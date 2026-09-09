@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
-	"github.com/MErenTalan/ekokod-rewrite/internal/platform/logging"
 	"github.com/MErenTalan/ekokod-rewrite/internal/scheduler"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 	"github.com/spf13/cobra"
@@ -21,7 +20,7 @@ func newSchedulerCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			log := logging.New(cfg.LogLevel, string(cfg.LogFormat), os.Stderr)
+			log := newCommandLogger(cfg, os.Stderr)
 
 			// scheduler.New's doc comment (internal/scheduler/scheduler.go:26-28)
 			// is explicit that whether the scheduler runs at all is a
@@ -63,6 +62,17 @@ func newSchedulerCmd() *cobra.Command {
 // isCleanShutdown reports whether err is exactly the context cancellation
 // scheduler.Scheduler.Run propagates from its underlying elector on a normal
 // stop, as opposed to a genuine startup or operational failure.
+//
+// Deliberately narrow to context.Canceled only (task 9 review,
+// Important-3): a context.DeadlineExceeded clause would also match any
+// error chain wrapping an ordinary net dial/i-o timeout, because
+// $GOROOT/src/net/net.go's (*timeoutError).Is compares equal to
+// context.DeadlineExceeded. cmd.Context() here comes from
+// signal.NotifyContext (cmd/ekokod/main.go), which carries no deadline, so
+// context.Canceled is the only value a normal shutdown can ever produce —
+// accepting DeadlineExceeded as well would only ever risk misclassifying a
+// genuine failure (a Postgres/Redis dial timeout reaching this point
+// through a %w chain) as a clean exit.
 func isCleanShutdown(err error) bool {
-	return err != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded))
+	return err != nil && errors.Is(err, context.Canceled)
 }

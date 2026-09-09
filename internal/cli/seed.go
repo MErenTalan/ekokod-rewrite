@@ -2,12 +2,10 @@ package cli
 
 import (
 	"fmt"
-	"net/url"
 	"sort"
 	"strings"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
-	"github.com/MErenTalan/ekokod-rewrite/internal/platform/secret"
 	"github.com/spf13/cobra"
 )
 
@@ -36,7 +34,7 @@ func newSeedCmd() *cobra.Command {
 			// reason to pay for a connection when there is nothing to load.
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "target environment: %s\n", cfg.Env)
-			fmt.Fprintf(out, "database host: %s\n", maskedDBHost(cfg.DB.URL))
+			fmt.Fprintf(out, "database: %s\n", dbURLDisplay(cfg))
 
 			if cfg.Env == config.EnvProduction && !yes {
 				return fmt.Errorf("refusing to seed the production database without --yes")
@@ -87,25 +85,32 @@ func sortedNames() []string {
 	return names
 }
 
-// maskedDBHost extracts the host:port from a DSN for display, without ever
-// printing the credential. url.Parse already keeps the password out of
-// (*url.URL).Host, but the extracted host is additionally passed through
-// secret.Redact against every fragment of the userinfo password as a
-// defence-in-depth measure, in case the DSN is malformed in a way that
-// causes credential material to land somewhere unexpected.
-func maskedDBHost(rawDSN string) string {
-	u, err := url.Parse(rawDSN)
-	if err != nil {
-		return "(unparseable DSN)"
-	}
-	host := u.Host
-	if host == "" {
-		return "(unknown)"
-	}
-	if u.User != nil {
-		if pw, ok := u.User.Password(); ok {
-			host = secret.Redact(host, secret.Fragments(pw))
+// dbURLDisplay returns the already-masked EKOKOD_DB_URL row from
+// cfg.Resolved(). This deliberately reuses config's own redactDSN
+// (internal/platform/config/resolved.go), which is already tested
+// (parse_test.go) and already printed verbatim by `ekokod config:check`,
+// instead of re-parsing the DSN here.
+//
+// An earlier version of this function (maskedDBHost) hand-parsed cfg.DB.URL
+// with net/url and ran the extracted host through secret.Redact against
+// password fragments. Task 9's review (Minor-1, Minor-2) found that pass
+// both pointless and actively harmful: net/url splits the authority at the
+// LAST unescaped '@', so (*url.URL).Host is disjoint from the userinfo
+// password by construction — the redaction pass never removed real
+// credential bytes, it only risked corrupting the displayed host whenever
+// a password fragment happened to also be a substring of the host or port
+// (e.g. "postgres://u:host@myhost:5432/db" printed "my••••••••:5432"). It
+// also duplicated DSN-scrubbing logic config already solved, and degraded
+// to "(unknown)" for DSN forms cfg.DB.URL may legally hold (pgx
+// keyword/value pairs, unix-socket DSNs) that config's own loader accepts.
+// Reusing the Resolved row avoids a second hand-rolled DSN parser — the
+// exact code class behind two Criticals earlier in this phase — and shows
+// the database name as well as the host.
+func dbURLDisplay(cfg *config.Config) string {
+	for _, r := range cfg.Resolved() {
+		if r.Name == "EKOKOD_DB_URL" {
+			return r.Value
 		}
 	}
-	return host
+	return "(unknown)"
 }

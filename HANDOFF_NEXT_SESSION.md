@@ -127,9 +127,12 @@ prompt explicitly, and the implementer must report on each:
 
   Installed: Go 1.27.1, Node 24.20.0 LTS, pnpm 12.3.4.
 
-- **Docker Desktop is RUNNING** (server 28.3.2, `/var/run/docker.sock` present). Images already
-  pulled: `timescale/timescaledb:2.30.0-pg16`, `redis:7.4.11-alpine`. Tasks 11 and 13 will also want
-  `golang:1.27.1-alpine` and `alpine:3.21`.
+- **Docker Desktop is DOWN as of session 4** — it stops between sessions, so ALWAYS verify rather
+  than trusting this line. Symptoms when down: `docker info` prints "The command 'docker' could not
+  be found in this WSL 2 distro", `/var/run/docker.sock` is absent, `/mnt/wsl/` holds only
+  `resolv.conf`, and `tasklist.exe` shows no Docker process. It has to be started from Windows.
+  When up (server 28.3.2) these images are already pulled: `timescale/timescaledb:2.30.0-pg16`,
+  `redis:7.4.11-alpine`; tasks 11 and 13 will also want `golang:1.27.1-alpine` and `alpine:3.21`.
 
 - The repo lives on `/mnt/c` (Windows drive under WSL), so Go builds and `pnpm install` are slower
   than native. That is expected — be patient with timeouts rather than assuming a hang.

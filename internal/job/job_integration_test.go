@@ -33,7 +33,7 @@ func TestNoopTaskRoundTrip(t *testing.T) {
 	cfg := startRedis(t)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	server, mux, err := job.NewServer(cfg, config.Worker{Concurrency: 2, MaxRetries: 1, Timeout: time.Minute}, log)
+	server, mux, err := job.NewServer(cfg, config.Worker{Concurrency: 2, MaxRetries: 1, Timeout: time.Minute}, log, nil)
 	require.NoError(t, err)
 
 	handled := make(chan string, 1)

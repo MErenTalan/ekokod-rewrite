@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"time"
@@ -13,7 +14,6 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/buildinfo"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/health"
-	"github.com/MErenTalan/ekokod-rewrite/internal/platform/logging"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 	ekoredis "github.com/MErenTalan/ekokod-rewrite/internal/store/redis"
 	"github.com/spf13/cobra"
@@ -42,7 +42,7 @@ func newAPICmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			log := logging.New(cfg.LogLevel, string(cfg.LogFormat), os.Stderr)
+			log := newCommandLogger(cfg, os.Stderr)
 			ctx := cmd.Context()
 
 			pool, err := postgres.NewPool(ctx, cfg.DB, log)
@@ -70,11 +70,29 @@ func newAPICmd() *cobra.Command {
 
 			server := newAPIServer(cfg.HTTP.Addr, router)
 
+			// Bind synchronously, before starting the serve goroutine or
+			// entering the shutdown select (task 9 review, Minor-3). Two
+			// defects shared this one root cause: (1) if ListenAndServe's
+			// bind failure and a SIGTERM arrived at the same instant, the
+			// select below had two ready cases and Go's pseudo-random
+			// choice could pick ctx.Done(), running Shutdown on a server
+			// that never bound (a no-op returning nil) — RunE then
+			// returned nil, exit 0, and a Restart=on-failure supervisor
+			// would never restart a dead API; and (2) "api listening" was
+			// logged before ListenAndServe was even called, so a bind
+			// failure always logged a successful-sounding line first.
+			// Binding here makes a bind failure a deterministic, immediate
+			// non-nil return with nothing yet to shut down.
+			ln, err := net.Listen("tcp", cfg.HTTP.Addr)
+			if err != nil {
+				return fmt.Errorf("listen %s: %w", cfg.HTTP.Addr, err)
+			}
+			log.Info("api listening", slog.String("addr", ln.Addr().String()),
+				slog.String("env", string(cfg.Env)))
+
 			errCh := make(chan error, 1)
 			go func() {
-				log.Info("api listening", slog.String("addr", cfg.HTTP.Addr),
-					slog.String("env", string(cfg.Env)))
-				if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				if err := server.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 					errCh <- fmt.Errorf("http server: %w", err)
 				}
 			}()
