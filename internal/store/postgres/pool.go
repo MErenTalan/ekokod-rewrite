@@ -16,7 +16,7 @@ import (
 func NewPool(ctx context.Context, cfg config.DB, log *slog.Logger) (*pgxpool.Pool, error) {
 	poolCfg, err := pgxpool.ParseConfig(cfg.URL)
 	if err != nil {
-		return nil, fmt.Errorf("parse database url: %w", err)
+		return nil, scrubErr(cfg.URL, "parse database url", err)
 	}
 
 	poolCfg.MaxConns = int32(cfg.MaxConns)
@@ -35,11 +35,11 @@ func NewPool(ctx context.Context, cfg config.DB, log *slog.Logger) (*pgxpool.Poo
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
-		return nil, fmt.Errorf("open database pool: %w", err)
+		return nil, scrubErr(cfg.URL, "open database pool", err)
 	}
 	if err := pool.Ping(ctx); err != nil {
 		pool.Close()
-		return nil, fmt.Errorf("ping database: %w", err)
+		return nil, scrubErr(cfg.URL, "ping database", err)
 	}
 
 	log.Info("database pool ready",
@@ -54,5 +54,12 @@ func Ping(ctx context.Context, pool *pgxpool.Pool) error {
 	if pool == nil {
 		return fmt.Errorf("database pool is not initialised")
 	}
-	return pool.Ping(ctx)
+	if err := pool.Ping(ctx); err != nil {
+		var password string
+		if cfg := pool.Config(); cfg != nil && cfg.ConnConfig != nil {
+			password = cfg.ConnConfig.Password
+		}
+		return scrubPoolErr(password, "ping database", err)
+	}
+	return nil
 }

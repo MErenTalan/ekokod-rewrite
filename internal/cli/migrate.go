@@ -38,14 +38,14 @@ func newMigrateCmd() *cobra.Command {
 		Use:   "down",
 		Short: "Roll migrations back (requires --all)",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if !all {
+				return errMigrateDownNeedsAll
+			}
 			cfg, err := config.FromEnv()
 			if err != nil {
 				return err
 			}
 			log := logging.New(cfg.LogLevel, string(cfg.LogFormat), os.Stderr)
-			if !all {
-				return errMigrateDownNeedsAll
-			}
 			return postgres.MigrateDownAll(cmd.Context(), cfg.DB.URL, log)
 		},
 	}

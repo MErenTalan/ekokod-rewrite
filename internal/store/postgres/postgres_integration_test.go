@@ -84,9 +84,34 @@ func TestPoolCheckReportsHealth(t *testing.T) {
 		MaxConnLifetime: time.Hour, StatementTimeout: 10 * time.Second}, discardLogger())
 	require.NoError(t, err)
 
-	require.NoError(t, postgres.Ping(ctx, pool))
+	check := postgres.PoolCheck(pool)
+	require.Equal(t, "database", check.Name)
+
+	require.NoError(t, check.Fn(ctx))
 	pool.Close()
-	require.Error(t, postgres.Ping(ctx, pool), "a closed pool must report unhealthy")
+	require.Error(t, check.Fn(ctx), "a closed pool must report unhealthy")
+}
+
+func TestMigrationsCheckReportsPendingThenCurrent(t *testing.T) {
+	ctx := context.Background()
+	dsn := startPostgres(t)
+	log := discardLogger()
+
+	pool, err := postgres.NewPool(ctx, config.DB{URL: dsn, MaxConns: 4, MinConns: 1,
+		MaxConnLifetime: time.Hour, StatementTimeout: 10 * time.Second}, log)
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+
+	check := postgres.MigrationsCheck(pool)
+	require.Equal(t, "migrations", check.Name)
+
+	require.Error(t, check.Fn(ctx), "no migration has run yet, so the schema must report pending")
+
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, log))
+	require.NoError(t, check.Fn(ctx), "the schema is current once every migration has been applied")
+
+	require.NoError(t, postgres.MigrateDownAll(ctx, dsn, log))
+	require.Error(t, check.Fn(ctx), "after down --all the schema must report pending again")
 }
 
 func TestStatementTimeoutIsApplied(t *testing.T) {
