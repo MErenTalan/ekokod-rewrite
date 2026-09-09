@@ -54,17 +54,28 @@ func (l *loader) required(name string) string {
 	return v
 }
 
+// dsnDisplay renders a DSN for display, always carrying the secret mask
+// glyph so every Resolved row flagged Secret is visibly masked, even when
+// the particular DSN happens to carry no embedded credential.
+func dsnDisplay(v string) string {
+	return maskGlyph + " " + redactDSN(v)
+}
+
 func (l *loader) requiredDSN(name string) string {
 	v, fromEnv := l.raw(name)
 	if !fromEnv {
 		l.fail(name, errors.New("is required but not set"))
-		l.record(name, "", false, false)
+		l.record(name, maskSecret(""), true, false)
 		return ""
 	}
 	if _, err := url.Parse(v); err != nil {
-		l.fail(name, fmt.Errorf("is not a valid URL: %w", err))
+		// Do not wrap the url.Parse error: url.Error.Error() embeds the raw
+		// input verbatim, which would print the DSN password in clear.
+		l.fail(name, errors.New("is not a valid URL"))
+		l.record(name, maskGlyph+" (invalid — value withheld)", true, true)
+		return v
 	}
-	l.record(name, redactDSN(v), false, true)
+	l.record(name, dsnDisplay(v), true, true)
 	return v
 }
 

@@ -152,3 +152,16 @@ func TestSMSFlagRequiresNothingButDefaultsOff(t *testing.T) {
 	require.False(t, cfg.Features.SMSAlarms)
 	require.False(t, strings.Contains(cfg.String(), "epias-pass"), "String() must never leak a secret")
 }
+
+// TestRequiredDSNNeverLeaksPasswordOnParseError guards against wrapping
+// net/url's parse error, which embeds the raw input (including the
+// password) verbatim in its Error() text.
+func TestRequiredDSNNeverLeaksPasswordOnParseError(t *testing.T) {
+	env := valid()
+	env["EKOKOD_DB_URL"] = "postgres://user:pa ss@localhost:5432/ekokod?sslmode=disable"
+
+	_, err := config.Load(lookupFrom(env))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "EKOKOD_DB_URL")
+	require.NotContains(t, err.Error(), "pa ss", "the DSN password must never appear in an error message")
+}
