@@ -100,12 +100,29 @@ func sortedNames() []string {
 // credential bytes, it only risked corrupting the displayed host whenever
 // a password fragment happened to also be a substring of the host or port
 // (e.g. "postgres://u:host@myhost:5432/db" printed "my••••••••:5432"). It
-// also duplicated DSN-scrubbing logic config already solved, and degraded
-// to "(unknown)" for DSN forms cfg.DB.URL may legally hold (pgx
-// keyword/value pairs, unix-socket DSNs) that config's own loader accepts.
-// Reusing the Resolved row avoids a second hand-rolled DSN parser — the
-// exact code class behind two Criticals earlier in this phase — and shows
-// the database name as well as the host.
+// also duplicated DSN-scrubbing logic config already solved.
+//
+// CORRECTION (task 9 review round 2, Critical): an earlier version of this
+// comment claimed that reusing the Resolved row also "fixes" the
+// "(unknown)" degradation maskedDBHost showed for pgx keyword/value DSNs
+// and unix-socket DSNs. That claim was false, and dangerously so: at the
+// time it was written, config.redactDSN's fallback for exactly those
+// shapes was a bare `return raw`, which — combined with dsnDisplay
+// unconditionally prepending the mask glyph — meant this function printed
+// the database password in clear behind what looked like a redacted
+// value. redactDSN has since been fixed to fail closed (never return an
+// unredacted value on any path); see its doc comment for the mandated
+// shape. The accurate claim now is narrower: a URL-shaped DSN that carries
+// its credential in the query string (a common unix-socket form, e.g.
+// "postgres:///db?host=/var/run/postgresql&password=...") does now show
+// the host and database name safely, with the password stripped from the
+// query string. A true pgx keyword/value DSN with no scheme at all
+// ("host=db user=x password=... dbname=y") is still withheld entirely —
+// redactDSN does not attempt to tokenise it, on the grounds that a
+// fallible redactor over a credential is worse than withholding — so that
+// case is exactly as opaque as maskedDBHost's old "(unknown)", just now
+// guaranteed safe by construction rather than safe by the old function's
+// bare-return accident.
 func dbURLDisplay(cfg *config.Config) string {
 	for _, r := range cfg.Resolved() {
 		if r.Name == "EKOKOD_DB_URL" {
