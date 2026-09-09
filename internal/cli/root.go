@@ -20,6 +20,7 @@ func NewRoot(out io.Writer) *cobra.Command {
 	root.SetErr(out)
 	root.AddCommand(newVersionCmd())
 	root.AddCommand(newConfigCheckCmd())
+	root.AddCommand(newMigrateCmd())
 	return root
 }
 
