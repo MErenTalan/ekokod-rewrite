@@ -33,8 +33,12 @@ func newSeedCmd() *cobra.Command {
 			// wrong one, and F0 has zero datasets to seed, so there is no
 			// reason to pay for a connection when there is nothing to load.
 			out := cmd.OutOrStdout()
-			fmt.Fprintf(out, "target environment: %s\n", cfg.Env)
-			fmt.Fprintf(out, "database: %s\n", dbURLDisplay(cfg))
+			if _, err := fmt.Fprintf(out, "target environment: %s\n", cfg.Env); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(out, "database: %s\n", dbURLDisplay(cfg)); err != nil {
+				return err
+			}
 
 			if cfg.Env == config.EnvProduction && !yes {
 				return fmt.Errorf("refusing to seed the production database without --yes")
@@ -48,14 +52,16 @@ func newSeedCmd() *cobra.Command {
 				return loader(cmd, cfg)
 			}
 			if len(seedDatasets) == 0 {
-				fmt.Fprintln(out, "no reference datasets are defined yet")
-				return nil
+				_, err := fmt.Fprintln(out, "no reference datasets are defined yet")
+				return err
 			}
 			// Iterate in sorted-name order, not map order (Go map
 			// iteration order is randomised on every run), so seed's
 			// output and load order are deterministic.
 			for _, name := range sortedNames() {
-				fmt.Fprintf(out, "seeding %s\n", name)
+				if _, err := fmt.Fprintf(out, "seeding %s\n", name); err != nil {
+					return err
+				}
 				if err := seedDatasets[name](cmd, cfg); err != nil {
 					return fmt.Errorf("seed %s: %w", name, err)
 				}

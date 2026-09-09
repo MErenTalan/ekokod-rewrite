@@ -8,7 +8,10 @@ LDFLAGS := -X $(MODULE)/internal/buildinfo.version=$(VERSION) \
            -X $(MODULE)/internal/buildinfo.commit=$(COMMIT) \
            -X $(MODULE)/internal/buildinfo.date=$(DATE)
 
-.PHONY: build test test-integration lint fmt tidy
+GOLANGCI_VERSION := v2.13.2
+GOVULNCHECK_VERSION := v1.8.0
+
+.PHONY: build test test-integration lint fmt tidy tools vuln
 
 build: ## Build the ekokod binary
 	go build -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/ekokod
@@ -24,3 +27,15 @@ fmt:
 
 tidy:
 	go mod tidy
+
+tools: ## Install pinned developer tools into $(GOPATH)/bin
+	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VERSION)
+	go install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
+
+lint: ## Run gofmt check, go vet and golangci-lint
+	@test -z "$$(gofmt -l ./cmd ./internal)" || (echo "gofmt needed:"; gofmt -l ./cmd ./internal; exit 1)
+	go vet ./...
+	golangci-lint run
+
+vuln: ## Scan dependencies for known vulnerabilities
+	govulncheck ./...

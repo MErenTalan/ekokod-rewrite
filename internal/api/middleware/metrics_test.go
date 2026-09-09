@@ -1,6 +1,7 @@
 package middleware_test
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -23,11 +24,11 @@ func TestMetricsRecordsUnmatchedRoutesUnderAConstantLabel(t *testing.T) {
 
 	unmatchedPath := "/this-path-is-never-registered-" + t.Name()
 	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, unmatchedPath, nil))
+	r.ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, unmatchedPath, nil))
 	require.Equal(t, http.StatusNotFound, rec.Code)
 
 	scrape := httptest.NewRecorder()
-	middleware.MetricsHandler().ServeHTTP(scrape, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	middleware.MetricsHandler().ServeHTTP(scrape, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", nil))
 	body := scrape.Body.String()
 
 	require.Contains(t, body, `route="unmatched"`,

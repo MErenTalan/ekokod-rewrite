@@ -65,7 +65,7 @@ func MigrateUp(ctx context.Context, dsn string, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	before, _ := goose.GetDBVersionContext(ctx, db)
 	if err := goose.UpContext(ctx, db, migrationsDir); err != nil {
@@ -85,7 +85,7 @@ func MigrateDownAll(ctx context.Context, dsn string, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	if err := goose.DownToContext(ctx, db, migrationsDir, 0); err != nil {
 		return scrubErr(dsn, "roll back migrations", err)
@@ -100,7 +100,7 @@ func MigrateStatus(ctx context.Context, dsn string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	gooseLogMu.Lock()
 	defer gooseLogMu.Unlock()
@@ -121,7 +121,7 @@ func PendingMigrations(ctx context.Context, dsn string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	migrations, err := goose.CollectMigrations(migrationsDir, 0, goose.MaxVersion)
 	if err != nil {

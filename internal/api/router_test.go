@@ -50,7 +50,7 @@ func newTestRouter(t *testing.T, checks ...health.Check) http.Handler {
 
 func TestHealthLiveAlwaysReturns200(t *testing.T) {
 	rec := httptest.NewRecorder()
-	newTestRouter(t).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health/live", nil))
+	newTestRouter(t).ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health/live", nil))
 	require.Equal(t, http.StatusOK, rec.Code)
 }
 
@@ -62,7 +62,7 @@ func TestHealthReadyReportsEachDependency(t *testing.T) {
 	)
 
 	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health/ready", nil))
+	router.ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health/ready", nil))
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	var report health.Report
@@ -77,14 +77,14 @@ func TestHealthReadyReturns503WhenADependencyIsDown(t *testing.T) {
 	)
 
 	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health/ready", nil))
+	router.ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health/ready", nil))
 	require.Equal(t, http.StatusServiceUnavailable, rec.Code)
 	require.Contains(t, rec.Body.String(), "connection refused")
 }
 
 func TestVersionEndpoint(t *testing.T) {
 	rec := httptest.NewRecorder()
-	newTestRouter(t).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/version", nil))
+	newTestRouter(t).ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/version", nil))
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Contains(t, rec.Body.String(), "version")
 }
@@ -92,10 +92,10 @@ func TestVersionEndpoint(t *testing.T) {
 func TestMetricsEndpointExposesHTTPMetrics(t *testing.T) {
 	router := newTestRouter(t)
 
-	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/health/live", nil))
+	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health/live", nil))
 
 	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	router.ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", nil))
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Contains(t, rec.Body.String(), "ekokod_http_request_duration_seconds")
 }
@@ -104,10 +104,10 @@ func TestRequestIDIsEchoedAndGenerated(t *testing.T) {
 	router := newTestRouter(t)
 
 	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health/live", nil))
+	router.ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health/live", nil))
 	require.NotEmpty(t, rec.Header().Get("X-Request-Id"))
 
-	req := httptest.NewRequest(http.MethodGet, "/health/live", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health/live", nil)
 	req.Header.Set("X-Request-Id", "caller-supplied-id")
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
@@ -117,14 +117,14 @@ func TestRequestIDIsEchoedAndGenerated(t *testing.T) {
 func TestCORSAllowsTheConfiguredOriginOnly(t *testing.T) {
 	router := newTestRouter(t)
 
-	req := httptest.NewRequest(http.MethodOptions, "/health/live", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodOptions, "/health/live", nil)
 	req.Header.Set("Origin", "http://localhost:3000")
 	req.Header.Set("Access-Control-Request-Method", "GET")
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	require.Equal(t, "http://localhost:3000", rec.Header().Get("Access-Control-Allow-Origin"))
 
-	req = httptest.NewRequest(http.MethodOptions, "/health/live", nil)
+	req = httptest.NewRequestWithContext(context.Background(), http.MethodOptions, "/health/live", nil)
 	req.Header.Set("Origin", "https://evil.example.com")
 	req.Header.Set("Access-Control-Request-Method", "GET")
 	rec = httptest.NewRecorder()

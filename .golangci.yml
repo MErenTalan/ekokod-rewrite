@@ -1,0 +1,68 @@
+version: "2"
+
+run:
+  timeout: 5m
+  build-tags:
+    - integration
+
+linters:
+  enable:
+    - bodyclose
+    - depguard
+    - errcheck
+    - errorlint
+    - gocritic
+    - govet
+    - ineffassign
+    - misspell
+    - noctx
+    - revive
+    - rowserrcheck
+    - sqlclosecheck
+    - staticcheck
+    - unconvert
+    - unused
+    - wastedassign
+
+  settings:
+    depguard:
+      rules:
+        domain-is-pure:
+          files:
+            - "**/internal/domain/**"
+          deny:
+            - pkg: "net/http"
+              desc: "internal/domain performs no I/O"
+            - pkg: "database/sql"
+              desc: "internal/domain performs no I/O"
+            - pkg: "os"
+              desc: "internal/domain performs no I/O"
+            - pkg: "log/slog"
+              desc: "internal/domain does not log"
+            - pkg: "github.com/MErenTalan/ekokod-rewrite/internal/store"
+              desc: "internal/domain imports nothing from the project"
+            - pkg: "github.com/MErenTalan/ekokod-rewrite/internal/api"
+              desc: "internal/domain imports nothing from the project"
+        no-float-money:
+          files:
+            - "**/internal/domain/billing/**"
+            - "**/internal/domain/tariff/**"
+          deny:
+            - pkg: "math/big"
+              desc: "use github.com/shopspring/decimal for monetary arithmetic"
+    revive:
+      rules:
+        - name: exported
+          disabled: false
+    errcheck:
+      exclude-functions:
+        - (net/http.ResponseWriter).Write
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

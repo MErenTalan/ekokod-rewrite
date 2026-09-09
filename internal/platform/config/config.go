@@ -12,6 +12,7 @@ import (
 // Environment is the deployment environment.
 type Environment string
 
+// The deployment environments Config.Env may resolve to.
 const (
 	EnvDevelopment Environment = "development"
 	EnvStaging     Environment = "staging"
@@ -21,6 +22,7 @@ const (
 // LogFormat selects the slog handler.
 type LogFormat string
 
+// The log formats Config.LogFormat may resolve to.
 const (
 	LogFormatJSON LogFormat = "json"
 	LogFormatText LogFormat = "text"
@@ -54,6 +56,7 @@ type Config struct {
 	resolved []Resolved
 }
 
+// HTTP configures the API's listen address and edge behaviour.
 type HTTP struct {
 	Addr           string
 	PublicURL      string
@@ -63,6 +66,7 @@ type HTTP struct {
 	RateLimitAuth  RateLimit
 }
 
+// DB configures the Postgres connection pool and retention policy.
 type DB struct {
 	URL              string
 	MaxConns         int
@@ -73,12 +77,15 @@ type DB struct {
 	CompressionAfter time.Duration
 }
 
+// Redis configures the shared Redis connection used for caching and queues.
 type Redis struct {
 	URL     string
 	CacheDB int
 	QueueDB int
 }
 
+// Security configures the secrets and parameters that protect
+// authentication, encryption and password storage.
 type Security struct {
 	EncryptionKey           []byte // 32 bytes, AES-256-GCM
 	JWTSigningKey           []byte
@@ -91,12 +98,14 @@ type Security struct {
 	LegacyEncryptionKey     []byte // migration only; may be empty
 }
 
+// Worker configures the background job worker.
 type Worker struct {
 	Concurrency int
 	MaxRetries  int
 	Timeout     time.Duration
 }
 
+// Scheduler configures the cron-driven leader-elected scheduler.
 type Scheduler struct {
 	Enabled bool
 }
@@ -113,12 +122,14 @@ type Schedule struct {
 	ReportsYearly  string
 }
 
+// Storage configures where and how uploaded files are stored.
 type Storage struct {
 	Root         string
 	UploadMax    int64
 	AllowedTypes []string
 }
 
+// External configures the third-party integrations the platform calls out to.
 type External struct {
 	EPIASUsername   string
 	EPIASPassword   string
@@ -132,6 +143,7 @@ type External struct {
 	PinnedCerts     map[string]string // host -> base64(DER)
 }
 
+// Features toggles optional platform functionality.
 type Features struct {
 	SelfRegistration bool
 	PricingPage      bool

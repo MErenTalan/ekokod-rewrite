@@ -83,7 +83,7 @@ func newAPICmd() *cobra.Command {
 			// failure always logged a successful-sounding line first.
 			// Binding here makes a bind failure a deterministic, immediate
 			// non-nil return with nothing yet to shut down.
-			ln, err := net.Listen("tcp", cfg.HTTP.Addr)
+			ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", cfg.HTTP.Addr)
 			if err != nil {
 				return fmt.Errorf("listen %s: %w", cfg.HTTP.Addr, err)
 			}

@@ -19,9 +19,13 @@ func newConfigCheckCmd() *cobra.Command {
 				return err
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "VARIABLE\tVALUE\tSOURCE")
+			if _, err := fmt.Fprintln(w, "VARIABLE\tVALUE\tSOURCE"); err != nil {
+				return err
+			}
 			for _, r := range cfg.Resolved() {
-				fmt.Fprintf(w, "%s\t%s\t%s\n", r.Name, r.Value, r.Source)
+				if _, err := fmt.Fprintf(w, "%s\t%s\t%s\n", r.Name, r.Value, r.Source); err != nil {
+					return err
+				}
 			}
 			return w.Flush()
 		},

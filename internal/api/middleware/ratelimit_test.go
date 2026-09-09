@@ -1,6 +1,7 @@
 package middleware_test
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -16,7 +17,7 @@ func TestRateLimitBlocksAfterTheLimitAndIsPerClient(t *testing.T) {
 		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
 
 	call := func(ip string) int {
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 		req.RemoteAddr = ip + ":12345"
 		rec := httptest.NewRecorder()
 		limited.ServeHTTP(rec, req)
@@ -34,7 +35,7 @@ func TestRateLimitIgnoresForwardedForFromUntrustedProxies(t *testing.T) {
 		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
 
 	call := func(forwarded string) int {
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 		req.RemoteAddr = "10.0.0.9:1111"
 		req.Header.Set("X-Forwarded-For", forwarded)
 		rec := httptest.NewRecorder()

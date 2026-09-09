@@ -2,6 +2,7 @@ package middleware_test
 
 import (
 	"bytes"
+	"context"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -21,7 +22,7 @@ func TestRecovererTurnsAPanicInto500AndLogsIt(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	require.NotPanics(t, func() {
-		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+		handler.ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil))
 	})
 	require.Equal(t, http.StatusInternalServerError, rec.Code)
 	require.Contains(t, rec.Body.String(), "internal")
