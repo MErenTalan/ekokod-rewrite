@@ -18,9 +18,15 @@ func NewRoot(out io.Writer) *cobra.Command {
 	}
 	root.SetOut(out)
 	root.SetErr(out)
-	root.AddCommand(newVersionCmd())
-	root.AddCommand(newConfigCheckCmd())
-	root.AddCommand(newMigrateCmd())
+	root.AddCommand(
+		newVersionCmd(),
+		newConfigCheckCmd(),
+		newMigrateCmd(),
+		newAPICmd(),
+		newWorkerCmd(),
+		newSchedulerCmd(),
+		newSeedCmd(),
+	)
 	return root
 }
 
