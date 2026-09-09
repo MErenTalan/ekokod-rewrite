@@ -3,11 +3,14 @@ package health
 
 import (
 	"context"
-	"sync"
+	"fmt"
 	"time"
 )
 
-// Check is one named readiness probe.
+// Check is one named readiness probe. Fn should observe ctx and return
+// promptly when it is done: Run bounds every check by a timeout, but a check
+// that ignores ctx is only reported as failed once the timeout elapses — its
+// goroutine keeps running in the background until Fn itself returns.
 type Check struct {
 	Name string
 	Fn   func(ctx context.Context) error
@@ -31,15 +34,20 @@ type Report struct {
 func (r Report) Healthy() bool { return r.Status == "ok" }
 
 // Run executes the checks concurrently, each bounded by timeout, and returns
-// results in the order the checks were given.
+// results in the order the checks were given. Run itself never blocks past
+// (approximately) timeout, even if a check ignores its context and keeps
+// running in the background: each check gets its own buffered result
+// channel, so an abandoned goroutine's eventual send never blocks and never
+// touches the shared results slice, which only Run's own goroutine writes.
 func Run(ctx context.Context, timeout time.Duration, checks ...Check) Report {
 	results := make([]Result, len(checks))
+	deadline := time.Now().Add(timeout)
 
-	var wg sync.WaitGroup
+	channels := make([]chan Result, len(checks))
 	for i, check := range checks {
-		wg.Add(1)
-		go func(i int, check Check) {
-			defer wg.Done()
+		ch := make(chan Result, 1)
+		channels[i] = ch
+		go func(check Check, ch chan<- Result) {
 			checkCtx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
 
@@ -50,10 +58,29 @@ func Run(ctx context.Context, timeout time.Duration, checks ...Check) Report {
 				res.Status = "failed"
 				res.Error = err.Error()
 			}
-			results[i] = res
-		}(i, check)
+			ch <- res
+		}(check, ch)
 	}
-	wg.Wait()
+
+	for i, check := range checks {
+		remaining := time.Until(deadline)
+		if remaining < 0 {
+			remaining = 0
+		}
+		timer := time.NewTimer(remaining)
+		select {
+		case res := <-channels[i]:
+			timer.Stop()
+			results[i] = res
+		case <-timer.C:
+			results[i] = Result{
+				Name:       check.Name,
+				Status:     "failed",
+				Error:      fmt.Sprintf("check did not return within its %s timeout", timeout),
+				DurationMS: timeout.Milliseconds(),
+			}
+		}
+	}
 
 	report := Report{Status: "ok", Checks: results}
 	for _, r := range results {

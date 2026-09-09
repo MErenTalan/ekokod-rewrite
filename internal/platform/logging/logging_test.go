@@ -59,6 +59,27 @@ func TestLoggerEmitsContextFields(t *testing.T) {
 	require.Equal(t, "company-9", got["company_id"])
 }
 
+type creds struct{}
+
+func (creds) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.String("username", "svc-acct"),
+		slog.String("password", "hunter2-logvaluer"),
+	)
+}
+
+func TestLoggerRedactsSecretsBehindLogValuer(t *testing.T) {
+	var buf bytes.Buffer
+	log := logging.New("info", "json", &buf)
+
+	log.Info("connecting", slog.Any("config", creds{}))
+
+	line := buf.String()
+	require.NotContains(t, line, "hunter2-logvaluer")
+	require.Contains(t, line, "svc-acct")
+	require.Contains(t, line, "[REDACTED]")
+}
+
 func TestLevelIsHonoured(t *testing.T) {
 	var buf bytes.Buffer
 	log := logging.New("warn", "json", &buf)

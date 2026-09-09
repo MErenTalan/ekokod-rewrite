@@ -61,6 +61,11 @@ func redactAttrs(attrs []slog.Attr) []slog.Attr {
 }
 
 func redactAttr(a slog.Attr) slog.Attr {
+	// Resolve slog.LogValuer values before inspecting them, so a secret
+	// hidden behind a LogValue() method (common on integration client
+	// config/credential structs) is redacted rather than deferred to the
+	// inner handler, which would resolve it after redaction has already run.
+	a.Value = a.Value.Resolve()
 	if a.Value.Kind() == slog.KindGroup {
 		return slog.Attr{Key: a.Key, Value: slog.GroupValue(redactAttrs(a.Value.Group())...)}
 	}
