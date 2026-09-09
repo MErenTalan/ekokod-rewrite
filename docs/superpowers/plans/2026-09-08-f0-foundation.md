@@ -3824,7 +3824,7 @@ EOF
   - `(*Elector).Run(ctx context.Context, lead func(ctx context.Context) error) error` — blocks; calls `lead` with a context cancelled when leadership is lost.
   - `(*Elector).IsLeader() bool`
   - `scheduler.LockKeyScheduler int64 = 0x656B6F6B6F64` (ASCII "ekokod")
-  - `scheduler.New(cfg *config.Config, log *slog.Logger) (*scheduler.Scheduler, error)` and `(*Scheduler).Run(ctx context.Context) error` — registers the cron entries and runs them only while leader.
+  - `scheduler.New(cfg *config.Config, pool *pgxpool.Pool, log *slog.Logger) *scheduler.Scheduler` and `(*Scheduler).Run(ctx context.Context) error` — registers the cron entries and runs them only while leader.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -5118,9 +5118,9 @@ docker compose build
 
 echo "==> Saving images"
 mkdir -p "$STAGE/images"
-docker save \
-  "$(docker compose config --images | tr '\n' ' ')" \
-  -o "$STAGE/images/ekokod-images.tar"
+# Unquoted on purpose: each image must arrive as its own argument.
+# shellcheck disable=SC2046
+docker save $(docker compose config --images) -o "$STAGE/images/ekokod-images.tar"
 
 echo "==> Staging deployment files"
 cp docker-compose.yml "$STAGE/"
@@ -5152,7 +5152,8 @@ chmod +x scripts/offline-bundle.sh
 - [ ] **Step 7: Bring the stack up and verify**
 
 ```bash
-make up
+# The web service is created in Task 12; verify the Go stack only.
+docker compose up -d --build postgres redis migrate api worker scheduler
 docker compose ps
 curl -s localhost:8080/health/ready | python3 -m json.tool
 curl -s localhost:8080/version | python3 -m json.tool
@@ -5277,7 +5278,7 @@ cd web && pnpm init && cd ..
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "check:i18n-parity": "node ../scripts/check-i18n-parity.mjs"
@@ -5289,6 +5290,7 @@ cd web && pnpm init && cd ..
     "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.3.1",
     "@tailwindcss/postcss": "4.3.3",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
@@ -5376,8 +5378,6 @@ export default [
   { ignores: ['.next/**', 'node_modules/**'] },
 ];
 ```
-
-(add `@eslint/eslintrc` to devDependencies)
 
 `web/vitest.config.ts`:
 
