@@ -1,0 +1,8 @@
+.git
+bin
+dist
+web/node_modules
+web/.next
+docs
+*.tar
+*.tar.gz

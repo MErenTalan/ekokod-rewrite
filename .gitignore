@@ -1,0 +1,11 @@
+/bin/
+/dist/
+/web/node_modules/
+/web/.next/
+/web/out/
+/web/coverage/
+.env
+.env.local
+*.tar
+*.tar.gz
+coverage.out
