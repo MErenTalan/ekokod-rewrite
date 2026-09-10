@@ -37,16 +37,76 @@
 --    missing start values would mean adding columns the spec does not define,
 --    which this migration is not free to do.
 --
+-- BUCKET TIMEZONE. Every bucket of a day or wider takes 'Europe/Istanbul'
+-- explicitly. 02-domain-rules.md section 1 evaluates all day, month and billing
+-- boundaries in Istanbul local time, and time_bucket without a timezone buckets
+-- in UTC: at UTC+3 the row labelled 1 January would actually cover 03:00 on the
+-- 1st to 03:00 on the 2nd, so local 00:00-03:00 consumption would be filed under
+-- the previous day, and a "January" total would drop the first three hours of
+-- January while picking up the first three of February. consumption_hourly is
+-- deliberately left timezone-free: Istanbul is a whole number of hours from UTC,
+-- so the argument would be a no-op there, and omitting it keeps that aggregate a
+-- fixed-width bucket.
+--
+-- REAL-TIME AGGREGATION IS ON FOR THE DAILY-OR-FINER VIEWS ONLY.
+-- TimescaleDB never materialises a bucket the refresh window only partly covers,
+-- at any end_offset, so the hour, day, month or year currently in progress is
+-- never in the materialised data. On a materialized_only view that means a query
+-- for "today" returns no row at all — absent, not stale, which is the same silent
+-- undercount as an unrefreshed backfill. consumption_hourly, consumption_daily
+-- and plant_production_daily therefore set materialized_only = false: the query
+-- unions the materialised buckets with a live scan above the materialisation
+-- watermark, and for those three the un-materialised tail is at most one open
+-- bucket — a day of raw readings for one analyzer, which is cheap.
+--
+-- consumption_monthly, consumption_yearly and plant_production_monthly keep
+-- materialized_only = true deliberately. Their watermark sits at the end of the
+-- last CLOSED month or year, so a live tail would be months of raw readings: in
+-- September, consumption_yearly would rescan nine months per analyzer on every
+-- read. A multi-million-row scan behind an innocuous dashboard query is a worse
+-- outcome than composing the figure explicitly.
+--
+-- CONSTRAINT ON TASK 10 AND ANYTHING THAT READS THESE VIEWS: month-to-date and
+-- year-to-date MUST be composed — the closed buckets from consumption_monthly or
+-- consumption_yearly, PLUS the open period taken from consumption_daily or from
+-- meter_readings. The open month and the open year are not in those views and
+-- must never be assumed to be. Do not "fix" a missing month-to-date row by
+-- flipping materialized_only; that trades a visible gap for an invisible table
+-- scan, and migrations_timeseries_integration_test.go asserts the current
+-- setting of all six views.
+--
+-- OPERATOR NOTE - AFTER ANY HISTORICAL BACKFILL, REFRESH EVERY AGGREGATE ONCE.
+-- A refresh policy only ever materialises [now - start_offset, now - end_offset].
+-- These views are materialized_only (the 2.30 default), so any bucket that was
+-- never inside a refresh window is not stale, it is ABSENT: the query succeeds
+-- and quietly returns fewer rows than the truth. Loading ten years of legacy
+-- readings would therefore leave consumption_yearly holding five years,
+-- consumption_monthly one, and consumption_daily ninety days. After a backfill,
+-- run once per aggregate, oldest bucket width last:
+--
+--     call refresh_continuous_aggregate('consumption_hourly',       NULL, now());
+--     call refresh_continuous_aggregate('consumption_daily',        NULL, now());
+--     call refresh_continuous_aggregate('consumption_monthly',      NULL, now());
+--     call refresh_continuous_aggregate('consumption_yearly',       NULL, now());
+--     call refresh_continuous_aggregate('plant_production_daily',   NULL, now());
+--     call refresh_continuous_aggregate('plant_production_monthly', NULL, now());
+--
+-- This migration cannot do it: there is no data to refresh at migration time,
+-- and a refresh commits its own work.
+--
 -- Refresh offsets: the spec fixes consumption_hourly (start 30 days, end 1 hour,
 -- schedule 30 minutes). The others keep end_offset at 1 hour rather than one
--- bucket width, because materialized_only defaults to true in 2.30 and an
--- end_offset of a whole bucket would make the current day, month or year
--- invisible in the view. start_offset covers the late-arriving-data window at
--- that granularity and schedule_interval grows with the bucket, so a yearly
--- roll-up is not recomputed every thirty minutes.
+-- bucket width so that a day, month or year is materialised as soon as it
+-- closes; a bucket-width end_offset would delay each level by a further whole
+-- bucket. It does not make the bucket currently in progress visible — Timescale
+-- does not materialise a bucket the refresh window only partly covers, and with
+-- materialized_only the unmaterialised part of the view is absent rather than
+-- computed live. start_offset covers the late-arriving-data window at that
+-- granularity, and schedule_interval grows with the bucket so a yearly roll-up
+-- is not recomputed every thirty minutes.
 
 create materialized view consumption_hourly
-with (timescaledb.continuous) as
+with (timescaledb.continuous, timescaledb.materialized_only = false) as
 select
     analyzer_id,
     time_bucket('1 hour', ts) as bucket,
@@ -83,10 +143,10 @@ select add_continuous_aggregate_policy('consumption_hourly',
     schedule_interval => interval '30 minutes');
 
 create materialized view consumption_daily
-with (timescaledb.continuous) as
+with (timescaledb.continuous, timescaledb.materialized_only = false) as
 select
     analyzer_id,
-    time_bucket('1 day', ts) as bucket,
+    time_bucket('1 day', ts, 'Europe/Istanbul') as bucket,
     first(active_import, ts)::numeric      as active_import_start,
     last(active_import, ts)::numeric       as active_import_end,
     (last(active_import, ts) - first(active_import, ts))::numeric             as active_consumption,
@@ -123,7 +183,7 @@ create materialized view consumption_monthly
 with (timescaledb.continuous) as
 select
     analyzer_id,
-    time_bucket('1 month', ts) as bucket,
+    time_bucket('1 month', ts, 'Europe/Istanbul') as bucket,
     first(active_import, ts)::numeric      as active_import_start,
     last(active_import, ts)::numeric       as active_import_end,
     (last(active_import, ts) - first(active_import, ts))::numeric             as active_consumption,
@@ -160,7 +220,7 @@ create materialized view consumption_yearly
 with (timescaledb.continuous) as
 select
     analyzer_id,
-    time_bucket('1 year', ts) as bucket,
+    time_bucket('1 year', ts, 'Europe/Istanbul') as bucket,
     first(active_import, ts)::numeric      as active_import_start,
     last(active_import, ts)::numeric       as active_import_end,
     (last(active_import, ts) - first(active_import, ts))::numeric             as active_consumption,
@@ -200,10 +260,10 @@ select add_continuous_aggregate_policy('consumption_yearly',
 -- carries the same number of samples.
 
 create materialized view plant_production_daily
-with (timescaledb.continuous) as
+with (timescaledb.continuous, timescaledb.materialized_only = false) as
 select
     plant_id,
-    time_bucket('1 day', ts) as bucket,
+    time_bucket('1 day', ts, 'Europe/Istanbul') as bucket,
     sum(production_kwh)::numeric   as production_kwh,
     max(active_power_kw)::numeric  as max_active_power_kw,
     avg(efficiency_pct)::numeric   as avg_efficiency_pct
@@ -219,7 +279,7 @@ create materialized view plant_production_monthly
 with (timescaledb.continuous) as
 select
     plant_id,
-    time_bucket('1 month', ts) as bucket,
+    time_bucket('1 month', ts, 'Europe/Istanbul') as bucket,
     sum(production_kwh)::numeric   as production_kwh,
     max(active_power_kw)::numeric  as max_active_power_kw,
     avg(efficiency_pct)::numeric   as avg_efficiency_pct
