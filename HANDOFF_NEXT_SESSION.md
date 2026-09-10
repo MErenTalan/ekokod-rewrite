@@ -1,41 +1,12 @@
-# Handoff — ekokod rewrite, phase F0
+# Handoff — ekokod rewrite, phase F1 (Data model and migration framework)
 
-Written 2026-09-10 (end of session 5). Branch `phase/f0-foundation`. **Nothing has been pushed;
-`main` is untouched and there is a real remote (`git@github.com:MErenTalan/ekokod-rewrite.git`).**
+> **STATUS: F1 IN PROGRESS.** This file is kept current as the phase runs, so that it is
+> useful even if the session ends unexpectedly. The "Where the work stands" table is the
+> truth; anything below it that contradicts the table is stale.
 
----
-
-## Paste this as the first message of the new session
-
-> Bu, bcem-energy'nin (yeni adıyla ekokod) Go ile yeniden yazım projesi. Spesifikasyon
-> `docs/rewrite/` içinde, faz planı `docs/rewrite/09-implementation-plan.md`. Şu an **Faz F0**
-> yürütülüyor: görev planı `docs/superpowers/plans/2026-09-08-f0-foundation.md`, ilerleme kaydı
-> `.superpowers/sdd/2026-09-08-f0-foundation/progress.md` (ledger).
->
-> Önce `HANDOFF_NEXT_SESSION.md` dosyasını oku, sonra ledger'ın sonunu oku, sonra kaldığın yerden
-> devam et. Yürütme yöntemi `superpowers:subagent-driven-development`: her görev için taze bir
-> implementer subagent, ardından task review, gerekirse fix turu. Ben plan + paralel subagent
-> yöntemini onaylıyorum, devam et.
->
-> Durum: **F0 (Foundation) TAMAMLANDI ve `main`'e merge edildi.** 13/13 görev, final whole-branch
-> review temiz. `phase/f0-foundation` branch'i silindi. **Hiçbir şey push EDİLMEDİ** — `main`
-> lokalde `origin/main`'in önünde; push kararı bana ait, sen push etme.
->
-> Sıradaki faz **F1 — Data model and migration framework**
-> (`docs/rewrite/09-implementation-plan.md`, satır 128). Toplam 16 faz var (F0–F15), yani 15 faz
-> kaldı; F0 yalnızca temeldi.
->
-> Şu sırayla ilerle:
-> 1. `HANDOFF_NEXT_SESSION.md`'i oku — özellikle "KNOWN FLAKE", "Deferred minors" (her madde
->    sahibi fazla işaretli, F1'e düşenler var) ve "Standing rulings" bölümlerini.
-> 2. **İlk iş: KNOWN FLAKE'i çöz.** `internal/scheduler` entegrasyon testleri paralel yük altında
->    ~3'te 1 patlıyor. Önce yük altında ÜRET (`-count=3` veya tüm suite paralel), hangi bound'un
->    düştüğünü tespit et, sonra sadece onu genişlet. Körlemesine bound büyütme.
-> 3. F1 için `superpowers:writing-plans` ile görev planı çıkar; "Deferred minors" listesindeki F1
->    sahipli maddeleri planın içine al.
-> 4. Planı `superpowers:subagent-driven-development` ile yürüt: her görev için taze implementer
->    subagent, ardından task review, gerekirse fix turu. Bu yöntemi onaylıyorum, sorma, devam et.
-> 5. Yeni bir branch aç (`phase/f1-data-model`), `main`'de çalışma.
+Branch `phase/f1-data-model`, branched from `main` at `6975b20` (F0 merged).
+**Nothing has been pushed.** `main` is still local-only ahead of `origin/main`, and the push
+decision is the user's — do not push.
 
 ---
 
@@ -43,155 +14,118 @@ Written 2026-09-10 (end of session 5). Branch `phase/f0-foundation`. **Nothing h
 
 | Task | State |
 |---|---|
-| 1 — repo skeleton, Go module, `version` | ✅ complete |
-| 2 — typed config + `config:check` | ✅ complete |
-| 3 — errors + redacting logger | ✅ complete |
-| 4 — clock, uuidv7, AES-256-GCM, health registry | ✅ complete |
-| 5 — postgres pool, embedded migrations, `migrate` | ✅ complete |
-| 6 — redis + asynq `noop` round trip | ✅ complete |
-| 7 — chi router, middleware, health/version/metrics | ✅ complete |
-| 8 — scheduler leader election | ✅ complete |
-| 9 — api/worker/scheduler/seed processes | ✅ complete (2 fix rounds) |
-| 10 — import-boundary test + golangci-lint | ✅ complete (1 fix round) |
-| 11 — Dockerfile, Compose, offline bundle | ✅ complete (**3** fix rounds) |
-| 12 — Next.js shell + i18n + readiness page | ✅ complete (1 fix round) |
-| 13 — CI | ✅ complete (2 fix rounds) |
-| — final whole-branch review | ✅ **clean** after one fix wave + two residual fixes |
-| — `finishing-a-development-branch` | ⬜ **awaiting the user's integration decision** |
+| — | pre-F1: known flake fixed (`e85a04c`) — **the F0 diagnosis was wrong**, see below |
+| 1 — tenancy + buildings migrations, reversibility harness | ✅ complete, review clean |
+| 2 — hypertables + continuous aggregates | ✅ complete (3 fix rounds, 2 scoped re-reviews) |
+| 3 — tariffs + icmal | ✅ complete, review clean |
+| 4 — carbon + ISO 50001 | ✅ complete, review clean |
+| 5 — files/integrations/calendar/operations | ✅ complete, review clean |
+| 6 — bills + reports + alarms | ✅ complete, review clean |
+| 7 — sqlc config, generated types, uuid override | 🔄 fix round 2 in flight |
+| 8a — `store.Scope`, arch guard, scrub fixes | ✅ complete, re-review clean |
+| 8b — domain model, decimal conversion, float guard, fixtures | 🔄 in flight (**critical path**) |
+| 9 — tenancy/building/analyzer/plant repositories | ⬜ not started |
+| 10 — time-series repositories | ⬜ not started |
+| 11 — remaining repositories + `admin` | ⬜ not started |
+| 12 — seed loader | ⬜ not started |
+| 13 — performance + acceptance suite | ⬜ not started |
+| — final whole-branch review | ⬜ not started |
 
-**PHASE F0 IS COMPLETE.** 13/13 tasks, final review clean. Branch is at `c846b58`, 35 commits
-ahead of `main`. Nothing pushed.
+**All eleven migrations exist and are green.** `migrate up → down → up` passes across the
+complete schema, verified by the controller personally on the merged result.
 
-Commits this session (session 5), oldest first:
-
-```
-e50afa4 fix(f0): tighten arch-guard package matching to true subpackages only
-74e500c feat(f0): dockerfile, compose stack with health checks and offline bundle script
-0f79aa1 fix(f0): keep secrets out of build layers, fix offline-bundle version tags, generate a real postgres password
-8426da2 fix(f0): gitignore gen-env-docker's temp files, stop the generator from rotating a live postgres password
-6448f0d fix(f0): fail closed on an unparseable DSN, don't preserve an empty postgres password
-e7b76ce feat(f0): next.js shell with next-intl catalogues and the readiness page
-0252709 fix(f0): name eslint/postcss config exports to clear lint warnings
-7307aee ci(f0): build, lint, unit, integration, vulnerability and frontend jobs
-cfdd030 fix(f0): override postcss to close two high-severity advisories
-07f9146 fix(f0): make ci actually cover the frontend audit gate
-c49f56b fix(f0): final-review wave — build context, config bounds, scrubbing, restart policy
-c846b58 fix(f0): restart the stateful services, reject a negative redis database index
-```
-
-### Verified green by the controller personally (not taken from any report)
-
-At `c846b58` (final):
+## Key paths
 
 ```
-make lint                          -> "0 issues.", exit 0
-go build ./...                     -> clean
-go test ./... -race -count=1       -> all packages ok
-go test ./... -tags=integration -race -count=1
-                                   -> exit 0, ALL packages ok (scheduler 45.5s, postgres 27.2s,
-                                      job 7.3s, redis 6.4s — real containers, not skipped)
-cd web && pnpm test                -> 3/3
-         pnpm typecheck            -> clean
-         pnpm lint                 -> clean, NO warnings
-         pnpm check:i18n-parity    -> "i18n parity ok — 9 keys in both locales"
-make up                            -> every service healthy INCLUDING web:
-                                      api/postgres/redis/web all (healthy), scheduler+worker up
-curl -s localhost:3000             -> renders database, migrations, redis rows (server-side fetch
-                                      really crossed the compose network)
-docker compose down -v             -> 0 containers, 0 volumes
+docs/rewrite/                                          the specification
+docs/rewrite/04-data-model.md                          AUTHORITATIVE DDL for F1
+docs/superpowers/plans/2026-09-10-f1-data-model.md     the F1 task plan (13 tasks, 7 waves)
+.superpowers/sdd/2026-09-10-f1-data-model/             git-ignored workspace
+  progress.md                                          THE LEDGER — read the tail first
+  task-N-brief.md / task-N-report.md                   per-task briefs and reports
+  sqlc-spike-findings.md                               controller-run spike, see below
+  timescale-shims-PROVEN.sql                           proven sqlc shim
 ```
 
 ---
 
-## The final whole-branch review — what it found
+## THE FLAKE THE F0 HANDOFF DESCRIBED WAS MISDIAGNOSED
 
-Dispatched on Opus over all 33 commits. Verdict: **Ready after named fixes** — 0 Critical,
-6 Important, ~30 Minor triaged by owning phase. All six were fixed in one wave (`c49f56b`), the
-scoped re-review returned all six ADDRESSED, and two residuals it surfaced were closed in
-`c846b58`.
+F0 recorded it as `internal/scheduler` integration tests failing ~1 in 3 under parallel load,
+and told F1 to widen whichever `require.Eventually` bound was failing.
 
-The six, all now fixed:
+**That was wrong.** Under `go test ./... -tags=integration -race -count=3` the scheduler
+package passes (134.9s for three runs, ~45s each, matching its healthy baseline). The package
+that failed was `internal/store/redis`, and the failure was not an `Eventually` bound at all:
 
-1. `.dockerignore` omitted `.superpowers/`, so `COPY . .` pulled the review workspace — including
-   four real generated `POSTGRES_PASSWORD` values — into the build layer and cache.
-2. The config loader accepted zero and negative durations/counts silently. Not one field: the same
-   helpers feed seven variables across five later phases.
-3. `postgres/health.go` held the one unscrubbed error leaving the store layer — and it is the one
-   that reaches an unauthenticated `/health/ready` body and the public web page.
-4. **`docker-compose.yml` set no `restart:` policy**, so Task 9's broker-death detector had no
-   supervisor: a worker that correctly exits 1 stayed dead forever. A genuinely *emergent* defect —
-   Task 9 built the detector, Task 11 built the compose file, neither owned the join. This is the
-   finding that justifies having a whole-branch review at all.
-5. `.env.example` shipped a *working* default DB password in the very file the offline bundle
-   stages as `env.template` for air-gapped operators.
-6. The `00001_extensions` down migration unconditionally dropped extensions it had not created.
+```
+wait until ready: external check: check target: retries: 93 address: localhost:32936:
+get state: Get ".../containers/<id>/json": context deadline exceeded
+```
 
-Two residuals, closed in `c846b58`: `postgres`/`redis` had no restart policy either (leaving the
-worker to crash-loop against a dead redis), and a **negative** `EKOKOD_REDIS_QUEUE_DB` silently
-aliased to DB 0 — go-redis only issues `SELECT` under `if c.opt.DB > 0` — collapsing the job queue
-onto the cache's database and defeating the invariant that package's own comment states.
+Redis had already logged "Ready to accept connections". What timed out was the **Docker API
+call** that testcontainers' port check issues on every poll. Root cause was an asymmetry:
+`modules/redis@v0.44.0/redis.go:72` hardcodes `WithStartupTimeout(10s)`, while
+`modules/postgres@v0.44.0/wait_strategies.go:24` leaves the library default of 60s. Fixed in
+`e85a04c` by restoring 60s for redis (REPLACING the strategy — appending leaves the 10s one
+in place and still fails).
 
-### It also refuted three claims this ledger had recorded
+### …and the same class recurred on postgres during F1
 
-The reviewer was explicitly invited to re-open the controller's rulings. Three did not survive:
+The controller's own full-suite run then failed with `TestEmissionFactorKeyUniqueness` at
+62.32s (5.34s in isolation). Reproduced deterministically by running the postgres package
+**twice concurrently**:
 
-1. The ledger said fixing `scrubErr`'s `%s`→`%w` "activates" the Task 9 `isCleanShutdown` narrowing
-   and they must be done together. **The coupling does not exist** — no scrubbed error can reach
-   `isCleanShutdown`. The `%w` change can be made alone. The real trade-off is different and worth
-   keeping: `%w` exposes the unscrubbed cause through `errors.Unwrap`.
-2. The ledger said `EKOKOD_JOB_TIMEOUT=0s` fires asynq's abort immediately. **Half wrong** — asynq
-   maps a zero `ShutdownTimeout` to its own 8 s default. The *negative* case is the real defect.
-3. The ledger said the elector integration test is timing-sensitive "in the wrong direction".
-   **Wrong** — `require.Eventually` is forgiving both ways. The suggested `require.False` is still
-   right, but as a *strength* improvement, not a flake fix.
+```
+retries: 520 ... context deadline exceeded
+--- FAIL: TestHypertablesAreConfigured (61.07s)
+```
 
-Upheld on re-examination: the 40 s `stop_grace_period` and shared-image rulings (all four shutdown
-constants checked end to end and coherent), the `main.go` doc-comment judgement, the fail-closed DSN
-handling (called "exemplary"), and — emphatically — not pushing to `main`.
+61.07s = the postgres module's 60s default, exhausted by 520 Docker API polls. Postgres never
+tripped it before because F1 grew that package from ~9 integration tests to ~23, each starting
+its own container. Assigned to Task 8b: raise to 180s in `testfixtures.StartPostgres`.
 
----
+**The property that makes this family so expensive: a container-startup failure surfaces as an
+arbitrary test failing, so it presents as a different flaky test every run.** That is exactly
+why F0 pinned it on the wrong package. If you see a new "flaky test", check whether the failure
+is actually a container readiness timeout before believing the test name.
 
-## THE ONE DECISION WAITING FOR YOU
-
-**Task 13's brief ends with `git push origin main`. I refused to run it.** There is a real remote,
-the work is on `phase/f0-foundation`, and `main` is shared. Pushing thirteen tasks of feature work
-straight onto main is your call, not a subagent's. Nothing has been pushed.
-
-When F0 closes, `superpowers:finishing-a-development-branch` will present the integration options
-(PR vs. merge vs. leave the branch). Decide there.
+**Structural fix, recorded not done:** the cause is one container per test. A shared container
+per package with per-test isolation is the real answer, but several tests genuinely need a
+virgin database (the migrate round-trip, the reversibility guard). This is the lever if suite
+time or flake rate worsens.
 
 ---
 
-## Environment — read before running anything
+## Standing rulings that keep paying off (carried from F0, all reconfirmed in F1)
 
-- **Toolchain lives in `$HOME/.local`; shell state does not persist between tool calls.** Prefix
-  every command:
+- **Requirements and tests beat the plan's prose and sample code.** Held repeatedly again.
+- **Verify interfaces against the real tree BEFORE dispatching.** The F1 pre-flight scan caught
+  six real conflicts, including four parallel tasks that would have collided on one test file
+  and a proposed test that duplicated an existing one verbatim.
+- **Do not trust a report — re-run the gate yourself.** This caught: a "no sleeps" claim that
+  was false, a task's SQLSTATE claim that was true of the run but not of the committed
+  assertions, and a full-suite flake no subagent had seen.
+- **Prove a guard can fail.** Non-negotiable now — see the next section for why.
+- **Scale the reviewer to the risk.** Opus reviewers found every Critical in this phase.
 
-  ```bash
-  export PATH="$HOME/.local/go/bin:$HOME/.local/node/bin:$HOME/go/bin:$PATH"
-  ```
+### NEW STANDING RULING — a guard that has only been seen to pass is not evidence
 
-  Go 1.27.1, Node 24.20.0, pnpm 12.3.4, golangci-lint v2.13.2, govulncheck v1.8.0.
+**Five guards in this phase turned out to be weaker than their names.** This is the phase's
+dominant defect class, and it is worth carrying forward as a first-class suspicion:
 
-- **Docker was UP all of session 5** (server 28.3.2). It stops between sessions — always verify
-  rather than trusting this line. Images already pulled: `timescale/timescaledb:2.30.0-pg16`,
-  `redis:7.4.11-alpine`, `golang:1.27.1-alpine`, `alpine:3.21`, `node:24.20.0-alpine`.
-  If down, ask the user to run:
-  `! "/mnt/c/Program Files/Docker/Docker/Docker Desktop.exe" &`
-
-- **`/mnt/c` (DrvFs) is not merely slow — it is BROKEN for stock `pnpm install` and `next build`**
-  (unconditional `chmod` EPERM, same-drive `fs.copyFile` EPERM). Session 5 worked around it with a
-  native-filesystem mirror at `/home/personal/ekokod-web-native` plus a `web/node_modules` symlink
-  that already exists on disk. **Do not re-engineer this.** Committed accommodations:
-  `web/.npmrc` (`package-import-method=copy`, self-documented) and `web/pnpm-workspace.yaml`
-  (`allowBuilds`). Nothing committed depends on the symlink — `web/Dockerfile` runs its own
-  `pnpm install` in the container, and the Docker build is the authoritative proof that
-  `pnpm build` works.
-  `.gitignore` line 3 is `/web/node_modules` **without a trailing slash** — that matters, see the
-  rulings below.
-
-- **`shellcheck` is NOT installed here.** The two shell scripts have never been statically
-  analysed locally; Task 13 was told to enforce it in CI.
+1. `no-float-money` (from F0) — depguard is an **import** linter and cannot see a struct field.
+   The "money is never float64" invariant was never mechanically enforced at field level.
+2. The reversibility guard — queried `pg_tables` only, so a forgotten `drop materialized view`
+   would pass silently. Widened to `pg_class` + `pg_type`.
+3. `TestEveryStoreMethodIsScoped` — matched only *exported* types named `*Repository`, so it
+   inspected **zero methods** and passed. The idiomatic unexported `buildingRepository`
+   satisfying an exported interface was invisible.
+4. The sqlc drift check — `git diff --exit-code` **ignores untracked files**, so a new
+   generated file that was never committed passes CI.
+5. `TestShimDeclaresEveryTimescaleFunctionTheMigrationsUse` — the guard added to close this very
+   class only examines functions the shim *already* declares, so a newly-used undeclared
+   function is never checked. (Fix in flight.)
 
 ---
 
@@ -200,213 +134,133 @@ When F0 closes, `superpowers:finishing-a-development-branch` will present the in
 | Decision | Value |
 |---|---|
 | Go module path | `github.com/MErenTalan/ekokod-rewrite` |
-| Binary name | `ekokod` |
-| Env var prefix | `EKOKOD_` (spec appendix documents `BCEM_`; names keep their spelling, prefix swapped) |
-| Branch | `phase/f0-foundation`, no separate git worktree |
+| Binary name | `ekokod` (spec says `bcem`; only the name changed) |
+| Env var prefix | `EKOKOD_` |
+| Branch | `phase/f1-data-model` |
 | Execution method | `superpowers:subagent-driven-development`, user approved plan + parallel subagents |
-| Commit trailers | `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>` + the session's own `Claude-Session:` URL — **the task briefs carry a STALE session URL, always override it** |
-
-### Standing rulings that keep paying off
-
-- **When the plan's prose or sample code disagrees with its stated requirements or its own tests,
-  the requirements and tests win.** Held ~10 times this phase; the plan's own sample code has now
-  contained a live defect at least four times.
-- **Verify interfaces and pins against the real tree BEFORE dispatching.** Session 5's Task 12
-  pre-flight checked all 11 npm version pins against the registry; Task 11's checked the
-  `buildinfo` ldflag paths and every route. A single bad pin is a guaranteed wasted round trip.
-- **Do not trust a report — re-run the gate yourself.** Every "verified green" line above was
-  produced by the controller. This caught things reviewers missed twice in session 5.
-- **Prove a guard can fail.** Task 10's implementer created a real violating package, watched the
-  tightened guard fail, then re-ran the SAME violation against the old logic and watched it pass.
-- **Ask the reviewer a specific question.** Every finding that mattered this session came from a
-  pointed question, not from "please review this".
-- **Scale the reviewer to the risk.** Opus on Task 11 (deployment artifacts) found 4 Importants
-  that a cheaper tier would likely have missed.
+| Commit trailers | `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>` + the session's own `Claude-Session:` URL — **task briefs carry a STALE session URL, always override** |
+| Parallelism | isolated git worktrees on the **native** filesystem (see Environment) |
 
 ---
 
-## Rulings made in session 5 (the full list, in order)
+## Environment — read before running anything
 
-Each is recorded in the ledger with its cost-if-wrong.
-
-**Task 10**
-1. Fold review Minor 2 (the `ListenConfig` ctx caveat) into the fix round rather than deferring —
-   the caveat existed only in a git-ignored report file and a future reader would assume the opposite.
-2. Defer Minors 1 and 3. The bare-slog-handler guard is textual not AST-based (real, but it is
-   defence in depth and is proven live); the `main.go` comment the reviewer called misleading is,
-   on re-reading, literally accurate.
-
-**Task 11**
-3. Compose MUST set `stop_grace_period: 40s` on api/worker/scheduler. Docker's 10s default would
-   SIGKILL the worker 20s before its 30s drain window closes. **Load-bearing.**
-4. The four Go services share ONE image with identical build args — the brief would have compiled
-   worker/scheduler with ldflag defaults, so `ekokod version` disagreed across one deployment.
-5. `web` stays in compose though it cannot build until Task 12; verification is Go-stack-only, and
-   `make up`/`make offline-bundle` were carried forward to Task 12. (Discharged — both now verified.)
-6. The `.env.docker` generator becomes a committed script — the file is gitignored, so a fresh
-   clone running `make up` would otherwise hit an opaque missing-env_file error.
-7. The shared-image layout stands; do NOT add `pull_policy: never`. Settled by execution: deleted
-   `ekokod:dev` outright and ran `docker compose up -d` with no `--build` — no pull, exit 0.
-8. FIX the hardcoded `POSTGRES_PASSWORD` even though the brief mandates the literal. The spec's
-   "no secret has a default value" outranks the plan's text, and this file ships to air-gapped
-   operators. Constraint: `make up` on a fresh clone must still work with zero manual steps.
-9. Fold all five Minors into the same fix round — each is a one-liner in a file already open.
-10. The generator must reason about BOTH files, with a defined outcome for all four states
-    (neither/both/`.env` only/`.env.docker` only), never rotating a password an existing volume
-    may already hold.
-11. Prove the `.env`-only state against a LIVE already-initialised volume — reading the code cannot
-    distinguish fixed from broken there, since both produce two mutually-consistent files.
-12. Fail CLOSED and LOUD on an unparseable DSN, and **never echo the DSN in the error** — three of
-    this phase's Criticals came from error text embedding a connection string.
-13. Treat an empty `POSTGRES_PASSWORD` as absent, not as a value to preserve.
-
-**Task 12**
-14. Step 7 must NOT undo the i18n divergence with `git checkout` — the file is untracked at that
-    point, so the checkout fails and the corruption would ship. Copy aside, mutate, restore by copy,
-    diff to prove byte-exact.
-15. `web/public/` needs a tracked `.gitkeep` — git does not track empty directories, so a fresh
-    clone would break the Dockerfile's `COPY /app/public`.
-16. `vitest.config.ts` gets an explicit `@/` alias — Vitest does not read tsconfig `paths`.
-17. The `web/node_modules` SYMLINK must never be committed. `.gitignore`'s `/web/node_modules/`
-    (trailing slash) matches directories only; proven with `git check-ignore`. Slashless form fixes it.
-18. Keep the DrvFs workaround, but nothing committed may depend on the symlink, `.npmrc` must
-    explain itself (it binds CI too), and a fresh clone must work with a plain `pnpm install`.
-19. The implementer's edits to TWO of Task 11's files (`web/Dockerfile`, `docker-compose.yml`) are
-    AUTHORISED and belong to Task 12 — both bugs were discoverable only by running `make up`, which
-    Task 11 provably could not do. Precedent: the Task 6→5 and Task 9→2 rulings.
-20. Fix the two eslint warnings by NAMING the exports, not by adding `eslint-disable` — this phase
-    does not silence linters (Task 10 fixed all 40 findings and suppressed none).
-
-**Task 13**
-21. **DO NOT `git push origin main`.** See "the one decision waiting for you".
-22. Pin `govulncheck` to v1.8.0 in CI — the brief's `@latest` disagrees with the Makefile's pin.
-23. CI must run golangci-lint at the SAME pinned version as local; verify the action major supports
-    the v2 line, else use `make tools && make lint`.
-24. Move `--max-warnings=0` into `web/package.json`'s lint script so local and CI agree.
-25. CI must run `shellcheck` over `scripts/*.sh` — closes a Task 11 deferred minor.
+- **Toolchain in `$HOME/.local`; shell state does not persist between tool calls.** Prefix every
+  command: `export PATH="$HOME/.local/go/bin:$HOME/.local/node/bin:$HOME/go/bin:$PATH"`
+  Go 1.27.1, Node 24.20.0, pnpm 12.3.4, golangci-lint v2.13.2, govulncheck v1.8.0,
+  **sqlc v1.30.0** (added in F1, pinned in `Makefile` and CI).
+- **Docker stops between sessions — always verify with `docker ps`.** If down, ask the user to
+  run: `! "/mnt/c/Program Files/Docker/Docker/Docker Desktop.exe" &`
+- **Git worktree isolation fails on this DrvFs mount** with "dubious ownership", because a linked
+  worktree's gitdir lives on `/mnt/c`. The Agent tool's `isolation: "worktree"` therefore does
+  **not** work here. What does work, and is how F1 ran four implementers concurrently:
+  ```bash
+  git worktree add -b f1/task-N /home/personal/ekokod-wt-tN phase/f1-data-model
+  git config --global --add safe.directory /home/personal/ekokod-wt-tN
+  ```
+  Then dispatch a normal (non-isolated) agent told to `cd` there. Merge with `--no-ff`.
+- **`/mnt/c` (DrvFs) is BROKEN for stock `pnpm install` and `next build`.** Session 5's
+  native-filesystem mirror at `/home/personal/ekokod-web-native` plus a `web/node_modules`
+  symlink is on disk. **Do not re-engineer this.**
+- **`shellcheck` is NOT installed locally**; CI enforces it.
 
 ---
 
-## KNOWN FLAKE — the first thing F1 should fix
+## F1-specific technical facts a successor must know
 
-`internal/scheduler`'s integration tests fail intermittently under full-suite parallel load.
-Measured at the final commit: **run 1 FAILED** with the package at 100.752s; **runs 2 and 3 passed**
-at 47.0s and 49.3s; all five tests pass in isolation in 42.9s. The 2× wall-clock blowup points at
-testcontainers/Docker contention while `go test ./...` runs packages in parallel, against the
-`require.Eventually(..., 5*time.Second, ...)` bounds at `elector_integration_test.go:67,76,80,102,
-140,157` — a 5 s budget to acquire a Postgres advisory lock is thin on a machine running several
-containers at once.
+### sqlc
 
-**The evidence is incomplete and I am saying so rather than papering over it:** the failing
-assertion's text was lost to an over-narrow grep on the first run and did not reproduce in two
-further attempts, so *which* bound failed is unknown. I deliberately did not widen bounds on a
-guess — that is the same blind fixing I forbade a Task 13 implementer from doing over shellcheck
-findings, and the standard applies to me too.
+- sqlc **parses the goose migrations directly** — `create_hypertable`, compression settings and
+  `create materialized view ... with (timescaledb.continuous)` all pass. There is deliberately
+  **no `schema.sql`**, no pg_dump step and no schema-drift check.
+- **`internal/store/postgres/timescale-shims.sql` is load-bearing and never applied to a real
+  database.** Without it, aggregate columns mistype — measured: `active_consumption`, an
+  **energy** value, generated as `int32`. Silent kWh truncation that no build, lint or migration
+  test would catch.
+- **The `::numeric` casts in `00005` are load-bearing and look redundant.** They are what keep
+  aggregate value columns numeric. Do not "tidy" them away.
+- UUIDs are `google/uuid.UUID` / `*uuid.UUID` via override. **A SQL NULL decodes as a nil
+  pointer, never `uuid.Nil`** — proven against a real container. No pgx codec registration was
+  needed; `pool.go` is untouched.
+- Generated code keeps `pgtype.Numeric`. `internal/domain/model` uses `decimal.Decimal`, and
+  Task 8b provides **one audited conversion pair** which must convert via string/exponent,
+  **never via float64**.
+- `postgres.DB` holds a **named unexported** `q *sqlcgen.Queries` — deliberately NOT embedded,
+  because embedding promoted unscoped query methods onto the store's exported surface.
 
-**F1: reproduce under load first** (`-count=3`, or the full suite in parallel), identify the bound
-that actually fails, then widen that one. **CI runs the identical command on `ubuntu-latest`, so it
-may flake there too** — a first-run red CI is as corrosive as a knowingly-red one.
+### Continuous aggregates
 
----
+- **All six are defined directly over the base hypertable; none is hierarchical.** Not a
+  platform limitation — a roll-up from `consumption_hourly` is *wrong by a whole hour* for the
+  seven registers with an index column, and loses every inter-hour step for the five without.
+- **Buckets of one day or wider carry `'Europe/Istanbul'`.** UTC bucketing violated
+  `02-domain-rules.md` §1 (day/month boundaries evaluated in Istanbul) — it attributed local
+  00:00–03:00 to the previous day. `consumption_hourly` is deliberately timezone-free.
+- **`materialized_only` is split:** `false` on `consumption_hourly`, `consumption_daily`,
+  `plant_production_daily` (open-bucket tail is bounded); `true` on the monthly/yearly views
+  (their tail would be months of raw readings — `consumption_yearly` would scan nine months per
+  analyzer in September).
+- **CONSTRAINT ON TASK 10:** month-to-date and year-to-date must be **composed explicitly**
+  (closed buckets + open period from `consumption_daily` or `meter_readings`). They are NOT
+  present in the monthly/yearly views. Do not "fix" a missing row by flipping `materialized_only`.
+- Timescale does **not** materialise a partially-covered bucket at any `end_offset`.
+- **`start_offset` permanently caps materialised history.** After a legacy backfill an operator
+  must run `call refresh_continuous_aggregate('<view>', NULL, now());` per aggregate, or old
+  data is silently absent — the query returns rows, just fewer than the truth. Runbook item for
+  the data migration; nothing enforces it.
+- Plant aggregate column names (the implementer's invention; the spec names none):
+  `production_kwh`, `max_active_power_kw`, `avg_efficiency_pct`.
+- `00005` requires `-- +goose NO TRANSACTION` (SQLSTATE 25001).
 
-## Deferred minors — triaged by the final whole-branch review
+### Spec defects found by execution
 
-The final review triaged every item below and assigned an owning phase. Items marked **fixed** were
-closed in the final fix wave (`c49f56b`, `c846b58`).
+1. **`04-data-model.md` §4.5 is not executable as written.** `add_compression_policy('plant_production', ...)`
+   errors "columnstore not enabled on hypertable" — the spec enables compression on
+   `meter_readings` but never on `plant_production`. The migration adds the missing
+   `alter table ... set (timescaledb.compress, ...)`.
+2. **`plant_production`'s primary key `(plant_id, ts, device_id)` includes a column the spec
+   declares nullable.** Postgres silently promotes it to NOT NULL, so **plant-level production
+   rows with no attributed device are unstorable**. Transcribed as written. **BLOCKS F2** — if
+   iSolar reports plant-level totals without a device serial, F2 needs a hypertable primary-key
+   change. Cheap while empty, expensive later. **Raise with the product owner.**
+3. §3's preamble ("every tenant-scoped table carries `company_id` directly") is contradicted by
+   the spec's own DDL for `building_contacts`, `power_plant_monthly_targets`,
+   `power_plant_devices`, `power_plant_alarm_recipients` and `plant_production`. Transcribed as
+   written. **Consequence for repositories:** `building_contacts` and `power_plant_devices` have
+   surrogate ids and so ARE addressable without a tenant reference — they must always be reached
+   through a parent-scoped query.
+4. §1 lists `btree_gin`; F0's `00001` omitted it. Added in F1.
 
-**Task 1** — text-mode version test asserts only the `ekokod` substring (the brief's own test).
+### Repository conventions Tasks 9–11 must follow
 
-**Task 2**
-- `External.ISolarRedirect` has no derived default (F2 owns it).
-- The 720h "remember me" refresh-token variant is not modelled (F6).
-- **`loader.duration` does not validate positivity.** `EKOKOD_JOB_TIMEOUT=0s` or `-5m` yields
-  `ShutdownTimeout <= 0` and asynq's abort timer fires immediately — in-flight tasks killed with no
-  drain. Pre-existing, not introduced by Task 9's `min()` clamp.
+- Every method takes `ctx` first, `store.Scope` second. Reject an invalid scope before touching
+  the database.
+- Use `Scope`'s authorisation branch. **Never write `if len(s.BuildingIDs) > 0 { ...ANY($1)... }`**
+  — that is fail-open, since an empty slice drops the predicate.
+- A nil/empty `BuildingIds` encodes to `NULL::uuid[]` and matches nothing, so a scope granting no
+  buildings returns **zero rows**. That is the designed fail-closed semantic; rely on it.
+- `audit_log` has no FKs (deliberate — an audit trail must survive its subject). Every join to
+  `companies`/`users` must be a **LEFT JOIN**, and the read model must render a missing subject
+  rather than dropping the row.
+- Errors route through the package's `scrubErr`. Scrubbed errors are traversable by `errors.Is`
+  via an unexported `scrubbed` type whose `Error()` is the redacted text; `secret.IsScrubbed` is
+  the positive fingerprint. **The "DSN did not parse" branch deliberately attaches NO cause** —
+  `*url.Error` embeds its whole input, i.e. the password. There is a test guarding this; do not
+  "fix" the inconsistency.
 
-**Tasks 3+4**
-- logging's secret-substring list is unexported and not extendable by callers.
-- **logging's redaction is KEY-BASED ONLY** — `redactAttr` never scans attribute *values*. Every
-  `slog.String("error", err.Error())` site depends entirely on the error having been scrubbed at
-  construction. Audited sites are currently safe. Phase-wide invariant worth remembering.
+### HARD REQUIREMENT FOR TASK 9
 
-**Task 5**
-- The down migration drops timescaledb/pgcrypto/citext unconditionally.
-- `checkMigrationsCurrent`'s non-`isUndefinedTable` branch returns an **unscrubbed** error.
-
-**Task 6**
-- `scrubErr` builds its error with `%s` not `%w`, so `errors.Is`/`As` cannot see through it.
-  **Fixing this activates Task 9's ruling that `isCleanShutdown` is narrowed to `context.Canceled`
-  only — do them together.**
-- `internal/job/scrub.go` and `internal/store/redis/scrub.go` hold byte-identical `scrubParseErr`.
-
-**Task 7**
-- `ratelimit.go` reaps stale buckets only every 10 minutes (trivial to grow with an IPv6 /64).
-- `Retry-After: 60` is hardcoded, unrelated to the configured window.
-
-**Task 8** (six, all from the Opus review)
-- `elector.go:54` — `time.NewTicker(e.retry)` panics on `retry <= 0` in an exported path.
-- `elector_integration_test.go:157` — timing-sensitive in the wrong direction (a *faster* machine
-  makes it more likely to fail). Deterministic form is `require.False` after `<-cancelled`.
-- `scheduler.go:69-80` — `asynq.NewScheduler` leaks a go-redis client per failed campaign (~1/10s).
-  Unreachable today; goes live when config-driven entries are registered.
-- `elector.go:139` — discards `pg_advisory_unlock`'s boolean.
-- `elector.go:148-150` — `recover()` keeps a deterministically panicking `lead` re-running forever.
-- Inherent: `IsLeader()`/`leadCtx` can lag reality by ~4s without fencing tokens.
-- **Carried forward:** the phase introducing the first real scheduled job must wire
-  `Scheduler.entries()` (it registers only the noop task) and add coverage.
-
-**Task 9**
-- `dsnDisplay`'s `q.Encode()` alphabetises and percent-encodes; display-only.
-- `internal/cli/api.go`'s serve goroutine is not joined before `RunE` returns (harmless).
-
-**Task 10**
-- The depguard `no-float-money` rule targets packages that do not exist until F4. Intended.
-- The bare-slog-handler guard detects textually (`strings.Contains`), so it is evadable by import
-  aliasing, unlike the AST-based domain checks. Defence in depth; proven live.
-- `cmd/ekokod/main.go`'s doc comment framing — controller judged it literally accurate, recorded so
-  the final review can re-open it.
-
-**Task 11**
-- The fix-round-3 live-test transcript in `task-11-report.md` prints a real generated
-  `POSTGRES_PASSWORD`. The whole SDD workspace is gitignored and the volume was destroyed; the
-  workspace is deleted at phase end. Test-log hygiene only.
-
-**Task 12**
-- `check-i18n-parity.mjs` compares flattened key PATHS but not leaf value TYPES.
-- `.gitignore` additions for `/web/next-env.d.ts` and `/web/tsconfig.tsbuildinfo` sit outside the
-  brief's literal file list. Low risk.
-
----
-
-## What the reviews caught across the phase
-
-Two classes dominate — keep reviewer prompts pointed at them.
-
-1. **Task 2, Critical** — `net/url.Parse`'s error embeds its input, printing the DB password.
-2. **Tasks 3+4, Critical** — the redacting handler never resolved `slog.LogValuer`.
-3. **Task 5, Critical** — pgx splits DSN userinfo at the first `@`, `net/url` at the last.
-4. **Task 7, Critical (plan's own sample code)** — allow-all CORS *with credentials* when
-   `EKOKOD_CORS_ORIGINS` was unset.
-5. **Task 7, Important (plan's own sample code)** — unbounded Prometheus labels from unmatched routes.
-6. **Task 9, Important (plan's own sample code)** — `asynq.Server.Run` races `signal.NotifyContext`;
-   the second `Shutdown` is a no-op, so `RunE` returned nil while asynq still drained.
-7. **Task 9, Critical (in Task 2's shipped code)** — `config.redactDSN` failed OPEN.
-8. **Task 10, Important** — arch guards used unbounded prefix matching, so `internal/apikeys` would
-   have been silently exempted from the "only the CLI imports the API" rule.
-9. **Task 11, Important ×4** — secrets into a build layer via an incomplete `.dockerignore`; an
-   unexported `VERSION` that hands air-gapped operators a tarball whose images the compose file
-   cannot name; a generator that could leave a sticky empty file; a hardcoded Postgres password
-   shipped to operators.
-10. **Task 11, Important ×2 more, each introduced BY A REPAIR** — temp files past `.gitignore`;
-    partial-state runs force-rotating a live password.
-
-**Nearly every one was a secret-handling or liveness defect the plan's own tests did not cover.**
+`TestEveryStoreMethodIsScoped` currently inspects **0 methods** and passes — the correct
+pre-repository baseline (the exemption was measured to suppress exactly 5, all inside `sqlcgen`,
+none in package `postgres`). **Task 9 must flip its `t.Log` of the inspected count to
+`require.Positive`.** If it does not, the guard is green over an empty set for the rest of the
+project and a narrowing bug in it is indistinguishable from having nothing to check.
 
 ---
 
-## Open questions for the product owner (block F4, not F0)
+## Open questions for the product owner (block F4, plus one that blocks F2)
 
-`docs/rewrite/02-domain-rules.md` §11. They need research, so raise them early.
+`docs/rewrite/02-domain-rules.md` §11, unchanged from F0:
 
 1. **Reactive penalty base** — entire reactive quantity charged (legacy) or only the excess?
 2. **Sub-9 kW exemption** — confirm installations under 9 kW are exempt.
@@ -416,23 +270,5 @@ Two classes dominate — keep reviewer prompts pointed at them.
 5. **Grid emission factor** — confirm the current official Türkiye value and source year, and
    whether historical reports are recomputed or keep 0.45.
 
----
-
-## Key paths
-
-```
-docs/rewrite/                                          the specification
-docs/rewrite/09-implementation-plan.md                 phases F0–F15
-docs/superpowers/plans/2026-09-08-f0-foundation.md     the F0 task plan
-.superpowers/sdd/2026-09-08-f0-foundation/             git-ignored workspace
-  progress.md                                          THE LEDGER — read the tail first
-  task-N-brief.md / task-N-report.md                   per-task briefs and reports
-  review-<base>..<head>.diff                           review packages
-```
-
-SDD helper scripts:
-`/home/personal/.claude/plugins/cache/claude-plugins-official/superpowers/6.3.0/skills/subagent-driven-development/scripts/`
-(`task-brief`, `review-package`, `sdd-workspace`).
-
-**Tip for the final review package:** `web/pnpm-lock.yaml` is 5774 generated lines. Exclude it —
-`git diff -U10 <base>..<head> -- . ':(exclude)web/pnpm-lock.yaml'` — or the reviewer reads noise.
+**NEW, blocks F2:** does iSolarCloud report plant-level production without a device serial? If
+so, `plant_production`'s primary key must change before any real ingestion (see spec defect 2).
