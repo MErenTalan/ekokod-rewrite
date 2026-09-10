@@ -9,3 +9,15 @@ allowBuilds:
   '@parcel/watcher': true
   '@swc/core': true
   unrs-resolver: true
+
+# postcss@8.4.31 is pulled in transitively by next@15.5.25 (both directly
+# and via next-intl -> next), and is vulnerable to two high-severity
+# advisories fixed upstream in postcss itself:
+#   - GHSA-6g55-p6wh-862q (arbitrary file read via sourceMappingURL, fixed >=8.5.12)
+#   - GHSA-r28c-9q8g-f849 (path traversal via sourceMappingURL, fixed >=8.5.18)
+# next does not vendor its own copy (pnpm why postcss shows a real
+# dependency edge: next > postcss), so this override resolves cleanly.
+# Drop this once a next release bundles postcss >=8.5.18 on its own —
+# check with `pnpm why postcss` after bumping next.
+overrides:
+  postcss: '>=8.5.18'
