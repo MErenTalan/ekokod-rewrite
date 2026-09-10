@@ -48,8 +48,8 @@ func TestMigrationsLeaveNoTablesBehind(t *testing.T) {
 		  from pg_class c
 		  join pg_namespace n on n.oid = c.relnamespace
 		 where n.nspname = 'public'
-		   -- ordinary tables, views, materialized views and sequences
-		   and c.relkind in ('r', 'v', 'm', 'S')
+		   -- ordinary and partitioned tables, views, materialized views, sequences
+		   and c.relkind in ('r', 'p', 'v', 'm', 'S')
 		   -- goose's bookkeeping table and the sequence behind its id column
 		   and c.relname not in ('goose_db_version', 'goose_db_version_id_seq')
 		union all
