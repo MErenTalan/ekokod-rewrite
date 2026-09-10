@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
+	"github.com/MErenTalan/ekokod-rewrite/internal/platform/secret"
 	"github.com/hibiken/asynq"
 	goredis "github.com/redis/go-redis/v9"
 )
@@ -26,7 +27,7 @@ const (
 func RedisOpt(cfg config.Redis) (asynq.RedisClientOpt, error) {
 	opts, err := goredis.ParseURL(cfg.URL)
 	if err != nil {
-		return asynq.RedisClientOpt{}, scrubParseErr("parse redis url")
+		return asynq.RedisClientOpt{}, secret.URLParseErr("parse redis url")
 	}
 	return asynq.RedisClientOpt{
 		Addr:     opts.Addr,

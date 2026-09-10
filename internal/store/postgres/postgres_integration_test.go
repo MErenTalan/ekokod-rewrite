@@ -160,9 +160,23 @@ func TestDownMigrationLeavesExtensionsInstalled(t *testing.T) {
 // package that used to escape scrubbing. It matters more than the others:
 // MigrationsCheck is wired into readyHandler, which serialises the error text
 // into the unauthenticated /health/ready body that the web health page then
-// renders. scrubPoolErr flattens the driver error to redacted text rather
-// than wrapping it with %w, so an unwrappable error is the observable proof
-// that the value went through the scrubber.
+// renders.
+//
+// CHANGED in task 8a. This test used to assert errors.Unwrap(err) == nil,
+// treating an unwrappable error as "the observable proof that the value went
+// through the scrubber". That proxy was never the property we wanted — it was
+// a side effect of scrubPoolErr flattening the driver error with %s, which
+// also destroyed errors.Is/errors.As for every caller of this package. The
+// flattening is now gone (see secret.Wrap): the redacted text lives in the
+// wrapper's Error() while the driver error stays reachable through Unwrap.
+//
+// So the assertion is inverted, and strengthened at the same time. Both
+// halves are now checked directly rather than by proxy: the printed text
+// carries no credential (the property that actually protects the readiness
+// body), AND the driver's own error is still reachable, so a caller can
+// errors.Is through a scrubbed error. Unwrapping deliberately yields
+// unredacted text; only the logging and HTTP paths, which print err.Error(),
+// are bound by the redaction.
 func TestMigrationsCheckErrorIsScrubbed(t *testing.T) {
 	ctx := context.Background()
 	dsn := startPostgres(t)
@@ -177,6 +191,12 @@ func TestMigrationsCheckErrorIsScrubbed(t *testing.T) {
 	err = postgres.MigrationsCheck(pool).Fn(ctx)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "read schema version")
-	require.Nil(t, errors.Unwrap(err), "the error must be flattened by scrubPoolErr, not wrapped with %%w")
 	require.NotContains(t, err.Error(), "ekokod:ekokod", "no credential may reach the readiness body")
+	require.NotContains(t, err.Error(), "ekokod", "no credential fragment may reach the readiness body")
+
+	cause := errors.Unwrap(err)
+	require.Error(t, cause, "the driver error must stay reachable: errors.Is must work through a scrubbed error")
+	require.Contains(t, cause.Error(), "closed pool",
+		"the reachable cause must be the driver's own error, not a copy of the redacted wrapper")
+	require.ErrorIs(t, err, cause, "errors.Is must traverse the scrubbed wrapper")
 }

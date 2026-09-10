@@ -9,6 +9,7 @@ import (
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/health"
+	"github.com/MErenTalan/ekokod-rewrite/internal/platform/secret"
 	goredis "github.com/redis/go-redis/v9"
 )
 
@@ -16,7 +17,7 @@ import (
 func New(ctx context.Context, cfg config.Redis, log *slog.Logger) (*goredis.Client, error) {
 	opts, err := goredis.ParseURL(cfg.URL)
 	if err != nil {
-		return nil, scrubParseErr("parse redis url")
+		return nil, secret.URLParseErr("parse redis url")
 	}
 	opts.DB = cfg.CacheDB
 
