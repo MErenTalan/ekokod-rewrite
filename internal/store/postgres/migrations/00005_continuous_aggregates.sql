@@ -77,12 +77,16 @@
 --
 -- OPERATOR NOTE - AFTER ANY HISTORICAL BACKFILL, REFRESH EVERY AGGREGATE ONCE.
 -- A refresh policy only ever materialises [now - start_offset, now - end_offset].
--- These views are materialized_only (the 2.30 default), so any bucket that was
--- never inside a refresh window is not stale, it is ABSENT: the query succeeds
--- and quietly returns fewer rows than the truth. Loading ten years of legacy
--- readings would therefore leave consumption_yearly holding five years,
--- consumption_monthly one, and consumption_daily ninety days. After a backfill,
--- run once per aggregate, oldest bucket width last:
+-- Any bucket that was never inside a refresh window is not stale, it is ABSENT:
+-- the query succeeds and quietly returns fewer rows than the truth. Real-time
+-- aggregation does NOT rescue this, which is the part worth knowing — it unions
+-- in raw rows only from ABOVE the materialisation watermark, and backfilled
+-- history sits below it, so old data is missing from consumption_hourly,
+-- consumption_daily and plant_production_daily exactly as it is from the three
+-- materialized_only views. Loading ten years of legacy readings would leave
+-- consumption_yearly holding five years, consumption_monthly one, and
+-- consumption_daily ninety days. After a backfill, run once per aggregate,
+-- oldest bucket width last:
 --
 --     call refresh_continuous_aggregate('consumption_hourly',       NULL, now());
 --     call refresh_continuous_aggregate('consumption_daily',        NULL, now());
