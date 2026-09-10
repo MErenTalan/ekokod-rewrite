@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
+	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
 	"github.com/stretchr/testify/require"
 )
 
@@ -15,10 +16,10 @@ import (
 // here would invite storing a plaintext password, and the API must never
 // return these at all.
 func TestIntegrationCredentialSecretsAreBytea(t *testing.T) {
-	dsn := startPostgres(t)
+	dsn := testfixtures.StartPostgresUnmigrated(t)
 	ctx := context.Background()
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
-	pool := newPool(t, dsn)
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
+	pool := testfixtures.NewPool(t, dsn)
 
 	for table, columns := range map[string][]string{
 		"integration_credentials": {"secret_enc", "extra_enc"},
@@ -46,10 +47,10 @@ func TestIntegrationCredentialSecretsAreBytea(t *testing.T) {
 // bigint identity column, not a uuid — the spec calls this out explicitly
 // because every other table in this migration uses uuid primary keys.
 func TestOperationalMessagesUsesBigserial(t *testing.T) {
-	dsn := startPostgres(t)
+	dsn := testfixtures.StartPostgresUnmigrated(t)
 	ctx := context.Background()
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
-	pool := newPool(t, dsn)
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
+	pool := testfixtures.NewPool(t, dsn)
 
 	var dataType string
 	require.NoError(t, pool.QueryRow(ctx,
@@ -62,10 +63,10 @@ func TestOperationalMessagesUsesBigserial(t *testing.T) {
 // TestJobRunsJSONBColumns pins job_runs.scope and .detail to jsonb, as the
 // brief calls out explicitly.
 func TestJobRunsJSONBColumns(t *testing.T) {
-	dsn := startPostgres(t)
+	dsn := testfixtures.StartPostgresUnmigrated(t)
 	ctx := context.Background()
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
-	pool := newPool(t, dsn)
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
+	pool := testfixtures.NewPool(t, dsn)
 
 	for _, column := range []string{"scope", "detail"} {
 		var dataType string
@@ -80,10 +81,10 @@ func TestJobRunsJSONBColumns(t *testing.T) {
 // TestCompanyWeekendDaysRejectsOutOfRangeDay proves the day_of_week check
 // constraint is present and enforced by Postgres, not just documented.
 func TestCompanyWeekendDaysRejectsOutOfRangeDay(t *testing.T) {
-	dsn := startPostgres(t)
+	dsn := testfixtures.StartPostgresUnmigrated(t)
 	ctx := context.Background()
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
-	pool := newPool(t, dsn)
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
+	pool := testfixtures.NewPool(t, dsn)
 
 	companyID, _ := seedCompanyAndBuilding(t, ctx, pool)
 
@@ -101,10 +102,10 @@ func TestCompanyWeekendDaysRejectsOutOfRangeDay(t *testing.T) {
 // TestCompanyVacationsRejectsInvertedRange proves the named valid_range check
 // on company_vacations is present and enforced.
 func TestCompanyVacationsRejectsInvertedRange(t *testing.T) {
-	dsn := startPostgres(t)
+	dsn := testfixtures.StartPostgresUnmigrated(t)
 	ctx := context.Background()
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
-	pool := newPool(t, dsn)
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
+	pool := testfixtures.NewPool(t, dsn)
 
 	companyID, _ := seedCompanyAndBuilding(t, ctx, pool)
 
@@ -124,10 +125,10 @@ func TestCompanyVacationsRejectsInvertedRange(t *testing.T) {
 // users, defaults and the operational_messages / job_runs shapes all hold
 // together end to end.
 func TestOperationsTablesRoundTrip(t *testing.T) {
-	dsn := startPostgres(t)
+	dsn := testfixtures.StartPostgresUnmigrated(t)
 	ctx := context.Background()
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
-	pool := newPool(t, dsn)
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
+	pool := testfixtures.NewPool(t, dsn)
 
 	companyID, _ := seedCompanyAndBuilding(t, ctx, pool)
 

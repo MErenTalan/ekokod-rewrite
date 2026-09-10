@@ -5,44 +5,20 @@ package postgres_test
 import (
 	"context"
 	"errors"
-	"io"
-	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/secret"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
+	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
 	"github.com/stretchr/testify/require"
-	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 )
-
-// startPostgres boots TimescaleDB and returns its DSN.
-func startPostgres(t *testing.T) string {
-	t.Helper()
-	ctx := context.Background()
-
-	container, err := tcpostgres.Run(ctx, "timescale/timescaledb:2.30.0-pg16",
-		tcpostgres.WithDatabase("ekokod"),
-		tcpostgres.WithUsername("ekokod"),
-		tcpostgres.WithPassword("ekokod"),
-		tcpostgres.BasicWaitStrategies(),
-		tcpostgres.WithSQLDriver("pgx"),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = container.Terminate(context.Background()) })
-
-	dsn, err := container.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-	return dsn
-}
-
-func discardLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
 
 func TestMigrateUpDownUp(t *testing.T) {
 	ctx := context.Background()
-	dsn := startPostgres(t)
-	log := discardLogger()
+	dsn := testfixtures.StartPostgresUnmigrated(t)
+	log := testfixtures.DiscardLogger()
 
 	require.NoError(t, postgres.MigrateUp(ctx, dsn, log))
 
@@ -64,11 +40,11 @@ func TestMigrateUpDownUp(t *testing.T) {
 
 func TestTimescaleExtensionIsInstalled(t *testing.T) {
 	ctx := context.Background()
-	dsn := startPostgres(t)
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
+	dsn := testfixtures.StartPostgresUnmigrated(t)
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
 
 	pool, err := postgres.NewPool(ctx, config.DB{URL: dsn, MaxConns: 4, MinConns: 1,
-		MaxConnLifetime: time.Hour, StatementTimeout: 10 * time.Second}, discardLogger())
+		MaxConnLifetime: time.Hour, StatementTimeout: 10 * time.Second}, testfixtures.DiscardLogger())
 	require.NoError(t, err)
 	t.Cleanup(pool.Close)
 
@@ -80,10 +56,10 @@ func TestTimescaleExtensionIsInstalled(t *testing.T) {
 
 func TestPoolCheckReportsHealth(t *testing.T) {
 	ctx := context.Background()
-	dsn := startPostgres(t)
+	dsn := testfixtures.StartPostgresUnmigrated(t)
 
 	pool, err := postgres.NewPool(ctx, config.DB{URL: dsn, MaxConns: 4, MinConns: 1,
-		MaxConnLifetime: time.Hour, StatementTimeout: 10 * time.Second}, discardLogger())
+		MaxConnLifetime: time.Hour, StatementTimeout: 10 * time.Second}, testfixtures.DiscardLogger())
 	require.NoError(t, err)
 
 	check := postgres.PoolCheck(pool)
@@ -96,8 +72,8 @@ func TestPoolCheckReportsHealth(t *testing.T) {
 
 func TestMigrationsCheckReportsPendingThenCurrent(t *testing.T) {
 	ctx := context.Background()
-	dsn := startPostgres(t)
-	log := discardLogger()
+	dsn := testfixtures.StartPostgresUnmigrated(t)
+	log := testfixtures.DiscardLogger()
 
 	pool, err := postgres.NewPool(ctx, config.DB{URL: dsn, MaxConns: 4, MinConns: 1,
 		MaxConnLifetime: time.Hour, StatementTimeout: 10 * time.Second}, log)
@@ -118,10 +94,10 @@ func TestMigrationsCheckReportsPendingThenCurrent(t *testing.T) {
 
 func TestStatementTimeoutIsApplied(t *testing.T) {
 	ctx := context.Background()
-	dsn := startPostgres(t)
+	dsn := testfixtures.StartPostgresUnmigrated(t)
 
 	pool, err := postgres.NewPool(ctx, config.DB{URL: dsn, MaxConns: 2, MinConns: 1,
-		MaxConnLifetime: time.Hour, StatementTimeout: 250 * time.Millisecond}, discardLogger())
+		MaxConnLifetime: time.Hour, StatementTimeout: 250 * time.Millisecond}, testfixtures.DiscardLogger())
 	require.NoError(t, err)
 	t.Cleanup(pool.Close)
 
@@ -138,8 +114,8 @@ func TestStatementTimeoutIsApplied(t *testing.T) {
 // timescaledb.
 func TestDownMigrationLeavesExtensionsInstalled(t *testing.T) {
 	ctx := context.Background()
-	dsn := startPostgres(t)
-	log := discardLogger()
+	dsn := testfixtures.StartPostgresUnmigrated(t)
+	log := testfixtures.DiscardLogger()
 
 	require.NoError(t, postgres.MigrateUp(ctx, dsn, log))
 	require.NoError(t, postgres.MigrateDownAll(ctx, dsn, log))
@@ -193,13 +169,13 @@ func TestDownMigrationLeavesExtensionsInstalled(t *testing.T) {
 // paths, which print err.Error(), are bound by the redaction.
 func TestMigrationsCheckErrorIsScrubbed(t *testing.T) {
 	ctx := context.Background()
-	dsn := startPostgres(t)
+	dsn := testfixtures.StartPostgresUnmigrated(t)
 
 	pool, err := postgres.NewPool(ctx, config.DB{URL: dsn, MaxConns: 2, MinConns: 1,
-		MaxConnLifetime: time.Hour, StatementTimeout: 10 * time.Second}, discardLogger())
+		MaxConnLifetime: time.Hour, StatementTimeout: 10 * time.Second}, testfixtures.DiscardLogger())
 	require.NoError(t, err)
 
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
 	pool.Close() // every subsequent query fails outside the undefined-table path
 
 	err = postgres.MigrationsCheck(pool).Fn(ctx)

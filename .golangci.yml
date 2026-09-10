@@ -46,25 +46,30 @@ linters:
         # Money and energy are numeric/decimal end to end, never float64.
         # This rule was written in F0 against internal/domain/billing and
         # internal/domain/tariff, neither of which exists yet, so it has
-        # never matched a single file. Task 8a points it at the store layer,
+        # never matched a single file. Task 8a pointed it at the store layer,
         # which does exist and is where the numeric columns are read and
-        # written. internal/domain/model is deliberately NOT listed even
-        # though the task brief asked for it: that package does not exist
-        # yet, and a glob for a non-existent directory is exactly the dormant
-        # rule this entry is fixing. Whichever task creates
-        # internal/domain/model adds the glob with it.
+        # written. Task 8b adds internal/domain/model, which it creates: 8a
+        # left the glob off precisely because a glob for a non-existent
+        # directory is the dormant-rule failure this entry exists to fix.
         #
         # Scope note: depguard matches IMPORTS, not declarations. It cannot
-        # see a `Total float64` struct field. It is the backstop against the
-        # arithmetic route into float money (math/big.Float, and big.Rat used
-        # as a stand-in for decimal); the field-level rule is carried by code
-        # review and by the numeric column types themselves.
+        # see a `Total float64` struct field, and no configuration of it can.
+        # What it covers is the ARITHMETIC route into float money — math/big
+        # (big.Float, and big.Rat used as a stand-in for decimal).
+        #
+        # The field-level half is NOT carried by review any more. It is
+        # TestNoFloatFieldsInModelOrStore in internal/arch/arch_test.go, which
+        # walks the same two package trees listed below with the type checker
+        # and fails on any struct field resolving to float32/float64 through
+        # pointers, slices, maps, arrays or aliases. The two halves are
+        # deliberately kept in step: a tree added here should be added there.
         no-float-money:
           files:
             # "**/internal/store/**" already covers internal/store/postgres
             # and every other subpackage; a separate entry for it would be
             # dead config that reads as extra coverage.
             - "**/internal/store/**"
+            - "**/internal/domain/model/**"
             - "**/internal/domain/billing/**"
             - "**/internal/domain/tariff/**"
           deny:

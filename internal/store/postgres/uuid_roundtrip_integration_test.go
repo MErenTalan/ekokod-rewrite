@@ -8,6 +8,7 @@ import (
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/sqlcgen"
+	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -45,10 +46,10 @@ import (
 // end through sqlc-generated code.
 func TestGeneratedUUIDRoundTripsThroughPostgres(t *testing.T) {
 	ctx := context.Background()
-	dsn := startPostgres(t)
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
+	dsn := testfixtures.StartPostgresUnmigrated(t)
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
 
-	pool := newPool(t, dsn)
+	pool := testfixtures.NewPool(t, dsn)
 	db := postgres.New(pool)
 	companyID, buildingID := seedCompanyAndBuilding(t, ctx, pool)
 
@@ -66,10 +67,10 @@ func TestGeneratedUUIDRoundTripsThroughPostgres(t *testing.T) {
 // a SQL NULL arriving as uuid.Nil.
 func TestGeneratedNullableUUIDDecodesAsNilNotUUIDNil(t *testing.T) {
 	ctx := context.Background()
-	dsn := startPostgres(t)
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
+	dsn := testfixtures.StartPostgresUnmigrated(t)
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
 
-	pool := newPool(t, dsn)
+	pool := testfixtures.NewPool(t, dsn)
 	db := postgres.New(pool)
 	companyID, buildingID := seedCompanyAndBuilding(t, ctx, pool)
 
@@ -109,10 +110,10 @@ func TestGeneratedNullableUUIDDecodesAsNilNotUUIDNil(t *testing.T) {
 // separate pgx code path from a scalar uuid parameter.
 func TestGeneratedUUIDArrayParameterRoundTrips(t *testing.T) {
 	ctx := context.Background()
-	dsn := startPostgres(t)
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
+	dsn := testfixtures.StartPostgresUnmigrated(t)
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
 
-	pool := newPool(t, dsn)
+	pool := testfixtures.NewPool(t, dsn)
 	db := postgres.New(pool)
 	companyID, wantedID := seedCompanyAndBuilding(t, ctx, pool)
 
@@ -145,10 +146,10 @@ func TestGeneratedUUIDArrayParameterRoundTrips(t *testing.T) {
 // the same *uuid.UUID shape sqlc generates for Analyzer.BuildingID.
 func TestNullableUUIDForeignKeyOnAnalyzers(t *testing.T) {
 	ctx := context.Background()
-	dsn := startPostgres(t)
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
+	dsn := testfixtures.StartPostgresUnmigrated(t)
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
 
-	pool := newPool(t, dsn)
+	pool := testfixtures.NewPool(t, dsn)
 	companyID, buildingID := seedCompanyAndBuilding(t, ctx, pool)
 
 	insert := `insert into analyzers (company_id, building_id, provider, provider_subtype, installation_number)

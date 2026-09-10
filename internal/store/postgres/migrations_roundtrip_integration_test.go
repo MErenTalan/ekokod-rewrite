@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
+	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,14 +35,14 @@ import (
 // seeded rows put the foreign keys between companies, buildings and everything
 // hanging off them under real load while the drops run in reverse order.
 func TestMigrationsLeaveNoTablesBehind(t *testing.T) {
-	dsn := startPostgres(t)
+	dsn := testfixtures.StartPostgresUnmigrated(t)
 	ctx := context.Background()
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
 
-	pool := newPool(t, dsn)
+	pool := testfixtures.NewPool(t, dsn)
 	seedCompanyAndBuilding(t, ctx, pool)
 
-	require.NoError(t, postgres.MigrateDownAll(ctx, dsn, discardLogger()))
+	require.NoError(t, postgres.MigrateDownAll(ctx, dsn, testfixtures.DiscardLogger()))
 	var remaining []string
 	rows, err := pool.Query(ctx, `
 		select c.relname

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
+	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
@@ -16,10 +17,10 @@ import (
 // index enforces one live bill per scope and period, and recomputation
 // supersedes rather than deletes, preserving what was issued.
 func TestOneLiveBillPerScopeAndPeriod(t *testing.T) {
-	dsn := startPostgres(t)
+	dsn := testfixtures.StartPostgresUnmigrated(t)
 	ctx := context.Background()
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
-	pool := newPool(t, dsn)
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
+	pool := testfixtures.NewPool(t, dsn)
 
 	companyID, buildingID := seedCompanyAndBuilding(t, ctx, pool)
 	insert := func(status string) (uuid.UUID, error) {

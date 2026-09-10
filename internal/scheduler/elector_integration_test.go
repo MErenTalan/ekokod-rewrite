@@ -4,57 +4,23 @@ package scheduler_test
 
 import (
 	"context"
-	"io"
-	"log/slog"
 	"testing"
 	"time"
 
-	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/scheduler"
-	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
 	"github.com/stretchr/testify/require"
-	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 )
-
-func startPostgres(t *testing.T) string {
-	t.Helper()
-	ctx := context.Background()
-	container, err := tcpostgres.Run(ctx, "timescale/timescaledb:2.30.0-pg16",
-		tcpostgres.WithDatabase("ekokod"),
-		tcpostgres.WithUsername("ekokod"),
-		tcpostgres.WithPassword("ekokod"),
-		tcpostgres.BasicWaitStrategies(),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = container.Terminate(context.Background()) })
-
-	dsn, err := container.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-	return dsn
-}
-
-func newPool(t *testing.T, dsn string) *pgxpool.Pool {
-	t.Helper()
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	pool, err := postgres.NewPool(context.Background(), config.DB{
-		URL: dsn, MaxConns: 4, MinConns: 1,
-		MaxConnLifetime: time.Hour, StatementTimeout: 10 * time.Second,
-	}, log)
-	require.NoError(t, err)
-	t.Cleanup(pool.Close)
-	return pool
-}
 
 // TestLeaderElection is named in the F0 acceptance criteria: exactly one of two
 // simultaneously started instances leads, and killing it transfers leadership.
 func TestLeaderElection(t *testing.T) {
-	dsn := startPostgres(t)
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	dsn := testfixtures.StartPostgresUnmigrated(t)
+	log := testfixtures.DiscardLogger()
 	const retry = 200 * time.Millisecond
 
-	first := scheduler.NewElector(newPool(t, dsn), scheduler.LockKeyScheduler, retry, log)
-	second := scheduler.NewElector(newPool(t, dsn), scheduler.LockKeyScheduler, retry, log)
+	first := scheduler.NewElector(testfixtures.NewPool(t, dsn), scheduler.LockKeyScheduler, retry, log)
+	second := scheduler.NewElector(testfixtures.NewPool(t, dsn), scheduler.LockKeyScheduler, retry, log)
 
 	firstCtx, stopFirst := context.WithCancel(context.Background())
 	secondCtx, stopSecond := context.WithCancel(context.Background())
@@ -84,10 +50,10 @@ func TestLeaderElection(t *testing.T) {
 }
 
 func TestLeadContextIsCancelledWhenTheProcessStops(t *testing.T) {
-	dsn := startPostgres(t)
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	dsn := testfixtures.StartPostgresUnmigrated(t)
+	log := testfixtures.DiscardLogger()
 
-	elector := scheduler.NewElector(newPool(t, dsn), scheduler.LockKeyScheduler, 100*time.Millisecond, log)
+	elector := scheduler.NewElector(testfixtures.NewPool(t, dsn), scheduler.LockKeyScheduler, 100*time.Millisecond, log)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	cancelled := make(chan struct{})
@@ -121,10 +87,10 @@ func TestLeadContextIsCancelledWhenTheProcessStops(t *testing.T) {
 // it, so this instance's lead context must be cancelled promptly or two
 // replicas could fire the same cron entries simultaneously.
 func TestLeadContextIsCancelledWhenTheConnectionDies(t *testing.T) {
-	dsn := startPostgres(t)
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	dsn := testfixtures.StartPostgresUnmigrated(t)
+	log := testfixtures.DiscardLogger()
 
-	elector := scheduler.NewElector(newPool(t, dsn), scheduler.LockKeyScheduler, 100*time.Millisecond, log)
+	elector := scheduler.NewElector(testfixtures.NewPool(t, dsn), scheduler.LockKeyScheduler, 100*time.Millisecond, log)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
@@ -142,7 +108,7 @@ func TestLeadContextIsCancelledWhenTheConnectionDies(t *testing.T) {
 	// Find and kill the backend holding the advisory lock from a completely
 	// separate connection, simulating a dropped connection or a database
 	// session that was killed out from under the elector.
-	admin := newPool(t, dsn)
+	admin := testfixtures.NewPool(t, dsn)
 	var pid int32
 	require.NoError(t, admin.QueryRow(context.Background(),
 		`select pid from pg_locks where locktype = 'advisory' limit 1`).Scan(&pid))
@@ -163,10 +129,10 @@ func TestLeadContextIsCancelledWhenTheConnectionDies(t *testing.T) {
 // value. A zero here must degrade to a sane interval, not take the process
 // down.
 func TestNonPositiveRetryDoesNotPanic(t *testing.T) {
-	dsn := startPostgres(t)
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	dsn := testfixtures.StartPostgresUnmigrated(t)
+	log := testfixtures.DiscardLogger()
 
-	elector := scheduler.NewElector(newPool(t, dsn), scheduler.LockKeyScheduler, 0, log)
+	elector := scheduler.NewElector(testfixtures.NewPool(t, dsn), scheduler.LockKeyScheduler, 0, log)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
