@@ -1,14 +1,25 @@
 name: ekokod
 
 x-ekokod-env: &ekokod-env
-  env_file: [.env.docker]
+  # required: false — Compose validates env_file on every subcommand,
+  # including `down`/`ps`/`logs`, so a missing .env.docker (a fresh clone
+  # before `make env-docker`/`up` has run) must not turn those into an
+  # opaque "env file not found" error. A genuinely missing app config is
+  # instead reported by the Go config loader itself, which already fails
+  # loudly and names the variable.
+  env_file: [{path: .env.docker, required: false}]
 
 services:
   postgres:
     image: timescale/timescaledb:2.30.0-pg16
     environment:
       POSTGRES_USER: ekokod
-      POSTGRES_PASSWORD: ekokod
+      # No default: a committed default password is exactly the secret
+      # the spec forbids. Generated fresh by scripts/gen-env-docker.sh
+      # into the project's .env (Compose's own interpolation file, not
+      # .env.docker) and consumed here via Compose variable substitution;
+      # EKOKOD_DB_URL in .env.docker embeds the same generated value.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required — run 'make env-docker' or set it in .env}
       POSTGRES_DB: ekokod
       TZ: Europe/Istanbul
     volumes:
@@ -70,10 +81,10 @@ services:
       timeout: 5s
       retries: 10
       start_period: 15s
-    # Matches the worker's asynq drain window (min(EKOKOD_JOB_TIMEOUT,
-    # job.MaxShutdownGrace) = 30s, see internal/job/server.go) plus
-    # headroom, instead of Docker's 10s default which would SIGKILL a
-    # draining process before it can finish.
+    # api's own drain window is shutdownGrace = 30s (internal/cli/api.go:24,
+    # the deadline http.Server.Shutdown is given for in-flight requests).
+    # 40s gives that window headroom, instead of Docker's 10s default
+    # which would SIGKILL the process before it can finish draining.
     stop_grace_period: 40s
     deploy:
       resources:
@@ -89,6 +100,10 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
+    # Matches the worker's asynq drain window (min(EKOKOD_JOB_TIMEOUT,
+    # job.MaxShutdownGrace) = 30s, see internal/job/server.go) plus
+    # headroom, instead of Docker's 10s default which would SIGKILL a
+    # draining process before it can finish.
     stop_grace_period: 40s
     deploy:
       resources:
@@ -102,6 +117,11 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
+    # The scheduler's leader-election loop exits as soon as its context is
+    # cancelled (internal/scheduler/elector.go) and releases the advisory
+    # lock immediately — no in-flight work to drain. 40s matches api and
+    # worker for one uniform operational shutdown envelope rather than
+    # because the scheduler itself needs it.
     stop_grace_period: 40s
     deploy:
       resources:

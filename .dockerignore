@@ -6,3 +6,5 @@ web/.next
 docs
 *.tar
 *.tar.gz
+.env
+.env.*
