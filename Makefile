@@ -11,7 +11,7 @@ LDFLAGS := -X $(MODULE)/internal/buildinfo.version=$(VERSION) \
 GOLANGCI_VERSION := v2.13.2
 GOVULNCHECK_VERSION := v1.8.0
 
-.PHONY: build test test-integration lint fmt tidy tools vuln
+.PHONY: build test test-integration lint fmt tidy tools vuln ci
 
 build: ## Build the ekokod binary
 	go build -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/ekokod
@@ -39,6 +39,8 @@ lint: ## Run gofmt check, go vet and golangci-lint
 
 vuln: ## Scan dependencies for known vulnerabilities
 	govulncheck ./...
+
+ci: lint test build web-lint web-test web-build ## Everything CI runs, except integration tests, govulncheck and shellcheck
 
 .PHONY: up down dev logs ps migrate seed generate offline-bundle env-docker
 
