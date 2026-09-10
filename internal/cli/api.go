@@ -83,6 +83,11 @@ func newAPICmd() *cobra.Command {
 			// failure always logged a successful-sounding line first.
 			// Binding here makes a bind failure a deterministic, immediate
 			// non-nil return with nothing yet to shut down.
+			//
+			// ctx here governs only address resolution during this Listen
+			// call; it does not bind the returned listener's lifetime to
+			// context cancellation. Cancelling ctx after this call returns
+			// does not close ln out from under the running server.
 			ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", cfg.HTTP.Addr)
 			if err != nil {
 				return fmt.Errorf("listen %s: %w", cfg.HTTP.Addr, err)

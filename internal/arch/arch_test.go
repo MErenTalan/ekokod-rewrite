@@ -14,6 +14,20 @@ import (
 
 const modulePath = "github.com/MErenTalan/ekokod-rewrite"
 
+// underPackage reports whether pkgPath is target itself or a true
+// subpackage of it (target followed by "/"). A bare strings.HasPrefix
+// match with no trailing-slash requirement would also match any sibling
+// package whose path merely starts with the same characters — e.g.
+// target "internal/api" would wrongly match a future "internal/apikeys"
+// or "internal/apiclient" package, silently exempting it from whichever
+// guard is doing the matching. That is a false negative in exactly the
+// class of bug these architecture guards exist to catch, so every
+// package-path comparison in this file must go through this helper
+// rather than a raw HasPrefix call.
+func underPackage(pkgPath, target string) bool {
+	return pkgPath == target || strings.HasPrefix(pkgPath, target+"/")
+}
+
 // forbiddenInDomain are packages that would give the domain layer I/O.
 var forbiddenInDomain = []string{
 	"net/http", "net", "database/sql", "os", "os/exec",
@@ -40,8 +54,8 @@ func repoRoot(t *testing.T) string {
 func TestDomainHasNoProjectImports(t *testing.T) {
 	for _, pkg := range loadPackages(t, "./internal/domain/...") {
 		for imported := range pkg.Imports {
-			if strings.HasPrefix(imported, modulePath) &&
-				!strings.HasPrefix(imported, modulePath+"/internal/domain") {
+			if underPackage(imported, modulePath) &&
+				!underPackage(imported, modulePath+"/internal/domain") {
 				t.Errorf("%s imports %s: internal/domain must not import project packages", pkg.PkgPath, imported)
 			}
 		}
@@ -66,11 +80,11 @@ func TestOnlyTheCLIImportsTheAPIPackage(t *testing.T) {
 		modulePath + "/internal/api": true,
 	}
 	for _, pkg := range loadPackages(t, "./...") {
-		if allowed[pkg.PkgPath] || strings.HasPrefix(pkg.PkgPath, modulePath+"/internal/api") {
+		if allowed[pkg.PkgPath] || underPackage(pkg.PkgPath, modulePath+"/internal/api") {
 			continue
 		}
 		for imported := range pkg.Imports {
-			if strings.HasPrefix(imported, modulePath+"/internal/api") {
+			if underPackage(imported, modulePath+"/internal/api") {
 				t.Errorf("%s imports %s: only internal/cli may wire the HTTP layer", pkg.PkgPath, imported)
 			}
 		}
@@ -80,7 +94,7 @@ func TestOnlyTheCLIImportsTheAPIPackage(t *testing.T) {
 func TestStoreAndIntegrationDoNotImportAPIOrService(t *testing.T) {
 	for _, pkg := range loadPackages(t, "./internal/store/...") {
 		for imported := range pkg.Imports {
-			require.False(t, strings.HasPrefix(imported, modulePath+"/internal/api"),
+			require.False(t, underPackage(imported, modulePath+"/internal/api"),
 				"%s must not import the HTTP layer", pkg.PkgPath)
 		}
 	}
