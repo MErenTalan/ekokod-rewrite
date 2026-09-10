@@ -241,6 +241,16 @@ func loadTypedPackages(t *testing.T, pattern string) []*packages.Package {
 // unscoped method through, which is the exact failure this guard exists to
 // prevent.
 func isScopeType(typ types.Type) bool {
+	return isNamed(typ, modulePath+"/internal/store", "Scope")
+}
+
+// isContextType reports whether typ is context.Context, matched the same way
+// and for the same reasons as isScopeType.
+func isContextType(typ types.Type) bool {
+	return isNamed(typ, "context", "Context")
+}
+
+func isNamed(typ types.Type, pkgPath, name string) bool {
 	if ptr, ok := types.Unalias(typ).(*types.Pointer); ok {
 		typ = ptr.Elem()
 	}
@@ -252,7 +262,40 @@ func isScopeType(typ types.Type) bool {
 	if obj == nil || obj.Pkg() == nil {
 		return false
 	}
-	return obj.Pkg().Path() == modulePath+"/internal/store" && obj.Name() == "Scope"
+	return obj.Pkg().Path() == pkgPath && obj.Name() == name
+}
+
+// signatureTakes reports whether any parameter of sig satisfies match.
+func signatureTakes(sig *types.Signature, match func(types.Type) bool) bool {
+	params := sig.Params()
+	for i := range params.Len() {
+		if match(params.At(i).Type()) {
+			return true
+		}
+	}
+	return false
+}
+
+// methodSetOf returns the full method set of named, INCLUDING methods
+// promoted from embedded fields.
+//
+// named.NumMethods() would be the obvious call and is wrong here: it reports
+// only explicitly declared methods. A repository written as
+// `type buildingRepository struct { *pgxpool.Pool }` declares nothing, yet
+// exposes Query, Exec and Ping — every one of them an unscoped, exported,
+// context-taking database method reachable on the repository value. That is
+// not a false positive to be filtered out; it is precisely the cross-tenant
+// hole this guard exists to catch, and the fix for it is to make the pool a
+// named field instead of an embedded one.
+//
+// The method set is taken on the POINTER type so that methods with pointer
+// receivers are included; for an interface, whose pointer has an empty
+// method set, the named type is used directly.
+func methodSetOf(named *types.Named) *types.MethodSet {
+	if _, isInterface := named.Underlying().(*types.Interface); isInterface {
+		return types.NewMethodSet(named)
+	}
+	return types.NewMethodSet(types.NewPointer(named))
 }
 
 // TestEveryStoreMethodIsScoped enforces docs/rewrite/03-target-architecture.md
@@ -266,24 +309,46 @@ func isScopeType(typ types.Type) bool {
 // schema can have, and it is invisible to every other check in this file, so
 // it gets a type-resolving guard rather than a textual one.
 //
-// The check walks every EXPORTED method declared on an EXPORTED named type
-// whose name ends in "Repository", under ./internal/store/postgres/..., and
-// requires that at least one parameter resolve to store.Scope. Methods with
-// value and pointer receivers are both covered: types.Named.Method reports
-// the methods declared with that named type as receiver either way.
+// WHAT IS INSPECTED, and why the predicate is shaped this way. Every exported
+// method — declared or promoted — of every named type under
+// ./internal/store/postgres/... that takes a context.Context must also take a
+// store.Scope.
+//
+//   - The type may be UNEXPORTED. The first draft of this guard required an
+//     exported type whose name ended in "Repository", which would have missed
+//     the most idiomatic shape in Go: an unexported `buildingRepository`
+//     struct satisfying an exported `store.BuildingRepository` interface. It
+//     also missed BuildingRepo, BuildingStore and plain Buildings. Nothing is
+//     gained by guessing at names, so the name test is gone entirely.
+//   - The method must be EXPORTED, because that is the surface other packages
+//     call — including through an interface, which is how an unexported type's
+//     methods escape the package. Unexported helpers are deliberately out of
+//     scope: requiring a Scope on private plumbing would force the parameter
+//     through functions that legitimately do not filter rows, and the caller
+//     that reaches such a helper is itself covered.
+//   - context.Context is the proxy for "this method talks to the database".
+//     It is not a perfect proxy, but a repository method that does I/O without
+//     a context would already be violating a different, older rule in this
+//     codebase.
 //
 // internal/store/postgres/admin is skipped. It is the deliberate, and the
 // only, unscoped surface in the system — the exemption is matched with
-// underPackage so that a future sibling package such as "…/postgres/adminui"
-// cannot inherit it by prefix.
+// underPackage so that a future sibling such as "…/postgres/adminui" cannot
+// inherit it by prefix.
 //
-// No repositories exist yet, so today this guard passes over an empty set.
-// That is expected: tasks 9-11 populate it. Its failure mode has been
-// exercised by hand (see the task report) precisely because a guard that has
-// never been seen to fail is not a guard.
+// TODO(task-9): flip the inspected-method count below into a hard assertion,
+// `require.Positive(t, inspected, …)`. It cannot be one yet: no repositories
+// exist, so the guard legitimately inspects zero methods and passes over an
+// empty set. That is also its weakness — every narrowing bug in the predicate
+// above looks identical to "there is nothing to check", so the count is
+// logged on every run to make the difference visible rather than silent.
+// Task 9 introduces the first repository and MUST convert the t.Log to a
+// require, otherwise this guard can stay vacuously green for the life of the
+// project.
 func TestEveryStoreMethodIsScoped(t *testing.T) {
 	const adminPkg = modulePath + "/internal/store/postgres/admin"
 
+	inspected := 0
 	for _, pkg := range loadTypedPackages(t, "./internal/store/postgres/...") {
 		if underPackage(pkg.PkgPath, adminPkg) {
 			continue
@@ -293,37 +358,51 @@ func TestEveryStoreMethodIsScoped(t *testing.T) {
 		}
 		scope := pkg.Types.Scope()
 		for _, name := range scope.Names() {
-			obj := scope.Lookup(name)
-			typeName, ok := obj.(*types.TypeName)
-			if !ok || !typeName.Exported() || !strings.HasSuffix(typeName.Name(), "Repository") {
+			typeName, ok := scope.Lookup(name).(*types.TypeName)
+			if !ok || typeName.IsAlias() {
 				continue
 			}
 			named, ok := types.Unalias(typeName.Type()).(*types.Named)
 			if !ok {
 				continue
 			}
-			for i := range named.NumMethods() {
-				method := named.Method(i)
-				if !method.Exported() {
+			methods := methodSetOf(named)
+			for i := range methods.Len() {
+				method, ok := methods.At(i).Obj().(*types.Func)
+				if !ok || !method.Exported() {
 					continue
 				}
 				sig, ok := method.Type().(*types.Signature)
-				if !ok {
+				if !ok || !signatureTakes(sig, isContextType) {
 					continue
 				}
-				scoped := false
-				params := sig.Params()
-				for j := range params.Len() {
-					if isScopeType(params.At(j).Type()) {
-						scoped = true
-						break
-					}
+				inspected++
+				if signatureTakes(sig, isScopeType) {
+					continue
 				}
-				if !scoped {
-					t.Errorf("%s.%s.%s has no store.Scope parameter: every exported repository method must be tenant-scoped (only %s may be unscoped)",
-						pkg.PkgPath, typeName.Name(), method.Name(), adminPkg)
-				}
+				t.Errorf("%s.%s.%s takes a context.Context but no store.Scope: every exported repository method must be tenant-scoped (only %s may be unscoped)",
+					pkg.PkgPath, typeName.Name(), method.Name(), adminPkg)
 			}
+		}
+	}
+
+	t.Logf("inspected %d exported context-taking method(s) under internal/store/postgres; "+
+		"TODO(task-9): this must become require.Positive once the first repository exists, "+
+		"otherwise a narrowing bug in this guard is indistinguishable from having nothing to check",
+		inspected)
+}
+
+// TestTheJobPackageDoesNotImportTheStore pins the layering that
+// internal/platform/secret's existence depends on: scrubParseErr lived in
+// both internal/job and internal/store/redis as identical copies precisely
+// because internal/job may not reach into internal/store to share it. With
+// nothing enforcing that, the "obvious" fix to a future duplication is the
+// import that this guard forbids.
+func TestTheJobPackageDoesNotImportTheStore(t *testing.T) {
+	for _, pkg := range loadPackages(t, "./internal/job/...") {
+		for imported := range pkg.Imports {
+			require.False(t, underPackage(imported, modulePath+"/internal/store"),
+				"%s imports %s: internal/job must not depend on the store layer; shared helpers belong in internal/platform", pkg.PkgPath, imported)
 		}
 	}
 }
