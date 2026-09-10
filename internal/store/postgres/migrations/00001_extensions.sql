@@ -4,6 +4,9 @@
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS citext;
+-- btree_gin lets a GIN index mix a scalar column with a jsonb or array one,
+-- which the composite indexes in docs/rewrite/04-data-model.md section 1 rely on.
+CREATE EXTENSION IF NOT EXISTS btree_gin;
 
 -- +goose Down
 -- Deliberately a no-op. The inverse of a conditional create is not an
