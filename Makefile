@@ -10,6 +10,7 @@ LDFLAGS := -X $(MODULE)/internal/buildinfo.version=$(VERSION) \
 
 GOLANGCI_VERSION := v2.13.2
 GOVULNCHECK_VERSION := v1.8.0
+SQLC_VERSION := v1.30.0
 
 .PHONY: build test test-integration lint fmt tidy tools vuln ci
 
@@ -31,6 +32,7 @@ tidy:
 tools: ## Install pinned developer tools into $(GOPATH)/bin
 	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VERSION)
 	go install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
+	go install github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
 
 lint: ## Run gofmt check, go vet and golangci-lint
 	@test -z "$$(gofmt -l ./cmd ./internal)" || (echo "gofmt needed:"; gofmt -l ./cmd ./internal; exit 1)
@@ -67,8 +69,8 @@ migrate: env-docker ## Apply migrations inside the stack
 seed: env-docker ## Load reference datasets inside the stack
 	docker compose run --rm api seed
 
-generate: ## Regenerate sqlc types and the OpenAPI client (populated from F1)
-	@echo "no generators configured yet"
+generate: ## Regenerate sqlc types from the migrations and internal/store/postgres/queries
+	sqlc generate
 
 offline-bundle: ## Build the air-gapped install bundle
 	./scripts/offline-bundle.sh

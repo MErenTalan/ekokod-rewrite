@@ -40,13 +40,22 @@ jobs:
       # golangci-lint-action's v6 major only supports golangci-lint v1.x;
       # v2 support was only added in v7 ("The GitHub Action v7 supports
       # golangci-lint v2 only"). Rather than track a second, action-side
-      # version pin, install the same pinned binary the Makefile uses so
+      # version pin, install the same pinned binaries the Makefile uses so
       # CI and local `make lint` are provably identical.
-      - name: Install pinned lint/vuln tools
+      - name: Install pinned developer tools
         run: make tools
 
       - name: golangci-lint
         run: golangci-lint run
+
+      # sqlcgen/ is committed so a fresh clone builds without sqlc installed,
+      # which means it can go stale against the migrations. `make tools`
+      # installs the same pinned sqlc the Makefile's generate target uses, so
+      # this regenerates with exactly the local toolchain and fails on a diff.
+      - name: sqlc is current
+        run: |
+          sqlc generate
+          git diff --exit-code -- internal/store/postgres/sqlcgen
 
       - name: Import-boundary check
         run: go test ./internal/arch/... -v

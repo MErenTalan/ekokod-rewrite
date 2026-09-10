@@ -1,0 +1,23 @@
+version: "2"
+sql:
+  - engine: postgresql
+    # sqlc parses the goose migrations directly — it ignores the TimescaleDB
+    # statements it does not understand (create_hypertable, the compression
+    # ALTER TABLE, add_compression_policy, add_continuous_aggregate_policy) and
+    # still builds a correct catalogue from the plain DDL around them. There is
+    # therefore no separate schema dump to keep in sync.
+    #
+    # timescale-shims.sql MUST come first: it declares the Timescale functions
+    # the continuous aggregates in 00005 are built on, so that sqlc can type
+    # their result columns. Without it sqlc guesses, and energy columns come out
+    # as int32. See the file's own header.
+    schema:
+      - internal/store/postgres/timescale-shims.sql
+      - internal/store/postgres/migrations
+    queries: internal/store/postgres/queries
+    gen:
+      go:
+        package: sqlcgen
+        out: internal/store/postgres/sqlcgen
+        sql_package: pgx/v5
+        emit_pointers_for_null_types: true
