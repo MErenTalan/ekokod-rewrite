@@ -9,6 +9,59 @@ Branch `phase/f1-data-model`, branched from `main` at `6975b20` (F0 merged).
 **Nothing has been pushed.** `main` is still local-only ahead of `origin/main`, and the push
 decision is the user's — do not push.
 
+
+---
+
+## Paste this as the first message of the new session
+
+> Bu, bcem-energy'nin (yeni adıyla ekokod) Go ile yeniden yazım projesi. Spesifikasyon
+> `docs/rewrite/` içinde, faz planı `docs/rewrite/09-implementation-plan.md`. Toplam 16 faz var
+> (F0-F15).
+>
+> **Durum: F1 (Data model and migration framework) yarıda duruyor — kasten, bir arıza yüzünden
+> değil.** Branch `phase/f1-data-model`, commit `f53915e`, çalışma ağacı temiz, tam entegrasyon
+> suite'i yeşil (18 paket, exit 0). Görev 1-8 bitti ve merge edildi; **görev 9-13 başlamadı.**
+> Hiçbir şey push EDİLMEDİ — `main` lokalde `origin/main`'in önünde; push kararı bana ait, sen
+> push etme.
+>
+> Şu sırayla ilerle:
+>
+> 1. **`HANDOFF_NEXT_SESSION.md`'i baştan sona oku.** Özellikle "START HERE", "The container
+>    readiness trap has THREE layers", "Repository conventions Tasks 9-11 must follow",
+>    "Rulings I made on the user's behalf" ve "Mistakes I made" bölümlerini. Sonra
+>    `.superpowers/sdd/2026-09-10-f1-data-model/progress.md` (ledger) dosyasının SONUNU oku.
+>
+> 2. **İlk iş: iki gözden geçirilmemiş görevi incelet.** Task 8b hiç task review görmedi
+>    (domain model, decimal dönüşümü, float guard, repository arayüzleri, testfixtures —
+>    görev 9-11'in tamamı bunun üstüne kuruluyor) ve Task 7'nin 2. fix round'u scoped
+>    re-review'suz merge edildi. Diff: `git diff a7b0750..61a1fe5`. Repository yazmadan önce
+>    bunları incelet.
+>
+> 3. **Task 9'a HARD REQUIREMENT olarak taşı:** `TestEveryStoreMethodIsScoped` şu anda 0 metot
+>    inceliyor ve geçiyor. Task 9 bu testteki `t.Log`'u `require.Positive`'e çevirmek ZORUNDA;
+>    yoksa guard projenin geri kalanında boş küme üzerinde yeşil kalır.
+>
+> 4. Kalan görevleri (9, 10, 11 paralel; sonra 12, 13, sonra final whole-branch review)
+>    `superpowers:subagent-driven-development` ile yürüt: her görev için taze implementer
+>    subagent, ardından task review, gerekirse fix turu. **Bu yöntemi onaylıyorum, sorma,
+>    devam et.** Brief'ler zaten üretilmiş durumda
+>    (`.superpowers/sdd/2026-09-10-f1-data-model/task-9-brief.md` … `task-13-brief.md`).
+>
+> 5. **Paralel çalışma için worktree kullan** — Agent tool'un `isolation: "worktree"` özelliği
+>    bu mount'ta ÇALIŞMIYOR ("dubious ownership"). Handoff'taki Environment bölümündeki
+>    native-filesystem worktree tarifini kullan, yeniden tasarlama.
+>
+> 6. **Her migration değişikliğinden sonra sqlc'yi yeniden üret.** Bu seansta iki Critical tam
+>    olarak bu adımın atlanmasından çıktı. `make ci` artık `check-generate` içeriyor.
+>
+> Ortam: toolchain `$HOME/.local`'de, her komuttan önce
+> `export PATH="$HOME/.local/go/bin:$HOME/.local/node/bin:$HOME/go/bin:$PATH"`. Docker seanslar
+> arası kapanıyor, önce `docker ps` ile doğrula. `/mnt/c` (DrvFs) stok `pnpm install`/`next build`
+> için bozuk — handoff'taki workaround'u yeniden tasarlama.
+>
+> Bu fazda beş guard adından zayıf çıktı (handoff'ta liste var). Bir guard'ın yalnızca GEÇTİĞİNİ
+> görmek kanıt değil — her guard'ın başarısız olabildiğini kanıtlat.
+
 ---
 
 ## Where the work stands
