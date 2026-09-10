@@ -48,6 +48,33 @@
 -- so the argument would be a no-op there, and omitting it keeps that aggregate a
 -- fixed-width bucket.
 --
+-- REAL-TIME AGGREGATION IS ON FOR THE DAILY-OR-FINER VIEWS ONLY.
+-- TimescaleDB never materialises a bucket the refresh window only partly covers,
+-- at any end_offset, so the hour, day, month or year currently in progress is
+-- never in the materialised data. On a materialized_only view that means a query
+-- for "today" returns no row at all — absent, not stale, which is the same silent
+-- undercount as an unrefreshed backfill. consumption_hourly, consumption_daily
+-- and plant_production_daily therefore set materialized_only = false: the query
+-- unions the materialised buckets with a live scan above the materialisation
+-- watermark, and for those three the un-materialised tail is at most one open
+-- bucket — a day of raw readings for one analyzer, which is cheap.
+--
+-- consumption_monthly, consumption_yearly and plant_production_monthly keep
+-- materialized_only = true deliberately. Their watermark sits at the end of the
+-- last CLOSED month or year, so a live tail would be months of raw readings: in
+-- September, consumption_yearly would rescan nine months per analyzer on every
+-- read. A multi-million-row scan behind an innocuous dashboard query is a worse
+-- outcome than composing the figure explicitly.
+--
+-- CONSTRAINT ON TASK 10 AND ANYTHING THAT READS THESE VIEWS: month-to-date and
+-- year-to-date MUST be composed — the closed buckets from consumption_monthly or
+-- consumption_yearly, PLUS the open period taken from consumption_daily or from
+-- meter_readings. The open month and the open year are not in those views and
+-- must never be assumed to be. Do not "fix" a missing month-to-date row by
+-- flipping materialized_only; that trades a visible gap for an invisible table
+-- scan, and migrations_timeseries_integration_test.go asserts the current
+-- setting of all six views.
+--
 -- OPERATOR NOTE - AFTER ANY HISTORICAL BACKFILL, REFRESH EVERY AGGREGATE ONCE.
 -- A refresh policy only ever materialises [now - start_offset, now - end_offset].
 -- These views are materialized_only (the 2.30 default), so any bucket that was
@@ -79,7 +106,7 @@
 -- is not recomputed every thirty minutes.
 
 create materialized view consumption_hourly
-with (timescaledb.continuous) as
+with (timescaledb.continuous, timescaledb.materialized_only = false) as
 select
     analyzer_id,
     time_bucket('1 hour', ts) as bucket,
@@ -116,7 +143,7 @@ select add_continuous_aggregate_policy('consumption_hourly',
     schedule_interval => interval '30 minutes');
 
 create materialized view consumption_daily
-with (timescaledb.continuous) as
+with (timescaledb.continuous, timescaledb.materialized_only = false) as
 select
     analyzer_id,
     time_bucket('1 day', ts, 'Europe/Istanbul') as bucket,
@@ -233,7 +260,7 @@ select add_continuous_aggregate_policy('consumption_yearly',
 -- carries the same number of samples.
 
 create materialized view plant_production_daily
-with (timescaledb.continuous) as
+with (timescaledb.continuous, timescaledb.materialized_only = false) as
 select
     plant_id,
     time_bucket('1 day', ts, 'Europe/Istanbul') as bucket,

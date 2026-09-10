@@ -4,11 +4,13 @@ package postgres_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -244,9 +246,43 @@ func seedAnalyzer(t *testing.T, ctx context.Context, pool *pgxpool.Pool) uuid.UU
 // that closed before the test ran.
 func refreshAggregate(t *testing.T, ctx context.Context, pool *pgxpool.Pool, view string) {
 	t.Helper()
+	refreshWindow(t, ctx, pool, view, at(2020, time.January, 1, 0, 0), at(2026, time.January, 1, 0, 0))
+}
+
+// pauseRefreshPolicies unschedules every continuous-aggregate refresh job before
+// a test materialises a window by hand. TimescaleDB's job scheduler is live in
+// the container and runs each policy shortly after it is registered, so a manual
+// refresh over the same range loses to it with "could not refresh continuous
+// aggregate due to a concurrent refresh" (SQLSTATE 55P03). That is a race in the
+// test, not a defect in the migration, and unscheduling removes it rather than
+// papering over it with a sleep.
+func pauseRefreshPolicies(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
 	_, err := pool.Exec(ctx,
-		`call refresh_continuous_aggregate($1::regclass, $2::timestamptz, $3::timestamptz)`,
-		view, at(2020, time.January, 1, 0, 0), at(2026, time.January, 1, 0, 0))
+		`select alter_job(job_id, scheduled => false)
+		   from timescaledb_information.jobs
+		  where proc_name = 'policy_refresh_continuous_aggregate'`)
+	require.NoError(t, err)
+}
+
+// refreshWindow materialises [from, to], retrying briefly if a policy run that
+// was already in flight when the test unscheduled it still holds the lock.
+func refreshWindow(t *testing.T, ctx context.Context, pool *pgxpool.Pool, view string, from, to time.Time) {
+	t.Helper()
+	var err error
+	for attempt := 0; attempt < 10; attempt++ {
+		_, err = pool.Exec(ctx,
+			`call refresh_continuous_aggregate($1::regclass, $2::timestamptz, $3::timestamptz)`,
+			view, from, to)
+		if err == nil {
+			return
+		}
+		var pgErr *pgconn.PgError
+		if !errors.As(err, &pgErr) || pgErr.Code != "55P03" {
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
 	require.NoError(t, err, "refresh %s", view)
 }
 
@@ -267,6 +303,7 @@ func TestConsumptionAggregatesComputeRegisterDeltas(t *testing.T) {
 	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
 	pool := newPool(t, dsn)
 
+	pauseRefreshPolicies(t, ctx, pool)
 	analyzerID := seedAnalyzer(t, ctx, pool)
 	seedAnalyzerReadings(t, ctx, pool, analyzerID)
 
@@ -334,6 +371,7 @@ func TestPlantProductionAggregatesBucketInIstanbul(t *testing.T) {
 	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
 	pool := newPool(t, dsn)
 
+	pauseRefreshPolicies(t, ctx, pool)
 	companyID, _ := seedCompanyAndBuilding(t, ctx, pool)
 	var plantID, deviceID uuid.UUID
 	require.NoError(t, pool.QueryRow(ctx,
@@ -510,6 +548,235 @@ func pgIdent(t *testing.T, name string) string {
 		return name
 	}
 	t.Fatalf("refusing to interpolate unknown relation %q", name)
+	return ""
+}
+
+// seedPlantWithDevice inserts the plant and device that plant_production's
+// foreign keys need, and returns both ids. device_id is part of that
+// hypertable's primary key, so Postgres promotes it to NOT NULL and a production
+// row without a device cannot be stored — see the task report.
+func seedPlantWithDevice(t *testing.T, ctx context.Context, pool *pgxpool.Pool) (plantID, deviceID uuid.UUID) {
+	t.Helper()
+	companyID, _ := seedCompanyAndBuilding(t, ctx, pool)
+	require.NoError(t, pool.QueryRow(ctx,
+		`insert into power_plants (company_id, name) values ($1, 'seed plant') returning id`,
+		companyID).Scan(&plantID))
+	require.NoError(t, pool.QueryRow(ctx,
+		`insert into power_plant_devices (plant_id, device_sn) values ($1, $2) returning id`,
+		plantID, uuid.NewString()).Scan(&deviceID))
+	return plantID, deviceID
+}
+
+// istanbulBucketStart truncates the current wall clock to the start of the
+// Istanbul hour, day, month or year that is still open. Test data is anchored to
+// the bucket start rather than to now() so a run that begins at HH:59 or at
+// 23:59 local cannot straddle two buckets.
+func istanbulBucketStart(unit string) time.Time {
+	now := time.Now().In(istanbul)
+	switch unit {
+	case "hour":
+		return time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), 0, 0, 0, istanbul)
+	case "day":
+		return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, istanbul)
+	case "month":
+		return time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, istanbul)
+	default:
+		return time.Date(now.Year(), time.January, 1, 0, 0, 0, 0, istanbul)
+	}
+}
+
+// refreshPolicyRange materialises exactly what the view's refresh policy would:
+// [now - startOffset, now - end_offset], with end_offset one hour everywhere.
+// The bucket currently open therefore stays unmaterialised, which is the whole
+// point of both tests below — whether it is nonetheless visible depends only on
+// materialized_only.
+func refreshPolicyRange(t *testing.T, ctx context.Context, pool *pgxpool.Pool, view string, startOffset time.Duration) {
+	t.Helper()
+	now := time.Now()
+	refreshWindow(t, ctx, pool, view, now.Add(-startOffset), now.Add(-time.Hour))
+}
+
+// TestOpenBucketIsVisibleInRealTimeAggregates proves the half of the
+// materialized_only split that costs something to get wrong. TimescaleDB does
+// not materialise a bucket the refresh window only partly covers, at any
+// end_offset, so the hour, day or month currently in progress is never in the
+// materialised data. On a materialized_only view that means a dashboard asking
+// for "today" gets no row at all — not a stale figure, an absent one, which is
+// the same silent-undercount failure as an unrefreshed backfill.
+//
+// consumption_hourly, consumption_daily and plant_production_daily therefore set
+// timescaledb.materialized_only = false, so the query unions the materialised
+// buckets with a live scan above the materialisation watermark. That tail is at
+// most one open bucket — a day of raw readings for one analyzer — which is cheap.
+func TestOpenBucketIsVisibleInRealTimeAggregates(t *testing.T) {
+	dsn := startPostgres(t)
+	ctx := context.Background()
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
+	pool := newPool(t, dsn)
+
+	pauseRefreshPolicies(t, ctx, pool)
+	analyzerID := seedAnalyzer(t, ctx, pool)
+	hourStart := istanbulBucketStart("hour")
+	dayStart := istanbulBucketStart("day")
+	for _, r := range []struct {
+		ts     time.Time
+		active string
+	}{
+		{dayStart, "2000.0000"},
+		{dayStart.Add(time.Second), "2005.0000"},
+		{hourStart, "2100.0000"},
+		{hourStart.Add(time.Second), "2130.0000"},
+	} {
+		_, err := pool.Exec(ctx,
+			`insert into meter_readings (analyzer_id, ts, kind, active_import, max_demand_kw, source_provider)
+			 values ($1, $2, 'load_profile', $3::numeric, 7::numeric, 'osos')
+			 on conflict (analyzer_id, ts, kind) do nothing`,
+			analyzerID, r.ts, r.active)
+		require.NoError(t, err)
+	}
+
+	plantID, deviceID := seedPlantWithDevice(t, ctx, pool)
+	_, err := pool.Exec(ctx,
+		`insert into plant_production (plant_id, ts, device_id, production_kwh, active_power_kw, efficiency_pct)
+		 values ($1, $2, $3, 4::numeric, 2::numeric, 15::numeric)`,
+		plantID, dayStart, deviceID)
+	require.NoError(t, err)
+
+	refreshPolicyRange(t, ctx, pool, "consumption_hourly", 30*24*time.Hour)
+	refreshPolicyRange(t, ctx, pool, "consumption_daily", 90*24*time.Hour)
+	refreshPolicyRange(t, ctx, pool, "plant_production_daily", 90*24*time.Hour)
+
+	var consumption pgtype.Numeric
+	require.NoError(t, pool.QueryRow(ctx,
+		`select active_consumption from consumption_hourly where analyzer_id = $1 and bucket = $2`,
+		analyzerID, hourStart).Scan(&consumption),
+		"the hour in progress must be visible in consumption_hourly")
+	requireNumericEquals(t, "30.0000", consumption)
+
+	require.NoError(t, pool.QueryRow(ctx,
+		`select active_consumption from consumption_daily where analyzer_id = $1 and bucket = $2`,
+		analyzerID, dayStart).Scan(&consumption),
+		"the Istanbul day in progress must be visible in consumption_daily")
+
+	var kwh pgtype.Numeric
+	require.NoError(t, pool.QueryRow(ctx,
+		`select production_kwh from plant_production_daily where plant_id = $1 and bucket = $2`,
+		plantID, dayStart).Scan(&kwh),
+		"the Istanbul day in progress must be visible in plant_production_daily")
+	requireNumericEquals(t, "4.0000", kwh)
+}
+
+// TestOpenBucketIsDeliberatelyAbsentFromCoarseAggregates pins an absence, so it
+// has to say why: this is a decision, not an oversight, and the next person to
+// see a missing month-to-date figure must not "fix" it by flipping
+// materialized_only.
+//
+// consumption_monthly, consumption_yearly and plant_production_monthly stay
+// materialized_only. Their materialisation watermark sits at the end of the last
+// CLOSED month or year, so real-time aggregation would put a live scan of every
+// raw reading since then behind an innocuous dashboard query — in September,
+// consumption_yearly would rescan nine months per analyzer every time it is
+// read. That is a worse outcome than composing the figure explicitly.
+//
+// CONSTRAINT ON TASK 10: month-to-date and year-to-date must be composed —
+// closed buckets from the monthly or yearly aggregate, plus the open period
+// taken from consumption_daily or from meter_readings. The open bucket is not in
+// these views and must never be assumed to be.
+func TestOpenBucketIsDeliberatelyAbsentFromCoarseAggregates(t *testing.T) {
+	dsn := startPostgres(t)
+	ctx := context.Background()
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
+	pool := newPool(t, dsn)
+
+	pauseRefreshPolicies(t, ctx, pool)
+	analyzerID := seedAnalyzer(t, ctx, pool)
+	monthStart := istanbulBucketStart("month")
+	yearStart := istanbulBucketStart("year")
+	for i, active := range []string{"3000.0000", "3050.0000"} {
+		_, err := pool.Exec(ctx,
+			`insert into meter_readings (analyzer_id, ts, kind, active_import, source_provider)
+			 values ($1, $2, 'load_profile', $3::numeric, 'osos')`,
+			analyzerID, monthStart.Add(time.Duration(i)*time.Second), active)
+		require.NoError(t, err)
+	}
+
+	plantID, deviceID := seedPlantWithDevice(t, ctx, pool)
+	_, err := pool.Exec(ctx,
+		`insert into plant_production (plant_id, ts, device_id, production_kwh)
+		 values ($1, $2, $3, 9::numeric)`, plantID, monthStart, deviceID)
+	require.NoError(t, err)
+
+	refreshPolicyRange(t, ctx, pool, "consumption_monthly", 365*24*time.Hour)
+	refreshPolicyRange(t, ctx, pool, "consumption_yearly", 5*365*24*time.Hour)
+	refreshPolicyRange(t, ctx, pool, "plant_production_monthly", 365*24*time.Hour)
+
+	// The rows exist and are reachable through a real-time view, so an absence
+	// below is the materialisation boundary and not a failed seed.
+	refreshPolicyRange(t, ctx, pool, "consumption_daily", 90*24*time.Hour)
+	var visible int
+	require.NoError(t, pool.QueryRow(ctx,
+		`select count(*) from consumption_daily where analyzer_id = $1 and bucket >= $2`,
+		analyzerID, monthStart).Scan(&visible))
+	require.Positive(t, visible, "the seeded readings must be visible somewhere")
+
+	for _, absent := range []struct {
+		view, idColumn string
+		id             uuid.UUID
+		bucket         time.Time
+	}{
+		{"consumption_monthly", "analyzer_id", analyzerID, monthStart},
+		{"consumption_yearly", "analyzer_id", analyzerID, yearStart},
+		{"plant_production_monthly", "plant_id", plantID, monthStart},
+	} {
+		var n int
+		require.NoError(t, pool.QueryRow(ctx,
+			`select count(*) from `+pgIdent(t, absent.view)+
+				` where `+pgColumn(t, absent.idColumn)+` = $1 and bucket = $2`,
+			absent.id, absent.bucket).Scan(&n))
+		require.Zero(t, n,
+			"%s must not expose the open bucket: it is materialized_only by design, and a "+
+				"to-date figure has to be composed from the daily aggregate or the hypertable",
+			absent.view)
+	}
+}
+
+// TestMaterializedOnlyIsConfiguredPerView pins the split itself. Flipping any of
+// these six changes what a dashboard shows, or what a dashboard query costs,
+// without changing a line of Go — so it must trip a test rather than ship.
+func TestMaterializedOnlyIsConfiguredPerView(t *testing.T) {
+	dsn := startPostgres(t)
+	ctx := context.Background()
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
+	pool := newPool(t, dsn)
+
+	for _, want := range []struct {
+		view             string
+		materializedOnly bool
+		why              string
+	}{
+		{"consumption_hourly", false, "the open hour must be visible; the live tail is one hour"},
+		{"consumption_daily", false, "the open Istanbul day must be visible; the live tail is one day"},
+		{"plant_production_daily", false, "the open Istanbul day must be visible; the live tail is one day"},
+		{"consumption_monthly", true, "a live tail would rescan every reading since the last closed month"},
+		{"consumption_yearly", true, "a live tail would rescan every reading since the last closed year"},
+		{"plant_production_monthly", true, "a live tail would rescan every row since the last closed month"},
+	} {
+		var materializedOnly bool
+		require.NoError(t, pool.QueryRow(ctx,
+			`select materialized_only from timescaledb_information.continuous_aggregates
+			  where view_name = $1`, want.view).Scan(&materializedOnly))
+		require.Equal(t, want.materializedOnly, materializedOnly, "%s: %s", want.view, want.why)
+	}
+}
+
+// pgColumn is pgIdent's counterpart for the two grouping columns these views are
+// keyed by.
+func pgColumn(t *testing.T, name string) string {
+	t.Helper()
+	if name == "analyzer_id" || name == "plant_id" {
+		return name
+	}
+	t.Fatalf("refusing to interpolate unknown column %q", name)
 	return ""
 }
 
