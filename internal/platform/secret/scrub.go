@@ -1,6 +1,9 @@
 package secret
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 // scrubbed is an error whose printed text has already been through Redact
 // and whose cause is still reachable by errors.Is and errors.As.
@@ -36,14 +39,67 @@ func (e *scrubbed) Unwrap() error { return e.cause }
 // message, while leaving err reachable by errors.Is and errors.As. Pass
 // Fragments(password) as fragments. A nil err returns nil so callers may
 // call Wrap unconditionally.
+//
+// AN EMPTY fragments LIST FAILS CLOSED. Redact(msg, nil) is a no-op, so an
+// empty list would mean "print the underlying error verbatim" — the scrubber
+// appearing to run while removing nothing. That is not a hypothetical: a
+// caller reaches this state whenever it could not locate the credential in
+// its connection string, which is exactly when the underlying error is most
+// likely to contain one. Two connection-string shapes pgx accepts do this
+// (libpq keyword/value form, and a password carried as a URL query
+// parameter), as does any pool whose credential came from PGPASSWORD or a
+// .pgpass file. "I do not know what to redact" therefore means "show
+// nothing", never "show everything", and the decision lives here at the one
+// choke point rather than in each caller, so no future call site can
+// reintroduce it.
 func Wrap(op string, fragments []string, err error) error {
 	if err == nil {
 		return nil
+	}
+	if len(fragments) == 0 {
+		return Withhold(op, "no credential could be identified, so nothing in the underlying error can be shown safely", err)
 	}
 	return &scrubbed{
 		msg:   fmt.Sprintf("%s: %s", op, Redact(err.Error(), fragments)),
 		cause: err,
 	}
+}
+
+// Withhold reports that op failed and why nothing more can be shown, without
+// including ANY of cause's own text. reason must describe the situation, not
+// the error: it is printed verbatim, so it must never be derived from a
+// value that could carry a credential.
+//
+// cause is still attached. Withholding is a statement about what may be
+// PRINTED, not about what a caller may inspect, and fmt never follows
+// Unwrap — so keeping the cause costs nothing in exposure and preserves
+// errors.Is and errors.As on paths where the text has to be dropped.
+// The caveat documented on the scrubbed type applies here with full force:
+// errors.Unwrap(err).Error() yields the original text, which in this branch
+// is precisely the text we decided we could not show.
+func Withhold(op, reason string, cause error) error {
+	return &scrubbed{
+		msg:   fmt.Sprintf("%s: details withheld (%s)", op, reason),
+		cause: cause,
+	}
+}
+
+// IsScrubbed reports whether err, or anything it wraps, was produced by this
+// package — i.e. whether its text has actually been through the scrubber.
+//
+// It exists to be a POSITIVE fingerprint. Before scrubbed errors became
+// traversable, "errors.Unwrap(err) == nil" was the only way a test could
+// tell a scrubbed error from a plain fmt.Errorf("%w") wrap, and that
+// distinguishing property is gone now that the cause is deliberately
+// reachable. Without a replacement, a call site on a credential-bearing path
+// could be reverted to a bare %w wrap and every assertion about it would
+// stay green, because the errors would be indistinguishable. Assertions of
+// the form "no credential appears in the text" cannot cover that gap on
+// their own: they are vacuous whenever the induced failure produced a driver
+// message that never contained the credential to begin with.
+func IsScrubbed(err error) bool {
+	var target *scrubbed
+	return errors.As(err, &target)
 }
 
 // URLParseErr reports a redis URL parse failure without ever including the

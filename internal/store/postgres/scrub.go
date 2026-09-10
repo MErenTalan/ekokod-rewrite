@@ -1,7 +1,6 @@
 package postgres
 
 import (
-	"fmt"
 	"net/url"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/secret"
@@ -9,10 +8,10 @@ import (
 
 // scrubErr wraps err under op, guaranteeing the result never contains any
 // fragment of dsn's password. dsn is parsed once with net/url; if it cannot
-// be parsed at all, the underlying error text is dropped entirely rather
-// than risk leaking a credential — we cannot reason about what a DSN we
-// cannot even parse might contain, or how a different parser downstream
-// might have split it.
+// be parsed at all, OR if it parses but yields no password, the underlying
+// error text is dropped entirely rather than risk leaking a credential — we
+// cannot reason about what a DSN we cannot read might contain, or how a
+// different parser downstream might have split it.
 //
 // This deliberately does NOT share secret.URLParseErr with the redis and job
 // packages: the two have genuinely diverged. Those withhold everything the
@@ -28,15 +27,21 @@ func scrubErr(dsn, op string, err error) error {
 	}
 	u, parseErr := url.Parse(dsn)
 	if parseErr != nil {
-		// No cause is attached: the driver error is exactly the value we
-		// have decided we cannot show, and an unwrappable error is the
-		// honest representation of "nothing here is safe to expose".
-		return fmt.Errorf("%s: database error (details withheld: dsn did not parse)", op)
+		return secret.Withhold(op, "dsn did not parse", err)
 	}
 	var password string
 	if u.User != nil {
 		password, _ = u.User.Password()
 	}
+	// An empty password here does NOT mean "there is no credential to
+	// protect": it means net/url found none in the userinfo, which is also
+	// what it reports for `host=… password=…` keyword/value form and for
+	// `postgres://user@host/db?password=…`. Both are accepted by pgx and
+	// both pass config.requiredDSN's url.Parse check, so both arrive here.
+	// secret.Wrap treats the resulting empty fragment list as a reason to
+	// withhold the driver text entirely rather than pass it through
+	// unredacted; that is deliberate and is asserted in
+	// scrub_internal_test.go.
 	return secret.Wrap(op, secret.Fragments(password), err)
 }
 

@@ -79,3 +79,59 @@ func TestURLParseErrWithholdsEverything(t *testing.T) {
 	require.EqualError(t, err, "parse redis url: redis url is not valid (details withheld)")
 	require.NoError(t, errors.Unwrap(err), "there is no cause to expose")
 }
+
+// TestWrapFailsClosedWhenThereAreNoFragments is the fix for the fail-open
+// hole found in review: Redact(msg, nil) is a no-op, so an empty fragment
+// list used to mean "print the underlying error verbatim" — the scrubber
+// appearing to run while removing nothing. A caller lands here precisely
+// when it could not locate the credential in its connection string, which
+// is exactly when the driver error is most likely to contain one.
+func TestWrapFailsClosedWhenThereAreNoFragments(t *testing.T) {
+	cause := fmt.Errorf("password authentication failed using %q: %w", "s3cret", errSentinel)
+
+	for name, fragments := range map[string][]string{
+		"nil fragments":   nil,
+		"empty fragments": {},
+		"empty password":  secret.Fragments(""),
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := secret.Wrap("ping database", fragments, cause)
+
+			require.NotContains(t, err.Error(), "s3cret",
+				"an unknown credential means show nothing, never show everything")
+			require.Contains(t, err.Error(), "ping database", "the operation must stay diagnosable")
+			require.ErrorIs(t, err, errSentinel, "withholding the text must not cost errors.Is")
+			require.True(t, secret.IsScrubbed(err))
+		})
+	}
+}
+
+// TestWithholdPrintsNoneOfTheCause pins the branch used when there is
+// nothing safe to show at all.
+func TestWithholdPrintsNoneOfTheCause(t *testing.T) {
+	cause := fmt.Errorf("postgres://ekokod:s3cret@db:5432/ekokod is malformed: %w", errSentinel)
+
+	err := secret.Withhold("parse database url", "dsn did not parse", cause)
+
+	require.Equal(t, "parse database url: details withheld (dsn did not parse)", err.Error())
+	require.NotContains(t, err.Error(), "s3cret")
+	require.NotContains(t, fmt.Sprintf("%+v", err), "s3cret")
+	require.ErrorIs(t, err, errSentinel, "the cause stays reachable even when its text may not be shown")
+}
+
+// TestIsScrubbedIsAPositiveFingerprint is the property that replaces the
+// old "errors.Unwrap(err) == nil" proxy. Once scrubbed errors became
+// traversable they stopped being distinguishable from a plain %w wrap by
+// shape alone, so tests on credential-bearing paths need something that a
+// bare fmt.Errorf cannot satisfy.
+func TestIsScrubbedIsAPositiveFingerprint(t *testing.T) {
+	scrubbedErr := secret.Wrap("op", secret.Fragments("pw"), errSentinel)
+	require.True(t, secret.IsScrubbed(scrubbedErr))
+	require.True(t, secret.IsScrubbed(fmt.Errorf("outer: %w", scrubbedErr)),
+		"a scrubbed error must stay identifiable through an outer wrap")
+
+	require.False(t, secret.IsScrubbed(fmt.Errorf("op: %w", errSentinel)),
+		"a plain %%w wrap must NOT pass for a scrubbed error: that is the whole point")
+	require.False(t, secret.IsScrubbed(errSentinel))
+	require.False(t, secret.IsScrubbed(nil))
+}
