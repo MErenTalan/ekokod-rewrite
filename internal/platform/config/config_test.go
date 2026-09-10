@@ -213,3 +213,31 @@ func TestZeroStaysLegalWhereItMeansSomething(t *testing.T) {
 	require.Zero(t, cfg.Worker.MaxRetries)
 	require.Zero(t, cfg.DB.ReadingRetention, "an unset retention still means unlimited")
 }
+
+// TestNegativeRedisDatabaseIndexIsRejected covers a failure mode that looks
+// like the zero case but is not: go-redis issues SELECT on connect only under
+// `if c.opt.DB > 0`, so a negative index fails that guard exactly as zero does
+// and the connection silently lands on database 0. A typo'd
+// EKOKOD_REDIS_QUEUE_DB=-1 would therefore put the job queue on the cache's own
+// database with no error, and a cache flush would drop queued work.
+func TestNegativeRedisDatabaseIndexIsRejected(t *testing.T) {
+	for _, name := range []string{"EKOKOD_REDIS_CACHE_DB", "EKOKOD_REDIS_QUEUE_DB"} {
+		t.Run(name, func(t *testing.T) {
+			env := valid()
+			env[name] = "-1"
+			_, err := config.Load(lookupFrom(env))
+			require.Error(t, err)
+			require.Contains(t, err.Error(), name, "the error must name the offending variable")
+			require.Contains(t, err.Error(), "zero or greater")
+		})
+	}
+}
+
+// TestRedisDatabasesStayDistinctByDefault pins the invariant the check above
+// protects: the cache and the queue must never share a logical database.
+func TestRedisDatabasesStayDistinctByDefault(t *testing.T) {
+	cfg, err := config.Load(lookupFrom(valid()))
+	require.NoError(t, err)
+	require.NotEqual(t, cfg.Redis.CacheDB, cfg.Redis.QueueDB,
+		"a cache flush must never be able to drop queued work")
+}

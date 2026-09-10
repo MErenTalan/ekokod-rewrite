@@ -135,13 +135,33 @@ func (l *loader) intVal(name string, def int) int {
 }
 
 // positiveInt is intVal with a "> 0" constraint. It exists because zero is a
-// legitimate value for several counts here (EKOKOD_REDIS_CACHE_DB,
-// EKOKOD_DB_MIN_CONNS, EKOKOD_JOB_MAX_RETRIES), so the constraint cannot live
-// in intVal itself and must be opted into per field.
+// legitimate value for several counts here (EKOKOD_DB_MIN_CONNS,
+// EKOKOD_JOB_MAX_RETRIES, and the Redis database indices — see
+// nonNegativeInt), so the constraint cannot live in intVal itself and must be
+// opted into per field.
 func (l *loader) positiveInt(name string, def int) int {
 	n := l.intVal(name, def)
 	if n <= 0 {
 		l.fail(name, errors.New("must be greater than zero"))
+		return def
+	}
+	return n
+}
+
+// nonNegativeInt is intVal with a ">= 0" constraint, for the Redis logical
+// database indices. positiveInt would be wrong — database 0 is a real
+// database and the documented default for the cache — but a negative is not
+// merely odd, it is silently wrong: go-redis issues SELECT on connect only
+// under `if c.opt.DB > 0` (redis.go:840-841), so a negative fails that guard
+// exactly as zero does and the connection simply lands on database 0. A
+// typo'd EKOKOD_REDIS_QUEUE_DB=-1 would therefore collapse the job queue onto
+// the cache's own database with no error at all, defeating the separation
+// this project relies on (see internal/store/redis/redis.go:1-3: "a cache
+// flush can never drop queued work").
+func (l *loader) nonNegativeInt(name string, def int) int {
+	n := l.intVal(name, def)
+	if n < 0 {
+		l.fail(name, errors.New("must be zero or greater"))
 		return def
 	}
 	return n
@@ -345,8 +365,8 @@ func Load(lookup func(string) (string, bool)) (*Config, error) {
 
 	c.Redis = Redis{
 		URL:     l.requiredDSN("EKOKOD_REDIS_URL"),
-		CacheDB: l.intVal("EKOKOD_REDIS_CACHE_DB", 0),
-		QueueDB: l.intVal("EKOKOD_REDIS_QUEUE_DB", 1),
+		CacheDB: l.nonNegativeInt("EKOKOD_REDIS_CACHE_DB", 0),
+		QueueDB: l.nonNegativeInt("EKOKOD_REDIS_QUEUE_DB", 1),
 	}
 
 	c.Security = Security{
@@ -364,6 +384,12 @@ func Load(lookup func(string) (string, bool)) (*Config, error) {
 		l.fail("EKOKOD_BCRYPT_COST", errors.New("must be at least 12"))
 	}
 
+	// EKOKOD_JOB_MAX_RETRIES and EKOKOD_READING_RETENTION are the two
+	// remaining unbounded knobs, left that way on purpose: nothing consumes
+	// either yet, and what a non-positive retry count or a negative retention
+	// window should mean is the consuming phase's decision, not this one's.
+	// Both need the same treatment as the fields around them when they are
+	// wired up.
 	c.Worker = Worker{
 		Concurrency: l.positiveInt("EKOKOD_WORKER_CONCURRENCY", 10),
 		MaxRetries:  l.intVal("EKOKOD_JOB_MAX_RETRIES", 5),
