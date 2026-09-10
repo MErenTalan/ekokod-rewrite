@@ -339,6 +339,28 @@ func methodSetOf(named *types.Named) *types.MethodSet {
 // underPackage so that a future sibling such as "…/postgres/adminui" cannot
 // inherit it by prefix.
 //
+// internal/store/postgres/sqlcgen is skipped too, for a different reason.
+// It is sqlc's generated output: DBTX is the raw pgx driver interface
+// (Exec/Query/QueryRow), and Queries holds one method per .sql file entry.
+// Those methods ARE the unscoped primitive — they are what a scoped
+// repository is built FROM, in the same way that a repository is built from
+// a *pgxpool.Pool, which this guard has never flagged either. Requiring a
+// store.Scope parameter on them is not possible: their signatures are
+// generated from the SQL, and store.Scope is a Go type sqlc knows nothing
+// about. Flagging them would leave only two outcomes — a permanently red
+// guard, or hand-editing generated code — and neither closes a hole.
+//
+// What the exemption does NOT do is let that surface escape. sqlcgen is
+// imported only by package postgres, whose own DB type keeps the generated
+// query set in a named, unexported field precisely so the methods are not
+// promoted onto an exported type (see the note on DB in
+// internal/store/postgres/db.go — an earlier draft embedded it, and this
+// guard is what caught that). So the guard's real job here is unchanged: it
+// ensures nothing outside admin RE-EXPORTS the unscoped primitive, and it
+// still inspects package postgres itself. Both exemptions are matched with
+// underPackage rather than a bare prefix, so a future "…/postgres/sqlcgenx"
+// cannot inherit either one by accident.
+//
 // WHAT THIS GUARD CANNOT DO, and who does it instead. This checks SIGNATURES,
 // not USAGE. A method can take a store.Scope, satisfy this guard completely,
 // and then never reference the parameter when it builds its SQL — a
@@ -364,11 +386,14 @@ func methodSetOf(named *types.Named) *types.MethodSet {
 // require, otherwise this guard can stay vacuously green for the life of the
 // project.
 func TestEveryStoreMethodIsScoped(t *testing.T) {
-	const adminPkg = modulePath + "/internal/store/postgres/admin"
+	const (
+		adminPkg   = modulePath + "/internal/store/postgres/admin"
+		sqlcgenPkg = modulePath + "/internal/store/postgres/sqlcgen"
+	)
 
 	inspected := 0
 	for _, pkg := range loadTypedPackages(t, "./internal/store/postgres/...") {
-		if underPackage(pkg.PkgPath, adminPkg) {
+		if underPackage(pkg.PkgPath, adminPkg) || underPackage(pkg.PkgPath, sqlcgenPkg) {
 			continue
 		}
 		if pkg.Types == nil {

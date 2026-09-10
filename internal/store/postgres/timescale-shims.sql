@@ -16,5 +16,11 @@
 -- pgtype.Numeric or an aggregate bucket stops generating as pgtype.Timestamptz,
 -- which is what catches the removal of any declaration below.
 create function time_bucket(bucket_width interval, ts timestamptz) returns timestamptz as $$ select ts $$ language sql;
+-- The three-argument, timezone-aware form. 00005 uses it for every bucket
+-- coarser than an hour, because a day/month/year boundary must be evaluated in
+-- Europe/Istanbul rather than UTC. It is a distinct overload as far as sqlc's
+-- catalogue is concerned: with only the two-argument declaration above, those
+-- five views regenerate with `Bucket interface{}`.
+create function time_bucket(bucket_width interval, ts timestamptz, timezone text) returns timestamptz as $$ select ts $$ language sql;
 create function first(value numeric, ordering timestamptz) returns numeric as $$ select value $$ language sql;
 create function last(value numeric, ordering timestamptz) returns numeric as $$ select value $$ language sql;
