@@ -1,8 +1,9 @@
 # Handoff — ekokod rewrite, phase F1 (Data model and migration framework)
 
-> **STATUS: F1 IN PROGRESS.** This file is kept current as the phase runs, so that it is
-> useful even if the session ends unexpectedly. The "Where the work stands" table is the
-> truth; anything below it that contradicts the table is stale.
+> **STATUS: F1 PAUSED MID-PHASE at the user's request.** Tasks 1-8 are done and merged;
+> Tasks 9-13 are not started. The session was stopped deliberately, not because anything
+> broke. Branch `phase/f1-data-model` is at `61a1fe5`, working tree clean, full integration
+> suite green (18 packages, exit 0), verified by the controller on the merged result.
 
 Branch `phase/f1-data-model`, branched from `main` at `6975b20` (F0 merged).
 **Nothing has been pushed.** `main` is still local-only ahead of `origin/main`, and the push
@@ -21,9 +22,9 @@ decision is the user's — do not push.
 | 4 — carbon + ISO 50001 | ✅ complete, review clean |
 | 5 — files/integrations/calendar/operations | ✅ complete, review clean |
 | 6 — bills + reports + alarms | ✅ complete, review clean |
-| 7 — sqlc config, generated types, uuid override | 🔄 fix round 2 in flight |
+| 7 — sqlc config, generated types, uuid override | ✅ done, 2 fix rounds — **round 2 UNREVIEWED** |
 | 8a — `store.Scope`, arch guard, scrub fixes | ✅ complete, re-review clean |
-| 8b — domain model, decimal conversion, float guard, fixtures | 🔄 in flight (**critical path**) |
+| 8b — domain model, decimal conversion, float guard, fixtures | ✅ done — **UNREVIEWED, no task review ever ran** |
 | 9 — tenancy/building/analyzer/plant repositories | ⬜ not started |
 | 10 — time-series repositories | ⬜ not started |
 | 11 — remaining repositories + `admin` | ⬜ not started |
@@ -33,6 +34,21 @@ decision is the user's — do not push.
 
 **All eleven migrations exist and are green.** `migrate up → down → up` passes across the
 complete schema, verified by the controller personally on the merged result.
+
+### START HERE — the two unreviewed tasks
+
+Every other completed task went through a task review and, where findings arose, scoped
+re-reviews. **Two did not, because the session stopped first:**
+
+1. **Task 8b never had a task review at all.** It delivered `internal/domain/model`, the
+   `pgtype.Numeric` ↔ `decimal.Decimal` conversion pair, the field-level float guard,
+   `internal/store/repository.go`, and `internal/testfixtures`. Tasks 9-11 build directly on
+   all of it. Its own evidence is strong (both guards proven failing-first, `-count=3` green),
+   but strong self-evidence is exactly what this phase has repeatedly found insufficient.
+2. **Task 7's fix round 2 was merged without its scoped re-review.**
+
+Review both before writing a repository. The full diff is
+`git diff a7b0750..61a1fe5` (or per-task: `git log --oneline --merges`).
 
 ## Key paths
 
@@ -94,6 +110,65 @@ is actually a container readiness timeout before believing the test name.
 per package with per-test isolation is the real answer, but several tests genuinely need a
 virgin database (the migrate round-trip, the reversibility guard). This is the lever if suite
 time or flake rate worsens.
+
+
+### What Task 8b delivered (Tasks 9-11 consume all of it)
+
+- **`internal/domain/model`** — one plain struct per aggregate, `decimal.Decimal` for money and
+  energy, `uuid.UUID`/`*uuid.UUID` for ids, named string types for every SQL enum.
+- **The `pgtype.Numeric` ↔ `decimal.Decimal` conversion pair** in `internal/store/postgres`.
+  **Use it; do not scatter conversions.** It converts via string/exponent, never via `float64` —
+  proven by writing a float64 implementation and watching the test fail: `numeric(18,6)` tariff
+  prices lost their sixth decimal (`123456789012.345678` → `…34567`), a 29-digit value lost
+  everything past digit 17, and `9007199254740993` became `…992`.
+- **`TestNoFloatFieldsInModelOrStore`** — the field-level float guard the project believed it
+  had since F0 but never did. Proven to fail on `float64`, `*float64`, `[]float32`,
+  `map[string]*[]float64`, an inline struct field, **and `type Money = float64`**, which
+  depguard and any text scan would miss. 1459 fields inspected.
+- **`internal/store/repository.go`** — the interfaces Tasks 9-11 implement. If a method you need
+  is missing, add it there first rather than inventing a name in the repository.
+- **`internal/testfixtures`** — `StartPostgres`, `StartRedis`, `NewPool`, `DiscardLogger`,
+  `NewTenant`. Consolidating these fixed a live bug: `internal/scheduler` held a **fourth** copy
+  of the redis helper still carrying the 10s budget.
+
+### The container-readiness trap has THREE layers, not one
+
+This cost three separate discoveries. If you touch the fixture helpers, know all three:
+
+1. testcontainers' **redis** module hardcodes `WithStartupTimeout(10s)`; postgres leaves the
+   library default of 60s.
+2. Under load, 60s is not enough either — measured 520 Docker-API polls exhausting it.
+3. **`WithWaitStrategy` hardcodes a 60-second deadline across all strategies**, so raising only
+   `WithStartupTimeout` looks like a fix and does nothing. Both helpers use
+   **`WithWaitStrategyAndDeadline`**. Do not "simplify" that back.
+
+And the strategy must **REPLACE**, never append — `WithAdditionalWaitStrategy` leaves the
+module's own short budget in place.
+
+**Watch item, not yet acted on.** One non-recurring failure at 180.49s under 2× load showed a
+*different* error: `dial tcp: lookup localhost: i/o timeout` — DNS, not the Docker API. It
+consumed the whole budget, so raising it again would not help. Candidate mitigation is
+`TESTCONTAINERS_HOST_OVERRIDE=127.0.0.1`, deliberately **not** adopted on a single observation
+because it changes the DSN host everywhere. If it recurs, adopt it; this entry is the evidence.
+
+---
+
+## Remaining F1 work
+
+Plan: `docs/superpowers/plans/2026-09-10-f1-data-model.md`. Briefs for every remaining task are
+already generated in the SDD workspace (`task-9-brief.md` … `task-13-brief.md`).
+
+| Task | Scope |
+|---|---|
+| 9 | Repositories: tenancy/identity/access, buildings, analyzers, plants |
+| 10 | Repositories: readings (COPY-based bulk insert), cursors, anomalies, production, prices, forecasts |
+| 11 | Repositories: tariffs, bills, reports, alarms, carbon, ISO, files, integrations, ops + the `admin` package |
+| 12 | Seed loader (`ekokod seed`), idempotent, embedded datasets |
+| 13 | Performance + acceptance suite: 1M rows with `EXPLAIN` chunk exclusion, aggregate correctness against a hand-computed fixture, compression, `TestScopeIsolation` |
+| — | Final whole-branch review, then `superpowers:finishing-a-development-branch` |
+
+Tasks 9, 10 and 11 are independent of one another and were planned to run in parallel
+(Wave F). 12 and 13 follow.
 
 ---
 
@@ -272,3 +347,44 @@ project and a narrowing bug in it is indistinguishable from having nothing to ch
 
 **NEW, blocks F2:** does iSolarCloud report plant-level production without a device serial? If
 so, `plant_production`'s primary key must change before any real ingestion (see spec defect 2).
+
+---
+
+## Rulings I made on the user's behalf this session
+
+Listed so they can be reviewed and undone. Each with what it costs if wrong.
+
+1. **Wave B tasks ran in parallel git worktrees on the native filesystem.** — Cost: none observed; it is how four implementers ran concurrently.
+2. **Each migration task owns its own test file**, rather than all editing one. — Cost: a trivial rename.
+3. **Shared test helpers are defined once** in `migrations_helpers_integration_test.go`. — Cost: trivial.
+4. **`EKOKOD_COMPRESSION_AFTER` / `EKOKOD_READING_RETENTION` stay unwired** — migrations are static SQL and cannot read config. — Cost: a later phase reconfigures policies at startup instead.
+5. **Task 7 took the "sqlc reads migrations directly" branch** (no `schema.sql`, no pg_dump, no schema-drift check), on the strength of a spike I ran. — Cost: a re-run spike.
+6. **Continuous aggregates carry explicit `::numeric` casts**, deviating from the spec's SQL. — Cost: cosmetic divergence; values unchanged. Without it, `active_consumption` generated as `int32`.
+7. **A sqlc-only Timescale shim file exists** and is never applied to a database. — Cost: aggregate columns mistype without it.
+8. **`plant_production.device_id` transcribed as written** despite being nullable-in-a-primary-key. — Cost: **F2 may need a hypertable PK change.** See spec defect 2.
+9. **`00005` uses `-- +goose NO TRANSACTION`** — tried transactional first, it genuinely fails. — Cost: partial-apply needs down-then-up.
+10. **The `plant_production` compression `alter table` was added**, which the spec omits. — Cost: the segmentby/orderby choice is a performance decision, changeable while empty.
+11. **UTC bucketing was treated as a constraint violation, not a judgement call** — I overrode the reviewer, which said the spec was silent. `02-domain-rules.md` §1 is not silent. — Cost: none; the fix is correct either way.
+12. **Real-time aggregation is split** — on for hourly/daily, off for monthly/yearly. — Cost: **MTD/YTD must be composed explicitly in Task 10.**
+13. **`start_offset` history capping is handled by documentation**, not tooling. — Cost: an operator who misses the runbook step gets silently truncated history.
+14. **`postgres.DB` uses a named unexported `q`, not embedding** — fixed structurally rather than exempted. — Cost: repositories write `db.q.X()`.
+15. **`google/uuid` override adopted**, conditional on proof — proven. — Cost: none; a clean revert was authorised and not needed.
+16. **Generated code keeps `pgtype.Numeric`**; no `shopspring/decimal` sqlc override (it needs a pgx adapter whose failure mode is silent). — Cost: conversion at the repository boundary, via one audited helper.
+17. **The scoped-method arch guard is exported-only** and currently inspects 0 methods. — Cost: **Task 9 must flip the `t.Log` to `require.Positive`**, or the guard is unverified for the rest of the project.
+18. **The "DSN did not parse" branch deliberately attaches no cause** — `*url.Error` embeds the whole DSN. — Cost: no `errors.Is` traversal on that branch, which nobody needs.
+19. **Postgres readiness budget raised to 180s**, from a measured 60s exhaustion at 520 polls. — Cost: a genuinely dead container takes 180s to fail.
+20. **`TESTCONTAINERS_HOST_OVERRIDE` not adopted** on a single non-recurring DNS failure. — Cost: it may recur; evidence is recorded.
+21. **Task 2's round 3 accepted without a fourth review seat** — test-only changes, controller-verified. — Cost: a test-only defect surfaces at the final review.
+22. **Wave B reviewed as one unit** rather than four separate seats. — Cost: a broader fix round if one migration had been wrong.
+23. **Task 6 and Task 8a dispatched early**, overlapping waves, once their real dependencies were merged. — Cost: rework if an earlier review had forced a schema change.
+
+## Mistakes I made, so they are not repeated
+
+- **Two Criticals came from my merge sequencing, not from any implementer.** Task 7 generated sqlc output against a schema Task 2 then changed; Task 8a widened an arch guard against a codebase Task 7 then added code to. Each merge was individually clean. **After merging any migration change, regenerate sqlc before calling the branch green** — `make ci` now includes `check-generate`, which makes this mechanical.
+- **I repeated the exact mistake the F0 handoff warned about**: grepped a failing suite for `ok|FAIL` and lost the assertion text. Capture full output on the first failure.
+- **I passed a subagent's self-assessment upward as verified fact** ("fixed without a sleep"); the re-review found a `time.Sleep`. A report's characterisation of its own fix is not evidence.
+- **I told Task 8b to raise `WithStartupTimeout`**, which would have been a placebo — `WithWaitStrategy` hardcodes a 60s deadline over all strategies. The agent caught it.
+- **I asserted a bidirectional numeric guard "would have caught C1".** It would not — `bucket` is not a numeric column. The agent found the guard that actually closes the class.
+- **I suggested a known-Timescale-function allowlist**; the agent rejected it for default-deny, correctly, because an allowlist only catches names someone remembered to enumerate.
+
+The pattern in the last three: **the implementers were right and I was wrong, and they said so.** Dispatches should keep inviting that.
