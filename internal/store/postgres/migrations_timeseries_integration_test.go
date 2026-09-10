@@ -222,10 +222,13 @@ func seedAnalyzerReadings(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 		require.NoError(t, err)
 	}
 
+	// Sits inside the 09:00 hour that the hourly leg asserts on, so every one of
+	// the four consumption views covers its own `where kind = 'load_profile'`
+	// clause rather than inheriting the coverage from a coarser bucket.
 	_, err := pool.Exec(ctx,
 		`insert into meter_readings (analyzer_id, ts, kind, active_import, source_provider)
 		 values ($1, $2, 'daily', 99999::numeric, 'osos')`,
-		analyzerID, at(2025, time.January, 2, 10, 0))
+		analyzerID, at(2025, time.January, 2, 9, 30))
 	require.NoError(t, err)
 }
 
@@ -615,23 +618,33 @@ func TestOpenBucketIsVisibleInRealTimeAggregates(t *testing.T) {
 	pool := newPool(t, dsn)
 
 	pauseRefreshPolicies(t, ctx, pool)
-	analyzerID := seedAnalyzer(t, ctx, pool)
 	hourStart := istanbulBucketStart("hour")
 	dayStart := istanbulBucketStart("day")
+
+	// Two analyzers, deliberately. Between 00:00 and 01:00 Europe/Istanbul the
+	// open hour and the open day begin at the same instant, so seeding both legs
+	// against one analyzer would collide on meter_readings' primary key
+	// (analyzer_id, ts, kind) — and the test would then fail for one hour every
+	// day with a value nobody could account for. Keeping the legs on separate
+	// analyzers makes them independent of the wall clock. The inserts carry no
+	// `on conflict` clause for the same reason: a seeder that silently discards
+	// rows it meant to write can only ever fail confusingly.
+	dayAnalyzer := seedAnalyzer(t, ctx, pool)
+	hourAnalyzer := seedAnalyzer(t, ctx, pool)
 	for _, r := range []struct {
-		ts     time.Time
-		active string
+		analyzer uuid.UUID
+		ts       time.Time
+		active   string
 	}{
-		{dayStart, "2000.0000"},
-		{dayStart.Add(time.Second), "2005.0000"},
-		{hourStart, "2100.0000"},
-		{hourStart.Add(time.Second), "2130.0000"},
+		{dayAnalyzer, dayStart, "2000.0000"},
+		{dayAnalyzer, dayStart.Add(time.Second), "2005.0000"},
+		{hourAnalyzer, hourStart, "2100.0000"},
+		{hourAnalyzer, hourStart.Add(time.Second), "2130.0000"},
 	} {
 		_, err := pool.Exec(ctx,
 			`insert into meter_readings (analyzer_id, ts, kind, active_import, max_demand_kw, source_provider)
-			 values ($1, $2, 'load_profile', $3::numeric, 7::numeric, 'osos')
-			 on conflict (analyzer_id, ts, kind) do nothing`,
-			analyzerID, r.ts, r.active)
+			 values ($1, $2, 'load_profile', $3::numeric, 7::numeric, 'osos')`,
+			r.analyzer, r.ts, r.active)
 		require.NoError(t, err)
 	}
 
@@ -649,14 +662,15 @@ func TestOpenBucketIsVisibleInRealTimeAggregates(t *testing.T) {
 	var consumption pgtype.Numeric
 	require.NoError(t, pool.QueryRow(ctx,
 		`select active_consumption from consumption_hourly where analyzer_id = $1 and bucket = $2`,
-		analyzerID, hourStart).Scan(&consumption),
+		hourAnalyzer, hourStart).Scan(&consumption),
 		"the hour in progress must be visible in consumption_hourly")
 	requireNumericEquals(t, "30.0000", consumption)
 
 	require.NoError(t, pool.QueryRow(ctx,
 		`select active_consumption from consumption_daily where analyzer_id = $1 and bucket = $2`,
-		analyzerID, dayStart).Scan(&consumption),
+		dayAnalyzer, dayStart).Scan(&consumption),
 		"the Istanbul day in progress must be visible in consumption_daily")
+	requireNumericEquals(t, "5.0000", consumption)
 
 	var kwh pgtype.Numeric
 	require.NoError(t, pool.QueryRow(ctx,
