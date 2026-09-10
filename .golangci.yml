@@ -48,9 +48,11 @@ linters:
         # internal/domain/tariff, neither of which exists yet, so it has
         # never matched a single file. Task 8a points it at the store layer,
         # which does exist and is where the numeric columns are read and
-        # written. internal/domain/model is deliberately NOT listed: a later
-        # task creates that package, and a glob for a non-existent directory
-        # is exactly the dormant rule this entry is fixing.
+        # written. internal/domain/model is deliberately NOT listed even
+        # though the task brief asked for it: that package does not exist
+        # yet, and a glob for a non-existent directory is exactly the dormant
+        # rule this entry is fixing. Whichever task creates
+        # internal/domain/model adds the glob with it.
         #
         # Scope note: depguard matches IMPORTS, not declarations. It cannot
         # see a `Total float64` struct field. It is the backstop against the
@@ -59,8 +61,10 @@ linters:
         # review and by the numeric column types themselves.
         no-float-money:
           files:
+            # "**/internal/store/**" already covers internal/store/postgres
+            # and every other subpackage; a separate entry for it would be
+            # dead config that reads as extra coverage.
             - "**/internal/store/**"
-            - "**/internal/store/postgres/**"
             - "**/internal/domain/billing/**"
             - "**/internal/domain/tariff/**"
           deny:

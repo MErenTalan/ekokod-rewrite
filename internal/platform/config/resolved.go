@@ -30,7 +30,8 @@ var dsnMaskGlyph = strings.Repeat("•", 4)
 // when it cannot safely redact in place, matching the pattern the codebase
 // already established for an unparseable DSN (requiredDSN's
 // "(invalid — value withheld)" at load.go) and for a value this package
-// cannot reason about at all (internal/job/scrub.go's "details withheld").
+// cannot reason about at all (internal/platform/secret.URLParseErr's
+// "details withheld").
 // dsnDisplay always prepends the mask glyph in front of whichever of these
 // is returned, so the caller sees "•••••••• (...)" — a glyph followed by an
 // explanation, never a glyph followed by the raw value.
