@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
+	"github.com/MErenTalan/ekokod-rewrite/internal/platform/secret"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 	"github.com/stretchr/testify/require"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -164,19 +165,32 @@ func TestDownMigrationLeavesExtensionsInstalled(t *testing.T) {
 //
 // CHANGED in task 8a. This test used to assert errors.Unwrap(err) == nil,
 // treating an unwrappable error as "the observable proof that the value went
-// through the scrubber". That proxy was never the property we wanted — it was
-// a side effect of scrubPoolErr flattening the driver error with %s, which
-// also destroyed errors.Is/errors.As for every caller of this package. The
-// flattening is now gone (see secret.Wrap): the redacted text lives in the
-// wrapper's Error() while the driver error stays reachable through Unwrap.
+// through the scrubber". That proxy was crude, but it was doing real work:
+// nothing else in the package produced an unwrappable error, so it was a
+// unique fingerprint of scrubPoolErr. Making scrubbed errors traversable
+// (see secret.Wrap) was correct, but it destroyed that fingerprint, and the
+// first replacement written for it did not restore one — every assertion
+// below is also satisfied by a naive fmt.Errorf("read schema version: %w").
 //
-// So the assertion is inverted, and strengthened at the same time. Both
-// halves are now checked directly rather than by proxy: the printed text
-// carries no credential (the property that actually protects the readiness
-// body), AND the driver's own error is still reachable, so a caller can
-// errors.Is through a scrubbed error. Unwrapping deliberately yields
-// unredacted text; only the logging and HTTP paths, which print err.Error(),
-// are bound by the redaction.
+// That gap mattered specifically here. The failure is induced with
+// pool.Close(), so the driver text is "closed pool", which never contained a
+// credential to begin with: the NotContains assertions below are VACUOUS on
+// this path and pass whether or not any redaction ran. They are kept because
+// they cost nothing and would catch a future change to how the error is
+// induced, but they are not what protects the readiness body.
+//
+// secret.IsScrubbed is the restored fingerprint, and it is a positive one: a
+// plain %w wrap cannot satisfy it. If health.go's scrubPoolErr call were
+// reverted to a bare wrap tomorrow, this test fails. The redaction itself —
+// mask present, credential absent, on a cause that really does carry the
+// credential — is proved without a container in
+// scrub_internal_test.go:TestScrubPoolErrRedactsTheCredentialOnTheReadinessPath,
+// because only a synthetic cause can make that assertion non-vacuous.
+//
+// What this test uniquely proves is the wiring: that the REAL MigrationsCheck
+// path, against a REAL database, returns a scrubbed, traversable error.
+// Unwrapping deliberately yields unredacted text; only the logging and HTTP
+// paths, which print err.Error(), are bound by the redaction.
 func TestMigrationsCheckErrorIsScrubbed(t *testing.T) {
 	ctx := context.Background()
 	dsn := startPostgres(t)
@@ -191,6 +205,16 @@ func TestMigrationsCheckErrorIsScrubbed(t *testing.T) {
 	err = postgres.MigrationsCheck(pool).Fn(ctx)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "read schema version")
+
+	// The load-bearing assertion: this error came out of the scrubber, not
+	// out of a bare fmt.Errorf("%w"). Nothing else in the package can
+	// satisfy it.
+	require.True(t, secret.IsScrubbed(err),
+		"the readiness path must return a scrubbed error: a plain %w wrap would put the driver text, credential and all, into the unauthenticated /health/ready body")
+
+	// Vacuous on this particular induced failure ("closed pool" carries no
+	// credential), kept only as a cheap tripwire if the inducement changes.
+	// The real redaction proof is the unit test named in the doc comment.
 	require.NotContains(t, err.Error(), "ekokod:ekokod", "no credential may reach the readiness body")
 	require.NotContains(t, err.Error(), "ekokod", "no credential fragment may reach the readiness body")
 
