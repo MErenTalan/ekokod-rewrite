@@ -8,7 +8,7 @@ package sqlcgen
 import (
 	"context"
 
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/google/uuid"
 )
 
 const getBuilding = `-- name: GetBuilding :one
@@ -17,8 +17,8 @@ where id = $1 and company_id = $2 and deleted_at is null
 `
 
 type GetBuildingParams struct {
-	ID        pgtype.UUID
-	CompanyID pgtype.UUID
+	ID        uuid.UUID
+	CompanyID uuid.UUID
 }
 
 func (q *Queries) GetBuilding(ctx context.Context, arg GetBuildingParams) (Building, error) {
@@ -53,9 +53,9 @@ order by name
 `
 
 type ListBuildingsForScopeParams struct {
-	CompanyID    pgtype.UUID
+	CompanyID    uuid.UUID
 	AllBuildings bool
-	BuildingIds  []pgtype.UUID
+	BuildingIds  []uuid.UUID
 }
 
 func (q *Queries) ListBuildingsForScope(ctx context.Context, arg ListBuildingsForScopeParams) ([]Building, error) {

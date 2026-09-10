@@ -21,3 +21,22 @@ sql:
         out: internal/store/postgres/sqlcgen
         sql_package: pgx/v5
         emit_pointers_for_null_types: true
+        # Every primary and foreign key in the schema is a uuid, and
+        # store.Scope carries google/uuid values (CompanyID uuid.UUID,
+        # BuildingIDs []uuid.UUID). Without this override the generated layer
+        # speaks pgtype.UUID and every repository in F1 converts at every
+        # boundary, forever. pgx/v5 encodes and decodes google/uuid.UUID with
+        # no codec registration -- its underlying type is [16]byte, which
+        # pgx's UUID codec handles through its underlying-type wrapper -- and
+        # uuid_roundtrip_integration_test.go proves that against a real
+        # database, including that a NULL uuid arrives as nil and NOT as
+        # uuid.Nil (which store.Scope treats as an invalid id).
+        overrides:
+          - db_type: "uuid"
+            go_type: "github.com/google/uuid.UUID"
+          - db_type: "uuid"
+            nullable: true
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+              pointer: true

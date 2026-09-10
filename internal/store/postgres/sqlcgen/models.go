@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/netip"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -971,8 +972,8 @@ func (ns NullVoltageLevel) Value() (driver.Value, error) {
 }
 
 type Alarm struct {
-	ID                              pgtype.UUID
-	CompanyID                       pgtype.UUID
+	ID                              uuid.UUID
+	CompanyID                       uuid.UUID
 	Name                            string
 	Type                            AlarmType
 	IsEnabled                       bool
@@ -1002,20 +1003,20 @@ type Alarm struct {
 }
 
 type AlarmAnalyzer struct {
-	AlarmID    pgtype.UUID
-	AnalyzerID pgtype.UUID
+	AlarmID    uuid.UUID
+	AnalyzerID uuid.UUID
 }
 
 type AlarmChannel struct {
-	AlarmID pgtype.UUID
+	AlarmID uuid.UUID
 	Channel NotifyChannel
 	Target  string
 }
 
 type AlarmEvent struct {
-	ID                pgtype.UUID
-	AlarmID           pgtype.UUID
-	AnalyzerID        pgtype.UUID
+	ID                uuid.UUID
+	AlarmID           uuid.UUID
+	AnalyzerID        *uuid.UUID
 	TriggeredAt       pgtype.Timestamptz
 	Message           string
 	Detail            []byte
@@ -1024,14 +1025,14 @@ type AlarmEvent struct {
 }
 
 type AlarmFiredBill struct {
-	AlarmID pgtype.UUID
-	BillID  pgtype.UUID
+	AlarmID uuid.UUID
+	BillID  uuid.UUID
 }
 
 type Analyzer struct {
-	ID                 pgtype.UUID
-	CompanyID          pgtype.UUID
-	BuildingID         pgtype.UUID
+	ID                 uuid.UUID
+	CompanyID          uuid.UUID
+	BuildingID         *uuid.UUID
 	Provider           IntegrationProvider
 	ProviderSubtype    string
 	InstallationNumber string
@@ -1063,11 +1064,11 @@ type Analyzer struct {
 
 type AuditLog struct {
 	ID         int64
-	CompanyID  pgtype.UUID
-	UserID     pgtype.UUID
+	CompanyID  *uuid.UUID
+	UserID     *uuid.UUID
 	Action     string
 	EntityType string
-	EntityID   pgtype.UUID
+	EntityID   *uuid.UUID
 	Before     []byte
 	After      []byte
 	Ip         *netip.Addr
@@ -1075,16 +1076,16 @@ type AuditLog struct {
 }
 
 type Bill struct {
-	ID                     pgtype.UUID
-	CompanyID              pgtype.UUID
-	BuildingID             pgtype.UUID
-	AnalyzerID             pgtype.UUID
+	ID                     uuid.UUID
+	CompanyID              uuid.UUID
+	BuildingID             *uuid.UUID
+	AnalyzerID             *uuid.UUID
 	Scope                  BillScope
 	PeriodKey              string
 	PeriodStart            pgtype.Timestamptz
 	PeriodEnd              pgtype.Timestamptz
 	DaysInPeriod           int32
-	TariffID               pgtype.UUID
+	TariffID               *uuid.UUID
 	TariffEffectiveFrom    pgtype.Date
 	ActiveImport           pgtype.Numeric
 	T1Kwh                  pgtype.Numeric
@@ -1136,7 +1137,7 @@ type Bill struct {
 }
 
 type BillHourlyDetail struct {
-	BillID      pgtype.UUID
+	BillID      uuid.UUID
 	Ts          pgtype.Timestamptz
 	Consumption pgtype.Numeric
 	Ptf         pgtype.Numeric
@@ -1147,8 +1148,8 @@ type BillHourlyDetail struct {
 }
 
 type BillLine struct {
-	ID        pgtype.UUID
-	BillID    pgtype.UUID
+	ID        uuid.UUID
+	BillID    uuid.UUID
 	Code      string
 	Label     string
 	Quantity  pgtype.Numeric
@@ -1160,13 +1161,13 @@ type BillLine struct {
 }
 
 type BillMember struct {
-	BillID     pgtype.UUID
-	AnalyzerID pgtype.UUID
+	BillID     uuid.UUID
+	AnalyzerID uuid.UUID
 }
 
 type Building struct {
-	ID                pgtype.UUID
-	CompanyID         pgtype.UUID
+	ID                uuid.UUID
+	CompanyID         uuid.UUID
 	Name              string
 	Address           *string
 	Latitude          pgtype.Numeric
@@ -1175,7 +1176,7 @@ type Building struct {
 	PersonnelCount    *int32
 	TotalAreaM2       pgtype.Numeric
 	Sector            *string
-	ResponsibleUserID pgtype.UUID
+	ResponsibleUserID *uuid.UUID
 	BillCutoffDay     int16
 	CreatedAt         pgtype.Timestamptz
 	UpdatedAt         pgtype.Timestamptz
@@ -1183,29 +1184,29 @@ type Building struct {
 }
 
 type BuildingContact struct {
-	ID         pgtype.UUID
-	BuildingID pgtype.UUID
+	ID         uuid.UUID
+	BuildingID uuid.UUID
 	Name       *string
 	Phone      *string
 	SortOrder  int16
 }
 
 type CalendarEvent struct {
-	ID        pgtype.UUID
-	CompanyID pgtype.UUID
+	ID        uuid.UUID
+	CompanyID uuid.UUID
 	Title     string
 	StartsAt  pgtype.Timestamptz
 	EndsAt    pgtype.Timestamptz
 	AllDay    bool
 	Colour    *string
-	CreatedBy pgtype.UUID
+	CreatedBy *uuid.UUID
 	CreatedAt pgtype.Timestamptz
 }
 
 type CarbonActivity struct {
-	ID                   pgtype.UUID
-	CompanyID            pgtype.UUID
-	BuildingID           pgtype.UUID
+	ID                   uuid.UUID
+	CompanyID            uuid.UUID
+	BuildingID           uuid.UUID
 	MainCategory         string
 	SubCategory          string
 	ActivityType         string
@@ -1213,7 +1214,7 @@ type CarbonActivity struct {
 	PeriodEnd            pgtype.Date
 	Quantity             pgtype.Numeric
 	Unit                 string
-	FactorID             pgtype.UUID
+	FactorID             *uuid.UUID
 	FactorKey            *string
 	FactorValue          pgtype.Numeric
 	ConversionMultiplier pgtype.Numeric
@@ -1224,15 +1225,15 @@ type CarbonActivity struct {
 	Details              []byte
 	Status               CarbonStatus
 	IsAutomated          bool
-	CreatedBy            pgtype.UUID
+	CreatedBy            *uuid.UUID
 	CreatedAt            pgtype.Timestamptz
 	UpdatedAt            pgtype.Timestamptz
 }
 
 type CarbonReport struct {
-	ID         pgtype.UUID
-	CompanyID  pgtype.UUID
-	BuildingID pgtype.UUID
+	ID         uuid.UUID
+	CompanyID  uuid.UUID
+	BuildingID uuid.UUID
 	Name       string
 	ReportType string
 	Period     string
@@ -1242,13 +1243,13 @@ type CarbonReport struct {
 }
 
 type CarbonSelectedActivity struct {
-	CompanyID   pgtype.UUID
-	BuildingID  pgtype.UUID
+	CompanyID   uuid.UUID
+	BuildingID  uuid.UUID
 	ActivityKey string
 }
 
 type Company struct {
-	ID             pgtype.UUID
+	ID             uuid.UUID
 	Name           string
 	Address        *string
 	TotalAreaM2    pgtype.Numeric
@@ -1262,34 +1263,34 @@ type Company struct {
 }
 
 type CompanyVacation struct {
-	ID          pgtype.UUID
-	CompanyID   pgtype.UUID
+	ID          uuid.UUID
+	CompanyID   uuid.UUID
 	StartDate   pgtype.Date
 	EndDate     pgtype.Date
 	Description *string
 }
 
 type CompanyWeekendDay struct {
-	CompanyID pgtype.UUID
+	CompanyID uuid.UUID
 	DayOfWeek int16
 }
 
 type ConsumptionAnomaly struct {
-	ID             pgtype.UUID
-	AnalyzerID     pgtype.UUID
+	ID             uuid.UUID
+	AnalyzerID     uuid.UUID
 	PeriodStart    pgtype.Timestamptz
 	PeriodEnd      pgtype.Timestamptz
 	Reason         string
 	Detail         []byte
 	ResolvedAt     pgtype.Timestamptz
-	ResolvedBy     pgtype.UUID
+	ResolvedBy     *uuid.UUID
 	Resolution     *string
 	OverrideValues []byte
 	CreatedAt      pgtype.Timestamptz
 }
 
 type ConsumptionDaily struct {
-	AnalyzerID            pgtype.UUID
+	AnalyzerID            uuid.UUID
 	Bucket                pgtype.Timestamptz
 	ActiveImportStart     pgtype.Numeric
 	ActiveImportEnd       pgtype.Numeric
@@ -1317,7 +1318,7 @@ type ConsumptionDaily struct {
 }
 
 type ConsumptionHourly struct {
-	AnalyzerID            pgtype.UUID
+	AnalyzerID            uuid.UUID
 	Bucket                pgtype.Timestamptz
 	ActiveImportStart     pgtype.Numeric
 	ActiveImportEnd       pgtype.Numeric
@@ -1345,7 +1346,7 @@ type ConsumptionHourly struct {
 }
 
 type ConsumptionMonthly struct {
-	AnalyzerID            pgtype.UUID
+	AnalyzerID            uuid.UUID
 	Bucket                pgtype.Timestamptz
 	ActiveImportStart     pgtype.Numeric
 	ActiveImportEnd       pgtype.Numeric
@@ -1373,7 +1374,7 @@ type ConsumptionMonthly struct {
 }
 
 type ConsumptionYearly struct {
-	AnalyzerID            pgtype.UUID
+	AnalyzerID            uuid.UUID
 	Bucket                pgtype.Timestamptz
 	ActiveImportStart     pgtype.Numeric
 	ActiveImportEnd       pgtype.Numeric
@@ -1401,8 +1402,8 @@ type ConsumptionYearly struct {
 }
 
 type EmissionFactor struct {
-	ID            pgtype.UUID
-	CompanyID     pgtype.UUID
+	ID            uuid.UUID
+	CompanyID     *uuid.UUID
 	Key           string
 	Label         string
 	MainCategory  string
@@ -1423,14 +1424,14 @@ type EmissionFactor struct {
 }
 
 type EmissionFactorConversion struct {
-	FactorID   pgtype.UUID
+	FactorID   uuid.UUID
 	Unit       string
 	Multiplier pgtype.Numeric
 	Label      string
 }
 
 type Forecast struct {
-	AnalyzerID   pgtype.UUID
+	AnalyzerID   uuid.UUID
 	Ts           pgtype.Timestamptz
 	GeneratedAt  pgtype.Timestamptz
 	HorizonHours int32
@@ -1442,8 +1443,8 @@ type Forecast struct {
 }
 
 type ForecastGap struct {
-	ID           pgtype.UUID
-	AnalyzerID   pgtype.UUID
+	ID           uuid.UUID
+	AnalyzerID   uuid.UUID
 	GeneratedAt  pgtype.Timestamptz
 	GapStart     pgtype.Timestamptz
 	GapEnd       pgtype.Timestamptz
@@ -1451,9 +1452,9 @@ type ForecastGap struct {
 }
 
 type IcmalImport struct {
-	ID         pgtype.UUID
-	CompanyID  pgtype.UUID
-	UploadedBy pgtype.UUID
+	ID         uuid.UUID
+	CompanyID  uuid.UUID
+	UploadedBy *uuid.UUID
 	FileName   string
 	RowCount   int32
 	Status     string
@@ -1462,9 +1463,9 @@ type IcmalImport struct {
 }
 
 type IcmalRow struct {
-	ID                 pgtype.UUID
-	ImportID           pgtype.UUID
-	BuildingID         pgtype.UUID
+	ID                 uuid.UUID
+	ImportID           uuid.UUID
+	BuildingID         *uuid.UUID
 	Period             string
 	EtsoCode           *string
 	TotalKwh           pgtype.Numeric
@@ -1495,7 +1496,7 @@ type IcmalRow struct {
 }
 
 type IngestionCursor struct {
-	AnalyzerID          pgtype.UUID
+	AnalyzerID          uuid.UUID
 	Kind                ReadingKind
 	LastTs              pgtype.Timestamptz
 	LastSuccessAt       pgtype.Timestamptz
@@ -1505,9 +1506,9 @@ type IngestionCursor struct {
 }
 
 type IntegrationCredential struct {
-	ID             pgtype.UUID
-	CompanyID      pgtype.UUID
-	DefinitionID   pgtype.UUID
+	ID             uuid.UUID
+	CompanyID      uuid.UUID
+	DefinitionID   uuid.UUID
 	Username       *string
 	SecretEnc      []byte
 	ExtraEnc       []byte
@@ -1522,7 +1523,7 @@ type IntegrationCredential struct {
 }
 
 type IntegrationDefinition struct {
-	ID        pgtype.UUID
+	ID        uuid.UUID
 	Provider  IntegrationProvider
 	Subtype   string
 	Endpoints []byte
@@ -1531,40 +1532,40 @@ type IntegrationDefinition struct {
 }
 
 type Iso50001ClauseDate struct {
-	ProjectID pgtype.UUID
+	ProjectID uuid.UUID
 	ClauseID  string
 	StartDate pgtype.Date
 	EndDate   pgtype.Date
 }
 
 type Iso50001Note struct {
-	ID        pgtype.UUID
-	ProjectID pgtype.UUID
+	ID        uuid.UUID
+	ProjectID uuid.UUID
 	ClauseID  string
 	Title     *string
 	Body      string
-	CreatedBy pgtype.UUID
+	CreatedBy *uuid.UUID
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
 }
 
 type Iso50001Project struct {
-	ID         pgtype.UUID
-	CompanyID  pgtype.UUID
-	BuildingID pgtype.UUID
+	ID         uuid.UUID
+	CompanyID  uuid.UUID
+	BuildingID uuid.UUID
 	CreatedAt  pgtype.Timestamptz
 	UpdatedAt  pgtype.Timestamptz
 }
 
 type IsolarForwardedAlarm struct {
-	PlantID  pgtype.UUID
+	PlantID  uuid.UUID
 	AlarmRef string
 	SentAt   pgtype.Timestamptz
 }
 
 type JobRun struct {
-	ID         pgtype.UUID
-	CompanyID  pgtype.UUID
+	ID         uuid.UUID
+	CompanyID  *uuid.UUID
 	JobType    string
 	Scope      []byte
 	StartedAt  pgtype.Timestamptz
@@ -1584,7 +1585,7 @@ type MarketPricesHourly struct {
 }
 
 type MeterReading struct {
-	AnalyzerID               pgtype.UUID
+	AnalyzerID               uuid.UUID
 	Ts                       pgtype.Timestamptz
 	Kind                     ReadingKind
 	ActiveImport             pgtype.Numeric
@@ -1608,7 +1609,7 @@ type MeterReading struct {
 }
 
 type NationalTariffSchedule struct {
-	ID                pgtype.UUID
+	ID                uuid.UUID
 	EffectiveFrom     pgtype.Date
 	UserGroup         DistributionUserGroup
 	VoltageLevel      VoltageLevel
@@ -1628,22 +1629,22 @@ type NationalTariffSchedule struct {
 
 type OperationalMessage struct {
 	ID          int64
-	CompanyID   pgtype.UUID
+	CompanyID   *uuid.UUID
 	Kind        string
 	Category    string
 	Status      string
 	Message     string
 	Detail      *string
 	RelatedType *string
-	RelatedID   pgtype.UUID
+	RelatedID   *uuid.UUID
 	Metadata    []byte
 	CreatedAt   pgtype.Timestamptz
 }
 
 type PlantProduction struct {
-	PlantID       pgtype.UUID
+	PlantID       uuid.UUID
 	Ts            pgtype.Timestamptz
-	DeviceID      pgtype.UUID
+	DeviceID      uuid.UUID
 	ProductionKwh pgtype.Numeric
 	ActivePowerKw pgtype.Numeric
 	EfficiencyPct pgtype.Numeric
@@ -1654,7 +1655,7 @@ type PlantProduction struct {
 }
 
 type PlantProductionDaily struct {
-	PlantID          pgtype.UUID
+	PlantID          uuid.UUID
 	Bucket           pgtype.Timestamptz
 	ProductionKwh    pgtype.Numeric
 	MaxActivePowerKw pgtype.Numeric
@@ -1662,7 +1663,7 @@ type PlantProductionDaily struct {
 }
 
 type PlantProductionMonthly struct {
-	PlantID          pgtype.UUID
+	PlantID          uuid.UUID
 	Bucket           pgtype.Timestamptz
 	ProductionKwh    pgtype.Numeric
 	MaxActivePowerKw pgtype.Numeric
@@ -1670,8 +1671,8 @@ type PlantProductionMonthly struct {
 }
 
 type PowerPlant struct {
-	ID                 pgtype.UUID
-	CompanyID          pgtype.UUID
+	ID                 uuid.UUID
+	CompanyID          uuid.UUID
 	Name               string
 	InstallationNumber *string
 	PlantKind          string
@@ -1699,13 +1700,13 @@ type PowerPlant struct {
 }
 
 type PowerPlantAlarmRecipient struct {
-	PlantID pgtype.UUID
+	PlantID uuid.UUID
 	Email   string
 }
 
 type PowerPlantDevice struct {
-	ID             pgtype.UUID
-	PlantID        pgtype.UUID
+	ID             uuid.UUID
+	PlantID        uuid.UUID
 	DeviceSn       string
 	DeviceName     *string
 	DeviceType     *int32
@@ -1722,15 +1723,15 @@ type PowerPlantDevice struct {
 }
 
 type PowerPlantMonthlyTarget struct {
-	PlantID   pgtype.UUID
+	PlantID   uuid.UUID
 	Month     int16
 	TargetKwh pgtype.Numeric
 }
 
 type Report struct {
-	ID             pgtype.UUID
-	CompanyID      pgtype.UUID
-	BuildingID     pgtype.UUID
+	ID             uuid.UUID
+	CompanyID      uuid.UUID
+	BuildingID     uuid.UUID
 	Type           ReportType
 	Period         string
 	PlantSelection PlantSelection
@@ -1747,8 +1748,8 @@ type Report struct {
 }
 
 type Session struct {
-	ID                pgtype.UUID
-	UserID            pgtype.UUID
+	ID                uuid.UUID
+	UserID            uuid.UUID
 	RefreshTokenHash  string
 	DeviceFingerprint *string
 	UserAgent         *string
@@ -1759,7 +1760,7 @@ type Session struct {
 }
 
 type SmtpSetting struct {
-	CompanyID   pgtype.UUID
+	CompanyID   uuid.UUID
 	Host        string
 	Port        int32
 	Secure      bool
@@ -1770,9 +1771,9 @@ type SmtpSetting struct {
 }
 
 type SolarTariff struct {
-	ID            pgtype.UUID
-	CompanyID     pgtype.UUID
-	PlantID       pgtype.UUID
+	ID            uuid.UUID
+	CompanyID     uuid.UUID
+	PlantID       uuid.UUID
 	EffectiveFrom pgtype.Date
 	FeedInTariff  pgtype.Numeric
 	PurchasePrice pgtype.Numeric
@@ -1783,25 +1784,25 @@ type SolarTariff struct {
 }
 
 type StoredFile struct {
-	ID           pgtype.UUID
-	CompanyID    pgtype.UUID
+	ID           uuid.UUID
+	CompanyID    uuid.UUID
 	OwnerType    string
-	OwnerID      pgtype.UUID
+	OwnerID      *uuid.UUID
 	ClauseID     *string
 	OriginalName string
 	StoredPath   string
 	ContentType  string
 	SizeBytes    int64
 	Checksum     string
-	UploadedBy   pgtype.UUID
+	UploadedBy   *uuid.UUID
 	CreatedAt    pgtype.Timestamptz
 	DeletedAt    pgtype.Timestamptz
 }
 
 type Tariff struct {
-	ID                          pgtype.UUID
-	CompanyID                   pgtype.UUID
-	BuildingID                  pgtype.UUID
+	ID                          uuid.UUID
+	CompanyID                   uuid.UUID
+	BuildingID                  *uuid.UUID
 	Name                        *string
 	EffectiveFrom               pgtype.Date
 	Currency                    CurrencyCode
@@ -1836,30 +1837,30 @@ type Tariff struct {
 	KbkReactivePower            pgtype.Numeric
 	KbkDistributionCostTlPerKwh pgtype.Numeric
 	UseManualYekdem             bool
-	CreatedBy                   pgtype.UUID
+	CreatedBy                   *uuid.UUID
 	CreatedAt                   pgtype.Timestamptz
 	UpdatedAt                   pgtype.Timestamptz
 	DeletedAt                   pgtype.Timestamptz
 }
 
 type TariffManualYekdem struct {
-	TariffID pgtype.UUID
+	TariffID uuid.UUID
 	Year     int16
 	Month    int16
 	Value    pgtype.Numeric
 }
 
 type TariffTax struct {
-	ID        pgtype.UUID
-	TariffID  pgtype.UUID
+	ID        uuid.UUID
+	TariffID  uuid.UUID
 	Name      string
 	Rate      pgtype.Numeric
 	SortOrder int16
 }
 
 type TariffTemplate struct {
-	ID          pgtype.UUID
-	CompanyID   pgtype.UUID
+	ID          uuid.UUID
+	CompanyID   uuid.UUID
 	Name        string
 	Description *string
 	IsDefault   bool
@@ -1869,8 +1870,8 @@ type TariffTemplate struct {
 }
 
 type User struct {
-	ID                pgtype.UUID
-	CompanyID         pgtype.UUID
+	ID                uuid.UUID
+	CompanyID         uuid.UUID
 	Name              string
 	Email             string
 	Phone             *string
@@ -1885,8 +1886,8 @@ type User struct {
 }
 
 type UserPasswordHistory struct {
-	ID           pgtype.UUID
-	UserID       pgtype.UUID
+	ID           uuid.UUID
+	UserID       uuid.UUID
 	PasswordHash string
 	CreatedAt    pgtype.Timestamptz
 }
