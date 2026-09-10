@@ -70,3 +70,17 @@ generate: ## Regenerate sqlc types and the OpenAPI client (populated from F1)
 
 offline-bundle: ## Build the air-gapped install bundle
 	./scripts/offline-bundle.sh
+
+.PHONY: web-install web-lint web-test web-build
+
+web-install:
+	cd web && pnpm install --frozen-lockfile
+
+web-lint:
+	cd web && pnpm lint && pnpm typecheck && pnpm check:i18n-parity
+
+web-test:
+	cd web && pnpm test
+
+web-build:
+	cd web && pnpm build

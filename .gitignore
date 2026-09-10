@@ -1,9 +1,11 @@
 /bin/
 /dist/
-/web/node_modules/
+/web/node_modules
 /web/.next/
 /web/out/
 /web/coverage/
+/web/next-env.d.ts
+/web/tsconfig.tsbuildinfo
 .env
 .env.local
 .env.docker

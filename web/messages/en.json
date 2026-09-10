@@ -1,0 +1,15 @@
+{
+  "app": {
+    "name": "ekokod",
+    "tagline": "Energy management platform"
+  },
+  "health": {
+    "title": "System status",
+    "subtitle": "Live status of the API and its dependencies",
+    "check": "Component",
+    "status": "Status",
+    "duration": "Duration",
+    "unreachable": "The API is unreachable",
+    "refresh": "Refresh"
+  }
+}

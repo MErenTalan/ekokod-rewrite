@@ -1,0 +1,11 @@
+# pnpm 12 refuses to run any dependency's install/postinstall script until
+# it is explicitly allowed here. These three are pulled in transitively —
+# @parcel/watcher and @swc/core by next-intl, unrs-resolver by
+# eslint-config-next's import resolver — and each needs its script to
+# select/link its native binary. No other dependency in this tree ships one
+# (`pnpm install` lists exactly these three as "Ignored build scripts"
+# without this file).
+allowBuilds:
+  '@parcel/watcher': true
+  '@swc/core': true
+  unrs-resolver: true
