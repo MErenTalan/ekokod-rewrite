@@ -4,33 +4,16 @@ package scheduler_test
 
 import (
 	"context"
-	"io"
-	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/job"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/scheduler"
+	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
 	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/require"
-	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
 )
-
-// startRedis boots Redis for the scheduler's queue backend, following the
-// same pattern as internal/job/job_integration_test.go.
-func startRedis(t *testing.T) config.Redis {
-	t.Helper()
-	ctx := context.Background()
-
-	container, err := tcredis.Run(ctx, "redis:7.4.11-alpine")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = container.Terminate(context.Background()) })
-
-	uri, err := container.ConnectionString(ctx)
-	require.NoError(t, err)
-	return config.Redis{URL: uri, CacheDB: 0, QueueDB: 1}
-}
 
 // entryIDs returns the scheduler entry IDs currently visible in Redis.
 func entryIDs(t *testing.T, insp *asynq.Inspector) []string {
@@ -70,12 +53,12 @@ func entryIDs(t *testing.T, insp *asynq.Inspector) []string {
 // already-stopped asynq.Scheduler would never produce one: its Start() call
 // would simply fail.
 func TestSchedulerBuildsAFreshAsynqSchedulerEveryTerm(t *testing.T) {
-	dsn := startPostgres(t)
-	redisCfg := startRedis(t)
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	dsn := testfixtures.StartPostgresUnmigrated(t)
+	redisCfg := testfixtures.RedisConfig(t)
+	log := testfixtures.DiscardLogger()
 
 	cfg := &config.Config{Redis: redisCfg, Timezone: time.UTC}
-	pool := newPool(t, dsn)
+	pool := testfixtures.NewPool(t, dsn)
 
 	opt, err := job.RedisOpt(redisCfg)
 	require.NoError(t, err)
@@ -101,7 +84,7 @@ func TestSchedulerBuildsAFreshAsynqSchedulerEveryTerm(t *testing.T) {
 	// notice on its own, shut its asynq.Scheduler down (which also clears
 	// its entries from Redis), and go on to campaign for and regain
 	// leadership by itself.
-	admin := newPool(t, dsn)
+	admin := testfixtures.NewPool(t, dsn)
 	var pid int32
 	require.NoError(t, admin.QueryRow(context.Background(),
 		`select pid from pg_locks where locktype = 'advisory' limit 1`).Scan(&pid))

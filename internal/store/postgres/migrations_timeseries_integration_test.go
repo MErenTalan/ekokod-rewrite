@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
+	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -33,10 +34,10 @@ func chunkInterval(t *testing.T, iv pgtype.Interval) time.Duration {
 // space partition determine whether a one-month single-analyzer query reads
 // four chunks or the whole table.
 func TestHypertablesAreConfigured(t *testing.T) {
-	dsn := startPostgres(t)
+	dsn := testfixtures.StartPostgresUnmigrated(t)
 	ctx := context.Background()
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
-	pool := newPool(t, dsn)
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
+	pool := testfixtures.NewPool(t, dsn)
 
 	for _, want := range []struct {
 		table       string
@@ -69,10 +70,10 @@ func TestHypertablesAreConfigured(t *testing.T) {
 // spec asks for. A migration that passed a different column, or a different
 // partition count, would still report num_dimensions = 2.
 func TestMeterReadingsIsSpacePartitionedByAnalyzer(t *testing.T) {
-	dsn := startPostgres(t)
+	dsn := testfixtures.StartPostgresUnmigrated(t)
 	ctx := context.Background()
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
-	pool := newPool(t, dsn)
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
+	pool := testfixtures.NewPool(t, dsn)
 
 	var column string
 	var partitions int
@@ -89,10 +90,10 @@ func TestMeterReadingsIsSpacePartitionedByAnalyzer(t *testing.T) {
 // actually runs and that queries still return correct rows from a compressed
 // chunk; this test only proves the policy was installed by the migration.
 func TestCompressionPoliciesExist(t *testing.T) {
-	dsn := startPostgres(t)
+	dsn := testfixtures.StartPostgresUnmigrated(t)
 	ctx := context.Background()
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
-	pool := newPool(t, dsn)
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
+	pool := testfixtures.NewPool(t, dsn)
 
 	for _, table := range []string{"meter_readings", "plant_production"} {
 		var n int
@@ -106,10 +107,10 @@ func TestCompressionPoliciesExist(t *testing.T) {
 // TestContinuousAggregatesExist pins the aggregate names Task 10's analytics
 // repositories and Task 13's correctness test both depend on.
 func TestContinuousAggregatesExist(t *testing.T) {
-	dsn := startPostgres(t)
+	dsn := testfixtures.StartPostgresUnmigrated(t)
 	ctx := context.Background()
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
-	pool := newPool(t, dsn)
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
+	pool := testfixtures.NewPool(t, dsn)
 
 	for _, name := range []string{
 		"consumption_hourly", "consumption_daily", "consumption_monthly",
@@ -138,10 +139,10 @@ func TestContinuousAggregatesExist(t *testing.T) {
 // wrong kWh. Asserting the catalogue type here is the cheap standing check that
 // the casts were not dropped in a later edit.
 func TestConsumptionColumnsAreNumeric(t *testing.T) {
-	dsn := startPostgres(t)
+	dsn := testfixtures.StartPostgresUnmigrated(t)
 	ctx := context.Background()
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
-	pool := newPool(t, dsn)
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
+	pool := testfixtures.NewPool(t, dsn)
 
 	for _, view := range []string{
 		"consumption_hourly", "consumption_daily", "consumption_monthly", "consumption_yearly",
@@ -301,10 +302,10 @@ func refreshWindow(t *testing.T, ctx context.Context, pool *pgxpool.Pool, view s
 // calendar boundary, and readings deliberately sit in the 00:00–03:00 local
 // window where UTC bucketing puts them on the previous day, month and year.
 func TestConsumptionAggregatesComputeRegisterDeltas(t *testing.T) {
-	dsn := startPostgres(t)
+	dsn := testfixtures.StartPostgresUnmigrated(t)
 	ctx := context.Background()
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
-	pool := newPool(t, dsn)
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
+	pool := testfixtures.NewPool(t, dsn)
 
 	pauseRefreshPolicies(t, ctx, pool)
 	analyzerID := seedAnalyzer(t, ctx, pool)
@@ -369,10 +370,10 @@ func TestConsumptionAggregatesComputeRegisterDeltas(t *testing.T) {
 // calendar day, so a reading at 01:00 Istanbul belongs to that day and not to
 // the one before.
 func TestPlantProductionAggregatesBucketInIstanbul(t *testing.T) {
-	dsn := startPostgres(t)
+	dsn := testfixtures.StartPostgresUnmigrated(t)
 	ctx := context.Background()
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
-	pool := newPool(t, dsn)
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
+	pool := testfixtures.NewPool(t, dsn)
 
 	pauseRefreshPolicies(t, ctx, pool)
 	companyID, _ := seedCompanyAndBuilding(t, ctx, pool)
@@ -429,10 +430,10 @@ func TestPlantProductionAggregatesBucketInIstanbul(t *testing.T) {
 // timezone-free: a whole-hour offset makes the timezone argument a no-op there,
 // and leaving it off keeps the aggregate a fixed-width bucket.
 func TestAggregateBucketsAreConfiguredForIstanbul(t *testing.T) {
-	dsn := startPostgres(t)
+	dsn := testfixtures.StartPostgresUnmigrated(t)
 	ctx := context.Background()
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
-	pool := newPool(t, dsn)
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
+	pool := testfixtures.NewPool(t, dsn)
 
 	for _, want := range []struct{ view, width, timezone string }{
 		{"consumption_hourly", "1 hour", ""},
@@ -463,10 +464,10 @@ func TestAggregateBucketsAreConfiguredForIstanbul(t *testing.T) {
 // other five were chosen in this task, which makes them exactly the values most
 // likely to be changed by accident later.
 func TestRefreshPolicyOffsetsAreConfigured(t *testing.T) {
-	dsn := startPostgres(t)
+	dsn := testfixtures.StartPostgresUnmigrated(t)
 	ctx := context.Background()
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
-	pool := newPool(t, dsn)
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
+	pool := testfixtures.NewPool(t, dsn)
 
 	for _, want := range []struct{ view, start, end, schedule string }{
 		{"consumption_hourly", "30 days", "1 hour", "30 minutes"},
@@ -499,10 +500,10 @@ func TestRefreshPolicyOffsetsAreConfigured(t *testing.T) {
 // segmentby must be the columns queries filter on, orderby the time column
 // descending.
 func TestCompressionSettingsAreConfigured(t *testing.T) {
-	dsn := startPostgres(t)
+	dsn := testfixtures.StartPostgresUnmigrated(t)
 	ctx := context.Background()
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
-	pool := newPool(t, dsn)
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
+	pool := testfixtures.NewPool(t, dsn)
 
 	for _, want := range []struct{ table, segmentby, orderby string }{
 		{"meter_readings", "analyzer_id,kind", "ts DESC"},
@@ -612,10 +613,10 @@ func refreshPolicyRange(t *testing.T, ctx context.Context, pool *pgxpool.Pool, v
 // buckets with a live scan above the materialisation watermark. That tail is at
 // most one open bucket — a day of raw readings for one analyzer — which is cheap.
 func TestOpenBucketIsVisibleInRealTimeAggregates(t *testing.T) {
-	dsn := startPostgres(t)
+	dsn := testfixtures.StartPostgresUnmigrated(t)
 	ctx := context.Background()
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
-	pool := newPool(t, dsn)
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
+	pool := testfixtures.NewPool(t, dsn)
 
 	pauseRefreshPolicies(t, ctx, pool)
 	hourStart := istanbulBucketStart("hour")
@@ -697,10 +698,10 @@ func TestOpenBucketIsVisibleInRealTimeAggregates(t *testing.T) {
 // taken from consumption_daily or from meter_readings. The open bucket is not in
 // these views and must never be assumed to be.
 func TestOpenBucketIsDeliberatelyAbsentFromCoarseAggregates(t *testing.T) {
-	dsn := startPostgres(t)
+	dsn := testfixtures.StartPostgresUnmigrated(t)
 	ctx := context.Background()
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
-	pool := newPool(t, dsn)
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
+	pool := testfixtures.NewPool(t, dsn)
 
 	pauseRefreshPolicies(t, ctx, pool)
 	analyzerID := seedAnalyzer(t, ctx, pool)
@@ -758,10 +759,10 @@ func TestOpenBucketIsDeliberatelyAbsentFromCoarseAggregates(t *testing.T) {
 // these six changes what a dashboard shows, or what a dashboard query costs,
 // without changing a line of Go — so it must trip a test rather than ship.
 func TestMaterializedOnlyIsConfiguredPerView(t *testing.T) {
-	dsn := startPostgres(t)
+	dsn := testfixtures.StartPostgresUnmigrated(t)
 	ctx := context.Background()
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
-	pool := newPool(t, dsn)
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
+	pool := testfixtures.NewPool(t, dsn)
 
 	for _, want := range []struct {
 		view             string
@@ -799,10 +800,10 @@ func pgColumn(t *testing.T, name string) string {
 // scalar column with a jsonb one, so the first migration that tries fails at
 // deploy time rather than here.
 func TestBtreeGinIsInstalled(t *testing.T) {
-	dsn := startPostgres(t)
+	dsn := testfixtures.StartPostgresUnmigrated(t)
 	ctx := context.Background()
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
-	pool := newPool(t, dsn)
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
+	pool := testfixtures.NewPool(t, dsn)
 
 	var installed bool
 	require.NoError(t, pool.QueryRow(ctx,

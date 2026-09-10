@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
+	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -16,10 +17,10 @@ import (
 // single_time tariff with no price, or a PTF tariff with no KBK, would
 // produce a silently wrong invoice in F4.
 func TestTariffConstraintsRejectIncompleteRows(t *testing.T) {
-	dsn := startPostgres(t)
+	dsn := testfixtures.StartPostgresUnmigrated(t)
 	ctx := context.Background()
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
-	pool := newPool(t, dsn)
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
+	pool := testfixtures.NewPool(t, dsn)
 
 	var companyID uuid.UUID
 	require.NoError(t, pool.QueryRow(ctx,
@@ -63,10 +64,10 @@ func TestTariffConstraintsRejectIncompleteRows(t *testing.T) {
 // on tariffs.vat_rate: a defaulted VAT rate would silently price every
 // invoice at whatever the default happened to be.
 func TestVatRateHasNoDefault(t *testing.T) {
-	dsn := startPostgres(t)
+	dsn := testfixtures.StartPostgresUnmigrated(t)
 	ctx := context.Background()
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
-	pool := newPool(t, dsn)
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
+	pool := testfixtures.NewPool(t, dsn)
 
 	var def *string
 	require.NoError(t, pool.QueryRow(ctx,
