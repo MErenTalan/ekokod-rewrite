@@ -18,9 +18,12 @@
 # the app's ability to authenticate, with no indication why. So:
 #   neither file exists      → generate both fresh, one new password.
 #   both files exist         → untouched, exit 0.
-#   only .env exists         → its POSTGRES_PASSWORD (if any) is preserved
-#                               and reused for the new .env.docker's
-#                               EKOKOD_DB_URL, never rotated.
+#   only .env exists         → its POSTGRES_PASSWORD (if any and non-empty)
+#                               is preserved and reused for the new
+#                               .env.docker's EKOKOD_DB_URL, never rotated.
+#                               Missing or empty → generate fresh (nothing
+#                               to preserve, .env.docker doesn't exist
+#                               either in this state).
 #   only .env.docker exists  → the password already embedded in its
 #                               EKOKOD_DB_URL is recovered and used to
 #                               (re)create .env, rather than dead-ending
@@ -29,14 +32,18 @@
 #                               this script; it must actually be able to
 #                               fix that state, not just regenerate a
 #                               password that no longer matches the
-#                               already-initialised database).
+#                               already-initialised database). If the DSN
+#                               can't be parsed, this fails closed instead
+#                               of inventing a password .env.docker (left
+#                               untouched) doesn't have — see below.
 # Whatever the entry state, .env and .env.docker agree on the password
 # when this script finishes, and an already-initialised Postgres volume is
 # never handed a password it wasn't created with.
 #
-# Every file this script writes is created at mode 0600 directly (not
-# chmod'd after the fact) in a same-filesystem temp path and moved into
-# place with an atomic rename, so a python3 failure or an interrupted run
+# Every file this script writes goes to a same-filesystem mkstemp path,
+# chmod 600 (belt-and-braces: mkstemp already creates at 0600, but this
+# makes the intent explicit rather than relying on that default), then an
+# atomic rename into place — so a python3 failure or an interrupted run
 # can never leave a sticky empty/partial file behind.
 set -euo pipefail
 
@@ -60,12 +67,18 @@ def read_lines(path):
 
 
 def extract(lines, key):
+    """Return key's value from lines, or None if absent OR empty — an
+    empty POSTGRES_PASSWORD= can never have initialised a live Postgres
+    volume (docker-compose.yml's ${POSTGRES_PASSWORD:?...} refuses to
+    start on an empty or unset value), so there is nothing to preserve by
+    treating "" as a real value."""
     if lines is None:
         return None
     prefix = key + "="
     for line in lines:
         if line.startswith(prefix):
-            return line[len(prefix):]
+            value = line[len(prefix):]
+            return value or None
     return None
 
 
@@ -106,19 +119,52 @@ if env_lines is not None and env_docker_lines is not None:
     print(".env and .env.docker already exist; leaving both untouched.")
     sys.exit(0)
 
-# Resolve the one value that must never silently rotate, in priority
-# order: an existing .env wins (it's the file Compose/Postgres actually
-# use), then recover it from .env.docker's EKOKOD_DB_URL if that's all
-# that's left, and only generate fresh if neither has ever run before.
-postgres_password = extract(env_lines, "POSTGRES_PASSWORD")
-source = "preserved from existing .env"
+# Resolve the one value that must never silently rotate. Because the
+# both-exist state already returned above, at most one of env_lines /
+# env_docker_lines is non-None here, so these are mutually exclusive:
+postgres_password = None
+source = None
 
-if postgres_password is None and env_docker_lines is not None:
+if env_lines is not None:
+    # Only .env exists: reuse its password if it has one; if not (e.g. an
+    # offline bundle's .env staged with just VERSION so far), there is
+    # nothing to recover from either file, so fall through to generate.
+    postgres_password = extract(env_lines, "POSTGRES_PASSWORD")
+    if postgres_password is not None:
+        source = "preserved from existing .env"
+
+elif env_docker_lines is not None:
+    # Only .env.docker exists: the password must come from there — never
+    # invent one, because .env.docker is left untouched below and a fresh
+    # .env password would silently disagree with it (and with whatever
+    # password any already-initialised Postgres volume was created
+    # under).
     db_url = extract(env_docker_lines, "EKOKOD_DB_URL")
     match = re.search(r"://[^:@/]+:([^@]+)@", db_url or "")
     if match:
         postgres_password = match.group(1)
         source = "recovered from existing .env.docker's EKOKOD_DB_URL"
+    else:
+        # Fail closed and loudly (task-11 review round 3, finding A).
+        # Name the file and the variable; never the DSN or any part of
+        # it — it is by definition a value this script could not parse,
+        # and this codebase has already had three separate findings
+        # about connection strings leaking into error text.
+        sys.stderr.write(
+            f"error: {ENV_DOCKER_PATH} exists but its EKOKOD_DB_URL does not "
+            "contain a password this script can parse out of the DSN's "
+            f"userinfo.\n"
+            f"Refusing to invent a new POSTGRES_PASSWORD for {ENV_PATH}: "
+            f"{ENV_DOCKER_PATH} is left untouched by this script, so a freshly "
+            "generated password would silently disagree with the database "
+            f"credentials already embedded in {ENV_DOCKER_PATH} (and with "
+            "whatever password any already-initialised Postgres volume was "
+            "created under).\n"
+            f"Fix EKOKOD_DB_URL's password in {ENV_DOCKER_PATH}, or delete "
+            f"{ENV_DOCKER_PATH} to start over with a freshly generated "
+            "password, then re-run.\n"
+        )
+        sys.exit(1)
 
 if postgres_password is None:
     postgres_password = secrets.token_urlsafe(24)
@@ -130,7 +176,7 @@ print(f"POSTGRES_PASSWORD: {source}")
 # scripts/offline-bundle.sh) and set POSTGRES_PASSWORD to the resolved
 # value above. Rewriting even when .env already held that exact password
 # is harmless (identical content) and keeps this branch uniform across
-# all three non-skip starting states.
+# all non-skip, non-error starting states.
 kept = [line for line in (env_lines or []) if not line.startswith("POSTGRES_PASSWORD=")]
 write_atomic(ENV_PATH, "\n".join([*kept, f"POSTGRES_PASSWORD={postgres_password}"]) + "\n")
 print("wrote .env")
