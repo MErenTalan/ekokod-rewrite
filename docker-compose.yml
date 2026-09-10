@@ -81,6 +81,8 @@ services:
       timeout: 5s
       retries: 10
       start_period: 15s
+    # See the worker service for why unless-stopped.
+    restart: unless-stopped
     # api's own drain window is shutdownGrace = 30s (internal/cli/api.go:24,
     # the deadline http.Server.Shutdown is given for in-flight requests).
     # 40s gives that window headroom, instead of Docker's 10s default
@@ -100,6 +102,14 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
+    # restart: the worker's broker-death detector (internal/cli/health.go)
+    # deliberately exits non-zero so a supervisor can act on it. Without a
+    # restart policy Docker's default ("no") applies and such a worker simply
+    # stays dead, leaving that whole mechanism inert. unless-stopped, not
+    # always: an operator's explicit `docker compose stop` must stay stopped
+    # across a daemon restart. migrate keeps restart: "no" — it is a
+    # run-once job whose success api/worker/scheduler wait on.
+    restart: unless-stopped
     # Matches the worker's asynq drain window (min(EKOKOD_JOB_TIMEOUT,
     # job.MaxShutdownGrace) = 30s, see internal/job/server.go) plus
     # headroom, instead of Docker's 10s default which would SIGKILL a
@@ -117,6 +127,8 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
+    # See the worker service for why unless-stopped.
+    restart: unless-stopped
     # The scheduler's leader-election loop exits as soon as its context is
     # cancelled (internal/scheduler/elector.go) and releases the advisory
     # lock immediately — no in-flight work to drain. 40s matches api and
@@ -138,6 +150,8 @@ services:
     ports: ["3000:3000"]
     depends_on:
       api: { condition: service_healthy }
+    # See the worker service for why unless-stopped.
+    restart: unless-stopped
     healthcheck:
       # 127.0.0.1, not localhost: web/Dockerfile pins HOSTNAME=0.0.0.0 so
       # Next's standalone server binds IPv4-only (see that file for why),

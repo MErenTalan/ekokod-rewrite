@@ -156,3 +156,32 @@ func TestLeadContextIsCancelledWhenTheConnectionDies(t *testing.T) {
 	}
 	require.Eventually(t, func() bool { return !elector.IsLeader() }, 5*time.Second, 50*time.Millisecond)
 }
+
+// TestNonPositiveRetryDoesNotPanic guards NewElector's exported surface:
+// time.NewTicker panics on a non-positive interval, and Run used to pass the
+// caller's retry to it unclamped while monitor already guarded the identical
+// value. A zero here must degrade to a sane interval, not take the process
+// down.
+func TestNonPositiveRetryDoesNotPanic(t *testing.T) {
+	dsn := startPostgres(t)
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	elector := scheduler.NewElector(newPool(t, dsn), scheduler.LockKeyScheduler, 0, log)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- elector.Run(ctx, func(leadCtx context.Context) error { <-leadCtx.Done(); return nil })
+	}()
+
+	require.Eventually(t, elector.IsLeader, 10*time.Second, 50*time.Millisecond,
+		"a zero retry must still campaign rather than panic")
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Run did not return after its context was cancelled")
+	}
+}

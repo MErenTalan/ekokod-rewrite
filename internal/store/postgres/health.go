@@ -49,7 +49,16 @@ func checkMigrationsCurrent(ctx context.Context, pool *pgxpool.Pool) error {
 		if isUndefinedTable(err) {
 			applied = nil // goose_db_version has never been created: nothing applied yet
 		} else {
-			return fmt.Errorf("read schema version: %w", err)
+			// Scrubbed like every other error leaving this package, and for
+			// a sharper reason than logging hygiene: MigrationsCheck is wired
+			// into readyHandler, which serialises Result.Error into the
+			// unauthenticated /health/ready JSON body and the web health
+			// page renders it. Same shape as Ping in pool.go.
+			var password string
+			if cfg := pool.Config(); cfg != nil && cfg.ConnConfig != nil {
+				password = cfg.ConnConfig.Password
+			}
+			return scrubPoolErr(password, "read schema version", err)
 		}
 	}
 

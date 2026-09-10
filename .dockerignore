@@ -8,3 +8,13 @@ docs
 *.tar.gz
 .env
 .env.*
+
+# Review/session artefacts and CI config: none of them are build inputs, and
+# .superpowers in particular holds task reports containing real generated
+# POSTGRES_PASSWORD values. The final image copies only /out/ekokod, so these
+# never ship — but they would still enter the build context and the build
+# cache, which a --cache-to export or a remote daemon exposes.
+.superpowers
+coverage.out
+HANDOFF_NEXT_SESSION.md
+.github

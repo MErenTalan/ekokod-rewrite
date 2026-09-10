@@ -51,7 +51,20 @@ func (e *Elector) IsLeader() bool { return e.leader.Load() }
 // Run returns promptly when ctx is cancelled at every stage: while waiting to
 // acquire, while leading, and while waiting to retry.
 func (e *Elector) Run(ctx context.Context, lead func(ctx context.Context) error) error {
-	ticker := time.NewTicker(e.retry)
+	// time.NewTicker panics on a non-positive interval, and retry reaches
+	// here straight from the exported NewElector, so a caller's zero would
+	// crash the process rather than fail a check. Clamp it exactly as
+	// monitor already clamps its own copy of the same value, instead of
+	// returning an error: a retry interval is a tuning knob, not a
+	// correctness input, and there is no caller that could act on the error.
+	// Only the lower bound is shared with monitor: monitor additionally caps
+	// its interval at maxWatchInterval, which must not apply here or a
+	// production retry of 10s would silently become 2s.
+	retry := e.retry
+	if retry <= 0 {
+		retry = maxWatchInterval
+	}
+	ticker := time.NewTicker(retry)
 	defer ticker.Stop()
 
 	for {

@@ -165,3 +165,51 @@ func TestRequiredDSNNeverLeaksPasswordOnParseError(t *testing.T) {
 	require.Contains(t, err.Error(), "EKOKOD_DB_URL")
 	require.NotContains(t, err.Error(), "pa ss", "the DSN password must never appear in an error message")
 }
+
+// TestNonPositiveDurationsAndCountsAreRejected covers the fields where zero or
+// a negative value is a silent hazard rather than a legitimate "unset": asynq
+// aborts every in-flight task immediately on a negative shutdown timeout, and
+// pgxpool expires every connection the moment it is opened on a non-positive
+// MaxConnLifetime. Neither fails loudly on its own, so the loader must.
+func TestNonPositiveDurationsAndCountsAreRejected(t *testing.T) {
+	for name, bad := range map[string][]string{
+		"EKOKOD_DB_MAX_CONN_LIFETIME": {"0s", "-1h"},
+		"EKOKOD_JOB_TIMEOUT":          {"0s", "-30m"},
+		"EKOKOD_ACCESS_TOKEN_TTL":     {"0s", "-15m"},
+		"EKOKOD_REFRESH_TOKEN_TTL":    {"0s", "-24h"},
+		"EKOKOD_ML_TIMEOUT":           {"0s", "-60s"},
+		"EKOKOD_WORKER_CONCURRENCY":   {"0", "-1"},
+		"EKOKOD_UPLOAD_MAX_BYTES":     {"0", "-1"},
+	} {
+		for _, v := range bad {
+			t.Run(name+"="+v, func(t *testing.T) {
+				env := valid()
+				env[name] = v
+				_, err := config.Load(lookupFrom(env))
+				require.Error(t, err)
+				require.Contains(t, err.Error(), name, "the error must name the offending variable")
+				require.Contains(t, err.Error(), "greater than zero")
+			})
+		}
+	}
+}
+
+// TestZeroStaysLegalWhereItMeansSomething guards the other half of the rule:
+// the positivity constraint is opt-in per field precisely because zero is a
+// meaningful value elsewhere — an unset retention is "unlimited", a zero
+// statement timeout is "no timeout", and Redis database 0 is a real database.
+func TestZeroStaysLegalWhereItMeansSomething(t *testing.T) {
+	env := valid()
+	env["EKOKOD_DB_STATEMENT_TIMEOUT"] = "0s"
+	env["EKOKOD_REDIS_CACHE_DB"] = "0"
+	env["EKOKOD_DB_MIN_CONNS"] = "0"
+	env["EKOKOD_JOB_MAX_RETRIES"] = "0"
+
+	cfg, err := config.Load(lookupFrom(env))
+	require.NoError(t, err)
+	require.Zero(t, cfg.DB.StatementTimeout)
+	require.Zero(t, cfg.DB.MinConns)
+	require.Zero(t, cfg.Redis.CacheDB)
+	require.Zero(t, cfg.Worker.MaxRetries)
+	require.Zero(t, cfg.DB.ReadingRetention, "an unset retention still means unlimited")
+}

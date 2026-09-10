@@ -134,6 +134,19 @@ func (l *loader) intVal(name string, def int) int {
 	return n
 }
 
+// positiveInt is intVal with a "> 0" constraint. It exists because zero is a
+// legitimate value for several counts here (EKOKOD_REDIS_CACHE_DB,
+// EKOKOD_DB_MIN_CONNS, EKOKOD_JOB_MAX_RETRIES), so the constraint cannot live
+// in intVal itself and must be opted into per field.
+func (l *loader) positiveInt(name string, def int) int {
+	n := l.intVal(name, def)
+	if n <= 0 {
+		l.fail(name, errors.New("must be greater than zero"))
+		return def
+	}
+	return n
+}
+
 func (l *loader) int64Val(name string, def int64) int64 {
 	v, fromEnv := l.raw(name)
 	if !fromEnv {
@@ -146,6 +159,16 @@ func (l *loader) int64Val(name string, def int64) int64 {
 		n = def
 	}
 	l.record(name, v, false, true)
+	return n
+}
+
+// positiveInt64 is int64Val with a "> 0" constraint.
+func (l *loader) positiveInt64(name string, def int64) int64 {
+	n := l.int64Val(name, def)
+	if n <= 0 {
+		l.fail(name, errors.New("must be greater than zero"))
+		return def
+	}
 	return n
 }
 
@@ -176,6 +199,25 @@ func (l *loader) duration(name string, def time.Duration) time.Duration {
 		d = def
 	}
 	l.record(name, v, false, true)
+	return d
+}
+
+// positiveDuration is duration with a "> 0" constraint, for the fields where a
+// zero or negative value is neither "unset" nor "unlimited" but a silent
+// hazard. A negative EKOKOD_JOB_TIMEOUT reaches asynq's shutdownTimeout, whose
+// time.AfterFunc then closes the abort channel immediately and kills every
+// in-flight task with no drain at all; a zero or negative
+// EKOKOD_DB_MAX_CONN_LIFETIME expires every pooled connection the moment it is
+// opened. Neither surfaces as an error at startup, so the check has to happen
+// here. The constraint is opt-in rather than baked into duration() because
+// optionalDuration's zero legitimately means "unlimited" and
+// EKOKOD_DB_STATEMENT_TIMEOUT's zero legitimately means "no timeout".
+func (l *loader) positiveDuration(name string, def time.Duration) time.Duration {
+	d := l.duration(name, def)
+	if d <= 0 {
+		l.fail(name, errors.New("must be greater than zero"))
+		return def
+	}
 	return d
 }
 
@@ -295,7 +337,7 @@ func Load(lookup func(string) (string, bool)) (*Config, error) {
 		URL:              l.requiredDSN("EKOKOD_DB_URL"),
 		MaxConns:         l.intVal("EKOKOD_DB_MAX_CONNS", 25),
 		MinConns:         l.intVal("EKOKOD_DB_MIN_CONNS", 5),
-		MaxConnLifetime:  l.duration("EKOKOD_DB_MAX_CONN_LIFETIME", time.Hour),
+		MaxConnLifetime:  l.positiveDuration("EKOKOD_DB_MAX_CONN_LIFETIME", time.Hour),
 		StatementTimeout: l.duration("EKOKOD_DB_STATEMENT_TIMEOUT", 30*time.Second),
 		ReadingRetention: l.optionalDuration("EKOKOD_READING_RETENTION"),
 		CompressionAfter: l.duration("EKOKOD_COMPRESSION_AFTER", 90*24*time.Hour),
@@ -312,8 +354,8 @@ func Load(lookup func(string) (string, bool)) (*Config, error) {
 		JWTSigningKey:           l.secret("EKOKOD_JWT_SIGNING_KEY", 32),
 		PasswordPepper:          l.secret("EKOKOD_PASSWORD_PEPPER", 32),
 		DeviceFingerprintSecret: l.secret("EKOKOD_DEVICE_FINGERPRINT_SECRET", 32),
-		AccessTokenTTL:          l.duration("EKOKOD_ACCESS_TOKEN_TTL", 15*time.Minute),
-		RefreshTokenTTL:         l.duration("EKOKOD_REFRESH_TOKEN_TTL", 24*time.Hour),
+		AccessTokenTTL:          l.positiveDuration("EKOKOD_ACCESS_TOKEN_TTL", 15*time.Minute),
+		RefreshTokenTTL:         l.positiveDuration("EKOKOD_REFRESH_TOKEN_TTL", 24*time.Hour),
 		BcryptCost:              l.intVal("EKOKOD_BCRYPT_COST", 12),
 		PasswordHistorySize:     l.intVal("EKOKOD_PASSWORD_HISTORY_SIZE", 5),
 		LegacyEncryptionKey:     l.optionalSecret("EKOKOD_LEGACY_ENCRYPTION_KEY"),
@@ -323,9 +365,9 @@ func Load(lookup func(string) (string, bool)) (*Config, error) {
 	}
 
 	c.Worker = Worker{
-		Concurrency: l.intVal("EKOKOD_WORKER_CONCURRENCY", 10),
+		Concurrency: l.positiveInt("EKOKOD_WORKER_CONCURRENCY", 10),
 		MaxRetries:  l.intVal("EKOKOD_JOB_MAX_RETRIES", 5),
-		Timeout:     l.duration("EKOKOD_JOB_TIMEOUT", 30*time.Minute),
+		Timeout:     l.positiveDuration("EKOKOD_JOB_TIMEOUT", 30*time.Minute),
 	}
 	c.Scheduler = Scheduler{Enabled: l.boolVal("EKOKOD_SCHEDULER_ENABLED", true)}
 	c.Schedule = Schedule{
@@ -341,7 +383,7 @@ func Load(lookup func(string) (string, bool)) (*Config, error) {
 
 	c.Storage = Storage{
 		Root:      l.required("EKOKOD_STORAGE_ROOT"),
-		UploadMax: l.int64Val("EKOKOD_UPLOAD_MAX_BYTES", 31457280),
+		UploadMax: l.positiveInt64("EKOKOD_UPLOAD_MAX_BYTES", 31457280),
 		AllowedTypes: l.csv("EKOKOD_UPLOAD_ALLOWED_TYPES", []string{
 			"application/pdf",
 			"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -358,7 +400,7 @@ func Load(lookup func(string) (string, bool)) (*Config, error) {
 		EPIASPassword:   string(l.secret("EKOKOD_EPIAS_PASSWORD", 1)),
 		MLURL:           l.str("EKOKOD_ML_URL", "http://ml:8000"),
 		MLAPIKey:        string(l.secret("EKOKOD_ML_API_KEY", 1)),
-		MLTimeout:       l.duration("EKOKOD_ML_TIMEOUT", 60*time.Second),
+		MLTimeout:       l.positiveDuration("EKOKOD_ML_TIMEOUT", 60*time.Second),
 		WeatherProvider: l.str("EKOKOD_WEATHER_PROVIDER", ""),
 		MapTileURL:      l.str("EKOKOD_MAP_TILE_URL", ""),
 		ISolarRedirect:  l.str("EKOKOD_ISOLAR_REDIRECT_URL", ""),

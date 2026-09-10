@@ -4,6 +4,7 @@ package postgres_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"testing"
@@ -125,4 +126,57 @@ func TestStatementTimeoutIsApplied(t *testing.T) {
 
 	_, err = pool.Exec(ctx, "select pg_sleep(2)")
 	require.Error(t, err, "the configured statement timeout must cancel a long query")
+}
+
+// TestDownMigrationLeavesExtensionsInstalled pins the intent of 00001's Down
+// section. The Up uses CREATE EXTENSION IF NOT EXISTS, which is a no-op when
+// an extension is already present, so the migration cannot claim to have
+// installed it — and an unconditional DROP on the way down would destroy
+// extensions a DBA pre-provisioned, or that another schema in a shared
+// database depends on, cascading through every hypertable built on
+// timescaledb.
+func TestDownMigrationLeavesExtensionsInstalled(t *testing.T) {
+	ctx := context.Background()
+	dsn := startPostgres(t)
+	log := discardLogger()
+
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, log))
+	require.NoError(t, postgres.MigrateDownAll(ctx, dsn, log))
+
+	pool, err := postgres.NewPool(ctx, config.DB{URL: dsn, MaxConns: 2, MinConns: 1,
+		MaxConnLifetime: time.Hour, StatementTimeout: 10 * time.Second}, log)
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+
+	for _, ext := range []string{"timescaledb", "pgcrypto", "citext"} {
+		var installed bool
+		require.NoError(t, pool.QueryRow(ctx,
+			`select exists(select 1 from pg_extension where extname = $1)`, ext).Scan(&installed))
+		require.True(t, installed, "%s must survive migrate down --all", ext)
+	}
+}
+
+// TestMigrationsCheckErrorIsScrubbed covers the one error path out of this
+// package that used to escape scrubbing. It matters more than the others:
+// MigrationsCheck is wired into readyHandler, which serialises the error text
+// into the unauthenticated /health/ready body that the web health page then
+// renders. scrubPoolErr flattens the driver error to redacted text rather
+// than wrapping it with %w, so an unwrappable error is the observable proof
+// that the value went through the scrubber.
+func TestMigrationsCheckErrorIsScrubbed(t *testing.T) {
+	ctx := context.Background()
+	dsn := startPostgres(t)
+
+	pool, err := postgres.NewPool(ctx, config.DB{URL: dsn, MaxConns: 2, MinConns: 1,
+		MaxConnLifetime: time.Hour, StatementTimeout: 10 * time.Second}, discardLogger())
+	require.NoError(t, err)
+
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
+	pool.Close() // every subsequent query fails outside the undefined-table path
+
+	err = postgres.MigrationsCheck(pool).Fn(ctx)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "read schema version")
+	require.Nil(t, errors.Unwrap(err), "the error must be flattened by scrubPoolErr, not wrapped with %%w")
+	require.NotContains(t, err.Error(), "ekokod:ekokod", "no credential may reach the readiness body")
 }

@@ -6,6 +6,14 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS citext;
 
 -- +goose Down
-DROP EXTENSION IF EXISTS citext;
-DROP EXTENSION IF EXISTS pgcrypto;
-DROP EXTENSION IF EXISTS timescaledb;
+-- Deliberately a no-op. The inverse of a conditional create is not an
+-- unconditional drop: the Up above is explicitly a no-op when an extension is
+-- already present, so it did not necessarily install any of these, and
+-- DROP EXTENSION IF EXISTS would destroy extensions a DBA pre-provisioned or
+-- that another schema in a shared database depends on — cascading through
+-- every hypertable built on timescaledb. Postgres records no per-migration
+-- provenance for an extension, and inferring it (pg_depend, an extra
+-- bookkeeping table) would be more state to keep correct than the drop is
+-- worth. Removing these is an operator decision, taken deliberately, not a
+-- side effect of `ekokod migrate down`.
+SELECT 1;
