@@ -42,9 +42,9 @@ lint: ## Run gofmt check, go vet and golangci-lint
 vuln: ## Scan dependencies for known vulnerabilities
 	govulncheck ./...
 
-ci: lint test build web-lint web-test web-build web-audit ## Everything CI runs, except integration tests, govulncheck and shellcheck
+ci: lint check-generate test build web-lint web-test web-build web-audit ## Everything CI runs, except integration tests, govulncheck and shellcheck
 
-.PHONY: up down dev logs ps migrate seed generate offline-bundle env-docker
+.PHONY: up down dev logs ps migrate seed generate check-generate offline-bundle env-docker
 
 env-docker: ## Generate .env.docker with fresh development secrets (idempotent)
 	./scripts/gen-env-docker.sh
@@ -71,6 +71,23 @@ seed: env-docker ## Load reference datasets inside the stack
 
 generate: ## Regenerate sqlc types from the migrations and internal/store/postgres/queries
 	sqlc generate
+
+# `git status --porcelain --untracked-files=all` rather than `git diff
+# --exit-code`: diff compares TRACKED files only and is blind to a new,
+# uncommitted one. Tasks 9-11 each add a query file, and each produces a new
+# sqlcgen/<name>.sql.go — with a diff-only check, forgetting to commit one
+# leaves this green and `go build` only notices once something calls the
+# missing method. porcelain reports added, modified and untracked alike, and
+# unlike `git add` + `git diff --cached` it does not mutate the caller's index,
+# which matters now that `make ci` runs this.
+check-generate: ## Fail if the committed sqlcgen output is not what sqlc produces
+	sqlc generate
+	@changed="$$(git status --porcelain --untracked-files=all -- internal/store/postgres/sqlcgen)"; \
+	if [ -n "$$changed" ]; then \
+		echo "sqlcgen is not current — run 'make generate' and commit the result:"; \
+		echo "$$changed"; \
+		exit 1; \
+	fi
 
 offline-bundle: ## Build the air-gapped install bundle
 	./scripts/offline-bundle.sh

@@ -52,10 +52,14 @@ jobs:
       # which means it can go stale against the migrations. `make tools`
       # installs the same pinned sqlc the Makefile's generate target uses, so
       # this regenerates with exactly the local toolchain and fails on a diff.
+      #
+      # It runs through the Makefile so that CI and `make ci` are provably the
+      # same check. See the note on check-generate for why it is a porcelain
+      # status check rather than `git diff --exit-code`: diff is blind to a new
+      # generated file that was never committed, which is exactly what Tasks
+      # 9-11 will each produce.
       - name: sqlc is current
-        run: |
-          sqlc generate
-          git diff --exit-code -- internal/store/postgres/sqlcgen
+        run: make check-generate
 
       - name: Import-boundary check
         run: go test ./internal/arch/... -v
