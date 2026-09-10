@@ -52,19 +52,73 @@ import (
 const generatedModelsPath = "sqlcgen/models.go"
 
 var (
-	commentRe    = regexp.MustCompile(`(?m)--.*$`)
-	createTabRe  = regexp.MustCompile(`(?is)create table\s+(\w+)\s*\((.*?)\n\);`)
-	columnRe     = regexp.MustCompile(`(?i)^\s*(\w+)\s+([a-z0-9_]+)`)
-	matViewRe    = regexp.MustCompile(`(?is)create materialized view\s+(\w+)(.*?)\ngroup by`)
-	castAliasRe  = regexp.MustCompile(`(?i)::numeric\s+as\s+(\w+)`)
-	declRe       = regexp.MustCompile(`(?i)create function\s+(\w+)\s*\(`)
-	tableKeyword = map[string]bool{
+	commentRe   = regexp.MustCompile(`(?m)--.*$`)
+	createTabRe = regexp.MustCompile(`(?is)create table\s+(\w+)\s*\((.*?)\n\);`)
+	columnRe    = regexp.MustCompile(`(?i)^\s*(\w+)\s+([a-z0-9_]+)`)
+	matViewRe   = regexp.MustCompile(`(?is)create materialized view\s+(\w+)(.*?)\ngroup by`)
+	castAliasRe = regexp.MustCompile(`(?i)::numeric\s+as\s+(\w+)`)
+	declRe      = regexp.MustCompile(`(?i)create function\s+(\w+)\s*\(`)
+	// matViewBodyRe captures a whole view body, unlike matViewRe which stops at
+	// `group by` because that is all the numeric-alias scan needs. Terminating
+	// on the first `;` is safe here only because no view body in this schema
+	// contains a semicolon inside a string literal; if one ever does, this
+	// under-reads rather than over-reads, and the per-function floors in
+	// TestEveryFunctionSQLcMustTypeIsDeclared are what would notice.
+	matViewBodyRe = regexp.MustCompile(`(?is)create materialized view\s+(\w+)(.*?);`)
+	tableKeyword  = map[string]bool{
 		"primary": true, "unique": true, "check": true,
 		"foreign": true, "constraint": true, "exclude": true,
 	}
 )
 
-const shimPath = "timescale-shims.sql"
+const (
+	shimPath   = "timescale-shims.sql"
+	queriesDir = "queries"
+)
+
+// nativeFunctions are functions sqlc's own catalogue already types, so calling
+// one in a view body or a query needs no shim declaration. It is deliberately
+// generous about ordinary Postgres built-ins that Tasks 9-11 are likely to
+// reach for: a name wrongly listed here is a missed mistype, but a name merely
+// absent is a loud, one-line fix, so the cost of the two mistakes is not
+// symmetric and this list should only ever gain names that Postgres really does
+// provide.
+var nativeFunctions = map[string]bool{
+	"count": true, "sum": true, "avg": true, "min": true, "max": true,
+	"stddev": true, "variance": true, "bool_and": true, "bool_or": true,
+	"abs": true, "ceil": true, "ceiling": true, "floor": true, "round": true,
+	"trunc": true, "greatest": true, "least": true, "coalesce": true,
+	"nullif": true, "mod": true, "power": true, "sqrt": true,
+	"now": true, "date_trunc": true, "date_part": true, "extract": true,
+	"age": true, "to_char": true, "to_date": true, "to_timestamp": true,
+	"make_timestamptz": true, "timezone": true,
+	"lower": true, "upper": true, "trim": true, "btrim": true, "length": true,
+	"concat": true, "concat_ws": true, "substring": true, "replace": true,
+	"split_part": true, "format": true, "md5": true, "encode": true, "decode": true,
+	"array_agg": true, "string_agg": true, "unnest": true, "cardinality": true,
+	"array_length": true, "array_position": true,
+	"jsonb_agg": true, "json_agg": true, "jsonb_build_object": true,
+	"json_build_object": true, "jsonb_object_agg": true, "to_jsonb": true,
+	"gen_random_uuid": true, "generate_series": true,
+	"row_number": true, "rank": true, "dense_rank": true, "lag": true, "lead": true,
+	"percentile_cont": true, "percentile_disc": true,
+}
+
+// notFunctions are SQL keywords and type names that can be followed by an
+// opening parenthesis without being a function call at all — `= any($3::uuid[])`,
+// `cast(x as y)`, `numeric(18,4)`, a window's `over (...)`. Skipping them keeps
+// the default-deny rule above from producing nonsense failures.
+var notFunctions = map[string]bool{
+	"any": true, "all": true, "in": true, "exists": true, "values": true,
+	"array": true, "row": true, "cast": true, "case": true, "when": true,
+	"select": true, "from": true, "where": true, "and": true, "or": true,
+	"not": true, "on": true, "using": true, "over": true, "partition": true,
+	"filter": true, "within": true, "group": true, "order": true, "by": true,
+	"having": true, "union": true, "intersect": true, "except": true,
+	"distinct": true, "as": true, "with": true, "returns": true, "function": true,
+	"numeric": true, "decimal": true, "varchar": true, "char": true,
+	"timestamp": true, "timestamptz": true, "interval": true, "time": true,
+}
 
 // schema is what the migrations say, as opposed to what the generated models
 // say. numeric maps a normalised column name to the migration it was declared
@@ -344,95 +398,204 @@ func TestNumericColumnNamesDoNotCollideWithIntegerColumns(t *testing.T) {
 			"mapping (which means reimplementing sqlc's inflection rules).")
 }
 
-// TestShimDeclaresEveryTimescaleFunctionTheMigrationsUse is the guard for the
-// failure that actually happened.
+// TestEveryFunctionSQLcMustTypeIsDeclared is the guard for the failure that
+// actually happened, generalised to the class rather than the instance.
 //
-// A merge changed five continuous aggregates from `time_bucket('1 day', ts)` to
-// the timezone-aware `time_bucket('1 day', ts, 'Europe/Istanbul')`, because a
-// day or month boundary must be evaluated in Europe/Istanbul rather than UTC.
-// To sqlc's catalogue that is a different overload, and timescale-shims.sql
-// declared only the two-argument form — so all five regenerated with
-// `Bucket interface{}` and CI's drift check went red.
+// WHAT HAPPENED. A merge changed five continuous aggregates from
+// `time_bucket('1 day', ts)` to the timezone-aware
+// `time_bucket('1 day', ts, 'Europe/Istanbul')`, because a day or month
+// boundary must be evaluated in Istanbul local time rather than UTC. To sqlc's
+// catalogue that is a different overload, timescale-shims.sql declared only the
+// two-argument form, and all five views regenerated with `Bucket interface{}`.
 //
-// Nothing in `make test` caught it, and that is structural rather than bad
-// luck: every other test in this file reads the COMMITTED models.go, which
-// still said pgtype.Timestamptz. Comparing committed Go against current SQL
-// cannot see a schema change that has not been regenerated yet.
+// Nothing in `make test` caught it, and that was structural rather than bad
+// luck: every other test in this file compares COMMITTED Go against CURRENT
+// SQL, and a schema change that has not been regenerated yet appears on neither
+// side. This test compares SQL against SQL, so it does not care.
 //
-// This test compares SQL against SQL, so it does not care. For every function
-// the shim declares, every arity that function is CALLED with anywhere in the
-// migrations must also be DECLARED. Adding a Timescale call the shim does not
-// cover now fails locally, at the moment the migration is written.
-func TestShimDeclaresEveryTimescaleFunctionTheMigrationsUse(t *testing.T) {
+// WHAT IT CHECKS, and why the scope is what it is. sqlc only has to know a
+// function's signature where it must INFER A RESULT TYPE: inside a view body,
+// and inside a query file. A bare `select create_hypertable(...)` or
+// `select add_compression_policy(...)` statement produces no Go type at all —
+// sqlc ignores those outright, which is the whole reason `schema:` can point at
+// the migrations directory — so requiring shim declarations for them would be a
+// false failure. Column defaults such as `default gen_random_uuid()` are the
+// same. Hence: materialized-view bodies and internal/store/postgres/queries.
+//
+// WHY DEFAULT-DENY rather than a list of known TimescaleDB names. An allowlist
+// of `time_bucket`/`locf`/`interpolate`/... only catches functions somebody
+// remembered to enumerate; the day TimescaleDB ships `time_bucket_ng` and
+// nobody updates the list, the guard goes quietly blind — which is precisely
+// the "guard narrower than its name" defect this phase keeps finding, including
+// in the first version of this very test, which looped over the functions the
+// shim already declared and so could never notice a new one. So the rule is
+// inverted: every function called in a type-inferring context must be either a
+// built-in sqlc already knows (nativeFunctions) or declared in the shim, at the
+// arity it is called with. An unknown function fails loudly and is fixed by one
+// line in whichever of the two lists is correct.
+func TestEveryFunctionSQLcMustTypeIsDeclared(t *testing.T) {
 	t.Parallel()
 
-	shim, err := os.ReadFile(shimPath)
-	require.NoError(t, err, "the sqlc-only Timescale shim is missing")
+	declared := shimDeclarations(t)
+	require.Contains(t, declared, "time_bucket", "parsed no time_bucket declaration out of "+shimPath)
 
-	// name -> set of declared arities.
-	declared := map[string]map[int]bool{}
-	for _, m := range declRe.FindAllStringSubmatchIndex(string(shim), -1) {
-		name := strings.ToLower(string(shim[m[2]:m[3]]))
-		arity := argCount(string(shim), m[1]-1)
-		if declared[name] == nil {
-			declared[name] = map[int]bool{}
+	byFn := map[string]int{}
+	for _, src := range typeInferringSQL(t) {
+		for _, call := range functionCalls(src.sql) {
+			if notFunctions[call.name] {
+				continue
+			}
+			byFn[call.name]++
+
+			if nativeFunctions[call.name] {
+				continue
+			}
+			arities, known := declared[call.name]
+			require.True(t, known,
+				"%s calls %s(), which sqlc's catalogue does not know: it is neither a "+
+					"built-in in nativeFunctions nor declared in %s. In a %s an undeclared "+
+					"function makes sqlc guess the column type — that is how an energy value "+
+					"once generated as int32. Declare it in %s, or, if it really is a Postgres "+
+					"built-in sqlc types on its own, add it to nativeFunctions.",
+				src.name, call.name, shimPath, src.kind, shimPath)
+			require.True(t, arities[call.arity],
+				"%s calls %s() with %d argument(s), but %s declares only %v. sqlc treats "+
+					"each arity as a distinct overload: an undeclared one regenerates as "+
+					"`interface{}`. Add the missing declaration to %s — extend it, never "+
+					"weaken an existing return type.",
+				src.name, call.name, call.arity, shimPath, sortedKeys(arities), shimPath)
 		}
-		declared[name][arity] = true
 	}
-	require.NotEmpty(t, declared, "parsed no declarations out of "+shimPath)
-	require.Contains(t, declared, "time_bucket")
+
+	// Anti-vacuity, PER FUNCTION rather than pooled. A pooled floor cannot
+	// notice the one function that matters going blind: the migrations hold
+	// ~136 first()/last() call sites against 6 time_bucket() ones, so a scanner
+	// that stopped seeing time_bucket specifically would still clear a total of
+	// twenty and pass in silence.
+	for fn, atLeast := range map[string]int{"time_bucket": 6, "first": 20, "last": 20} {
+		require.GreaterOrEqual(t, byFn[fn], atLeast,
+			"found only %d call site(s) for %s(); the call scanner has probably "+
+				"stopped matching it, which would make this guard blind to exactly "+
+				"the function it was written for", byFn[fn], fn)
+	}
+}
+
+// sqlSource is one block of SQL in which sqlc must infer result types.
+type sqlSource struct {
+	name string
+	kind string
+	sql  string
+}
+
+// typeInferringSQL returns every such block: the body of each materialized
+// view in the migrations, and each query file. Everything else in a migration —
+// bare `select create_hypertable(...)` calls, column defaults, index
+// expressions — yields no Go type, so an unknown function there is harmless.
+func typeInferringSQL(t *testing.T) []sqlSource {
+	t.Helper()
+
+	var out []sqlSource
 
 	entries, err := migrationsFS.ReadDir(migrationsDir)
 	require.NoError(t, err)
-
-	calls := 0
 	for _, entry := range entries {
 		name := migrationsDir + "/" + entry.Name()
 		raw, err := migrationsFS.ReadFile(name)
 		require.NoError(t, err)
 		sql := commentRe.ReplaceAllString(string(raw), "")
-
-		for fn, arities := range declared {
-			for _, at := range callSites(sql, fn) {
-				calls++
-				require.True(t, arities[at],
-					"%s calls %s() with %d argument(s), but %s declares only %v. "+
-						"sqlc treats each arity as a distinct overload: an undeclared one "+
-						"regenerates as `interface{}`. Add the missing declaration to %s "+
-						"— extend it, never weaken an existing return type.",
-					name, fn, at, shimPath, sortedKeys(arities), shimPath)
-			}
+		for _, block := range matViewBodyRe.FindAllStringSubmatch(sql, -1) {
+			out = append(out, sqlSource{
+				name: name + " (view " + block[1] + ")",
+				kind: "continuous aggregate",
+				sql:  block[2],
+			})
 		}
 	}
 
-	// Anti-vacuity: 00005 calls time_bucket, first and last many times over.
-	require.GreaterOrEqual(t, calls, 20,
-		"found implausibly few Timescale function calls in the migrations; "+
-			"the call scanner has probably stopped matching")
+	queryFiles, err := os.ReadDir(queriesDir)
+	require.NoError(t, err)
+	for _, entry := range queryFiles {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
+			continue
+		}
+		name := queriesDir + "/" + entry.Name()
+		raw, err := os.ReadFile(name)
+		require.NoError(t, err)
+		out = append(out, sqlSource{
+			name: name,
+			kind: "query file",
+			sql:  commentRe.ReplaceAllString(string(raw), ""),
+		})
+	}
+
+	require.GreaterOrEqual(t, len(out), 7,
+		"expected at least the six continuous aggregates and one query file; "+
+			"the block scanner has probably stopped matching")
+	return out
 }
 
-// callSites returns the argument count of every call to fn in sql. Matching is
-// on a word boundary so that `last(` does not also match `atlast(`.
-func callSites(sql, fn string) []int {
-	var out []int
-	for i := 0; i+len(fn) < len(sql); i++ {
-		if !strings.HasPrefix(strings.ToLower(sql[i:]), fn) {
+// shimDeclarations parses timescale-shims.sql into name -> set of arities.
+func shimDeclarations(t *testing.T) map[string]map[int]bool {
+	t.Helper()
+
+	shim, err := os.ReadFile(shimPath)
+	require.NoError(t, err, "the sqlc-only Timescale shim is missing")
+
+	declared := map[string]map[int]bool{}
+	for _, m := range declRe.FindAllStringSubmatchIndex(string(shim), -1) {
+		name := strings.ToLower(string(shim[m[2]:m[3]]))
+		if declared[name] == nil {
+			declared[name] = map[int]bool{}
+		}
+		declared[name][argCount(string(shim), m[1]-1)] = true
+	}
+	require.NotEmpty(t, declared, "parsed no declarations out of "+shimPath)
+	return declared
+}
+
+type funcCall struct {
+	name  string
+	arity int
+}
+
+// functionCalls returns every function call in sql: an identifier followed by
+// optional whitespace and an opening parenthesis.
+//
+// Whitespace here is ANY whitespace, newlines included. The first draft skipped
+// only spaces and tabs, which meant a migration formatted as "time_bucket\n("
+// would have been invisible to the very guard written to watch time_bucket.
+//
+// A name preceded by "." is skipped: that is a qualified call such as sqlc.arg,
+// which is sqlc's own pseudo-function and not something the catalogue types.
+func functionCalls(sql string) []funcCall {
+	var out []funcCall
+	for i := 0; i < len(sql); i++ {
+		if !isIdentStart(sql[i]) || (i > 0 && (isIdentByte(sql[i-1]) || sql[i-1] == '.')) {
 			continue
 		}
-		if i > 0 && isIdentByte(sql[i-1]) {
-			continue
-		}
-		j := i + len(fn)
-		for j < len(sql) && (sql[j] == ' ' || sql[j] == '\t') {
+		j := i
+		for j < len(sql) && isIdentByte(sql[j]) {
 			j++
 		}
-		if j >= len(sql) || sql[j] != '(' {
-			continue
+		name := strings.ToLower(sql[i:j])
+		k := j
+		for k < len(sql) && isSpaceByte(sql[k]) {
+			k++
 		}
-		out = append(out, argCount(sql, j))
-		i = j
+		if k < len(sql) && sql[k] == '(' {
+			out = append(out, funcCall{name: name, arity: argCount(sql, k)})
+		}
+		i = j - 1
 	}
 	return out
+}
+
+func isIdentStart(b byte) bool {
+	return b == '_' || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
+}
+
+func isSpaceByte(b byte) bool {
+	return b == ' ' || b == '\t' || b == '\n' || b == '\r'
 }
 
 // argCount counts the arguments of the call whose opening parenthesis is at
