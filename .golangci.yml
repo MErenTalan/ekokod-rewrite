@@ -43,8 +43,24 @@ linters:
               desc: "internal/domain imports nothing from the project"
             - pkg: "github.com/MErenTalan/ekokod-rewrite/internal/api"
               desc: "internal/domain imports nothing from the project"
+        # Money and energy are numeric/decimal end to end, never float64.
+        # This rule was written in F0 against internal/domain/billing and
+        # internal/domain/tariff, neither of which exists yet, so it has
+        # never matched a single file. Task 8a points it at the store layer,
+        # which does exist and is where the numeric columns are read and
+        # written. internal/domain/model is deliberately NOT listed: a later
+        # task creates that package, and a glob for a non-existent directory
+        # is exactly the dormant rule this entry is fixing.
+        #
+        # Scope note: depguard matches IMPORTS, not declarations. It cannot
+        # see a `Total float64` struct field. It is the backstop against the
+        # arithmetic route into float money (math/big.Float, and big.Rat used
+        # as a stand-in for decimal); the field-level rule is carried by code
+        # review and by the numeric column types themselves.
         no-float-money:
           files:
+            - "**/internal/store/**"
+            - "**/internal/store/postgres/**"
             - "**/internal/domain/billing/**"
             - "**/internal/domain/tariff/**"
           deny:
