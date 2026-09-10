@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: "1.27.1"
+  NODE_VERSION: "24.20.0"
+
+jobs:
+  go:
+    name: Go build, lint and unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: shellcheck
+        run: shellcheck scripts/*.sh
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Add GOPATH/bin to PATH
+        run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: gofmt
+        run: test -z "$(gofmt -l ./cmd ./internal)" || (gofmt -l ./cmd ./internal; exit 1)
+
+      - name: go vet
+        run: go vet ./...
+
+      # golangci-lint-action's v6 major only supports golangci-lint v1.x;
+      # v2 support was only added in v7 ("The GitHub Action v7 supports
+      # golangci-lint v2 only"). Rather than track a second, action-side
+      # version pin, install the same pinned binary the Makefile uses so
+      # CI and local `make lint` are provably identical.
+      - name: Install pinned lint/vuln tools
+        run: make tools
+
+      - name: golangci-lint
+        run: golangci-lint run
+
+      - name: Import-boundary check
+        run: go test ./internal/arch/... -v
+
+      - name: Unit tests
+        run: go test ./... -race -coverprofile=coverage.out -covermode=atomic
+
+      - name: Coverage summary
+        run: go tool cover -func=coverage.out | tail -1
+
+      - name: Build
+        run: make build
+
+      - name: govulncheck
+        run: govulncheck ./...
+
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Integration tests (testcontainers)
+        run: go test ./... -tags=integration -race -count=1 -timeout 20m
+
+  web:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.3.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm check:i18n-parity
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm audit --audit-level=high

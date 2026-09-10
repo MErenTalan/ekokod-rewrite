@@ -1,0 +1,20 @@
+/bin/
+/dist/
+/web/node_modules
+/web/.next/
+/web/out/
+/web/coverage/
+/web/next-env.d.ts
+/web/tsconfig.tsbuildinfo
+.env
+.env.local
+.env.docker
+# Also covers scripts/gen-env-docker.sh's same-directory temp files
+# (.env.XXXXXX, .env.docker.XXXXXX) so a process killed between mktemp
+# and its cleanup trap can never leave a secrets-bearing file unignored
+# in the repo root.
+.env.*
+!.env.example
+*.tar
+*.tar.gz
+coverage.out

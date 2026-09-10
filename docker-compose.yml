@@ -1,0 +1,178 @@
+name: ekokod
+
+x-ekokod-env: &ekokod-env
+  # required: false — Compose validates env_file on every subcommand,
+  # including `down`/`ps`/`logs`, so a missing .env.docker (a fresh clone
+  # before `make env-docker`/`up` has run) must not turn those into an
+  # opaque "env file not found" error. A genuinely missing app config is
+  # instead reported by the Go config loader itself, which already fails
+  # loudly and names the variable.
+  env_file: [{path: .env.docker, required: false}]
+
+services:
+  postgres:
+    image: timescale/timescaledb:2.30.0-pg16
+    environment:
+      POSTGRES_USER: ekokod
+      # No default: a committed default password is exactly the secret
+      # the spec forbids. Generated fresh by scripts/gen-env-docker.sh
+      # into the project's .env (Compose's own interpolation file, not
+      # .env.docker) and consumed here via Compose variable substitution;
+      # EKOKOD_DB_URL in .env.docker embeds the same generated value.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required — run 'make env-docker' or set it in .env}
+      POSTGRES_DB: ekokod
+      TZ: Europe/Istanbul
+    # The stateful services restart too, or unless-stopped on the app
+    # services is worse than useless: worker's broker-death detector watches
+    # redis, so a redis that never comes back turns a restarting worker into
+    # a permanent crash-loop with no path to recovery. Safe here because both
+    # keep their state in a named volume (redis with --appendonly yes).
+    restart: unless-stopped
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ekokod -d ekokod"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    deploy:
+      resources:
+        limits: { cpus: "4", memory: 4g }
+
+  redis:
+    image: redis:7.4.11-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    # See postgres for why the stateful services restart too.
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    deploy:
+      resources:
+        limits: { cpus: "1", memory: 512m }
+
+  # migrate owns the sole build stanza for the ekokod image: api, worker and
+  # scheduler below reference the same `image:` tag without their own
+  # build section, so `docker compose up --build` compiles the binary
+  # exactly once and every service runs the identical build (same
+  # version/commit/date ldflags) rather than four independently-built
+  # images that could drift from one another.
+  migrate:
+    image: ekokod:${VERSION:-dev}
+    build:
+      context: .
+      args: { VERSION: "${VERSION:-dev}", COMMIT: "${COMMIT:-none}", DATE: "${DATE:-unknown}" }
+    <<: *ekokod-env
+    command: ["migrate", "up"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  api:
+    image: ekokod:${VERSION:-dev}
+    <<: *ekokod-env
+    command: ["api"]
+    ports: ["8080:8080"]
+    volumes:
+      - artifacts:/var/lib/ekokod
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    # See the worker service for why unless-stopped.
+    restart: unless-stopped
+    # api's own drain window is shutdownGrace = 30s (internal/cli/api.go:24,
+    # the deadline http.Server.Shutdown is given for in-flight requests).
+    # 40s gives that window headroom, instead of Docker's 10s default
+    # which would SIGKILL the process before it can finish draining.
+    stop_grace_period: 40s
+    deploy:
+      resources:
+        limits: { cpus: "2", memory: 1g }
+
+  worker:
+    image: ekokod:${VERSION:-dev}
+    <<: *ekokod-env
+    command: ["worker"]
+    volumes:
+      - artifacts:/var/lib/ekokod
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    # restart: the worker's broker-death detector (internal/cli/health.go)
+    # deliberately exits non-zero so a supervisor can act on it. Without a
+    # restart policy Docker's default ("no") applies and such a worker simply
+    # stays dead, leaving that whole mechanism inert. unless-stopped, not
+    # always: an operator's explicit `docker compose stop` must stay stopped
+    # across a daemon restart. migrate keeps restart: "no" — it is a
+    # run-once job whose success api/worker/scheduler wait on.
+    restart: unless-stopped
+    # Matches the worker's asynq drain window (min(EKOKOD_JOB_TIMEOUT,
+    # job.MaxShutdownGrace) = 30s, see internal/job/server.go) plus
+    # headroom, instead of Docker's 10s default which would SIGKILL a
+    # draining process before it can finish.
+    stop_grace_period: 40s
+    deploy:
+      resources:
+        limits: { cpus: "4", memory: 2g }
+
+  scheduler:
+    image: ekokod:${VERSION:-dev}
+    <<: *ekokod-env
+    command: ["scheduler"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    # See the worker service for why unless-stopped.
+    restart: unless-stopped
+    # The scheduler's leader-election loop exits as soon as its context is
+    # cancelled (internal/scheduler/elector.go) and releases the advisory
+    # lock immediately — no in-flight work to drain. 40s matches api and
+    # worker for one uniform operational shutdown envelope rather than
+    # because the scheduler itself needs it.
+    stop_grace_period: 40s
+    deploy:
+      resources:
+        limits: { cpus: "1", memory: 512m }
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8080
+      EKOKOD_INTERNAL_API_URL: http://api:8080
+      TZ: Europe/Istanbul
+    ports: ["3000:3000"]
+    depends_on:
+      api: { condition: service_healthy }
+    # See the worker service for why unless-stopped.
+    restart: unless-stopped
+    healthcheck:
+      # 127.0.0.1, not localhost: web/Dockerfile pins HOSTNAME=0.0.0.0 so
+      # Next's standalone server binds IPv4-only (see that file for why),
+      # but Alpine's BusyBox wget resolves "localhost" to ::1 first and
+      # gets a refused connection — same reasoning as the Next.js team's
+      # own Docker example healthcheck.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+volumes:
+  postgres-data:
+  redis-data:
+  artifacts:
