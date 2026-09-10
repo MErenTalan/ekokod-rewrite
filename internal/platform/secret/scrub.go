@@ -70,13 +70,20 @@ func Wrap(op string, fragments []string, err error) error {
 // the error: it is printed verbatim, so it must never be derived from a
 // value that could carry a credential.
 //
-// cause is still attached. Withholding is a statement about what may be
-// PRINTED, not about what a caller may inspect, and fmt never follows
-// Unwrap — so keeping the cause costs nothing in exposure and preserves
-// errors.Is and errors.As on paths where the text has to be dropped.
-// The caveat documented on the scrubbed type applies here with full force:
-// errors.Unwrap(err).Error() yields the original text, which in this branch
-// is precisely the text we decided we could not show.
+// cause may be nil, and choosing that is a real decision rather than a
+// convenience. Attaching it is usually right: withholding is a statement
+// about what may be PRINTED, not about what a caller may inspect, fmt never
+// follows Unwrap, and errors.Is/errors.As keep working against a real driver
+// sentinel on a path where the text had to be dropped. The caveat documented
+// on the scrubbed type applies with full force — errors.Unwrap(err).Error()
+// yields the original text, which on this path is precisely the text we
+// decided we could not show.
+//
+// Pass nil when the cause IS the dangerous value and no caller would ever
+// match on it. internal/store/postgres/scrub.go's dsn-did-not-parse branch is
+// the case in point: *url.Error embeds its whole input, so the cause there is
+// the raw DSN, and no one writes errors.Is against a URL-parse sentinel. A
+// reachable cause would cost containment and buy nothing.
 func Withhold(op, reason string, cause error) error {
 	return &scrubbed{
 		msg:   fmt.Sprintf("%s: details withheld (%s)", op, reason),

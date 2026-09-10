@@ -320,12 +320,15 @@ func methodSetOf(named *types.Named) *types.MethodSet {
 //     struct satisfying an exported `store.BuildingRepository` interface. It
 //     also missed BuildingRepo, BuildingStore and plain Buildings. Nothing is
 //     gained by guessing at names, so the name test is gone entirely.
-//   - The method must be EXPORTED, because that is the surface other packages
-//     call — including through an interface, which is how an unexported type's
-//     methods escape the package. Unexported helpers are deliberately out of
-//     scope: requiring a Scope on private plumbing would force the parameter
-//     through functions that legitimately do not filter rows, and the caller
-//     that reaches such a helper is itself covered.
+//   - The method must be EXPORTED, and this is settled, not provisional. The
+//     guard checks the package's EXTERNAL CONTRACT, which is where a
+//     cross-tenant hole can actually be reached from; an unexported method is
+//     callable only from inside internal/store/postgres. Widening to
+//     unexported methods would flag ordinary internal plumbing — scan,
+//     queryRow and friends — and the only cure for those false positives
+//     would be loosening the guard, which is how guards die. An unexported
+//     type is still covered, because its methods reach other packages through
+//     an exported interface.
 //   - context.Context is the proxy for "this method talks to the database".
 //     It is not a perfect proxy, but a repository method that does I/O without
 //     a context would already be violating a different, older rule in this
@@ -335,6 +338,21 @@ func methodSetOf(named *types.Named) *types.MethodSet {
 // only, unscoped surface in the system — the exemption is matched with
 // underPackage so that a future sibling such as "…/postgres/adminui" cannot
 // inherit it by prefix.
+//
+// WHAT THIS GUARD CANNOT DO, and who does it instead. This checks SIGNATURES,
+// not USAGE. A method can take a store.Scope, satisfy this guard completely,
+// and then never reference the parameter when it builds its SQL — a
+// cross-tenant read that is invisible to any static check at this level.
+// Nothing here will ever catch that, and no amount of widening the predicate
+// would change it.
+//
+// That half is covered behaviourally by Task 13's TestScopeIsolation, which
+// walks every repository with tenant A's scope and tenant B's ids and
+// requires that nothing comes back. The division of labour is deliberate:
+// GUARD FOR THE SIGNATURE HERE, TEST FOR THE BEHAVIOUR THERE. Neither is
+// sufficient alone — a signature check cannot see intent, and a behavioural
+// test only covers the repositories someone remembered to enumerate, which is
+// exactly what this guard makes impossible to forget.
 //
 // TODO(task-9): flip the inspected-method count below into a hard assertion,
 // `require.Positive(t, inspected, …)`. It cannot be one yet: no repositories

@@ -27,7 +27,16 @@ func scrubErr(dsn, op string, err error) error {
 	}
 	u, parseErr := url.Parse(dsn)
 	if parseErr != nil {
-		return secret.Withhold(op, "dsn did not parse", err)
+		// NO CAUSE, deliberately, and unlike every sibling branch in this
+		// file: *url.Error embeds its entire input verbatim, so parseErr
+		// itself carries the raw DSN — password included. That is the exact
+		// value that produced Critical #1 of the previous phase, and
+		// attaching anything derived from this DSN would put it back within
+		// reach of errors.Unwrap. The usual trade (a reachable cause buys
+		// errors.Is against a real driver sentinel) pays nothing here:
+		// nobody matches on a URL-parse sentinel. Leave this alone; the
+		// inconsistency is the point.
+		return secret.Withhold(op, "dsn did not parse", nil)
 	}
 	var password string
 	if u.User != nil {

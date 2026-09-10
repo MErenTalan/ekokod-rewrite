@@ -3,6 +3,7 @@ package postgres
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -112,4 +113,40 @@ func TestScrubPoolErrWithholdsWhenThePoolHasNoPassword(t *testing.T) {
 	require.NotContains(t, err.Error(), "s3cret")
 	require.Contains(t, err.Error(), "read schema version")
 	require.ErrorIs(t, err, errDriver)
+}
+
+// TestScrubErrAttachesNoCauseWhenTheDSNDidNotParse pins a deliberate
+// inconsistency, so that "fixing" it fails loudly.
+//
+// Every other branch in scrub.go keeps the cause reachable: that is the whole
+// point of secret.Wrap, and it buys callers errors.Is against a real driver
+// sentinel. This branch must NOT, because here the cause is *url.Error, whose
+// Error() embeds its entire input verbatim — the raw DSN, password and all.
+// That is the value behind Critical #1 of the previous phase. Attaching it
+// would put the DSN back within reach of errors.Unwrap, and would buy
+// nothing: nobody matches on a URL-parse sentinel.
+//
+// The uniformity argument for attaching it is reasonable, which is exactly
+// why this test exists rather than a comment alone.
+func TestScrubErrAttachesNoCauseWhenTheDSNDidNotParse(t *testing.T) {
+	// url.Parse rejects this outright, and its error quotes the whole DSN.
+	// Assembled at runtime rather than written as a literal because
+	// staticcheck's SA1007 rejects a constant invalid URL passed to
+	// url.Parse — invalidity being the entire point here. That the linter
+	// objects at all is independent confirmation of the premise.
+	dsn := fmt.Sprintf("postgres://ekokod:%s@host:5432/db%s", "s3cret", "%zz")
+
+	_, parseErr := url.Parse(dsn)
+	require.Error(t, parseErr, "the fixture must actually fail to parse")
+	require.Contains(t, parseErr.Error(), "s3cret",
+		"the premise of this test: url.Error embeds its input, so the cause carries the credential")
+
+	err := scrubErr(dsn, "parse database url", parseErr)
+
+	require.NotContains(t, err.Error(), "s3cret")
+	require.Contains(t, err.Error(), "parse database url")
+	require.NoError(t, errors.Unwrap(err),
+		"this branch must attach NO cause: unwrapping it would expose the raw DSN that url.Error embedded")
+	require.True(t, secret.IsScrubbed(err),
+		"withholding still goes through the scrubber, so the value stays identifiable as scrubbed")
 }
