@@ -40,7 +40,7 @@ lint: ## Run gofmt check, go vet and golangci-lint
 vuln: ## Scan dependencies for known vulnerabilities
 	govulncheck ./...
 
-ci: lint test build web-lint web-test web-build ## Everything CI runs, except integration tests, govulncheck and shellcheck
+ci: lint test build web-lint web-test web-build web-audit ## Everything CI runs, except integration tests, govulncheck and shellcheck
 
 .PHONY: up down dev logs ps migrate seed generate offline-bundle env-docker
 
@@ -73,7 +73,7 @@ generate: ## Regenerate sqlc types and the OpenAPI client (populated from F1)
 offline-bundle: ## Build the air-gapped install bundle
 	./scripts/offline-bundle.sh
 
-.PHONY: web-install web-lint web-test web-build
+.PHONY: web-install web-lint web-test web-build web-audit
 
 web-install:
 	cd web && pnpm install --frozen-lockfile
@@ -86,3 +86,6 @@ web-test:
 
 web-build:
 	cd web && pnpm build
+
+web-audit: ## Fail on high-severity frontend dependency vulnerabilities
+	cd web && pnpm audit --audit-level=high
