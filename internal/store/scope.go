@@ -28,3 +28,62 @@ type Scope struct {
 // valid; every repository method rejects an invalid scope before touching
 // the database.
 func (s Scope) Valid() bool { return s.CompanyID != uuid.Nil }
+
+// AllowsBuilding reports whether the principal may see building id.
+//
+// This is the authorisation branch in one place, so that no repository has to
+// write it. The version everyone reaches for by hand,
+//
+//	if len(s.BuildingIDs) > 0 { … AND building_id = ANY($1) … }
+//
+// is FAIL-OPEN: an empty slice drops the predicate and the query silently
+// returns every building in the company — the precise failure Scope exists to
+// prevent, arrived at through the most natural-looking line of Go in the
+// package. Valid() is necessary but not sufficient on its own; this and
+// BuildingFilter are what make the safe path also the easy one.
+//
+// Everything about it fails closed: an invalid scope allows nothing whatever
+// else is set, the zero uuid is never a building, and an empty set is never
+// widened into "all".
+func (s Scope) AllowsBuilding(id uuid.UUID) bool {
+	if !s.Valid() || id == uuid.Nil {
+		return false
+	}
+	if s.AllBuildings {
+		return true
+	}
+	for _, allowed := range s.BuildingIDs {
+		if allowed == id {
+			return true
+		}
+	}
+	return false
+}
+
+// BuildingFilter is what repositories consume when building a query. It
+// returns the building ids to filter on and whether the whole company is
+// granted.
+//
+// Callers MUST branch on all, never on len(ids):
+//
+//	ids, all := scope.BuildingFilter()
+//	if !all {
+//	    where = append(where, "building_id = ANY($n)") // ids may be empty:
+//	}                                                  // that matches no rows,
+//	                                                   // which is correct.
+//
+// An empty ids with all false is a real and meaningful state — a principal
+// with no buildings — and the predicate must still be applied so the query
+// returns nothing. Dropping it because the slice is empty is the fail-open
+// bug. An invalid scope reports (nil, false) for the same reason: deny.
+//
+// The returned slice aliases the Scope's own; callers must not mutate it.
+func (s Scope) BuildingFilter() (ids []uuid.UUID, all bool) {
+	if !s.Valid() {
+		return nil, false
+	}
+	if s.AllBuildings {
+		return nil, true
+	}
+	return s.BuildingIDs, false
+}
