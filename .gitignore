@@ -7,6 +7,12 @@
 .env
 .env.local
 .env.docker
+# Also covers scripts/gen-env-docker.sh's same-directory temp files
+# (.env.XXXXXX, .env.docker.XXXXXX) so a process killed between mktemp
+# and its cleanup trap can never leave a secrets-bearing file unignored
+# in the repo root.
+.env.*
+!.env.example
 *.tar
 *.tar.gz
 coverage.out
