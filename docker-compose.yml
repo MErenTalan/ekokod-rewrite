@@ -1,0 +1,131 @@
+name: ekokod
+
+x-ekokod-env: &ekokod-env
+  env_file: [.env.docker]
+
+services:
+  postgres:
+    image: timescale/timescaledb:2.30.0-pg16
+    environment:
+      POSTGRES_USER: ekokod
+      POSTGRES_PASSWORD: ekokod
+      POSTGRES_DB: ekokod
+      TZ: Europe/Istanbul
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ekokod -d ekokod"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    deploy:
+      resources:
+        limits: { cpus: "4", memory: 4g }
+
+  redis:
+    image: redis:7.4.11-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    deploy:
+      resources:
+        limits: { cpus: "1", memory: 512m }
+
+  # migrate owns the sole build stanza for the ekokod image: api, worker and
+  # scheduler below reference the same `image:` tag without their own
+  # build section, so `docker compose up --build` compiles the binary
+  # exactly once and every service runs the identical build (same
+  # version/commit/date ldflags) rather than four independently-built
+  # images that could drift from one another.
+  migrate:
+    image: ekokod:${VERSION:-dev}
+    build:
+      context: .
+      args: { VERSION: "${VERSION:-dev}", COMMIT: "${COMMIT:-none}", DATE: "${DATE:-unknown}" }
+    <<: *ekokod-env
+    command: ["migrate", "up"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  api:
+    image: ekokod:${VERSION:-dev}
+    <<: *ekokod-env
+    command: ["api"]
+    ports: ["8080:8080"]
+    volumes:
+      - artifacts:/var/lib/ekokod
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    # Matches the worker's asynq drain window (min(EKOKOD_JOB_TIMEOUT,
+    # job.MaxShutdownGrace) = 30s, see internal/job/server.go) plus
+    # headroom, instead of Docker's 10s default which would SIGKILL a
+    # draining process before it can finish.
+    stop_grace_period: 40s
+    deploy:
+      resources:
+        limits: { cpus: "2", memory: 1g }
+
+  worker:
+    image: ekokod:${VERSION:-dev}
+    <<: *ekokod-env
+    command: ["worker"]
+    volumes:
+      - artifacts:/var/lib/ekokod
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    stop_grace_period: 40s
+    deploy:
+      resources:
+        limits: { cpus: "4", memory: 2g }
+
+  scheduler:
+    image: ekokod:${VERSION:-dev}
+    <<: *ekokod-env
+    command: ["scheduler"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    stop_grace_period: 40s
+    deploy:
+      resources:
+        limits: { cpus: "1", memory: 512m }
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8080
+      EKOKOD_INTERNAL_API_URL: http://api:8080
+      TZ: Europe/Istanbul
+    ports: ["3000:3000"]
+    depends_on:
+      api: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+volumes:
+  postgres-data:
+  redis-data:
+  artifacts:

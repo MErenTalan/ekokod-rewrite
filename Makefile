@@ -39,3 +39,34 @@ lint: ## Run gofmt check, go vet and golangci-lint
 
 vuln: ## Scan dependencies for known vulnerabilities
 	govulncheck ./...
+
+.PHONY: up down dev logs ps migrate seed generate offline-bundle env-docker
+
+env-docker: ## Generate .env.docker with fresh development secrets (idempotent)
+	./scripts/gen-env-docker.sh
+
+up: env-docker ## Build and start the whole stack
+	docker compose up -d --build
+
+down: ## Stop the stack and remove volumes
+	docker compose down -v
+
+dev: up logs ## Start the stack and follow the logs
+
+logs:
+	docker compose logs -f api worker scheduler
+
+ps:
+	docker compose ps
+
+migrate: env-docker ## Apply migrations inside the stack
+	docker compose run --rm migrate migrate up
+
+seed: env-docker ## Load reference datasets inside the stack
+	docker compose run --rm api seed
+
+generate: ## Regenerate sqlc types and the OpenAPI client (populated from F1)
+	@echo "no generators configured yet"
+
+offline-bundle: ## Build the air-gapped install bundle
+	./scripts/offline-bundle.sh

@@ -6,6 +6,7 @@
 /web/coverage/
 .env
 .env.local
+.env.docker
 *.tar
 *.tar.gz
 coverage.out
