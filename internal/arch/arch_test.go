@@ -424,8 +424,8 @@ func TestEveryStoreMethodIsScoped(t *testing.T) {
 				if signatureTakes(sig, isScopeType) {
 					continue
 				}
-				t.Errorf("%s.%s.%s takes a context.Context but no store.Scope: every exported repository method must be tenant-scoped (only %s may be unscoped)",
-					pkg.PkgPath, typeName.Name(), method.Name(), adminPkg)
+				t.Errorf("%s.%s.%s takes a context.Context but no store.Scope: every exported repository method must be tenant-scoped (only %s, the deliberate unscoped surface, and %s, sqlc's generated primitives, are exempt)",
+					pkg.PkgPath, typeName.Name(), method.Name(), adminPkg, sqlcgenPkg)
 			}
 		}
 	}

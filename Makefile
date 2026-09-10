@@ -80,9 +80,15 @@ generate: ## Regenerate sqlc types from the migrations and internal/store/postgr
 # missing method. porcelain reports added, modified and untracked alike, and
 # unlike `git add` + `git diff --cached` it does not mutate the caller's index,
 # which matters now that `make ci` runs this.
+#
+# The `|| exit 1` is not decoration. An empty `changed` means "nothing to
+# report", and git failing — not installed, not a checkout, a broken index —
+# also produces an empty string, so without it this guard PASSES precisely when
+# it cannot run. The `git diff --exit-code` it replaced failed loudly in that
+# case, and losing that would have been a straight regression.
 check-generate: ## Fail if the committed sqlcgen output is not what sqlc produces
 	sqlc generate
-	@changed="$$(git status --porcelain --untracked-files=all -- internal/store/postgres/sqlcgen)"; \
+	@changed="$$(git status --porcelain --untracked-files=all -- internal/store/postgres/sqlcgen)" || exit 1; \
 	if [ -n "$$changed" ]; then \
 		echo "sqlcgen is not current — run 'make generate' and commit the result:"; \
 		echo "$$changed"; \
