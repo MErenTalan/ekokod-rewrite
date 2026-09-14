@@ -9,18 +9,97 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 )
 
-// The repository contract. One interface per aggregate, and every method takes
-// ctx first and a Scope second.
+// The repository contract. One interface per aggregate.
 //
-// The Scope parameter is second on EVERY method, including the ones where it
-// cannot narrow anything (market prices and the national tariff schedule are
-// platform-wide tables with no company_id). That uniformity is the point:
-// internal/arch's TestEveryStoreMethodIsScoped requires a Scope on every
-// exported, context-taking method under internal/store/postgres, and an
-// interface that omitted it "because this table has no tenant" would be the
-// one place a reviewer has to think rather than check. Those methods still
-// validate the Scope and still return ErrInvalidScope for a zero one, because
-// a caller with no valid tenant has no business reading anything.
+// TWO KINDS OF INTERFACE live in this file, and the line between them is the
+// tenancy model of the whole system. 03-target-architecture.md §2.5 is
+// binding: "The repository layer takes an explicit Scope value; there is no
+// 'unscoped' query method outside the admin package."
+//
+//   - SCOPED interfaces — every section but the last. Every method takes ctx
+//     first and a Scope second, with no exception. They are implemented in
+//     package internal/store/postgres, where internal/arch's
+//     TestEveryStoreMethodIsScoped enforces the signature, and they are the
+//     only store surface product request handling uses.
+//   - UNSCOPED ADMIN interfaces — the final section, every one named Admin….
+//     No method takes a Scope. They are implemented ONLY by package
+//     internal/store/postgres/admin, the one package that guard exempts, and
+//     each method says why its caller cannot hold a Scope. The list is closed.
+//
+// PLATFORM DATA: READS ARE SCOPED, WRITES ARE ADMIN. market_prices_hourly,
+// yekdem_monthly, national_tariff_schedule and integration_definitions have no
+// company_id at all, and emission_factors / emission_factor_conversions hold
+// platform rows (company_id NULL) beside company-owned ones.
+//
+//   - A TENANT READ of platform data is scoped. The Scope narrows nothing for a
+//     platform row, but it is still required and still validated: a caller
+//     with no valid tenant has no business reading anything, and a scoped
+//     surface with no exceptions is one a reviewer checks rather than argues.
+//   - A WRITE to platform data is never on a scoped interface. Any valid Scope
+//     would authorise it, so tenant A's credentials could change the prices on
+//     tenant B's invoices. Those writes are on the Admin interfaces.
+//
+// job_runs, operational_messages and audit_log also allow company_id NULL, for
+// platform work. Their scoped methods store s.CompanyID and see only rows whose
+// company_id = s.CompanyID — never the NULL rows. Platform rows are written
+// through AdminAuditRepository and AdminJournalRepository, so a platform job
+// never has to invent a company to satisfy a Scope.
+//
+// WRITES STORE THE SCOPE'S COMPANY. A scoped write stores s.CompanyID as the
+// row's company_id. A model value whose CompanyID names another company — or is
+// nil where the column is nullable and nil means a platform row — is refused
+// with ErrNotFound and nothing is written.
+//
+// ROWS WITHOUT company_id. These relations carry no company_id and are
+// reachable only through a parent that does (the global constraints' known
+// exception to "every tenant-scoped table carries company_id directly"):
+//
+//	user_password_history, sessions                      -> users
+//	building_contacts                                    -> buildings
+//	power_plant_monthly_targets, power_plant_devices,
+//	power_plant_alarm_recipients, plant_production,
+//	plant_production_daily/_monthly,
+//	isolar_forwarded_alarms                              -> power_plants
+//	meter_readings, ingestion_cursors,
+//	consumption_anomalies, forecasts, forecast_gaps,
+//	consumption_hourly/_daily/_monthly/_yearly           -> analyzers
+//	tariff_taxes, tariff_manual_yekdem                   -> tariffs
+//	icmal_rows                                           -> icmal_imports
+//	emission_factor_conversions                          -> emission_factors
+//	iso50001_clause_dates, iso50001_notes                -> iso50001_projects
+//	bill_lines, bill_members, bill_hourly_detail         -> bills
+//	alarm_analyzers, alarm_channels, alarm_events,
+//	alarm_fired_bills                                    -> alarms
+//
+// Every method touching one of them carries an "Isolation:" line naming the
+// parent its query MUST join through. Joining through the parent means applying
+// the parent's whole Scope predicate — company_id = s.CompanyID and, where the
+// parent has a building_id, the Scope's building branch — exactly as the parent
+// repository's own Get applies it, so a child is visible exactly when its
+// parent is. `where id = $1` on the child alone is the bug: a surrogate id is a
+// guessable handle into another tenant. The rules every such method follows:
+//
+//   - A single parent id or child id not visible to the Scope — missing,
+//     another tenant's, or outside the Scope's buildings — returns ErrNotFound,
+//     for reads and writes alike, and a write touches nothing.
+//   - A visible parent with no children returns an empty result, not
+//     ErrNotFound.
+//   - A batch write (BulkInsert, RecordGaps, InsertRows, a Replace… taking ids)
+//     in which ANY row names a parent not visible to the Scope is refused WHOLE
+//     with ErrNotFound and writes nothing. A partial write would make the result
+//     an oracle for which ids exist elsewhere.
+//   - A read taking a LIST of parent ids, or a parent id as a filter field,
+//     narrows: ids not visible to the Scope contribute no rows, which is
+//     indistinguishable from ids with no data.
+//   - Every other id a write stores as a foreign key (created_by, resolved_by,
+//     a member analyzer, a device) must itself be visible to the Scope — for a
+//     user, belong to s.CompanyID — or the write is refused with ErrNotFound. A
+//     foreign key to another tenant's row is a cross-tenant link even when the
+//     row being written is your own. (audit_log is the exception: it has no
+//     foreign keys by design, and records ids as given.)
+//
+// Tasks 9-11 pin each of these with an isolation test: tenant A's Scope, tenant
+// B's ids, ErrNotFound or nothing back.
 //
 // Method-name conventions, so that Tasks 9-11 never have to invent one:
 //
@@ -34,12 +113,15 @@ import (
 //	Replace…  — swap the whole child collection of one parent in one
 //	            transaction (tariff taxes, bill lines, alarm channels …),
 //	            because those collections are always written as a set.
+//	…Platform…— on an Admin interface, the unscoped sibling of a scoped
+//	            method that writes the same table for one tenant.
 //
 // Errors are the sentinels in errors.go, matched with errors.Is: ErrNotFound,
-// ErrConflict, ErrInvalidScope. A row belonging to another tenant returns
-// ErrNotFound and never ErrInvalidScope — the two must stay indistinguishable
-// from outside, or the error itself becomes an oracle for what exists in
-// another company.
+// ErrConflict, ErrInvalidScope, ErrInvalidRange. ErrInvalidScope and
+// ErrInvalidRange are returned before any database round trip, the Scope
+// checked first. A row belonging to another tenant returns ErrNotFound and
+// never ErrInvalidScope — the two must stay indistinguishable from outside, or
+// the error itself becomes an oracle for what exists in another company.
 
 // Page is the pagination every List filter embeds.
 //
@@ -60,6 +142,21 @@ type Page struct {
 type TimeRange struct {
 	From time.Time
 	To   time.Time
+}
+
+// Valid reports whether r can be used: both ends set, and From strictly before
+// To. Ends are compared as instants, so the two may carry different
+// time.Locations.
+//
+// Every repository method that takes a TimeRange — directly, or through a
+// non-nil *TimeRange in a filter — returns ErrInvalidRange for an invalid one
+// BEFORE any database round trip. A zero end is never read as "unbounded" and
+// an empty or inverted window is never read as "nothing": both are caller bugs
+// and are reported as one. A nil *TimeRange in a filter means the filter does
+// not narrow by time, and is only offered on tables that are not hypertables.
+// There is deliberately no maximum span.
+func (r TimeRange) Valid() bool {
+	return !r.From.IsZero() && !r.To.IsZero() && r.From.Before(r.To)
 }
 
 // ---------------------------------------------------------------------------
@@ -101,14 +198,12 @@ type UserFilter struct {
 
 // UserRepository reads and writes users, their password history and their
 // login bookkeeping.
+//
+// There is no lookup by email here. A login has no Scope to offer — the Scope
+// is what a login produces — so resolving one is
+// AdminAuthRepository.UserByEmail.
 type UserRepository interface {
 	Get(ctx context.Context, s Scope, id uuid.UUID) (model.User, error)
-
-	// GetByEmail resolves a login. The email column is citext, so the match
-	// is case-insensitive, and the lookup is still scoped: authentication
-	// resolves the company first and then the user within it.
-	GetByEmail(ctx context.Context, s Scope, email string) (model.User, error)
-
 	List(ctx context.Context, s Scope, f UserFilter) ([]model.User, error)
 	Create(ctx context.Context, s Scope, u model.User) (model.User, error)
 	Update(ctx context.Context, s Scope, u model.User) (model.User, error)
@@ -117,10 +212,17 @@ type UserRepository interface {
 	// SetPassword writes the new hash and appends the OLD one to the
 	// history, in one transaction. Splitting the two would let a crash
 	// between them lose the record that blocks reuse.
+	//
+	// Isolation: user_password_history has no company_id — join through
+	// users (company_id = s.CompanyID). Another tenant's userID returns
+	// ErrNotFound and writes neither the hash nor the history row.
 	SetPassword(ctx context.Context, s Scope, userID uuid.UUID, hash string, at time.Time) error
 
 	// PasswordHistory returns the most recent entries first, newest bounded
 	// by limit, so a caller can refuse a reused password.
+	//
+	// Isolation: join user_password_history through users (company_id =
+	// s.CompanyID). Another tenant's userID returns ErrNotFound.
 	PasswordHistory(ctx context.Context, s Scope, userID uuid.UUID, limit int32) ([]model.PasswordHistoryEntry, error)
 
 	// RecordLogin stamps last_login_at. It is separate from Update so that a
@@ -138,25 +240,44 @@ type SessionFilter struct {
 }
 
 // SessionRepository manages refresh-token sessions.
+//
+// Isolation, for EVERY method: sessions has no company_id — join through users
+// (company_id = s.CompanyID). A session id or user id of another tenant
+// returns ErrNotFound, and a write touches nothing.
+//
+// There is no lookup by refresh-token hash here. A refresh request carries only
+// the token, so it has no Scope to offer; resolving one is
+// AdminAuthRepository.SessionByRefreshTokenHash.
 type SessionRepository interface {
+	// Get — Isolation: join sessions through users.
 	Get(ctx context.Context, s Scope, id uuid.UUID) (model.Session, error)
 
-	// GetByRefreshTokenHash looks a session up by the HASH of the presented
-	// token. The plaintext token never reaches this layer.
-	GetByRefreshTokenHash(ctx context.Context, s Scope, hash string) (model.Session, error)
-
+	// List — Isolation: join sessions through users; only sessions of users
+	// of s.CompanyID are listed, and an f.UserID of another tenant yields an
+	// empty list.
 	List(ctx context.Context, s Scope, f SessionFilter) ([]model.Session, error)
+
+	// Create — Isolation: sess.UserID must be a user of s.CompanyID, or the
+	// insert is refused with ErrNotFound.
 	Create(ctx context.Context, s Scope, sess model.Session) (model.Session, error)
 
 	// Revoke stamps revoked_at. Sessions are never deleted on logout, so that
 	// a replayed token is provably a replay rather than an unknown token.
+	//
+	// Isolation: join sessions through users.
 	Revoke(ctx context.Context, s Scope, id uuid.UUID, at time.Time) error
 
 	// RevokeAllForUser is what a password change and a role change both call.
+	//
+	// Isolation: join sessions through users; another tenant's userID
+	// returns ErrNotFound.
 	RevokeAllForUser(ctx context.Context, s Scope, userID uuid.UUID, at time.Time) (int64, error)
 
 	// DeleteExpired is housekeeping: it removes sessions that expired before
 	// before, and returns how many rows went.
+	//
+	// Isolation: join sessions through users; it deletes only the expired
+	// sessions of s.CompanyID's users, so a sweep runs once per tenant.
 	DeleteExpired(ctx context.Context, s Scope, before time.Time) (int64, error)
 }
 
@@ -170,11 +291,19 @@ type AuditFilter struct {
 	Page       Page
 }
 
-// AuditRepository appends to and reads the audit trail.
+// AuditRepository appends to and reads a tenant's audit trail.
 //
 // There is no Update and no Delete, by design: an audit row that can be edited
 // is not an audit row.
+//
+// audit_log.company_id is nullable, for platform actions. These methods store
+// and see only company_id = s.CompanyID, never a NULL row; a platform action is
+// appended through AdminAuditRepository.AppendPlatform.
 type AuditRepository interface {
+	// Append stores s.CompanyID as company_id. An entry whose CompanyID is nil
+	// (a platform row) or names another company is refused with ErrNotFound.
+	// UserID and EntityID are recorded as given: audit_log has no foreign keys
+	// by design, so that a deleted subject does not erase its history.
 	Append(ctx context.Context, s Scope, e model.AuditEntry) (model.AuditEntry, error)
 	List(ctx context.Context, s Scope, f AuditFilter) ([]model.AuditEntry, error)
 }
@@ -212,11 +341,19 @@ type BuildingRepository interface {
 	SoftDelete(ctx context.Context, s Scope, id uuid.UUID, at time.Time) error
 
 	// Contacts returns a building's contacts in sort_order.
+	//
+	// Isolation: building_contacts has no company_id — join through
+	// buildings (company_id and the Scope's building branch). A building
+	// not visible to the Scope returns ErrNotFound.
 	Contacts(ctx context.Context, s Scope, buildingID uuid.UUID) ([]model.BuildingContact, error)
 
 	// ReplaceContacts swaps the whole contact list in one transaction. The
 	// UI edits them as a list, so a per-row API would make a partial write
 	// the normal case.
+	//
+	// Isolation: join building_contacts through buildings. A building not
+	// visible to the Scope returns ErrNotFound and nothing is replaced; the
+	// contacts' own BuildingID fields are ignored in favour of buildingID.
 	ReplaceContacts(ctx context.Context, s Scope, buildingID uuid.UUID, contacts []model.BuildingContact) ([]model.BuildingContact, error)
 }
 
@@ -275,7 +412,8 @@ type PlantFilter struct {
 //
 // power_plants has NO building_id, so a Scope narrows plants to the company
 // and no further. A repository must not invent a join through analyzers to
-// pretend otherwise.
+// pretend otherwise. "Visible to the Scope" for a plant therefore means
+// company_id = s.CompanyID and deleted_at is null.
 type PlantRepository interface {
 	Get(ctx context.Context, s Scope, id uuid.UUID) (model.PowerPlant, error)
 	List(ctx context.Context, s Scope, f PlantFilter) ([]model.PowerPlant, error)
@@ -283,17 +421,38 @@ type PlantRepository interface {
 	Update(ctx context.Context, s Scope, p model.PowerPlant) (model.PowerPlant, error)
 	SoftDelete(ctx context.Context, s Scope, id uuid.UUID, at time.Time) error
 
+	// MonthlyTargets — Isolation: power_plant_monthly_targets has no
+	// company_id — join through power_plants. Another tenant's plantID
+	// returns ErrNotFound.
 	MonthlyTargets(ctx context.Context, s Scope, plantID uuid.UUID) ([]model.PlantMonthlyTarget, error)
+
+	// ReplaceMonthlyTargets — Isolation: join power_plant_monthly_targets
+	// through power_plants. Another tenant's plantID returns ErrNotFound and
+	// nothing is replaced.
 	ReplaceMonthlyTargets(ctx context.Context, s Scope, plantID uuid.UUID, targets []model.PlantMonthlyTarget) ([]model.PlantMonthlyTarget, error)
 
+	// Devices — Isolation: power_plant_devices has no company_id — join
+	// through power_plants. Another tenant's plantID returns ErrNotFound.
 	Devices(ctx context.Context, s Scope, plantID uuid.UUID) ([]model.PlantDevice, error)
 
 	// UpsertDevice is keyed on (plant_id, device_sn): the provider's device
 	// list is re-fetched on a schedule and must converge rather than
 	// accumulate duplicates.
+	//
+	// Isolation: join power_plant_devices through power_plants on d.PlantID.
+	// A d.PlantID of another tenant is refused with ErrNotFound. The update
+	// branch never changes plant_id, so a device can be neither moved to nor
+	// taken from another plant.
 	UpsertDevice(ctx context.Context, s Scope, d model.PlantDevice) (model.PlantDevice, error)
 
+	// AlarmRecipients — Isolation: power_plant_alarm_recipients has no
+	// company_id — join through power_plants. Another tenant's plantID
+	// returns ErrNotFound.
 	AlarmRecipients(ctx context.Context, s Scope, plantID uuid.UUID) ([]model.PlantAlarmRecipient, error)
+
+	// ReplaceAlarmRecipients — Isolation: join power_plant_alarm_recipients
+	// through power_plants. Another tenant's plantID returns ErrNotFound and
+	// nothing is replaced.
 	ReplaceAlarmRecipients(ctx context.Context, s Scope, plantID uuid.UUID, emails []string) ([]model.PlantAlarmRecipient, error)
 }
 
@@ -307,6 +466,10 @@ type PlantRepository interface {
 // NEVER a continuous aggregate. 04-data-model.md §4.3 requires that
 // distinction to be explicit in the code, which is why the aggregate reads
 // live on AnalyticsRepository under names that cannot be confused with these.
+//
+// Isolation, for EVERY method: meter_readings has no company_id — join through
+// analyzers (company_id and the Scope's building branch; an analyzer with no
+// building only under AllBuildings, as AnalyzerFilter.Unassigned documents).
 type ReadingRepository interface {
 	// BulkInsert writes rows idempotently: COPY into a staging table, then
 	// one `insert … on conflict (analyzer_id, ts, kind) do update`
@@ -315,12 +478,20 @@ type ReadingRepository interface {
 	//
 	// The counts are real, not estimated: the job model records processed
 	// and skipped separately and guessing them is not acceptable.
+	//
+	// Isolation: the staging-to-table insert joins through analyzers. If ANY
+	// row's analyzer is not visible to the Scope the whole batch is refused
+	// with ErrNotFound and nothing is written.
 	BulkInsert(ctx context.Context, s Scope, rows []model.MeterReading) (inserted, updated int, err error)
 
 	// Range returns readings for one analyzer over the half-open window.
 	// There is deliberately no unbounded variant: 04-data-model.md §14 says
 	// a query with no time bound is a bug, and this signature makes one
-	// impossible to express.
+	// impossible to express. An invalid r returns ErrInvalidRange.
+	//
+	// Isolation: join through analyzers. An analyzer not visible to the
+	// Scope returns ErrNotFound; a visible one with no readings in r returns
+	// an empty slice.
 	Range(ctx context.Context, s Scope, analyzerID uuid.UUID, r TimeRange, kind model.ReadingKind) ([]model.MeterReading, error)
 
 	// BoundaryReadings returns the last reading at or before each of start
@@ -331,27 +502,60 @@ type ReadingRepository interface {
 	// either reading is missing, or if reading_start and reading_end are the
 	// same reading, the period yields no row — it is not emitted as zero." A
 	// zero here becomes a wrong invoice, which is why these are pointers.
+	//
+	// This is the one hypertable read bounded on one side only, and
+	// deliberately: §3.1 wants the last reading however long ago it was
+	// taken. The upper bound (ts <= start, ts <= end) still excludes every
+	// later chunk, and the query is a descending index probe with limit 1.
+	//
+	// Isolation: join through analyzers. An analyzer not visible to the
+	// Scope returns ErrNotFound — never two nils, which would read as "no
+	// data" for a meter that is simply someone else's.
 	BoundaryReadings(ctx context.Context, s Scope, analyzerID uuid.UUID, start, end time.Time) (startReading, endReading *model.MeterReading, err error)
 
-	// Latest returns the most recent reading of a kind, or nil if there is
-	// none. Nil rather than ErrNotFound: an analyzer with no readings yet is
-	// an ordinary state, not a lookup failure.
-	Latest(ctx context.Context, s Scope, analyzerID uuid.UUID, kind model.ReadingKind) (*model.MeterReading, error)
+	// Latest returns the most recent reading of a kind WITHIN r, or nil if
+	// there is none in r. Nil rather than ErrNotFound: an analyzer with no
+	// recent readings is an ordinary state, not a lookup failure.
+	//
+	// It takes a TimeRange because §14 has no exception for "the newest
+	// row": an unbounded `order by ts desc limit 1` excludes no chunk, and
+	// for an analyzer that has never reported it can probe every chunk of
+	// the hypertable before returning nil. A caller that only wants to know WHEN
+	// an analyzer last reported reads Analyzer.LastReadingAt, which costs no
+	// hypertable access at all. An invalid r returns ErrInvalidRange.
+	//
+	// Isolation: join through analyzers. An analyzer not visible to the
+	// Scope returns ErrNotFound, not nil.
+	Latest(ctx context.Context, s Scope, analyzerID uuid.UUID, r TimeRange, kind model.ReadingKind) (*model.MeterReading, error)
 }
 
 // CursorRepository tracks per-analyzer ingestion high-water marks.
+//
+// Isolation, for EVERY method: ingestion_cursors has no company_id — join
+// through analyzers.
 type CursorRepository interface {
+	// Get — Isolation: join through analyzers. An analyzer not visible to the
+	// Scope, or one with no cursor yet, returns ErrNotFound.
 	Get(ctx context.Context, s Scope, analyzerID uuid.UUID, kind model.ReadingKind) (model.IngestionCursor, error)
+
+	// List — Isolation: join through analyzers; ids not visible to the Scope
+	// contribute no rows.
 	List(ctx context.Context, s Scope, analyzerIDs []uuid.UUID) ([]model.IngestionCursor, error)
 
 	// RecordSuccess advances last_ts and last_success_at and RESETS
 	// consecutive_failures. Clearing the counter is part of recording a
 	// success, not a separate call a caller can forget.
+	//
+	// Isolation: join through analyzers. An analyzer not visible to the
+	// Scope returns ErrNotFound and no cursor is created or changed.
 	RecordSuccess(ctx context.Context, s Scope, analyzerID uuid.UUID, kind model.ReadingKind, lastTs, at time.Time) error
 
 	// RecordFailure increments consecutive_failures and stores the message.
 	// The message reaches an operator, so the caller passes already-scrubbed
 	// text: nothing carrying a DSN or credential may be stored here.
+	//
+	// Isolation: join through analyzers. An analyzer not visible to the
+	// Scope returns ErrNotFound and no cursor is created or changed.
 	RecordFailure(ctx context.Context, s Scope, analyzerID uuid.UUID, kind model.ReadingKind, message string, at time.Time) error
 }
 
@@ -366,28 +570,60 @@ type AnomalyFilter struct {
 }
 
 // AnomalyRepository records and resolves suspect consumption periods.
+//
+// Isolation, for EVERY method: consumption_anomalies has no company_id — join
+// through analyzers.
 type AnomalyRepository interface {
+	// Get — Isolation: join consumption_anomalies through analyzers. An
+	// anomaly whose analyzer is not visible to the Scope returns ErrNotFound.
 	Get(ctx context.Context, s Scope, id uuid.UUID) (model.ConsumptionAnomaly, error)
+
+	// List — Isolation: join through analyzers; f.AnalyzerIDs not visible to
+	// the Scope contribute no rows.
 	List(ctx context.Context, s Scope, f AnomalyFilter) ([]model.ConsumptionAnomaly, error)
+
+	// Create — Isolation: a.AnalyzerID not visible to the Scope is refused
+	// with ErrNotFound.
 	Create(ctx context.Context, s Scope, a model.ConsumptionAnomaly) (model.ConsumptionAnomaly, error)
 
 	// Resolve stamps resolved_at, resolved_by and the resolution, and stores
 	// any manual override values. An anomaly is never deleted: the record
 	// that a period was once suspect is what explains a restated bill.
+	//
+	// Isolation: join consumption_anomalies through analyzers; an anomaly id
+	// not visible to the Scope returns ErrNotFound. resolvedBy must be a user
+	// of s.CompanyID, or the call is refused with ErrNotFound.
 	Resolve(ctx context.Context, s Scope, id uuid.UUID, resolvedBy uuid.UUID, resolution string, overrides []byte, at time.Time) (model.ConsumptionAnomaly, error)
 }
 
 // ProductionRepository reads and writes plant_production.
+//
+// Isolation, for EVERY method: plant_production has no company_id — join
+// through power_plants.
 type ProductionRepository interface {
 	// BulkInsert is idempotent on (plant_id, ts, device_id), like
 	// ReadingRepository.BulkInsert and for the same reason.
+	//
+	// Isolation: join through power_plants. If ANY row's plant is not
+	// visible to the Scope, or ANY row's device_id is not a device of that
+	// same row's plant, the whole batch is refused with ErrNotFound and
+	// nothing is written.
 	BulkInsert(ctx context.Context, s Scope, rows []model.PlantProduction) (inserted, updated int, err error)
 
-	// Range reads the hypertable directly, over a bounded window.
+	// Range reads the hypertable directly, over a bounded window. An invalid
+	// r returns ErrInvalidRange.
+	//
+	// Isolation: join through power_plants. A plant not visible to the Scope
+	// returns ErrNotFound.
 	Range(ctx context.Context, s Scope, plantID uuid.UUID, r TimeRange) ([]model.PlantProduction, error)
 
-	// Latest is the most recent sample for a plant, or nil if there is none.
-	Latest(ctx context.Context, s Scope, plantID uuid.UUID) (*model.PlantProduction, error)
+	// Latest is the most recent sample for a plant WITHIN r, or nil if there
+	// is none in r. It is bounded for the reason ReadingRepository.Latest is.
+	// An invalid r returns ErrInvalidRange.
+	//
+	// Isolation: join through power_plants. A plant not visible to the Scope
+	// returns ErrNotFound, not nil.
+	Latest(ctx context.Context, s Scope, plantID uuid.UUID, r TimeRange) (*model.PlantProduction, error)
 }
 
 // AnalyticsRepository reads the six continuous aggregates.
@@ -396,6 +632,11 @@ type ProductionRepository interface {
 // to the aggregate's refresh lag. It is correct for dashboards and reports and
 // WRONG for billing, which must go through ReadingRepository.BoundaryReadings.
 // The names are chosen so that no call site can mistake one for the other.
+//
+// Isolation, for EVERY method: the aggregates have no company_id — the
+// consumption_* aggregates join through analyzers and the production_*
+// aggregates through power_plants. Ids not visible to the Scope contribute no
+// rows. Every method returns ErrInvalidRange for an invalid r.
 type AnalyticsRepository interface {
 	ConsumptionHourly(ctx context.Context, s Scope, analyzerIDs []uuid.UUID, r TimeRange) ([]model.ConsumptionBucket, error)
 	ConsumptionDaily(ctx context.Context, s Scope, analyzerIDs []uuid.UUID, r TimeRange) ([]model.ConsumptionBucket, error)
@@ -406,35 +647,53 @@ type AnalyticsRepository interface {
 	ProductionMonthly(ctx context.Context, s Scope, plantIDs []uuid.UUID, r TimeRange) ([]model.PlantProductionBucket, error)
 }
 
-// PriceRepository reads and writes the market price series and the YEKDEM
-// table.
+// PriceRepository is a tenant's READ access to the market price series and the
+// YEKDEM table.
 //
 // Both tables are PLATFORM-WIDE: neither has a company_id, so the Scope
 // narrows nothing. It is still required and still validated — see this file's
-// header — and a repository here must not pretend to filter by it.
+// header — and a repository here must not pretend to filter by it. The WRITES
+// are AdminMarketDataRepository's: a scoped price write would let any tenant
+// change every tenant's invoices.
 type PriceRepository interface {
-	UpsertHourly(ctx context.Context, s Scope, prices []model.MarketPrice) (int64, error)
+	// HourlyRange returns ErrInvalidRange for an invalid r.
 	HourlyRange(ctx context.Context, s Scope, r TimeRange) ([]model.MarketPrice, error)
-
-	UpsertYekdem(ctx context.Context, s Scope, values []model.YekdemMonthly) (int64, error)
 	Yekdem(ctx context.Context, s Scope, year, month int16) (model.YekdemMonthly, error)
 }
 
 // ForecastRepository stores and reads forecast runs.
+//
+// Isolation, for EVERY method: forecasts and forecast_gaps have no company_id —
+// join through analyzers.
 type ForecastRepository interface {
 	// BulkInsert is idempotent on (analyzer_id, ts, generated_at). Because
 	// generated_at is part of the key, a new run ACCUMULATES rather than
 	// overwriting the previous one, which is what makes a forecast scorable
 	// against what actually happened.
+	//
+	// Isolation: join through analyzers. If ANY row's analyzer is not
+	// visible to the Scope the whole batch is refused with ErrNotFound and
+	// nothing is written.
 	BulkInsert(ctx context.Context, s Scope, rows []model.Forecast) (inserted, updated int, err error)
 
+	// Range — Isolation: join through analyzers. An analyzer not visible to
+	// the Scope returns ErrNotFound. An invalid r returns ErrInvalidRange.
 	Range(ctx context.Context, s Scope, analyzerID uuid.UUID, r TimeRange) ([]model.Forecast, error)
 
 	// LatestRun returns the forecasts from the most recent run covering the
-	// window.
+	// window. An invalid r returns ErrInvalidRange.
+	//
+	// Isolation: join through analyzers. An analyzer not visible to the
+	// Scope returns ErrNotFound.
 	LatestRun(ctx context.Context, s Scope, analyzerID uuid.UUID, r TimeRange) ([]model.Forecast, error)
 
+	// RecordGaps — Isolation: join forecast_gaps through analyzers on each
+	// gap's AnalyzerID. If ANY gap's analyzer is not visible to the Scope the
+	// whole call is refused with ErrNotFound and nothing is written.
 	RecordGaps(ctx context.Context, s Scope, gaps []model.ForecastGap) error
+
+	// Gaps — Isolation: join forecast_gaps through analyzers. An analyzer not
+	// visible to the Scope returns ErrNotFound.
 	Gaps(ctx context.Context, s Scope, analyzerID uuid.UUID, generatedAt time.Time) ([]model.ForecastGap, error)
 }
 
@@ -473,10 +732,21 @@ type TariffRepository interface {
 	// ErrNotFound.
 	Effective(ctx context.Context, s Scope, buildingID uuid.UUID, on time.Time) (model.Tariff, error)
 
+	// Taxes — Isolation: tariff_taxes has no company_id — join through
+	// tariffs. A tariff not visible to the Scope returns ErrNotFound.
 	Taxes(ctx context.Context, s Scope, tariffID uuid.UUID) ([]model.TariffTax, error)
+
+	// ReplaceTaxes — Isolation: join tariff_taxes through tariffs. A tariff
+	// not visible to the Scope returns ErrNotFound and nothing is replaced.
 	ReplaceTaxes(ctx context.Context, s Scope, tariffID uuid.UUID, taxes []model.TariffTax) ([]model.TariffTax, error)
 
+	// ManualYekdem — Isolation: tariff_manual_yekdem has no company_id — join
+	// through tariffs. A tariff not visible to the Scope returns ErrNotFound.
 	ManualYekdem(ctx context.Context, s Scope, tariffID uuid.UUID) ([]model.TariffManualYekdem, error)
+
+	// ReplaceManualYekdem — Isolation: join tariff_manual_yekdem through
+	// tariffs. A tariff not visible to the Scope returns ErrNotFound and
+	// nothing is replaced.
 	ReplaceManualYekdem(ctx context.Context, s Scope, tariffID uuid.UUID, values []model.TariffManualYekdem) ([]model.TariffManualYekdem, error)
 }
 
@@ -526,15 +796,15 @@ type NationalTariffFilter struct {
 	Page         Page
 }
 
-// NationalTariffRepository reads and writes the published national tariff
-// schedule that backs the public bill calculator.
+// NationalTariffRepository is a tenant's READ access to the published national
+// tariff schedule that backs the public bill calculator.
 //
 // The table is PLATFORM-WIDE — no company_id — so the Scope narrows nothing
-// here either.
+// here either. The schedule is written only through
+// AdminCatalogueRepository.UpsertNationalTariffSchedule.
 type NationalTariffRepository interface {
 	List(ctx context.Context, s Scope, f NationalTariffFilter) ([]model.NationalTariffScheduleEntry, error)
 	Effective(ctx context.Context, s Scope, group model.DistributionUserGroup, level model.VoltageLevel, term model.TariffTerm, on time.Time) (model.NationalTariffScheduleEntry, error)
-	Upsert(ctx context.Context, s Scope, entries []model.NationalTariffScheduleEntry) (int64, error)
 }
 
 // IcmalFilter narrows an icmal import listing.
@@ -554,7 +824,15 @@ type IcmalRepository interface {
 	// applied|rejected and stores the derived coefficients and warnings.
 	UpdateImportResult(ctx context.Context, s Scope, id uuid.UUID, status string, result []byte) (model.IcmalImport, error)
 
+	// InsertRows — Isolation: icmal_rows has no company_id — join through
+	// icmal_imports. An import not visible to the Scope returns ErrNotFound.
+	// A row's BuildingID, when set, must be a building visible to the Scope;
+	// if ANY is not, the whole call is refused with ErrNotFound and nothing
+	// is written.
 	InsertRows(ctx context.Context, s Scope, importID uuid.UUID, rows []model.IcmalRow) (int64, error)
+
+	// ListRows — Isolation: join icmal_rows through icmal_imports. An import
+	// not visible to the Scope returns ErrNotFound.
 	ListRows(ctx context.Context, s Scope, importID uuid.UUID, p Page) ([]model.IcmalRow, error)
 }
 
@@ -590,12 +868,22 @@ type BillRepository interface {
 	// Create inserts a bill. It returns ErrConflict if a non-superseded bill
 	// already exists for the same (scope, subject, period): recomputation
 	// goes through Supersede, never through a delete-and-insert.
+	//
+	// Isolation: bill_lines and bill_members have no company_id and are
+	// written under the new bill, which carries s.CompanyID. b's building
+	// and analyzer, and every id in members, must be visible to the Scope;
+	// if ANY is not, the whole call is refused with ErrNotFound and nothing
+	// is written.
 	Create(ctx context.Context, s Scope, b model.Bill, lines []model.BillLine, members []uuid.UUID) (model.Bill, error)
 
 	// Supersede is the recomputation path from 04-data-model.md §14: in ONE
 	// transaction it marks the existing live bill superseded and inserts the
 	// replacement. The old bill and its lines stay readable, which is what
 	// makes a disputed invoice explainable months later.
+	//
+	// Isolation: replacing must be a bill visible to the Scope, or the call
+	// returns ErrNotFound and changes nothing; the replacement's lines and
+	// members follow Create's rule.
 	Supersede(ctx context.Context, s Scope, replacing uuid.UUID, b model.Bill, lines []model.BillLine, members []uuid.UUID, at time.Time) (model.Bill, error)
 
 	// UpdateStatus moves a bill between draft, issued and flagged. It cannot
@@ -607,10 +895,21 @@ type BillRepository interface {
 	// SetPDFPath records where the rendered invoice was stored.
 	SetPDFPath(ctx context.Context, s Scope, id uuid.UUID, path string) error
 
+	// Lines — Isolation: bill_lines has no company_id — join through bills.
+	// A bill not visible to the Scope returns ErrNotFound.
 	Lines(ctx context.Context, s Scope, billID uuid.UUID) ([]model.BillLine, error)
+
+	// Members — Isolation: bill_members has no company_id — join through
+	// bills. A bill not visible to the Scope returns ErrNotFound.
 	Members(ctx context.Context, s Scope, billID uuid.UUID) ([]model.BillMember, error)
 
+	// HourlyDetail — Isolation: bill_hourly_detail has no company_id — join
+	// through bills. A bill not visible to the Scope returns ErrNotFound.
 	HourlyDetail(ctx context.Context, s Scope, billID uuid.UUID) ([]model.BillHourlyDetail, error)
+
+	// ReplaceHourlyDetail — Isolation: join bill_hourly_detail through bills.
+	// A bill not visible to the Scope returns ErrNotFound and nothing is
+	// replaced.
 	ReplaceHourlyDetail(ctx context.Context, s Scope, billID uuid.UUID, rows []model.BillHourlyDetail) (int64, error)
 }
 
@@ -678,17 +977,40 @@ type AlarmRepository interface {
 	Update(ctx context.Context, s Scope, a model.Alarm) (model.Alarm, error)
 	SoftDelete(ctx context.Context, s Scope, id uuid.UUID, at time.Time) error
 
+	// Analyzers — Isolation: alarm_analyzers has no company_id — join through
+	// alarms. An alarm not visible to the Scope returns ErrNotFound.
 	Analyzers(ctx context.Context, s Scope, alarmID uuid.UUID) ([]model.AlarmAnalyzer, error)
+
+	// ReplaceAnalyzers — Isolation: join alarm_analyzers through alarms. An
+	// alarm not visible to the Scope returns ErrNotFound; if ANY of
+	// analyzerIDs is not visible to the Scope the whole call is refused with
+	// ErrNotFound. Either way nothing is replaced.
 	ReplaceAnalyzers(ctx context.Context, s Scope, alarmID uuid.UUID, analyzerIDs []uuid.UUID) error
 
+	// Channels — Isolation: alarm_channels has no company_id — join through
+	// alarms. An alarm not visible to the Scope returns ErrNotFound.
 	Channels(ctx context.Context, s Scope, alarmID uuid.UUID) ([]model.AlarmChannel, error)
+
+	// ReplaceChannels — Isolation: join alarm_channels through alarms. An
+	// alarm not visible to the Scope returns ErrNotFound and nothing is
+	// replaced.
 	ReplaceChannels(ctx context.Context, s Scope, alarmID uuid.UUID, channels []model.AlarmChannel) error
 
+	// CreateEvent — Isolation: alarm_events has no company_id — join through
+	// alarms on e.AlarmID. An alarm not visible to the Scope, or an
+	// e.AnalyzerID not visible to it, is refused with ErrNotFound.
 	CreateEvent(ctx context.Context, s Scope, e model.AlarmEvent) (model.AlarmEvent, error)
+
+	// ListEvents — Isolation: join alarm_events through alarms; events of
+	// alarms not visible to the Scope are never listed, whatever f names.
 	ListEvents(ctx context.Context, s Scope, f AlarmEventFilter) ([]model.AlarmEvent, error)
 
 	// MarkNotified records delivery. A non-nil notificationError with a nil
 	// notified_at is a real state: the alarm fired and nobody was told.
+	//
+	// Isolation: join alarm_events through alarms by eventID — never
+	// `where id = $1` on alarm_events alone. An event whose alarm is not
+	// visible to the Scope returns ErrNotFound and nothing is written.
 	MarkNotified(ctx context.Context, s Scope, eventID uuid.UUID, at time.Time, notificationError *string) error
 
 	// MarkBillFired claims a (alarm, bill) pair. It returns false if the pair
@@ -696,10 +1018,18 @@ type AlarmRepository interface {
 	// same alarm twice after a recomputation. Claiming and checking is ONE
 	// call precisely so that two workers cannot both pass a check and both
 	// fire.
+	//
+	// Isolation: alarm_fired_bills has no company_id — join through BOTH
+	// alarms and bills. If either is not visible to the Scope the call
+	// returns ErrNotFound and claims nothing.
 	MarkBillFired(ctx context.Context, s Scope, alarmID, billID uuid.UUID) (claimed bool, err error)
 
 	// MarkIsolarForwarded is the same claim-once idiom for iSolar alarm
 	// forwarding, keyed on (plant_id, alarm_ref).
+	//
+	// Isolation: isolar_forwarded_alarms has no company_id — join through
+	// power_plants. A plant not visible to the Scope returns ErrNotFound and
+	// claims nothing.
 	MarkIsolarForwarded(ctx context.Context, s Scope, plantID uuid.UUID, alarmRef string, at time.Time) (claimed bool, err error)
 }
 
@@ -734,16 +1064,44 @@ type CarbonActivityFilter struct {
 
 // CarbonRepository reads and writes the emission factor catalogue and the
 // recorded activities computed from it.
+//
+// A factor is VISIBLE to a Scope when it is a platform factor (company_id NULL)
+// or belongs to s.CompanyID; it is WRITABLE only when it belongs to
+// s.CompanyID. Platform factors and their conversions are written through
+// AdminCatalogueRepository.
 type CarbonRepository interface {
+	// Factor returns a platform factor or one of s.CompanyID's own. Another
+	// company's factor returns ErrNotFound.
 	Factor(ctx context.Context, s Scope, id uuid.UUID) (model.EmissionFactor, error)
+
+	// ListFactors returns s.CompanyID's own factors, and the platform
+	// catalogue too when f.IncludePlatform is set. Another company's factors
+	// are never listed.
 	ListFactors(ctx context.Context, s Scope, f EmissionFactorFilter) ([]model.EmissionFactor, error)
 
-	// UpsertFactor is keyed on (coalesce(company_id, zero uuid), key), the
-	// table's unique index: a company may shadow a platform key with its own
-	// factor but cannot have two of its own.
+	// UpsertFactor writes a COMPANY-OWNED factor, keyed on
+	// (coalesce(company_id, zero uuid), key), the table's unique index: a
+	// company may shadow a platform key with its own factor but cannot have
+	// two of its own.
+	//
+	// The stored company_id is s.CompanyID. A factor whose CompanyID is nil
+	// (a platform factor) or names another company is refused with
+	// ErrNotFound, and so is an f.ID naming an existing factor that is not
+	// s.CompanyID's own. Upserting a key that exists in the platform
+	// catalogue creates the company's shadowing row and never modifies the
+	// platform row.
 	UpsertFactor(ctx context.Context, s Scope, f model.EmissionFactor) (model.EmissionFactor, error)
 
+	// Conversions — Isolation: emission_factor_conversions has no company_id
+	// — join through emission_factors. Readable for a platform factor or one
+	// of s.CompanyID's own; another company's factorID returns ErrNotFound.
 	Conversions(ctx context.Context, s Scope, factorID uuid.UUID) ([]model.EmissionFactorConversion, error)
+
+	// ReplaceConversions — Isolation: join emission_factor_conversions
+	// through emission_factors, which must belong to s.CompanyID. A platform
+	// factor's id or another company's is refused with ErrNotFound and
+	// nothing is replaced; platform conversions are
+	// AdminCatalogueRepository.ReplacePlatformConversions.
 	ReplaceConversions(ctx context.Context, s Scope, factorID uuid.UUID, conversions []model.EmissionFactorConversion) error
 
 	SelectedActivities(ctx context.Context, s Scope, buildingID uuid.UUID) ([]model.CarbonSelectedActivity, error)
@@ -776,12 +1134,36 @@ type ISO50001Repository interface {
 	// is an upsert rather than a check-then-insert that could race.
 	EnsureProject(ctx context.Context, s Scope, buildingID uuid.UUID) (model.ISO50001Project, error)
 
+	// ClauseDates — Isolation: iso50001_clause_dates has no company_id — join
+	// through iso50001_projects. A project not visible to the Scope returns
+	// ErrNotFound.
 	ClauseDates(ctx context.Context, s Scope, projectID uuid.UUID) ([]model.ISO50001ClauseDate, error)
+
+	// ReplaceClauseDates — Isolation: join iso50001_clause_dates through
+	// iso50001_projects. A project not visible to the Scope returns
+	// ErrNotFound and nothing is replaced.
 	ReplaceClauseDates(ctx context.Context, s Scope, projectID uuid.UUID, dates []model.ISO50001ClauseDate) error
 
+	// Notes — Isolation: iso50001_notes has no company_id — join through
+	// iso50001_projects. A project not visible to the Scope returns
+	// ErrNotFound.
 	Notes(ctx context.Context, s Scope, projectID uuid.UUID, clauseID *string) ([]model.ISO50001Note, error)
+
+	// CreateNote — Isolation: join through iso50001_projects on n.ProjectID.
+	// A project not visible to the Scope, or an n.CreatedBy that is not a
+	// user of s.CompanyID, is refused with ErrNotFound.
 	CreateNote(ctx context.Context, s Scope, n model.ISO50001Note) (model.ISO50001Note, error)
+
+	// UpdateNote — Isolation: join iso50001_notes through iso50001_projects
+	// by n.ID — never `where id = $1` on the note alone. A note not visible
+	// to the Scope returns ErrNotFound and nothing is written. project_id is
+	// not updated: a note stays under the project it was created in, so an
+	// update cannot move it into another tenant's project.
 	UpdateNote(ctx context.Context, s Scope, n model.ISO50001Note) (model.ISO50001Note, error)
+
+	// DeleteNote — Isolation: join iso50001_notes through iso50001_projects
+	// by id. A note not visible to the Scope returns ErrNotFound and nothing
+	// is deleted.
 	DeleteNote(ctx context.Context, s Scope, id uuid.UUID) error
 }
 
@@ -820,8 +1202,9 @@ type FileRepository interface {
 // TestIntegrationCredentialsAreNeverReturnedInPlaintext pins that the ordinary
 // read never carries it.
 type IntegrationRepository interface {
-	// Definitions is the platform catalogue: no company_id, so the Scope
-	// narrows nothing.
+	// Definitions is a tenant's read of the platform catalogue: no
+	// company_id, so the Scope narrows nothing. The catalogue is written only
+	// through AdminCatalogueRepository.UpsertIntegrationDefinitions.
 	Definitions(ctx context.Context, s Scope) ([]model.IntegrationDefinition, error)
 	Definition(ctx context.Context, s Scope, provider model.IntegrationProvider, subtype string) (model.IntegrationDefinition, error)
 
@@ -883,6 +1266,8 @@ type CalendarRepository interface {
 	// schema's check constraint and time.Weekday.
 	ReplaceWeekendDays(ctx context.Context, s Scope, days []int16) error
 
+	// Vacations returns every vacation when r is nil, and ErrInvalidRange
+	// for a non-nil invalid one.
 	Vacations(ctx context.Context, s Scope, r *TimeRange) ([]model.CompanyVacation, error)
 	CreateVacation(ctx context.Context, s Scope, v model.CompanyVacation) (model.CompanyVacation, error)
 	DeleteVacation(ctx context.Context, s Scope, id uuid.UUID) error
@@ -909,26 +1294,197 @@ type MessageFilter struct {
 	Page        Page
 }
 
-// OpsRepository backs the Messages screen and operator diagnostics.
+// OpsRepository backs a tenant's Messages screen and job diagnostics.
 //
 // Nothing written through here may contain a DSN, a password or any other
 // secret: both job_runs.error and operational_messages.detail are shown to
 // operators and exported. The store layer's scrubbing helpers run before a
 // message reaches these methods, not inside them.
+//
+// job_runs.company_id and operational_messages.company_id are nullable, for
+// platform work. Every method here stores and sees only company_id =
+// s.CompanyID, never a NULL row. A platform job's run and messages are written
+// through AdminJournalRepository.
 type OpsRepository interface {
 	// StartRun inserts a job_runs row in the 'running' state and returns it,
-	// so the caller holds the id it will finish.
+	// so the caller holds the id it will finish. The stored company_id is
+	// s.CompanyID; a run whose CompanyID is nil (a platform run) or names
+	// another company is refused with ErrNotFound.
 	StartRun(ctx context.Context, s Scope, run model.JobRun) (model.JobRun, error)
 
 	// FinishRun stamps finished_at, the final status and the three counts.
 	// The counts are explicit rather than derived: the spec's job model
 	// requires processed/skipped/failed and a job that cannot say how many
 	// rows it skipped cannot be trusted to have skipped them deliberately.
+	//
+	// Only a run with company_id = s.CompanyID can be finished here; a
+	// platform run's id or another company's returns ErrNotFound.
 	FinishRun(ctx context.Context, s Scope, id uuid.UUID, status string, processed, skipped, failed int32, errText *string, detail []byte, at time.Time) (model.JobRun, error)
 
 	GetRun(ctx context.Context, s Scope, id uuid.UUID) (model.JobRun, error)
 	ListRuns(ctx context.Context, s Scope, f JobRunFilter) ([]model.JobRun, error)
 
+	// AppendMessage stores s.CompanyID as company_id; a message whose
+	// CompanyID is nil (a platform message) or names another company is
+	// refused with ErrNotFound.
 	AppendMessage(ctx context.Context, s Scope, m model.OperationalMessage) (model.OperationalMessage, error)
 	ListMessages(ctx context.Context, s Scope, f MessageFilter) ([]model.OperationalMessage, error)
+}
+
+// ===========================================================================
+// UNSCOPED ADMIN INTERFACES
+// Implemented ONLY by package internal/store/postgres/admin.
+// ===========================================================================
+//
+// Nothing below takes a Scope. That is not an omission; it is the reason these
+// interfaces are separate from everything above. Each method exists because its
+// caller provably has no tenant to offer — a login that has not yet produced a
+// Scope, or platform work that belongs to no company — and each says so.
+//
+// They are implemented only by internal/store/postgres/admin, the single
+// package internal/arch's TestEveryStoreMethodIsScoped exempts. That guard
+// walks internal/store/postgres/... and fails on any exported context-taking
+// method without a Scope, so an implementation placed anywhere else in that
+// tree is red. It does NOT see code outside internal/store/postgres; keeping
+// implementations out of other packages is review's job, and Task 11's.
+// Product request handling never depends on these interfaces except where a
+// method names its caller.
+//
+// Platform writes store company_id NULL. A model value whose CompanyID is
+// non-nil names a tenant row, which this surface does not write: it is refused
+// with ErrNotFound and nothing is written. Likewise a platform method handed
+// the id of a tenant's row (a tenant's job run, a company-owned factor) returns
+// ErrNotFound: from here, tenant rows do not exist.
+//
+// The interfaces are grouped by the task that implements them, one interface
+// per group, so that parallel work never edits the same declaration. Keep each
+// group in its own file under internal/store/postgres/admin (auth.go, audit.go,
+// marketdata.go, catalogue.go, journal.go).
+//
+// THE LIST IS CLOSED. A method is added here only when its caller cannot hold
+// a Scope, never because holding one is inconvenient; every method added is a
+// permanent unscoped path into the database.
+
+// AdminAuthRepository resolves the two credentials a request presents before it
+// has a tenant. Implemented by Task 9.
+type AdminAuthRepository interface {
+	// UserByEmail resolves a login. It cannot take a Scope because the Scope
+	// is what a successful login PRODUCES: the request carries an email and a
+	// password and nothing else. users.email is unique across the platform
+	// (the unique index on users(email) where deleted_at is null), so the
+	// email alone identifies the user and, through them, the tenant.
+	//
+	// The match is case-insensitive (email is citext). A soft-deleted user,
+	// or a user whose company is soft-deleted, returns ErrNotFound. An
+	// inactive user IS returned: IsActive is the caller's to refuse, and the
+	// caller must refuse it with the same response as a wrong password.
+	UserByEmail(ctx context.Context, email string) (model.User, error)
+
+	// SessionByRefreshTokenHash resolves a refresh. It cannot take a Scope
+	// for the same reason: a refresh request carries only the token.
+	// sessions.refresh_token_hash is unique across the platform. The
+	// plaintext token never reaches this layer; hash is the hash.
+	//
+	// It returns the owning user with the session because sessions has no
+	// company_id: without the user's CompanyID the caller could not build
+	// the Scope every following call needs, and would need a second unscoped
+	// lookup to get it.
+	//
+	// Revoked and expired sessions ARE returned. Rejecting them is the
+	// caller's job, and only a returned revoked session lets it tell a
+	// replayed token from an unknown one (see SessionRepository.Revoke). A
+	// session whose user or whose user's company is soft-deleted returns
+	// ErrNotFound.
+	SessionByRefreshTokenHash(ctx context.Context, hash string) (model.Session, model.User, error)
+}
+
+// AdminAuditRepository appends platform audit rows. Implemented by Task 9.
+type AdminAuditRepository interface {
+	// AppendPlatform appends an audit row with company_id NULL: an action
+	// by the platform or an operator that belongs to no tenant (a catalogue
+	// update, a market-data import). It cannot take a Scope because a
+	// Scope's CompanyID is never Nil — there is no Scope that means "no
+	// company" — and borrowing a tenant's would attribute a platform action
+	// to that tenant. A tenant's action is AuditRepository.Append.
+	//
+	// An entry whose CompanyID is non-nil is refused with ErrNotFound.
+	AppendPlatform(ctx context.Context, e model.AuditEntry) (model.AuditEntry, error)
+}
+
+// AdminMarketDataRepository writes the platform-wide market series that every
+// tenant's bills are priced from. Implemented by Task 10.
+//
+// None of it can take a Scope: the prices are published for the whole market,
+// the ingestion job that fetches them acts for no tenant, and any Scope that
+// authorised the write would let one tenant's credentials reprice every
+// tenant's invoices. Tenants read them through PriceRepository.
+type AdminMarketDataRepository interface {
+	// UpsertHourlyPrices writes market_prices_hourly, keyed on its ts primary
+	// key, and returns the number of rows written. Re-importing a day
+	// converges rather than duplicating.
+	UpsertHourlyPrices(ctx context.Context, prices []model.MarketPrice) (int64, error)
+
+	// UpsertYekdem writes yekdem_monthly, keyed on its (year, month) primary
+	// key, and returns the number of rows written.
+	UpsertYekdem(ctx context.Context, values []model.YekdemMonthly) (int64, error)
+}
+
+// AdminCatalogueRepository writes the platform reference catalogues.
+// Implemented by Task 11; Task 12's seed loader is its main caller.
+//
+// None of it can take a Scope: the catalogues are shared by every tenant and
+// maintained by the platform, so a Scope would identify no owner — and any
+// Scope that authorised the write would let one tenant rewrite what every
+// tenant reads. Tenants read them through NationalTariffRepository,
+// CarbonRepository and IntegrationRepository.
+type AdminCatalogueRepository interface {
+	// UpsertNationalTariffSchedule writes national_tariff_schedule, keyed on
+	// its unique (effective_from, user_group, voltage_level, term), and
+	// returns the number of rows written.
+	UpsertNationalTariffSchedule(ctx context.Context, entries []model.NationalTariffScheduleEntry) (int64, error)
+
+	// UpsertPlatformFactor writes a PLATFORM emission factor (company_id
+	// NULL), keyed on (coalesce(company_id, zero uuid), key). It never
+	// touches a company-owned factor, including one that shadows the same
+	// key: seeding must not overwrite a tenant's override. A factor whose
+	// CompanyID is non-nil is refused with ErrNotFound. The scoped sibling
+	// is CarbonRepository.UpsertFactor.
+	UpsertPlatformFactor(ctx context.Context, f model.EmissionFactor) (model.EmissionFactor, error)
+
+	// ReplacePlatformConversions swaps the conversions of a PLATFORM factor
+	// in one transaction. A company-owned factor's id returns ErrNotFound and
+	// nothing is replaced. The scoped sibling is
+	// CarbonRepository.ReplaceConversions.
+	ReplacePlatformConversions(ctx context.Context, factorID uuid.UUID, conversions []model.EmissionFactorConversion) error
+
+	// UpsertIntegrationDefinitions writes integration_definitions, keyed on
+	// its unique (provider, subtype), and returns the number of rows written.
+	UpsertIntegrationDefinitions(ctx context.Context, defs []model.IntegrationDefinition) (int64, error)
+}
+
+// AdminJournalRepository records platform jobs — work that runs for no tenant,
+// such as the market price import — in the same job_runs and
+// operational_messages tables tenants' jobs use, with company_id NULL.
+// Implemented by Task 11.
+//
+// None of it can take a Scope: the schema says platform work is company_id
+// NULL, a Scope's CompanyID is never Nil, and a platform job made to borrow a
+// tenant's Scope would file its failures on that tenant's Messages screen. The
+// scoped siblings are OpsRepository.StartRun, FinishRun and AppendMessage.
+type AdminJournalRepository interface {
+	// StartPlatformRun inserts a job_runs row with company_id NULL in the
+	// 'running' state. A run whose CompanyID is non-nil is refused with
+	// ErrNotFound.
+	StartPlatformRun(ctx context.Context, run model.JobRun) (model.JobRun, error)
+
+	// FinishPlatformRun stamps a PLATFORM run exactly as
+	// OpsRepository.FinishRun stamps a tenant's. A tenant run's id returns
+	// ErrNotFound and nothing is written, so this path cannot rewrite a
+	// tenant's journal.
+	FinishPlatformRun(ctx context.Context, id uuid.UUID, status string, processed, skipped, failed int32, errText *string, detail []byte, at time.Time) (model.JobRun, error)
+
+	// AppendPlatformMessage appends an operational message with company_id
+	// NULL. A message whose CompanyID is non-nil is refused with ErrNotFound.
+	// As with OpsRepository, the text must already be scrubbed.
+	AppendPlatformMessage(ctx context.Context, m model.OperationalMessage) (model.OperationalMessage, error)
 }

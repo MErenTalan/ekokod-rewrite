@@ -109,6 +109,14 @@ func numericToDecimalPtr(n pgtype.Numeric) (*decimal.Decimal, error) {
 // rescales to the column's declared scale on write in any case; preserving it
 // here means a value that never touches the database still compares equal to
 // the one that did.
+//
+// EXCESS SCALE IS PASSED THROUGH, NOT ROUNDED HERE. A decimal with more
+// fractional digits than the column declares (2.4512345 into numeric(18,6))
+// reaches Postgres intact and the column's typmod rounds it half away from
+// zero on write, so the stored value differs from the Go value without any
+// error. Callers therefore round in DOMAIN code, under the rounding rule the
+// business specifies for that quantity, before the value reaches a
+// repository; this function does not guess a rounding mode on their behalf.
 func decimalToNumeric(d decimal.Decimal) pgtype.Numeric {
 	// Coefficient returns a fresh big.Int, so the result does not alias d's
 	// internals.
