@@ -60,9 +60,22 @@ type Tenant struct {
 var fixtureNamespace = uuid.MustParse("6f9619ff-8b86-d011-b42d-00c04fc964ff")
 
 // fixtureEpoch is the created_at/updated_at every fixture row gets. It is
-// fixed rather than time.Now() so that a struct built by NewTenant compares
-// equal to the row a repository reads back, byte for byte, without a test
-// having to special-case timestamps.
+// fixed rather than time.Now() so that a struct built by NewTenant can be
+// compared with the row a repository reads back.
+//
+// What "compares equal" means, precisely:
+//
+//   - Timestamps are equal as INSTANTS, under time.Time.Equal — not under ==
+//     or require.Equal. pgx decodes timestamptz into time.Local, so the value
+//     read back carries a different *time.Location than this UTC epoch
+//     whenever the test process's local zone is not UTC, and a reflect-based
+//     comparison of the two structs fails although nothing is wrong.
+//   - Decimals are equal in value AND in scale: every decimal literal below is
+//     written at exactly its column's declared scale, so the column stores it
+//     unrounded (TestTenantRowsAreActuallyInTheDatabase reads each one back as
+//     text). Whether decimal.Decimal values also compare equal under
+//     reflection depends on the exponent the read path produces; use
+//     Decimal.Equal.
 var fixtureEpoch = time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
 
 // NewTenant inserts a complete tenant and returns it.
@@ -149,8 +162,8 @@ func NewTenant(t *testing.T, ctx context.Context, pool *pgxpool.Pool, seed int64
 			CompanyID:         tenant.Company.ID,
 			Name:              fmt.Sprintf("Fixture Building %c (tenant %d)", 'A'+rune(i), seed),
 			Address:           ptr(fmt.Sprintf("Building %d, Fixture Street", i)),
-			Latitude:          decPtr(fmt.Sprintf("41.0%06d", i)),
-			Longitude:         decPtr(fmt.Sprintf("29.0%06d", i)),
+			Latitude:          decPtr(fmt.Sprintf("41.%06d", i)),
+			Longitude:         decPtr(fmt.Sprintf("29.%06d", i)),
 			Floors:            ptr(int32(3 + i)),
 			PersonnelCount:    ptr(int32(10 + i)),
 			TotalAreaM2:       decPtr(fmt.Sprintf("%d.50", 1000+i)),
@@ -202,8 +215,8 @@ func NewTenant(t *testing.T, ctx context.Context, pool *pgxpool.Pool, seed int64
 				// A multiplier other than 1, so that a repository which
 				// forgets to apply or record it is observably wrong.
 				MeterMultiplier: dec("40.000000"),
-				Latitude:        decPtr(fmt.Sprintf("41.0%06d", bi*10+ai)),
-				Longitude:       decPtr(fmt.Sprintf("29.0%06d", bi*10+ai)),
+				Latitude:        decPtr(fmt.Sprintf("41.%06d", bi*10+ai)),
+				Longitude:       decPtr(fmt.Sprintf("29.%06d", bi*10+ai)),
 				EtsoCode:        ptr(fmt.Sprintf("40X%013d", seed*100+int64(bi*10+ai))),
 				IsActive:        true,
 				CreatedAt:       fixtureEpoch,
