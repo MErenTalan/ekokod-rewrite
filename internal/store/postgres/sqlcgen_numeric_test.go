@@ -65,13 +65,7 @@ var (
 	// under-reads rather than over-reads, and the per-function floors in
 	// TestEveryFunctionSQLcMustTypeIsDeclared are what would notice.
 	matViewBodyRe = regexp.MustCompile(`(?is)create materialized view\s+(\w+)(.*?);`)
-	// blockCommentRe matches a /* ... */ comment. (?s) lets "." match a
-	// newline, because a review found `locf/* x */(ts)` — a block comment
-	// sitting between a function name and its opening parenthesis — hiding
-	// the call from functionCalls entirely: unlike commentRe's line
-	// comments, nothing here stripped it before the scan.
-	blockCommentRe = regexp.MustCompile(`(?s)/\*.*?\*/`)
-	tableKeyword   = map[string]bool{
+	tableKeyword  = map[string]bool{
 		"primary": true, "unique": true, "check": true,
 		"foreign": true, "constraint": true, "exclude": true,
 	}
@@ -493,14 +487,136 @@ type sqlSource struct {
 	sql  string
 }
 
-// stripComments removes every SQL comment from sql: block comments first,
-// since one can itself contain "--" and because a block comment may span
-// lines that a line-by-line strip would otherwise leave half-stripped, then
-// line comments. Every caller that feeds functionCalls must go through this,
-// not commentRe alone, or a block comment between a function name and its
-// parenthesis hides the call.
+// stripComments removes every SQL comment from sql — "--" to end of line,
+// and NESTED "/* */" block comments, exactly as Postgres itself lexes them —
+// while leaving every quoted literal ('...' strings, "..." identifiers,
+// $tag$...$tag$ dollar-quoted strings) untouched, byte for byte.
+//
+// It is a hand-written lexer, not a regex pre-pass, because a regex pre-pass
+// cannot tell a comment DELIMITER from the same two characters appearing
+// inside a literal, and a review found three ways that gap lets an
+// undeclared function slip past TestEveryFunctionSQLcMustTypeIsDeclared
+// silently:
+//
+//   - A "--" line comment containing "/*" (e.g. `-- serves /api/* routes`),
+//     with an unrelated "*/" appearing later in real code. A regex block-
+//     comment pass run before the line-comment pass treats the "/*" inside
+//     the line comment as a real opener and deletes everything up to that
+//     unrelated "*/" — which can delete the very call the guard exists to
+//     catch. A lexer never has this problem: once it is inside a line
+//     comment it skips to the next "\n" and nothing inside that span is
+//     ever reinterpreted, because states are entered in strict left-to-right
+//     order rather than by an independent regex search.
+//   - String literals containing '/*' … '*/' as plain text: the same
+//     regex-based block-comment pass treats those as real delimiters and
+//     deletes whatever real code sits between them.
+//   - A string literal containing a lone '"' (e.g. `'"'`): a scanner that
+//     does not track '...' string state at all misreads that quote as the
+//     START of a double-quoted identifier and skips ahead to the next '"'
+//     it can find, silently swallowing real code (and any call in it).
+//
+// This function and functionCalls below therefore share one lexing
+// primitive, skipNonCode, so both agree on where a comment or a literal
+// begins and ends.
 func stripComments(sql string) string {
-	return commentRe.ReplaceAllString(blockCommentRe.ReplaceAllString(sql, ""), "")
+	var b strings.Builder
+	b.Grow(len(sql))
+	for i := 0; i < len(sql); {
+		if end, isComment, ok := skipNonCode(sql, i); ok {
+			if !isComment {
+				b.WriteString(sql[i:end]) // a literal: keep it verbatim
+			}
+			i = end
+			continue
+		}
+		b.WriteByte(sql[i])
+		i++
+	}
+	return b.String()
+}
+
+// skipNonCode reports whether sql, starting at i, is a "--" line comment, a
+// NESTED "/* */" block comment (Postgres nests them, unlike the ANSI
+// standard), a '...' string literal (” is an escaped quote), or a
+// $tag$...$tag$ dollar-quoted string (including the common bare $$...$$) —
+// and if so, the index just past it, and whether it was a COMMENT (dropped
+// by stripComments) as opposed to a LITERAL (kept verbatim, and never
+// scanned for an identifier by functionCalls). An unterminated literal or
+// comment consumes the rest of sql: there is nothing safe to do with
+// malformed input other than stop.
+func skipNonCode(sql string, i int) (end int, isComment bool, ok bool) {
+	n := len(sql)
+	switch {
+	case sql[i] == '-' && i+1 < n && sql[i+1] == '-':
+		j := i + 2
+		for j < n && sql[j] != '\n' {
+			j++
+		}
+		return j, true, true
+
+	case sql[i] == '/' && i+1 < n && sql[i+1] == '*':
+		depth := 1
+		j := i + 2
+		for j < n && depth > 0 {
+			switch {
+			case sql[j] == '/' && j+1 < n && sql[j+1] == '*':
+				depth++
+				j += 2
+			case sql[j] == '*' && j+1 < n && sql[j+1] == '/':
+				depth--
+				j += 2
+			default:
+				j++
+			}
+		}
+		return j, true, true
+
+	case sql[i] == '\'':
+		j := i + 1
+		for j < n {
+			if sql[j] == '\'' {
+				if j+1 < n && sql[j+1] == '\'' {
+					j += 2 // '' escape: still inside the literal
+					continue
+				}
+				j++
+				break
+			}
+			j++
+		}
+		return j, false, true
+
+	case sql[i] == '$':
+		if contentStart, ok := dollarQuoteTag(sql, i); ok {
+			closer := sql[i:contentStart] // "$tag$" or "$$", byte-identical to the opener
+			if idx := strings.Index(sql[contentStart:], closer); idx >= 0 {
+				return contentStart + idx + len(closer), false, true
+			}
+			return n, false, true
+		}
+	}
+	return 0, false, false
+}
+
+// dollarQuoteTag reports whether sql opens a dollar-quoted string at the '$'
+// index i, returning the index just past the OPENING delimiter ("$$" or
+// "$tag$"). The tag, if any, is whatever identifier-byte run sits between
+// the two '$' characters — Postgres requires it to start with a letter or
+// underscore, which this does not re-check, since a tag this permissive
+// rejects is simply not a dollar-quote opener at all (see the "$1" case
+// below) and falls through as an ordinary byte.
+//
+// "$1" (a positional query parameter) is the case this must NOT match: it
+// scans past the digit, finds no closing '$', and reports ok=false.
+func dollarQuoteTag(sql string, i int) (contentStart int, ok bool) {
+	j := i + 1
+	for j < len(sql) && isIdentByte(sql[j]) {
+		j++
+	}
+	if j < len(sql) && sql[j] == '$' {
+		return j + 1, true
+	}
+	return 0, false
 }
 
 // typeInferringSQL returns every such block: the body of each materialized
@@ -574,57 +690,109 @@ type funcCall struct {
 	arity int
 }
 
+// sqlcPseudoFunctions are the ONLY names sqlc itself recognises inside its
+// own "sqlc." namespace — sqlc.arg and sqlc.narg for named parameters,
+// sqlc.slice for an IN-list parameter, sqlc.embed for embedding a whole
+// struct. The first draft skipped `sqlc.` + ANY name, on the theory that
+// nothing else lives in that namespace; that theory is exactly what an
+// undeclared `sqlc.wobble_undeclared(id)` would exploit, so the qualifier
+// check below additionally requires the name itself be one of these four.
+var sqlcPseudoFunctions = map[string]bool{
+	"arg": true, "narg": true, "slice": true, "embed": true,
+}
+
 // functionCalls returns every function call in sql: an identifier — or a
 // "double quoted identifier" — followed by optional whitespace and an
-// opening parenthesis. Callers must run sql through stripComments first, so
-// that a comment sitting between the name and the parenthesis cannot hide a
-// call.
+// opening parenthesis. It shares skipNonCode with stripComments, so it never
+// needs sql pre-stripped to avoid the block-comment evasion: it recognises a
+// comment (of either kind) and skips it in the same pass. It also tracks
+// '...' string and $tag$...$tag$ literal boundaries with that same
+// function, so identifier-like text INSIDE one of those is never mistaken
+// for a call, and a lone '"' inside one is never mistaken for the start of a
+// quoted identifier. (typeInferringSQL still runs stripComments first, for
+// an unrelated reason: matViewBodyRe needs comment-free text to find a view
+// body's real terminating ";" rather than one inside a comment.)
 //
 // Whitespace here is ANY whitespace, newlines included. The first draft skipped
 // only spaces and tabs, which meant a migration formatted as "time_bucket\n("
 // would have been invisible to the very guard written to watch time_bucket.
 //
-// A name preceded by "." is a qualified call, and only the SQLC qualifier is
-// skipped: sqlc.arg, sqlc.narg and sqlc.slice are sqlc's own pseudo-functions,
-// not something its catalogue types. The first draft skipped a name preceded
-// by ANY qualifier, meant only to cover that case, and so let a
-// schema-qualified real call such as `public.locf(ts)` slip past the guard
-// entirely — the same silent `interface{}` this file exists to prevent. Any
-// other qualifier (a schema, or a table/alias as in `b.name`) is checked like
-// an unqualified call; `b.name` is still never reported, because nothing
-// follows it with "(".
+// A DOUBLE-QUOTED identifier's case is preserved exactly as written, unlike
+// an unquoted one (lowercased below, matching how Postgres folds an
+// unquoted identifier). Postgres treats a quoted identifier as
+// case-SENSITIVE: `"LOCF"` names a different object than `locf` or `"locf"`,
+// so lower-casing it here would make `"LOCF"(ts)` match this file's (all
+// lowercase) nativeFunctions/shim entries when the two are not the same
+// name at all — a false "it's declared" that defeats the whole guard.
+//
+// A name preceded by "." is a qualified call, and only sqlc's own
+// pseudo-functions (sqlcPseudoFunctions) are skipped. The first draft
+// skipped a name preceded by ANY qualifier, meant only to cover
+// `sqlc.arg`/`narg`/`slice`, and so let a schema-qualified real call such as
+// `public.locf(ts)` slip past the guard entirely — the same silent
+// `interface{}` this file exists to prevent. Any other qualifier (a schema,
+// or a table/alias as in `b.name`) is checked like an unqualified call;
+// `b.name` is still never reported, because nothing follows it with "(".
 func functionCalls(sql string) []funcCall {
 	var out []funcCall
-	for i := 0; i < len(sql); i++ {
+	for i := 0; i < len(sql); {
+		if end, _, ok := skipNonCode(sql, i); ok {
+			// A comment (already stripped by the caller, but harmless to
+			// skip again) or a literal — either way, not a place a call's
+			// name can start.
+			i = end
+			continue
+		}
+
 		if sql[i] == '"' {
-			j := i + 1
-			for j < len(sql) && sql[j] != '"' {
-				j++
-			}
-			if j >= len(sql) {
+			j, name, closed := scanQuotedIdentifier(sql, i)
+			if !closed {
 				break // unterminated quote: nothing more to scan
 			}
-			name := strings.ToLower(sql[i+1 : j])
-			out = appendIfCall(out, sql, name, j+1)
+			out = appendIfCall(out, sql, name, j)
 			i = j
 			continue
 		}
-		if !isIdentStart(sql[i]) || (i > 0 && isIdentByte(sql[i-1])) {
+
+		if !isIdentStart(sql[i]) {
+			i++
 			continue
 		}
 		j := i
 		for j < len(sql) && isIdentByte(sql[j]) {
 			j++
 		}
-		if i > 0 && sql[i-1] == '.' && qualifierIsSQLC(sql, i-1) {
-			i = j - 1
+		name := strings.ToLower(sql[i:j])
+		if i > 0 && sql[i-1] == '.' && qualifierIsSQLC(sql, i-1) && sqlcPseudoFunctions[name] {
+			i = j
 			continue
 		}
-		name := strings.ToLower(sql[i:j])
 		out = appendIfCall(out, sql, name, j)
-		i = j - 1
+		i = j
 	}
 	return out
+}
+
+// scanQuotedIdentifier reads a "..." double-quoted identifier starting at
+// the opening quote index i, unescaping "" to a single ". It returns the
+// index just past the closing quote, the identifier's exact text (case
+// preserved), and whether a closing quote was found at all.
+func scanQuotedIdentifier(sql string, i int) (end int, name string, closed bool) {
+	var b strings.Builder
+	j := i + 1
+	for j < len(sql) {
+		if sql[j] == '"' {
+			if j+1 < len(sql) && sql[j+1] == '"' {
+				b.WriteByte('"')
+				j += 2
+				continue
+			}
+			return j + 1, b.String(), true
+		}
+		b.WriteByte(sql[j])
+		j++
+	}
+	return j, b.String(), false
 }
 
 // appendIfCall appends a funcCall named name to out if sql, starting at
@@ -641,10 +809,9 @@ func appendIfCall(out []funcCall, sql, name string, from int) []funcCall {
 }
 
 // qualifierIsSQLC reports whether the identifier immediately before the "."
-// at index dot is "sqlc" (case-insensitively) — sqlc's own pseudo-function
-// namespace, and the only qualifier this scanner may skip. Any other
-// qualifier (a schema such as public, or a table/alias) must still have its
-// unqualified name checked against nativeFunctions and the shim.
+// at index dot is "sqlc" (case-insensitively). It is only half of the check
+// that lets a qualified call be skipped — see sqlcPseudoFunctions for the
+// other half, which the name itself must also satisfy.
 func qualifierIsSQLC(sql string, dot int) bool {
 	end := dot
 	start := dot
@@ -760,6 +927,16 @@ func TestFunctionCallsRecognisesEveryCallSpelling(t *testing.T) {
 			calls: []funcCall{{name: "locf", arity: 1}},
 		},
 		{
+			// "LOCF" and locf are DIFFERENT identifiers in Postgres — a
+			// quoted identifier is case-sensitive, an unquoted one is
+			// folded to lower case. Lower-casing this one would make it
+			// match this file's (all-lowercase) nativeFunctions/shim
+			// entries for a function it does not actually name.
+			name:  "a quoted identifier's case is preserved, not folded",
+			sql:   `select "LOCF"(ts) from consumption_hourly`,
+			calls: []funcCall{{name: "LOCF", arity: 1}},
+		},
+		{
 			name:  "sqlc's own pseudo-namespace is still skipped",
 			sql:   `select * from buildings where id = sqlc.arg(id)`,
 			calls: nil,
@@ -774,14 +951,66 @@ func TestFunctionCallsRecognisesEveryCallSpelling(t *testing.T) {
 			calls: []funcCall{{name: "any", arity: 1}},
 		},
 		{
+			// Task 8c fix round 1: the qualifier check used to skip
+			// `sqlc.` + ANY name, which an undeclared
+			// `sqlc.wobble_undeclared(id)` would have exploited outright.
+			name:  "an undeclared name under the sqlc qualifier is NOT skipped",
+			sql:   `select * from buildings where id = sqlc.wobble_undeclared(id)`,
+			calls: []funcCall{{name: "wobble_undeclared", arity: 1}},
+		},
+		{
 			name:  "a plain column reference is never reported",
 			sql:   `select b.name from buildings b`,
+			calls: nil,
+		},
+		{
+			// Task 8c fix round 1, evasion 1: a review found the OLD
+			// stripComments — a blockCommentRe pass followed by a
+			// commentRe pass — treated the "/*" inside this LINE comment
+			// as a real block-comment opener, and then, being non-greedy,
+			// deleted everything up to the unrelated "*/" closing the real
+			// block comment near the end, taking the real call with it.
+			name: "a line comment containing /* does not hide a later real call",
+			sql: "-- serves /api/* routes\n" +
+				"select wobble_undeclared(id) from buildings /* trailing */;",
+			calls: []funcCall{{name: "wobble_undeclared", arity: 1}},
+		},
+		{
+			// Task 8c fix round 1, evasion 2: the same blockCommentRe pass
+			// cannot tell a '/*'...'*/' pair of STRING LITERALS from a real
+			// block comment, and deletes whatever real code — including a
+			// call — sits between them.
+			name: "a string literal containing /* or */ does not hide a call between two such literals",
+			sql: `select case when note = '/*' then wobble_undeclared(id) else 0 end ` +
+				`from buildings where flag = '*/';`,
+			calls: []funcCall{{name: "wobble_undeclared", arity: 1}},
+		},
+		{
+			// Task 8c fix round 1, evasion 3: a scanner with no '...'
+			// string-tracking misreads a lone '"' inside a string literal
+			// as the START of a quoted identifier, scans for the next '"'
+			// it can find (there may be none), and — in the old
+			// implementation — gives up on the rest of sql entirely,
+			// hiding every call after it.
+			name:  `a lone " inside a string literal does not hide a later real call`,
+			sql:   `select id from buildings where note = '"' and wobble_undeclared(id) > 0;`,
+			calls: []funcCall{{name: "wobble_undeclared", arity: 1}},
+		},
+		{
+			// Dollar-quoted strings are the one literal form the ORIGINAL
+			// (round 0) scanner never had to face, since none of this
+			// schema's migrations or query files used one — but the fix
+			// round's lexer must still treat $tag$...$tag$ (and the bare
+			// $$...$$ form) as a literal, not as call-bearing code, or as
+			// two independent, unmatched positional parameters.
+			name:  "a dollar-quoted string is not scanned for calls, and $1/$2 are not mistaken for one",
+			sql:   `select $tag$ wobble_undeclared($1) $tag$, $$ another_undeclared($2) $$ from buildings where id = $1`,
 			calls: nil,
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.calls, functionCalls(tc.sql))
+			require.Equal(t, tc.calls, functionCalls(stripComments(tc.sql)))
 		})
 	}
 
@@ -793,6 +1022,19 @@ func TestFunctionCallsRecognisesEveryCallSpelling(t *testing.T) {
 
 	t.Run("a block comment spanning multiple lines is stripped too", func(t *testing.T) {
 		sql := stripComments("select locf/* spans\nmultiple\nlines */(ts) from consumption_hourly")
+		require.Equal(t, []funcCall{{name: "locf", arity: 1}}, functionCalls(sql))
+	})
+
+	// A NON-nested reading (Postgres nests /* */; the ANSI standard does
+	// not) would treat "/* inner */" as closing the WHOLE comment, exposing
+	// "text_that_looks_like_a_call(x)" as real code — a false positive
+	// this asserts against directly, not just "the real call still
+	// appears", which nesting-blind stripping got right here by accident
+	// (the real call sits after the true end, so hiding it was never the
+	// risk this particular case tests).
+	t.Run("nested block comments close only at the matching depth", func(t *testing.T) {
+		sql := stripComments(
+			"/* outer /* inner */ text_that_looks_like_a_call(x) */ select locf(ts) from consumption_hourly")
 		require.Equal(t, []funcCall{{name: "locf", arity: 1}}, functionCalls(sql))
 	})
 }

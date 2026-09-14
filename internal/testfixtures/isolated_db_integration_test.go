@@ -60,6 +60,29 @@ func TestNewIsolatedDBSupportsTheSameSeedTwice(t *testing.T) {
 // three ever regresses, NewIsolatedDB must fall back to
 // `CREATE DATABASE` + postgres.MigrateUp per call, and this test is what
 // would tell you to.
+//
+// PROOF 2's DERIVATION (Task 8c fix round 1, Important 3). consumption_hourly
+// is declared `timescaledb.materialized_only = false` (00005:113), so a
+// plain `select … from consumption_hourly` unions in real-time aggregation
+// over the raw hypertable REGARDLESS of whether anything was ever
+// materialised — a review proved this by deleting the
+// refresh_continuous_aggregate call below and watching the old version of
+// this test still pass. Reading only what the refresh actually materialised
+// requires flipping the clone's view to `materialized_only = true` first, so
+// the numbers below are exactly what got written into the materialisation
+// hypertable, nothing else.
+//
+// The five readings inserted below are exactly one hour apart
+// (base, base+1h, …, base+4h), and consumption_hourly's own bucket is
+// `time_bucket('1 hour', ts)` — so each reading lands in its OWN,
+// single-reading bucket: five buckets, one row per bucket. For a
+// single-reading bucket, first(active_import, ts) and last(active_import,
+// ts) are the same one value, so active_index (= last(active_import, ts))
+// for the base+4h bucket is exactly that reading's active_import, 40, and
+// reading_count for every bucket is exactly 1. Both are asserted as EXACT
+// values, not merely "> 0", which is what makes this proof non-vacuous:
+// with the refresh removed, materialized_only means the row for base+4h
+// does not exist at all, and the query below returns sql.ErrNoRows.
 func TestIsolatedDBCloneSupportsTimescaleOperations(t *testing.T) {
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
@@ -82,22 +105,46 @@ func TestIsolatedDBCloneSupportsTimescaleOperations(t *testing.T) {
 	).Scan(&chunks))
 	require.Greater(t, chunks, 0, "inserting into meter_readings created no chunk on the clone")
 
-	// Proof 2: refresh_continuous_aggregate still materialises a row.
+	// Proof 2: refresh_continuous_aggregate still materialises the EXACT
+	// expected rows — see the derivation above.
 	_, err := pool.Exec(ctx,
 		`call refresh_continuous_aggregate('consumption_hourly', $1::timestamptz, $2::timestamptz)`,
 		base.Add(-24*time.Hour), base.Add(24*time.Hour))
 	require.NoError(t, err, "refresh_continuous_aggregate errored on the clone")
-	var materialised int
-	require.NoError(t, pool.QueryRow(ctx,
-		`select count(*) from consumption_hourly where analyzer_id = $1`, analyzerID).Scan(&materialised))
-	require.Greater(t, materialised, 0, "consumption_hourly materialised no row on the clone")
 
-	// Proof 3: compress_chunk still succeeds.
-	var chunkName string
+	// Flip to materialized_only so the query below can ONLY see what the
+	// refresh actually wrote, never the real-time union.
+	_, err = pool.Exec(ctx, `alter materialized view consumption_hourly set (timescaledb.materialized_only = true)`)
+	require.NoError(t, err, "could not switch the clone's view to materialized_only")
+
+	var totalBuckets int
 	require.NoError(t, pool.QueryRow(ctx,
-		`select show_chunks::text from show_chunks('meter_readings') show_chunks limit 1`).Scan(&chunkName))
-	_, err = pool.Exec(ctx, `select compress_chunk($1::regclass)`, chunkName)
+		`select count(*) from consumption_hourly where analyzer_id = $1`, analyzerID).Scan(&totalBuckets))
+	require.Equal(t, 5, totalBuckets, "one reading per hour must materialise into five distinct hourly buckets")
+
+	var activeIndex string
+	var readingCount int
+	require.NoError(t, pool.QueryRow(ctx,
+		`select active_index::text, reading_count from consumption_hourly where analyzer_id = $1 and bucket = $2`,
+		analyzerID, base.Add(4*time.Hour)).Scan(&activeIndex, &readingCount))
+	require.Equal(t, "40.0000", activeIndex, "the base+4h bucket's only reading has active_import=40")
+	require.Equal(t, 1, readingCount, "a single-reading bucket must report reading_count=1")
+
+	// Proof 3: compress_chunk still succeeds, and the chunk is ACTUALLY
+	// compressed afterwards — not merely that the call returned no error.
+	var chunkSchema, chunkName string
+	require.NoError(t, pool.QueryRow(ctx,
+		`select chunk_schema, chunk_name from timescaledb_information.chunks
+		 where hypertable_name = 'meter_readings' limit 1`).Scan(&chunkSchema, &chunkName))
+	qualified := chunkSchema + "." + chunkName
+	_, err = pool.Exec(ctx, `select compress_chunk($1::regclass)`, qualified)
 	require.NoError(t, err, "compress_chunk errored on the clone")
+
+	var isCompressed bool
+	require.NoError(t, pool.QueryRow(ctx,
+		`select is_compressed from timescaledb_information.chunks
+		 where chunk_schema = $1 and chunk_name = $2`, chunkSchema, chunkName).Scan(&isCompressed))
+	require.True(t, isCompressed, "compress_chunk reported success but the chunk is not marked compressed")
 }
 
 // TestNewIsolatedDBIsSafeUnderConcurrentCalls exercises the concurrency
