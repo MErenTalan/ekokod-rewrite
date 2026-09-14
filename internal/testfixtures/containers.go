@@ -19,10 +19,17 @@ package testfixtures
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
+	"net/url"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
@@ -255,9 +262,261 @@ func NewPool(t *testing.T, dsn string) *pgxpool.Pool {
 	return pool
 }
 
-// NewMigratedPool is StartPostgres plus NewPool: the one call a repository
-// test needs before it can do anything.
+// NewMigratedPool is StartPostgres plus NewPool: a fresh container, fully
+// migrated, wrapped in a pool.
+//
+// A repository test wants NewIsolatedDB instead. This boots one container
+// PER TEST, which is what the migration round-trip and reversibility tests
+// need — they require a virgin container, not a virgin database inside a
+// shared one — but which made every repository test pay a fresh container's
+// startup cost, and made `go test -count=3` share the same globally seeded
+// data three times over. NewIsolatedDB keeps this call's shape but reuses
+// one container for the whole test binary and gives every call its own
+// database inside it.
 func NewMigratedPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	return NewPool(t, StartPostgres(t))
+}
+
+// isolatedTemplateDB is the name of the database NewIsolatedDB migrates
+// exactly once per test binary and clones on every call.
+const isolatedTemplateDB = "ekokod_isolated_template"
+
+// isolatedRetryAttempts and isolatedRetryDelay bound the retry loop
+// terminateSessionsAndRetry runs. See that function for why any retry is
+// needed at all.
+const (
+	isolatedRetryAttempts = 20
+	isolatedRetryDelay    = 20 * time.Millisecond
+)
+
+var (
+	// isolatedContainerOnce guards booting the ONE TimescaleDB container a
+	// test binary's NewIsolatedDB calls share. It is package-level state,
+	// deliberately: "one container per test binary" means one per process,
+	// and a process links this package once no matter how many test files
+	// in the package call NewIsolatedDB.
+	isolatedContainerOnce sync.Once
+	isolatedRootDSN       string
+	isolatedContainerErr  error
+
+	// isolatedTemplateOnce guards migrating isolatedTemplateDB exactly once,
+	// the first time any call needs it.
+	isolatedTemplateOnce sync.Once
+	isolatedTemplateErr  error
+
+	// isolatedDBSeq names every cloned database uniquely, so that concurrent
+	// t.Parallel() callers in the same package never race on a name.
+	isolatedDBSeq atomic.Uint64
+)
+
+// NewIsolatedDB returns a pool over a brand-new, fully migrated database,
+// isolated from every other call's — in this test, in a parallel test, and
+// in a repeat of this same test under `go test -count=3` — the same way a
+// call to NewMigratedPool against its own fresh container always was.
+//
+// It differs from NewMigratedPool in what it shares: ONE TimescaleDB
+// container per test BINARY, started lazily on the first call and left for
+// testcontainers' own reaper rather than terminated by any one test's
+// t.Cleanup (see isolatedRoot) — but a DIFFERENT, FRESH DATABASE inside that
+// container on every call, dropped on that call's own t.Cleanup. Twenty
+// repository tests that used to mean twenty containers on one Docker daemon,
+// which is the load that exhausted postgresReadyBudget earlier in this
+// phase, now mean one.
+//
+// The per-call database is not migrated from scratch: isolatedTemplateDB is
+// migrated once per binary and every call clones it with
+// `CREATE DATABASE … TEMPLATE …`, which this package measured at roughly
+// 7x faster than a full migration run — about 120ms against about 850ms on
+// the machine this was measured on (see the report for Task 8c). That is
+// safe for THIS schema specifically because a test against a real clone
+// proved three TimescaleDB-specific behaviours survive it: a hypertable
+// insert still creates chunks, refresh_continuous_aggregate still
+// materialises a continuous aggregate, and compress_chunk still succeeds —
+// see TestIsolatedDBCloneSupportsTimescaleOperations. If a future migration
+// changes what TimescaleDB keeps per-database in a way that test would
+// catch, that test fails and this comment's safety claim no longer holds.
+func NewIsolatedDB(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	ctx := context.Background()
+
+	rootDSN := isolatedRoot(t)
+	isolatedTemplate(t, rootDSN)
+
+	name := fmt.Sprintf("isolated_db_%d", isolatedDBSeq.Add(1))
+	require.NoError(t, cloneIsolatedDB(ctx, rootDSN, name), "cloning the isolated-database template")
+
+	// Registered BEFORE calling NewPool, and that order is load-bearing.
+	// t.Cleanup runs LAST REGISTERED FIRST, so this runs AFTER NewPool's own
+	// t.Cleanup(pool.Close) below — DROP DATABASE fails while this call's
+	// own pool still holds a connection open against it.
+	t.Cleanup(func() { dropIsolatedDB(t, rootDSN, name) })
+
+	return NewPool(t, withDatabase(rootDSN, name))
+}
+
+// isolatedRoot returns the DSN of the one TimescaleDB container every
+// NewIsolatedDB call in this test binary shares, booting it on the first
+// call.
+//
+// It deliberately does NOT call t.Cleanup(container.Terminate), unlike
+// StartPostgresUnmigrated: that Cleanup runs at the end of whichever TEST
+// happened to be first to call NewIsolatedDB, not at the end of the test
+// BINARY, and terminating the container there would pull it out from under
+// every later test's call. Nothing in this package terminates it at all —
+// testcontainers registers every container it starts with the ryuk reaper
+// sidecar (see the "Creating container for image testcontainers/ryuk" line
+// any of these tests already print), which removes every container in its
+// session when the session's connection to it drops, i.e. when this test
+// binary's process exits. `go test` exiting is what cleans this one up.
+func isolatedRoot(t *testing.T) string {
+	t.Helper()
+	isolatedContainerOnce.Do(func() {
+		ctx := context.Background()
+		container, err := tcpostgres.Run(ctx, postgresImage,
+			tcpostgres.WithDatabase(fixtureDB),
+			tcpostgres.WithUsername(fixtureUser),
+			tcpostgres.WithPassword(fixturePassword),
+			tcpostgres.WithSQLDriver("pgx"),
+			postgresWaitStrategy(),
+		)
+		if err != nil {
+			isolatedContainerErr = err
+			return
+		}
+		isolatedRootDSN, isolatedContainerErr = container.ConnectionString(ctx, "sslmode=disable")
+	})
+	require.NoError(t, isolatedContainerErr, "starting the shared isolated-database container")
+	return isolatedRootDSN
+}
+
+// isolatedTemplate migrates isolatedTemplateDB inside the container at
+// rootDSN exactly once per test binary.
+func isolatedTemplate(t *testing.T, rootDSN string) {
+	t.Helper()
+	isolatedTemplateOnce.Do(func() {
+		isolatedTemplateErr = func() error {
+			ctx := context.Background()
+			root, err := pgx.Connect(ctx, rootDSN)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = root.Close(ctx) }()
+
+			ident := pgx.Identifier{isolatedTemplateDB}.Sanitize()
+			if _, err := root.Exec(ctx, "create database "+ident); err != nil {
+				return err
+			}
+			return postgres.MigrateUp(ctx, withDatabase(rootDSN, isolatedTemplateDB), DiscardLogger())
+		}()
+	})
+	require.NoError(t, isolatedTemplateErr, "migrating the shared isolated-database template")
+}
+
+// cloneIsolatedDB creates database name inside the container at rootDSN as a
+// `CREATE DATABASE … TEMPLATE isolatedTemplateDB`.
+func cloneIsolatedDB(ctx context.Context, rootDSN, name string) error {
+	root, err := pgx.Connect(ctx, rootDSN)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = root.Close(ctx) }()
+
+	ident := pgx.Identifier{name}.Sanitize()
+	return terminateSessionsAndRetry(ctx, root, isolatedTemplateDB, func() error {
+		_, err := root.Exec(ctx, fmt.Sprintf("create database %s template %s", ident, isolatedTemplateDB))
+		return err
+	})
+}
+
+// dropIsolatedDB drops database name inside the container at rootDSN. Per
+// the pool this call's own t.Cleanup ordering already closed, this runs
+// with no session of its own open against name — but TimescaleDB's
+// per-database background worker scheduler (see terminateSessionsAndRetry)
+// may still hold one, exactly as it does against the template, so the same
+// retry applies.
+//
+// A failure here is logged, not failed: dropping is hygiene, not
+// correctness — every database this creates lives inside a container that
+// testcontainers' reaper removes in full when the process exits (see
+// isolatedRoot), so a database this could not drop is not a leak past the
+// test run, only litter within it.
+func dropIsolatedDB(t *testing.T, rootDSN, name string) {
+	t.Helper()
+	ctx := context.Background()
+
+	root, err := pgx.Connect(ctx, rootDSN)
+	if err != nil {
+		t.Logf("NewIsolatedDB: could not connect to drop %s, leaving it for the container's reaper: %v", name, err)
+		return
+	}
+	defer func() { _ = root.Close(ctx) }()
+
+	ident := pgx.Identifier{name}.Sanitize()
+	err = terminateSessionsAndRetry(ctx, root, name, func() error {
+		_, err := root.Exec(ctx, "drop database if exists "+ident)
+		return err
+	})
+	if err != nil {
+		t.Logf("NewIsolatedDB: could not drop %s, leaving it for the container's reaper: %v", name, err)
+	}
+}
+
+// terminateSessionsAndRetry terminates every session against dbName other
+// than root's own, then runs action; if action still fails with Postgres
+// SQLSTATE 55006 ("source database … is being accessed by other users"), it
+// retries the terminate-then-action pair up to isolatedRetryAttempts times.
+//
+// WHY THIS EXISTS AT ALL. Both CREATE DATABASE … TEMPLATE and DROP DATABASE
+// require that nothing be connected to the database in question, and this
+// package's own connections never are — but TimescaleDB adds one that is
+// not this package's to close. Every database with an active job (this
+// schema's compression and continuous-aggregate policies, added by
+// 00005_continuous_aggregates.sql) gets its own "TimescaleDB Background
+// Worker Scheduler" backend, spawned by the extension itself, independent of
+// any client connection.
+//
+// WHY IT TERMINATES BEFORE THE FIRST ATTEMPT, not only after one fails.
+// Measured directly against this image (timescale/timescaledb:2.30.0-pg16):
+// issuing CREATE DATABASE … TEMPLATE against a template that scheduler is
+// still connected to does not fail fast. Postgres's own createdb keeps
+// polling for the other backend to go away and only reports 55006 after
+// roughly five seconds — call it once per NewIsolatedDB call and every
+// call pays that five seconds. Terminating unconditionally first, then
+// calling action, measured under 150ms consistently (see the Task 8c
+// report); the retry loop below exists only for the rare case where a
+// replacement backend reconnects in the gap between the terminate and the
+// action, not as the primary path.
+func terminateSessionsAndRetry(ctx context.Context, root *pgx.Conn, dbName string, action func() error) error {
+	for attempt := 1; ; attempt++ {
+		if _, err := root.Exec(ctx,
+			`select pg_terminate_backend(pid) from pg_stat_activity where datname = $1 and pid <> pg_backend_pid()`,
+			dbName); err != nil {
+			return err
+		}
+		err := action()
+		if err == nil {
+			return nil
+		}
+		var pgErr *pgconn.PgError
+		if !errors.As(err, &pgErr) || pgErr.Code != "55006" || attempt >= isolatedRetryAttempts {
+			return err
+		}
+		time.Sleep(isolatedRetryDelay)
+	}
+}
+
+// withDatabase returns dsn with its database path replaced by name, keeping
+// every other part (host, port, credentials, query parameters) unchanged.
+func withDatabase(dsn, name string) string {
+	u, err := url.Parse(dsn)
+	if err != nil {
+		// dsn was already parsed once by whatever produced it (a
+		// container's own ConnectionString, or a prior call through this
+		// same function), so a parse failure here would be this package's
+		// own bug, not a runtime condition a caller could act on.
+		panic(fmt.Sprintf("testfixtures: withDatabase: %v", err))
+	}
+	u.Path = "/" + name
+	return u.String()
 }
