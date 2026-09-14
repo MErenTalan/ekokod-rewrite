@@ -19,4 +19,12 @@ var (
 	// whose Valid method reports false. It is returned before any database
 	// round trip.
 	ErrInvalidScope = errors.New("invalid scope")
+
+	// ErrInvalidRange is returned when a repository method is handed a
+	// TimeRange whose Valid method reports false: a zero From or To, or a
+	// From that is not strictly before To. It is returned before any database
+	// round trip. A zero end is never read as "unbounded" — an unbounded
+	// query over a hypertable is a bug (04-data-model.md §14), and a
+	// forgotten assignment must not be the way to write one.
+	ErrInvalidRange = errors.New("invalid time range")
 )
