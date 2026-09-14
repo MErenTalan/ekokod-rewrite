@@ -1,0 +1,274 @@
+-- Tariffs, tariff templates, solar tariffs, the national tariff schedule and
+-- icmal imports (migration 00006). Query names are prefixed with the
+-- aggregate they belong to (Tariff…, TariffTemplate…, SolarTariff…,
+-- NationalTariff…, Icmal…) per the wave-f convention.
+
+-- name: TariffGet :one
+select * from tariffs
+where id = sqlc.arg(id) and company_id = sqlc.arg(company_id)
+  and (sqlc.arg(all_buildings)::boolean or building_id = any(sqlc.arg(building_ids)::uuid[]))
+  and deleted_at is null;
+
+-- name: TariffList :many
+select * from tariffs
+where company_id = sqlc.arg(company_id)
+  and (sqlc.arg(all_buildings)::boolean or building_id = any(sqlc.arg(building_ids)::uuid[]))
+  and (cardinality(sqlc.arg(ids)::uuid[]) = 0 or id = any(sqlc.arg(ids)::uuid[]))
+  and (sqlc.narg(building_id)::uuid is null or building_id = sqlc.narg(building_id))
+  and (not sqlc.arg(company_wide)::boolean or building_id is null)
+  and (sqlc.narg(effective_on)::date is null or effective_from <= sqlc.narg(effective_on))
+  and (sqlc.arg(include_deleted)::boolean or deleted_at is null)
+order by effective_from desc, id
+limit sqlc.arg(limit_val) offset sqlc.arg(offset_val);
+
+-- name: TariffCreate :one
+insert into tariffs (
+  id, company_id, building_id, name, effective_from, currency, energy_type,
+  voltage_level, user_group, price_type, term, supply_company,
+  single_time_price, t1_price, t2_price, t3_price, overuse_price,
+  overuse_threshold_kwh_per_day, distribution_cost, reactive_power_price,
+  green_energy_price, green_energy_distribution_cost, contracted_power_kw,
+  power_unit_price, generation_usage, generation_price_per_kwh, vat_rate,
+  use_ptf_yekdem, kbk_energy, kbk_t1, kbk_t2, kbk_t3, kbk_power_price,
+  kbk_overuse_price, kbk_reactive_power, kbk_distribution_cost_tl_per_kwh,
+  use_manual_yekdem, created_by, created_at, updated_at
+) values (
+  gen_random_uuid(), sqlc.arg(company_id), sqlc.narg(building_id), sqlc.narg(name),
+  sqlc.arg(effective_from), sqlc.arg(currency), sqlc.arg(energy_type),
+  sqlc.arg(voltage_level), sqlc.arg(user_group), sqlc.arg(price_type), sqlc.arg(term),
+  sqlc.arg(supply_company), sqlc.narg(single_time_price), sqlc.narg(t1_price),
+  sqlc.narg(t2_price), sqlc.narg(t3_price), sqlc.narg(overuse_price),
+  sqlc.narg(overuse_threshold_kwh_per_day), sqlc.arg(distribution_cost),
+  sqlc.arg(reactive_power_price), sqlc.narg(green_energy_price),
+  sqlc.narg(green_energy_distribution_cost), sqlc.narg(contracted_power_kw),
+  sqlc.narg(power_unit_price), sqlc.arg(generation_usage), sqlc.narg(generation_price_per_kwh),
+  sqlc.arg(vat_rate), sqlc.arg(use_ptf_yekdem), sqlc.narg(kbk_energy), sqlc.narg(kbk_t1),
+  sqlc.narg(kbk_t2), sqlc.narg(kbk_t3), sqlc.narg(kbk_power_price), sqlc.narg(kbk_overuse_price),
+  sqlc.narg(kbk_reactive_power), sqlc.narg(kbk_distribution_cost_tl_per_kwh),
+  sqlc.arg(use_manual_yekdem), sqlc.narg(created_by), sqlc.arg(created_at), sqlc.arg(created_at)
+) returning *;
+
+-- name: TariffUpdate :one
+update tariffs set
+  building_id = sqlc.narg(building_id), name = sqlc.narg(name),
+  effective_from = sqlc.arg(effective_from), currency = sqlc.arg(currency),
+  energy_type = sqlc.arg(energy_type), voltage_level = sqlc.arg(voltage_level),
+  user_group = sqlc.arg(user_group), price_type = sqlc.arg(price_type), term = sqlc.arg(term),
+  supply_company = sqlc.arg(supply_company), single_time_price = sqlc.narg(single_time_price),
+  t1_price = sqlc.narg(t1_price), t2_price = sqlc.narg(t2_price), t3_price = sqlc.narg(t3_price),
+  overuse_price = sqlc.narg(overuse_price),
+  overuse_threshold_kwh_per_day = sqlc.narg(overuse_threshold_kwh_per_day),
+  distribution_cost = sqlc.arg(distribution_cost), reactive_power_price = sqlc.arg(reactive_power_price),
+  green_energy_price = sqlc.narg(green_energy_price),
+  green_energy_distribution_cost = sqlc.narg(green_energy_distribution_cost),
+  contracted_power_kw = sqlc.narg(contracted_power_kw), power_unit_price = sqlc.narg(power_unit_price),
+  generation_usage = sqlc.arg(generation_usage), generation_price_per_kwh = sqlc.narg(generation_price_per_kwh),
+  vat_rate = sqlc.arg(vat_rate), use_ptf_yekdem = sqlc.arg(use_ptf_yekdem),
+  kbk_energy = sqlc.narg(kbk_energy), kbk_t1 = sqlc.narg(kbk_t1), kbk_t2 = sqlc.narg(kbk_t2),
+  kbk_t3 = sqlc.narg(kbk_t3), kbk_power_price = sqlc.narg(kbk_power_price),
+  kbk_overuse_price = sqlc.narg(kbk_overuse_price), kbk_reactive_power = sqlc.narg(kbk_reactive_power),
+  kbk_distribution_cost_tl_per_kwh = sqlc.narg(kbk_distribution_cost_tl_per_kwh),
+  use_manual_yekdem = sqlc.arg(use_manual_yekdem), updated_at = sqlc.arg(updated_at)
+where id = sqlc.arg(id) and company_id = sqlc.arg(company_id)
+  and (sqlc.arg(all_buildings)::boolean or building_id = any(sqlc.arg(building_ids)::uuid[]))
+  and deleted_at is null
+returning *;
+
+-- name: TariffSoftDelete :execrows
+update tariffs set deleted_at = sqlc.arg(deleted_at)
+where id = sqlc.arg(id) and company_id = sqlc.arg(company_id)
+  and (sqlc.arg(all_buildings)::boolean or building_id = any(sqlc.arg(building_ids)::uuid[]))
+  and deleted_at is null;
+
+-- TariffBuildingVisible checks that a building is visible to the Scope
+-- before Effective is allowed to fall back to a company-wide tariff.
+-- name: TariffBuildingVisible :one
+select exists (
+  select 1 from buildings
+  where id = sqlc.arg(building_id) and company_id = sqlc.arg(company_id) and deleted_at is null
+    and (sqlc.arg(all_buildings)::boolean or id = any(sqlc.arg(building_ids)::uuid[]))
+) as visible;
+
+-- name: TariffEffectiveForBuilding :one
+select * from tariffs
+where company_id = sqlc.arg(company_id) and building_id = sqlc.arg(building_id)
+  and deleted_at is null and effective_from <= sqlc.arg(effective_on)
+order by effective_from desc
+limit 1;
+
+-- name: TariffEffectiveCompanyWide :one
+select * from tariffs
+where company_id = sqlc.arg(company_id) and building_id is null
+  and deleted_at is null and effective_from <= sqlc.arg(effective_on)
+order by effective_from desc
+limit 1;
+
+-- name: TariffVisible :one
+select exists (
+  select 1 from tariffs
+  where id = sqlc.arg(id) and company_id = sqlc.arg(company_id)
+    and (sqlc.arg(all_buildings)::boolean or building_id = any(sqlc.arg(building_ids)::uuid[]))
+    and deleted_at is null
+) as visible;
+
+-- name: TariffTaxList :many
+select * from tariff_taxes where tariff_id = sqlc.arg(tariff_id) order by sort_order, id;
+
+-- name: TariffTaxDeleteForTariff :exec
+delete from tariff_taxes where tariff_id = sqlc.arg(tariff_id);
+
+-- name: TariffTaxInsert :one
+insert into tariff_taxes (id, tariff_id, name, rate, sort_order)
+values (gen_random_uuid(), sqlc.arg(tariff_id), sqlc.arg(name), sqlc.arg(rate), sqlc.arg(sort_order))
+returning *;
+
+-- name: TariffManualYekdemList :many
+select * from tariff_manual_yekdem where tariff_id = sqlc.arg(tariff_id) order by year, month;
+
+-- name: TariffManualYekdemDeleteForTariff :exec
+delete from tariff_manual_yekdem where tariff_id = sqlc.arg(tariff_id);
+
+-- name: TariffManualYekdemInsert :one
+insert into tariff_manual_yekdem (tariff_id, year, month, value)
+values (sqlc.arg(tariff_id), sqlc.arg(year), sqlc.arg(month), sqlc.arg(value))
+returning *;
+
+-- name: TariffTemplateGet :one
+select * from tariff_templates where id = sqlc.arg(id) and company_id = sqlc.arg(company_id);
+
+-- name: TariffTemplateList :many
+select * from tariff_templates
+where company_id = sqlc.arg(company_id)
+  and (sqlc.arg(name_contains) = '' or name ilike '%' || sqlc.arg(name_contains) || '%')
+  and (sqlc.narg(is_default)::boolean is null or is_default = sqlc.narg(is_default))
+order by name
+limit sqlc.arg(limit_val) offset sqlc.arg(offset_val);
+
+-- name: TariffTemplateCreate :one
+insert into tariff_templates (id, company_id, name, description, is_default, payload, created_at, updated_at)
+values (gen_random_uuid(), sqlc.arg(company_id), sqlc.arg(name), sqlc.narg(description),
+        sqlc.arg(is_default), sqlc.arg(payload), sqlc.arg(created_at), sqlc.arg(created_at))
+returning *;
+
+-- name: TariffTemplateUpdate :one
+update tariff_templates set
+  name = sqlc.arg(name), description = sqlc.narg(description), is_default = sqlc.arg(is_default),
+  payload = sqlc.arg(payload), updated_at = sqlc.arg(updated_at)
+where id = sqlc.arg(id) and company_id = sqlc.arg(company_id)
+returning *;
+
+-- name: TariffTemplateDelete :execrows
+delete from tariff_templates where id = sqlc.arg(id) and company_id = sqlc.arg(company_id);
+
+-- name: SolarTariffGet :one
+select * from solar_tariffs
+where id = sqlc.arg(id) and company_id = sqlc.arg(company_id) and deleted_at is null;
+
+-- name: SolarTariffList :many
+select * from solar_tariffs
+where company_id = sqlc.arg(company_id)
+  and (sqlc.narg(plant_id)::uuid is null or plant_id = sqlc.narg(plant_id))
+  and (sqlc.narg(effective_on)::date is null or effective_from <= sqlc.narg(effective_on))
+  and (sqlc.arg(include_deleted)::boolean or deleted_at is null)
+order by effective_from desc, id
+limit sqlc.arg(limit_val) offset sqlc.arg(offset_val);
+
+-- name: SolarTariffCreate :one
+insert into solar_tariffs (id, company_id, plant_id, effective_from, feed_in_tariff, purchase_price, currency, notes, created_at)
+values (gen_random_uuid(), sqlc.arg(company_id), sqlc.arg(plant_id), sqlc.arg(effective_from),
+        sqlc.arg(feed_in_tariff), sqlc.narg(purchase_price), sqlc.arg(currency), sqlc.narg(notes), sqlc.arg(created_at))
+returning *;
+
+-- name: SolarTariffSoftDelete :execrows
+update solar_tariffs set deleted_at = sqlc.arg(deleted_at)
+where id = sqlc.arg(id) and company_id = sqlc.arg(company_id) and deleted_at is null;
+
+-- name: SolarTariffEffective :one
+select * from solar_tariffs
+where company_id = sqlc.arg(company_id) and plant_id = sqlc.arg(plant_id)
+  and deleted_at is null and effective_from <= sqlc.arg(effective_on)
+order by effective_from desc
+limit 1;
+
+-- name: SolarTariffPlantVisible :one
+select exists (
+  select 1 from power_plants
+  where id = sqlc.arg(plant_id) and company_id = sqlc.arg(company_id) and deleted_at is null
+) as visible;
+
+-- name: NationalTariffList :many
+select * from national_tariff_schedule
+where (sqlc.narg(user_group)::distribution_user_group is null or user_group = sqlc.narg(user_group))
+  and (sqlc.narg(voltage_level)::voltage_level is null or voltage_level = sqlc.narg(voltage_level))
+  and (sqlc.narg(term)::tariff_term is null or term = sqlc.narg(term))
+  and (sqlc.narg(effective_on)::date is null or effective_from <= sqlc.narg(effective_on))
+order by effective_from desc, id
+limit sqlc.arg(limit_val) offset sqlc.arg(offset_val);
+
+-- name: NationalTariffEffective :one
+select * from national_tariff_schedule
+where user_group = sqlc.arg(user_group) and voltage_level = sqlc.arg(voltage_level) and term = sqlc.arg(term)
+  and effective_from <= sqlc.arg(effective_on)
+order by effective_from desc
+limit 1;
+
+-- name: IcmalImportCreate :one
+insert into icmal_imports (id, company_id, uploaded_by, file_name, row_count, status, result, created_at)
+values (gen_random_uuid(), sqlc.arg(company_id), sqlc.narg(uploaded_by), sqlc.arg(file_name),
+        sqlc.arg(row_count), sqlc.arg(status), sqlc.narg(result), sqlc.arg(created_at))
+returning *;
+
+-- name: IcmalImportGet :one
+select * from icmal_imports where id = sqlc.arg(id) and company_id = sqlc.arg(company_id);
+
+-- name: IcmalImportList :many
+select * from icmal_imports
+where company_id = sqlc.arg(company_id)
+  and (sqlc.narg(status)::text is null or status = sqlc.narg(status))
+  and (sqlc.narg(range_from)::timestamptz is null or created_at >= sqlc.narg(range_from))
+  and (sqlc.narg(range_to)::timestamptz is null or created_at < sqlc.narg(range_to))
+order by created_at desc, id
+limit sqlc.arg(limit_val) offset sqlc.arg(offset_val);
+
+-- name: IcmalImportUpdateResult :one
+update icmal_imports set status = sqlc.arg(status), result = sqlc.arg(result)
+where id = sqlc.arg(id) and company_id = sqlc.arg(company_id)
+returning *;
+
+-- name: IcmalImportVisible :one
+select exists (
+  select 1 from icmal_imports where id = sqlc.arg(id) and company_id = sqlc.arg(company_id)
+) as visible;
+
+-- name: IcmalUploaderVisible :one
+select exists (
+  select 1 from users where id = sqlc.arg(user_id) and company_id = sqlc.arg(company_id)
+) as visible;
+
+-- name: IcmalRowInsert :one
+insert into icmal_rows (
+  id, import_id, building_id, period, etso_code, total_kwh, t0_kwh, t1_kwh, t2_kwh, t3_kwh,
+  energy_charge, distribution_charge, reactive_charge, power_charge, overuse_charge,
+  inductive_kvarh, capacitive_kvarh, demand_kw, vat_base, vat, btv, energy_fund, trt,
+  price_difference, correction_amount, is_cancelled, term, voltage_level, is_multi_time, raw
+) values (
+  gen_random_uuid(), sqlc.arg(import_id), sqlc.narg(building_id), sqlc.arg(period), sqlc.narg(etso_code),
+  sqlc.narg(total_kwh), sqlc.narg(t0_kwh), sqlc.narg(t1_kwh), sqlc.narg(t2_kwh), sqlc.narg(t3_kwh),
+  sqlc.narg(energy_charge), sqlc.narg(distribution_charge), sqlc.narg(reactive_charge), sqlc.narg(power_charge),
+  sqlc.narg(overuse_charge), sqlc.narg(inductive_kvarh), sqlc.narg(capacitive_kvarh), sqlc.narg(demand_kw),
+  sqlc.narg(vat_base), sqlc.narg(vat), sqlc.narg(btv), sqlc.narg(energy_fund), sqlc.narg(trt),
+  sqlc.narg(price_difference), sqlc.narg(correction_amount), sqlc.arg(is_cancelled), sqlc.narg(term),
+  sqlc.narg(voltage_level), sqlc.narg(is_multi_time), sqlc.narg(raw)
+) returning *;
+
+-- name: IcmalRowList :many
+select * from icmal_rows
+where import_id = sqlc.arg(import_id)
+order by id
+limit sqlc.arg(limit_val) offset sqlc.arg(offset_val);
+
+-- name: IcmalVisibleBuildingCount :one
+select count(*) from buildings
+where company_id = sqlc.arg(company_id) and deleted_at is null
+  and id = any(sqlc.arg(check_ids)::uuid[])
+  and (sqlc.arg(all_buildings)::boolean or id = any(sqlc.arg(building_ids)::uuid[]));
