@@ -61,7 +61,7 @@ func TestGeneratedUUIDRoundTripsThroughPostgres(t *testing.T) {
 
 	// Both parameters are google/uuid values, encoded by pgx with no codec
 	// registration on the pool.
-	got, err := q.GetBuilding(ctx, sqlcgen.GetBuildingParams{ID: buildingID, CompanyID: companyID})
+	got, err := q.BuildingGet(ctx, sqlcgen.BuildingGetParams{ID: buildingID, CompanyID: companyID})
 	require.NoError(t, err)
 
 	require.Equal(t, buildingID, got.ID, "not-null uuid primary key did not round-trip")
@@ -82,7 +82,7 @@ func TestGeneratedNullableUUIDDecodesAsNilNotUUIDNil(t *testing.T) {
 
 	// seedCompanyAndBuilding writes only the not-null columns, so this
 	// building's responsible_user_id is SQL NULL.
-	got, err := q.GetBuilding(ctx, sqlcgen.GetBuildingParams{ID: buildingID, CompanyID: companyID})
+	got, err := q.BuildingGet(ctx, sqlcgen.BuildingGetParams{ID: buildingID, CompanyID: companyID})
 	require.NoError(t, err)
 	require.Nil(t, got.ResponsibleUserID,
 		"a NULL uuid must decode as a nil *uuid.UUID: a non-nil pointer to "+
@@ -102,7 +102,7 @@ func TestGeneratedNullableUUIDDecodesAsNilNotUUIDNil(t *testing.T) {
 		`update buildings set responsible_user_id = $1 where id = $2`, userID, buildingID)
 	require.NoError(t, err)
 
-	got, err = q.GetBuilding(ctx, sqlcgen.GetBuildingParams{ID: buildingID, CompanyID: companyID})
+	got, err = q.BuildingGet(ctx, sqlcgen.BuildingGetParams{ID: buildingID, CompanyID: companyID})
 	require.NoError(t, err)
 	require.NotNil(t, got.ResponsibleUserID, "a populated nullable uuid decoded as nil")
 	require.Equal(t, userID, *got.ResponsibleUserID,
@@ -130,18 +130,18 @@ func TestGeneratedUUIDArrayParameterRoundTrips(t *testing.T) {
 	).Scan(&otherID))
 
 	// AllBuildings false: only the ids in the array come back.
-	scoped, err := q.ListBuildingsForScope(ctx, sqlcgen.ListBuildingsForScopeParams{CompanyID: companyID, AllBuildings: false, BuildingIds: []uuid.UUID{wantedID}})
+	scoped, err := q.BuildingListForScope(ctx, sqlcgen.BuildingListForScopeParams{CompanyID: companyID, AllBuildings: false, BuildingIds: []uuid.UUID{wantedID}})
 	require.NoError(t, err)
 	require.Len(t, scoped, 1, "uuid[] parameter did not filter as expected")
 	require.Equal(t, wantedID, scoped[0].ID)
 
 	// An empty slice must select nothing rather than erroring or matching all.
-	empty, err := q.ListBuildingsForScope(ctx, sqlcgen.ListBuildingsForScopeParams{CompanyID: companyID, AllBuildings: false, BuildingIds: nil})
+	empty, err := q.BuildingListForScope(ctx, sqlcgen.BuildingListForScopeParams{CompanyID: companyID, AllBuildings: false, BuildingIds: nil})
 	require.NoError(t, err)
 	require.Empty(t, empty, "an empty building_ids array must match no rows")
 
 	// AllBuildings true: the array is ignored and every building comes back.
-	all, err := q.ListBuildingsForScope(ctx, sqlcgen.ListBuildingsForScopeParams{CompanyID: companyID, AllBuildings: true, BuildingIds: nil})
+	all, err := q.BuildingListForScope(ctx, sqlcgen.BuildingListForScopeParams{CompanyID: companyID, AllBuildings: true, BuildingIds: nil})
 	require.NoError(t, err)
 	require.Len(t, all, 2)
 }

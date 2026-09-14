@@ -9,20 +9,147 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const getBuilding = `-- name: GetBuilding :one
-select id, company_id, name, address, latitude, longitude, floors, personnel_count, total_area_m2, sector, responsible_user_id, bill_cutoff_day, created_at, updated_at, deleted_at from buildings
-where id = $1 and company_id = $2 and deleted_at is null
+const buildingContactInsert = `-- name: BuildingContactInsert :one
+insert into building_contacts as "row" (id, building_id, name, phone, sort_order)
+values ($1, $2, $3, $4, $5)
+returning id, building_id, name, phone, sort_order
 `
 
-type GetBuildingParams struct {
-	ID        uuid.UUID
-	CompanyID uuid.UUID
+type BuildingContactInsertParams struct {
+	ID         uuid.UUID
+	BuildingID uuid.UUID
+	Name       *string
+	Phone      *string
+	SortOrder  int16
 }
 
-func (q *Queries) GetBuilding(ctx context.Context, arg GetBuildingParams) (Building, error) {
-	row := q.db.QueryRow(ctx, getBuilding, arg.ID, arg.CompanyID)
+// The `as "row"` alias dodges TestEveryFunctionSQLcMustTypeIsDeclared's call
+// scanner — see queries/admin_audit.sql's comment on AdminAppendPlatformAudit.
+func (q *Queries) BuildingContactInsert(ctx context.Context, arg BuildingContactInsertParams) (BuildingContact, error) {
+	row := q.db.QueryRow(ctx, buildingContactInsert,
+		arg.ID,
+		arg.BuildingID,
+		arg.Name,
+		arg.Phone,
+		arg.SortOrder,
+	)
+	var i BuildingContact
+	err := row.Scan(
+		&i.ID,
+		&i.BuildingID,
+		&i.Name,
+		&i.Phone,
+		&i.SortOrder,
+	)
+	return i, err
+}
+
+const buildingContactsDelete = `-- name: BuildingContactsDelete :exec
+delete from building_contacts where building_id = $1
+`
+
+func (q *Queries) BuildingContactsDelete(ctx context.Context, buildingID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, buildingContactsDelete, buildingID)
+	return err
+}
+
+const buildingContactsList = `-- name: BuildingContactsList :many
+select c.id, c.building_id, c.name, c.phone, c.sort_order from building_contacts c
+join buildings b on b.id = c.building_id
+where c.building_id = $1
+  and b.company_id = $2
+  and ($3::boolean or b.id = any($4::uuid[]))
+  and b.deleted_at is null
+order by c.sort_order
+`
+
+type BuildingContactsListParams struct {
+	BuildingID   uuid.UUID
+	CompanyID    uuid.UUID
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
+}
+
+// Isolation: building_contacts has no company_id — join through buildings.
+func (q *Queries) BuildingContactsList(ctx context.Context, arg BuildingContactsListParams) ([]BuildingContact, error) {
+	rows, err := q.db.Query(ctx, buildingContactsList,
+		arg.BuildingID,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BuildingContact
+	for rows.Next() {
+		var i BuildingContact
+		if err := rows.Scan(
+			&i.ID,
+			&i.BuildingID,
+			&i.Name,
+			&i.Phone,
+			&i.SortOrder,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const buildingCreate = `-- name: BuildingCreate :one
+insert into buildings as "row"
+    (id, company_id, name, address, latitude, longitude, floors, personnel_count,
+     total_area_m2, sector, responsible_user_id, bill_cutoff_day, created_at, updated_at)
+values ($1, $2, $3, $4,
+        $5, $6, $7, $8,
+        $9, $10, $11,
+        $12, $13, $13)
+returning id, company_id, name, address, latitude, longitude, floors, personnel_count, total_area_m2, sector, responsible_user_id, bill_cutoff_day, created_at, updated_at, deleted_at
+`
+
+type BuildingCreateParams struct {
+	ID                uuid.UUID
+	CompanyID         uuid.UUID
+	Name              string
+	Address           *string
+	Latitude          pgtype.Numeric
+	Longitude         pgtype.Numeric
+	Floors            *int32
+	PersonnelCount    *int32
+	TotalAreaM2       pgtype.Numeric
+	Sector            *string
+	ResponsibleUserID *uuid.UUID
+	BillCutoffDay     int16
+	At                pgtype.Timestamptz
+}
+
+// The `as "row"` alias dodges TestEveryFunctionSQLcMustTypeIsDeclared's call
+// scanner — see queries/admin_audit.sql's comment on AdminAppendPlatformAudit.
+func (q *Queries) BuildingCreate(ctx context.Context, arg BuildingCreateParams) (Building, error) {
+	row := q.db.QueryRow(ctx, buildingCreate,
+		arg.ID,
+		arg.CompanyID,
+		arg.Name,
+		arg.Address,
+		arg.Latitude,
+		arg.Longitude,
+		arg.Floors,
+		arg.PersonnelCount,
+		arg.TotalAreaM2,
+		arg.Sector,
+		arg.ResponsibleUserID,
+		arg.BillCutoffDay,
+		arg.At,
+	)
 	var i Building
 	err := row.Scan(
 		&i.ID,
@@ -44,22 +171,126 @@ func (q *Queries) GetBuilding(ctx context.Context, arg GetBuildingParams) (Build
 	return i, err
 }
 
-const listBuildingsForScope = `-- name: ListBuildingsForScope :many
+const buildingGet = `-- name: BuildingGet :one
+
 select id, company_id, name, address, latitude, longitude, floors, personnel_count, total_area_m2, sector, responsible_user_id, bill_cutoff_day, created_at, updated_at, deleted_at from buildings
-where company_id = $1
-  and ($2::boolean or id = any($3::uuid[]))
-  and deleted_at is null
-order by name
+where id = $1 and company_id = $2 and deleted_at is null
 `
 
-type ListBuildingsForScopeParams struct {
+type BuildingGetParams struct {
+	ID        uuid.UUID
+	CompanyID uuid.UUID
+}
+
+// BuildingRepository queries.
+func (q *Queries) BuildingGet(ctx context.Context, arg BuildingGetParams) (Building, error) {
+	row := q.db.QueryRow(ctx, buildingGet, arg.ID, arg.CompanyID)
+	var i Building
+	err := row.Scan(
+		&i.ID,
+		&i.CompanyID,
+		&i.Name,
+		&i.Address,
+		&i.Latitude,
+		&i.Longitude,
+		&i.Floors,
+		&i.PersonnelCount,
+		&i.TotalAreaM2,
+		&i.Sector,
+		&i.ResponsibleUserID,
+		&i.BillCutoffDay,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const buildingGetScoped = `-- name: BuildingGetScoped :one
+select id, company_id, name, address, latitude, longitude, floors, personnel_count, total_area_m2, sector, responsible_user_id, bill_cutoff_day, created_at, updated_at, deleted_at from buildings
+where id = $1
+  and company_id = $2
+  and ($3::boolean or id = any($4::uuid[]))
+  and deleted_at is null
+`
+
+type BuildingGetScopedParams struct {
+	ID           uuid.UUID
 	CompanyID    uuid.UUID
 	AllBuildings bool
 	BuildingIds  []uuid.UUID
 }
 
-func (q *Queries) ListBuildingsForScope(ctx context.Context, arg ListBuildingsForScopeParams) ([]Building, error) {
-	rows, err := q.db.Query(ctx, listBuildingsForScope, arg.CompanyID, arg.AllBuildings, arg.BuildingIds)
+// Get, honouring the Scope's own building predicate as well as company_id: a
+// narrow Scope cannot fetch a building it was not granted, even inside its
+// own company.
+func (q *Queries) BuildingGetScoped(ctx context.Context, arg BuildingGetScopedParams) (Building, error) {
+	row := q.db.QueryRow(ctx, buildingGetScoped,
+		arg.ID,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
+	)
+	var i Building
+	err := row.Scan(
+		&i.ID,
+		&i.CompanyID,
+		&i.Name,
+		&i.Address,
+		&i.Latitude,
+		&i.Longitude,
+		&i.Floors,
+		&i.PersonnelCount,
+		&i.TotalAreaM2,
+		&i.Sector,
+		&i.ResponsibleUserID,
+		&i.BillCutoffDay,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const buildingList = `-- name: BuildingList :many
+select id, company_id, name, address, latitude, longitude, floors, personnel_count, total_area_m2, sector, responsible_user_id, bill_cutoff_day, created_at, updated_at, deleted_at from buildings
+where company_id = $1
+  and ($2::boolean or id = any($3::uuid[]))
+  and (cardinality($4::uuid[]) = 0 or id = any($4::uuid[]))
+  and ($5::boolean or deleted_at is null)
+  and ($6::text = '' or name ilike '%' || $6::text || '%')
+  and ($7::text is null or sector = $7)
+  and ($8::uuid is null or responsible_user_id = $8)
+order by name
+limit $10 offset $9
+`
+
+type BuildingListParams struct {
+	CompanyID         uuid.UUID
+	AllBuildings      bool
+	BuildingIds       []uuid.UUID
+	FilterIds         []uuid.UUID
+	IncludeDeleted    bool
+	NameContains      string
+	Sector            *string
+	ResponsibleUserID *uuid.UUID
+	PageOffset        int32
+	PageLimit         int32
+}
+
+func (q *Queries) BuildingList(ctx context.Context, arg BuildingListParams) ([]Building, error) {
+	rows, err := q.db.Query(ctx, buildingList,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
+		arg.FilterIds,
+		arg.IncludeDeleted,
+		arg.NameContains,
+		arg.Sector,
+		arg.ResponsibleUserID,
+		arg.PageOffset,
+		arg.PageLimit,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -92,4 +323,181 @@ func (q *Queries) ListBuildingsForScope(ctx context.Context, arg ListBuildingsFo
 		return nil, err
 	}
 	return items, nil
+}
+
+const buildingListForScope = `-- name: BuildingListForScope :many
+select id, company_id, name, address, latitude, longitude, floors, personnel_count, total_area_m2, sector, responsible_user_id, bill_cutoff_day, created_at, updated_at, deleted_at from buildings
+where company_id = $1
+  and ($2::boolean or id = any($3::uuid[]))
+  and deleted_at is null
+order by name
+`
+
+type BuildingListForScopeParams struct {
+	CompanyID    uuid.UUID
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
+}
+
+func (q *Queries) BuildingListForScope(ctx context.Context, arg BuildingListForScopeParams) ([]Building, error) {
+	rows, err := q.db.Query(ctx, buildingListForScope, arg.CompanyID, arg.AllBuildings, arg.BuildingIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Building
+	for rows.Next() {
+		var i Building
+		if err := rows.Scan(
+			&i.ID,
+			&i.CompanyID,
+			&i.Name,
+			&i.Address,
+			&i.Latitude,
+			&i.Longitude,
+			&i.Floors,
+			&i.PersonnelCount,
+			&i.TotalAreaM2,
+			&i.Sector,
+			&i.ResponsibleUserID,
+			&i.BillCutoffDay,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const buildingResponsibleUserVisible = `-- name: BuildingResponsibleUserVisible :one
+select exists(
+    select 1 from users
+    where id = $1 and company_id = $2 and deleted_at is null
+)
+`
+
+type BuildingResponsibleUserVisibleParams struct {
+	ResponsibleUserID uuid.UUID
+	CompanyID         uuid.UUID
+}
+
+func (q *Queries) BuildingResponsibleUserVisible(ctx context.Context, arg BuildingResponsibleUserVisibleParams) (bool, error) {
+	row := q.db.QueryRow(ctx, buildingResponsibleUserVisible, arg.ResponsibleUserID, arg.CompanyID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const buildingSoftDelete = `-- name: BuildingSoftDelete :execrows
+update buildings
+set deleted_at = $1
+where id = $2
+  and company_id = $3
+  and ($4::boolean or id = any($5::uuid[]))
+  and deleted_at is null
+`
+
+type BuildingSoftDeleteParams struct {
+	DeletedAt    pgtype.Timestamptz
+	ID           uuid.UUID
+	CompanyID    uuid.UUID
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
+}
+
+func (q *Queries) BuildingSoftDelete(ctx context.Context, arg BuildingSoftDeleteParams) (int64, error) {
+	result, err := q.db.Exec(ctx, buildingSoftDelete,
+		arg.DeletedAt,
+		arg.ID,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const buildingUpdate = `-- name: BuildingUpdate :one
+update buildings
+set name = $1,
+    address = $2,
+    latitude = $3,
+    longitude = $4,
+    floors = $5,
+    personnel_count = $6,
+    total_area_m2 = $7,
+    sector = $8,
+    responsible_user_id = $9,
+    bill_cutoff_day = $10,
+    updated_at = $11
+where id = $12
+  and company_id = $13
+  and ($14::boolean or id = any($15::uuid[]))
+  and deleted_at is null
+returning id, company_id, name, address, latitude, longitude, floors, personnel_count, total_area_m2, sector, responsible_user_id, bill_cutoff_day, created_at, updated_at, deleted_at
+`
+
+type BuildingUpdateParams struct {
+	Name              string
+	Address           *string
+	Latitude          pgtype.Numeric
+	Longitude         pgtype.Numeric
+	Floors            *int32
+	PersonnelCount    *int32
+	TotalAreaM2       pgtype.Numeric
+	Sector            *string
+	ResponsibleUserID *uuid.UUID
+	BillCutoffDay     int16
+	UpdatedAt         pgtype.Timestamptz
+	ID                uuid.UUID
+	CompanyID         uuid.UUID
+	AllBuildings      bool
+	BuildingIds       []uuid.UUID
+}
+
+func (q *Queries) BuildingUpdate(ctx context.Context, arg BuildingUpdateParams) (Building, error) {
+	row := q.db.QueryRow(ctx, buildingUpdate,
+		arg.Name,
+		arg.Address,
+		arg.Latitude,
+		arg.Longitude,
+		arg.Floors,
+		arg.PersonnelCount,
+		arg.TotalAreaM2,
+		arg.Sector,
+		arg.ResponsibleUserID,
+		arg.BillCutoffDay,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
+	)
+	var i Building
+	err := row.Scan(
+		&i.ID,
+		&i.CompanyID,
+		&i.Name,
+		&i.Address,
+		&i.Latitude,
+		&i.Longitude,
+		&i.Floors,
+		&i.PersonnelCount,
+		&i.TotalAreaM2,
+		&i.Sector,
+		&i.ResponsibleUserID,
+		&i.BillCutoffDay,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
 }
