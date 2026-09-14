@@ -452,73 +452,107 @@ func TestTheJobPackageDoesNotImportTheStore(t *testing.T) {
 }
 
 // floatGuardPatterns are the package trees TestNoFloatFieldsInModelOrStore
-// walks: the domain model, where money and energy are declared, and the store
-// layer, where they are read and written. They are the two places a float
-// field would do damage; a float in an HTTP DTO is a presentation bug, a float
-// here is a wrong invoice.
+// walks: the whole domain layer, where money and energy are declared and
+// computed, and the whole store layer, where they are read and written. They
+// are the places a float field would do damage; a float in an HTTP DTO is a
+// presentation bug, a float here is a wrong invoice.
+//
+// Both are RECURSIVE patterns, deliberately. A package added under either tree
+// later — internal/domain/billing, internal/domain/tariff, a new store
+// subpackage — is covered the moment it exists, with no edit here. An earlier
+// version listed ./internal/domain/model/... alone, so a float field in a new
+// internal/domain/billing package passed while .golangci.yml claimed the two
+// halves covered the same trees.
+//
+// .golangci.yml's no-float-money depguard rule lists exactly these two trees
+// (**/internal/domain/** and **/internal/store/**). Change both or neither.
 var floatGuardPatterns = []string{
-	"./internal/domain/model/...",
+	"./internal/domain/...",
 	"./internal/store/...",
 }
 
+// floatCarrierPackages are the FOREIGN packages whose struct types the float
+// guard descends into. They are the packages whose structs exist to carry a
+// column value, so a float inside one of their structs IS a float column value
+// held in a field: pgtype.Float8 is what sqlc generates for a nullable
+// `double precision` column, and pgtype.Float4, pgtype.Point/Box/Circle/Line
+// and sql.NullFloat64 are the same thing in other shapes.
+//
+// Walking the whole package rather than deny-listing Float4, Float8 and
+// NullFloat64 by name is the point: a deny-list is complete only until the
+// next wrapper someone did not think of, and the guard would say nothing when
+// it went stale.
+var floatCarrierPackages = map[string]bool{
+	"github.com/jackc/pgx/v5/pgtype": true,
+	"database/sql":                   true,
+	"database/sql/driver":            true,
+}
+
+// floatGuardMinFields is the anti-vacuity floor. Measured at 1581 struct
+// fields when the reach was widened to the two recursive trees above; the
+// floor leaves ~5% headroom so that deleting a genuinely dead struct does not
+// turn the guard red, while a guard that silently stopped loading
+// internal/store (~40% of the count) or internal/domain/model cannot pass.
+// The count only grows as Tasks 9-11 add repositories; raise the floor when
+// it has grown well past this.
+const floatGuardMinFields = 1500
+
 // TestNoFloatFieldsInModelOrStore enforces the invariant this project has
-// asserted since F0 and, until now, has never actually had: no struct field in
-// the domain model or the store layer is a float.
+// asserted since F0: no struct field in the domain layer or the store layer is,
+// or contains, a float.
 //
 // WHY THIS IS A TEST AND NOT A LINTER RULE. .golangci.yml's `no-float-money`
 // is a depguard rule, and depguard is an IMPORT linter. It can forbid
 // math/big; it cannot see `Total float64`, because no import is involved in
-// declaring one. Task 8a established that as fact and wrote it into the config
-// comment. The field-level half of the rule has therefore been carried by code
-// review alone, which is to say by nothing that fails a build. This is that
-// half.
+// declaring one. This test is the field-level half.
 //
-// WHAT IT CHECKS. Every field of every struct type declared under the patterns
-// above — package-level types, types declared inside functions, and anonymous
-// structs used as field types — resolved through the type checker. The type is
-// unwrapped through pointers, slices, arrays, maps (both key and element) and
-// channels, so none of these hides a float:
+// WHAT IT CHECKS. Every field of every struct type declared under
+// floatGuardPatterns — package-level types, types declared inside functions,
+// and anonymous structs used as field types — resolved through the type
+// checker, never matched by spelling. From the field's type it follows:
 //
-//	Total    float64
-//	Total    *float64
-//	Totals   []float64
-//	Totals   [12]float64
-//	ByMonth  map[string]float64
-//	ByRate   map[float64]string
-//	Stream   chan float64
-//	Nested   struct{ Total float64 }
-//	Deep     []map[string]*[]float64
+//   - pointers, slices, arrays, channels, and maps (key AND element);
+//   - anonymous structs, field by field;
+//   - aliases, via types.Unalias (`type Money = float64`);
+//   - EVERY named type's underlying type, whichever package declares it, so a
+//     defined type (`type Money float64`, or a foreign `type Rate float64`)
+//     is caught, and so is an embedded field whose type is one;
+//   - EVERY named type's type arguments, so `Box[float64]` and
+//     `sql.Null[float64]` are caught even when Box's own declaration is clean;
+//   - into the fields of a named STRUCT when the struct is declared anywhere
+//     in this module (not only in the walked trees: a money type declared in
+//     internal/platform and held here is still this codebase's choice) or in
+//     one of floatCarrierPackages (pgtype.Float8, sql.NullFloat64, …).
 //
-// Types are resolved, never matched by name, for the same reason isScopeType
-// resolves rather than greps: `type Money = float64` is an alias, and a
-// textual scan for "float64" would miss every field declared as Money.
-// types.Unalias plus a *types.Basic kind comparison sees through it.
+// WHAT IT DOES NOT CHECK, deliberately.
 //
-// WHAT IT DOES NOT CHECK, deliberately. It does not follow NAMED types into
-// other packages. pgtype.Numeric and decimal.Decimal both hold no float, but
-// something like time.Duration or a third-party struct with a float field is
-// not this guard's business: those types are not where this project's money
-// lives, and following them would flag every dependency that happens to
-// contain a float. What matters is that no type DECLARED here introduces one,
-// because a float declared here is a float this codebase chose. Fields whose
-// type is declared in one of the walked packages are covered when that type is
-// itself walked.
+//   - The internals of foreign structs outside floatCarrierPackages. A field
+//     holding *pgxpool.Pool or *redis.Client reaches connection pools, TLS
+//     configuration and retry policies; a float in there is a backoff jitter
+//     or a histogram bucket, not money, and descending into it would make this
+//     guard's colour depend on the private fields of whatever dependency
+//     version is pinned. The only cure for such a false positive would be an
+//     exemption list, which is how guards die. A foreign struct that exists to
+//     CARRY a value lives in a carrier package and is walked.
+//   - Interfaces and function types: a field of type `any` or `func() float64`
+//     holds no float statically.
+//   - Local variables, function parameters and return values: this is the
+//     FIELD-level guard, matching where the schema's numeric columns land.
+//   - _test.go files and files behind build tags: packages are loaded without
+//     tests, so this guards production code only.
 //
-// Local variables, function parameters and return values are also out of
-// scope: this is the FIELD-level guard, matching where the schema's numeric
-// columns land. A float local inside a helper is visible in review; a float
-// field is what silently persists.
-//
-// The guard asserts it inspected a plausible number of fields. A guard that
-// walks nothing passes for the same reason a guard that finds nothing does,
-// and this phase has already found three guards that were weaker than their
-// names implied.
+// The guard asserts it inspected at least floatGuardMinFields fields. A guard
+// that walks nothing passes for the same reason a guard that finds nothing
+// does, and this phase has already found seven guards that were weaker than
+// their names implied — this one among them, before its reach and its named
+// type handling were fixed.
 func TestNoFloatFieldsInModelOrStore(t *testing.T) {
 	inspected := 0
 
 	for _, pattern := range floatGuardPatterns {
 		for _, pkg := range loadTypedPackages(t, pattern) {
 			if pkg.TypesInfo == nil {
+				t.Errorf("%s: loaded without type information; the float guard cannot inspect it", pkg.PkgPath)
 				continue
 			}
 			for _, file := range pkg.Syntax {
@@ -553,9 +587,10 @@ func TestNoFloatFieldsInModelOrStore(t *testing.T) {
 		}
 	}
 
-	require.GreaterOrEqual(t, inspected, 200,
-		"inspected implausibly few struct fields (%d): the guard walked almost nothing "+
-			"and would pass whatever the code said", inspected)
+	require.GreaterOrEqual(t, inspected, floatGuardMinFields,
+		"inspected implausibly few struct fields (%d, floor %d): the guard walked far less than "+
+			"it did when the floor was measured and would pass whatever the code said",
+		inspected, floatGuardMinFields)
 	t.Logf("inspected %d struct field(s) across %v for float types", inspected, floatGuardPatterns)
 }
 
@@ -572,25 +607,23 @@ func fieldNames(field *ast.Field) string {
 	return strings.Join(names, ", ")
 }
 
-// floatKindIn reports whether typ is, or structurally contains, a float32 or
-// float64, looking through pointers, slices, arrays, maps, channels and
-// anonymous structs. It does NOT descend into named types — see
-// TestNoFloatFieldsInModelOrStore's comment for why that boundary is where it
-// is.
+// floatKindIn reports whether typ is, or contains, a float32 or float64, and
+// if so names the float kind and the named types it was reached through. See
+// TestNoFloatFieldsInModelOrStore for exactly what is followed and why.
 //
-// The `seen` set guards against a recursive anonymous structure. One cannot be
-// written in Go today (a type that contains itself needs a name), but the
-// function is recursive over attacker-free input either way and the set costs
-// nothing.
+// The `seen` set, keyed by the fully qualified type string, stops recursion
+// through self-referential named types (`type node struct{ next *node }`) and
+// avoids re-walking a type reached along two paths. Keying by string rather
+// than *types.Named identity matters for generics: two instantiations of the
+// same generic type are not guaranteed to share a pointer.
 func floatKindIn(typ types.Type) (string, bool) {
-	return floatKindInSeen(typ, map[types.Type]bool{})
+	return floatKindInSeen(typ, map[string]bool{})
 }
 
-func floatKindInSeen(typ types.Type, seen map[types.Type]bool) (string, bool) {
-	if typ == nil || seen[typ] {
+func floatKindInSeen(typ types.Type, seen map[string]bool) (string, bool) {
+	if typ == nil {
 		return "", false
 	}
-	seen[typ] = true
 
 	switch t := types.Unalias(typ).(type) {
 	case *types.Basic:
@@ -614,16 +647,55 @@ func floatKindInSeen(typ types.Type, seen map[types.Type]bool) (string, bool) {
 		}
 		return floatKindInSeen(t.Elem(), seen)
 	case *types.Struct:
-		// An ANONYMOUS struct used as a field type. A named struct is not
-		// reached here (types.Unalias of a *types.Named is still Named), and
-		// is covered by the walk when its own declaration is visited.
 		for i := range t.NumFields() {
 			if kind, ok := floatKindInSeen(t.Field(i).Type(), seen); ok {
 				return kind, true
 			}
 		}
 		return "", false
+	case *types.Named:
+		key := types.TypeString(t, nil)
+		if seen[key] {
+			return "", false
+		}
+		seen[key] = true
+
+		through := func(kind string) string {
+			return kind + " through " + types.TypeString(t, func(p *types.Package) string { return p.Name() })
+		}
+
+		if args := t.TypeArgs(); args != nil {
+			for i := range args.Len() {
+				if kind, ok := floatKindInSeen(args.At(i), seen); ok {
+					return through(kind), true
+				}
+			}
+		}
+
+		// For an instantiated generic, Underlying is already substituted, so
+		// Box[float64]'s underlying is struct{ V float64 }.
+		underlying := t.Underlying()
+		if _, isStruct := underlying.(*types.Struct); isStruct && !floatGuardDescendsInto(t) {
+			return "", false
+		}
+		if kind, ok := floatKindInSeen(underlying, seen); ok {
+			return through(kind), true
+		}
+		return "", false
 	default:
+		// Interfaces, signatures and type parameters hold no float
+		// statically; an instantiation's type arguments are checked above.
 		return "", false
 	}
+}
+
+// floatGuardDescendsInto reports whether the float guard walks the fields of
+// the named struct type t: yes for any struct declared in this module or in a
+// floatCarrierPackages package, no for every other foreign struct.
+func floatGuardDescendsInto(t *types.Named) bool {
+	pkg := t.Obj().Pkg()
+	if pkg == nil {
+		return false
+	}
+	return underPackage(pkg.Path(), modulePath) || floatCarrierPackages[pkg.Path()]
 }

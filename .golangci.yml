@@ -45,33 +45,28 @@ linters:
               desc: "internal/domain imports nothing from the project"
         # Money and energy are numeric/decimal end to end, never float64.
         # This rule was written in F0 against internal/domain/billing and
-        # internal/domain/tariff, neither of which exists yet, so it has
-        # never matched a single file. Task 8a pointed it at the store layer,
-        # which does exist and is where the numeric columns are read and
-        # written. Task 8b adds internal/domain/model, which it creates: 8a
-        # left the glob off precisely because a glob for a non-existent
-        # directory is the dormant-rule failure this entry exists to fix.
+        # internal/domain/tariff before either existed. It now covers the two
+        # whole trees, recursively: every package under internal/domain and
+        # every package under internal/store, including packages not yet
+        # written, so no future package needs an edit here to be covered.
         #
         # Scope note: depguard matches IMPORTS, not declarations. It cannot
         # see a `Total float64` struct field, and no configuration of it can.
         # What it covers is the ARITHMETIC route into float money — math/big
         # (big.Float, and big.Rat used as a stand-in for decimal).
         #
-        # The field-level half is NOT carried by review any more. It is
-        # TestNoFloatFieldsInModelOrStore in internal/arch/arch_test.go, which
-        # walks the same two package trees listed below with the type checker
-        # and fails on any struct field resolving to float32/float64 through
-        # pointers, slices, maps, arrays or aliases. The two halves are
-        # deliberately kept in step: a tree added here should be added there.
+        # The field-level half is TestNoFloatFieldsInModelOrStore in
+        # internal/arch/arch_test.go. Its floatGuardPatterns are
+        # ./internal/domain/... and ./internal/store/... — the same two
+        # recursive trees as the globs below — and it fails on any struct field
+        # that is or contains float32/float64 through pointers, containers,
+        # aliases, defined types, generic type arguments, this module's structs
+        # and pgtype/database/sql value wrappers (pgtype.Float8, sql.NullFloat64).
+        # Change both or neither.
         no-float-money:
           files:
-            # "**/internal/store/**" already covers internal/store/postgres
-            # and every other subpackage; a separate entry for it would be
-            # dead config that reads as extra coverage.
+            - "**/internal/domain/**"
             - "**/internal/store/**"
-            - "**/internal/domain/model/**"
-            - "**/internal/domain/billing/**"
-            - "**/internal/domain/tariff/**"
           deny:
             - pkg: "math/big"
               desc: "use github.com/shopspring/decimal for monetary arithmetic"
