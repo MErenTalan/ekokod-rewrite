@@ -498,6 +498,11 @@ type ReadingRepository interface {
 	// and end — the exact operation 02-domain-rules.md §3.1 specifies for
 	// billing.
 	//
+	// It takes a kind because the primary key (analyzer_id, ts, kind) allows
+	// two kinds to carry different register values at the very same instant
+	// (02-domain-rules.md §2.3, §3.4); which kind billing reads is an F4
+	// decision this signature leaves open rather than guesses at.
+	//
 	// Either return may be nil, and nil is NOT a zero reading. §3.1: "If
 	// either reading is missing, or if reading_start and reading_end are the
 	// same reading, the period yields no row — it is not emitted as zero." A
@@ -511,7 +516,7 @@ type ReadingRepository interface {
 	// Isolation: join through analyzers. An analyzer not visible to the
 	// Scope returns ErrNotFound — never two nils, which would read as "no
 	// data" for a meter that is simply someone else's.
-	BoundaryReadings(ctx context.Context, s Scope, analyzerID uuid.UUID, start, end time.Time) (startReading, endReading *model.MeterReading, err error)
+	BoundaryReadings(ctx context.Context, s Scope, analyzerID uuid.UUID, kind model.ReadingKind, start, end time.Time) (startReading, endReading *model.MeterReading, err error)
 
 	// Latest returns the most recent reading of a kind WITHIN r, or nil if
 	// there is none in r. Nil rather than ErrNotFound: an analyzer with no
