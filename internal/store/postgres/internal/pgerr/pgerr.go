@@ -18,7 +18,6 @@ package pgerr
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -39,21 +38,31 @@ import (
 // fall through to the default, scrubbed branch like any other error.
 const uniqueViolation = "23505"
 
-// sentinel makes a wrapped error answer errors.Is for exactly one of store's
-// sentinel values, while keeping the original driver error — pgx.ErrNoRows,
-// or the *pgconn.PgError itself — reachable through errors.Is/errors.As for a
-// caller that wants the driver's own value.
+// sentinel makes an already-scrubbed error additionally answer errors.Is for
+// one of store's sentinel values.
 //
-// This is the same Error()/Unwrap() split scrub.go's `scrubbed` type uses in
-// package postgres, reused rather than reinvented: Error() prints only text
-// that was already safe to print (see Translate's two comments below on why
-// that is true for both branches that construct one of these), and Unwrap()
-// keeps the cause traversable. The one addition over `scrubbed` is Is, which
-// scrubbed has no need of because it never has to make an error answer for a
-// synthetic sentinel — only for the driver's own value.
+// It wraps a cause that has ALREADY BEEN THROUGH secret.Wrap — never the raw
+// driver error — which is what makes this a thin wrapper around the one
+// scrubbing style rather than a second one. Task 8c fix round 1 found the
+// first version of this type built its cause as plain fmt.Errorf("%s: %w",
+// op, err), on the theory that pgx.ErrNoRows and *pgconn.PgError never print
+// a credential on their own — true in isolation, but err here is whatever a
+// caller passed in, and a caller can (and, per the review's probe, did) wrap
+// pgx.ErrNoRows or a *pgconn.PgError in text that names a DSN. Every non-nil
+// outcome of Translate must be scrubbed, not just the branches that "happen
+// not to need it".
+//
+// Error() and Unwrap() therefore both defer entirely to cause: Error() is
+// already redacted (cause is secret.Wrap's own result), and Unwrap() keeps
+// the FULL original chain reachable, because secret.Wrap's own type keeps
+// its cause traversable too — errors.Is(result, pgx.ErrNoRows) and
+// errors.As(result, &pgErr) both walk sentinel -> scrubbed -> the original
+// err. Is is the one addition over secret.Wrap's own type, which never needs
+// to answer for a synthetic sentinel like store.ErrNotFound — only for the
+// driver's own values.
 type sentinel struct {
 	target error // store.ErrNotFound or store.ErrConflict
-	cause  error // op-wrapped, so cause.Error() already names the operation
+	cause  error // always the result of secret.Wrap — never a bare fmt.Errorf wrap
 }
 
 func (s *sentinel) Error() string        { return s.cause.Error() }
@@ -67,38 +76,42 @@ func (s *sentinel) Is(target error) bool { return target == s.target }
 //   - nil -> nil, so callers can call Translate unconditionally.
 //   - pgx.ErrNoRows, wrapped or not -> errors.Is(result, store.ErrNotFound).
 //   - a unique_violation (SQLSTATE 23505) -> errors.Is(result, store.ErrConflict).
-//   - everything else -> scrubbed through secret.Wrap using the password pgx
-//     itself parsed out of pool's own connection string, exactly as
-//     scrubPoolErr does in package postgres. (scrubPoolErr is one line of
-//     secret.Wrap; this calls secret.Wrap directly rather than importing
-//     package postgres, which pgerr is underneath and must not import back
-//     into.)
+//   - everything else -> scrubbed the same way, with no synthetic sentinel.
+//
+// ALL FOUR non-nil outcomes go through scrub, which is secret.Wrap using the
+// password pgx itself parsed out of pool's own connection string — exactly
+// as scrubPoolErr does in package postgres. (scrubPoolErr is one line of
+// secret.Wrap; this calls secret.Wrap directly rather than importing package
+// postgres, which pgerr is underneath and must not import back into.) A
+// unique violation's Detail, which echoes the offending column VALUES ("Key
+// (email)=(x@y) already exists"), still never reaches a caller either way:
+// *pgconn.PgError's own Error() renders Severity + Message + SQLSTATE only,
+// never Detail, so scrubbing the driver error's text can never surface it.
 //
 // op is a short description of the failed operation, folded into the
 // result's Error() text the same way every other error in this package does.
-//
-// Neither of the two sentinel branches can leak a credential: pgx.ErrNoRows's
-// Error() is the fixed string "no rows in result set", and *pgconn.PgError's
-// Error() is Severity + Message + SQLSTATE only — Detail, which is where a
-// unique violation echoes the offending column VALUES ("Key (email)=(x@y)
-// already exists"), is a separate field that Error() never renders. So the
-// conflict branch below can wrap the driver error as-is: its Error() already
-// names the constraint (Message) and never the value (Detail stays
-// unreached), which is the default this task's brief asks for.
 func Translate(pool *pgxpool.Pool, op string, err error) error {
 	if err == nil {
 		return nil
 	}
 
+	scrubbed := scrub(pool, op, err)
+
 	if errors.Is(err, pgx.ErrNoRows) {
-		return &sentinel{target: store.ErrNotFound, cause: fmt.Errorf("%s: %w", op, err)}
+		return &sentinel{target: store.ErrNotFound, cause: scrubbed}
 	}
 
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolation {
-		return &sentinel{target: store.ErrConflict, cause: fmt.Errorf("%s: %w", op, err)}
+		return &sentinel{target: store.ErrConflict, cause: scrubbed}
 	}
 
+	return scrubbed
+}
+
+// scrub is the ONE scrubbing call every non-nil outcome of Translate goes
+// through, so that no branch can be added later that forgets to.
+func scrub(pool *pgxpool.Pool, op string, err error) error {
 	return secret.Wrap(op, secret.Fragments(poolPassword(pool)), err)
 }
 

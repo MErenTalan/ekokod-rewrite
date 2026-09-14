@@ -269,10 +269,12 @@ func NewPool(t *testing.T, dsn string) *pgxpool.Pool {
 // PER TEST, which is what the migration round-trip and reversibility tests
 // need — they require a virgin container, not a virgin database inside a
 // shared one — but which made every repository test pay a fresh container's
-// startup cost, and made `go test -count=3` share the same globally seeded
-// data three times over. NewIsolatedDB keeps this call's shape but reuses
-// one container for the whole test binary and gives every call its own
-// database inside it.
+// startup cost for what could instead be a fresh DATABASE inside one shared
+// container. NewIsolatedDB keeps this call's shape but reuses one container
+// for the whole test binary and gives every call its own database inside
+// it, which is also what lets `go test -count=3` repeat a test safely: the
+// same test body run three times gets three fresh, independent databases,
+// not the same one three times over.
 func NewMigratedPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	return NewPool(t, StartPostgres(t))
@@ -284,9 +286,27 @@ const isolatedTemplateDB = "ekokod_isolated_template"
 
 // isolatedRetryAttempts and isolatedRetryDelay bound the retry loop
 // terminateSessionsAndRetry runs. See that function for why any retry is
-// needed at all.
+// needed at all, and for why the bound below is measured in SECONDS, not
+// milliseconds, despite the terminate-then-act pair costing under 150ms in
+// the overwhelmingly common case where nothing races it.
+//
+// A RETRY, not the common path, is the one case that can be slow: it is
+// only reached when the action still failed with 55006 immediately after a
+// terminate, meaning a replacement backend reconnected in that gap — and
+// Postgres's own createdb/dropdb do not fail fast against a database that
+// is still in use. They poll internally and only report 55006 after
+// roughly five seconds (measured directly; see terminateSessionsAndRetry).
+// isolatedRetryAttempts=20 therefore bounds a retry-exhausted call at
+// roughly 20 * 5s = 100s, not the 400ms a naive 20 * isolatedRetryDelay
+// reading suggests — isolatedRetryDelay only ever elapses BETWEEN a failed
+// attempt and the next terminate, never instead of the ~5s the failed
+// attempt itself already cost. Kept small (3) rather than large, because a
+// retry this task's own testing never needed past the first attempt is not
+// worth budgeting for at the cost of a 100s worst case; a persistent racer
+// is a real bug to see fail loudly, not something to spend two minutes
+// finding out about.
 const (
-	isolatedRetryAttempts = 20
+	isolatedRetryAttempts = 3
 	isolatedRetryDelay    = 20 * time.Millisecond
 )
 
