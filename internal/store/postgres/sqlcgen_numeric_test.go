@@ -65,7 +65,13 @@ var (
 	// under-reads rather than over-reads, and the per-function floors in
 	// TestEveryFunctionSQLcMustTypeIsDeclared are what would notice.
 	matViewBodyRe = regexp.MustCompile(`(?is)create materialized view\s+(\w+)(.*?);`)
-	tableKeyword  = map[string]bool{
+	// blockCommentRe matches a /* ... */ comment. (?s) lets "." match a
+	// newline, because a review found `locf/* x */(ts)` — a block comment
+	// sitting between a function name and its opening parenthesis — hiding
+	// the call from functionCalls entirely: unlike commentRe's line
+	// comments, nothing here stripped it before the scan.
+	blockCommentRe = regexp.MustCompile(`(?s)/\*.*?\*/`)
+	tableKeyword   = map[string]bool{
 		"primary": true, "unique": true, "check": true,
 		"foreign": true, "constraint": true, "exclude": true,
 	}
@@ -487,6 +493,16 @@ type sqlSource struct {
 	sql  string
 }
 
+// stripComments removes every SQL comment from sql: block comments first,
+// since one can itself contain "--" and because a block comment may span
+// lines that a line-by-line strip would otherwise leave half-stripped, then
+// line comments. Every caller that feeds functionCalls must go through this,
+// not commentRe alone, or a block comment between a function name and its
+// parenthesis hides the call.
+func stripComments(sql string) string {
+	return commentRe.ReplaceAllString(blockCommentRe.ReplaceAllString(sql, ""), "")
+}
+
 // typeInferringSQL returns every such block: the body of each materialized
 // view in the migrations, and each query file. Everything else in a migration —
 // bare `select create_hypertable(...)` calls, column defaults, index
@@ -502,7 +518,7 @@ func typeInferringSQL(t *testing.T) []sqlSource {
 		name := migrationsDir + "/" + entry.Name()
 		raw, err := migrationsFS.ReadFile(name)
 		require.NoError(t, err)
-		sql := commentRe.ReplaceAllString(string(raw), "")
+		sql := stripComments(string(raw))
 		for _, block := range matViewBodyRe.FindAllStringSubmatch(sql, -1) {
 			out = append(out, sqlSource{
 				name: name + " (view " + block[1] + ")",
@@ -524,7 +540,7 @@ func typeInferringSQL(t *testing.T) []sqlSource {
 		out = append(out, sqlSource{
 			name: name,
 			kind: "query file",
-			sql:  commentRe.ReplaceAllString(string(raw), ""),
+			sql:  stripComments(string(raw)),
 		})
 	}
 
@@ -558,36 +574,84 @@ type funcCall struct {
 	arity int
 }
 
-// functionCalls returns every function call in sql: an identifier followed by
-// optional whitespace and an opening parenthesis.
+// functionCalls returns every function call in sql: an identifier — or a
+// "double quoted identifier" — followed by optional whitespace and an
+// opening parenthesis. Callers must run sql through stripComments first, so
+// that a comment sitting between the name and the parenthesis cannot hide a
+// call.
 //
 // Whitespace here is ANY whitespace, newlines included. The first draft skipped
 // only spaces and tabs, which meant a migration formatted as "time_bucket\n("
 // would have been invisible to the very guard written to watch time_bucket.
 //
-// A name preceded by "." is skipped: that is a qualified call such as sqlc.arg,
-// which is sqlc's own pseudo-function and not something the catalogue types.
+// A name preceded by "." is a qualified call, and only the SQLC qualifier is
+// skipped: sqlc.arg, sqlc.narg and sqlc.slice are sqlc's own pseudo-functions,
+// not something its catalogue types. The first draft skipped a name preceded
+// by ANY qualifier, meant only to cover that case, and so let a
+// schema-qualified real call such as `public.locf(ts)` slip past the guard
+// entirely — the same silent `interface{}` this file exists to prevent. Any
+// other qualifier (a schema, or a table/alias as in `b.name`) is checked like
+// an unqualified call; `b.name` is still never reported, because nothing
+// follows it with "(".
 func functionCalls(sql string) []funcCall {
 	var out []funcCall
 	for i := 0; i < len(sql); i++ {
-		if !isIdentStart(sql[i]) || (i > 0 && (isIdentByte(sql[i-1]) || sql[i-1] == '.')) {
+		if sql[i] == '"' {
+			j := i + 1
+			for j < len(sql) && sql[j] != '"' {
+				j++
+			}
+			if j >= len(sql) {
+				break // unterminated quote: nothing more to scan
+			}
+			name := strings.ToLower(sql[i+1 : j])
+			out = appendIfCall(out, sql, name, j+1)
+			i = j
+			continue
+		}
+		if !isIdentStart(sql[i]) || (i > 0 && isIdentByte(sql[i-1])) {
 			continue
 		}
 		j := i
 		for j < len(sql) && isIdentByte(sql[j]) {
 			j++
 		}
+		if i > 0 && sql[i-1] == '.' && qualifierIsSQLC(sql, i-1) {
+			i = j - 1
+			continue
+		}
 		name := strings.ToLower(sql[i:j])
-		k := j
-		for k < len(sql) && isSpaceByte(sql[k]) {
-			k++
-		}
-		if k < len(sql) && sql[k] == '(' {
-			out = append(out, funcCall{name: name, arity: argCount(sql, k)})
-		}
+		out = appendIfCall(out, sql, name, j)
 		i = j - 1
 	}
 	return out
+}
+
+// appendIfCall appends a funcCall named name to out if sql, starting at
+// from, is optional whitespace followed by "(".
+func appendIfCall(out []funcCall, sql, name string, from int) []funcCall {
+	k := from
+	for k < len(sql) && isSpaceByte(sql[k]) {
+		k++
+	}
+	if k < len(sql) && sql[k] == '(' {
+		out = append(out, funcCall{name: name, arity: argCount(sql, k)})
+	}
+	return out
+}
+
+// qualifierIsSQLC reports whether the identifier immediately before the "."
+// at index dot is "sqlc" (case-insensitively) — sqlc's own pseudo-function
+// namespace, and the only qualifier this scanner may skip. Any other
+// qualifier (a schema such as public, or a table/alias) must still have its
+// unqualified name checked against nativeFunctions and the shim.
+func qualifierIsSQLC(sql string, dot int) bool {
+	end := dot
+	start := dot
+	for start > 0 && isIdentByte(sql[start-1]) {
+		start--
+	}
+	return strings.EqualFold(sql[start:end], "sqlc")
 }
 
 func isIdentStart(b byte) bool {
@@ -653,4 +717,82 @@ func sortedKeys(m map[int]bool) []int {
 	}
 	sort.Ints(out)
 	return out
+}
+
+// TestFunctionCallsRecognisesEveryCallSpelling pins the scanner directly,
+// independent of TestEveryFunctionSQLcMustTypeIsDeclared's real migrations
+// and query files, against the three spellings a review found slipping past
+// it — each one confirmed, with a real `sqlc generate`, to regenerate the
+// column as `interface{}`:
+//
+//  1. schema-qualified: `public.locf(ts)` — the old rule skipped every
+//     qualified name, meant only to skip sqlc's own sqlc.arg/narg/slice.
+//  2. quoted identifier: `"locf"(ts)`.
+//  3. a block comment between the name and the parenthesis: `locf/* x */(ts)`
+//     — handled by stripping block comments before the scan, which is the
+//     same treatment `--` line comments already got.
+//
+// Alongside each, it pins the false-positive guards that made the old rule
+// look reasonable in the first place: sqlc's own pseudo-namespace
+// (sqlc.arg/narg/slice) must still be skipped, and a plain column reference
+// such as `b.name` must still never be reported.
+func TestFunctionCallsRecognisesEveryCallSpelling(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		sql   string
+		calls []funcCall
+	}{
+		{
+			name:  "schema-qualified call is reported by its unqualified name",
+			sql:   `select public.locf(ts) from consumption_hourly`,
+			calls: []funcCall{{name: "locf", arity: 1}},
+		},
+		{
+			name:  "table-alias-qualified call is reported the same way",
+			sql:   `select b.locf(ts) from consumption_hourly b`,
+			calls: []funcCall{{name: "locf", arity: 1}},
+		},
+		{
+			name:  "double-quoted identifier is treated as the name",
+			sql:   `select "locf"(ts) from consumption_hourly`,
+			calls: []funcCall{{name: "locf", arity: 1}},
+		},
+		{
+			name:  "sqlc's own pseudo-namespace is still skipped",
+			sql:   `select * from buildings where id = sqlc.arg(id)`,
+			calls: nil,
+		},
+		{
+			// any() is a real call as far as functionCalls is concerned —
+			// notFunctions is what the guard filters it with, one layer up
+			// — so it is expected here too. The point of this case is
+			// sqlc.narg and sqlc.slice: neither may appear.
+			name:  "sqlc.narg and sqlc.slice are still skipped too",
+			sql:   `select * from buildings where id = sqlc.narg(id) and company_id = any(sqlc.slice(ids))`,
+			calls: []funcCall{{name: "any", arity: 1}},
+		},
+		{
+			name:  "a plain column reference is never reported",
+			sql:   `select b.name from buildings b`,
+			calls: nil,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.calls, functionCalls(tc.sql))
+		})
+	}
+
+	t.Run("block comment between name and parenthesis is stripped first", func(t *testing.T) {
+		sql := stripComments("select locf/* x */(ts) from consumption_hourly")
+		require.NotContains(t, sql, "/*", "the block comment must be gone before the scanner ever runs")
+		require.Equal(t, []funcCall{{name: "locf", arity: 1}}, functionCalls(sql))
+	})
+
+	t.Run("a block comment spanning multiple lines is stripped too", func(t *testing.T) {
+		sql := stripComments("select locf/* spans\nmultiple\nlines */(ts) from consumption_hourly")
+		require.Equal(t, []funcCall{{name: "locf", arity: 1}}, functionCalls(sql))
+	})
 }
