@@ -44,14 +44,14 @@ func (s *Service) SyncAnalyzers(ctx context.Context, p job.SyncAnalyzersPayload)
 	if err != nil {
 		errText := redacted(creds, err)
 		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil, now)
-		return err
+		return wrapRedacted(errText, err)
 	}
 
 	if verr := src.Verify(ctx, creds); verr != nil {
 		errText := redacted(creds, verr)
 		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil, now)
 		s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "error", errText, nil)
-		return verr
+		return wrapRedacted(errText, verr)
 	}
 
 	modelProvider, ok := creds.Provider.ModelProvider()
@@ -59,7 +59,7 @@ func (s *Service) SyncAnalyzers(ctx context.Context, p job.SyncAnalyzersPayload)
 		err := &integration.Error{Kind: integration.ErrMalformedPayload, Provider: creds.Provider, Op: "sync_analyzers.provider"}
 		errText := redacted(creds, err)
 		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil, now)
-		return err
+		return wrapRedacted(errText, err)
 	}
 
 	points, derr := src.DiscoverMeteringPoints(ctx, creds)
@@ -67,7 +67,7 @@ func (s *Service) SyncAnalyzers(ctx context.Context, p job.SyncAnalyzersPayload)
 		errText := redacted(creds, derr)
 		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil, now)
 		s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "error", errText, nil)
-		return derr
+		return wrapRedacted(errText, derr)
 	}
 
 	var failed int32
@@ -133,7 +133,18 @@ func (s *Service) upsertMeteringPoint(ctx context.Context, sc store.Scope, provi
 	case err == nil:
 		updated := applyMeteringPointFields(existing, pt)
 		updated.UpdatedAt = now
-		return s.deps.Analyzers.Update(ctx, sc, updated)
+		result, uerr := s.deps.Analyzers.Update(ctx, sc, updated)
+		if uerr != nil {
+			return model.Analyzer{}, uerr
+		}
+		// I5/R27: a multiplier change found by sync is applied AND reported
+		// — it changes bills — the same shape the fetch path (fetch.go)
+		// uses for a multiplier resolved mid-fetch.
+		if pt.MeterMultiplier != nil && !existing.MeterMultiplier.Equal(*pt.MeterMultiplier) {
+			s.appendMessage(ctx, sc, sc.CompanyID, "job", "analyzer-refresh", "warning", "meter multiplier changed",
+				mustJSON(map[string]any{"analyzer_id": result.ID, "multiplier": result.MeterMultiplier.String()}))
+		}
+		return result, nil
 	case errors.Is(err, store.ErrNotFound):
 		a := newAnalyzerFromMeteringPoint(sc.CompanyID, provider, subtype, pt, now)
 		return s.deps.Analyzers.Create(ctx, sc, a)

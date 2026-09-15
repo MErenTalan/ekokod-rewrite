@@ -31,6 +31,14 @@ const (
 	// RejectConflictingDuplicate is D1: two rows sharing (AnalyzerID, Ts,
 	// Kind) with different register values. Dedupe refuses the whole group.
 	RejectConflictingDuplicate RejectReason = "conflicting_duplicate"
+	// RejectWrongAnalyzer is I2: a row an adapter returned in response to
+	// THIS request but stamped with a different AnalyzerID. It never
+	// reaches Validate, BulkInsert, or this analyzer's cursor.
+	RejectWrongAnalyzer RejectReason = "wrong_analyzer"
+	// RejectWrongKind is I2: a row whose Kind is neither the requested
+	// p.Kind nor model.ReadingKindReset — the one other kind the fetch loop
+	// expects mixed into a p.Kind page, for negative-delta suppression.
+	RejectWrongKind RejectReason = "wrong_kind"
 )
 
 // Rejection records one candidate reading Dedupe or Validate declined to
@@ -86,19 +94,44 @@ var allRegisters = []registerAccessor{
 // shape.
 var cumulativeRegisters = allRegisters[:12]
 
-// sanityMinHistorySamples is the fewest register deltas a 7-day history must
-// contain before the sanity-jump check trusts the median it computes from
-// them. Below this, Validate skips the check entirely for that register
-// rather than compare against a median built from too little data to be
-// meaningful.
-const sanityMinHistorySamples = 30
+// sanityMinHistorySamples is the fewest POSITIVE register deltas a 7-day
+// history must contain before the sanity-jump check (R13) trusts the median
+// it computes from them. Below this, Validate skips the check entirely for
+// that register rather than compare against a median built from too little
+// data to be meaningful. R13 pins this at 24.
+const sanityMinHistorySamples = 24
 
 // sanityMaxConsecutiveJumps is how many consecutive candidate rows Validate
-// rejects as RejectSanityJump before concluding the "jump" is a genuine,
-// sustained shift (a multiplier correction, a meter replacement) rather than
-// corrupt data, and accepting the row that would have been the fourth
-// rejection in a row — see Validate's doc.
+// rejects as RejectSanityJump, per analyzer per run (SanityStreak), before
+// concluding the "jump" is a genuine, sustained shift (a multiplier
+// correction, a meter replacement) rather than corrupt data — see
+// SanityStreak's and Validate's docs.
 const sanityMaxConsecutiveJumps = 3
+
+// SanityStreak carries R13's "at most three consecutive [sanity-jump]
+// rejections per analyzer per run" state across every Validate call one
+// FetchReadings run makes — a run pages through possibly many chunks, and
+// Validate itself is a pure function with no memory of its own between
+// calls. Service creates exactly one SanityStreak per run and threads the
+// same pointer, via Options.SanityStreak, through every Validate call that
+// run makes for its one analyzer and kind.
+//
+// Once the streak trips (a fourth consecutive jump), it stays tripped for
+// the rest of the run: every later row passes the sanity check
+// unconditionally, matching R13's own text ("readings are accepted... so a
+// genuine step never silently discards data forever"). The streak never
+// re-arms mid-run — it cannot cycle reject-3-accept-1-reject-3... forever
+// against a sustained step change.
+//
+// A caller that leaves Options.SanityStreak nil (every existing unit test,
+// and any other single-page caller) gets a streak scoped to that one
+// Validate call only: three consecutive rejections then a flagged,
+// accepted fourth, exactly as before — but nothing carries over to a
+// second call, which is the per-run behaviour only Service needs.
+type SanityStreak struct {
+	consecutive int
+	tripped     bool
+}
 
 // Validate applies 06 §9 / R11-R14 to rows, in order, against prev (the last
 // accepted reading before this batch) and history (readings from the 7 days
@@ -114,31 +147,50 @@ const sanityMaxConsecutiveJumps = 3
 // never reaches the sanity-jump check and never updates the "effective
 // previous reading" the jump check compares against.
 //
-// Sanity jump (R13): for each of cumulativeRegisters, the threshold is
-// history's own median consecutive delta for that register, times
-// o.SanityMultiple — but only when history contains at least
-// sanityMinHistorySamples deltas for that register; with fewer, the check is
-// skipped (every row passes) because a median from too little data is not
-// trustworthy. A row whose delta from the effective previous reading exceeds
-// the threshold on any register is a "jump". The first
-// sanityMaxConsecutiveJumps (3) consecutive jumps are rejected
-// (RejectSanityJump, Register = the first offending register found). A
-// FOURTH consecutive jump is treated as a genuine sustained shift rather
-// than corruption: the row IS kept (appended to valid, and becomes the new
-// effective previous reading), but a Rejection{Reason: RejectSanityJump,
-// Register: "sustained"} is still appended to rejected, purely as an
-// operator flag — Service turns it into an `error` operational message
-// rather than folding it into the ordinary rejection-count warning. The
-// streak resets after the fourth row, whether it is a further jump or not.
+// Sanity jump (R13): for each of cumulativeRegisters, "typical" is the
+// median of that register's POSITIVE consecutive deltas in history (zero
+// and negative deltas are excluded from the median entirely — they are idle
+// or reversing periods, not a rate of consumption), computed only when
+// history holds at least sanityMinHistorySamples (24) such deltas; with
+// fewer, the check is skipped for that register (every row passes on it)
+// because a median from too little data is not trustworthy. The threshold
+// scales with how much time actually elapsed since the effective previous
+// reading: elapsedIntervals = (row.Ts − prev.Ts) ÷ history's own median
+// spacing between the consecutive readings that produced those same
+// positive deltas, and the limit is max(o.SanityMultiple × median ×
+// elapsedIntervals, 1) — so a longer-than-usual gap (an overnight outage,
+// a delayed poll) scales the allowance up instead of flagging ordinary
+// accumulated consumption as a jump. Only an INCREASE beyond that limit is
+// a "jump": a decrease, however large, is never rejected here — R14's
+// DetectNegativeDeltas is what flags a decrease, and either way the reading
+// is stored.
+//
+// The first sanityMaxConsecutiveJumps (3) consecutive jumps, counted by
+// streak (SanityStreak — per run when Service supplies one, per call
+// otherwise), are rejected (RejectSanityJump, Register = the first
+// offending register found). The row that makes the streak's FOURTH
+// consecutive jump is treated as a genuine sustained shift rather than
+// corruption: it IS kept (appended to valid, and becomes the new effective
+// previous reading), but a Rejection{Reason: RejectSanityJump, Register:
+// "sustained"} is still appended to rejected, purely as an operator flag —
+// Service turns it into an `error` operational message rather than folding
+// it into the ordinary rejection-count warning. From that row on, streak is
+// tripped and the sanity check no longer rejects anything for the rest of
+// its scope (the run, when Service supplies the streak) — see
+// SanityStreak's doc for why it does not re-arm.
 func Validate(prev *model.MeterReading, history []model.MeterReading, rows []model.MeterReading, now time.Time, o Options) (valid []model.MeterReading, rejected []Rejection) {
 	thresholds := sanityThresholds(history, o.SanityMultiple)
+
+	streak := o.SanityStreak
+	if streak == nil {
+		streak = &SanityStreak{}
+	}
 
 	var effectivePrev *model.MeterReading
 	if prev != nil {
 		p := *prev
 		effectivePrev = &p
 	}
-	consecutiveJumps := 0
 
 	for _, row := range rows {
 		switch {
@@ -157,18 +209,21 @@ func Validate(prev *model.MeterReading, history []model.MeterReading, rows []mod
 			continue
 		}
 
-		if reg, jumped := isSanityJump(effectivePrev, row, thresholds); jumped {
-			consecutiveJumps++
-			if consecutiveJumps <= sanityMaxConsecutiveJumps {
-				rejected = append(rejected, Rejection{Ts: row.Ts, Kind: row.Kind, Reason: RejectSanityJump, Register: reg})
-				continue
+		if !streak.tripped {
+			if reg, jumped := isSanityJump(effectivePrev, row, thresholds, o.SanityMultiple); jumped {
+				streak.consecutive++
+				if streak.consecutive <= sanityMaxConsecutiveJumps {
+					rejected = append(rejected, Rejection{Ts: row.Ts, Kind: row.Kind, Reason: RejectSanityJump, Register: reg})
+					continue
+				}
+				// The streak's fourth consecutive jump: accept it as a
+				// sustained shift, flag it, and trip the streak — see
+				// SanityStreak's doc for why this never re-arms.
+				streak.tripped = true
+				rejected = append(rejected, Rejection{Ts: row.Ts, Kind: row.Kind, Reason: RejectSanityJump, Register: "sustained"})
+			} else {
+				streak.consecutive = 0
 			}
-			// Fourth consecutive jump: accept it as a sustained shift, flag
-			// it, and reset the streak.
-			rejected = append(rejected, Rejection{Ts: row.Ts, Kind: row.Kind, Reason: RejectSanityJump, Register: "sustained"})
-			consecutiveJumps = 0
-		} else {
-			consecutiveJumps = 0
 		}
 
 		valid = append(valid, row)
@@ -196,42 +251,61 @@ func anyRegisterNegative(row model.MeterReading) (register string, negative bool
 	return "", false
 }
 
-// sanityThresholds computes, for each of cumulativeRegisters, median(delta)
-// * multiple — or reports ok=false when history has fewer than
-// sanityMinHistorySamples deltas for that register.
+// sanityThreshold is R13's "typical" for one register: the median of its
+// POSITIVE consecutive deltas in history, and the median time gap between
+// the pair of readings that produced each of those same deltas — spacing is
+// paired with medianDelta rather than computed separately over all of
+// history, so both describe the same evidence (this register's own
+// reporting cadence, not the whole reading's). ok is false when history
+// held fewer than sanityMinHistorySamples such deltas for this register.
 type sanityThreshold struct {
-	value decimal.Decimal
-	ok    bool
+	medianDelta decimal.Decimal
+	spacing     time.Duration
+	ok          bool
 }
 
 func sanityThresholds(history []model.MeterReading, multiple decimal.Decimal) map[string]sanityThreshold {
 	out := make(map[string]sanityThreshold, len(cumulativeRegisters))
 	for _, reg := range cumulativeRegisters {
-		deltas := registerDeltas(history, reg)
+		deltas, spacings := registerDeltaSamples(history, reg)
 		if len(deltas) < sanityMinHistorySamples {
 			out[reg.name] = sanityThreshold{ok: false}
 			continue
 		}
-		out[reg.name] = sanityThreshold{value: median(deltas).Mul(multiple), ok: true}
+		out[reg.name] = sanityThreshold{medianDelta: median(deltas), spacing: medianDuration(spacings), ok: true}
 	}
 	return out
 }
 
-// registerDeltas walks history in order and returns the consecutive delta
-// for reg wherever both readings carry a non-nil value for it.
-func registerDeltas(history []model.MeterReading, reg registerAccessor) []decimal.Decimal {
-	var deltas []decimal.Decimal
+// registerDeltaSamples walks history in order and, for every consecutive
+// pair of readings that both carry a non-nil value for reg, returns the
+// delta and the Ts gap between them — but ONLY for pairs whose delta is
+// POSITIVE (R13: "median over positive deltas only" — a zero delta is an
+// idle interval and a negative one is a decrease, neither of which
+// describes a typical rate of consumption) and whose Ts gap is itself
+// positive (out-of-order or duplicate-timestamp history rows never
+// contribute a sample). deltas[i] and spacings[i] describe the same pair,
+// so a caller computing "how many typical intervals elapsed" from spacing
+// divides into a gap measured the same way the delta itself was.
+func registerDeltaSamples(history []model.MeterReading, reg registerAccessor) (deltas []decimal.Decimal, spacings []time.Duration) {
 	var prevVal *decimal.Decimal
+	var prevTs time.Time
 	for _, r := range history {
 		v := reg.get(r)
-		if v != nil && prevVal != nil {
-			deltas = append(deltas, v.Sub(*prevVal).Abs())
-		}
 		if v != nil {
+			if prevVal != nil {
+				gap := r.Ts.Sub(prevTs)
+				delta := v.Sub(*prevVal)
+				if gap > 0 && delta.IsPositive() {
+					deltas = append(deltas, delta)
+					spacings = append(spacings, gap)
+				}
+			}
 			prevVal = v
+			prevTs = r.Ts
 		}
 	}
-	return deltas
+	return deltas, spacings
 }
 
 func median(vals []decimal.Decimal) decimal.Decimal {
@@ -245,13 +319,38 @@ func median(vals []decimal.Decimal) decimal.Decimal {
 	return sorted[n/2-1].Add(sorted[n/2]).Div(decimal.NewFromInt(2))
 }
 
-// isSanityJump reports whether row jumps on any cumulativeRegisters register
-// relative to prev, using thresholds. Only the first offending register is
-// named — Validate rejects the whole row on the first violation found, and
-// walking cumulativeRegisters in a fixed order makes which one is named
-// deterministic.
-func isSanityJump(prev *model.MeterReading, row model.MeterReading, thresholds map[string]sanityThreshold) (register string, jumped bool) {
+func medianDuration(vals []time.Duration) time.Duration {
+	sorted := make([]time.Duration, len(vals))
+	copy(sorted, vals)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+	n := len(sorted)
+	if n%2 == 1 {
+		return sorted[n/2]
+	}
+	return (sorted[n/2-1] + sorted[n/2]) / 2
+}
+
+// isSanityJump reports whether row jumps on any cumulativeRegisters
+// register relative to prev, using thresholds and multiple (R13's
+// EKOKOD_INGEST_SANITY_MULTIPLE, o.SanityMultiple). Only the first
+// offending register is named — Validate rejects the whole row on the
+// first violation found, and walking cumulativeRegisters in a fixed order
+// makes which one is named deterministic.
+//
+// A jump is tested only for an INCREASE (delta.IsPositive()): R13's sanity
+// rule is about an implausible rate of consumption, and a decrease is
+// R14's concern (DetectNegativeDeltas), never this one — it is stored
+// either way. The limit scales with elapsed time: elapsedIntervals =
+// (row.Ts − prev.Ts) ÷ th.spacing, limit = max(multiple × th.medianDelta ×
+// elapsedIntervals, 1), so a gap several times the register's usual
+// reporting interval widens the allowance proportionally instead of
+// comparing a multi-interval delta against a single-interval threshold.
+func isSanityJump(prev *model.MeterReading, row model.MeterReading, thresholds map[string]sanityThreshold, multiple decimal.Decimal) (register string, jumped bool) {
 	if prev == nil {
+		return "", false
+	}
+	tsGap := row.Ts.Sub(prev.Ts)
+	if tsGap <= 0 {
 		return "", false
 	}
 	for _, reg := range cumulativeRegisters {
@@ -263,8 +362,16 @@ func isSanityJump(prev *model.MeterReading, row model.MeterReading, thresholds m
 		if pv == nil || cv == nil {
 			continue
 		}
-		delta := cv.Sub(*pv).Abs()
-		if delta.GreaterThan(th.value) {
+		delta := cv.Sub(*pv)
+		if !delta.IsPositive() {
+			continue
+		}
+		elapsedIntervals := decimal.NewFromInt(tsGap.Nanoseconds()).Div(decimal.NewFromInt(th.spacing.Nanoseconds()))
+		limit := multiple.Mul(th.medianDelta).Mul(elapsedIntervals)
+		if limit.LessThan(decimal.NewFromInt(1)) {
+			limit = decimal.NewFromInt(1)
+		}
+		if delta.GreaterThan(limit) {
 			return reg.name, true
 		}
 	}

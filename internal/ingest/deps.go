@@ -103,6 +103,13 @@ type Options struct {
 	// run (every chunk, every page), so a misbehaving adapter that never
 	// stops returning NextCursor cannot hang a worker forever. Default 1000.
 	MaxPagesPerRun int
+	// SanityStreak carries R13's per-run "at most three consecutive
+	// sanity-jump rejections" state across every Validate call FetchReadings
+	// makes for one run — see SanityStreak's doc. Service sets this to a
+	// fresh *SanityStreak at the start of every run; a caller of Validate
+	// directly (every unit test) leaves it nil and gets Validate's
+	// single-call-scoped fallback instead.
+	SanityStreak *SanityStreak
 }
 
 // Default values for the Options fields New fills in when left zero.

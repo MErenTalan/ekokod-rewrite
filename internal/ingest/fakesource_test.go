@@ -3,6 +3,7 @@ package ingest_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -100,6 +101,64 @@ func resetAt(tsStr string) model.MeterReading {
 type fetchStep struct {
 	result integration.FetchResult
 	err    error
+}
+
+// ingestTestSpyHook is an ingest.PostPersistHook that records every call's
+// arguments instead of doing anything — M2's proof that hooks see the
+// range actually persisted THAT PAGE, not the outer chunk bound.
+type ingestTestSpyHook struct {
+	mu    sync.Mutex
+	calls []ingestTestHookCall
+}
+
+type ingestTestHookCall struct {
+	Kind     model.ReadingKind
+	From, To time.Time
+}
+
+func (h *ingestTestSpyHook) AfterPersist(_ context.Context, _ store.Scope, _ model.Analyzer, kind model.ReadingKind, from, to time.Time) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.calls = append(h.calls, ingestTestHookCall{Kind: kind, From: from, To: to})
+	return nil
+}
+
+func (h *ingestTestSpyHook) callsSoFar() []ingestTestHookCall {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	out := make([]ingestTestHookCall, len(h.calls))
+	copy(out, h.calls)
+	return out
+}
+
+// ingestTestSecretLeakingAnalyzerRepo wraps a real store.AnalyzerRepository
+// and forces Create to fail for one installation number with an error whose
+// text embeds a credential fragment — I4's fixture for proving SyncAnalyzers'
+// failed_points detail is redacted exactly like every other record
+// TestIngestionFailureMessageContainsNoSecret already pins for FetchReadings.
+type ingestTestSecretLeakingAnalyzerRepo struct {
+	store.AnalyzerRepository
+	failInstallation string
+	secret           string
+}
+
+func (r *ingestTestSecretLeakingAnalyzerRepo) Create(ctx context.Context, s store.Scope, a model.Analyzer) (model.Analyzer, error) {
+	if a.InstallationNumber == r.failInstallation {
+		return model.Analyzer{}, fmt.Errorf("ingest_test: create failed, upstream said password %s was wrong", r.secret)
+	}
+	return r.AnalyzerRepository.Create(ctx, s, a)
+}
+
+// ingestTestFailingUpdateAnalyzerRepo wraps a real store.AnalyzerRepository
+// and forces every Update to fail — M1's fixture for proving a failed
+// multiplier-update neither reports "meter multiplier changed" nor mutates
+// the in-memory analyzer FetchReadings keeps using for the rest of its run.
+type ingestTestFailingUpdateAnalyzerRepo struct {
+	store.AnalyzerRepository
+}
+
+func (r *ingestTestFailingUpdateAnalyzerRepo) Update(context.Context, store.Scope, model.Analyzer) (model.Analyzer, error) {
+	return model.Analyzer{}, errors.New("ingest_test: forced update failure")
 }
 
 // fakeAdapter is the in-memory integration.Adapter every ingest test drives

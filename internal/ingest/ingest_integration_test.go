@@ -159,6 +159,33 @@ func ingestTestWindow(from time.Time, dur time.Duration) *job.Window {
 	return &job.Window{From: from, To: from.Add(dur)}
 }
 
+// ingestTestSyncRunsForCredential lists every integration.sync_analyzers job
+// run whose scope names credentialID — the sync-side counterpart of
+// ingestTestRunsForAnalyzer, used instead of taking ListRuns' newest-first
+// ordering on faith: job_runs.id is a UUID (StartRun mints it with
+// uuid.New()), so "order by started_at desc, id" ties on started_at do NOT
+// reliably tie-break to insertion order the way a bigserial id would.
+// Filtering by this run's own credential_id sidesteps that entirely.
+func ingestTestSyncRunsForCredential(t *testing.T, ctx context.Context, ops *postgres.OpsRepository, sc store.Scope, credentialID uuid.UUID) []model.JobRun {
+	t.Helper()
+	jobType := job.TypeIntegrationSyncAnalyzers
+	runs, err := ops.ListRuns(ctx, sc, store.JobRunFilter{JobType: &jobType, Page: store.Page{Limit: 200}})
+	require.NoError(t, err)
+	var out []model.JobRun
+	for _, r := range runs {
+		var scope struct {
+			CredentialID uuid.UUID `json:"credential_id"`
+		}
+		if err := json.Unmarshal(r.Scope, &scope); err != nil {
+			continue
+		}
+		if scope.CredentialID == credentialID {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
 // ingestTestPlatformRun reads job_runs directly — AdminJournalRepository
 // exposes no List/Get, since the dispatcher that writes through it has
 // nothing to read back either (Global Constraints: the admin surface is
@@ -562,11 +589,21 @@ func TestIngestionFailureMessageContainsNoSecret(t *testing.T) {
 	enq := newRecordingEnqueuer()
 	svc := ingestTestNewService(t, repos, creds, src, enq, clk, ingest.Options{})
 
-	src.setSteps(fetchStep{err: fmt.Errorf("upstream rejected credentials for password %s", secretValue)})
+	// The underlying cause wraps integration.ErrAuth (%w), the way a real
+	// adapter would classify an upstream rejection — I3's proof needs a
+	// cause that both leaks the secret in its text AND stays reachable via
+	// errors.Is once wrapped for redaction.
+	src.setSteps(fetchStep{err: fmt.Errorf("upstream rejected credentials for password %s: %w", secretValue, integration.ErrAuth)})
 
 	window := ingestTestWindow(ingestTestIstanbulMidnight, 2*time.Hour)
 	err := svc.FetchReadings(ctx, job.FetchReadingsPayload{CompanyID: tn.Company.ID, CredentialID: creds.CredentialID, AnalyzerID: analyzer.ID, Kind: model.ReadingKindLoadProfile, Window: window})
 	require.Error(t, err)
+
+	// I3: the error returned to the JOB LAYER (not just the stored
+	// records checked below) must also be redacted, yet still classify —
+	// job.ClassifyForRetry needs errors.Is to keep working through it.
+	require.NotContains(t, err.Error(), secretValue, "I3: the error returned to the job layer must be redacted")
+	require.ErrorIs(t, err, integration.ErrAuth, "I3: the redacted wrapper must still unwrap to the classified cause")
 
 	run := ingestTestRunsForAnalyzer(t, ctx, repos.ops, tn.Scope, job.TypeIntegrationFetchReadings, analyzer.ID)
 	require.Len(t, run, 1)
@@ -751,4 +788,409 @@ func TestIngestionHooksRunBeforeCursorAdvance(t *testing.T) {
 	// The rows themselves WERE persisted before the hook ran — only the
 	// cursor is held back.
 	require.Len(t, ingestTestAllReadings(t, ctx, repos.readings, tn.Scope, analyzer.ID, model.ReadingKindLoadProfile), 4)
+}
+
+// TestIngestionExplicitWindowNeverAdvancesCursorPastAGap is I1: an explicit
+// p.Window fetch may move the live cursor forward only when it is
+// contiguous with what the cursor already covers. A window that starts
+// AFTER the cursor — a gap the cursor has not covered yet — must leave the
+// cursor exactly where it was, so the next cursor-driven run still asks for
+// the gap instead of skipping straight past it.
+func TestIngestionExplicitWindowNeverAdvancesCursorPastAGap(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tn := testfixtures.NewTenant(t, ctx, pool, 9113)
+	repos := ingestTestNewRepos(pool)
+
+	analyzer := tn.Analyzers[0]
+	creds := integration.Credentials{CredentialID: uuid.New(), CompanyID: tn.Company.ID, Provider: integration.ProviderOSOS, Subtype: analyzer.ProviderSubtype}
+	src := newFakeAdapter(integration.ProviderOSOS, 24*time.Hour, model.ReadingKindLoadProfile)
+	// The clock must sit comfortably AFTER day 6 (below), or day 6's own
+	// readings would trip RejectFuture (R12) instead of exercising I1.
+	clk := clock.NewFake(ingestTestIstanbulMidnight.Add(7 * 24 * time.Hour))
+	enq := newRecordingEnqueuer()
+	svc := ingestTestNewService(t, repos, creds, src, enq, clk, ingest.Options{})
+
+	// Day 1: an explicit window with no stored cursor yet — always allowed
+	// to advance (resolveFetchWindow's "no stored cursor" case).
+	day1 := ingestTestIstanbulMidnight
+	day1Rows := ingestTestQuarterHourly(analyzer.ID, day1, 4) // 00:00..00:45
+	src.setSteps(fetchStep{result: integration.FetchResult{Readings: day1Rows}})
+	require.NoError(t, svc.FetchReadings(ctx, job.FetchReadingsPayload{
+		CompanyID: tn.Company.ID, CredentialID: creds.CredentialID, AnalyzerID: analyzer.ID,
+		Kind: model.ReadingKindLoadProfile, Window: ingestTestWindow(day1, time.Hour),
+	}))
+	cur1, err := repos.cursors.Get(ctx, tn.Scope, analyzer.ID, model.ReadingKindLoadProfile)
+	require.NoError(t, err)
+	require.NotNil(t, cur1.LastTs)
+	day1LastTs := *cur1.LastTs
+
+	// Day 6: an explicit window that STARTS AFTER the cursor (days 2-5 were
+	// never fetched — a gap). I1: the rows are still persisted, but the
+	// cursor must NOT move.
+	day6 := day1.Add(5 * 24 * time.Hour)
+	day6Rows := ingestTestQuarterHourly(analyzer.ID, day6, 4)
+	clk.Advance(time.Minute)
+	src.setSteps(fetchStep{result: integration.FetchResult{Readings: day6Rows}})
+	require.NoError(t, svc.FetchReadings(ctx, job.FetchReadingsPayload{
+		CompanyID: tn.Company.ID, CredentialID: creds.CredentialID, AnalyzerID: analyzer.ID,
+		Kind: model.ReadingKindLoadProfile, Window: ingestTestWindow(day6, time.Hour),
+	}))
+
+	cur2, err := repos.cursors.Get(ctx, tn.Scope, analyzer.ID, model.ReadingKindLoadProfile)
+	require.NoError(t, err)
+	require.True(t, cur2.LastTs.Equal(day1LastTs), "I1: an explicit window past a gap must never advance the cursor")
+
+	rows := ingestTestAllReadings(t, ctx, repos.readings, tn.Scope, analyzer.ID, model.ReadingKindLoadProfile)
+	require.Len(t, rows, 8, "both windows' rows are stored even though only day 1's moved the cursor")
+
+	// A subsequent CURSOR-DRIVEN run (Window nil) must resume exactly from
+	// the cursor — i.e. it still asks for the gap (days 2-5), not day 6.
+	startIdx := len(src.requestLog())
+	clk.Advance(time.Minute)
+	src.setSteps(fetchStep{result: integration.FetchResult{}})
+	require.NoError(t, svc.FetchReadings(ctx, job.FetchReadingsPayload{
+		CompanyID: tn.Company.ID, CredentialID: creds.CredentialID, AnalyzerID: analyzer.ID, Kind: model.ReadingKindLoadProfile,
+	}))
+	reqs := src.requestLog()
+	require.True(t, len(reqs) > startIdx)
+	require.True(t, reqs[startIdx].From.Equal(day1LastTs), "the next cursor-driven run must still request the gap, not resume past it")
+}
+
+// TestIngestionRowsStampedWithAnotherAnalyzerAreRejected is I2: a page an
+// adapter returns for one analyzer's request is trusted to carry that
+// analyzer's own rows only after an attribution check — a row stamped with
+// a DIFFERENT, real analyzer's ID (same company, same provider) must never
+// be persisted under either identity, and must never influence the
+// REQUESTED analyzer's cursor.
+func TestIngestionRowsStampedWithAnotherAnalyzerAreRejected(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tn := testfixtures.NewTenant(t, ctx, pool, 9114)
+	repos := ingestTestNewRepos(pool)
+
+	now := ingestTestNow
+	target := ingestTestNewActiveAnalyzer(t, ctx, repos.analyzers, tn.Scope, tn.Company.ID, tn.Buildings[0].ID, model.IntegrationProviderOSOS, "AttribSub", "ATTRIB-TARGET", decimal.NewFromInt(1), now)
+	impostor := ingestTestNewActiveAnalyzer(t, ctx, repos.analyzers, tn.Scope, tn.Company.ID, tn.Buildings[0].ID, model.IntegrationProviderOSOS, "AttribSub", "ATTRIB-IMPOSTOR", decimal.NewFromInt(1), now)
+
+	creds := integration.Credentials{CredentialID: uuid.New(), CompanyID: tn.Company.ID, Provider: integration.ProviderOSOS, Subtype: "AttribSub"}
+	src := newFakeAdapter(integration.ProviderOSOS, 24*time.Hour, model.ReadingKindLoadProfile)
+	clk := clock.NewFake(now)
+	enq := newRecordingEnqueuer()
+	svc := ingestTestNewService(t, repos, creds, src, enq, clk, ingest.Options{})
+
+	correctRows := ingestTestQuarterHourly(target.ID, ingestTestIstanbulMidnight, 2) // 00:00, 00:15
+	// The wrong-analyzer rows carry LATER timestamps than the correct ones:
+	// if I2's attribution check were missing, they would wrongly advance
+	// target's cursor past what target itself actually received.
+	wrongRows := ingestTestQuarterHourly(impostor.ID, ingestTestIstanbulMidnight.Add(2*time.Hour), 2) // 02:00, 02:15
+
+	window := ingestTestWindow(ingestTestIstanbulMidnight, 4*time.Hour)
+	mixed := append(append([]model.MeterReading{}, correctRows...), wrongRows...)
+	src.setSteps(fetchStep{result: integration.FetchResult{Readings: mixed}})
+
+	require.NoError(t, svc.FetchReadings(ctx, job.FetchReadingsPayload{
+		CompanyID: tn.Company.ID, CredentialID: creds.CredentialID, AnalyzerID: target.ID,
+		Kind: model.ReadingKindLoadProfile, Window: window,
+	}))
+
+	require.Len(t, ingestTestAllReadings(t, ctx, repos.readings, tn.Scope, target.ID, model.ReadingKindLoadProfile), 2,
+		"only the correctly-stamped rows are persisted for the fetched analyzer")
+	require.Empty(t, ingestTestAllReadings(t, ctx, repos.readings, tn.Scope, impostor.ID, model.ReadingKindLoadProfile),
+		"I2: nothing is EVER written for the impostor analyzer — a row stamped with its ID is rejected outright")
+
+	cur, err := repos.cursors.Get(ctx, tn.Scope, target.ID, model.ReadingKindLoadProfile)
+	require.NoError(t, err)
+	require.NotNil(t, cur.LastTs)
+	require.True(t, cur.LastTs.Equal(ingestTestIstanbulMidnight.Add(15*time.Minute)),
+		"I2: the cursor reflects only the correctly-attributed rows, not the wrong-analyzer rows' later timestamps")
+
+	run := ingestTestRunsForAnalyzer(t, ctx, repos.ops, tn.Scope, job.TypeIntegrationFetchReadings, target.ID)
+	require.Len(t, run, 1)
+	var detail struct {
+		RejectionsByReason map[string]int32 `json:"rejections_by_reason"`
+	}
+	require.NoError(t, json.Unmarshal(run[0].Detail, &detail))
+	require.EqualValues(t, 2, detail.RejectionsByReason[string(ingest.RejectWrongAnalyzer)])
+}
+
+// TestSyncAnalyzersFailureMessageContainsNoSecret is I4: SyncAnalyzers'
+// redaction had no test coverage at all — this covers all three of its
+// failure surfaces (Verify, DiscoverMeteringPoints, and a per-point
+// failed_points reason), matching what
+// TestIngestionFailureMessageContainsNoSecret already pins for
+// FetchReadings.
+func TestSyncAnalyzersFailureMessageContainsNoSecret(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tn := testfixtures.NewTenant(t, ctx, pool, 9115)
+	repos := ingestTestNewRepos(pool)
+	const secretValue = "sUp3rSyncSecretPassw0rd!"
+
+	t.Run("Verify", func(t *testing.T) {
+		creds := integration.Credentials{
+			CredentialID: uuid.New(), CompanyID: tn.Company.ID, Provider: integration.ProviderOSOS, Subtype: "SyncVerifySub",
+			Secret: integration.NewSecret([]byte(secretValue)),
+		}
+		src := newFakeAdapter(integration.ProviderOSOS, 24*time.Hour, model.ReadingKindLoadProfile)
+		src.verifyErr = fmt.Errorf("verify rejected password %s: %w", secretValue, integration.ErrAuth)
+		clk := clock.NewFake(ingestTestNow)
+		enq := newRecordingEnqueuer()
+		svc := ingestTestNewService(t, repos, creds, src, enq, clk, ingest.Options{})
+
+		err := svc.SyncAnalyzers(ctx, job.SyncAnalyzersPayload{CompanyID: tn.Company.ID, CredentialID: creds.CredentialID})
+		require.Error(t, err)
+		require.NotContains(t, err.Error(), secretValue, "I3-for-sync: the returned error must be redacted too")
+		require.ErrorIs(t, err, integration.ErrAuth)
+
+		runs := ingestTestSyncRunsForCredential(t, ctx, repos.ops, tn.Scope, creds.CredentialID)
+		require.Len(t, runs, 1)
+		require.NotNil(t, runs[0].Error)
+		require.NotContains(t, *runs[0].Error, secretValue)
+
+		messages, merr := repos.ops.ListMessages(ctx, tn.Scope, store.MessageFilter{})
+		require.NoError(t, merr)
+		for _, m := range messages {
+			require.NotContains(t, m.Message, secretValue)
+		}
+	})
+
+	t.Run("Discover", func(t *testing.T) {
+		creds := integration.Credentials{
+			CredentialID: uuid.New(), CompanyID: tn.Company.ID, Provider: integration.ProviderOSOS, Subtype: "SyncDiscoverSub",
+			Secret: integration.NewSecret([]byte(secretValue)),
+		}
+		src := newFakeAdapter(integration.ProviderOSOS, 24*time.Hour, model.ReadingKindLoadProfile)
+		src.discoverErr = fmt.Errorf("discovery failed, password %s rejected: %w", secretValue, integration.ErrUpstreamUnavailable)
+		clk := clock.NewFake(ingestTestNow)
+		enq := newRecordingEnqueuer()
+		svc := ingestTestNewService(t, repos, creds, src, enq, clk, ingest.Options{})
+
+		err := svc.SyncAnalyzers(ctx, job.SyncAnalyzersPayload{CompanyID: tn.Company.ID, CredentialID: creds.CredentialID})
+		require.Error(t, err)
+		require.NotContains(t, err.Error(), secretValue)
+		require.ErrorIs(t, err, integration.ErrUpstreamUnavailable)
+
+		runs := ingestTestSyncRunsForCredential(t, ctx, repos.ops, tn.Scope, creds.CredentialID)
+		require.Len(t, runs, 1)
+		require.NotNil(t, runs[0].Error)
+		require.NotContains(t, *runs[0].Error, secretValue)
+	})
+
+	t.Run("failed_points", func(t *testing.T) {
+		creds := integration.Credentials{
+			CredentialID: uuid.New(), CompanyID: tn.Company.ID, Provider: integration.ProviderOSOS, Subtype: "SyncPointsSub",
+			Secret: integration.NewSecret([]byte(secretValue)),
+		}
+		src := newFakeAdapter(integration.ProviderOSOS, 24*time.Hour, model.ReadingKindLoadProfile)
+		src.points = []integration.MeteringPoint{{InstallationNumber: "LEAK-1"}}
+		leaking := &ingestTestSecretLeakingAnalyzerRepo{AnalyzerRepository: repos.analyzers, failInstallation: "LEAK-1", secret: secretValue}
+		clk := clock.NewFake(ingestTestNow)
+		enq := newRecordingEnqueuer()
+
+		deps := ingest.Deps{
+			Analyzers: leaking, Readings: repos.readings, Cursors: repos.cursors,
+			Anomalies: repos.anomalies, Ops: repos.ops, ProviderSeries: repos.series,
+			AdminIngestion: repos.adminIngestion, AdminJournal: repos.adminJournal,
+			Credentials: fixedCredentialOpener(creds), Sources: sourceMap{creds.Provider: src},
+			Enqueuer: enq, Clock: clk, Log: testfixtures.DiscardLogger(),
+		}
+		svc, err := ingest.New(deps, ingest.Options{})
+		require.NoError(t, err)
+
+		require.NoError(t, svc.SyncAnalyzers(ctx, job.SyncAnalyzersPayload{CompanyID: tn.Company.ID, CredentialID: creds.CredentialID}))
+
+		runs := ingestTestSyncRunsForCredential(t, ctx, repos.ops, tn.Scope, creds.CredentialID)
+		require.Len(t, runs, 1)
+		require.Contains(t, string(runs[0].Detail), "LEAK-1")
+		require.NotContains(t, string(runs[0].Detail), secretValue, "I4: a failed_points reason must be redacted")
+	})
+}
+
+// TestSyncMultiplierChangeIsAppliedAndReported is I5/R27: a multiplier
+// change SyncAnalyzers discovers (not FetchReadings) must be applied AND
+// reported with the same "meter multiplier changed" warning shape the
+// fetch path uses (TestIngestionMultiplierChangeIsAppliedAndReported).
+func TestSyncMultiplierChangeIsAppliedAndReported(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tn := testfixtures.NewTenant(t, ctx, pool, 9116)
+	repos := ingestTestNewRepos(pool)
+
+	now := ingestTestNow
+	existing := ingestTestNewActiveAnalyzer(t, ctx, repos.analyzers, tn.Scope, tn.Company.ID, tn.Buildings[0].ID, model.IntegrationProviderOSOS, "SyncMultSub", "MULT-1", decimal.NewFromInt(1), now)
+
+	creds := integration.Credentials{CredentialID: uuid.New(), CompanyID: tn.Company.ID, Provider: integration.ProviderOSOS, Subtype: "SyncMultSub"}
+	src := newFakeAdapter(integration.ProviderOSOS, 24*time.Hour, model.ReadingKindLoadProfile)
+	newMultiplier := decimal.RequireFromString("60.000000")
+	src.points = []integration.MeteringPoint{{InstallationNumber: "MULT-1", MeterMultiplier: &newMultiplier}}
+	clk := clock.NewFake(now)
+	enq := newRecordingEnqueuer()
+	svc := ingestTestNewService(t, repos, creds, src, enq, clk, ingest.Options{})
+
+	require.NoError(t, svc.SyncAnalyzers(ctx, job.SyncAnalyzersPayload{CompanyID: tn.Company.ID, CredentialID: creds.CredentialID}))
+
+	updated, err := repos.analyzers.Get(ctx, tn.Scope, existing.ID)
+	require.NoError(t, err)
+	require.True(t, updated.MeterMultiplier.Equal(newMultiplier), "I5/R27: sync applies a reported multiplier change")
+
+	messages, merr := repos.ops.ListMessages(ctx, tn.Scope, store.MessageFilter{})
+	require.NoError(t, merr)
+	var found bool
+	for _, m := range messages {
+		if m.Message == "meter multiplier changed" {
+			found = true
+			require.Equal(t, "warning", m.Status)
+		}
+	}
+	require.True(t, found, "I5/R27: sync must report the multiplier change, same as the fetch path")
+}
+
+// TestIngestionMultiplierUpdateFailureDoesNotReportOrMutate is M1: a failed
+// Analyzers.Update on a resolved multiplier change must not be reported as
+// "meter multiplier changed" (it did not happen), must not leave the
+// in-memory analyzer mutated for the rest of the run, and must not fail the
+// whole run — the page's readings are still persisted.
+func TestIngestionMultiplierUpdateFailureDoesNotReportOrMutate(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tn := testfixtures.NewTenant(t, ctx, pool, 9117)
+	repos := ingestTestNewRepos(pool)
+
+	analyzer := tn.Analyzers[0] // MeterMultiplier fixture value: 40.000000
+	creds := integration.Credentials{CredentialID: uuid.New(), CompanyID: tn.Company.ID, Provider: integration.ProviderOSOS, Subtype: analyzer.ProviderSubtype}
+	src := newFakeAdapter(integration.ProviderOSOS, 24*time.Hour, model.ReadingKindLoadProfile)
+	clk := clock.NewFake(ingestTestNow)
+	enq := newRecordingEnqueuer()
+
+	failing := &ingestTestFailingUpdateAnalyzerRepo{AnalyzerRepository: repos.analyzers}
+	deps := ingest.Deps{
+		Analyzers: failing, Readings: repos.readings, Cursors: repos.cursors,
+		Anomalies: repos.anomalies, Ops: repos.ops, ProviderSeries: repos.series,
+		AdminIngestion: repos.adminIngestion, AdminJournal: repos.adminJournal,
+		Credentials: fixedCredentialOpener(creds), Sources: sourceMap{creds.Provider: src},
+		Enqueuer: enq, Clock: clk, Log: testfixtures.DiscardLogger(),
+	}
+	svc, err := ingest.New(deps, ingest.Options{})
+	require.NoError(t, err)
+
+	newMultiplier := decimal.RequireFromString("45.000000")
+	rows := []model.MeterReading{
+		readingFor(analyzer.ID, ingestTestIstanbulMidnight.Format(time.RFC3339), model.ReadingKindLoadProfile, map[string]string{"active_import": "10.0000"}),
+	}
+	window := ingestTestWindow(ingestTestIstanbulMidnight, 2*time.Hour)
+	src.setSteps(fetchStep{result: integration.FetchResult{
+		Readings:           rows,
+		ResolvedMultiplier: &integration.ResolvedMultiplier{Value: newMultiplier, Source: integration.MultiplierFromLastEndex},
+	}})
+
+	require.NoError(t, svc.FetchReadings(ctx, job.FetchReadingsPayload{CompanyID: tn.Company.ID, CredentialID: creds.CredentialID, AnalyzerID: analyzer.ID, Kind: model.ReadingKindLoadProfile, Window: window}),
+		"M1: a failed multiplier update must not fail the whole run")
+
+	require.Len(t, ingestTestAllReadings(t, ctx, repos.readings, tn.Scope, analyzer.ID, model.ReadingKindLoadProfile), 1)
+
+	stillOld, gerr := repos.analyzers.Get(ctx, tn.Scope, analyzer.ID)
+	require.NoError(t, gerr)
+	require.False(t, stillOld.MeterMultiplier.Equal(newMultiplier), "M1: a failed Update must never be silently treated as if it changed the multiplier")
+
+	messages, merr := repos.ops.ListMessages(ctx, tn.Scope, store.MessageFilter{})
+	require.NoError(t, merr)
+	for _, m := range messages {
+		require.NotEqual(t, "meter multiplier changed", m.Message, "M1: no 'meter multiplier changed' message on a failed update")
+	}
+}
+
+// TestIngestionHookReceivesActualPersistedPageRange is M2: PostPersistHook
+// must receive [minTs, maxTs] of the rows actually persisted THAT PAGE, not
+// the chunk's outer [From, To) — two pages of one chunk, scripted with
+// disjoint ranges, must produce two DIFFERENT hook calls.
+func TestIngestionHookReceivesActualPersistedPageRange(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tn := testfixtures.NewTenant(t, ctx, pool, 9118)
+	repos := ingestTestNewRepos(pool)
+
+	analyzer := tn.Analyzers[0]
+	creds := integration.Credentials{CredentialID: uuid.New(), CompanyID: tn.Company.ID, Provider: integration.ProviderOSOS, Subtype: analyzer.ProviderSubtype}
+	src := newFakeAdapter(integration.ProviderOSOS, 24*time.Hour, model.ReadingKindLoadProfile)
+	clk := clock.NewFake(ingestTestNow)
+	enq := newRecordingEnqueuer()
+	spy := &ingestTestSpyHook{}
+
+	deps := ingest.Deps{
+		Analyzers: repos.analyzers, Readings: repos.readings, Cursors: repos.cursors,
+		Anomalies: repos.anomalies, Ops: repos.ops, ProviderSeries: repos.series,
+		AdminIngestion: repos.adminIngestion, AdminJournal: repos.adminJournal,
+		Credentials: fixedCredentialOpener(creds), Sources: sourceMap{creds.Provider: src},
+		Enqueuer: enq, Clock: clk, Log: testfixtures.DiscardLogger(),
+		Hooks: map[model.IntegrationProvider][]ingest.PostPersistHook{model.IntegrationProviderOSOS: {spy}},
+	}
+	svc, err := ingest.New(deps, ingest.Options{})
+	require.NoError(t, err)
+
+	window := ingestTestWindow(ingestTestIstanbulMidnight, 24*time.Hour) // one chunk (MaxWindow == 24h)
+	page1From := ingestTestIstanbulMidnight
+	page1 := ingestTestQuarterHourly(analyzer.ID, page1From, 2) // 00:00, 00:15
+	page1NextCursor := page1From.Add(15 * time.Minute)
+	page2From := ingestTestIstanbulMidnight.Add(10 * time.Hour)
+	page2 := ingestTestQuarterHourly(analyzer.ID, page2From, 2) // 10:00, 10:15
+	src.setSteps(
+		fetchStep{result: integration.FetchResult{Readings: page1, NextCursor: &page1NextCursor}},
+		fetchStep{result: integration.FetchResult{Readings: page2}},
+	)
+
+	require.NoError(t, svc.FetchReadings(ctx, job.FetchReadingsPayload{CompanyID: tn.Company.ID, CredentialID: creds.CredentialID, AnalyzerID: analyzer.ID, Kind: model.ReadingKindLoadProfile, Window: window}))
+
+	calls := spy.callsSoFar()
+	require.Len(t, calls, 2)
+	require.True(t, calls[0].From.Equal(page1From), "hook call 1: page 1's own min, not the chunk's From")
+	require.True(t, calls[0].To.Equal(page1From.Add(15*time.Minute)), "hook call 1: page 1's own max")
+	require.True(t, calls[1].From.Equal(page2From), "hook call 2: page 2's own min, not the chunk's (unchanged) From")
+	require.True(t, calls[1].To.Equal(page2From.Add(15*time.Minute)), "hook call 2: page 2's own max")
+}
+
+// TestIngestionWarningMessagesEmittedInSortedCodeOrder is M5: distinct
+// adapter warning codes must become operational messages in a fixed,
+// deterministic (sorted) order — acc.warnings is a Go map, so without a
+// sort the emission order would vary from run to run.
+func TestIngestionWarningMessagesEmittedInSortedCodeOrder(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tn := testfixtures.NewTenant(t, ctx, pool, 9119)
+	repos := ingestTestNewRepos(pool)
+
+	analyzer := tn.Analyzers[0]
+	creds := integration.Credentials{CredentialID: uuid.New(), CompanyID: tn.Company.ID, Provider: integration.ProviderOSOS, Subtype: analyzer.ProviderSubtype}
+	src := newFakeAdapter(integration.ProviderOSOS, 24*time.Hour, model.ReadingKindLoadProfile)
+	clk := clock.NewFake(ingestTestNow)
+	enq := newRecordingEnqueuer()
+	svc := ingestTestNewService(t, repos, creds, src, enq, clk, ingest.Options{})
+
+	rows := ingestTestQuarterHourly(analyzer.ID, ingestTestIstanbulMidnight, 1)
+	window := ingestTestWindow(ingestTestIstanbulMidnight, time.Hour)
+	src.setSteps(fetchStep{result: integration.FetchResult{
+		Readings: rows,
+		Warnings: []integration.Warning{{Code: "zzz_code"}, {Code: "aaa_code"}, {Code: "mmm_code"}},
+	}})
+
+	require.NoError(t, svc.FetchReadings(ctx, job.FetchReadingsPayload{CompanyID: tn.Company.ID, CredentialID: creds.CredentialID, AnalyzerID: analyzer.ID, Kind: model.ReadingKindLoadProfile, Window: window}))
+
+	messages, err := repos.ops.ListMessages(ctx, tn.Scope, store.MessageFilter{})
+	require.NoError(t, err)
+	byCode := map[string]model.OperationalMessage{}
+	for _, m := range messages {
+		if m.Message == "aaa_code" || m.Message == "mmm_code" || m.Message == "zzz_code" {
+			byCode[m.Message] = m
+		}
+	}
+	require.Len(t, byCode, 3)
+	require.True(t, byCode["aaa_code"].ID < byCode["mmm_code"].ID, "M5: warning messages must be emitted in sorted code order")
+	require.True(t, byCode["mmm_code"].ID < byCode["zzz_code"].ID, "M5: warning messages must be emitted in sorted code order")
 }

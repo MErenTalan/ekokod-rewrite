@@ -3,6 +3,7 @@ package ingest
 import (
 	"context"
 	"encoding/json"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,6 +26,52 @@ func redacted(creds integration.Credentials, err error) string {
 		return ""
 	}
 	return secret.Redact(err.Error(), creds.Fragments())
+}
+
+// redactedCause is the error FetchReadings/SyncAnalyzers return to the job
+// layer (I3) once a failure has already gone through redacted() for
+// job_runs.error/ingestion_cursors.last_error/an operational message:
+// Error() renders that SAME already-redacted text — never cause's own,
+// possibly credential-bearing, text — while Unwrap() still reaches cause,
+// so job.ClassifyForRetry's errors.Is(cause, integration.ErrRateLimited)
+// (etc.) keeps working on the value asynq actually receives and logs.
+//
+// Modelled on internal/platform/secret's scrubbed type (the same
+// "print only the redacted text, but stay traversable via Unwrap" split),
+// without secret.Wrap's own "<op>: " prefix: the text here must match
+// verbatim what redacted() already computed for this failure's other
+// records, not a second, differently-formatted rendering of it.
+type redactedCause struct {
+	text  string
+	cause error
+}
+
+func (e *redactedCause) Error() string { return e.text }
+func (e *redactedCause) Unwrap() error { return e.cause }
+
+// wrapRedacted returns cause reported to the job layer as text (the value
+// already computed via redacted() for this failure's job_runs/cursor/
+// message records), while keeping cause reachable via errors.Is/errors.As —
+// I3. A nil cause returns nil so callers may use it unconditionally.
+func wrapRedacted(text string, cause error) error {
+	if cause == nil {
+		return nil
+	}
+	return &redactedCause{text: text, cause: cause}
+}
+
+// sortedWarningCodes returns warnings' keys in a fixed, deterministic order
+// (M5): warnings is a map, and FetchReadings iterates it to emit one
+// operational message per distinct adapter warning code — without a sort,
+// two runs with the same warnings would emit their messages in a different,
+// unpredictable order every time.
+func sortedWarningCodes(warnings map[string]int32) []string {
+	codes := make([]string, 0, len(warnings))
+	for code := range warnings {
+		codes = append(codes, code)
+	}
+	sort.Strings(codes)
+	return codes
 }
 
 // countsStatus is job_runs.status for a run whose only failure unit is

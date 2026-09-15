@@ -105,7 +105,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 	if err != nil {
 		errText := redacted(creds, err)
 		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 1, &errText, nil, now)
-		return err
+		return wrapRedacted(errText, err)
 	}
 
 	modelProvider, ok := creds.Provider.ModelProvider()
@@ -113,17 +113,25 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 		mismatch := &integration.Error{Kind: integration.ErrMalformedPayload, Provider: creds.Provider, Op: "fetch_readings.provider_mismatch"}
 		errText := redacted(creds, mismatch)
 		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 1, &errText, nil, now)
-		return mismatch
+		return wrapRedacted(errText, mismatch)
 	}
 
 	acc := newFetchAccumulator()
 
-	from, to, err := s.resolveFetchWindow(ctx, sc, p, now)
+	from, to, allowCursorAdvance, err := s.resolveFetchWindow(ctx, sc, p, now)
 	if err != nil {
 		errText := err.Error()
 		s.finishRun(ctx, sc, run.ID, "failed", acc.processed, acc.skipped, 1, &errText, acc.detail(), now)
 		return err
 	}
+
+	// C1/R13: the sanity-jump streak is scoped to this ONE run (this
+	// analyzer, this kind) and must survive every chunk and page of it —
+	// see SanityStreak's doc. runOpts is s.opts with a fresh streak
+	// attached; every Validate call below uses runOpts, never s.opts
+	// directly.
+	runOpts := s.opts
+	runOpts.SanityStreak = &SanityStreak{}
 
 	chunks := normalize.Chunk(from, to, src.MaxWindow(p.Kind))
 	if len(chunks) == 0 {
@@ -176,14 +184,22 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 			}
 
 			kept, dedupeRejected := Dedupe(res.Readings)
-			valid, validateRejected := Validate(prev, history, kept, now, s.opts)
+			// I2: an adapter's page is trusted to be about THIS analyzer
+			// and to carry only p.Kind (the requested kind) or a reset
+			// reading (the one other kind the negative-delta check below
+			// consumes) only after this filter — a row stamped with
+			// another analyzer's ID, or any other Kind, is rejected before
+			// it can reach Validate, BulkInsert, or this analyzer's cursor.
+			attributed, attributionRejected := filterAttribution(kept, analyzer.ID, p.Kind)
+			valid, validateRejected := Validate(prev, history, attributed, now, runOpts)
 			realRejected, sanityFlags := partitionSanityFlags(validateRejected)
 			acc.addRejections(dedupeRejected)
+			acc.addRejections(attributionRejected)
 			acc.addRejections(realRejected)
 			acc.addWarnings(res.Warnings)
 			for _, f := range sanityFlags {
 				s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "error",
-					"sustained register jump accepted after three consecutive rejections",
+					"sustained register jump — review",
 					mustJSON(map[string]any{"analyzer_id": analyzer.ID, "kind": p.Kind, "ts": f.Ts}))
 			}
 
@@ -194,41 +210,78 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 				}
 				acc.processed += int32(inserted + updated)
 
+				// M2: hooks receive the range actually persisted THIS PAGE
+				// (every kind mixed into valid, reset rows included), not
+				// the outer chunk bound — a hook reconciling against what
+				// it can see must be told what really landed, not what the
+				// chunk planner merely intended to request.
+				pageMinTs, pageMaxTs := readingTsBounds(valid)
+				acc.touchAffected(pageMinTs, pageMaxTs)
+
 				for _, hook := range s.deps.Hooks[analyzer.Provider] {
-					if herr := hook.AfterPersist(ctx, sc, analyzer, p.Kind, chunk.From, chunk.To); herr != nil {
+					if herr := hook.AfterPersist(ctx, sc, analyzer, p.Kind, pageMinTs, pageMaxTs); herr != nil {
 						return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, herr, acc, now)
 					}
 				}
 
-				minTs, maxTs := readingTsBounds(valid)
-				acc.touchAffected(minTs, maxTs)
+				// I2: the cursor, TouchLastReading, DetectNegativeDeltas'
+				// sequence and the next page's "effective previous
+				// reading" must only ever see this analyzer's own p.Kind
+				// rows — a reset row sitting between two p.Kind rows in
+				// valid (by Ts order) must never anchor the cursor, and
+				// must never sit INSIDE the p.Kind delta sequence (which
+				// would silently break the adjacency DetectNegativeDeltas
+				// relies on to compare consecutive same-kind readings).
+				kindRows := readingsOfKind(valid, p.Kind)
 
-				resets := readingsOfKind(valid, model.ReadingKindReset)
-				rangeResets, rerr := s.deps.Readings.Range(ctx, sc, analyzer.ID,
-					store.TimeRange{From: minTs, To: maxTs.Add(time.Nanosecond)}, model.ReadingKindReset)
-				if rerr != nil {
-					return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, rerr, acc, now)
-				}
-				resets = append(resets, rangeResets...)
+				if len(kindRows) > 0 {
+					kindMinTs, kindMaxTs := readingTsBounds(kindRows)
 
-				for _, d := range DetectNegativeDeltas(prev, valid, resets) {
-					exists, eerr := s.negativeDeltaAnomalyExists(ctx, sc, analyzer.ID, d)
-					if eerr != nil {
-						return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, eerr, acc, now)
+					resets := readingsOfKind(valid, model.ReadingKindReset)
+					rangeResets, rerr := s.deps.Readings.Range(ctx, sc, analyzer.ID,
+						store.TimeRange{From: kindMinTs, To: kindMaxTs.Add(time.Nanosecond)}, model.ReadingKindReset)
+					if rerr != nil {
+						return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, rerr, acc, now)
 					}
-					if exists {
-						continue
+					resets = append(resets, rangeResets...)
+
+					for _, d := range DetectNegativeDeltas(prev, kindRows, resets) {
+						exists, eerr := s.negativeDeltaAnomalyExists(ctx, sc, analyzer.ID, d)
+						if eerr != nil {
+							return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, eerr, acc, now)
+						}
+						if exists {
+							continue
+						}
+						if _, cerr := s.deps.Anomalies.Create(ctx, sc, model.ConsumptionAnomaly{
+							AnalyzerID:  analyzer.ID,
+							PeriodStart: d.PrevTs,
+							PeriodEnd:   d.CurTs,
+							Reason:      "negative_delta",
+							Detail:      mustJSON(map[string]string{"register": d.Register, "kind": string(p.Kind)}),
+						}); cerr != nil {
+							return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, cerr, acc, now)
+						}
+						acc.anomaliesCreated++
 					}
-					if _, cerr := s.deps.Anomalies.Create(ctx, sc, model.ConsumptionAnomaly{
-						AnalyzerID:  analyzer.ID,
-						PeriodStart: d.PrevTs,
-						PeriodEnd:   d.CurTs,
-						Reason:      "negative_delta",
-						Detail:      mustJSON(map[string]string{"register": d.Register, "kind": string(p.Kind)}),
-					}); cerr != nil {
-						return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, cerr, acc, now)
+
+					// R19/I1: the cursor and last-reading watermark advance
+					// only when at least one p.Kind row was persisted this
+					// page AND this run is allowed to move the live cursor
+					// at all (I1: an explicit window that starts after a
+					// gap the cursor has not covered yet must never move
+					// it — see resolveFetchWindow's doc).
+					if allowCursorAdvance {
+						if cerr := s.deps.Cursors.RecordSuccess(ctx, sc, analyzer.ID, p.Kind, kindMaxTs, now); cerr != nil {
+							return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, cerr, acc, now)
+						}
+						if terr := s.deps.Analyzers.TouchLastReading(ctx, sc, analyzer.ID, kindMaxTs); terr != nil {
+							return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, terr, acc, now)
+						}
 					}
-					acc.anomaliesCreated++
+
+					last := kindRows[len(kindRows)-1]
+					prev = &last
 				}
 
 				if hourly := convertHourlyValues(analyzer.ID, analyzer.Provider, res.HourlyValues); len(hourly) > 0 {
@@ -238,29 +291,30 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 				}
 
 				if res.ResolvedMultiplier != nil && !res.ResolvedMultiplier.Value.Equal(analyzer.MeterMultiplier) {
-					updatedAnalyzer := analyzer
-					updatedAnalyzer.MeterMultiplier = res.ResolvedMultiplier.Value
-					updatedAnalyzer.UpdatedAt = now
-					if newA, uerr := s.deps.Analyzers.Update(ctx, sc, updatedAnalyzer); uerr == nil {
-						analyzer = newA
+					// M1: re-load the analyzer immediately before the
+					// update, so a concurrent operator edit to any OTHER
+					// field (Update takes the whole row) made since this
+					// run loaded `analyzer` at the top survives. On
+					// failure, neither report "multiplier changed" (it did
+					// not happen) nor mutate the in-memory `analyzer` this
+					// run keeps using for its own remaining requests —
+					// only a successful write may do either; a failure
+					// here is logged and the run continues (the readings
+					// this page already persisted are not at risk).
+					if fresh, gerr := s.deps.Analyzers.Get(ctx, sc, analyzer.ID); gerr != nil {
+						s.deps.Log.ErrorContext(ctx, "ingest: reload analyzer before multiplier update failed", "analyzer_id", analyzer.ID, "error", gerr)
 					} else {
-						analyzer = updatedAnalyzer
+						fresh.MeterMultiplier = res.ResolvedMultiplier.Value
+						fresh.UpdatedAt = now
+						if newA, uerr := s.deps.Analyzers.Update(ctx, sc, fresh); uerr != nil {
+							s.deps.Log.ErrorContext(ctx, "ingest: update analyzer multiplier failed", "analyzer_id", analyzer.ID, "error", uerr)
+						} else {
+							analyzer = newA
+							s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "warning", "meter multiplier changed",
+								mustJSON(map[string]any{"analyzer_id": analyzer.ID, "multiplier": analyzer.MeterMultiplier.String()}))
+						}
 					}
-					s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "warning", "meter multiplier changed",
-						mustJSON(map[string]any{"analyzer_id": analyzer.ID, "multiplier": analyzer.MeterMultiplier.String()}))
 				}
-
-				// R19: the cursor advances only because at least one row
-				// was persisted this page.
-				if cerr := s.deps.Cursors.RecordSuccess(ctx, sc, analyzer.ID, p.Kind, maxTs, now); cerr != nil {
-					return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, cerr, acc, now)
-				}
-				if terr := s.deps.Analyzers.TouchLastReading(ctx, sc, analyzer.ID, maxTs); terr != nil {
-					return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, terr, acc, now)
-				}
-
-				last := valid[len(valid)-1]
-				prev = &last
 			}
 
 			if res.NextCursor == nil {
@@ -283,7 +337,10 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 		s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "warning",
 			fmt.Sprintf("%d readings rejected", acc.skipped), mustJSON(acc.rejections))
 	}
-	for code := range acc.warnings {
+	// M5: a fixed, sorted order — acc.warnings is a map, and iterating it
+	// directly would emit these messages in an unpredictable order from one
+	// run to the next.
+	for _, code := range sortedWarningCodes(acc.warnings) {
 		s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "warning", code,
 			mustJSON(map[string]int32{"count": acc.warnings[code]}))
 	}
@@ -293,7 +350,10 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 
 // failFetchRun records the failure on the cursor, finishes the job_runs row
 // (partial if anything was persisted before the failure, else failed), and
-// returns cause unchanged so the caller can `return s.failFetchRun(...)`.
+// returns cause wrapped (I3) so the caller can `return s.failFetchRun(...)`
+// without handing the job layer cause's own, possibly credential-bearing,
+// text — the wrapper's Error() is exactly errText below; its Unwrap()
+// still reaches cause.
 func (s *Service) failFetchRun(ctx context.Context, sc store.Scope, runID, analyzerID uuid.UUID, kind model.ReadingKind, creds integration.Credentials, cause error, acc *fetchAccumulator, at time.Time) error {
 	errText := redacted(creds, cause)
 	if rerr := s.deps.Cursors.RecordFailure(ctx, sc, analyzerID, kind, errText, at); rerr != nil {
@@ -302,7 +362,7 @@ func (s *Service) failFetchRun(ctx context.Context, sc store.Scope, runID, analy
 	status := fetchRunStatus(1, acc.processed > 0)
 	s.finishRun(ctx, sc, runID, status, acc.processed, acc.skipped, 1, &errText, acc.detail(), at)
 	s.appendMessage(ctx, sc, sc.CompanyID, "job", "analyzer-refresh", "error", errText, nil)
-	return cause
+	return wrapRedacted(errText, cause)
 }
 
 // resolveFetchWindow implements the brief's step 4: an explicit p.Window
@@ -310,18 +370,39 @@ func (s *Service) failFetchRun(ctx context.Context, sc store.Scope, runID, analy
 // ErrNotFound, or a cursor row with no LastTs yet (RecordFailure can create
 // one before any success) — falls back to R18's 30-day lookback. To is
 // always now for the cursor-driven form.
-func (s *Service) resolveFetchWindow(ctx context.Context, sc store.Scope, p job.FetchReadingsPayload, now time.Time) (from, to time.Time, err error) {
-	if p.Window != nil {
-		return p.Window.From, p.Window.To, nil
-	}
+//
+// allowCursorAdvance is I1: an explicit p.Window may move the LIVE cursor
+// forward only when doing so does not skip data the cursor has not covered
+// yet — i.e. the window is contiguous with (starts at or before) what the
+// cursor already reflects, or there is no stored cursor at all yet. A
+// window that starts AFTER the stored cursor (a gap between what the
+// cursor covers and what this explicit fetch is about to persist) must
+// leave the cursor exactly where it was: advancing it would make the next
+// cursor-driven run skip straight past the gap instead of requesting it.
+// The cursor-driven form (p.Window == nil) always resumes exactly from the
+// cursor, so it can never itself create a gap — allowCursorAdvance is
+// always true there.
+func (s *Service) resolveFetchWindow(ctx context.Context, sc store.Scope, p job.FetchReadingsPayload, now time.Time) (from, to time.Time, allowCursorAdvance bool, err error) {
 	cur, cerr := s.deps.Cursors.Get(ctx, sc, p.AnalyzerID, p.Kind)
+
+	if p.Window != nil {
+		switch {
+		case cerr == nil && cur.LastTs != nil:
+			return p.Window.From, p.Window.To, !cur.LastTs.Before(p.Window.From), nil
+		case cerr == nil, errors.Is(cerr, store.ErrNotFound):
+			return p.Window.From, p.Window.To, true, nil
+		default:
+			return time.Time{}, time.Time{}, false, cerr
+		}
+	}
+
 	switch {
 	case cerr == nil && cur.LastTs != nil:
-		return *cur.LastTs, now, nil
+		return *cur.LastTs, now, true, nil
 	case cerr == nil, errors.Is(cerr, store.ErrNotFound):
-		return now.Add(-s.opts.InitialLookback), now, nil
+		return now.Add(-s.opts.InitialLookback), now, true, nil
 	default:
-		return time.Time{}, time.Time{}, cerr
+		return time.Time{}, time.Time{}, false, cerr
 	}
 }
 
@@ -383,6 +464,30 @@ func meteringPointFromAnalyzer(a model.Analyzer) integration.MeteringPoint {
 		Longitude:          a.Longitude,
 		DefinitionType:     a.DefinitionType,
 	}
+}
+
+// filterAttribution implements I2: a row is trusted to belong to this fetch
+// (persisted, counted toward this analyzer's cursor, compared against this
+// analyzer's prev/history) only after it passes here. An adapter bug, or a
+// misconfigured/malicious upstream, that stamps a returned row with another
+// analyzer's ID must never let that row reach Validate or BulkInsert; a row
+// whose Kind is neither the requested kind nor model.ReadingKindReset (the
+// one other kind the fetch loop's negative-delta step expects mixed into a
+// page) is equally untrusted here — reset rows are consumed separately, by
+// Ts, later in the loop, and any other Kind has no meaning for this
+// request at all.
+func filterAttribution(rows []model.MeterReading, analyzerID uuid.UUID, kind model.ReadingKind) (kept []model.MeterReading, rejected []Rejection) {
+	for _, r := range rows {
+		switch {
+		case r.AnalyzerID != analyzerID:
+			rejected = append(rejected, Rejection{Ts: r.Ts, Kind: r.Kind, Reason: RejectWrongAnalyzer})
+		case r.Kind != kind && r.Kind != model.ReadingKindReset:
+			rejected = append(rejected, Rejection{Ts: r.Ts, Kind: r.Kind, Reason: RejectWrongKind})
+		default:
+			kept = append(kept, r)
+		}
+	}
+	return kept, rejected
 }
 
 func readingsOfKind(rows []model.MeterReading, kind model.ReadingKind) []model.MeterReading {
