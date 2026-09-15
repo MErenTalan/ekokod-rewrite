@@ -30,8 +30,15 @@ type IntegrationRepository struct {
 }
 
 // NewIntegrationRepository builds an IntegrationRepository on pool, sealing
-// and opening secrets with cipher.
+// and opening secrets with cipher. cipher must not be nil: a nil cipher
+// would panic later, at the first Seal/Open call, with a confusing
+// nil-pointer trace far from the real mistake — refusing it here, at
+// construction, is a programmer error surfaced immediately and clearly
+// (fix round 1, folded minor).
 func NewIntegrationRepository(pool *pgxpool.Pool, cipher *crypto.Cipher) *IntegrationRepository {
+	if cipher == nil {
+		panic("postgres.NewIntegrationRepository: cipher must not be nil")
+	}
 	return &IntegrationRepository{q: sqlcgen.New(pool), pool: pool, cipher: cipher}
 }
 
@@ -136,6 +143,14 @@ func (r *IntegrationRepository) ListCredentials(ctx context.Context, s store.Sco
 // UpsertCredential seals secret and extra with r.cipher and stores the
 // ciphertext. secret and extra are parameters, never struct fields, so they
 // cannot be accidentally retained, logged or returned.
+//
+// A nil (empty) secret or extra on an UPDATE (an existing row for this
+// (company_id, definition_id)) leaves that column's stored ciphertext
+// UNCHANGED — this is how a caller updates username/settings/is_active alone
+// without re-supplying the secret. The SQL's own
+// `coalesce(excluded.x, x)` makes this atomic with the write (fix round 1,
+// folded minor); to actually clear a secret, DeleteCredential and
+// UpsertCredential again.
 func (r *IntegrationRepository) UpsertCredential(ctx context.Context, s store.Scope, c model.IntegrationCredential, secret, extra []byte) (model.IntegrationCredential, error) {
 	if !s.Valid() {
 		return model.IntegrationCredential{}, store.ErrInvalidScope

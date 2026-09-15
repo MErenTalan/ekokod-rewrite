@@ -75,6 +75,14 @@ and (
           and u.deleted_at is null
     )
 )
+and (
+    $11::uuid is null
+    or exists (
+        select 1 from emission_factors f
+        where f.id = $11::uuid
+          and (f.company_id is null or f.company_id = $2::uuid)
+    )
+)
 returning id, company_id, building_id, main_category, sub_category, activity_type, period_start, period_end, quantity, unit, factor_id, factor_key, factor_value, conversion_multiplier, emission_kgco2e, scope, iso_category, description, details, status, is_automated, created_by, created_at, updated_at
 `
 
@@ -104,6 +112,10 @@ type CarbonCreateActivityParams struct {
 	BuildingIds          []uuid.UUID
 }
 
+// factor_id is a stored FK (fix round 1, Important 1, R1): null (no
+// factor — a manual activity), a platform factor, or one of the caller's
+// own is allowed; another company's factor id is refused, atomically with
+// the write.
 func (q *Queries) CarbonCreateActivity(ctx context.Context, arg CarbonCreateActivityParams) (CarbonActivity, error) {
 	row := q.db.QueryRow(ctx, carbonCreateActivity,
 		arg.ID,
@@ -251,11 +263,25 @@ func (q *Queries) CarbonDeleteActivity(ctx context.Context, arg CarbonDeleteActi
 }
 
 const carbonDeleteConversions = `-- name: CarbonDeleteConversions :exec
-delete from emission_factor_conversions where factor_id = $1
+delete from emission_factor_conversions c
+using emission_factors f
+where f.id = c.factor_id
+  and c.factor_id = $1::uuid
+  and f.company_id = $2::uuid
 `
 
-func (q *Queries) CarbonDeleteConversions(ctx context.Context, factorID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, carbonDeleteConversions, factorID)
+type CarbonDeleteConversionsParams struct {
+	FactorID  uuid.UUID
+	CompanyID uuid.UUID
+}
+
+// CarbonDeleteConversions and CarbonInsertConversions both carry the
+// company_id predicate directly, joined through emission_factors, rather
+// than trusting the caller (ReplaceConversions) to have already verified
+// ownership in Go: even if that Go-level check were bypassed, neither
+// statement can touch a row it does not own (fix round 1, Important 2).
+func (q *Queries) CarbonDeleteConversions(ctx context.Context, arg CarbonDeleteConversionsParams) error {
+	_, err := q.db.Exec(ctx, carbonDeleteConversions, arg.FactorID, arg.CompanyID)
 	return err
 }
 
@@ -274,18 +300,29 @@ func (q *Queries) CarbonDeleteSelectedActivities(ctx context.Context, arg Carbon
 }
 
 const carbonFactorOwnerForShare = `-- name: CarbonFactorOwnerForShare :one
-select company_id from emission_factors where id = $1 for share
+select id from emission_factors
+where id = $1::uuid and company_id = $2::uuid
+for share
 `
+
+type CarbonFactorOwnerForShareParams struct {
+	ID        uuid.UUID
+	CompanyID uuid.UUID
+}
 
 // CarbonFactorOwnerForShare locks the parent row INSIDE the caller's
 // transaction for ReplaceConversions, so the ownership check and the
 // delete+insert that follows it see a consistent row and cannot race a
-// concurrent write to the same factor.
-func (q *Queries) CarbonFactorOwnerForShare(ctx context.Context, id uuid.UUID) (*uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, carbonFactorOwnerForShare, id)
-	var company_id *uuid.UUID
-	err := row.Scan(&company_id)
-	return company_id, err
+// concurrent write to the same factor. The company_id predicate is IN THE
+// LOCK QUERY ITSELF: a platform factor or another company's factor matches
+// zero rows here, so the caller never reaches delete/insert at all — the
+// refusal does not depend on a Go-level equality check on a returned value
+// (fix round 1, Important 2).
+func (q *Queries) CarbonFactorOwnerForShare(ctx context.Context, arg CarbonFactorOwnerForShareParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, carbonFactorOwnerForShare, arg.ID, arg.CompanyID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const carbonGetActivity = `-- name: CarbonGetActivity :one
@@ -395,13 +432,15 @@ func (q *Queries) CarbonGetFactor(ctx context.Context, arg CarbonGetFactorParams
 
 const carbonInsertConversions = `-- name: CarbonInsertConversions :exec
 insert into emission_factor_conversions (factor_id, unit, multiplier, label)
-select $1, elem->>'unit', (elem->>'multiplier')::numeric, elem->>'label'
-from jsonb_array_elements($2::jsonb) as elem
+select f.id, elem->>'unit', (elem->>'multiplier')::numeric, elem->>'label'
+from jsonb_array_elements($1::jsonb) as elem, emission_factors f
+where f.id = $2::uuid and f.company_id = $3::uuid
 `
 
 type CarbonInsertConversionsParams struct {
-	FactorID    uuid.UUID
 	Conversions []byte
+	FactorID    uuid.UUID
+	CompanyID   uuid.UUID
 }
 
 // CarbonInsertConversions takes the whole batch as one jsonb array: sqlc's
@@ -410,9 +449,12 @@ type CarbonInsertConversionsParams struct {
 // and read back with `elem->>'field'` plus a per-column cast is this
 // codebase's bulk-insert idiom for a parallel-column child collection (see
 // timescale-shims.sql's jsonb_array_elements declaration for why this shape,
-// and not jsonb_to_recordset's `AS t(col type, ...)`).
+// and not jsonb_to_recordset's `AS t(col type, ...)`). The insert selects
+// `f.id`, not the raw `$1` parameter, and f is filtered to
+// (id, company_id): a batch cannot land under a factor_id/company_id pair
+// that does not jointly identify a real, owned row.
 func (q *Queries) CarbonInsertConversions(ctx context.Context, arg CarbonInsertConversionsParams) error {
-	_, err := q.db.Exec(ctx, carbonInsertConversions, arg.FactorID, arg.Conversions)
+	_, err := q.db.Exec(ctx, carbonInsertConversions, arg.Conversions, arg.FactorID, arg.CompanyID)
 	return err
 }
 
@@ -535,27 +577,46 @@ func (q *Queries) CarbonListActivities(ctx context.Context, arg CarbonListActivi
 }
 
 const carbonListConversions = `-- name: CarbonListConversions :many
-select c.factor_id, c.unit, c.multiplier, c.label from emission_factor_conversions c
-join emission_factors f on f.id = c.factor_id
-where c.factor_id = $1
-  and (f.company_id is null or f.company_id = $2)
+select f.id as factor_id, c.unit, c.multiplier, c.label
+from emission_factors f
+left join emission_factor_conversions c on c.factor_id = f.id
+where f.id = $1::uuid
+  and (f.company_id is null or f.company_id = $2::uuid)
 order by c.unit
 `
 
 type CarbonListConversionsParams struct {
 	FactorID  uuid.UUID
-	CompanyID *uuid.UUID
+	CompanyID uuid.UUID
 }
 
-func (q *Queries) CarbonListConversions(ctx context.Context, arg CarbonListConversionsParams) ([]EmissionFactorConversion, error) {
+type CarbonListConversionsRow struct {
+	FactorID   uuid.UUID
+	Unit       *string
+	Multiplier pgtype.Numeric
+	Label      *string
+}
+
+// CarbonListConversions is the SINGLE parent-driven statement Conversions()
+// runs (fix round 1, Important 3): it starts from emission_factors, not
+// emission_factor_conversions, and LEFT JOINs the (parentless, company_id-
+// free) child table, so a visible factor with zero conversions still
+// returns exactly one row (unit/multiplier/label all null — the sentinel
+// the repository turns into an empty slice), while an invisible or
+// nonexistent factor id returns ZERO rows (ErrNotFound). There is no
+// separate Go-level pre-check query any more: this one statement's own
+// `(f.company_id is null or f.company_id = $2)` predicate is the only thing
+// standing between a caller and another company's conversions, so
+// tautologising it is directly test-visible.
+func (q *Queries) CarbonListConversions(ctx context.Context, arg CarbonListConversionsParams) ([]CarbonListConversionsRow, error) {
 	rows, err := q.db.Query(ctx, carbonListConversions, arg.FactorID, arg.CompanyID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []EmissionFactorConversion
+	var items []CarbonListConversionsRow
 	for rows.Next() {
-		var i EmissionFactorConversion
+		var i CarbonListConversionsRow
 		if err := rows.Scan(
 			&i.FactorID,
 			&i.Unit,
@@ -835,6 +896,16 @@ where carbon_activities.id = $18::uuid
         and b.deleted_at is null
         and ($20::boolean or b.id = any($21::uuid[]))
   )
+  -- factor_id is a stored FK (fix round 1, Important 1, R1): see
+  -- CarbonCreateActivity's identical clause.
+  and (
+      $8::uuid is null
+      or exists (
+          select 1 from emission_factors f
+          where f.id = $8::uuid
+            and (f.company_id is null or f.company_id = $19::uuid)
+      )
+  )
 returning id, company_id, building_id, main_category, sub_category, activity_type, period_start, period_end, quantity, unit, factor_id, factor_key, factor_value, conversion_multiplier, emission_kgco2e, scope, iso_category, description, details, status, is_automated, created_by, created_at, updated_at
 `
 
@@ -951,6 +1022,14 @@ and (
           and u.deleted_at is null
     )
 )
+and (
+    $10::uuid is null
+    or exists (
+        select 1 from emission_factors f
+        where f.id = $10::uuid
+          and (f.company_id is null or f.company_id = $1::uuid)
+    )
+)
 on conflict (building_id, activity_type, period_start) where is_automated
 do update set
     main_category = excluded.main_category,
@@ -999,6 +1078,8 @@ type CarbonUpsertAutomatedActivityParams struct {
 // Keyed on the partial unique index (building_id, activity_type,
 // period_start) where is_automated. is_automated is hard-coded true: this
 // path exists only for the derived-from-meter-data recomputation.
+// factor_id is a stored FK (fix round 1, Important 1, R1): see
+// CarbonCreateActivity's identical clause.
 func (q *Queries) CarbonUpsertAutomatedActivity(ctx context.Context, arg CarbonUpsertAutomatedActivityParams) (CarbonActivity, error) {
 	row := q.db.QueryRow(ctx, carbonUpsertAutomatedActivity,
 		arg.CompanyID,

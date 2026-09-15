@@ -68,30 +68,33 @@ func (r *ISO50001Repository) EnsureProject(ctx context.Context, s store.Scope, b
 
 // --- iso50001_clause_dates ------------------------------------------------
 
-// ClauseDates — Isolation: iso50001_clause_dates has no company_id, so
-// visibility is proven by ISO50001ProjectVisible (its own query carries the
-// scope predicate) before listing: a project id that does not exist, or is
-// not visible, returns ErrNotFound instead of an ambiguous empty list.
+// ClauseDates — Isolation (fix round 1, Important 3): ONE parent-driven
+// statement (ISO50001ListClauseDates, LEFT JOIN from iso50001_projects), not
+// a separate Go-level pre-check query followed by a second read: zero rows
+// means the project itself is not visible (ErrNotFound); one or more rows
+// with a null ClauseID is the sentinel for "visible project, no clause
+// dates" (an empty slice, not an error).
 func (r *ISO50001Repository) ClauseDates(ctx context.Context, s store.Scope, projectID uuid.UUID) ([]model.ISO50001ClauseDate, error) {
 	if !s.Valid() {
 		return nil, store.ErrInvalidScope
 	}
 	buildingIDs, allBuildings := s.BuildingFilter()
-	if _, err := r.q.ISO50001ProjectVisible(ctx, sqlcgen.ISO50001ProjectVisibleParams{
-		ID: projectID, CompanyID: s.CompanyID, AllBuildings: allBuildings, BuildingIds: buildingIDs,
-	}); err != nil {
-		return nil, pgerr.Translate(r.pool, "check iso50001 project visibility", err)
-	}
 	rows, err := r.q.ISO50001ListClauseDates(ctx, sqlcgen.ISO50001ListClauseDatesParams{
 		ProjectID: projectID, CompanyID: s.CompanyID, AllBuildings: allBuildings, BuildingIds: buildingIDs,
 	})
 	if err != nil {
 		return nil, pgerr.Translate(r.pool, "list iso50001 clause dates", err)
 	}
+	if len(rows) == 0 {
+		return nil, store.ErrNotFound
+	}
 	out := make([]model.ISO50001ClauseDate, 0, len(rows))
 	for _, row := range rows {
+		if row.ClauseID == nil {
+			continue // sentinel row: the project is visible but has no clause dates
+		}
 		out = append(out, model.ISO50001ClauseDate{
-			ProjectID: row.ProjectID, ClauseID: row.ClauseID,
+			ProjectID: projectID, ClauseID: *row.ClauseID,
 			StartDate: iso50001OptionalDate(row.StartDate), EndDate: iso50001OptionalDate(row.EndDate),
 		})
 	}
@@ -123,10 +126,14 @@ func iso50001DateString(t *time.Time) *string {
 	return &s
 }
 
-// ReplaceClauseDates — Isolation: the parent project is locked FOR SHARE
-// inside this transaction (ISO50001ProjectVisibleForShare) before the
-// delete+insert: a project not visible to the Scope returns ErrNotFound and
-// nothing is replaced.
+// ReplaceClauseDates — Isolation (fix round 1, Important 2): the parent
+// project is locked FOR SHARE inside this transaction
+// (ISO50001ProjectVisibleForShare) before the delete+insert, and
+// ISO50001DeleteClauseDates/ISO50001InsertClauseDates ALSO carry the
+// company_id/building predicate directly (joined through
+// iso50001_projects/buildings): a project not visible to the Scope returns
+// ErrNotFound from the lock and never reaches delete/insert, and even if it
+// did, neither statement can touch a project it does not own.
 func (r *ISO50001Repository) ReplaceClauseDates(ctx context.Context, s store.Scope, projectID uuid.UUID, dates []model.ISO50001ClauseDate) error {
 	if !s.Valid() {
 		return store.ErrInvalidScope
@@ -142,14 +149,16 @@ func (r *ISO50001Repository) ReplaceClauseDates(ctx context.Context, s store.Sco
 		}); err != nil {
 			return pgerr.Translate(r.pool, "lock iso50001 project", err)
 		}
-		if err := qtx.ISO50001DeleteClauseDates(ctx, projectID); err != nil {
+		if err := qtx.ISO50001DeleteClauseDates(ctx, sqlcgen.ISO50001DeleteClauseDatesParams{
+			ProjectID: projectID, CompanyID: s.CompanyID, AllBuildings: allBuildings, BuildingIds: buildingIDs,
+		}); err != nil {
 			return pgerr.Translate(r.pool, "delete iso50001 clause dates", err)
 		}
 		if len(dates) == 0 {
 			return nil
 		}
 		if err := qtx.ISO50001InsertClauseDates(ctx, sqlcgen.ISO50001InsertClauseDatesParams{
-			ProjectID: projectID, Dates: payload,
+			ProjectID: projectID, CompanyID: s.CompanyID, AllBuildings: allBuildings, BuildingIds: buildingIDs, Dates: payload,
 		}); err != nil {
 			return pgerr.Translate(r.pool, "insert iso50001 clause dates", err)
 		}
@@ -167,27 +176,56 @@ func iso50001NoteFromRow(row sqlcgen.Iso50001Note) model.ISO50001Note {
 	}
 }
 
-// Notes — Isolation: iso50001_notes has no company_id, so visibility is
-// proven by ISO50001ProjectVisible before listing.
+// iso50001NoteListRowToModel converts one non-sentinel ISO50001ListNotesRow
+// (the caller has already checked row.ID != nil) to a model.ISO50001Note.
+// Every column here is a pointer/nullable pgtype ONLY because it comes
+// through a LEFT JOIN from iso50001_projects (fix round 1, Important 3); the
+// underlying iso50001_notes columns are NOT NULL, so every dereference below
+// is safe once row.ID is known non-nil.
+func iso50001NoteListRowToModel(row sqlcgen.ISO50001ListNotesRow) model.ISO50001Note {
+	n := model.ISO50001Note{ID: *row.ID, ProjectID: *row.ProjectID, CreatedBy: row.CreatedBy}
+	if row.ClauseID != nil {
+		n.ClauseID = *row.ClauseID
+	}
+	n.Title = row.Title
+	if row.Body != nil {
+		n.Body = *row.Body
+	}
+	if row.CreatedAt.Valid {
+		n.CreatedAt = row.CreatedAt.Time
+	}
+	if row.UpdatedAt.Valid {
+		n.UpdatedAt = row.UpdatedAt.Time
+	}
+	return n
+}
+
+// Notes — Isolation (fix round 1, Important 3): ONE parent-driven statement
+// (ISO50001ListNotes, LEFT JOIN from iso50001_projects with the optional
+// clause_id filter embedded in the JOIN's own ON clause, not the WHERE): zero
+// rows means the project itself is not visible (ErrNotFound); one or more
+// rows with a null note ID is the sentinel for "visible project, no notes
+// match" (an empty slice, not an error).
 func (r *ISO50001Repository) Notes(ctx context.Context, s store.Scope, projectID uuid.UUID, clauseID *string) ([]model.ISO50001Note, error) {
 	if !s.Valid() {
 		return nil, store.ErrInvalidScope
 	}
 	buildingIDs, allBuildings := s.BuildingFilter()
-	if _, err := r.q.ISO50001ProjectVisible(ctx, sqlcgen.ISO50001ProjectVisibleParams{
-		ID: projectID, CompanyID: s.CompanyID, AllBuildings: allBuildings, BuildingIds: buildingIDs,
-	}); err != nil {
-		return nil, pgerr.Translate(r.pool, "check iso50001 project visibility", err)
-	}
 	rows, err := r.q.ISO50001ListNotes(ctx, sqlcgen.ISO50001ListNotesParams{
 		ProjectID: projectID, CompanyID: s.CompanyID, AllBuildings: allBuildings, BuildingIds: buildingIDs, ClauseID: clauseID,
 	})
 	if err != nil {
 		return nil, pgerr.Translate(r.pool, "list iso50001 notes", err)
 	}
+	if len(rows) == 0 {
+		return nil, store.ErrNotFound
+	}
 	out := make([]model.ISO50001Note, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, iso50001NoteFromRow(row))
+		if row.ID == nil {
+			continue // sentinel row: the project is visible but no note matches
+		}
+		out = append(out, iso50001NoteListRowToModel(row))
 	}
 	return out, nil
 }

@@ -31,9 +31,15 @@ limit sqlc.arg(limit_val)::int offset sqlc.arg(offset_val)::int;
 -- CarbonFactorOwnerForShare locks the parent row INSIDE the caller's
 -- transaction for ReplaceConversions, so the ownership check and the
 -- delete+insert that follows it see a consistent row and cannot race a
--- concurrent write to the same factor.
+-- concurrent write to the same factor. The company_id predicate is IN THE
+-- LOCK QUERY ITSELF: a platform factor or another company's factor matches
+-- zero rows here, so the caller never reaches delete/insert at all — the
+-- refusal does not depend on a Go-level equality check on a returned value
+-- (fix round 1, Important 2).
 -- name: CarbonFactorOwnerForShare :one
-select company_id from emission_factors where id = $1 for share;
+select id from emission_factors
+where id = sqlc.arg(id)::uuid and company_id = sqlc.arg(company_id)::uuid
+for share;
 
 -- CarbonBuildingVisibleForShare is CarbonFactorOwnerForShare's counterpart
 -- for ReplaceSelectedActivities: it locks the building row so the visibility
@@ -89,15 +95,36 @@ do update set
     updated_at = now()
 returning *;
 
+-- CarbonListConversions is the SINGLE parent-driven statement Conversions()
+-- runs (fix round 1, Important 3): it starts from emission_factors, not
+-- emission_factor_conversions, and LEFT JOINs the (parentless, company_id-
+-- free) child table, so a visible factor with zero conversions still
+-- returns exactly one row (unit/multiplier/label all null — the sentinel
+-- the repository turns into an empty slice), while an invisible or
+-- nonexistent factor id returns ZERO rows (ErrNotFound). There is no
+-- separate Go-level pre-check query any more: this one statement's own
+-- `(f.company_id is null or f.company_id = $2)` predicate is the only thing
+-- standing between a caller and another company's conversions, so
+-- tautologising it is directly test-visible.
 -- name: CarbonListConversions :many
-select c.* from emission_factor_conversions c
-join emission_factors f on f.id = c.factor_id
-where c.factor_id = $1
-  and (f.company_id is null or f.company_id = $2)
+select f.id as factor_id, c.unit, c.multiplier, c.label
+from emission_factors f
+left join emission_factor_conversions c on c.factor_id = f.id
+where f.id = sqlc.arg(factor_id)::uuid
+  and (f.company_id is null or f.company_id = sqlc.arg(company_id)::uuid)
 order by c.unit;
 
+-- CarbonDeleteConversions and CarbonInsertConversions both carry the
+-- company_id predicate directly, joined through emission_factors, rather
+-- than trusting the caller (ReplaceConversions) to have already verified
+-- ownership in Go: even if that Go-level check were bypassed, neither
+-- statement can touch a row it does not own (fix round 1, Important 2).
 -- name: CarbonDeleteConversions :exec
-delete from emission_factor_conversions where factor_id = $1;
+delete from emission_factor_conversions c
+using emission_factors f
+where f.id = c.factor_id
+  and c.factor_id = sqlc.arg(factor_id)::uuid
+  and f.company_id = sqlc.arg(company_id)::uuid;
 
 -- CarbonInsertConversions takes the whole batch as one jsonb array: sqlc's
 -- (deliberately minimal) built-in catalogue has no multi-array unnest
@@ -105,11 +132,15 @@ delete from emission_factor_conversions where factor_id = $1;
 -- and read back with `elem->>'field'` plus a per-column cast is this
 -- codebase's bulk-insert idiom for a parallel-column child collection (see
 -- timescale-shims.sql's jsonb_array_elements declaration for why this shape,
--- and not jsonb_to_recordset's `AS t(col type, ...)`).
+-- and not jsonb_to_recordset's `AS t(col type, ...)`). The insert selects
+-- `f.id`, not the raw `$1` parameter, and f is filtered to
+-- (id, company_id): a batch cannot land under a factor_id/company_id pair
+-- that does not jointly identify a real, owned row.
 -- name: CarbonInsertConversions :exec
 insert into emission_factor_conversions (factor_id, unit, multiplier, label)
-select $1, elem->>'unit', (elem->>'multiplier')::numeric, elem->>'label'
-from jsonb_array_elements(sqlc.arg(conversions)::jsonb) as elem;
+select f.id, elem->>'unit', (elem->>'multiplier')::numeric, elem->>'label'
+from jsonb_array_elements(sqlc.arg(conversions)::jsonb) as elem, emission_factors f
+where f.id = sqlc.arg(factor_id)::uuid and f.company_id = sqlc.arg(company_id)::uuid;
 
 -- The scope's building narrowing is embedded here rather than checked with
 -- Scope.AllowsBuilding in Go: AllowsBuilding returns true for ANY id under
@@ -200,6 +231,18 @@ and (
           and u.deleted_at is null
     )
 )
+-- factor_id is a stored FK (fix round 1, Important 1, R1): null (no
+-- factor — a manual activity), a platform factor, or one of the caller's
+-- own is allowed; another company's factor id is refused, atomically with
+-- the write.
+and (
+    sqlc.narg(factor_id)::uuid is null
+    or exists (
+        select 1 from emission_factors f
+        where f.id = sqlc.narg(factor_id)::uuid
+          and (f.company_id is null or f.company_id = sqlc.arg(company_id)::uuid)
+    )
+)
 returning *;
 
 -- name: CarbonUpdateActivity :one
@@ -233,6 +276,16 @@ where carbon_activities.id = sqlc.arg(id)::uuid
       where b.id = carbon_activities.building_id
         and b.deleted_at is null
         and (sqlc.arg(all_buildings)::boolean or b.id = any(sqlc.arg(building_ids)::uuid[]))
+  )
+  -- factor_id is a stored FK (fix round 1, Important 1, R1): see
+  -- CarbonCreateActivity's identical clause.
+  and (
+      sqlc.narg(factor_id)::uuid is null
+      or exists (
+          select 1 from emission_factors f
+          where f.id = sqlc.narg(factor_id)::uuid
+            and (f.company_id is null or f.company_id = sqlc.arg(company_id)::uuid)
+      )
   )
 returning *;
 
@@ -279,6 +332,16 @@ and (
         where u.id = sqlc.narg(created_by)::uuid
           and u.company_id = sqlc.arg(company_id)::uuid
           and u.deleted_at is null
+    )
+)
+-- factor_id is a stored FK (fix round 1, Important 1, R1): see
+-- CarbonCreateActivity's identical clause.
+and (
+    sqlc.narg(factor_id)::uuid is null
+    or exists (
+        select 1 from emission_factors f
+        where f.id = sqlc.narg(factor_id)::uuid
+          and (f.company_id is null or f.company_id = sqlc.arg(company_id)::uuid)
     )
 )
 on conflict (building_id, activity_type, period_start) where is_automated

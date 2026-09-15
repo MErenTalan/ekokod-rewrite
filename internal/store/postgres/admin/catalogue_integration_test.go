@@ -152,3 +152,73 @@ func TestAdminUpsertIntegrationDefinitionsIsIdempotent(t *testing.T) {
 	require.NoError(t, pool.QueryRow(ctx, `select count(*) from integration_definitions`).Scan(&count))
 	require.Equal(t, 1, count)
 }
+
+// TestAdminUpsertNationalTariffScheduleRefusesInBatchDuplicateKey is the
+// folded-minor test (fix round 1): a batch carrying two entries that share
+// the table's natural key (effective_from, user_group, voltage_level, term)
+// is refused WHOLE, before any database round trip, with an
+// ErrConflict-matching error naming the key — matching Task 10's BulkInsert
+// duplicate-key ruling.
+func TestAdminUpsertNationalTariffScheduleRefusesInBatchDuplicateKey(t *testing.T) {
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	repo := admin.NewCatalogueRepository(pool)
+
+	dup := model.NationalTariffScheduleEntry{
+		EffectiveFrom:     time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC),
+		UserGroup:         model.UserGroupResidential,
+		VoltageLevel:      model.VoltageLevelLV,
+		Term:              model.TariffTermMonomial,
+		EnergyPrice:       catalogueDec("1.000000"),
+		DistributionPrice: catalogueDec("0.100000"),
+		VatRate:           catalogueDec("20.000"),
+	}
+	dup2 := dup
+	dup2.EnergyPrice = catalogueDec("9.000000")
+
+	_, err := repo.UpsertNationalTariffSchedule(ctx, []model.NationalTariffScheduleEntry{dup, dup2})
+	require.ErrorIs(t, err, store.ErrConflict)
+	require.Contains(t, err.Error(), "2026-02-01")
+
+	var count int
+	require.NoError(t, pool.QueryRow(ctx, `select count(*) from national_tariff_schedule`).Scan(&count))
+	require.Zero(t, count, "the refused batch must not have written anything, not even one of the two")
+}
+
+// TestAdminReplacePlatformConversionsSmallerReplaceRemovesExactly is the
+// folded-minor test (fix round 1): replacing a platform factor's
+// conversions with a SMALLER set removes exactly the rows no longer
+// present, not just adds/updates the new ones.
+func TestAdminReplacePlatformConversionsSmallerReplaceRemovesExactly(t *testing.T) {
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	repo := admin.NewCatalogueRepository(pool)
+	carbonRepo := postgres.NewCarbonRepository(pool)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 9003)
+
+	platform, err := repo.UpsertPlatformFactor(ctx, model.EmissionFactor{
+		Key: "methane", Label: "Methane", MainCategory: "fuel", BaseFactor: catalogueDec("1.00000000"), BaseUnit: "kg",
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, repo.ReplacePlatformConversions(ctx, platform.ID, []model.EmissionFactorConversion{
+		{Unit: "litre", Multiplier: catalogueDec("0.10000000"), Label: "per litre"},
+		{Unit: "m3", Multiplier: catalogueDec("0.20000000"), Label: "per m3"},
+		{Unit: "gallon", Multiplier: catalogueDec("0.30000000"), Label: "per gallon"},
+	}))
+
+	before, err := carbonRepo.Conversions(ctx, tenant.Scope, platform.ID)
+	require.NoError(t, err)
+	require.Len(t, before, 3)
+
+	// A SMALLER replace: only "m3" survives.
+	require.NoError(t, repo.ReplacePlatformConversions(ctx, platform.ID, []model.EmissionFactorConversion{
+		{Unit: "m3", Multiplier: catalogueDec("0.25000000"), Label: "per m3 updated"},
+	}))
+
+	after, err := carbonRepo.Conversions(ctx, tenant.Scope, platform.ID)
+	require.NoError(t, err)
+	require.Len(t, after, 1, "the removed rows (litre, gallon) must actually be gone, not merely unmodified")
+	require.Equal(t, "m3", after[0].Unit)
+	require.True(t, after[0].Multiplier.Equal(catalogueDec("0.25000000")))
+}

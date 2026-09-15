@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const iSO50001CreateNote = `-- name: ISO50001CreateNote :one
@@ -77,11 +78,36 @@ func (q *Queries) ISO50001CreateNote(ctx context.Context, arg ISO50001CreateNote
 }
 
 const iSO50001DeleteClauseDates = `-- name: ISO50001DeleteClauseDates :exec
-delete from iso50001_clause_dates where project_id = $1
+delete from iso50001_clause_dates cd
+using iso50001_projects p, buildings b
+where cd.project_id = p.id
+  and p.building_id = b.id
+  and cd.project_id = $1::uuid
+  and p.company_id = $2::uuid
+  and b.deleted_at is null
+  and ($3::boolean or p.building_id = any($4::uuid[]))
 `
 
-func (q *Queries) ISO50001DeleteClauseDates(ctx context.Context, projectID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, iSO50001DeleteClauseDates, projectID)
+type ISO50001DeleteClauseDatesParams struct {
+	ProjectID    uuid.UUID
+	CompanyID    uuid.UUID
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
+}
+
+// ISO50001DeleteClauseDates and ISO50001InsertClauseDates both carry the
+// company_id/building predicate directly, joined through
+// iso50001_projects/buildings, rather than trusting the caller
+// (ReplaceClauseDates) to have already verified visibility via the FOR
+// SHARE lock alone (fix round 1, Important 2 — same shape as
+// carbon.sql's CarbonDeleteConversions/CarbonInsertConversions).
+func (q *Queries) ISO50001DeleteClauseDates(ctx context.Context, arg ISO50001DeleteClauseDatesParams) error {
+	_, err := q.db.Exec(ctx, iSO50001DeleteClauseDates,
+		arg.ProjectID,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
+	)
 	return err
 }
 
@@ -207,30 +233,49 @@ func (q *Queries) ISO50001GetProject(ctx context.Context, arg ISO50001GetProject
 
 const iSO50001InsertClauseDates = `-- name: ISO50001InsertClauseDates :exec
 insert into iso50001_clause_dates (project_id, clause_id, start_date, end_date)
-select $1, elem->>'clause_id', (elem->>'start_date')::date, (elem->>'end_date')::date
-from jsonb_array_elements($2::jsonb) as elem
+select p.id, elem->>'clause_id', (elem->>'start_date')::date, (elem->>'end_date')::date
+from jsonb_array_elements($1::jsonb) as elem, iso50001_projects p
+join buildings b on b.id = p.building_id
+where p.id = $2::uuid
+  and p.company_id = $3::uuid
+  and b.deleted_at is null
+  and ($4::boolean or p.building_id = any($5::uuid[]))
 `
 
 type ISO50001InsertClauseDatesParams struct {
-	ProjectID uuid.UUID
-	Dates     []byte
+	Dates        []byte
+	ProjectID    uuid.UUID
+	CompanyID    uuid.UUID
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
 }
 
 // One jsonb array parameter, unpacked with jsonb_array_elements: see
 // carbon.sql's CarbonInsertConversions for why (no multi-array unnest in
 // sqlc's catalogue, and jsonb_to_recordset's column-list alias trips
-// TestEveryFunctionSQLcMustTypeIsDeclared's relation/call scan).
+// TestEveryFunctionSQLcMustTypeIsDeclared's relation/call scan). The insert
+// selects `p.id`, not the raw `$1`-shaped parameter, and p is filtered to
+// (id, company_id) joined to a not-deleted, scope-visible building: a batch
+// cannot land under a project_id/company_id pair that does not jointly
+// identify a real, visible project.
 func (q *Queries) ISO50001InsertClauseDates(ctx context.Context, arg ISO50001InsertClauseDatesParams) error {
-	_, err := q.db.Exec(ctx, iSO50001InsertClauseDates, arg.ProjectID, arg.Dates)
+	_, err := q.db.Exec(ctx, iSO50001InsertClauseDates,
+		arg.Dates,
+		arg.ProjectID,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
+	)
 	return err
 }
 
 const iSO50001ListClauseDates = `-- name: ISO50001ListClauseDates :many
-select cd.project_id, cd.clause_id, cd.start_date, cd.end_date from iso50001_clause_dates cd
-join iso50001_projects p on p.id = cd.project_id
+select cd.clause_id, cd.start_date, cd.end_date
+from iso50001_projects p
 join buildings b on b.id = p.building_id
-where cd.project_id = $1
-  and p.company_id = $2
+left join iso50001_clause_dates cd on cd.project_id = p.id
+where p.id = $1::uuid
+  and p.company_id = $2::uuid
   and b.deleted_at is null
   and ($3::boolean or p.building_id = any($4::uuid[]))
 order by cd.clause_id
@@ -243,7 +288,23 @@ type ISO50001ListClauseDatesParams struct {
 	BuildingIds  []uuid.UUID
 }
 
-func (q *Queries) ISO50001ListClauseDates(ctx context.Context, arg ISO50001ListClauseDatesParams) ([]Iso50001ClauseDate, error) {
+type ISO50001ListClauseDatesRow struct {
+	ClauseID  *string
+	StartDate pgtype.Date
+	EndDate   pgtype.Date
+}
+
+// ISO50001ListClauseDates is the SINGLE parent-driven statement ClauseDates()
+// runs (fix round 1, Important 3): it starts from iso50001_projects, not
+// iso50001_clause_dates, and LEFT JOINs the (parentless, company_id-free)
+// child table, so a visible project with zero clause dates still returns
+// exactly one row (clause_id/start_date/end_date all null — the sentinel
+// the repository turns into an empty slice), while an invisible or
+// nonexistent project id returns ZERO rows (ErrNotFound). There is no
+// separate Go-level pre-check query any more (ISO50001ProjectVisible is
+// gone): this one statement's own company_id predicate is the only thing
+// standing between a caller and another tenant's clause dates.
+func (q *Queries) ISO50001ListClauseDates(ctx context.Context, arg ISO50001ListClauseDatesParams) ([]ISO50001ListClauseDatesRow, error) {
 	rows, err := q.db.Query(ctx, iSO50001ListClauseDates,
 		arg.ProjectID,
 		arg.CompanyID,
@@ -254,15 +315,10 @@ func (q *Queries) ISO50001ListClauseDates(ctx context.Context, arg ISO50001ListC
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Iso50001ClauseDate
+	var items []ISO50001ListClauseDatesRow
 	for rows.Next() {
-		var i Iso50001ClauseDate
-		if err := rows.Scan(
-			&i.ProjectID,
-			&i.ClauseID,
-			&i.StartDate,
-			&i.EndDate,
-		); err != nil {
+		var i ISO50001ListClauseDatesRow
+		if err := rows.Scan(&i.ClauseID, &i.StartDate, &i.EndDate); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -274,40 +330,58 @@ func (q *Queries) ISO50001ListClauseDates(ctx context.Context, arg ISO50001ListC
 }
 
 const iSO50001ListNotes = `-- name: ISO50001ListNotes :many
-select n.id, n.project_id, n.clause_id, n.title, n.body, n.created_by, n.created_at, n.updated_at from iso50001_notes n
-join iso50001_projects p on p.id = n.project_id
+select n.id, n.project_id, n.clause_id, n.title, n.body, n.created_by, n.created_at, n.updated_at
+from iso50001_projects p
 join buildings b on b.id = p.building_id
-where n.project_id = $1
-  and p.company_id = $2
+left join iso50001_notes n on n.project_id = p.id
+  and ($1::text is null or n.clause_id = $1::text)
+where p.id = $2::uuid
+  and p.company_id = $3::uuid
   and b.deleted_at is null
-  and ($3::boolean or p.building_id = any($4::uuid[]))
-  and ($5::text is null or n.clause_id = $5::text)
+  and ($4::boolean or p.building_id = any($5::uuid[]))
 order by n.created_at, n.id
 `
 
 type ISO50001ListNotesParams struct {
+	ClauseID     *string
 	ProjectID    uuid.UUID
 	CompanyID    uuid.UUID
 	AllBuildings bool
 	BuildingIds  []uuid.UUID
-	ClauseID     *string
 }
 
-func (q *Queries) ISO50001ListNotes(ctx context.Context, arg ISO50001ListNotesParams) ([]Iso50001Note, error) {
+type ISO50001ListNotesRow struct {
+	ID        *uuid.UUID
+	ProjectID *uuid.UUID
+	ClauseID  *string
+	Title     *string
+	Body      *string
+	CreatedBy *uuid.UUID
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+// ISO50001ListNotes is the SINGLE parent-driven statement Notes() runs (fix
+// round 1, Important 3): the optional clause_id filter is in the LEFT
+// JOIN's own ON clause, not the WHERE clause, so "project visible, no notes
+// match the filter" still returns the project's sentinel row (all n.*
+// columns null) rather than being filtered away entirely — zero rows means
+// the PROJECT itself is not visible (ErrNotFound), never "no notes matched".
+func (q *Queries) ISO50001ListNotes(ctx context.Context, arg ISO50001ListNotesParams) ([]ISO50001ListNotesRow, error) {
 	rows, err := q.db.Query(ctx, iSO50001ListNotes,
+		arg.ClauseID,
 		arg.ProjectID,
 		arg.CompanyID,
 		arg.AllBuildings,
 		arg.BuildingIds,
-		arg.ClauseID,
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Iso50001Note
+	var items []ISO50001ListNotesRow
 	for rows.Next() {
-		var i Iso50001Note
+		var i ISO50001ListNotesRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.ProjectID,
@@ -326,39 +400,6 @@ func (q *Queries) ISO50001ListNotes(ctx context.Context, arg ISO50001ListNotesPa
 		return nil, err
 	}
 	return items, nil
-}
-
-const iSO50001ProjectVisible = `-- name: ISO50001ProjectVisible :one
-select p.id from iso50001_projects p
-join buildings b on b.id = p.building_id
-where p.id = $1
-  and p.company_id = $2
-  and b.deleted_at is null
-  and ($3::boolean or p.building_id = any($4::uuid[]))
-`
-
-type ISO50001ProjectVisibleParams struct {
-	ID           uuid.UUID
-	CompanyID    uuid.UUID
-	AllBuildings bool
-	BuildingIds  []uuid.UUID
-}
-
-// ISO50001ProjectVisible is ISO50001ProjectVisibleForShare without the lock,
-// for the read-only existence/visibility check ClauseDates and Notes run
-// before listing their (parentless, company_id-free) child rows: a project id
-// that does not exist, or is not visible to the Scope, must return
-// ErrNotFound rather than the empty list a plain "many" query would give it.
-func (q *Queries) ISO50001ProjectVisible(ctx context.Context, arg ISO50001ProjectVisibleParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, iSO50001ProjectVisible,
-		arg.ID,
-		arg.CompanyID,
-		arg.AllBuildings,
-		arg.BuildingIds,
-	)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
 }
 
 const iSO50001ProjectVisibleForShare = `-- name: ISO50001ProjectVisibleForShare :one

@@ -53,7 +53,10 @@ func adminOperationalMessageFromRow(row sqlcgen.OperationalMessage) model.Operat
 
 // StartPlatformRun inserts a job_runs row with company_id NULL in the
 // 'running' state. A run whose CompanyID is non-nil is refused with
-// ErrNotFound, before any database call.
+// ErrNotFound, before any database call. A caller-supplied run.Status is
+// IGNORED, not merely defaulted: per the contract, a job run always starts
+// 'running' — only FinishPlatformRun may set a terminal status (fix round 1,
+// folded minor; mirrors OpsRepository.StartRun).
 func (r *JournalRepository) StartPlatformRun(ctx context.Context, run model.JobRun) (model.JobRun, error) {
 	if run.CompanyID != nil {
 		return model.JobRun{}, store.ErrNotFound
@@ -62,12 +65,8 @@ func (r *JournalRepository) StartPlatformRun(ctx context.Context, run model.JobR
 	if scope == nil {
 		scope = []byte("{}")
 	}
-	status := run.Status
-	if status == "" {
-		status = "running"
-	}
 	row, err := r.q.AdminStartPlatformRun(ctx, sqlcgen.AdminStartPlatformRunParams{
-		ID: run.ID, JobType: run.JobType, Scope: scope, Status: status,
+		ID: run.ID, JobType: run.JobType, Scope: scope, Status: "running",
 	})
 	if err != nil {
 		return model.JobRun{}, pgerr.Translate(r.pool, "start platform job run", err)

@@ -137,3 +137,74 @@ func TestOpsRepositoryRejectsInvalidScope(t *testing.T) {
 	_, err = repo.ListMessages(ctx, invalid, store.MessageFilter{})
 	require.ErrorIs(t, err, store.ErrInvalidScope)
 }
+
+// TestOpsCrossTenantIsolation is the fix round 1, Important 4 test: every
+// prior Ops isolation test exercised only a PLATFORM (company_id NULL) row
+// leaking into a tenant's surface; none used a SECOND REAL company's rows.
+// This proves GetRun/FinishRun/ListRuns/AppendMessage/ListMessages all
+// refuse tenant A's rows under tenant B's OWN AdminScope — the company_id
+// predicate itself, not a coincidence of "no other tenant existed yet".
+func TestOpsCrossTenantIsolation(t *testing.T) {
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 8030)
+	tenantB := testfixtures.NewTenant(t, ctx, pool, 8031)
+	repo := postgres.NewOpsRepository(pool)
+
+	companyA := tenantA.Company.ID
+	runA, err := repo.StartRun(ctx, tenantA.Scope, model.JobRun{CompanyID: &companyA, JobType: "bill-generation"})
+	require.NoError(t, err)
+
+	companyB := tenantB.Company.ID
+	msgA, err := repo.AppendMessage(ctx, tenantA.Scope, model.OperationalMessage{
+		CompanyID: &companyA, Kind: "job", Category: "bill-generation", Status: "success", Message: "A's message",
+	})
+	require.NoError(t, err)
+
+	// GetRun: tenant B's AdminScope cannot read tenant A's run.
+	_, err = repo.GetRun(ctx, tenantB.AdminScope, runA.ID)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	// FinishRun: tenant B's AdminScope cannot finish tenant A's run.
+	_, err = repo.FinishRun(ctx, tenantB.AdminScope, runA.ID, "success", 1, 0, 0, nil, nil, time.Now().UTC())
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	stillRunning, err := repo.GetRun(ctx, tenantA.Scope, runA.ID)
+	require.NoError(t, err)
+	require.Equal(t, "running", stillRunning.Status, "tenant B's refused FinishRun must not have touched tenant A's run")
+
+	// ListRuns: tenant A's run never appears under tenant B's AdminScope,
+	// even once tenant B has runs of its own.
+	_, err = repo.StartRun(ctx, tenantB.Scope, model.JobRun{CompanyID: &companyB, JobType: "bill-generation"})
+	require.NoError(t, err)
+	listB, err := repo.ListRuns(ctx, tenantB.AdminScope, store.JobRunFilter{})
+	require.NoError(t, err)
+	for _, r := range listB {
+		require.NotEqual(t, runA.ID, r.ID)
+	}
+
+	// ListMessages: tenant A's message never appears under tenant B's
+	// AdminScope.
+	messagesB, err := repo.ListMessages(ctx, tenantB.AdminScope, store.MessageFilter{})
+	require.NoError(t, err)
+	for _, m := range messagesB {
+		require.NotEqual(t, msgA.ID, m.ID)
+	}
+}
+
+// TestOpsStartRunIgnoresCallerSuppliedStatus is the folded-minor test (fix
+// round 1): a job run is INSERTED in state 'running' per the contract,
+// regardless of what the caller puts in run.Status.
+func TestOpsStartRunIgnoresCallerSuppliedStatus(t *testing.T) {
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenant := testfixtures.NewTenant(t, ctx, pool, 8040)
+	repo := postgres.NewOpsRepository(pool)
+
+	companyID := tenant.Company.ID
+	started, err := repo.StartRun(ctx, tenant.Scope, model.JobRun{
+		CompanyID: &companyID, JobType: "bill-generation", Status: "success",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "running", started.Status, "a caller-supplied Status must be ignored, not honoured, on StartRun")
+}

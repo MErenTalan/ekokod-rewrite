@@ -31,15 +31,6 @@ func NewCatalogueRepository(pool *pgxpool.Pool) *CatalogueRepository {
 
 var _ store.AdminCatalogueRepository = (*CatalogueRepository)(nil)
 
-var catalogueZeroUUID = uuid.Nil
-
-func catalogueIDOrZero(id uuid.UUID) uuid.UUID {
-	if id == uuid.Nil {
-		return catalogueZeroUUID
-	}
-	return id
-}
-
 // --- UpsertNationalTariffSchedule ---------------------------------------
 
 type catalogueNationalTariffRecord struct {
@@ -72,19 +63,32 @@ func catalogueDecimalString(d *decimal.Decimal) *string {
 
 // UpsertNationalTariffSchedule writes national_tariff_schedule, keyed on its
 // unique (effective_from, user_group, voltage_level, term), and returns the
-// number of rows written.
+// number of rows written. A batch carrying two entries that share that
+// natural key is refused whole, before any database round trip, with
+// store.ErrConflict naming the key (fix round 1, folded minor — same ruling
+// as Task 10's BulkInsert duplicate-key refusal): the `on conflict` clause
+// would otherwise let the database pick an unspecified winner between them.
 func (r *CatalogueRepository) UpsertNationalTariffSchedule(ctx context.Context, entries []model.NationalTariffScheduleEntry) (int64, error) {
 	if len(entries) == 0 {
 		return 0, nil
 	}
+	if err := validateNationalTariffScheduleEntries(entries); err != nil {
+		return 0, err
+	}
 	records := make([]catalogueNationalTariffRecord, len(entries))
 	for i, e := range entries {
 		records[i] = catalogueNationalTariffRecord{
-			ID:                catalogueIDOrZero(e.ID),
-			EffectiveFrom:     e.EffectiveFrom.Format("2006-01-02"),
-			UserGroup:         string(e.UserGroup),
-			VoltageLevel:      string(e.VoltageLevel),
-			Term:              string(e.Term),
+			ID:            e.ID,
+			EffectiveFrom: e.EffectiveFrom.Format("2006-01-02"),
+			UserGroup:     string(e.UserGroup),
+			VoltageLevel:  string(e.VoltageLevel),
+			Term:          string(e.Term),
+			// .String(), not a numeric.go-style pgtype.Numeric{Int,Exp}: this
+			// batch travels as one jsonb parameter (see admin_catalogue.sql),
+			// so every price is a JSON string round-tripped through
+			// `(elem->>'field')::numeric` on the server, never a float64 —
+			// still exact, just a different (and, for this bulk path, the
+			// only available) encoding than numeric.go's audited pair.
 			EnergyPrice:       e.EnergyPrice.String(),
 			T1Price:           catalogueDecimalString(e.T1Price),
 			T2Price:           catalogueDecimalString(e.T2Price),
@@ -106,6 +110,32 @@ func (r *CatalogueRepository) UpsertNationalTariffSchedule(ctx context.Context, 
 		return 0, pgerr.Translate(r.pool, "upsert national tariff schedule", err)
 	}
 	return n, nil
+}
+
+// validateNationalTariffScheduleEntries refuses the whole
+// UpsertNationalTariffSchedule call, before any database round trip, when
+// two entries in the SAME batch share the table's natural key
+// (effective_from, user_group, voltage_level, term).
+func validateNationalTariffScheduleEntries(entries []model.NationalTariffScheduleEntry) error {
+	type key struct {
+		effectiveFrom string
+		userGroup     model.DistributionUserGroup
+		voltageLevel  model.VoltageLevel
+		term          model.TariffTerm
+	}
+	seen := make(map[key]struct{}, len(entries))
+	for _, e := range entries {
+		k := key{
+			effectiveFrom: e.EffectiveFrom.Format("2006-01-02"),
+			userGroup:     e.UserGroup, voltageLevel: e.VoltageLevel, term: e.Term,
+		}
+		if _, ok := seen[k]; ok {
+			return fmt.Errorf("%w: duplicate national tariff schedule key effective_from=%s user_group=%s voltage_level=%s term=%s",
+				store.ErrConflict, k.effectiveFrom, k.userGroup, k.voltageLevel, k.term)
+		}
+		seen[k] = struct{}{}
+	}
+	return nil
 }
 
 // --- UpsertPlatformFactor -------------------------------------------------
@@ -133,7 +163,7 @@ func (r *CatalogueRepository) UpsertPlatformFactor(ctx context.Context, f model.
 		catPath = []string{}
 	}
 	row, err := r.q.AdminUpsertPlatformFactor(ctx, sqlcgen.AdminUpsertPlatformFactorParams{
-		ID:            catalogueIDOrZero(f.ID),
+		ID:            f.ID,
 		Key:           f.Key,
 		Label:         f.Label,
 		MainCategory:  f.MainCategory,
@@ -185,6 +215,11 @@ func catalogueEmissionFactorFromRow(row sqlcgen.EmissionFactor) (model.EmissionF
 func (r *CatalogueRepository) ReplacePlatformConversions(ctx context.Context, factorID uuid.UUID, conversions []model.EmissionFactorConversion) error {
 	records := make([]catalogueConversionRecord, len(conversions))
 	for i, c := range conversions {
+		// .String(), not numeric.go's pgtype.Numeric{Int,Exp}: this batch
+		// travels as one jsonb parameter (see admin_catalogue.sql's
+		// AdminInsertFactorConversions), decoded server-side with
+		// `(elem->>'multiplier')::numeric` — exact, never a float64, just a
+		// JSON-string encoding rather than numeric.go's typed param path.
 		records[i] = catalogueConversionRecord{Unit: c.Unit, Multiplier: c.Multiplier.String(), Label: c.Label}
 	}
 	payload, err := json.Marshal(records)
@@ -246,7 +281,7 @@ func (r *CatalogueRepository) UpsertIntegrationDefinitions(ctx context.Context, 
 			endpoints = json.RawMessage("{}")
 		}
 		records[i] = catalogueIntegrationDefinitionRecord{
-			ID: catalogueIDOrZero(d.ID), Provider: string(d.Provider), Subtype: d.Subtype, Endpoints: endpoints,
+			ID: d.ID, Provider: string(d.Provider), Subtype: d.Subtype, Endpoints: endpoints,
 		}
 	}
 	payload, err := json.Marshal(records)

@@ -49,10 +49,15 @@ select
 where exists (
     select 1 from integration_definitions d where d.id = sqlc.arg(definition_id)::uuid
 )
+-- On conflict, a nil secret/extra parameter means "leave it as it was", not
+-- "wipe it": UpsertCredential is also how a caller updates username/settings
+-- alone, without re-supplying the secret, so `coalesce(excluded.x, x)` keeps
+-- the stored ciphertext when the incoming value is NULL (fix round 1, folded
+-- minor).
 on conflict (company_id, definition_id) do update set
     username = excluded.username,
-    secret_enc = excluded.secret_enc,
-    extra_enc = excluded.extra_enc,
+    secret_enc = coalesce(excluded.secret_enc, integration_credentials.secret_enc),
+    extra_enc = coalesce(excluded.extra_enc, integration_credentials.extra_enc),
     settings = excluded.settings,
     pm5340_url = excluded.pm5340_url,
     isolar_region = excluded.isolar_region,

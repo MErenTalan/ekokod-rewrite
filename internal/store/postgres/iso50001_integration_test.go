@@ -79,6 +79,9 @@ func TestISO50001ClauseDatesIsolation(t *testing.T) {
 	_, err = repo.ClauseDates(ctx, tenantB.Scope, project.ID)
 	require.ErrorIs(t, err, store.ErrNotFound)
 
+	_, err = repo.ClauseDates(ctx, tenantB.AdminScope, project.ID)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
 	err = repo.ReplaceClauseDates(ctx, tenantB.Scope, project.ID, nil)
 	require.ErrorIs(t, err, store.ErrNotFound)
 
@@ -128,22 +131,34 @@ func TestISO50001NotesIsolation(t *testing.T) {
 	require.Equal(t, "Updated note", updated.Body)
 
 	// Tenant B cannot read, create, update or delete tenant A's project's
-	// notes.
+	// notes — including under tenant B's OWN AdminScope (fix round 1,
+	// Important 4: AllBuildings bypasses the building-id-list branch
+	// entirely, so this is what proves the company_id predicate itself, not
+	// just the building-list check, is load-bearing).
 	_, err = repo.Notes(ctx, tenantB.Scope, project.ID, nil)
+	require.ErrorIs(t, err, store.ErrNotFound)
+	_, err = repo.Notes(ctx, tenantB.AdminScope, project.ID, nil)
 	require.ErrorIs(t, err, store.ErrNotFound)
 
 	_, err = repo.CreateNote(ctx, tenantB.Scope, model.ISO50001Note{ProjectID: project.ID, ClauseID: "5.1", Body: "hack"})
 	require.ErrorIs(t, err, store.ErrNotFound)
+	_, err = repo.CreateNote(ctx, tenantB.AdminScope, model.ISO50001Note{ProjectID: project.ID, ClauseID: "5.1", Body: "hack-admin"})
+	require.ErrorIs(t, err, store.ErrNotFound)
 
 	_, err = repo.UpdateNote(ctx, tenantB.Scope, model.ISO50001Note{ID: note.ID, ProjectID: project.ID, ClauseID: "5.1", Body: "hack"})
 	require.ErrorIs(t, err, store.ErrNotFound)
+	_, err = repo.UpdateNote(ctx, tenantB.AdminScope, model.ISO50001Note{ID: note.ID, ProjectID: project.ID, ClauseID: "5.1", Body: "hack-admin"})
+	require.ErrorIs(t, err, store.ErrNotFound)
 
 	err = repo.DeleteNote(ctx, tenantB.Scope, note.ID)
+	require.ErrorIs(t, err, store.ErrNotFound)
+	err = repo.DeleteNote(ctx, tenantB.AdminScope, note.ID)
 	require.ErrorIs(t, err, store.ErrNotFound)
 
 	stillThere, err := repo.Notes(ctx, tenantA.Scope, project.ID, nil)
 	require.NoError(t, err)
 	require.Len(t, stillThere, 1, "tenant B's refused writes must not have touched tenant A's note")
+	require.Equal(t, "Updated note", stillThere[0].Body, "none of tenant B's refused writes altered the body either")
 
 	// CreateNote also refuses a created_by that is not a user of the
 	// caller's company.
@@ -201,4 +216,22 @@ func TestISO50001AdminScopeCannotStoreAnotherTenantsForeignKeys(t *testing.T) {
 	notes, err := repo.Notes(ctx, tenantA.AdminScope, project.ID, nil)
 	require.NoError(t, err)
 	require.Empty(t, notes, "the refused CreateNote must not have written anything")
+}
+
+// TestISO50001ProjectCrossTenantAdminScopeIsolation proves Project() itself
+// (not just EnsureProject/ClauseDates/Notes) is refused for another
+// tenant's building, even under the caller's own AdminScope (fix round 1,
+// Important 4).
+func TestISO50001ProjectCrossTenantAdminScopeIsolation(t *testing.T) {
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 5040)
+	tenantB := testfixtures.NewTenant(t, ctx, pool, 5041)
+	repo := postgres.NewISO50001Repository(pool)
+
+	_, err := repo.EnsureProject(ctx, tenantA.Scope, tenantA.Buildings[0].ID)
+	require.NoError(t, err)
+
+	_, err = repo.Project(ctx, tenantB.AdminScope, tenantA.Buildings[0].ID)
+	require.ErrorIs(t, err, store.ErrNotFound)
 }

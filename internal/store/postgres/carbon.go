@@ -185,30 +185,37 @@ func (r *CarbonRepository) UpsertFactor(ctx context.Context, s store.Scope, f mo
 
 // --- emission_factor_conversions ---------------------------------------
 
-// Conversions — Isolation: emission_factor_conversions has no company_id, so
-// visibility is proven by fetching the parent factor first (CarbonGetFactor,
-// whose own query carries the scope predicate): a factor id that does not
-// exist, or is not visible, returns ErrNotFound instead of an ambiguous empty
-// list.
+// Conversions — Isolation (fix round 1, Important 3): ONE parent-driven
+// statement (CarbonListConversions, LEFT JOIN from emission_factors), not a
+// separate Go-level pre-check query followed by a second read: zero rows
+// means the factor itself is not visible (ErrNotFound); one or more rows
+// with a null Unit is the sentinel for "visible factor, no conversions"
+// (an empty slice, not an error).
 func (r *CarbonRepository) Conversions(ctx context.Context, s store.Scope, factorID uuid.UUID) ([]model.EmissionFactorConversion, error) {
 	if !s.Valid() {
 		return nil, store.ErrInvalidScope
 	}
-	companyID := s.CompanyID
-	if _, err := r.q.CarbonGetFactor(ctx, sqlcgen.CarbonGetFactorParams{ID: factorID, CompanyID: &companyID}); err != nil {
-		return nil, pgerr.Translate(r.pool, "get emission factor", err)
-	}
-	rows, err := r.q.CarbonListConversions(ctx, sqlcgen.CarbonListConversionsParams{FactorID: factorID, CompanyID: &companyID})
+	rows, err := r.q.CarbonListConversions(ctx, sqlcgen.CarbonListConversionsParams{FactorID: factorID, CompanyID: s.CompanyID})
 	if err != nil {
 		return nil, pgerr.Translate(r.pool, "list emission factor conversions", err)
 	}
+	if len(rows) == 0 {
+		return nil, store.ErrNotFound
+	}
 	out := make([]model.EmissionFactorConversion, 0, len(rows))
 	for _, row := range rows {
+		if row.Unit == nil {
+			continue // sentinel row: the factor is visible but has no conversions
+		}
 		mult, err := numericToDecimal(row.Multiplier)
 		if err != nil {
 			return nil, fmt.Errorf("emission_factor_conversions.multiplier: %w", err)
 		}
-		out = append(out, model.EmissionFactorConversion{FactorID: row.FactorID, Unit: row.Unit, Multiplier: mult, Label: row.Label})
+		var label string
+		if row.Label != nil {
+			label = *row.Label
+		}
+		out = append(out, model.EmissionFactorConversion{FactorID: factorID, Unit: *row.Unit, Multiplier: mult, Label: label})
 	}
 	return out, nil
 }
@@ -222,16 +229,26 @@ type carbonConversionRecord struct {
 func carbonConversionRecordsJSON(conversions []model.EmissionFactorConversion) ([]byte, error) {
 	records := make([]carbonConversionRecord, len(conversions))
 	for i, c := range conversions {
+		// .String(), not numeric.go's pgtype.Numeric{Int,Exp}: this batch
+		// travels as one jsonb parameter (see carbon.sql's
+		// CarbonInsertConversions), decoded server-side with
+		// `(elem->>'multiplier')::numeric` — exact, never a float64, just a
+		// JSON-string encoding rather than numeric.go's typed param path.
 		records[i] = carbonConversionRecord{Unit: c.Unit, Multiplier: c.Multiplier.String(), Label: c.Label}
 	}
 	return json.Marshal(records)
 }
 
-// ReplaceConversions — Isolation: emission_factor_conversions has no
-// company_id, so the parent factor is locked FOR SHARE inside this
-// transaction (CarbonFactorOwnerForShare) before the delete+insert: a
-// platform factor's id, or another company's, returns ErrNotFound and
-// nothing is replaced.
+// ReplaceConversions — Isolation (fix round 1, Important 2):
+// emission_factor_conversions has no company_id, so the parent factor is
+// locked FOR SHARE inside this transaction (CarbonFactorOwnerForShare) —
+// and that lock query itself carries the company_id predicate now, so a
+// platform factor's id, or another company's, matches zero rows and never
+// reaches the delete+insert at all. CarbonDeleteConversions and
+// CarbonInsertConversions ALSO carry the company_id predicate directly
+// (joined through emission_factors), so refusal does not depend on any
+// Go-level equality check between the lock's result and s.CompanyID — there
+// is deliberately no such check left to bypass.
 func (r *CarbonRepository) ReplaceConversions(ctx context.Context, s store.Scope, factorID uuid.UUID, conversions []model.EmissionFactorConversion) error {
 	if !s.Valid() {
 		return store.ErrInvalidScope
@@ -241,21 +258,21 @@ func (r *CarbonRepository) ReplaceConversions(ctx context.Context, s store.Scope
 		return fmt.Errorf("marshal conversions: %w", err)
 	}
 	return r.inTx(ctx, func(qtx *sqlcgen.Queries) error {
-		owner, err := qtx.CarbonFactorOwnerForShare(ctx, factorID)
-		if err != nil {
+		if _, err := qtx.CarbonFactorOwnerForShare(ctx, sqlcgen.CarbonFactorOwnerForShareParams{
+			ID: factorID, CompanyID: s.CompanyID,
+		}); err != nil {
 			return pgerr.Translate(r.pool, "lock emission factor", err)
 		}
-		if owner == nil || *owner != s.CompanyID {
-			return store.ErrNotFound
-		}
-		if err := qtx.CarbonDeleteConversions(ctx, factorID); err != nil {
+		if err := qtx.CarbonDeleteConversions(ctx, sqlcgen.CarbonDeleteConversionsParams{
+			FactorID: factorID, CompanyID: s.CompanyID,
+		}); err != nil {
 			return pgerr.Translate(r.pool, "delete emission factor conversions", err)
 		}
 		if len(conversions) == 0 {
 			return nil
 		}
 		if err := qtx.CarbonInsertConversions(ctx, sqlcgen.CarbonInsertConversionsParams{
-			FactorID: factorID, Conversions: payload,
+			FactorID: factorID, CompanyID: s.CompanyID, Conversions: payload,
 		}); err != nil {
 			return pgerr.Translate(r.pool, "insert emission factor conversions", err)
 		}

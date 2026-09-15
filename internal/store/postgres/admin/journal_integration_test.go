@@ -78,3 +78,16 @@ func TestAdminAppendPlatformMessage(t *testing.T) {
 	})
 	require.ErrorIs(t, err, store.ErrNotFound)
 }
+
+// TestAdminStartPlatformRunIgnoresCallerSuppliedStatus is the folded-minor
+// test (fix round 1): a platform job run is INSERTED in state 'running' per
+// the contract, regardless of what the caller puts in run.Status.
+func TestAdminStartPlatformRunIgnoresCallerSuppliedStatus(t *testing.T) {
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	repo := admin.NewJournalRepository(pool)
+
+	started, err := repo.StartPlatformRun(ctx, model.JobRun{JobType: "market-import", Status: "failed"})
+	require.NoError(t, err)
+	require.Equal(t, "running", started.Status, "a caller-supplied Status must be ignored, not honoured, on StartPlatformRun")
+}

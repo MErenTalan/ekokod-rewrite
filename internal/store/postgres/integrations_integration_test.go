@@ -122,8 +122,9 @@ func TestIntegrationCredentialsAreNeverReturnedInPlaintext(t *testing.T) {
 	require.NotEqual(t, string(created.SecretEnc), string(createdOther.SecretEnc))
 
 	// Another tenant cannot open tenant A's secret through OpenSecret
-	// either: the credential is not visible to it at all.
-	_, _, err = repo.OpenSecret(ctx, other.Scope, created.ID)
+	// either: the credential is not visible to it at all — including under
+	// that tenant's own AdminScope.
+	_, _, err = repo.OpenSecret(ctx, other.AdminScope, created.ID)
 	require.ErrorIs(t, err, store.ErrNotFound)
 }
 
@@ -171,15 +172,19 @@ func TestIntegrationRecordVerificationAndDeleteAreScoped(t *testing.T) {
 	}, []byte("s"), nil)
 	require.NoError(t, err)
 
-	_, err = repo.Credential(ctx, tenantB.Scope, definitionID)
+	// Asserted under tenant B's AdminScope specifically (fix round 1,
+	// Important 4/gate requirement): integration_credentials has no
+	// building_id at all, so company_id is the ONLY predicate that could
+	// exclude the row here.
+	_, err = repo.Credential(ctx, tenantB.AdminScope, definitionID)
 	require.ErrorIs(t, err, store.ErrNotFound)
 
-	err = repo.RecordVerification(ctx, tenantB.Scope, cred.ID, time.Now().UTC(), nil)
+	err = repo.RecordVerification(ctx, tenantB.AdminScope, cred.ID, time.Now().UTC(), nil)
 	require.ErrorIs(t, err, store.ErrNotFound)
 
 	require.NoError(t, repo.RecordVerification(ctx, tenantA.Scope, cred.ID, time.Now().UTC(), nil))
 
-	err = repo.DeleteCredential(ctx, tenantB.Scope, cred.ID)
+	err = repo.DeleteCredential(ctx, tenantB.AdminScope, cred.ID)
 	require.ErrorIs(t, err, store.ErrNotFound)
 
 	require.NoError(t, repo.DeleteCredential(ctx, tenantA.Scope, cred.ID))
@@ -204,4 +209,52 @@ func TestIntegrationUpsertCredentialRefusesANonexistentDefinition(t *testing.T) 
 	list, err := repo.ListCredentials(ctx, tenant.Scope)
 	require.NoError(t, err)
 	require.Empty(t, list, "the refused upsert must not have written anything")
+}
+
+// TestIntegrationUpsertCredentialNilSecretKeepsStoredCiphertext is the
+// folded-minor test (fix round 1): an UpsertCredential call with a nil
+// secret/extra on an existing row must NOT wipe the previously stored
+// ciphertext — it means "leave it as it was", not "clear it".
+func TestIntegrationUpsertCredentialNilSecretKeepsStoredCiphertext(t *testing.T) {
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenant := testfixtures.NewTenant(t, ctx, pool, 7050)
+	repo := postgres.NewIntegrationRepository(pool, integrationCipher(t))
+
+	definitionID := integrationInsertDefinition(t, ctx, pool, "isolar", "default")
+	created, err := repo.UpsertCredential(ctx, tenant.Scope, model.IntegrationCredential{
+		CompanyID: tenant.Company.ID, DefinitionID: definitionID, Username: strPtrIntegration("alice"), IsActive: true,
+	}, []byte("original-secret"), []byte("original-extra"))
+	require.NoError(t, err)
+	require.NotEmpty(t, created.SecretEnc)
+	require.NotEmpty(t, created.ExtraEnc)
+
+	// Re-upsert with a DIFFERENT username, IsActive false, but nil secret and
+	// nil extra: the stored ciphertext for both must survive unchanged.
+	updated, err := repo.UpsertCredential(ctx, tenant.Scope, model.IntegrationCredential{
+		CompanyID: tenant.Company.ID, DefinitionID: definitionID, Username: strPtrIntegration("bob"), IsActive: false,
+	}, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, "bob", *updated.Username, "non-secret fields must still update")
+	require.False(t, updated.IsActive)
+	require.Equal(t, string(created.SecretEnc), string(updated.SecretEnc), "a nil secret on update must not wipe the stored ciphertext")
+	require.Equal(t, string(created.ExtraEnc), string(updated.ExtraEnc), "a nil extra on update must not wipe the stored ciphertext")
+
+	secret, extra, err := repo.OpenSecret(ctx, tenant.Scope, created.ID)
+	require.NoError(t, err)
+	require.Equal(t, "original-secret", string(secret), "the original secret must still decrypt correctly")
+	require.Equal(t, "original-extra", string(extra))
+}
+
+func strPtrIntegration(s string) *string { return &s }
+
+// TestNewIntegrationRepositoryPanicsOnNilCipher is the folded-minor test (fix
+// round 1): constructing an IntegrationRepository with a nil cipher panics
+// immediately, with a clear message, rather than compiling silently and
+// panicking later at the first Seal/Open call.
+func TestNewIntegrationRepositoryPanicsOnNilCipher(t *testing.T) {
+	pool := testfixtures.NewIsolatedDB(t)
+	require.Panics(t, func() {
+		postgres.NewIntegrationRepository(pool, nil)
+	})
 }

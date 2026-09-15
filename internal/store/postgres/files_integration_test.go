@@ -40,15 +40,18 @@ func TestFileCreateGetListSoftDelete(t *testing.T) {
 	require.Equal(t, created.ID, got.ID)
 
 	// Another company cannot read, list or soft-delete it: it is
-	// indistinguishable from a missing file.
-	_, err = repo.Get(ctx, tenantB.Scope, created.ID)
+	// indistinguishable from a missing file. Asserted under tenant B's
+	// AdminScope specifically (fix round 1, Important 4/gate requirement):
+	// stored_files has no building_id at all, so company_id is the ONLY
+	// predicate that could exclude the row here.
+	_, err = repo.Get(ctx, tenantB.AdminScope, created.ID)
 	require.ErrorIs(t, err, store.ErrNotFound)
 
-	listB, err := repo.List(ctx, tenantB.Scope, store.FileFilter{})
+	listB, err := repo.List(ctx, tenantB.AdminScope, store.FileFilter{})
 	require.NoError(t, err)
 	require.Empty(t, listB)
 
-	err = repo.SoftDelete(ctx, tenantB.Scope, created.ID, time.Now().UTC())
+	err = repo.SoftDelete(ctx, tenantB.AdminScope, created.ID, time.Now().UTC())
 	require.ErrorIs(t, err, store.ErrNotFound)
 
 	listA, err := repo.List(ctx, tenantA.Scope, store.FileFilter{})
