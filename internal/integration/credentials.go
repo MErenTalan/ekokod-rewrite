@@ -128,6 +128,15 @@ type Credentials struct {
 	BaseURL                 string // pm5340_url
 	Region                  string // isolar_region
 	TokenExpiresAt          *time.Time
+	// IsActive mirrors model.IntegrationCredential.IsActive (X-M3, final
+	// review B), populated by internal/credentials's buildCredentials. An
+	// operator can deactivate a credential (e.g. after a security incident
+	// or a contract change) without deleting it; ingest's FetchReadings,
+	// SyncAnalyzers and Backfill each refuse to proceed once they observe
+	// IsActive == false, rather than continuing to call out to the
+	// provider with credentials that are deliberately no longer meant to
+	// be used.
+	IsActive bool
 }
 
 // Fragments returns every secret's plaintext held by c, deduplicated and

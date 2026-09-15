@@ -21,7 +21,13 @@ test: ## Run unit tests
 	go test ./... -race -coverprofile=coverage.out -covermode=atomic
 
 test-integration: ## Run integration tests (requires Docker)
-	go test ./... -tags=integration -race -count=1 -parallel 8
+	# M6 (final review B): TESTCONTAINERS_HOST_OVERRIDE=127.0.0.1 pins the
+	# host testcontainers-go uses for its own readiness "wait until ready"
+	# probes (containers.go's wait strategies) to loopback instead of letting
+	# it resolve "localhost", which under Docker Desktop/WSL2 can flake as a
+	# DNS lookup timeout or a stale docker.sock deadline when the daemon is
+	# under load from a concurrent test run sharing it.
+	TESTCONTAINERS_HOST_OVERRIDE=127.0.0.1 go test ./... -tags=integration -race -count=1 -parallel 8
 
 # test-perf runs Task 13's slow F1 acceptance suite: 1,000,000 synthetic
 # readings across 100 analyzers, asserting the chunk layout and EXPLAIN plan

@@ -1,3 +1,7 @@
 {
-  "note": "unused: auth_failure fails at CAS, before any data fixture is served"
+  "status": {
+    "success": false,
+    "code": "CAS_AUTHENTICATION_FAILED",
+    "message": "FIXTURE-invalid-credentials"
+  }
 }

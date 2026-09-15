@@ -259,7 +259,11 @@ func TestISolarFixtureMatrix(t *testing.T) {
 		{
 			name: "pagination",
 			routes: func(t *testing.T) []fake.Route {
-				return []fake.Route{devicesPagedRoute(t)}
+				// I1: the fixture-matrix guard requires this case's own
+				// table entry to reference isolar_pagination.json directly
+				// (not merely through a helper's own body), so the file's
+				// name is read here and passed in.
+				return []fake.Route{devicesPagedRoute(t, fake.Fixture(t, "isolar", "isolar_pagination.json"))}
 			},
 			call: func(t *testing.T, c *isolar.Client, creds integration.Credentials) (int, error) {
 				devices, err := c.Devices(context.Background(), creds, "FX3001")
@@ -311,16 +315,22 @@ func deviceMinuteRoute(respond fake.Responder) fake.Route {
 	return fake.Route{Method: http.MethodPost, Path: "/openapi/platform/getDevicePointMinuteDataList", Respond: respond}
 }
 
-// devicesPagedRoute serves isolar_devices_page1.json on the first call to
-// getDeviceListByPsId and isolar_devices_page2.json on every call after,
-// via fake.Sequence — the two-page fixture the task brief names.
-func devicesPagedRoute(t *testing.T) fake.Route {
+// devicesPagedRoute serves fixture's "page1" object on the first call to
+// getDeviceListByPsId and its "page2" object on every call after, via
+// fake.Sequence — fixture is isolar_pagination.json, read by the caller so
+// the fixture-matrix "pagination" case's own table entry names it directly.
+func devicesPagedRoute(t *testing.T, fixture []byte) fake.Route {
+	var pages struct {
+		Page1 json.RawMessage `json:"page1"`
+		Page2 json.RawMessage `json:"page2"`
+	}
+	require.NoError(t, json.Unmarshal(fixture, &pages))
 	return fake.Route{
 		Method: http.MethodPost,
 		Path:   "/openapi/platform/getDeviceListByPsId",
 		Respond: fake.Sequence(
-			fake.JSON(http.StatusOK, fake.Fixture(t, "isolar", "isolar_devices_page1.json")),
-			fake.JSON(http.StatusOK, fake.Fixture(t, "isolar", "isolar_devices_page2.json")),
+			fake.JSON(http.StatusOK, pages.Page1),
+			fake.JSON(http.StatusOK, pages.Page2),
 		),
 	}
 }

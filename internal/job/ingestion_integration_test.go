@@ -26,6 +26,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -41,12 +42,9 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/credentials"
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration"
-	"github.com/MErenTalan/ekokod-rewrite/internal/integration/epias"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/fake"
-	"github.com/MErenTalan/ekokod-rewrite/internal/integration/httpx"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/isolar"
 	"github.com/MErenTalan/ekokod-rewrite/internal/job"
-	"github.com/MErenTalan/ekokod-rewrite/internal/marketdata"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/crypto"
@@ -202,7 +200,7 @@ func (b *acceptLogBuffer) String() string {
 // key "127.0.0.1", so a test must never run two fake servers concurrently
 // against the same acceptEnv).
 func acceptEnvSetup(t *testing.T, seed int64, pins map[string]string) *acceptEnv {
-	return acceptEnvSetupFull(t, seed, pins, testfixtures.DiscardLogger(), nil, nil, nil)
+	return acceptEnvSetupFull(t, seed, pins, testfixtures.DiscardLogger(), nil, nil)
 }
 
 // acceptEnvSetupTight is acceptEnvSetup with a shortened
@@ -212,32 +210,31 @@ func acceptEnvSetup(t *testing.T, seed int64, pins map[string]string) *acceptEnv
 func acceptEnvSetupTight(t *testing.T, seed int64, pins map[string]string, lookback time.Duration) *acceptEnv {
 	return acceptEnvSetupFull(t, seed, pins, testfixtures.DiscardLogger(), nil, func(cfg *config.Config) {
 		cfg.Ingest.InitialLookback = lookback
-	}, nil)
+	})
 }
 
 // acceptEnvSetupWithLog is acceptEnvSetup plus an injectable logger — used
 // by TestIngestionSecretsNeverReachRunsCursorsMessagesOrLogs, the one test
 // that must inspect what the worker actually logged.
 func acceptEnvSetupWithLog(t *testing.T, seed int64, pins map[string]string, log *slog.Logger, logs *acceptLogBuffer, mutateCfg func(*config.Config)) *acceptEnv {
-	return acceptEnvSetupFull(t, seed, pins, log, logs, mutateCfg, nil)
+	return acceptEnvSetupFull(t, seed, pins, log, logs, mutateCfg)
 }
 
-// acceptEnvSetupWithPrices is acceptEnvSetup with Handlers.Prices replaced
-// by buildPrices(pool)'s result — buildPrices runs after the isolated pool
-// exists (so it can build its own admin.MarketDataRepository/
-// JournalRepository on the SAME database) but before job.Register. See
-// acceptEnvSetupFull's doc for why this substitution exists.
-func acceptEnvSetupWithPrices(t *testing.T, seed int64, pins map[string]string, buildPrices func(pool *pgxpool.Pool) job.PriceSyncer) *acceptEnv {
-	return acceptEnvSetupFull(t, seed, pins, testfixtures.DiscardLogger(), nil, nil, buildPrices)
+// acceptEnvSetupWithEPIAS is acceptEnvSetup with cfg.External.EPIASCASURL/
+// EPIASBaseURL pointed at a fake server BEFORE worker.Build runs (M3, final
+// review B: config.External now carries these fields — see
+// internal/platform/config/load.go's httpsURL — so worker.Build's own
+// epias.New wiring can be driven end to end against fake.NewTLSServer, with
+// no Handlers.Prices substitution at the test layer).
+func acceptEnvSetupWithEPIAS(t *testing.T, seed int64, pins map[string]string, casURL, baseURL string) *acceptEnv {
+	return acceptEnvSetupFull(t, seed, pins, testfixtures.DiscardLogger(), nil, func(cfg *config.Config) {
+		cfg.External.EPIASCASURL = casURL
+		cfg.External.EPIASBaseURL = baseURL
+	})
 }
 
 // acceptEnvSetupFull is every other acceptEnvSetup* variant's shared body.
-// buildPrices, when non-nil, is called with the isolated pool and its
-// result REPLACES worker.Build's own Handlers.Prices before job.Register —
-// used only by TestEPIASSyncThroughTheWorkerIsIdempotent (see that test's
-// own doc comment for why: worker.Build's EPİAŞ client has no seam for a
-// test-time CASURL/BaseURL).
-func acceptEnvSetupFull(t *testing.T, seed int64, pins map[string]string, log *slog.Logger, logs *acceptLogBuffer, mutateCfg func(*config.Config), buildPrices func(*pgxpool.Pool) job.PriceSyncer) *acceptEnv {
+func acceptEnvSetupFull(t *testing.T, seed int64, pins map[string]string, log *slog.Logger, logs *acceptLogBuffer, mutateCfg func(*config.Config)) *acceptEnv {
 	t.Helper()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
@@ -258,11 +255,7 @@ func acceptEnvSetupFull(t *testing.T, seed int64, pins map[string]string, log *s
 
 	server, mux, err := job.NewServer(cfg.Redis, cfg.Worker, log, nil)
 	require.NoError(t, err)
-	handlers := *built.Handlers
-	if buildPrices != nil {
-		handlers.Prices = buildPrices(pool)
-	}
-	job.Register(mux, &handlers)
+	job.Register(mux, built.Handlers)
 	require.NoError(t, server.Start(mux))
 	t.Cleanup(func() {
 		server.Stop()
@@ -707,6 +700,20 @@ func TestIngestionEndToEndSameWindowTwiceProducesNoDuplicates(t *testing.T) {
 // multi-chunk cursor-resume mechanics in detail, against a fake adapter it
 // has full control over — this test's job is proving the SAME task-level
 // contract holds through the real PM5340 adapter and a real asynq retry.
+//
+// I1 (final review B): a single-phase version of this test — enqueue once,
+// fail 3 times, retry, succeed — CANNOT catch a broken resume, because
+// attempt 1 never has a stored cursor to ignore in the first place: with no
+// prior cursor, resolveFetchWindow's ONLY path is the "no cursor yet"
+// InitialLookback fallback, identically whether or not the cursor branch
+// is broken. Ignoring the live cursor (mutating resolveFetchWindow's
+// `cur.LastTs != nil` case to fall back to `now.Add(-InitialLookback)`
+// instead of `*cur.LastTs`) left this test PASSING. The test is therefore
+// now two phases: phase 1 is a plain, uninterrupted fetch that establishes
+// a real cursor; phase 2 is the interrupted-then-retried fetch from the
+// original design above, and its own resumed request is asserted to carry
+// start == phase 1's cursor — the one assertion that actually exercises the
+// cursor-resume branch, not just "a retried task can still succeed".
 // ---------------------------------------------------------------------------
 
 // acceptPM5340FailNThenSucceed answers the first n requests with 500, then
@@ -751,7 +758,7 @@ func acceptPM5340Midpoint(from, to time.Time) time.Time {
 }
 
 func TestIngestionEndToEndInterruptedFetchResumesFromCursor(t *testing.T) {
-	router := &acceptPM5340FailNThenSucceed{remaining: 3} // httpx's own default MaxAttempts
+	router := &acceptPM5340FailNThenSucceed{} // remaining 0: phase 1's one request succeeds outright
 	srv := fake.NewTLSServer(t, router.route())
 	// 20h: strictly under PM5340's 7-day MaxWindow, so a first-ever
 	// cursor-driven fetch ([now-lookback, now)) is always exactly ONE
@@ -764,27 +771,60 @@ func TestIngestionEndToEndInterruptedFetchResumesFromCursor(t *testing.T) {
 	})
 	analyzer := acceptAnalyzer(t, e, model.IntegrationProviderPM5340, "T17Resume", "PM-RESUME-1", decimal.NewFromInt(1))
 
-	// Nil Window: cursor-driven. Attempt 1's one request exhausts httpx's
-	// 3 in-client attempts (all 500) and persists nothing — the task
-	// fails. asynq retries once (MaxRetry: 1) after its own backoff
-	// (job/retry.go: ~15-30s jittered); by then acceptPM5340FailNThenSucceed's
-	// budget is spent, so attempt 2's request succeeds.
+	// Phase 1: a plain, uninterrupted, nil-Window (cursor-driven) fetch
+	// establishes a REAL cursor from a persisted row — see the design note
+	// above for why this phase must exist at all.
 	acceptEnqueueFetch(t, e, credID, analyzer.ID, model.ReadingKindLoadProfile, nil, 1)
-
-	runs := acceptWaitRunsLong(t, e, job.TypeIntegrationFetchReadings, "analyzer_id", analyzer.ID, 2)
-	// runs is newest-first: runs[1] is attempt 1, runs[0] is attempt 2.
-	require.Equal(t, "failed", runs[1].Status, "attempt 1 exhausted its retries before persisting anything")
-	require.EqualValues(t, 0, runs[1].Processed)
-	require.Equal(t, "success", runs[0].Status, "attempt 2 must complete after the retry")
-	require.EqualValues(t, 1, runs[0].Processed)
+	phase1 := acceptWaitRuns(t, e, job.TypeIntegrationFetchReadings, "analyzer_id", analyzer.ID, 1)
+	require.Equal(t, "success", phase1[0].Status)
+	require.EqualValues(t, 1, phase1[0].Processed)
 
 	cur, err := e.cursors.Get(e.ctx, e.tn.Scope, analyzer.ID, model.ReadingKindLoadProfile)
 	require.NoError(t, err)
-	require.NotNil(t, cur.LastTs, "the cursor only advances once the retried attempt actually persists a row")
+	require.NotNil(t, cur.LastTs, "phase 1 must advance the cursor to its persisted row's own Ts")
+	phase1Cursor := *cur.LastTs
+
+	// Phase 2: fail 3 times (httpx's own default MaxAttempts, all 500) then
+	// succeed. Nil Window: cursor-driven, and a nil Window has no
+	// deterministic task id (job.NewFetchReadingsTask), so re-enqueuing the
+	// same analyzer/kind here is allowed — unlike Test 1 above's identical
+	// EXPLICIT window, which asynq's own deterministic id refuses to
+	// re-enqueue. Attempt 1's one request exhausts httpx's in-client retry
+	// budget and persists nothing (R19: a run that fetches nothing is
+	// "failed", not a partial success); asynq retries the whole task once
+	// more (job/retry.go's own backoff, hence acceptWaitRunsLong's longer
+	// bound); attempt 2's request must resume from phase1Cursor, not
+	// restart from InitialLookback, and succeeds.
+	atomic.StoreInt32(&router.remaining, 3)
+	acceptEnqueueFetch(t, e, credID, analyzer.ID, model.ReadingKindLoadProfile, nil, 1)
+
+	// 3 finished runs total across both phases, newest first: phase 2's
+	// retried success, phase 2's exhausted-retries failure, phase 1's
+	// success.
+	runs := acceptWaitRunsLong(t, e, job.TypeIntegrationFetchReadings, "analyzer_id", analyzer.ID, 3)
+	require.Equal(t, "success", runs[0].Status, "phase 2's retried attempt must complete")
+	require.EqualValues(t, 1, runs[0].Processed)
+	require.Equal(t, "failed", runs[1].Status, "phase 2's first attempt exhausted its retries before persisting anything")
+	require.EqualValues(t, 0, runs[1].Processed)
+
+	// I1: the actual resume assertion. The retried attempt's own (only)
+	// request must carry start == phase1Cursor — proving the SECOND fetch
+	// resumed exactly where the FIRST left off, rather than merely
+	// succeeding eventually. Mutating resolveFetchWindow to ignore
+	// cur.LastTs (falling back to now.Add(-InitialLookback) instead) makes
+	// this assertion FAIL while every other assertion in this test still
+	// passes.
+	reqs := srv.Requests()
+	require.NotEmpty(t, reqs)
+	last := reqs[len(reqs)-1]
+	q, perr := url.ParseQuery(last.RawQuery)
+	require.NoError(t, perr)
+	require.Equal(t, phase1Cursor.UTC().Format(time.RFC3339), q.Get("start"),
+		"phase 2's resumed request must start exactly at phase 1's cursor, not restart from InitialLookback")
 
 	rows := acceptRows(t, e, analyzer.ID, model.ReadingKindLoadProfile)
-	require.Len(t, rows, 1, "the interrupted attempt lost nothing (it had nothing to lose) and the retry did not duplicate anything")
-	require.True(t, rows[0].Ts.Equal(*cur.LastTs))
+	require.Len(t, rows, 2, "phase 1's row plus phase 2's row: the interruption lost nothing and the retry did not duplicate anything")
+	require.False(t, rows[0].Ts.Equal(rows[1].Ts), "phase 1 and phase 2 must persist two DISTINCT rows")
 }
 
 // ---------------------------------------------------------------------------
@@ -1174,26 +1214,16 @@ func TestIngestionSecretsNeverReachRunsCursorsMessagesOrLogs(t *testing.T) {
 // epias.sync_prices task twice converges rather than duplicating
 // market_prices_hourly/yekdem_monthly.
 //
-// Wiring gap discovered while writing this test (documented, not fixed
-// here): worker.Build (internal/worker/wiring.go) constructs its EPİAŞ
-// client as `epias.New(httpxPool, epias.Options{Username, Password,
-// Locker})` — no CASURL/BaseURL override — because config.External
-// (internal/platform/config/config.go, Task 16-owned) has no field for
-// either. epias.New then falls back to its own real, production
-// giris.epias.com.tr/seffaflik.epias.com.tr defaults. There is no way,
-// through worker.Build alone, to point the EPİAŞ client this suite's
-// worker actually runs at a fake.NewTLSServer — and adding the missing
-// config fields is outside internal/worker (the controller's "wiring-only
-// fixes in internal/worker are allowed" ruling does not reach a sibling
-// package, internal/platform/config, owned by Task 16). Worked around at
-// the test layer, not the wiring layer: acceptEnvSetupWithPrices swaps
-// Handlers.Prices for a REAL marketdata.Syncer over a REAL epias.Client —
-// exactly the components worker.Build would use — built directly in this
-// test with CASURL/BaseURL pointed at the fake server, and passes that
-// combined Handlers (every other field still worker.Build's own) to
-// job.Register. This is still an end-to-end proof through the real asynq
-// worker/job.Client/job.NewServer path; only the one hardcoded-URL
-// dependency is substituted.
+// M3 (final review B): config.External now carries EPIASCASURL/
+// EPIASBaseURL (internal/platform/config), and worker.Build's own
+// epias.New wiring (internal/worker/wiring.go) passes them through — so
+// this test drives built.Handlers.Prices UNMODIFIED, through the exact
+// production wiring (including the worker's own Redis lock, not a
+// lock.NewMemory substitute), pointed at fake.NewTLSServer only via
+// acceptEnvSetupWithEPIAS's config override. An earlier version of this
+// test had no such config seam and substituted a hand-built
+// marketdata.Syncer for Handlers.Prices at the test layer instead; that
+// substitution is no longer needed.
 // ---------------------------------------------------------------------------
 
 func TestEPIASSyncThroughTheWorkerIsIdempotent(t *testing.T) {
@@ -1203,17 +1233,7 @@ func TestEPIASSyncThroughTheWorkerIsIdempotent(t *testing.T) {
 		fake.Route{Method: http.MethodPost, Path: acceptEPIASYekPath, Respond: fake.JSON(http.StatusOK, fake.Fixture(t, "epias", "epias_yekdem.json"))},
 	)
 
-	e := acceptEnvSetupWithPrices(t, 17009, srv.Pins, func(pool *pgxpool.Pool) job.PriceSyncer {
-		epiasPool, err := httpx.NewPool(httpx.PoolOptions{PinnedCerts: srv.Pins, Locker: lock.NewMemory(nil)})
-		require.NoError(t, err)
-		epiasClient, err := epias.New(epiasPool, epias.Options{
-			CASURL: srv.URL + acceptEPIASCasPath, BaseURL: srv.URL + "/electricity-service",
-			Username: "epias-user", Password: integration.NewSecret([]byte("epias-pass")),
-			Locker: lock.NewMemory(nil), Clock: clock.System(),
-		})
-		require.NoError(t, err)
-		return marketdata.New(epiasClient, admin.NewMarketDataRepository(pool), admin.NewJournalRepository(pool), clock.System(), testfixtures.DiscardLogger())
-	})
+	e := acceptEnvSetupWithEPIAS(t, 17009, srv.Pins, srv.URL+acceptEPIASCasPath, srv.URL+"/electricity-service")
 
 	from := time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC)
 	to := time.Date(2026, 1, 6, 0, 0, 0, 0, time.UTC)

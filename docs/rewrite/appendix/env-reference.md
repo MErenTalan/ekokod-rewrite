@@ -119,6 +119,8 @@ configuration.** No secret has a default.
 |----------|:--------:|---------|---------|
 | `BCEM_EPIAS_USERNAME` | ✅ | | EPİAŞ transparency platform |
 | `BCEM_EPIAS_PASSWORD` | ✅ | | |
+| `BCEM_EPIAS_CAS_URL` | | `https://giris.epias.com.tr/cas/v1/tickets` | EPİAŞ CAS ticket endpoint; must be https (M3, F2 final review B) |
+| `BCEM_EPIAS_BASE_URL` | | `https://seffaflik.epias.com.tr/electricity-service` | EPİAŞ electricity-service base URL; must be https |
 | `BCEM_ML_URL` | | `http://ml:8000` | Python service |
 | `BCEM_ML_API_KEY` | ✅ | | Shared secret for the ML service |
 | `BCEM_ML_TIMEOUT` | | `60s` | |

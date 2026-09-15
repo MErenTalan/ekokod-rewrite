@@ -101,6 +101,20 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 		return classifyStoreErr(err) // M14
 	}
 
+	// X-M3, final review B: an operator-deactivated credential must stop
+	// ingestion here, before any network call, non-retryably (ErrConfig ->
+	// job.ClassifyForRetry -> asynq.SkipRetry) and with a clear operational
+	// message — never silently skipped like an inactive ANALYZER above
+	// (that is routine; a still-active analyzer pointed at a deactivated
+	// credential is an operator action that needs visibility).
+	if !creds.IsActive {
+		cerr := &integration.Error{Kind: integration.ErrConfig, Provider: creds.Provider, Op: "fetch_readings.credential_inactive"}
+		errText := redacted(creds, cerr)
+		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 1, &errText, nil, now)
+		s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "error", errText, nil)
+		return wrapRedacted(errText, cerr)
+	}
+
 	src, err := s.deps.Sources.Source(creds.Provider)
 	if err != nil {
 		errText := redacted(creds, err)

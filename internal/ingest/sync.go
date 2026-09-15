@@ -40,6 +40,18 @@ func (s *Service) SyncAnalyzers(ctx context.Context, p job.SyncAnalyzersPayload)
 		return classifyStoreErr(err) // M14
 	}
 
+	// X-M3, final review B: see fetch.go's identical gate — an
+	// operator-deactivated credential must stop ingestion here, before any
+	// network call, non-retryably (ErrConfig -> job.ClassifyForRetry ->
+	// asynq.SkipRetry) and with a clear operational message.
+	if !creds.IsActive {
+		cerr := &integration.Error{Kind: integration.ErrConfig, Provider: creds.Provider, Op: "sync_analyzers.credential_inactive"}
+		errText := redacted(creds, cerr)
+		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil, now)
+		s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "error", errText, nil)
+		return wrapRedacted(errText, cerr)
+	}
+
 	src, err := s.deps.Sources.Source(creds.Provider)
 	if err != nil {
 		errText := redacted(creds, err)

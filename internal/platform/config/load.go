@@ -55,6 +55,26 @@ func (l *loader) required(name string) string {
 	return v
 }
 
+// httpsURL (M3, final review B) reads an optional URL that defaults to def
+// when unset, and fails when the resolved value's scheme is not https —
+// TLS verification is never disabled anywhere in this codebase (06 §1 rule
+// 7), and a provider base URL is exactly the kind of value an operator
+// could otherwise silently downgrade to plain http.
+func (l *loader) httpsURL(name, def string) string {
+	v, fromEnv := l.raw(name)
+	if !fromEnv {
+		v = def
+	}
+	u, err := url.Parse(v)
+	if err != nil || u.Scheme != "https" {
+		l.fail(name, errors.New("must be an https URL"))
+		l.record(name, v, false, fromEnv)
+		return v
+	}
+	l.record(name, v, false, fromEnv)
+	return v
+}
+
 // dsnDisplay renders a DSN for display, always carrying the secret mask
 // glyph so every Resolved row flagged Secret is visibly masked, even when
 // the particular DSN happens to carry no embedded credential.
@@ -449,6 +469,8 @@ func Load(lookup func(string) (string, bool)) (*Config, error) {
 	c.External = External{
 		EPIASUsername:   l.required("EKOKOD_EPIAS_USERNAME"),
 		EPIASPassword:   string(l.secret("EKOKOD_EPIAS_PASSWORD", 1)),
+		EPIASCASURL:     l.httpsURL("EKOKOD_EPIAS_CAS_URL", "https://giris.epias.com.tr/cas/v1/tickets"),
+		EPIASBaseURL:    l.httpsURL("EKOKOD_EPIAS_BASE_URL", "https://seffaflik.epias.com.tr/electricity-service"),
 		MLURL:           l.str("EKOKOD_ML_URL", "http://ml:8000"),
 		MLAPIKey:        string(l.secret("EKOKOD_ML_API_KEY", 1)),
 		MLTimeout:       l.positiveDuration("EKOKOD_ML_TIMEOUT", 60*time.Second),

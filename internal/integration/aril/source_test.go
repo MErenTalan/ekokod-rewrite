@@ -168,18 +168,35 @@ func arilAuthRoute(t *testing.T) fake.Route {
 	return fake.Route{Method: http.MethodPost, Path: "/aril/authentication", Respond: fake.JSON(200, fake.Fixture(t, "aril", "aril_token_bare_string.json"))}
 }
 
-// arilAuthFailureResponder answers 401 and echoes the submitted body back
-// in the response — the only channel through which the plaintext password
-// could leak, since httpx never returns a failed response's body to the
-// caller. TestARILErrorsCarryNoCredential asserts it does not.
-func arilAuthFailureResponder(t *testing.T) fake.Responder {
+// arilAuthFailureResponder answers 401, carrying the recorded
+// aril_auth_failure.json fixture (a bare empty-token string, R1's own "401
+// or empty token" auth-failure shape) as the "token" field, and echoes the
+// submitted body back in the response — the only channel through which the
+// plaintext password could leak, since httpx never returns a failed
+// response's body to the caller. TestARILErrorsCarryNoCredential asserts it
+// does not. (I1: the fixture-matrix guard requires the "auth_failure" case
+// to actually read the file it names, not merely have it exist on disk.)
+func arilAuthFailureResponder(t *testing.T, tokenFixture []byte) fake.Responder {
 	t.Helper()
 	return func(w http.ResponseWriter, r *http.Request) {
 		raw, _ := io.ReadAll(r.Body)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]string{"echo": string(raw)})
+		_ = json.NewEncoder(w).Encode(map[string]json.RawMessage{
+			"token": json.RawMessage(tokenFixture),
+			"echo":  mustJSONMarshal(t, string(raw)),
+		})
 	}
+}
+
+// mustJSONMarshal marshals v to json.RawMessage, failing the test on error
+// — used to embed a plain string value alongside json.RawMessage fields in
+// the same map[string]json.RawMessage (map values must share one type).
+func mustJSONMarshal(t *testing.T, v any) json.RawMessage {
+	t.Helper()
+	b, err := json.Marshal(v)
+	require.NoError(t, err)
+	return b
 }
 
 func istanbulDay(year int, month time.Month, day int) (from, to time.Time) {
@@ -270,7 +287,7 @@ func TestARILFixtureMatrix(t *testing.T) {
 		{
 			name: "auth_failure",
 			routes: func(t *testing.T) []fake.Route {
-				return []fake.Route{{Method: http.MethodPost, Path: "/aril/authentication", Respond: arilAuthFailureResponder(t)}}
+				return []fake.Route{{Method: http.MethodPost, Path: "/aril/authentication", Respond: arilAuthFailureResponder(t, fake.Fixture(t, "aril", "aril_auth_failure.json"))}}
 			},
 			wantErr: integration.ErrAuth,
 		},
@@ -309,10 +326,16 @@ func TestARILFixtureMatrix(t *testing.T) {
 			name:        "pagination",
 			useDiscover: true,
 			routes: func(t *testing.T) []fake.Route {
+				// I1: this case serves the fixture-matrix's own
+				// aril_pagination.json for page 1 (byte-identical to
+				// aril_subscriptions_page1.json, which the other,
+				// non-matrix pagination tests below keep using directly),
+				// so the guard's per-case check actually proves this file
+				// is read here.
 				return []fake.Route{
 					arilAuthRoute(t),
 					{Method: http.MethodPost, Path: "/aril/analyzers-list", Respond: fake.Sequence(
-						fake.JSON(200, fake.Fixture(t, "aril", "aril_subscriptions_page1.json")),
+						fake.JSON(200, fake.Fixture(t, "aril", "aril_pagination.json")),
 						fake.JSON(200, fake.Fixture(t, "aril", "aril_subscriptions_page2.json")),
 					)},
 				}
@@ -642,7 +665,7 @@ func TestIdempotentARILRefetchYieldsIdenticalReadings(t *testing.T) {
 }
 
 func TestARILVerifyMapsAuthFailure(t *testing.T) {
-	srv := fake.NewTLSServer(t, fake.Route{Method: http.MethodPost, Path: "/aril/authentication", Respond: arilAuthFailureResponder(t)})
+	srv := fake.NewTLSServer(t, fake.Route{Method: http.MethodPost, Path: "/aril/authentication", Respond: arilAuthFailureResponder(t, fake.Fixture(t, "aril", "aril_auth_failure.json"))})
 	pool, _ := arilTestPool(t, srv)
 	src := arilNewSource(pool, 0)
 	err := src.Verify(context.Background(), arilTestCreds(srv))
@@ -705,7 +728,7 @@ func arilProfileDateLiteral(t time.Time) string {
 
 func TestARILErrorsCarryNoCredential(t *testing.T) {
 	from, to := istanbulDay(2026, 9, 1)
-	srv := fake.NewTLSServer(t, fake.Route{Method: http.MethodPost, Path: "/aril/authentication", Respond: arilAuthFailureResponder(t)})
+	srv := fake.NewTLSServer(t, fake.Route{Method: http.MethodPost, Path: "/aril/authentication", Respond: arilAuthFailureResponder(t, fake.Fixture(t, "aril", "aril_auth_failure.json"))})
 	pool, _ := arilTestPool(t, srv)
 	src := arilNewSource(pool, 0)
 	creds := arilTestCreds(srv)

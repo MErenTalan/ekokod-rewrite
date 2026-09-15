@@ -216,6 +216,8 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 	}
 
 	epiasClient, err := epias.New(httpxPool, epias.Options{
+		CASURL:   cfg.External.EPIASCASURL,
+		BaseURL:  cfg.External.EPIASBaseURL,
 		Username: cfg.External.EPIASUsername,
 		Password: integration.NewSecret([]byte(cfg.External.EPIASPassword)),
 		Locker:   redisLock,

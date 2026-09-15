@@ -1495,3 +1495,110 @@ func TestIngestionWarningMessagesEmittedInSortedCodeOrder(t *testing.T) {
 	require.True(t, byCode["aaa_code"].ID < byCode["mmm_code"].ID, "M5: warning messages must be emitted in sorted code order")
 	require.True(t, byCode["mmm_code"].ID < byCode["zzz_code"].ID, "M5: warning messages must be emitted in sorted code order")
 }
+
+// TestFetchReadingsRefusesInactiveCredential is X-M3 (final review B): a
+// credential an operator has deactivated (integration.Credentials.IsActive
+// == false, populated from model.IntegrationCredential.IsActive by
+// internal/credentials's buildCredentials) must stop FetchReadings before
+// any adapter call, non-retryably (ErrConfig), with the job_runs row
+// recording the failure and an operational message naming it — never
+// silently treated like an ordinary inactive ANALYZER (a routine "success,
+// skipped" case elsewhere in this file: an analyzer being off is normal
+// operator bookkeeping, but an active analyzer whose CREDENTIAL was
+// deactivated needs visibility).
+func TestFetchReadingsRefusesInactiveCredential(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tn := testfixtures.NewTenant(t, ctx, pool, 9199)
+	repos := ingestTestNewRepos(pool)
+
+	analyzer := tn.Analyzers[0]
+	creds := integration.Credentials{
+		CredentialID: uuid.New(), CompanyID: tn.Company.ID, Provider: integration.ProviderOSOS,
+		Subtype: analyzer.ProviderSubtype, IsActive: false,
+	}
+	src := newFakeAdapter(integration.ProviderOSOS, 24*time.Hour, model.ReadingKindLoadProfile)
+	clk := clock.NewFake(ingestTestNow)
+	enq := newRecordingEnqueuer()
+
+	deps := ingest.Deps{
+		Analyzers: repos.analyzers, Readings: repos.readings, Cursors: repos.cursors,
+		Anomalies: repos.anomalies, Ops: repos.ops, ProviderSeries: repos.series,
+		AdminIngestion: repos.adminIngestion, AdminJournal: repos.adminJournal,
+		Credentials: credentialOpenerFunc(func(context.Context, store.Scope, uuid.UUID) (integration.Credentials, error) {
+			return creds, nil
+		}),
+		Sources:  sourceMap{creds.Provider: src},
+		Enqueuer: enq, Clock: clk, Log: testfixtures.DiscardLogger(),
+	}
+	svc, err := ingest.New(deps, ingest.Options{})
+	require.NoError(t, err)
+
+	window := ingestTestWindow(ingestTestIstanbulMidnight, 24*time.Hour)
+	payload := job.FetchReadingsPayload{CompanyID: tn.Company.ID, CredentialID: creds.CredentialID, AnalyzerID: analyzer.ID, Kind: model.ReadingKindLoadProfile, Window: window}
+
+	err = svc.FetchReadings(ctx, payload)
+	require.Error(t, err)
+	require.ErrorIs(t, err, integration.ErrConfig, "an inactive credential must be ErrConfig, non-retryable via job.ClassifyForRetry")
+	require.Empty(t, src.requestLog(), "an inactive credential must never reach the adapter")
+
+	runs := ingestTestRunsForAnalyzer(t, ctx, repos.ops, tn.Scope, job.TypeIntegrationFetchReadings, analyzer.ID)
+	require.Len(t, runs, 1)
+	require.Equal(t, "failed", runs[0].Status)
+
+	messages, merr := repos.ops.ListMessages(ctx, tn.Scope, store.MessageFilter{})
+	require.NoError(t, merr)
+	require.NotEmpty(t, messages, "the inactive-credential refusal must leave an operational message")
+}
+
+// TestSyncAnalyzersRefusesInactiveCredential is X-M3's SyncAnalyzers half:
+// see TestFetchReadingsRefusesInactiveCredential's doc for the full
+// rationale. An inactive credential must stop discovery before the adapter
+// is ever called (DiscoverMeteringPoints must not run).
+func TestSyncAnalyzersRefusesInactiveCredential(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tn := testfixtures.NewTenant(t, ctx, pool, 9198)
+	repos := ingestTestNewRepos(pool)
+
+	creds := integration.Credentials{
+		CredentialID: uuid.New(), CompanyID: tn.Company.ID, Provider: integration.ProviderOSOS,
+		Subtype: "SyncInactiveSub", IsActive: false,
+	}
+	src := newFakeAdapter(integration.ProviderOSOS, 24*time.Hour, model.ReadingKindLoadProfile)
+	clk := clock.NewFake(ingestTestNow)
+	enq := newRecordingEnqueuer()
+
+	deps := ingest.Deps{
+		Analyzers: repos.analyzers, Readings: repos.readings, Cursors: repos.cursors,
+		Anomalies: repos.anomalies, Ops: repos.ops, ProviderSeries: repos.series,
+		AdminIngestion: repos.adminIngestion, AdminJournal: repos.adminJournal,
+		Credentials: credentialOpenerFunc(func(context.Context, store.Scope, uuid.UUID) (integration.Credentials, error) {
+			return creds, nil
+		}),
+		Sources:  sourceMap{creds.Provider: src},
+		Enqueuer: enq, Clock: clk, Log: testfixtures.DiscardLogger(),
+	}
+	svc, err := ingest.New(deps, ingest.Options{})
+	require.NoError(t, err)
+
+	// src leaves Verify/DiscoverMeteringPoints at their zero-value (nil
+	// error, no points): if the gate did NOT fire, SyncAnalyzers would run
+	// them and return nil (a normal, zero-analyzer sync), never ErrConfig —
+	// so requiring ErrConfig below also proves the gate fired before
+	// either was reached.
+	err = svc.SyncAnalyzers(ctx, job.SyncAnalyzersPayload{CompanyID: tn.Company.ID, CredentialID: creds.CredentialID})
+	require.Error(t, err)
+	require.ErrorIs(t, err, integration.ErrConfig, "an inactive credential must be ErrConfig, non-retryable via job.ClassifyForRetry")
+
+	runs, rerr := repos.ops.ListRuns(ctx, tn.Scope, store.JobRunFilter{JobType: ptrString(job.TypeIntegrationSyncAnalyzers), Page: store.Page{Limit: 5}})
+	require.NoError(t, rerr)
+	require.Len(t, runs, 1)
+	require.Equal(t, "failed", runs[0].Status)
+
+	messages, merr := repos.ops.ListMessages(ctx, tn.Scope, store.MessageFilter{})
+	require.NoError(t, merr)
+	require.NotEmpty(t, messages, "the inactive-credential refusal must leave an operational message")
+}

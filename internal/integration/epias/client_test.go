@@ -201,8 +201,13 @@ func TestEPIASFixtureMatrix(t *testing.T) {
 		{
 			name: "auth_failure",
 			routes: func(t *testing.T) []fake.Route {
+				// I1: the fixture-matrix guard requires the "auth_failure"
+				// case to actually read epias_auth_failure.json, not merely
+				// have it exist on disk — CAS answers 401 with this
+				// recorded error body, matching the shape it fails in
+				// (before any data fixture is ever served).
 				return []fake.Route{
-					casRoute(fake.Raw(http.StatusUnauthorized, "", nil)),
+					casRoute(fake.Raw(http.StatusUnauthorized, "application/json", fake.Fixture(t, "epias", "epias_auth_failure.json"))),
 				}
 			},
 			wantErr: integration.ErrAuth,

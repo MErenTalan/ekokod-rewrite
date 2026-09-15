@@ -169,23 +169,29 @@ func gridboxBaseRoutes(t *testing.T) []fake.Route {
 	}
 }
 
-// gridboxAuthFailureResponder answers 400 invalid_grant and echoes the
-// submitted form body back in the response — the only way
-// TestGridBoxErrorsCarryNoCredential can prove the credential does not
-// survive into err.Error(): httpx never returns a failed response's body to
-// the caller, so this route's ECHO is the sole channel through which the
-// plaintext password could leak, and the test asserts it does not.
-func gridboxAuthFailureResponder(t *testing.T) fake.Responder {
+// gridboxAuthFailureResponder answers 400 invalid_grant, built from the
+// recorded gridbox_auth_failure.json fixture body (I1: the fixture-matrix
+// guard requires the "auth_failure" case to actually read the file it
+// names, not merely have it exist on disk), and echoes the submitted form
+// body back in the response — the only way TestGridBoxErrorsCarryNoCredential
+// can prove the credential does not survive into err.Error(): httpx never
+// returns a failed response's body to the caller, so this route's ECHO is
+// the sole channel through which the plaintext password could leak, and the
+// test asserts it does not.
+func gridboxAuthFailureResponder(t *testing.T, fixture []byte) fake.Responder {
 	t.Helper()
+	var body map[string]string
+	require.NoError(t, json.Unmarshal(fixture, &body))
 	return func(w http.ResponseWriter, r *http.Request) {
 		raw, _ := io.ReadAll(r.Body)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error":             "invalid_grant",
-			"error_description": "FIXTURE-invalid-credentials",
-			"echo":              string(raw),
-		})
+		resp := make(map[string]string, len(body)+1)
+		for k, v := range body {
+			resp[k] = v
+		}
+		resp["echo"] = string(raw)
+		_ = json.NewEncoder(w).Encode(resp)
 	}
 }
 
@@ -288,7 +294,7 @@ func TestGridBoxFixtureMatrix(t *testing.T) {
 			name: "auth_failure",
 			from: dayFrom, to: dayTo,
 			routes: func(t *testing.T) []fake.Route {
-				return []fake.Route{{Method: http.MethodPost, Path: "/gridbox/token", Respond: gridboxAuthFailureResponder(t)}}
+				return []fake.Route{{Method: http.MethodPost, Path: "/gridbox/token", Respond: gridboxAuthFailureResponder(t, fake.Fixture(t, "gridbox", "gridbox_auth_failure.json"))}}
 			},
 			wantErr: integration.ErrAuth,
 		},
@@ -620,7 +626,7 @@ func TestIdempotentGridBoxRefetchYieldsIdenticalReadings(t *testing.T) {
 }
 
 func TestGridBoxVerifyMapsAuthFailure(t *testing.T) {
-	srv := fake.NewTLSServer(t, fake.Route{Method: http.MethodPost, Path: "/gridbox/token", Respond: gridboxAuthFailureResponder(t)})
+	srv := fake.NewTLSServer(t, fake.Route{Method: http.MethodPost, Path: "/gridbox/token", Respond: gridboxAuthFailureResponder(t, fake.Fixture(t, "gridbox", "gridbox_auth_failure.json"))})
 	pool, _ := gridboxTestPool(t, srv)
 	src := gridboxNewSource(pool, 0)
 
@@ -752,7 +758,7 @@ func TestGridBoxNeverReturnsReadingsOutsideWindow(t *testing.T) {
 }
 
 func TestGridBoxErrorsCarryNoCredential(t *testing.T) {
-	srv := fake.NewTLSServer(t, fake.Route{Method: http.MethodPost, Path: "/gridbox/token", Respond: gridboxAuthFailureResponder(t)})
+	srv := fake.NewTLSServer(t, fake.Route{Method: http.MethodPost, Path: "/gridbox/token", Respond: gridboxAuthFailureResponder(t, fake.Fixture(t, "gridbox", "gridbox_auth_failure.json"))})
 	pool, _ := gridboxTestPool(t, srv)
 	src := gridboxNewSource(pool, 0)
 	creds := gridboxTestCreds(srv, false)

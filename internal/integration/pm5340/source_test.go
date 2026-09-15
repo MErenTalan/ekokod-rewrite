@@ -2,6 +2,7 @@ package pm5340_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"sort"
@@ -172,29 +173,40 @@ func TestPM5340FixtureMatrix(t *testing.T) {
 					Path:   "/api/v1/readings",
 					Respond: fake.Sequence(
 						fake.RateLimited("1"),
-						fake.JSON(http.StatusOK, fake.Fixture(t, "pm5340", "pm5340_success.json")),
+						fake.JSON(http.StatusOK, fake.Fixture(t, "pm5340", "pm5340_rate_limited.json")),
 					),
 				}}
 			},
 			check: func(t *testing.T, res integration.FetchResult) {
 				require.Len(t, res.Readings, 2)
+				// I1: assert the served rate_limited fixture's own values,
+				// not the success fixture's, so the case actually proves
+				// pm5340_rate_limited.json (not pm5340_success.json) was
+				// read after the 429.
+				require.Equal(t, time.Date(2026, 1, 5, 6, 0, 0, 0, time.UTC), res.Readings[0].Ts.UTC())
+				require.Equal(t, time.Date(2026, 1, 5, 6, 15, 0, 0, time.UTC), res.Readings[1].Ts.UTC())
 			},
 		},
 		{
 			name: "pagination",
 			routes: func(t *testing.T) []fake.Route {
+				var pages struct {
+					Page1 json.RawMessage `json:"page1"`
+					Page2 json.RawMessage `json:"page2"`
+				}
+				require.NoError(t, json.Unmarshal(fake.Fixture(t, "pm5340", "pm5340_pagination.json"), &pages))
 				return []fake.Route{
 					{
 						Method:  http.MethodGet,
 						Path:    "/api/v1/readings",
 						Match:   func(r *http.Request) bool { return r.URL.Query().Get("cursor") == "" },
-						Respond: fake.JSON(http.StatusOK, fake.Fixture(t, "pm5340", "pm5340_page1.json")),
+						Respond: fake.JSON(http.StatusOK, pages.Page1),
 					},
 					{
 						Method:  http.MethodGet,
 						Path:    "/api/v1/readings",
 						Match:   func(r *http.Request) bool { return r.URL.Query().Get("cursor") == "fixture-cursor-page-2" },
-						Respond: fake.JSON(http.StatusOK, fake.Fixture(t, "pm5340", "pm5340_page2.json")),
+						Respond: fake.JSON(http.StatusOK, pages.Page2),
 					},
 				}
 			},
@@ -219,6 +231,16 @@ func TestPM5340FixtureMatrix(t *testing.T) {
 			}
 			require.NoError(t, err)
 			tc.check(t, res)
+
+			// I1: pagination must actually make two requests carrying the
+			// cursor param, not just return the right count via dedupe.
+			if tc.name == "pagination" {
+				reqs := srv.Requests()
+				require.Len(t, reqs, 2)
+				require.False(t, hasQueryParam(reqs[0].RawQuery, "cursor"))
+				require.True(t, hasQueryParam(reqs[1].RawQuery, "cursor"))
+				require.Contains(t, reqs[1].RawQuery, "cursor=fixture-cursor-page-2")
+			}
 		})
 	}
 }
@@ -231,7 +253,7 @@ func TestPM5340FixtureMatrixRateLimitedRecordsSleep(t *testing.T) {
 		Path:   "/api/v1/readings",
 		Respond: fake.Sequence(
 			fake.RateLimited("1"),
-			fake.JSON(http.StatusOK, fake.Fixture(t, "pm5340", "pm5340_success.json")),
+			fake.JSON(http.StatusOK, fake.Fixture(t, "pm5340", "pm5340_rate_limited.json")),
 		),
 	})
 	pool, sleeper := pm5340TestPool(t, srv)
@@ -240,6 +262,7 @@ func TestPM5340FixtureMatrixRateLimitedRecordsSleep(t *testing.T) {
 	res, err := src.FetchReadings(context.Background(), pm5340TestCreds(srv), pm5340TestRequest())
 	require.NoError(t, err)
 	require.Len(t, res.Readings, 2)
+	require.Equal(t, time.Date(2026, 1, 5, 6, 0, 0, 0, time.UTC), res.Readings[0].Ts.UTC())
 	require.Contains(t, sleeper.recorded(), time.Second)
 	require.Len(t, srv.Requests(), 2)
 }
@@ -303,18 +326,24 @@ func TestPM5340NullsStayNull(t *testing.T) {
 // shape — the second request carries cursor=<cursorNext> (adapter-
 // patterns.md item 5: count recorded requests and assert their params).
 func TestPM5340FollowsCursorPages(t *testing.T) {
+	var pages struct {
+		Page1 json.RawMessage `json:"page1"`
+		Page2 json.RawMessage `json:"page2"`
+	}
+	require.NoError(t, json.Unmarshal(fake.Fixture(t, "pm5340", "pm5340_pagination.json"), &pages))
+
 	srv := fake.NewTLSServer(t,
 		fake.Route{
 			Method:  http.MethodGet,
 			Path:    "/api/v1/readings",
 			Match:   func(r *http.Request) bool { return r.URL.Query().Get("cursor") == "" },
-			Respond: fake.JSON(http.StatusOK, fake.Fixture(t, "pm5340", "pm5340_page1.json")),
+			Respond: fake.JSON(http.StatusOK, pages.Page1),
 		},
 		fake.Route{
 			Method:  http.MethodGet,
 			Path:    "/api/v1/readings",
 			Match:   func(r *http.Request) bool { return r.URL.Query().Get("cursor") == "fixture-cursor-page-2" },
-			Respond: fake.JSON(http.StatusOK, fake.Fixture(t, "pm5340", "pm5340_page2.json")),
+			Respond: fake.JSON(http.StatusOK, pages.Page2),
 		},
 	)
 	pool, _ := pm5340TestPool(t, srv)

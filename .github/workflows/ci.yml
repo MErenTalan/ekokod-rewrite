@@ -102,6 +102,13 @@ jobs:
   integration:
     name: Integration tests
     runs-on: ubuntu-latest
+    # M6 (final review B): pins testcontainers-go's own readiness probes to
+    # loopback (see Makefile's test-integration target for the full
+    # rationale) — a GitHub-hosted runner's Docker daemon is a single-tenant
+    # VM, so this env is a defensive match with the Makefile target rather
+    # than a fix for an observed CI flake.
+    env:
+      TESTCONTAINERS_HOST_OVERRIDE: 127.0.0.1
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
