@@ -4,11 +4,13 @@ package marketdata_test
 
 import (
 	"context"
-	"sync"
+	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
@@ -19,104 +21,10 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/marketdata"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
+	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/admin"
 	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
 )
-
-// fakeJournal is an in-memory store.AdminJournalRepository.
-//
-// SPEC GAP (see task-12-report.md): the task-12 brief's own text for this
-// file names `admin.NewJournalRepository`, the real Postgres-backed
-// implementation. It does not exist on this task's base — Task 12's base
-// is F2 Waves A+B only (Tasks 1-4), and store.AdminJournalRepository
-// (job_runs/operational_messages writes with company_id NULL) is
-// implemented by Task 11, in Wave D, which has not run yet; only
-// audit.go, auth.go and marketdata.go exist under
-// internal/store/postgres/admin today. internal/store/postgres/admin is
-// also not this task's file ownership (it owns internal/integration/epias
-// and internal/marketdata only) — writing journal.go here would collide
-// with Task 11's own implementation at rebase time.
-//
-// This fake is the documented workaround: Syncer itself (sync.go) is
-// written against the store.AdminJournalRepository INTERFACE only, so it
-// is completely unaffected by which implementation a caller wires in: once
-// this branch is rebased onto a base that has Task 11's
-// admin.NewJournalRepository, that constructor drops in here unchanged and
-// this fake (and this comment) can be deleted. Until then, this is what
-// lets the market-data write path (admin.NewMarketDataRepository, real
-// Postgres, via NewIsolatedDB) be genuinely integration-tested while the
-// journal half is exercised against a working substitute rather than not
-// exercised at all.
-type fakeJournal struct {
-	mu       sync.Mutex
-	runs     map[uuid.UUID]model.JobRun
-	messages []model.OperationalMessage
-}
-
-func newFakeJournal() *fakeJournal {
-	return &fakeJournal{runs: make(map[uuid.UUID]model.JobRun)}
-}
-
-func (f *fakeJournal) StartPlatformRun(_ context.Context, run model.JobRun) (model.JobRun, error) {
-	if run.CompanyID != nil {
-		return model.JobRun{}, store.ErrNotFound
-	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	run.ID = uuid.New()
-	run.Status = "running"
-	f.runs[run.ID] = run
-	return run, nil
-}
-
-func (f *fakeJournal) FinishPlatformRun(_ context.Context, id uuid.UUID, status string, processed, skipped, failed int32, errText *string, detail []byte, at time.Time) (model.JobRun, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	run, ok := f.runs[id]
-	if !ok {
-		return model.JobRun{}, store.ErrNotFound
-	}
-	run.Status = status
-	run.Processed = processed
-	run.Skipped = skipped
-	run.Failed = failed
-	run.Error = errText
-	run.Detail = detail
-	run.FinishedAt = &at
-	f.runs[id] = run
-	return run, nil
-}
-
-func (f *fakeJournal) AppendPlatformMessage(_ context.Context, m model.OperationalMessage) (model.OperationalMessage, error) {
-	if m.CompanyID != nil {
-		return model.OperationalMessage{}, store.ErrNotFound
-	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	m.ID = int64(len(f.messages) + 1)
-	f.messages = append(f.messages, m)
-	return m, nil
-}
-
-func (f *fakeJournal) lastRun() model.JobRun {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	var latest model.JobRun
-	for _, r := range f.runs {
-		if r.StartedAt.After(latest.StartedAt) || latest.ID == uuid.Nil {
-			latest = r
-		}
-	}
-	return latest
-}
-
-func (f *fakeJournal) allMessages() []model.OperationalMessage {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	out := make([]model.OperationalMessage, len(f.messages))
-	copy(out, f.messages)
-	return out
-}
 
 // fakePriceSource is a hand-rolled marketdata.PriceSource: HourlyPTF and
 // YekdemUnitCost are supplied per test as plain functions so each test
@@ -137,6 +45,18 @@ func (f *fakePriceSource) YekdemUnitCost(_ context.Context, from, to time.Time) 
 	return f.yekdem(from, to)
 }
 
+// fakePriceSourceWithYekdemDrops additionally implements the OPTIONAL
+// yekdemDropReporter capability sync.go type-asserts for (M2, fix round
+// 1: "surface the drop count in the sync run's detail"), so a test can
+// drive syncDetail.YekdemDropped without a real EPİAŞ payload containing
+// an unparseable row.
+type fakePriceSourceWithYekdemDrops struct {
+	fakePriceSource
+	dropped int32
+}
+
+func (f *fakePriceSourceWithYekdemDrops) YekdemDropped() int32 { return f.dropped }
+
 // fullDayPrices returns one model.MarketPrice per hour in [from, to).
 func fullDayPrices(from, to time.Time) []model.MarketPrice {
 	var prices []model.MarketPrice
@@ -150,14 +70,97 @@ func fixedYekdem(_, _ time.Time) ([]model.YekdemMonthly, error) {
 	return []model.YekdemMonthly{{Year: 2026, Month: 1, Value: decimal.RequireFromString("100.0000")}}, nil
 }
 
+// realJobRun is a job_runs row read directly off the database — not
+// through store.AdminJournalRepository, which exposes no read method — so
+// a test can inspect exactly what Syncer, via the real
+// admin.JournalRepository, actually persisted.
+type realJobRun struct {
+	ID         uuid.UUID
+	CompanyID  *uuid.UUID
+	Status     string
+	Processed  int32
+	Skipped    int32
+	Failed     int32
+	Error      *string
+	Scope      []byte
+	Detail     []byte
+	StartedAt  time.Time
+	FinishedAt *time.Time
+}
+
+// fetchJobRunByID reads one job_runs row by id.
+func fetchJobRunByID(t *testing.T, ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) realJobRun {
+	t.Helper()
+	var r realJobRun
+	err := pool.QueryRow(ctx, `
+		select id, company_id, status, processed, skipped, failed, error, scope, detail, started_at, finished_at
+		from job_runs where id = $1`, id).
+		Scan(&r.ID, &r.CompanyID, &r.Status, &r.Processed, &r.Skipped, &r.Failed, &r.Error, &r.Scope, &r.Detail, &r.StartedAt, &r.FinishedAt)
+	require.NoError(t, err)
+	return r
+}
+
+// fetchLatestJobRun reads the most recently started job_runs row for
+// jobType. Ties in started_at (this package's tests run against a fixed
+// clock.Fake, so two runs in the same test can share one instant) are
+// broken by id, which is fine here: every test that calls this more than
+// once asserts something true of EITHER run it could produce.
+func fetchLatestJobRun(t *testing.T, ctx context.Context, pool *pgxpool.Pool, jobType string) realJobRun {
+	t.Helper()
+	var id uuid.UUID
+	err := pool.QueryRow(ctx, `
+		select id from job_runs where job_type = $1
+		order by started_at desc, id desc
+		limit 1`, jobType).Scan(&id)
+	require.NoError(t, err)
+	return fetchJobRunByID(t, ctx, pool, id)
+}
+
+// realOperationalMessage is an operational_messages row read directly off
+// the database, the same way realJobRun is.
+type realOperationalMessage struct {
+	ID        int64
+	CompanyID *uuid.UUID
+	Kind      string
+	Category  string
+	Status    string
+	Message   string
+	Metadata  []byte
+	CreatedAt time.Time
+}
+
+// fetchOperationalMessages reads every operational_messages row for
+// category, ordered by id (bigserial: insertion order). That ordering is
+// for THIS TEST's own determinism only — Syncer (sync.go) never reads
+// operational_messages back, so nothing in the code under test relies on
+// any read-back ordering here.
+func fetchOperationalMessages(t *testing.T, ctx context.Context, pool *pgxpool.Pool, category string) []realOperationalMessage {
+	t.Helper()
+	rows, err := pool.Query(ctx, `
+		select id, company_id, kind, category, status, message, metadata, created_at
+		from operational_messages where category = $1
+		order by id asc`, category)
+	require.NoError(t, err)
+	defer rows.Close()
+	var out []realOperationalMessage
+	for rows.Next() {
+		var m realOperationalMessage
+		require.NoError(t, rows.Scan(&m.ID, &m.CompanyID, &m.Kind, &m.Category, &m.Status, &m.Message, &m.Metadata, &m.CreatedAt))
+		out = append(out, m)
+	}
+	require.NoError(t, rows.Err())
+	return out
+}
+
 // TestSyncPricesIsIdempotent: running the same window twice converges
-// rather than duplicating, and the platform run rows carry no company —
-// asserted here on the fakeJournal's own recorded run (see fakeJournal's
-// doc comment for why AdminJournalRepository is a fake on this base).
+// rather than duplicating, and the platform run row carries no company —
+// asserted here directly on the real job_runs row admin.JournalRepository
+// wrote.
 func TestSyncPricesIsIdempotent(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	market := admin.NewMarketDataRepository(pool)
-	journal := newFakeJournal()
+	journal := admin.NewJournalRepository(pool)
 
 	from := time.Date(2026, 1, 5, 0, 0, 0, 0, normalize.Istanbul).UTC()
 	to := time.Date(2026, 1, 6, 0, 0, 0, 0, normalize.Istanbul).UTC()
@@ -183,7 +186,7 @@ func TestSyncPricesIsIdempotent(t *testing.T) {
 	require.NoError(t, pool.QueryRow(ctx, `select count(*) from market_prices_hourly`).Scan(&n2))
 	require.Equal(t, n1, n2, "re-syncing the same window must converge, not duplicate")
 
-	run := journal.lastRun()
+	run := fetchLatestJobRun(t, ctx, pool, "epias.sync_prices")
 	require.Nil(t, run.CompanyID, "a platform run's company_id must be NULL")
 	require.Equal(t, "success", run.Status)
 }
@@ -191,10 +194,14 @@ func TestSyncPricesIsIdempotent(t *testing.T) {
 // TestSyncPricesReportsMissingHoursWithoutFilling: 23 of 24 hours published
 // → 23 rows written, one warning platform message, the run is partial, and
 // no row exists for the missing hour — it is reported, never fabricated.
+// Also covers the jsonb round-trip for FinishPlatformRun's detail column,
+// StartPlatformRun's scope column, and AppendPlatformMessage's metadata
+// column, all read back off the real database.
 func TestSyncPricesReportsMissingHoursWithoutFilling(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	market := admin.NewMarketDataRepository(pool)
-	journal := newFakeJournal()
+	journal := admin.NewJournalRepository(pool)
 
 	from := time.Date(2026, 1, 7, 0, 0, 0, 0, normalize.Istanbul).UTC()
 	to := time.Date(2026, 1, 8, 0, 0, 0, 0, normalize.Istanbul).UTC()
@@ -227,23 +234,64 @@ func TestSyncPricesReportsMissingHoursWithoutFilling(t *testing.T) {
 	require.NoError(t, pool.QueryRow(ctx, `select count(*) from market_prices_hourly where ts = $1`, missingHour).Scan(&missingCount))
 	require.Equal(t, 0, missingCount, "the missing hour must have no row at all, not a fabricated one")
 
-	run := journal.lastRun()
+	run := fetchLatestJobRun(t, ctx, pool, "epias.sync_prices")
 	require.Equal(t, "partial", run.Status)
+	require.Nil(t, run.CompanyID, "a platform run's company_id must be NULL")
 
-	messages := journal.allMessages()
+	// jsonb round-trip: StartPlatformRun's scope column records the window
+	// this run actually requested (sync.go's syncScope). syncScope itself
+	// is unexported, so this mirrors its json tags rather than importing
+	// the type.
+	var scope struct {
+		PTFFrom time.Time `json:"ptf_from"`
+		PTFTo   time.Time `json:"ptf_to"`
+	}
+	require.NoError(t, json.Unmarshal(run.Scope, &scope))
+	require.True(t, from.Equal(scope.PTFFrom), "scope.ptf_from must round-trip")
+	require.True(t, to.Equal(scope.PTFTo), "scope.ptf_to must round-trip")
+
+	// jsonb round-trip: FinishPlatformRun's detail column (sync.go's
+	// syncDetail) — one missing hour, no YEKDEM drop on this run.
+	var detail struct {
+		MissingDays   int   `json:"missing_days"`
+		MissingHours  int   `json:"missing_hours"`
+		YekdemDropped int32 `json:"yekdem_dropped,omitempty"`
+	}
+	require.NoError(t, json.Unmarshal(run.Detail, &detail))
+	require.Equal(t, 1, detail.MissingDays)
+	require.Equal(t, 1, detail.MissingHours)
+	require.Zero(t, detail.YekdemDropped)
+
+	// Platform messages are readable off operational_messages. Ordering:
+	// this run writes exactly one message, and Syncer never reads
+	// operational_messages back at all (see fetchOperationalMessages'
+	// doc comment) — there is no ordering the code relies on to state.
+	messages := fetchOperationalMessages(t, ctx, pool, "market-prices")
 	require.Len(t, messages, 1)
+	require.Nil(t, messages[0].CompanyID)
 	require.Equal(t, "job", messages[0].Kind)
-	require.Equal(t, "market-prices", messages[0].Category)
 	require.Equal(t, "warning", messages[0].Status)
 	require.Equal(t, "1 PTF hours missing", messages[0].Message)
+
+	// jsonb round-trip: AppendPlatformMessage's metadata column
+	// ({"days": missing}, sync.go's appendMissingHoursMessage).
+	var meta struct {
+		Days map[string][]time.Time `json:"days"`
+	}
+	require.NoError(t, json.Unmarshal(messages[0].Metadata, &meta))
+	dayKey := missingHour.In(normalize.Istanbul).Format("2006-01-02")
+	require.Contains(t, meta.Days, dayKey)
+	require.Len(t, meta.Days[dayKey], 1)
+	require.True(t, missingHour.Equal(meta.Days[dayKey][0]), "the missing hour itself must round-trip through metadata")
 }
 
 // TestSyncPricesBackfillWindow: an explicit 60-day window writes every
 // day, not just the default trailing window.
 func TestSyncPricesBackfillWindow(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	market := admin.NewMarketDataRepository(pool)
-	journal := newFakeJournal()
+	journal := admin.NewJournalRepository(pool)
 
 	from := time.Date(2020, 6, 1, 0, 0, 0, 0, normalize.Istanbul).UTC()
 	to := time.Date(2020, 7, 31, 0, 0, 0, 0, normalize.Istanbul).UTC() // 60 days
@@ -276,6 +324,141 @@ func TestSyncPricesBackfillWindow(t *testing.T) {
 		from, to).Scan(&days))
 	require.Equal(t, 60, days, "every day of the explicit window must have been written")
 
-	run := journal.lastRun()
+	run := fetchLatestJobRun(t, ctx, pool, "epias.sync_prices")
 	require.Equal(t, "success", run.Status)
+	require.Nil(t, run.CompanyID, "a platform run's company_id must be NULL")
+}
+
+// TestSyncPricesRecordsYekdemDroppedInDetail proves the jsonb round-trip
+// for syncDetail.YekdemDropped specifically in the non-zero case (M2, fix
+// round 1): when Source reports dropped YEKDEM rows via the optional
+// yekdemDropReporter capability, that count is written into
+// FinishPlatformRun's detail jsonb and reads back unchanged.
+func TestSyncPricesRecordsYekdemDroppedInDetail(t *testing.T) {
+	t.Parallel()
+	pool := testfixtures.NewIsolatedDB(t)
+	market := admin.NewMarketDataRepository(pool)
+	journal := admin.NewJournalRepository(pool)
+
+	from := time.Date(2026, 3, 1, 0, 0, 0, 0, normalize.Istanbul).UTC()
+	to := time.Date(2026, 3, 2, 0, 0, 0, 0, normalize.Istanbul).UTC()
+
+	src := &fakePriceSourceWithYekdemDrops{
+		fakePriceSource: fakePriceSource{
+			hourly: func(f, t time.Time) ([]model.MarketPrice, []integration.Warning, error) {
+				return fullDayPrices(f, t), nil, nil
+			},
+			yekdem: fixedYekdem,
+		},
+		dropped: 3,
+	}
+	syncer := marketdata.New(src, market, journal, clock.NewFake(to), testfixtures.DiscardLogger())
+
+	ctx := context.Background()
+	require.NoError(t, syncer.SyncPrices(ctx, job.SyncPricesPayload{Window: &job.Window{From: from, To: to}}))
+
+	run := fetchLatestJobRun(t, ctx, pool, "epias.sync_prices")
+	require.Equal(t, "success", run.Status)
+
+	var detail struct {
+		MissingDays   int   `json:"missing_days"`
+		MissingHours  int   `json:"missing_hours"`
+		YekdemDropped int32 `json:"yekdem_dropped,omitempty"`
+	}
+	require.NoError(t, json.Unmarshal(run.Detail, &detail))
+	require.Equal(t, int32(3), detail.YekdemDropped, "a nonzero YekdemDropped count must round-trip through the jsonb detail column")
+}
+
+// TestSyncPricesRecordsFailedRunOnSourceError exercises Syncer's failure
+// path (Syncer.fail) against the real journal: a fetch error surfaces as
+// a 'failed' platform run with the error text stored and readable back,
+// and the platform run's company_id stays NULL even on failure.
+func TestSyncPricesRecordsFailedRunOnSourceError(t *testing.T) {
+	t.Parallel()
+	pool := testfixtures.NewIsolatedDB(t)
+	market := admin.NewMarketDataRepository(pool)
+	journal := admin.NewJournalRepository(pool)
+
+	from := time.Date(2026, 2, 1, 0, 0, 0, 0, normalize.Istanbul).UTC()
+	to := time.Date(2026, 2, 2, 0, 0, 0, 0, normalize.Istanbul).UTC()
+
+	wantErr := errors.New("epias: simulated fetch failure")
+	src := &fakePriceSource{
+		hourly: func(_, _ time.Time) ([]model.MarketPrice, []integration.Warning, error) {
+			return nil, nil, wantErr
+		},
+	}
+	syncer := marketdata.New(src, market, journal, clock.NewFake(to), testfixtures.DiscardLogger())
+
+	ctx := context.Background()
+	err := syncer.SyncPrices(ctx, job.SyncPricesPayload{Window: &job.Window{From: from, To: to}})
+	require.ErrorIs(t, err, wantErr)
+
+	run := fetchLatestJobRun(t, ctx, pool, "epias.sync_prices")
+	require.Nil(t, run.CompanyID, "a platform run's company_id must be NULL even on failure")
+	require.Equal(t, "failed", run.Status)
+	require.NotNil(t, run.Error)
+	require.Contains(t, *run.Error, "simulated fetch failure")
+}
+
+// TestPlatformJournalStatusValuesRoundTrip proves that every status value
+// Syncer ever writes to a platform run — 'running' (StartPlatformRun's
+// fixed insert status), then 'success', 'partial' or 'failed'
+// (FinishPlatformRun) — is accepted by job_runs.status and read back
+// unchanged, both via the repository's own returned row and a direct
+// re-read off the database (so a value merely echoed by RETURNING,
+// without ever really being persisted, cannot pass this test).
+func TestPlatformJournalStatusValuesRoundTrip(t *testing.T) {
+	t.Parallel()
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	journal := admin.NewJournalRepository(pool)
+
+	for _, status := range []string{"success", "partial", "failed"} {
+		started, err := journal.StartPlatformRun(ctx, model.JobRun{JobType: "epias.sync_prices"})
+		require.NoError(t, err)
+		require.Equal(t, "running", started.Status)
+		require.Equal(t, "running", fetchJobRunByID(t, ctx, pool, started.ID).Status,
+			"'running' must be accepted by the DB and read back, not just echoed by the insert's own RETURNING")
+
+		var errText *string
+		if status == "failed" {
+			msg := "epias: simulated failure"
+			errText = &msg
+		}
+		finished, err := journal.FinishPlatformRun(ctx, started.ID, status, 1, 0, 0, errText, []byte(`{}`), time.Now().UTC())
+		require.NoError(t, err)
+		require.Equal(t, status, finished.Status)
+
+		reread := fetchJobRunByID(t, ctx, pool, started.ID)
+		require.Equal(t, status, reread.Status, "%q must be accepted by the DB and read back", status)
+		if status == "failed" {
+			require.NotNil(t, reread.Error)
+			require.Equal(t, "epias: simulated failure", *reread.Error)
+		}
+	}
+}
+
+// TestJournalFinishPlatformRunCannotFinishATenantRun proves (d): the real
+// admin.JournalRepository's FinishPlatformRun can never finish a TENANT's
+// job run, even given that run's own id — AdminFinishPlatformRun's SQL
+// (admin_journal.sql) only ever matches a company_id-NULL row.
+func TestJournalFinishPlatformRunCannotFinishATenantRun(t *testing.T) {
+	t.Parallel()
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenant := testfixtures.NewTenant(t, ctx, pool, 912004)
+	opsRepo := postgres.NewOpsRepository(pool)
+	journal := admin.NewJournalRepository(pool)
+
+	companyID := tenant.Company.ID
+	tenantRun, err := opsRepo.StartRun(ctx, tenant.Scope, model.JobRun{CompanyID: &companyID, JobType: "epias.sync_prices"})
+	require.NoError(t, err)
+
+	_, err = journal.FinishPlatformRun(ctx, tenantRun.ID, "success", 5, 0, 0, nil, nil, time.Now().UTC())
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	stillRunning, err := opsRepo.GetRun(ctx, tenant.Scope, tenantRun.ID)
+	require.NoError(t, err)
+	require.Equal(t, "running", stillRunning.Status, "the refused platform finish must not have touched the tenant's run")
 }
