@@ -129,47 +129,63 @@ func resolveYearMonth(period, date *string) (year, month int16, ok bool) {
 }
 
 // parseUnitCostResponse decodes one YEKDEM unit-cost HTTP response body
-// into rows. Unlike parseMCPResponse, a bad individual row is dropped
-// silently rather than reported through a Warning: YekdemUnitCost's
-// signature (task-12 brief) carries no []integration.Warning return, so
-// there is no channel to report it through, and YEKDEM's low row count
-// (one per month) makes a silently-dropped row far less consequential
-// than a silently-dropped PTF hour would be. A malformed top-level shape,
-// or two rows for the same (year, month) within one response, is still a
-// hard ErrMalformedPayload, exactly as for MCP.
-func parseUnitCostResponse(body []byte) ([]unitCostRow, error) {
+// into rows, plus the count of rows dropped because they failed to parse.
+//
+// M2 (task-12-fix1-findings.md, fix round 1): unlike parseMCPResponse, a
+// bad individual row here cannot be reported through a
+// []integration.Warning the way an MCP row's can — YekdemUnitCost's own
+// signature (task-12 brief: "func (c *Client) YekdemUnitCost(ctx
+// context.Context, from, to time.Time) ([]model.YekdemMonthly, error)") is
+// pinned by the brief with no Warnings slot, and that exact signature is
+// also what marketdata.PriceSource's interface requires — changing it
+// would break that pinned contract. So the drop count returned here does
+// NOT leave parseUnitCostResponse as a Warning; instead Client.YekdemUnitCost
+// accumulates it across chunks and exposes it through the OPTIONAL
+// YekdemDropped() capability (see client.go), which marketdata.Syncer
+// type-asserts for and folds into the sync run's `detail` JSON
+// (syncDetail.YekdemDropped in sync.go) — so a systematically malformed
+// YEKDEM feed is still visible to an operator reading job_runs, even
+// though it cannot ride a Warning. A malformed top-level shape, or two
+// rows for the same (year, month) within one response, is still a hard
+// ErrMalformedPayload, exactly as for MCP — those are not "dropped rows",
+// they invalidate the whole response.
+func parseUnitCostResponse(body []byte) ([]unitCostRow, int, error) {
 	var env unitCostEnvelope
 	if err := newStrictDecoder(body).Decode(&env); err != nil {
-		return nil, &integration.Error{Kind: integration.ErrMalformedPayload, Provider: integration.ProviderEPIAS, Op: "unit-cost"}
+		return nil, 0, &integration.Error{Kind: integration.ErrMalformedPayload, Provider: integration.ProviderEPIAS, Op: "unit-cost"}
 	}
 	raw, ok := env.rows()
 	if !ok {
-		return nil, &integration.Error{Kind: integration.ErrMalformedPayload, Provider: integration.ProviderEPIAS, Op: "unit-cost"}
+		return nil, 0, &integration.Error{Kind: integration.ErrMalformedPayload, Provider: integration.ProviderEPIAS, Op: "unit-cost"}
 	}
 
 	rows := make([]unitCostRow, 0, len(raw))
 	type key struct{ y, m int16 }
 	seen := make(map[key]bool, len(raw))
+	dropped := 0
 
 	for _, r := range raw {
 		var item unitCostItem
 		if err := newStrictDecoder(r).Decode(&item); err != nil {
+			dropped++
 			continue
 		}
 		year, month, ok := resolveYearMonth(item.Period, item.Date)
 		if !ok {
+			dropped++
 			continue
 		}
 		value, err := normalize.JSONNumber(item.UnitCost)
 		if err != nil {
+			dropped++
 			continue
 		}
 		k := key{year, month}
 		if seen[k] {
-			return nil, &integration.Error{Kind: integration.ErrMalformedPayload, Provider: integration.ProviderEPIAS, Op: "unit-cost"}
+			return nil, 0, &integration.Error{Kind: integration.ErrMalformedPayload, Provider: integration.ProviderEPIAS, Op: "unit-cost"}
 		}
 		seen[k] = true
 		rows = append(rows, unitCostRow{Year: year, Month: month, Value: value})
 	}
-	return rows, nil
+	return rows, dropped, nil
 }

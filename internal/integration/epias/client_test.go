@@ -504,6 +504,57 @@ func TestEPIASYekdemUnitCost(t *testing.T) {
 	require.Equal(t, "190.5678", byMonth[2])
 }
 
+// TestEPIASYekdemDroppedRowsAreCounted (M2, fix round 1): a YEKDEM row
+// that fails to resolve a (year, month) — here, one with neither `period`
+// nor `date` — is silently dropped from the result (unlike an MCP row,
+// which gets a Warning), but the drop is not lost: YekdemDropped()
+// reports it, which is what lets marketdata.Syncer surface it in the sync
+// run's `detail` JSON (see sync.go's yekdemDropReporter).
+func TestEPIASYekdemDroppedRowsAreCounted(t *testing.T) {
+	srv := fake.NewTLSServer(t,
+		casRoute(casSuccess("TGT-18-yekdemdrop-cas01")),
+		yekRoute(fake.JSON(http.StatusOK, fake.Fixture(t, "epias", "epias_yekdem_partial.json"))),
+	)
+	pool, _ := epiasTestPool(t, srv, nil)
+	c, err := epias.New(pool, epiasTestOptions(srv, clock.NewFake(fixtureNow), nil))
+	require.NoError(t, err)
+
+	require.Equal(t, int32(0), c.YekdemDropped(), "no call yet: nothing dropped")
+
+	from := time.Date(2026, 1, 1, 0, 0, 0, 0, normalize.Istanbul).UTC()
+	to := time.Date(2026, 3, 1, 0, 0, 0, 0, normalize.Istanbul).UTC()
+	values, err := c.YekdemUnitCost(context.Background(), from, to)
+	require.NoError(t, err)
+	require.Len(t, values, 2, "the two well-formed rows are still returned")
+	require.Equal(t, int32(1), c.YekdemDropped(), "the one row with neither period nor date must be counted dropped")
+}
+
+// TestEPIASYekdemDroppedResetsOnCleanCall: a stale nonzero drop count from
+// an earlier call must not leak into a later, clean call's result.
+func TestEPIASYekdemDroppedResetsOnCleanCall(t *testing.T) {
+	srv := fake.NewTLSServer(t,
+		casRoute(casSuccess("TGT-19-yekdemreset-cas01")),
+		yekRoute(fake.Sequence(
+			fake.JSON(http.StatusOK, fake.Fixture(t, "epias", "epias_yekdem_partial.json")),
+			fake.JSON(http.StatusOK, fake.Fixture(t, "epias", "epias_yekdem.json")),
+		)),
+	)
+	pool, _ := epiasTestPool(t, srv, nil)
+	c, err := epias.New(pool, epiasTestOptions(srv, clock.NewFake(fixtureNow), nil))
+	require.NoError(t, err)
+
+	from := time.Date(2026, 1, 1, 0, 0, 0, 0, normalize.Istanbul).UTC()
+	to := time.Date(2026, 3, 1, 0, 0, 0, 0, normalize.Istanbul).UTC()
+
+	_, err = c.YekdemUnitCost(context.Background(), from, to)
+	require.NoError(t, err)
+	require.Equal(t, int32(1), c.YekdemDropped())
+
+	_, err = c.YekdemUnitCost(context.Background(), from, to)
+	require.NoError(t, err)
+	require.Equal(t, int32(0), c.YekdemDropped(), "a clean call must reset the count, not accumulate")
+}
+
 // TestEPIASRejectsNonJSONBody covers the genuinely-broken-syntax half of
 // adapter-patterns.md #6 (the fixture matrix's "malformed" case now covers
 // only the valid-JSON-wrong-shape half — see its route's comment for why).

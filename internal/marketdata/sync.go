@@ -77,6 +77,29 @@ type syncScope struct {
 type syncDetail struct {
 	MissingDays  int `json:"missing_days"`
 	MissingHours int `json:"missing_hours"`
+	// YekdemDropped is the count of YEKDEM rows the source silently
+	// dropped as unparseable (M2, fix round 1) — 0 unless Source
+	// implements the optional yekdemDropReporter capability, since
+	// PriceSource.YekdemUnitCost's own return has no Warnings slot to
+	// carry this through directly. See yekdemDropReporter's doc comment.
+	YekdemDropped int32 `json:"yekdem_dropped,omitempty"`
+}
+
+// yekdemDropReporter is an OPTIONAL capability a PriceSource may
+// implement — satisfied by *epias.Client — to report how many YEKDEM rows
+// its most recent YekdemUnitCost call silently dropped as unparseable.
+//
+// M2 (task-12-fix1-findings.md, fix round 1): YekdemUnitCost's signature
+// (`([]model.YekdemMonthly, error)`, pinned by the task-12 brief) has no
+// []integration.Warning slot the way HourlyPTF's does, so a dropped YEKDEM
+// row cannot ride a Warning without breaking that pinned interface. This
+// package therefore type-asserts for this narrower, optional capability
+// instead (the same pattern as io.WriterTo) and, when present, folds the
+// count into syncDetail.YekdemDropped — resolving M2 via "surface the drop
+// count in the sync run's detail", the finding's explicit fallback for a
+// signature a Warning truly cannot fit.
+type yekdemDropReporter interface {
+	YekdemDropped() int32
 }
 
 // SyncPrices implements job.PriceSyncer. It never fabricates a value for a
@@ -134,6 +157,14 @@ func (s *Syncer) SyncPrices(ctx context.Context, p job.SyncPricesPayload) error 
 		s.fail(ctx, run.ID, processed, skipped, err)
 		return err
 	}
+	// M2: see yekdemDropReporter's doc comment — Source may optionally
+	// report how many YEKDEM rows it silently dropped as unparseable;
+	// when it does, that count rides in syncDetail.YekdemDropped below,
+	// not a Warning (YekdemUnitCost's signature has no Warnings slot).
+	var yekdemDropped int32
+	if r, ok := s.Source.(yekdemDropReporter); ok {
+		yekdemDropped = r.YekdemDropped()
+	}
 	yek = dedupYekdem(yek)
 	yn, err := s.Market.UpsertYekdem(ctx, yek)
 	if err != nil {
@@ -157,7 +188,7 @@ func (s *Syncer) SyncPrices(ctx context.Context, p job.SyncPricesPayload) error 
 		}
 	}
 
-	detail, err := json.Marshal(syncDetail{MissingDays: len(missing), MissingHours: totalMissing(missing)})
+	detail, err := json.Marshal(syncDetail{MissingDays: len(missing), MissingHours: totalMissing(missing), YekdemDropped: yekdemDropped})
 	if err != nil {
 		detail = nil
 	}
@@ -224,10 +255,18 @@ func (s *Syncer) resolveWindow(w *job.Window) (time.Time, time.Time) {
 
 // resolveYekdemWindow implements the task-12 brief's YEKDEM window: the
 // first day of (this run's month − 3) to the first day of next month.
-// Deliberately independent of p.Window: YEKDEM is monthly, cheap to
-// refresh, and a caller backfilling an old PTF range via an explicit
-// p.Window should not, as a side effect, overwrite the platform's current
-// YEKDEM figures with values for a window it never asked for.
+//
+// Ruling R39 (task-12-fix1-findings.md, fix round 1): an explicit PTF
+// backfill window (p.Window) does NOT backfill YEKDEM. YEKDEM ALWAYS uses
+// this trailing [now.month-3, now.month+1) cadence, computed from the
+// CURRENT run's clock, regardless of what p.Window a caller passed for
+// PTF. A historical YEKDEM backfill (re-fetching unit costs for months
+// outside this trailing window) is a separate admin action, out of this
+// job's scope — F6/F14. The reasoning stands as before: YEKDEM is monthly
+// and cheap to refresh on every run, and a caller backfilling an old PTF
+// range via p.Window should not, as a side effect, overwrite the
+// platform's current YEKDEM figures with values for a window it never
+// asked for.
 func (s *Syncer) resolveYekdemWindow() (time.Time, time.Time) {
 	now := s.Clock.Now().In(normalize.Istanbul)
 	y, m, _ := now.Date()

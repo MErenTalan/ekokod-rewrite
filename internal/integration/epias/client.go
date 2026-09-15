@@ -10,6 +10,7 @@ import (
 	"errors"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
@@ -86,7 +87,29 @@ type Client struct {
 	mu       sync.Mutex
 	ticket   string
 	ticketAt time.Time
+
+	// yekdemDropped is the count of YEKDEM rows dropped as unparseable in
+	// the most recent YekdemUnitCost call — M2 (task-12-fix1-findings.md,
+	// fix round 1). See YekdemDropped's and parseUnitCostResponse's doc
+	// comments for why this exists instead of a Warning return.
+	yekdemDropped atomic.Int32
 }
+
+// YekdemDropped returns the number of YEKDEM rows silently dropped as
+// unparseable during the most recent YekdemUnitCost call (0 if none, or if
+// YekdemUnitCost has not been called yet).
+//
+// This is an OPTIONAL capability, not part of the marketdata.PriceSource
+// interface: YekdemUnitCost's own return signature is pinned by the
+// task-12 brief as `([]model.YekdemMonthly, error)`, with no
+// []integration.Warning slot (unlike HourlyPTF's), so a bad YEKDEM row
+// cannot be reported that way without breaking that pinned contract.
+// marketdata.Syncer type-asserts its PriceSource for this method and,
+// when present, folds the count into the sync run's `detail` JSON — so a
+// systematically malformed YEKDEM feed is still visible to an operator
+// reading job_runs, per M2's "surface the drop count in the sync run's
+// detail" resolution.
+func (c *Client) YekdemDropped() int32 { return c.yekdemDropped.Load() }
 
 // New builds a Client. An empty Username or Password is refused before any
 // network call, naming the environment variable the platform config reads
@@ -239,6 +262,7 @@ func (c *Client) YekdemUnitCost(ctx context.Context, from, to time.Time) ([]mode
 	type key struct{ year, month int16 }
 	seen := make(map[key]model.YekdemMonthly)
 	var order []key
+	var dropped int32
 
 	for _, w := range normalize.Chunk(from, to, yekdemMaxWindow) {
 		resp, err := c.doData(ctx, func(ticket string) httpx.Request {
@@ -247,10 +271,11 @@ func (c *Client) YekdemUnitCost(ctx context.Context, from, to time.Time) ([]mode
 		if err != nil {
 			return nil, err
 		}
-		rows, err := parseUnitCostResponse(resp.Body)
+		rows, drop, err := parseUnitCostResponse(resp.Body)
 		if err != nil {
 			return nil, err
 		}
+		dropped += int32(drop)
 		fetchedAt := c.opts.Clock.Now()
 		for _, row := range rows {
 			k := key{row.Year, row.Month}
@@ -260,6 +285,9 @@ func (c *Client) YekdemUnitCost(ctx context.Context, from, to time.Time) ([]mode
 			seen[k] = model.YekdemMonthly{Year: row.Year, Month: row.Month, Value: row.Value, FetchedAt: fetchedAt}
 		}
 	}
+	// Stored even on a zero-drop call, so a stale nonzero count from an
+	// earlier call never leaks into a later, clean one (M2).
+	c.yekdemDropped.Store(dropped)
 
 	out := make([]model.YekdemMonthly, 0, len(order))
 	for _, k := range order {
