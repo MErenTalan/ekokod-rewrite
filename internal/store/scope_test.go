@@ -93,3 +93,35 @@ func TestTheNilBuildingIsNeverAllowed(t *testing.T) {
 	s.AllBuildings = true
 	require.False(t, s.AllowsBuilding(uuid.Nil), "not even 'all buildings' makes a zero id a building")
 }
+
+// TestSystemScopeGrantsWholeCompany pins SystemScope's explicit-widening
+// shape: a background job that has no single building grant still gets a
+// valid, whole-company scope through the one constructor F2 adds, not a
+// hand-built Scope{AllBuildings: true}.
+func TestSystemScopeGrantsWholeCompany(t *testing.T) {
+	companyID := uuid.New()
+	s := store.SystemScope(companyID)
+
+	require.True(t, s.Valid())
+	require.Equal(t, companyID, s.CompanyID)
+	require.True(t, s.AllBuildings)
+	require.True(t, s.AllowsBuilding(uuid.New()), "SystemScope must grant any building in the company")
+
+	ids, all := s.BuildingFilter()
+	require.True(t, all)
+	require.Empty(t, ids)
+}
+
+// TestSystemScopeOfNilCompanyIsInvalid pins the fail-closed half: a caller
+// that forgets to supply a company id gets a Scope every repository rejects
+// before any I/O, never one that silently reaches for "every company".
+func TestSystemScopeOfNilCompanyIsInvalid(t *testing.T) {
+	s := store.SystemScope(uuid.Nil)
+
+	require.False(t, s.Valid())
+	require.False(t, s.AllowsBuilding(uuid.New()), "an invalid scope must allow nothing even though AllBuildings is set")
+
+	ids, all := s.BuildingFilter()
+	require.False(t, all)
+	require.Empty(t, ids)
+}

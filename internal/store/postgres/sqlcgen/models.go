@@ -1451,6 +1451,14 @@ type ForecastGap struct {
 	MissingHours int32
 }
 
+type GenerationAnchor struct {
+	AnalyzerID   uuid.UUID
+	AnchorTs     pgtype.Timestamptz
+	ActiveExport pgtype.Numeric
+	Source       string
+	UpdatedAt    pgtype.Timestamptz
+}
+
 type IcmalImport struct {
 	ID         uuid.UUID
 	CompanyID  uuid.UUID
@@ -1606,6 +1614,7 @@ type MeterReading struct {
 	SourceProvider           IntegrationProvider
 	IngestedAt               pgtype.Timestamptz
 	Raw                      []byte
+	IntervalGenerationKwh    pgtype.Numeric
 }
 
 type NationalTariffSchedule struct {
@@ -1726,6 +1735,15 @@ type PowerPlantMonthlyTarget struct {
 	PlantID   uuid.UUID
 	Month     int16
 	TargetKwh pgtype.Numeric
+}
+
+type ProviderHourlyValue struct {
+	AnalyzerID        uuid.UUID
+	Ts                pgtype.Timestamptz
+	ActiveConsumption pgtype.Numeric
+	ActiveGeneration  pgtype.Numeric
+	SourceProvider    IntegrationProvider
+	IngestedAt        pgtype.Timestamptz
 }
 
 type Report struct {

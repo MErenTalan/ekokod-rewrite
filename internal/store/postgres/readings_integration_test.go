@@ -472,3 +472,68 @@ func TestReadingLatestNeverReturnsForeignDataEvenWhenForeignAnalyzerHasReadings(
 	require.NoError(t, err)
 	require.NotNil(t, gotWide)
 }
+
+// f2genPM5340Row builds one fixture MeterReading carrying
+// IntervalGenerationKwh — PM5340's interval energy (migration 00012, F2
+// Task 5).
+func f2genPM5340Row(analyzerID uuid.UUID, ts time.Time, activeImport, intervalGeneration string) model.MeterReading {
+	row := readingsRow(analyzerID, ts, model.ReadingKindLoadProfile, activeImport, "1")
+	row.SourceProvider = model.IntegrationProviderPM5340
+	row.IntervalGenerationKwh = readingsDecPtr(intervalGeneration)
+	return row
+}
+
+// TestReadingsCarryIntervalGenerationKwh is the F2 Task 5 acceptance test:
+// BulkInsert then Range returns the exact decimal; nil stays nil; a
+// re-upsert that changes only active_export keeps interval_generation_kwh
+// (the column is written on EVERY upsert, from `excluded.
+// interval_generation_kwh`, exactly like every other register — never
+// dropped from the SET list).
+func TestReadingsCarryIntervalGenerationKwh(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
+	repo := postgres.NewReadingRepository(pool)
+	analyzerID := tenant.Analyzers[0].ID
+
+	withGeneration := f2genPM5340Row(analyzerID, readingsEpoch, "1000.0000", "0.6250")
+	withoutGeneration := readingsRow(analyzerID, readingsEpoch.Add(time.Hour), model.ReadingKindLoadProfile, "1000.0000", "1")
+	withoutGeneration.SourceProvider = model.IntegrationProviderPM5340
+	// IntervalGenerationKwh left nil deliberately: a provider payload that
+	// genuinely reports no interval energy for this row, never zero.
+
+	inserted, updated, err := repo.BulkInsert(ctx, tenant.Scope, []model.MeterReading{withGeneration, withoutGeneration})
+	require.NoError(t, err)
+	require.Equal(t, 2, inserted)
+	require.Zero(t, updated)
+
+	got, err := repo.Range(ctx, tenant.Scope, analyzerID,
+		store.TimeRange{From: readingsEpoch, To: readingsEpoch.Add(2 * time.Hour)},
+		model.ReadingKindLoadProfile)
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+
+	require.NotNil(t, got[0].IntervalGenerationKwh)
+	require.True(t, decimal.RequireFromString("0.6250").Equal(*got[0].IntervalGenerationKwh),
+		"want 0.6250, got %s", got[0].IntervalGenerationKwh)
+
+	require.Nil(t, got[1].IntervalGenerationKwh, "a nil interval generation must stay nil, never become zero")
+
+	// Re-upsert the FIRST row, changing active_export only — the read row
+	// had no active_export set, so this ALSO sets one for the first time —
+	// while repeating the exact same interval_generation_kwh value.
+	reupserted := withGeneration
+	reupserted.ActiveExport = readingsDecPtr("50.0000")
+	_, _, err = repo.BulkInsert(ctx, tenant.Scope, []model.MeterReading{reupserted})
+	require.NoError(t, err)
+
+	got, err = repo.Range(ctx, tenant.Scope, analyzerID,
+		store.TimeRange{From: readingsEpoch, To: readingsEpoch.Add(time.Minute)},
+		model.ReadingKindLoadProfile)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.NotNil(t, got[0].ActiveExport)
+	require.True(t, decimal.RequireFromString("50.0000").Equal(*got[0].ActiveExport))
+	require.NotNil(t, got[0].IntervalGenerationKwh, "interval_generation_kwh must survive a re-upsert that only changes active_export")
+	require.True(t, decimal.RequireFromString("0.6250").Equal(*got[0].IntervalGenerationKwh))
+}

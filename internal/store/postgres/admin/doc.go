@@ -16,7 +16,7 @@
 // cross-tenant hole that no test at the request layer will ever catch, because
 // the method itself is exactly as capable as it looks: nothing narrows it.
 //
-// The five interfaces, and why each one cannot take a Scope:
+// The six interfaces, and why each one cannot take a Scope:
 //
 //   - AdminAuthRepository resolves the two credentials a request presents
 //     BEFORE it has a Scope: a login carries only an email, and a refresh
@@ -46,6 +46,17 @@
 //     operational_messages tables tenant jobs use, with company_id NULL. A
 //     platform job made to borrow a tenant's Scope would file its failures on
 //     that tenant's own Messages screen.
+//
+//   - AdminIngestionRepository lists the credentials the scheduled ingestion
+//     dispatcher must fan out to, on every tick, across every tenant in one
+//     pass. Its caller has no tenant to offer for exactly the same structural
+//     reason AdminMarketDataRepository's and AdminJournalRepository's do: the
+//     dispatcher is not acting on behalf of any one company, it is finding
+//     the work every company has waiting. A Scope would have to name a
+//     company before the dispatcher even knows which companies have active
+//     credentials, which is backwards — this method is what tells it. It is
+//     a genuine sixth member of this closed list, not an exception to it:
+//     implemented by F2 Task 5.
 //
 // THE LIST OF METHODS IS CLOSED. A method is added here only when its caller
 // cannot hold a Scope, never because holding one is inconvenient: see each
