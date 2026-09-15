@@ -548,6 +548,43 @@ func TestVerifyRedactsAuthFailureAndRecordsSuccess(t *testing.T) {
 	require.NotNil(t, updated.LastVerifiedAt)
 }
 
+// TestVerifyPreservesErrorChain is fix round 2's M proof (dropped last
+// round): Verify's redacted error must still let a caller errors.Is
+// against the verifier's own sentinel (integration.ErrAuth) — fix round
+// 1's Verify returned errors.New(redactedText(...)), a brand-new error
+// with no Unwrap, which threw the chain away entirely even though the
+// redacted TEXT it produced was already correct (that text-only guarantee
+// is TestVerifyRedactsAuthFailureAndRecordsSuccess, above, which never
+// checked errors.Is). This test asserts BOTH: the secret is still absent
+// from Error(), AND errors.Is(err, integration.ErrAuth) is true.
+func TestVerifyPreservesErrorChain(t *testing.T) {
+	t.Parallel()
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenant := testfixtures.NewTenant(t, ctx, pool, 140026)
+	credInsertDefinition(t, ctx, pool, "gridbox", "default", nil)
+	h := newCredHarness(t, pool, credNow)
+
+	pw := "FIXTURE-PW-SECRET-VALUE-CHAIN"
+	secret := integration.NewSecret([]byte(pw))
+	view, err := h.svc.Configure(ctx, tenant.AdminScope, credentials.Input{
+		Provider: model.IntegrationProviderGridbox, Subtype: "default", Secret: &secret,
+	})
+	require.NoError(t, err)
+
+	fv := h.verifiers.forProvider(integration.ProviderGridBox)
+	// The message text WOULD carry the credential if redaction were
+	// broken; %w wraps integration.ErrAuth so the chain has something
+	// real to preserve.
+	fv.err = fmt.Errorf("gridbox verify: login rejected for password %s (HTTP 401): %w", pw, integration.ErrAuth)
+
+	_, err = h.svc.Verify(ctx, tenant.AdminScope, view.ID)
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), pw, "the redacted text must never carry the credential")
+	require.ErrorIs(t, err, integration.ErrAuth,
+		"Verify's redacted error must preserve the chain so callers can errors.Is against the verifier's sentinel")
+}
+
 func TestISolarCallbackStoresTokensForTheStatesCompany(t *testing.T) {
 	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
@@ -883,6 +920,154 @@ func TestUpdateExtraBlocksWhileISolarTokenLockIsHeld(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "update-mark", creds.Extra["note"].Reveal())
 	require.Equal(t, "refresh-1", creds.Extra["refresh_token"].Reveal(), "Update's Extra merge must preserve unrelated keys")
+}
+
+// blockingUpsertRepo wraps a store.IntegrationRepository, blocking the
+// FIRST call to UpsertCredential made AFTER the test arms it (via
+// armed.Store(true)) until the test closes proceed, and signalling
+// entered once that call has started. Every other UpsertCredential call —
+// including Configure's own, made while setting up the test fixture,
+// before arming — passes straight through to the embedded, real
+// repository. It exists for TestUpdateHoldsIsolarLockAcrossUpsertWrite
+// (I3, fix round 2): a fake Locker cannot tell the difference between
+// "released before the write" and "released after the write" the way a
+// real timing race would, but a repository that can pause UpsertCredential
+// mid-flight lets the test force exactly that window open and prove
+// nothing else can run in it. Arming is required because Configure (the
+// test's own setup) also calls UpsertCredential once, before Update ever
+// runs — without it, the sync.Once would fire (and hang, since nothing is
+// listening on entered/proceed yet) during setup instead of during the
+// Update this test targets.
+type blockingUpsertRepo struct {
+	store.IntegrationRepository
+	armed   atomic.Bool
+	once    sync.Once
+	entered chan struct{}
+	proceed chan struct{}
+}
+
+func (r *blockingUpsertRepo) UpsertCredential(ctx context.Context, s store.Scope, c model.IntegrationCredential, secretPlain, extra []byte) (model.IntegrationCredential, error) {
+	if r.armed.Load() {
+		r.once.Do(func() {
+			close(r.entered)
+			<-r.proceed
+		})
+	}
+	return r.IntegrationRepository.UpsertCredential(ctx, s, c, secretPlain, extra)
+}
+
+// TestUpdateHoldsIsolarLockAcrossUpsertWrite is I3's fix-round-2 proof.
+// TestUpdateExtraBlocksWhileISolarTokenLockIsHeld (above) only proves
+// Update's Extra READ-MERGE runs under isolarTokenLockKey — fix round 1's
+// bug was releasing the lease right after that merge, LEAVING THE ACTUAL
+// UpsertCredential WRITE UNLOCKED, so that older test stayed green under
+// the very regression this one targets. Here, UpsertCredential itself is
+// made to block (via blockingUpsertRepo) so a concurrent
+// ISolarAccessToken refresh can be started WHILE Update is provably
+// inside its write: with the fix (lease held across the write, via
+// defer), the refresh must not complete until Update's blocked
+// UpsertCredential is released; with the regression (lease released
+// before the write), the refresh's Acquire succeeds immediately and it
+// races Update's write, and the two writes interleave in whichever order
+// the goroutine scheduler picks.
+func TestUpdateHoldsIsolarLockAcrossUpsertWrite(t *testing.T) {
+	t.Parallel()
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenant := testfixtures.NewTenant(t, ctx, pool, 140027)
+	credInsertDefinition(t, ctx, pool, "isolar", "EU", nil)
+
+	realIntegrations := postgres.NewIntegrationRepository(pool, credCipher(t))
+	blocker := &blockingUpsertRepo{
+		IntegrationRepository: realIntegrations,
+		entered:               make(chan struct{}),
+		proceed:               make(chan struct{}),
+	}
+	isolarFake := &credFakeISolar{}
+	svc, err := credentials.New(credentials.Deps{
+		Integrations: blocker,
+		Analyzers:    postgres.NewAnalyzerRepository(pool),
+		Verifiers:    newCredFakeVerifierResolver(),
+		ISolar:       isolarFake,
+		Enqueuer:     &recordingEnqueuer{},
+		Locker:       lock.NewMemory(now2clock(credNow)),
+		Nonces:       lock.NewMemory(now2clock(credNow)),
+		Clock:        clock.NewFake(credNow),
+		StateKey:     []byte("integration-test-oauth-state-32b"),
+		RedirectURI:  "https://app.example.invalid/integrations/isolar/callback",
+		MaxRetry:     3,
+	})
+	require.NoError(t, err)
+
+	view, err := svc.Configure(ctx, tenant.AdminScope, credentials.Input{
+		Provider: model.IntegrationProviderISolar, Subtype: "EU",
+		Extra: isolarExtraFixture("refresh-1", "access-old"),
+	})
+	require.NoError(t, err)
+	// Inside the 5-minute refresh window, so ISolarAccessToken below will
+	// attempt a real refresh rather than taking the fast, unlocked "fresh"
+	// path.
+	require.NoError(t, realIntegrations.RecordVerification(ctx, tenant.AdminScope, view.ID, credNow, ptr(credNow.Add(1*time.Minute))))
+
+	isolarFake.setRefreshToken(isolar.Token{
+		AccessToken:  integration.NewSecret([]byte("access-new")),
+		RefreshToken: integration.NewSecret([]byte("refresh-new")),
+		ExpiresAt:    credNow.Add(2 * time.Hour),
+	})
+
+	// Arm the blocker only now — Configure's own UpsertCredential call
+	// above (test setup) must pass straight through.
+	blocker.armed.Store(true)
+
+	updateDone := make(chan error, 1)
+	go func() {
+		_, uerr := svc.Update(ctx, tenant.AdminScope, view.ID, credentials.Input{
+			Extra: map[string]integration.Secret{"note": integration.NewSecret([]byte("update-mark"))},
+		})
+		updateDone <- uerr
+	}()
+
+	select {
+	case <-blocker.entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Update never reached UpsertCredential")
+	}
+
+	refreshDone := make(chan struct {
+		tok integration.Secret
+		err error
+	}, 1)
+	go func() {
+		tok, rerr := svc.ISolarAccessToken(ctx, tenant.AdminScope, view.ID)
+		refreshDone <- struct {
+			tok integration.Secret
+			err error
+		}{tok, rerr}
+	}()
+
+	select {
+	case res := <-refreshDone:
+		t.Fatalf("ISolarAccessToken's refresh completed (err=%v) while Update's UpsertCredential write was still "+
+			"blocked — Update released the isolar token lock before its write, not after (I3 regression)", res.err)
+	case <-time.After(200 * time.Millisecond):
+		// Still blocked behind Update's held lease, as required.
+	}
+
+	close(blocker.proceed)
+
+	require.NoError(t, <-updateDone)
+	res := <-refreshDone
+	require.NoError(t, res.err)
+	require.Equal(t, "access-new", res.tok.Reveal())
+
+	creds, err := svc.Open(ctx, tenant.AdminScope, view.ID)
+	require.NoError(t, err)
+	require.Equal(t, "update-mark", creds.Extra["note"].Reveal(),
+		"Update's Extra write must have landed")
+	require.Equal(t, "refresh-new", creds.Extra["refresh_token"].Reveal(),
+		"the refresh's NEW refresh_token must be the one finally stored — Update ran (and released) first, so "+
+			"the refresh's later read-merge-write, serialised after it by the SAME lock, sees Update's merge and "+
+			"is never clobbered by (or itself clobbers) Update's write")
 }
 
 // TestISolarAccessTokenRefreshesOnceAcrossTwoServiceInstances is I4's

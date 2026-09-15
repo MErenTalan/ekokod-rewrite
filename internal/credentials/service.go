@@ -302,6 +302,24 @@ func redactedText(creds integration.Credentials, err error) string {
 	return secret.Redact(err.Error(), creds.Fragments())
 }
 
+// redactedVerifyError wraps a verifier's error for Verify (fix round 2, M
+// dropped last round): Error() renders the secret-redacted text (03 §7 —
+// a credential must never reach an operator-facing error), but Unwrap()
+// returns the ORIGINAL, unredacted verifier error, so the error CHAIN is
+// preserved — a caller can still errors.Is(err, integration.ErrAuth) (or
+// errors.As into an *integration.Error) to distinguish auth failures from
+// other verify errors, exactly as if this wrapper were not there. Fix
+// round 1 returned errors.New(redactedText(...)), which threw the chain
+// away entirely: errors.Is/As against the original sentinel always
+// returned false, even though the redacted TEXT was correct.
+type redactedVerifyError struct {
+	text string
+	err  error
+}
+
+func (e *redactedVerifyError) Error() string { return e.text }
+func (e *redactedVerifyError) Unwrap() error { return e.err }
+
 // zeroBytes overwrites b in place, best effort — the plaintext buffers this
 // package builds (a Secret's Reveal() copy, a merged Extra JSON blob) are
 // zeroed once sealed. This is best effort, not a guarantee: Go's garbage
@@ -529,20 +547,27 @@ func (s *Service) Update(ctx context.Context, sc store.Scope, id uuid.UUID, in I
 		}
 
 		if def.Provider == model.IntegrationProviderISolar {
-			// I3 (fix round 1): this is a read-merge-write of the SAME
-			// Extra blob ISolarAccessToken's refresh and ISolarCallback's
-			// persistIsolarToken also read-merge-write, under
-			// isolarTokenLockKey. Without the same lock here, an Update
-			// racing either of those loses whichever write lands second
-			// entirely — most dangerously the refresh's brand-new
-			// refresh_token, since iSolarCloud invalidates the previous
-			// one on every refresh, permanently stranding the credential.
+			// I3 (fix round 2): the lease MUST stay held across
+			// UpsertCredential's write below, not just across
+			// mergeExtraNow's read-merge here — releasing right after
+			// mergeExtraNow (fix round 1's mistake) left the window
+			// between release and UpsertCredential completely unlocked,
+			// so a concurrent ISolarAccessToken refresh (or
+			// ISolarCallback) could read-merge-write in that gap and have
+			// its own write silently clobbered by this Update's later
+			// UpsertCredential, or vice versa — most dangerously the
+			// refresh's brand-new refresh_token, since iSolarCloud
+			// invalidates the previous one on every refresh, permanently
+			// stranding the credential. defer (not an immediate release)
+			// holds the lease across the re-read → merge → UpsertCredential
+			// sequence below, exactly like ISolarCallback's own
+			// Acquire/defer releaseLease pairing.
 			lease, lerr := s.deps.Locker.Acquire(ctx, isolarTokenLockKey(sc.CompanyID), isolarTokenLockTTL)
 			if lerr != nil {
 				return View{}, lerr
 			}
+			defer releaseLease(ctx, lease)
 			err = mergeExtraNow()
-			releaseLease(ctx, lease)
 		} else {
 			err = mergeExtraNow()
 		}
@@ -707,7 +732,7 @@ func (s *Service) Verify(ctx context.Context, sc store.Scope, id uuid.UUID) (Vie
 		return View{}, verr
 	}
 	if verifyErr := verifier.Verify(ctx, creds); verifyErr != nil {
-		return View{}, errors.New(redactedText(creds, verifyErr))
+		return View{}, &redactedVerifyError{text: redactedText(creds, verifyErr), err: verifyErr}
 	}
 
 	// I1 (fix round 1): re-read the credential now, AFTER Open, instead of
