@@ -22,7 +22,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
 )
 
-var stateTestKey = []byte("test-hmac-key-0123456789abcdef!")
+var stateTestKey = []byte("test-hmac-key-0123456789abcdef!!") // 33 bytes >= minStateKeyLen
 
 // TestStateRoundTrip proves signState/verifyState agree with each other:
 // a freshly signed state verifies to the exact claims it was signed with.

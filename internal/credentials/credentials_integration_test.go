@@ -210,6 +210,11 @@ type credHarness struct {
 	clock        *clock.Fake
 	stateKey     []byte
 	redirectURI  string
+	// locker is the SAME lock.Locker handed to credentials.Deps.Locker —
+	// kept here so a test can acquire the isolar token lock itself
+	// (TestUpdateExtraBlocksWhileISolarTokenLockIsHeld, I3) to prove Update
+	// actually serialises through it.
+	locker lock.Locker
 }
 
 func newCredHarness(t *testing.T, pool *pgxpool.Pool, now time.Time) *credHarness {
@@ -223,6 +228,7 @@ func newCredHarness(t *testing.T, pool *pgxpool.Pool, now time.Time) *credHarnes
 		clock:        clock.NewFake(now),
 		stateKey:     []byte("integration-test-oauth-state-32b"),
 		redirectURI:  "https://app.example.invalid/integrations/isolar/callback",
+		locker:       lock.NewMemory(now2clock(now)),
 	}
 	svc, err := credentials.New(credentials.Deps{
 		Integrations: h.integrations,
@@ -230,7 +236,7 @@ func newCredHarness(t *testing.T, pool *pgxpool.Pool, now time.Time) *credHarnes
 		Verifiers:    h.verifiers,
 		ISolar:       h.isolarFake,
 		Enqueuer:     h.enqueuer,
-		Locker:       lock.NewMemory(h.clock.Now),
+		Locker:       h.locker,
 		Nonces:       lock.NewMemory(h.clock.Now),
 		Clock:        h.clock,
 		StateKey:     h.stateKey,
@@ -240,6 +246,15 @@ func newCredHarness(t *testing.T, pool *pgxpool.Pool, now time.Time) *credHarnes
 	require.NoError(t, err)
 	h.svc = svc
 	return h
+}
+
+// now2clock returns a func() time.Time frozen at now — lock.Memory takes a
+// clock func, and the harness's own h.clock.Now is equally frozen (the
+// fake clock never advances during these tests), so either works; this
+// helper avoids a forward reference to h.clock in newCredHarness's own
+// struct literal.
+func now2clock(now time.Time) func() time.Time {
+	return func() time.Time { return now }
 }
 
 // isolarExtraFixture is a plausible set of isolar Extra keys: app_id (for
@@ -548,6 +563,16 @@ func TestISolarCallbackStoresTokensForTheStatesCompany(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	// Folded minor (fix round 1): tenant B gets its OWN isolar credential
+	// FIRST, with its own refresh token, so "tenant B's list is unchanged"
+	// below is a meaningful cross-tenant proof — not just "tenant B has
+	// nothing at all so of course nothing changed".
+	viewB, err := h.svc.Configure(ctx, tenantB.AdminScope, credentials.Input{
+		Provider: model.IntegrationProviderISolar, Subtype: "EU",
+		Extra: isolarExtraFixture("tenant-b-refresh", "tenant-b-access"),
+	})
+	require.NoError(t, err)
+
 	h.isolarFake.setExchangeToken(isolar.Token{
 		AccessToken:  integration.NewSecret([]byte("access-1")),
 		RefreshToken: integration.NewSecret([]byte("refresh-1")),
@@ -569,10 +594,24 @@ func TestISolarCallbackStoresTokensForTheStatesCompany(t *testing.T) {
 
 	// tenant B's own scope proves the callback wrote under the STATE's
 	// company (derived internally, via store.SystemScope), never a
-	// caller-supplied or default scope: tenant B has no credential at all.
+	// caller-supplied or default scope: tenant B's OWN credential (and its
+	// OWN refresh token, configured above) is completely untouched. Read
+	// via the repository directly, NOT svc.Open: tenant B's credential has
+	// never been verified (no TokenExpiresAt), so Open's own isolar
+	// freshness check would treat it as "not fresh" and trigger an
+	// UNRELATED refresh attempt of its own — exactly the side effect this
+	// assertion must not introduce while checking for one.
+	_, extraPlainB, err := h.integrations.OpenSecret(ctx, tenantB.AdminScope, viewB.ID)
+	require.NoError(t, err)
+	var extraB map[string]string
+	require.NoError(t, json.Unmarshal(extraPlainB, &extraB))
+	require.Equal(t, "tenant-b-refresh", extraB["refresh_token"])
+	require.Equal(t, "tenant-b-access", extraB["access_token"])
+
 	listB, err := h.svc.List(ctx, tenantB.AdminScope)
 	require.NoError(t, err)
-	require.Empty(t, listB)
+	require.Len(t, listB, 1, "tenant B's own credential — and only that one")
+	require.Nil(t, listB[0].LastVerifiedAt, "tenant A's callback must never touch tenant B's row")
 }
 
 // TestISolarCallbackKeepsRefreshTokenWhenProviderOmitsANewOne is the
@@ -683,4 +722,444 @@ func TestISolarAccessTokenRefreshesOnceUnderConcurrency(t *testing.T) {
 		require.Equal(t, "access-new", results[i].Reveal())
 	}
 	require.EqualValues(t, 1, h.isolarFake.RefreshCalls(), "exactly one Refresh call must reach the provider")
+}
+
+// ============================================================================
+// Fix round 1 (opus review of 0ec2398..9ce1bbc) — I1-I5 and the folded
+// "invalid key accepted" minor. See task-14-fix1-findings.md.
+// ============================================================================
+
+// TestConfigureRefusesWhenCredentialAlreadyExists is I2/R45: a second
+// Configure for the same (company, definition) must be refused with an
+// ErrConflict-matching error, and must NOT touch the existing row at all —
+// the original bug silently replaced it via UpsertCredential's upsert,
+// wiping its sealed Extra (any OAuth tokens) and resetting
+// settings/is_active to whatever the second call's Input happened to carry.
+func TestConfigureRefusesWhenCredentialAlreadyExists(t *testing.T) {
+	t.Parallel()
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenant := testfixtures.NewTenant(t, ctx, pool, 140019)
+	credInsertDefinition(t, ctx, pool, "gridbox", "default", nil)
+	h := newCredHarness(t, pool, credNow)
+
+	secret := integration.NewSecret([]byte("FIXTURE-PW-ORIGINAL"))
+	view, err := h.svc.Configure(ctx, tenant.AdminScope, credentials.Input{
+		Provider: model.IntegrationProviderGridbox, Subtype: "default",
+		Username: ptr("original-user"), Secret: &secret,
+		Settings: json.RawMessage(`{"use_billing_indexes":true}`),
+		Extra: map[string]integration.Secret{
+			"app_id": integration.NewSecret([]byte("original-app-id")),
+		},
+	})
+	require.NoError(t, err)
+
+	otherSecret := integration.NewSecret([]byte("FIXTURE-PW-OVERWRITE-ATTEMPT"))
+	_, err = h.svc.Configure(ctx, tenant.AdminScope, credentials.Input{
+		Provider: model.IntegrationProviderGridbox, Subtype: "default",
+		Username: ptr("overwrite-attempt-user"), Secret: &otherSecret,
+	})
+	require.ErrorIs(t, err, store.ErrConflict)
+
+	// Nothing about the original credential changed: same secret, same
+	// settings, same Extra — Configure's failed second call left no trace.
+	creds, err := h.svc.Open(ctx, tenant.AdminScope, view.ID)
+	require.NoError(t, err)
+	require.Equal(t, "FIXTURE-PW-ORIGINAL", creds.Secret.Reveal())
+	require.Equal(t, "original-app-id", creds.Extra["app_id"].Reveal())
+
+	list, err := h.svc.List(ctx, tenant.AdminScope)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	require.Equal(t, ptr("original-user"), list[0].Username)
+	require.JSONEq(t, `{"use_billing_indexes":true}`, string(list[0].Settings))
+}
+
+// TestVerifyPreservesRefreshedTokenExpiry is I1's proof. Verify calls Open,
+// which — for an isolar credential whose token is inside the 5-minute
+// refresh window — refreshes it and ALREADY persists the new
+// token_expires_at (persistIsolarToken's own RecordVerification call).
+// Verify's own, later RecordVerification call must record that SAME
+// refreshed expiry, never the stale, pre-refresh one it would get from
+// creds.TokenExpiresAt (built by buildCredentials before Open's refresh
+// ran).
+func TestVerifyPreservesRefreshedTokenExpiry(t *testing.T) {
+	t.Parallel()
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenant := testfixtures.NewTenant(t, ctx, pool, 140020)
+	credInsertDefinition(t, ctx, pool, "isolar", "EU", nil)
+	h := newCredHarness(t, pool, credNow)
+
+	view, err := h.svc.Configure(ctx, tenant.AdminScope, credentials.Input{
+		Provider: model.IntegrationProviderISolar, Subtype: "EU",
+		Extra: isolarExtraFixture("refresh-1", "access-old"),
+	})
+	require.NoError(t, err)
+	// Inside the 5-minute refresh window: Open (inside Verify) will refresh.
+	require.NoError(t, h.integrations.RecordVerification(ctx, tenant.AdminScope, view.ID, credNow, ptr(credNow.Add(1*time.Minute))))
+
+	refreshedExpiry := credNow.Add(2 * time.Hour)
+	h.isolarFake.setRefreshToken(isolar.Token{
+		AccessToken:  integration.NewSecret([]byte("access-new")),
+		RefreshToken: integration.NewSecret([]byte("refresh-new")),
+		ExpiresAt:    refreshedExpiry,
+	})
+
+	updated, err := h.svc.Verify(ctx, tenant.AdminScope, view.ID)
+	require.NoError(t, err)
+	require.NotNil(t, updated.TokenExpiresAt)
+	require.True(t, updated.TokenExpiresAt.Equal(refreshedExpiry),
+		"Verify must record the REFRESHED expiry, not the stale pre-refresh one")
+
+	// The stored expiry is now far from the refresh window: a further
+	// ISolarAccessToken call must make ZERO extra Refresh calls — a stale
+	// stored expiry (still ~1 minute out) would trigger a second one.
+	tok, err := h.svc.ISolarAccessToken(ctx, tenant.AdminScope, view.ID)
+	require.NoError(t, err)
+	require.Equal(t, "access-new", tok.Reveal())
+	require.EqualValues(t, 1, h.isolarFake.RefreshCalls(), "Verify's own refresh must be the ONLY Refresh call")
+}
+
+// TestUpdateExtraBlocksWhileISolarTokenLockIsHeld is I3's deterministic
+// mutation proof. Update's read-merge-write of an isolar credential's
+// Extra must serialise under the SAME lock key
+// ("isolar:token:<company>") as ISolarAccessToken's refresh and
+// ISolarCallback's persistIsolarToken — otherwise a concurrent Update can
+// read the pre-refresh Extra, and its later write silently discards
+// whichever new token a concurrent refresh just wrote (or vice versa).
+//
+// Rather than relying on network-delay timing to occasionally reproduce a
+// lost update, this test acquires the lock itself, directly, before
+// calling Update: with the fix, Update blocks until the test releases the
+// lock; with I3's regression (Update's Extra merge unlocked), Update
+// returns almost immediately regardless of who else holds the lock — that
+// is exactly the observable difference this test pins.
+func TestUpdateExtraBlocksWhileISolarTokenLockIsHeld(t *testing.T) {
+	t.Parallel()
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenant := testfixtures.NewTenant(t, ctx, pool, 140021)
+	credInsertDefinition(t, ctx, pool, "isolar", "EU", nil)
+	h := newCredHarness(t, pool, credNow)
+
+	view, err := h.svc.Configure(ctx, tenant.AdminScope, credentials.Input{
+		Provider: model.IntegrationProviderISolar, Subtype: "EU",
+		Extra: isolarExtraFixture("refresh-1", "access-1"),
+	})
+	require.NoError(t, err)
+
+	// Same key format as isolarTokenLockKey(sc.CompanyID) in service.go.
+	lockKey := "isolar:token:" + tenant.Company.ID.String()
+	lease, err := h.locker.Acquire(ctx, lockKey, 60*time.Second)
+	require.NoError(t, err)
+
+	done := make(chan error, 1)
+	go func() {
+		_, uerr := h.svc.Update(ctx, tenant.AdminScope, view.ID, credentials.Input{
+			Extra: map[string]integration.Secret{"note": integration.NewSecret([]byte("update-mark"))},
+		})
+		done <- uerr
+	}()
+
+	select {
+	case uerr := <-done:
+		t.Fatalf("Update returned (err=%v) while the isolar token lock was still held externally — "+
+			"its Extra merge is not serialised under isolarTokenLockKey (I3 regression)", uerr)
+	case <-time.After(200 * time.Millisecond):
+		// Still blocked on the lock, as required.
+	}
+
+	require.NoError(t, lease.Release(ctx))
+
+	select {
+	case uerr := <-done:
+		require.NoError(t, uerr)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Update never returned after the lock was released")
+	}
+
+	creds, err := h.svc.Open(ctx, tenant.AdminScope, view.ID)
+	require.NoError(t, err)
+	require.Equal(t, "update-mark", creds.Extra["note"].Reveal())
+	require.Equal(t, "refresh-1", creds.Extra["refresh_token"].Reveal(), "Update's Extra merge must preserve unrelated keys")
+}
+
+// TestISolarAccessTokenRefreshesOnceAcrossTwoServiceInstances is I4's
+// central proof: Deps.Locker's double-checked refresh must serialise
+// ACROSS process/instance boundaries, not just within one *Service's own
+// goroutines — the real deployment shares one Redis-backed lock.Locker
+// across every worker process. Two *credentials.Service instances (each
+// with its own Clock, but sharing the SAME lock.Memory as their Locker and
+// the SAME isolar fake/repositories) refresh concurrently: exactly ONE
+// Refresh call must reach the provider.
+func TestISolarAccessTokenRefreshesOnceAcrossTwoServiceInstances(t *testing.T) {
+	t.Parallel()
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenant := testfixtures.NewTenant(t, ctx, pool, 140022)
+	credInsertDefinition(t, ctx, pool, "isolar", "EU", nil)
+
+	sharedLocker := lock.NewMemory(now2clock(credNow))
+	integrations := postgres.NewIntegrationRepository(pool, credCipher(t))
+	analyzers := postgres.NewAnalyzerRepository(pool)
+	isolarFake := &credFakeISolar{}
+	verifiers := newCredFakeVerifierResolver()
+	enqueuer := &recordingEnqueuer{}
+
+	newInstance := func() *credentials.Service {
+		svc, err := credentials.New(credentials.Deps{
+			Integrations: integrations,
+			Analyzers:    analyzers,
+			Verifiers:    verifiers,
+			ISolar:       isolarFake,
+			Enqueuer:     enqueuer,
+			Locker:       sharedLocker,
+			Nonces:       lock.NewMemory(now2clock(credNow)),
+			Clock:        clock.NewFake(credNow),
+			StateKey:     []byte("integration-test-oauth-state-32b"),
+			RedirectURI:  "https://app.example.invalid/integrations/isolar/callback",
+			MaxRetry:     3,
+		})
+		require.NoError(t, err)
+		return svc
+	}
+	svcA := newInstance()
+	svcB := newInstance()
+
+	view, err := svcA.Configure(ctx, tenant.AdminScope, credentials.Input{
+		Provider: model.IntegrationProviderISolar, Subtype: "EU",
+		Extra: isolarExtraFixture("refresh-1", "access-old"),
+	})
+	require.NoError(t, err)
+	require.NoError(t, integrations.RecordVerification(ctx, tenant.AdminScope, view.ID, credNow, ptr(credNow.Add(1*time.Minute))))
+
+	isolarFake.setRefreshToken(isolar.Token{
+		AccessToken:  integration.NewSecret([]byte("access-new")),
+		RefreshToken: integration.NewSecret([]byte("refresh-new")),
+		ExpiresAt:    credNow.Add(2 * time.Hour),
+	})
+	isolarFake.mu.Lock()
+	isolarFake.refreshDelay = 50 * time.Millisecond
+	isolarFake.mu.Unlock()
+
+	const n = 10
+	results := make([]integration.Secret, n)
+	errs := make([]error, n)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		svc := svcA
+		if i%2 == 0 {
+			svc = svcB
+		}
+		go func(i int, svc *credentials.Service) {
+			defer wg.Done()
+			results[i], errs[i] = svc.ISolarAccessToken(ctx, tenant.AdminScope, view.ID)
+		}(i, svc)
+	}
+	wg.Wait()
+
+	for i := 0; i < n; i++ {
+		require.NoError(t, errs[i])
+		require.Equal(t, "access-new", results[i].Reveal())
+	}
+	require.EqualValues(t, 1, isolarFake.RefreshCalls(),
+		"exactly one Refresh call must reach the provider, across BOTH service instances sharing one lock.Memory")
+}
+
+// TestPM5340UpdateChangesInstallationNumberOnSingleAnalyzer is I5's proof.
+// Update with a DIFFERENT InstallationNumber must leave the credential with
+// exactly ONE ACTIVE pm5340 analyzer, never two — the original bug looked
+// the analyzer up by the (now stale) OLD installation number via
+// GetByInstallation, found nothing, and created a SECOND active one
+// alongside the first. AnalyzerRepository.Update cannot change
+// installation_number in place (it is that repository's own immutable
+// natural key), so the fix retires the old row (SoftDelete) and creates a
+// fresh one — this test asserts on the OBSERVABLE guarantee ("exactly one
+// active analyzer, with the new number"), not on the row keeping its id.
+func TestPM5340UpdateChangesInstallationNumberOnSingleAnalyzer(t *testing.T) {
+	t.Parallel()
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenant := testfixtures.NewTenant(t, ctx, pool, 140023)
+	credInsertDefinition(t, ctx, pool, "pm5340", "default", nil)
+	h := newCredHarness(t, pool, credNow)
+
+	pm5340URL := "http://10.0.0.6:502"
+	view, err := h.svc.Configure(ctx, tenant.AdminScope, credentials.Input{
+		Provider: model.IntegrationProviderPM5340, Subtype: "default",
+		PM5340URL: &pm5340URL, InstallationNumber: ptr("PM-OLD"),
+	})
+	require.NoError(t, err)
+
+	original, err := h.analyzers.GetByInstallation(ctx, tenant.AdminScope, model.IntegrationProviderPM5340, "default", "PM-OLD")
+	require.NoError(t, err)
+
+	_, err = h.svc.Update(ctx, tenant.AdminScope, view.ID, credentials.Input{
+		InstallationNumber: ptr("PM-NEW"),
+	})
+	require.NoError(t, err)
+
+	// Exactly one ACTIVE (default List excludes soft-deleted) pm5340
+	// analyzer for this company — not two.
+	list, err := h.analyzers.List(ctx, tenant.AdminScope, store.AnalyzerFilter{Providers: []model.IntegrationProvider{model.IntegrationProviderPM5340}})
+	require.NoError(t, err)
+	require.Len(t, list, 1, "InstallationNumber change must never leave a second active analyzer around")
+	require.Equal(t, "PM-NEW", list[0].InstallationNumber)
+	require.True(t, list[0].IsActive)
+	require.NotEqual(t, original.ID, list[0].ID, "InstallationNumber is AnalyzerRepository.Update's immutable natural key — it retires the old row and creates a fresh one")
+
+	// The OLD installation number no longer resolves as an active analyzer
+	// (its row still exists, soft-deleted).
+	_, err = h.analyzers.GetByInstallation(ctx, tenant.AdminScope, model.IntegrationProviderPM5340, "default", "PM-OLD")
+	require.ErrorIs(t, err, store.ErrNotFound)
+	includingDeleted, err := h.analyzers.List(ctx, tenant.AdminScope, store.AnalyzerFilter{
+		Providers: []model.IntegrationProvider{model.IntegrationProviderPM5340}, IncludeDeleted: true,
+	})
+	require.NoError(t, err)
+	require.Len(t, includingDeleted, 2, "the old row is retired, not erased")
+
+	// Idempotent: Update with the SAME (now current) installation number a
+	// second time does not create a third row.
+	_, err = h.svc.Update(ctx, tenant.AdminScope, view.ID, credentials.Input{InstallationNumber: ptr("PM-NEW")})
+	require.NoError(t, err)
+	list2, err := h.analyzers.List(ctx, tenant.AdminScope, store.AnalyzerFilter{Providers: []model.IntegrationProvider{model.IntegrationProviderPM5340}})
+	require.NoError(t, err)
+	require.Len(t, list2, 1)
+	require.Equal(t, list[0].ID, list2[0].ID)
+}
+
+// TestConfigureAndUpdateRejectInvalidExtraKeyNames is the folded minor's
+// mutation proof ("invalid key accepted"): an Input.Extra key not matching
+// ^[a-z][a-z0-9_]{0,63}$ must be refused with ErrInvalidExtraKey, on BOTH
+// Configure and Update, and must never reach OpenSecret's stored blob.
+func TestConfigureAndUpdateRejectInvalidExtraKeyNames(t *testing.T) {
+	t.Parallel()
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenant := testfixtures.NewTenant(t, ctx, pool, 140024)
+	credInsertDefinition(t, ctx, pool, "gridbox", "default", nil)
+	h := newCredHarness(t, pool, credNow)
+
+	badKeys := []string{"APP_ID", "app id", "-app_id", "", "app.id", "app-id"}
+	for _, k := range badKeys {
+		t.Run("Configure rejects "+k, func(t *testing.T) {
+			_, err := h.svc.Configure(ctx, tenant.AdminScope, credentials.Input{
+				Provider: model.IntegrationProviderGridbox, Subtype: "default",
+				Extra: map[string]integration.Secret{k: integration.NewSecret([]byte("v"))},
+			})
+			require.ErrorIs(t, err, credentials.ErrInvalidExtraKey)
+		})
+	}
+
+	view, err := h.svc.Configure(ctx, tenant.AdminScope, credentials.Input{
+		Provider: model.IntegrationProviderGridbox, Subtype: "default",
+		Extra: map[string]integration.Secret{"app_id": integration.NewSecret([]byte("ok"))},
+	})
+	require.NoError(t, err)
+
+	for _, k := range badKeys {
+		t.Run("Update rejects "+k, func(t *testing.T) {
+			_, err := h.svc.Update(ctx, tenant.AdminScope, view.ID, credentials.Input{
+				Extra: map[string]integration.Secret{k: integration.NewSecret([]byte("v"))},
+			})
+			require.ErrorIs(t, err, credentials.ErrInvalidExtraKey)
+		})
+	}
+
+	// A good key still works.
+	updated, err := h.svc.Update(ctx, tenant.AdminScope, view.ID, credentials.Input{
+		Extra: map[string]integration.Secret{"app_key": integration.NewSecret([]byte("ok2"))},
+	})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"app_id", "app_key"}, updated.ExtraKeys)
+}
+
+// TestUpdateDeleteVerifyDiscoverAreScopedToTenant is the folded minor's
+// cross-tenant coverage for Update/Delete/Verify/Discover: tenant B's
+// AdminScope against tenant A's credential id gets store.ErrNotFound for
+// every one of them, with tenant A's own scope (a positive control) still
+// succeeding on the SAME credential afterward.
+func TestUpdateDeleteVerifyDiscoverAreScopedToTenant(t *testing.T) {
+	t.Parallel()
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 140025)
+	tenantB := testfixtures.NewTenant(t, ctx, pool, 140026)
+	credInsertDefinition(t, ctx, pool, "gridbox", "default", nil)
+	h := newCredHarness(t, pool, credNow)
+
+	secret := integration.NewSecret([]byte("FIXTURE-PW"))
+	view, err := h.svc.Configure(ctx, tenantA.AdminScope, credentials.Input{
+		Provider: model.IntegrationProviderGridbox, Subtype: "default", Secret: &secret,
+	})
+	require.NoError(t, err)
+
+	_, err = h.svc.Update(ctx, tenantB.AdminScope, view.ID, credentials.Input{Username: ptr("hijacked")})
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	_, err = h.svc.Verify(ctx, tenantB.AdminScope, view.ID)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	_, err = h.svc.Discover(ctx, tenantB.AdminScope, view.ID)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	require.ErrorIs(t, h.svc.Delete(ctx, tenantB.AdminScope, view.ID), store.ErrNotFound)
+	// DeleteCredential is scoped SQL (`where id = $1 and company_id = $2`),
+	// so a wrong-tenant Delete either affects 0 rows (ErrNotFound) or, if
+	// the repository is more permissive, must still not remove the row —
+	// the positive control below is what actually proves it survived.
+
+	// Positive control: tenant A itself can still act on the credential —
+	// the row was never touched by tenant B's attempts above.
+	updated, err := h.svc.Update(ctx, tenantA.AdminScope, view.ID, credentials.Input{Username: ptr("owner-update")})
+	require.NoError(t, err)
+	require.Equal(t, ptr("owner-update"), updated.Username)
+
+	_, err = h.svc.Verify(ctx, tenantA.AdminScope, view.ID)
+	require.NoError(t, err)
+
+	taskID, err := h.svc.Discover(ctx, tenantA.AdminScope, view.ID)
+	require.NoError(t, err)
+	require.NotEmpty(t, taskID)
+
+	require.NoError(t, h.svc.Delete(ctx, tenantA.AdminScope, view.ID))
+}
+
+// TestISolarMethodsAreScopedToTenant is the folded minor's cross-tenant
+// coverage for ISolarAuthorizeURL and ISolarAccessToken: tenant B's
+// AdminScope against tenant A's isolar credential id gets
+// store.ErrNotFound, with tenant A's own scope succeeding as a positive
+// control.
+func TestISolarMethodsAreScopedToTenant(t *testing.T) {
+	t.Parallel()
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 140027)
+	tenantB := testfixtures.NewTenant(t, ctx, pool, 140028)
+	credInsertDefinition(t, ctx, pool, "isolar", "EU", nil)
+	h := newCredHarness(t, pool, credNow)
+
+	view, err := h.svc.Configure(ctx, tenantA.AdminScope, credentials.Input{
+		Provider: model.IntegrationProviderISolar, Subtype: "EU",
+		Extra: isolarExtraFixture("refresh-1", "access-1"),
+	})
+	require.NoError(t, err)
+	require.NoError(t, h.integrations.RecordVerification(ctx, tenantA.AdminScope, view.ID, credNow, ptr(credNow.Add(2*time.Hour))))
+
+	_, err = h.svc.ISolarAuthorizeURL(ctx, tenantB.AdminScope, view.ID)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	_, err = h.svc.ISolarAccessToken(ctx, tenantB.AdminScope, view.ID)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	// Positive control.
+	authorizeURL, err := h.svc.ISolarAuthorizeURL(ctx, tenantA.AdminScope, view.ID)
+	require.NoError(t, err)
+	require.NotEmpty(t, authorizeURL)
+
+	tok, err := h.svc.ISolarAccessToken(ctx, tenantA.AdminScope, view.ID)
+	require.NoError(t, err)
+	require.Equal(t, "access-1", tok.Reveal())
 }

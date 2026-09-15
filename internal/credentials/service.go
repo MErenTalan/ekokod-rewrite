@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"regexp"
 	"time"
 
 	"github.com/google/uuid"
@@ -44,6 +45,69 @@ var ErrInvalidState = errors.New("credentials: invalid oauth state")
 // or a key that looks like it is trying to smuggle a secret through the one
 // JSON column the API returns verbatim. See settings.go.
 var ErrInvalidSettings = errors.New("credentials: invalid settings")
+
+// ErrInvalidExtraKey is returned when an Input.Extra key does not match
+// extraKeyPattern (fix round 1, folded minor "invalid key accepted"). Extra
+// key names end up as map keys the rest of this package (and isolar.Client,
+// which reads creds.Extra["access_token"]/["refresh_token"] by exact name)
+// trusts implicitly; an unvalidated name is how an operator-facing field
+// could smuggle something unexpected into that trust.
+var ErrInvalidExtraKey = errors.New("credentials: invalid extra key")
+
+// extraKeyPattern is the allowed shape for an Input.Extra key: lowercase
+// ASCII, starting with a letter, snake_case.
+var extraKeyPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
+
+// validateExtraKeys rejects any Input.Extra key that does not match
+// extraKeyPattern. Checked before ANY Extra key reaches mergeExtra, on both
+// Configure and Update.
+func validateExtraKeys(delta map[string]integration.Secret) error {
+	for k := range delta {
+		if !extraKeyPattern.MatchString(k) {
+			return fmt.Errorf("%w: %q", ErrInvalidExtraKey, k)
+		}
+	}
+	return nil
+}
+
+// minStateKeyLen is New's minimum for Deps.StateKey: an HMAC key shorter
+// than its hash's block-relevant strength defeats the point of signing the
+// OAuth state at all. 32 bytes matches Deps.StateKey's own doc comment
+// (HMAC(JWTSigningKey, …)) and internal/platform/crypto's cipher key size.
+const minStateKeyLen = 32
+
+// isolarTokenLockKey is the Deps.Locker critical-section key EVERY
+// read-merge-write of an isolar credential's Extra blob (or a read of its
+// currently-fresh access token) serialises under: ISolarAccessToken's
+// refresh, ISolarCallback's persistIsolarToken, and Update's own Extra
+// merge for an isolar credential (I3) — same key everywhere so all three
+// exclude each other. Companies never share a lock: two different isolar
+// credentials belonging to the SAME company would still (harmlessly)
+// serialise through this key, since the key only names sc.CompanyID; that
+// is a company only ever having one isolar credential in practice
+// (integration_credentials(company_id, definition_id) unique, and isolar
+// has exactly one definition per region), not a correctness requirement.
+func isolarTokenLockKey(companyID uuid.UUID) string {
+	return "isolar:token:" + companyID.String()
+}
+
+// releaseLeaseTimeout bounds releaseLease's own detached context (folded
+// minor: "lease.Release uses context.WithoutCancel(ctx) with a short
+// timeout").
+const releaseLeaseTimeout = 5 * time.Second
+
+// releaseLease releases lease on a context DERIVED from ctx's values but
+// DETACHED from its cancellation (context.WithoutCancel), bounded by its
+// own short timeout. Release must still run — and must not hang — even
+// when ctx itself has just been cancelled or has already deadlined: the
+// critical section it is closing out already happened, so an early
+// cancellation must not skip cleanup, and a wedged Locker backend must not
+// hang the caller forever either.
+func releaseLease(ctx context.Context, lease lock.Lease) {
+	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), releaseLeaseTimeout)
+	defer cancel()
+	_ = lease.Release(rctx)
+}
 
 // errNotIsolar is returned by the iSolar-only methods when id names a
 // credential for a different provider. It is deliberately unexported and
@@ -179,8 +243,8 @@ func New(d Deps) (*Service, error) {
 		return nil, fmt.Errorf("credentials: Deps.Nonces is required")
 	case d.Clock == nil:
 		return nil, fmt.Errorf("credentials: Deps.Clock is required")
-	case len(d.StateKey) == 0:
-		return nil, fmt.Errorf("credentials: Deps.StateKey is required")
+	case len(d.StateKey) < minStateKeyLen:
+		return nil, fmt.Errorf("credentials: Deps.StateKey must be at least %d bytes", minStateKeyLen)
 	case d.RedirectURI == "":
 		return nil, fmt.Errorf("credentials: Deps.RedirectURI is required")
 	}
@@ -251,12 +315,21 @@ func zeroBytes(b []byte) {
 	}
 }
 
-// zeroExtraPlain zeros every plaintext value in m, best effort (see
-// zeroBytes).
+// zeroExtraPlain clears every plaintext value in m to "" (fix round 1: its
+// earlier doc comment claimed it "zeros" the plaintext, which was never
+// true for a map[string]string — Go strings are immutable, so
+// []byte(v) copies v's bytes into a NEW slice; zeroing that copy, as the
+// old code did, touches nothing but a value that was about to be discarded
+// anyway, leaving the original string's backing bytes untouched in memory
+// for as long as the GC happens to keep them alive). This function's real
+// effect is narrower than "zeroing": it only ensures m itself no longer
+// holds the plaintext values once this returns, so a later read of m (or a
+// dump of it) cannot recover them from the map — it makes no claim about,
+// and cannot deliver, wiping the immutable string bytes those values were
+// copied from. Callers needing an actual best-effort wipe use zeroBytes on
+// a real []byte, as service.go's secretPlain/extraJSON already do.
 func zeroExtraPlain(m map[string]string) {
-	for k, v := range m {
-		b := []byte(v)
-		zeroBytes(b)
+	for k := range m {
 		m[k] = ""
 	}
 }
@@ -315,10 +388,27 @@ func (s *Service) Configure(ctx context.Context, sc store.Scope, in Input) (View
 	if err := validatePM5340URL(in.PM5340URL); err != nil {
 		return View{}, err
 	}
+	if err := validateExtraKeys(in.Extra); err != nil {
+		return View{}, err
+	}
 
 	def, err := s.deps.Integrations.Definition(ctx, sc, in.Provider, in.Subtype)
 	if err != nil {
 		return View{}, err
+	}
+
+	// R45 (fix round 1, I2): a credential already exists for this
+	// (company, definition) — integration_credentials(company_id,
+	// definition_id) is unique, so UpsertCredential below would silently
+	// REPLACE it: wipe its sealed Extra (any OAuth tokens it carries) and
+	// reset settings/is_active to whatever this fresh Input carries (which,
+	// for a bare "reconfigure" call, is typically all zero values). Refuse
+	// instead; callers that mean to change an existing credential use
+	// Update, which read-merges every field.
+	if _, cerr := s.deps.Integrations.Credential(ctx, sc, def.ID); cerr == nil {
+		return View{}, fmt.Errorf("%w: a credential already exists for %s/%s (use Update)", store.ErrConflict, in.Provider, in.Subtype)
+	} else if !errors.Is(cerr, store.ErrNotFound) {
+		return View{}, cerr
 	}
 
 	isActive := true
@@ -373,6 +463,9 @@ func (s *Service) Update(ctx context.Context, sc store.Scope, id uuid.UUID, in I
 	if err != nil {
 		return View{}, err
 	}
+	if err := validateExtraKeys(in.Extra); err != nil {
+		return View{}, err
+	}
 
 	settingsJSON := existing.Settings
 	if len(in.Settings) > 0 {
@@ -411,24 +504,50 @@ func (s *Service) Update(ctx context.Context, sc store.Scope, id uuid.UUID, in I
 	var extraJSON []byte
 	var extraPlainForZero map[string]string
 	if in.Extra != nil {
-		_, existingExtra, oerr := s.deps.Integrations.OpenSecret(ctx, sc, id)
-		if oerr != nil {
-			return View{}, oerr
-		}
-		base := map[string]string{}
-		if len(existingExtra) > 0 {
-			if uerr := json.Unmarshal(existingExtra, &base); uerr != nil {
-				return View{}, fmt.Errorf("credentials: decode stored extra: %w", uerr)
+		mergeExtraNow := func() error {
+			_, existingExtra, oerr := s.deps.Integrations.OpenSecret(ctx, sc, id)
+			if oerr != nil {
+				return oerr
 			}
+			base := map[string]string{}
+			if len(existingExtra) > 0 {
+				if uerr := json.Unmarshal(existingExtra, &base); uerr != nil {
+					zeroBytes(existingExtra)
+					return fmt.Errorf("credentials: decode stored extra: %w", uerr)
+				}
+			}
+			zeroBytes(existingExtra)
+			merged := mergeExtra(base, in.Extra)
+			zeroExtraPlain(base)
+			extraPlainForZero = merged
+			var jerr error
+			extraJSON, jerr = json.Marshal(merged)
+			if jerr != nil {
+				return fmt.Errorf("credentials: encode extra: %w", jerr)
+			}
+			return nil
 		}
-		zeroBytes(existingExtra)
-		merged := mergeExtra(base, in.Extra)
-		zeroExtraPlain(base)
-		extraPlainForZero = merged
-		var jerr error
-		extraJSON, jerr = json.Marshal(merged)
-		if jerr != nil {
-			return View{}, fmt.Errorf("credentials: encode extra: %w", jerr)
+
+		if def.Provider == model.IntegrationProviderISolar {
+			// I3 (fix round 1): this is a read-merge-write of the SAME
+			// Extra blob ISolarAccessToken's refresh and ISolarCallback's
+			// persistIsolarToken also read-merge-write, under
+			// isolarTokenLockKey. Without the same lock here, an Update
+			// racing either of those loses whichever write lands second
+			// entirely — most dangerously the refresh's brand-new
+			// refresh_token, since iSolarCloud invalidates the previous
+			// one on every refresh, permanently stranding the credential.
+			lease, lerr := s.deps.Locker.Acquire(ctx, isolarTokenLockKey(sc.CompanyID), isolarTokenLockTTL)
+			if lerr != nil {
+				return View{}, lerr
+			}
+			err = mergeExtraNow()
+			releaseLease(ctx, lease)
+		} else {
+			err = mergeExtraNow()
+		}
+		if err != nil {
+			return View{}, err
 		}
 	}
 
@@ -454,37 +573,80 @@ func (s *Service) Update(ctx context.Context, sc store.Scope, id uuid.UUID, in I
 	return s.viewOf(ctx, sc, saved, def)
 }
 
-// upsertPM5340Analyzer ensures the single analyzer a pm5340 credential's
-// InstallationNumber names exists. It is idempotent: an existing analyzer
-// with the same natural key (provider, subtype, installation_number) is
-// left as-is (Configure/Update carry no other analyzer-descriptive fields
-// to apply). This method (rather than the later Discover job) creates it,
+// upsertPM5340Analyzer ensures the credential has exactly ONE active
+// analyzer, with installationNumber. It is idempotent AND handles a
+// CHANGED installation number (I5, fix round 1): the credential's one
+// analyzer is identified by (company, provider, subtype) — NOT by
+// (provider, subtype, installationNumber). The original draft looked it up
+// by the incoming installationNumber via GetByInstallation, which is the
+// credential's analyzer's natural key only when the number has never
+// changed; an Update that changes InstallationNumber found nothing there
+// (the row still has the OLD number) and CREATED A SECOND active pm5340
+// analyzer instead of replacing the existing one. A company's pm5340
+// credential and its analyzer are 1:1 on (company, provider, subtype) —
+// Configure enforces at most one credential per (company, definition), and
+// def.Subtype is that definition's — so listing by provider and filtering
+// by subtype in Go (AnalyzerFilter carries no subtype field) reliably
+// finds THIS credential's one analyzer regardless of what installation
+// number it was originally created with.
+//
+// A changed InstallationNumber retires the old row (SoftDelete) and
+// creates a fresh one, rather than updating InstallationNumber in place,
+// because AnalyzerRepository.Update never writes
+// installation_number/provider/provider_subtype at all — they are that
+// repository's own immutable natural key (internal/store/postgres/
+// analyzers.go's AnalyzerUpdate query has no such column). This still
+// delivers I5's actual requirement — never more than one ACTIVE pm5340
+// analyzer for this credential — at the cost of the analyzer getting a new
+// id when its installation number changes (its OLD id and any readings
+// already attributed to it are retained, just under a soft-deleted row).
+//
+// This method (rather than the later Discover job) creates/replaces it,
 // because pm5340 is "customer-local" (Provider-defaults table:
 // "Serialise per company: no (customer-local)") — there is no distributor
 // discovery call to find it, only what the operator types in here — so the
 // analyzer is created ACTIVE immediately, unlike a provider-discovered one
 // (R27, which is about analyzers a sync job finds unprompted).
 func (s *Service) upsertPM5340Analyzer(ctx context.Context, sc store.Scope, def model.IntegrationDefinition, installationNumber string) error {
-	_, err := s.deps.Analyzers.GetByInstallation(ctx, sc, def.Provider, def.Subtype, installationNumber)
-	switch {
-	case err == nil:
-		return nil
-	case errors.Is(err, store.ErrNotFound):
-		now := s.deps.Clock.Now()
-		_, cerr := s.deps.Analyzers.Create(ctx, sc, model.Analyzer{
-			CompanyID:          sc.CompanyID,
-			Provider:           def.Provider,
-			ProviderSubtype:    def.Subtype,
-			InstallationNumber: installationNumber,
-			MeterMultiplier:    decimal.NewFromInt(1),
-			IsActive:           true,
-			CreatedAt:          now,
-			UpdatedAt:          now,
-		})
-		return cerr
-	default:
+	existing, err := s.deps.Analyzers.List(ctx, sc, store.AnalyzerFilter{
+		Providers: []model.IntegrationProvider{def.Provider},
+	})
+	if err != nil {
 		return err
 	}
+	for _, a := range existing {
+		if a.ProviderSubtype != def.Subtype {
+			continue
+		}
+		if a.InstallationNumber == installationNumber {
+			return nil
+		}
+		// AnalyzerRepository.Update (internal/store/postgres/analyzers.go)
+		// never touches installation_number/provider/provider_subtype —
+		// its own natural key — so a changed InstallationNumber cannot be
+		// applied in place. Retire the old row (SoftDelete: it drops out
+		// of every default List/Get, including the lookup above on the
+		// NEXT call) and create a fresh one with the new number, rather
+		// than leaving the old one ACTIVE alongside a new one — exactly
+		// the "second active pm5340 analyzer" I5 forbids.
+		if derr := s.deps.Analyzers.SoftDelete(ctx, sc, a.ID, s.deps.Clock.Now()); derr != nil {
+			return derr
+		}
+		break
+	}
+
+	now := s.deps.Clock.Now()
+	_, cerr := s.deps.Analyzers.Create(ctx, sc, model.Analyzer{
+		CompanyID:          sc.CompanyID,
+		Provider:           def.Provider,
+		ProviderSubtype:    def.Subtype,
+		InstallationNumber: installationNumber,
+		MeterMultiplier:    decimal.NewFromInt(1),
+		IsActive:           true,
+		CreatedAt:          now,
+		UpdatedAt:          now,
+	})
+	return cerr
 }
 
 // List returns every credential of sc.CompanyID, as Views.
@@ -548,8 +710,26 @@ func (s *Service) Verify(ctx context.Context, sc store.Scope, id uuid.UUID) (Vie
 		return View{}, errors.New(redactedText(creds, verifyErr))
 	}
 
+	// I1 (fix round 1): re-read the credential now, AFTER Open, instead of
+	// trusting creds.TokenExpiresAt. For an isolar credential, Open's call
+	// into ISolarAccessToken may have just refreshed the token and already
+	// persisted the NEW token_expires_at via persistIsolarToken's own
+	// RecordVerification call — but creds (built by buildCredentials
+	// BEFORE that refresh happened) still carries the STALE, pre-refresh
+	// expiry. Writing creds.TokenExpiresAt here would silently overwrite
+	// the correct, just-refreshed expiry with the old one, and the next
+	// ISolarAccessToken call would see a soon-to-expire token and refresh
+	// AGAIN for no reason. Re-reading picks up whatever is actually
+	// current in the store — the refreshed value when Open refreshed,
+	// unchanged otherwise (and nil for every non-isolar provider, exactly
+	// as before).
+	current, _, err := s.getCredential(ctx, sc, id)
+	if err != nil {
+		return View{}, err
+	}
+
 	now := s.deps.Clock.Now()
-	if terr := s.deps.Integrations.RecordVerification(ctx, sc, id, now, creds.TokenExpiresAt); terr != nil {
+	if terr := s.deps.Integrations.RecordVerification(ctx, sc, id, now, current.TokenExpiresAt); terr != nil {
 		return View{}, terr
 	}
 

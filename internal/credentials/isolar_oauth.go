@@ -88,10 +88,42 @@ func (s *Service) ISolarCallback(ctx context.Context, code, state string) error 
 		return err
 	}
 
-	tok, err := s.deps.ISolar.ExchangeCode(ctx, creds, code, s.deps.RedirectURI)
+	// R46: the redirect_uri sent to the token exchange must be
+	// byte-identical to the one sent in the authorize request
+	// (ISolarAuthorizeURL builds exactly this same
+	// RedirectURI+"?state="+url.QueryEscape(state) and hands it to
+	// AuthorizeURL as redirectURI). isolar.Client's own AuthorizeURL doc
+	// comment (internal/integration/isolar/auth.go) says as much: "the
+	// caller is expected to hand redirectURI already carrying its own
+	// '?state=...' query when one is wanted" — that applies equally to
+	// ExchangeCode's redirectURI, since iSolarCloud's OAuth protocol takes
+	// one redirect_uri string with no separate state parameter (confirmed
+	// against the legacy client, bcem-energy's isolarClient.ts:
+	// buildAuthorizeUrl(appId, region, redirectUri) and
+	// exchangeAuthCode(code, companyId, redirectUri) both take a single
+	// redirectUri the caller must pass identically to both). The original
+	// draft sent the BARE s.deps.RedirectURI here — no "?state=..." — which
+	// does not match what AuthorizeURL sent and would be rejected by any
+	// provider that validates redirect_uri against the authorize request
+	// (fix round 1, folded minor).
+	redirectURI := s.deps.RedirectURI + "?state=" + url.QueryEscape(state)
+
+	tok, err := s.deps.ISolar.ExchangeCode(ctx, creds, code, redirectURI)
 	if err != nil {
 		return err
 	}
+
+	// I3 (fix round 1): persistIsolarToken is a read-merge-write of the
+	// SAME Extra blob ISolarAccessToken's refresh (and Update, for an
+	// isolar credential) also read-merge-write, under the same
+	// isolarTokenLockKey — without this lock here, this callback racing
+	// either of those can lose whichever write lands second.
+	lease, err := s.deps.Locker.Acquire(ctx, isolarTokenLockKey(sc.CompanyID), isolarTokenLockTTL)
+	if err != nil {
+		return err
+	}
+	defer releaseLease(ctx, lease)
+
 	return s.persistIsolarToken(ctx, sc, cred, tok)
 }
 
@@ -136,11 +168,11 @@ func (s *Service) isolarAccessToken(ctx context.Context, sc store.Scope, id uuid
 		return access, nil
 	}
 
-	lease, err := s.deps.Locker.Acquire(ctx, "isolar:token:"+sc.CompanyID.String(), isolarTokenLockTTL)
+	lease, err := s.deps.Locker.Acquire(ctx, isolarTokenLockKey(sc.CompanyID), isolarTokenLockTTL)
 	if err != nil {
 		return integration.Secret{}, err
 	}
-	defer func() { _ = lease.Release(ctx) }()
+	defer releaseLease(ctx, lease)
 
 	// Double-checked: re-read now that the lock is held.
 	cred, _, err = s.getCredential(ctx, sc, id)
