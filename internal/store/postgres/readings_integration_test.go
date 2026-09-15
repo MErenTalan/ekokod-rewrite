@@ -353,6 +353,12 @@ func TestReadingRangeNeverReturnsForeignDataEvenWhenForeignAnalyzerHasReadings(t
 	_, _, err := repo.BulkInsert(ctx, tenantB.Scope, []model.MeterReading{foreign})
 	require.NoError(t, err)
 
+	// Self-evident non-vacuity: the row above really exists — tenant B can
+	// read it back through its own Scope.
+	selfB, err := repo.Range(ctx, tenantB.Scope, tenantB.Analyzers[0].ID, validRange, model.ReadingKindLoadProfile)
+	require.NoError(t, err)
+	require.Len(t, selfB, 1)
+
 	// tenant A's AdminScope (all_buildings), tenant B's real (and populated)
 	// analyzer id. AdminScope, not the narrow Scope: under a narrow Scope the
 	// building predicate alone already excludes tenant B's analyzer (its
@@ -408,6 +414,14 @@ func TestReadingBoundaryReadingsNeverReturnsForeignDataEvenWhenForeignAnalyzerHa
 	_, _, err := repo.BulkInsert(ctx, tenantB.Scope, []model.MeterReading{foreign})
 	require.NoError(t, err)
 
+	// Self-evident non-vacuity: the row above really exists — tenant B can
+	// read it back through its own Scope.
+	startB, endB, err := repo.BoundaryReadings(ctx, tenantB.Scope, tenantB.Analyzers[0].ID,
+		model.ReadingKindLoadProfile, readingsEpoch, readingsEpoch)
+	require.NoError(t, err)
+	require.NotNil(t, startB)
+	require.NotNil(t, endB)
+
 	start, end, err := repo.BoundaryReadings(ctx, tenantA.AdminScope, tenantB.Analyzers[0].ID,
 		model.ReadingKindLoadProfile, readingsEpoch, readingsEpoch)
 	require.ErrorIs(t, err, store.ErrNotFound)
@@ -453,6 +467,12 @@ func TestReadingLatestNeverReturnsForeignDataEvenWhenForeignAnalyzerHasReadings(
 	foreign := readingsRow(tenantB.Analyzers[0].ID, readingsEpoch, model.ReadingKindLoadProfile, "999.0000", "1")
 	_, _, err := repo.BulkInsert(ctx, tenantB.Scope, []model.MeterReading{foreign})
 	require.NoError(t, err)
+
+	// Self-evident non-vacuity: the row above really exists — tenant B can
+	// read it back through its own Scope.
+	selfB, err := repo.Latest(ctx, tenantB.Scope, tenantB.Analyzers[0].ID, validRange, model.ReadingKindLoadProfile)
+	require.NoError(t, err)
+	require.NotNil(t, selfB)
 
 	got, err := repo.Latest(ctx, tenantA.AdminScope, tenantB.Analyzers[0].ID, validRange, model.ReadingKindLoadProfile)
 	require.ErrorIs(t, err, store.ErrNotFound)

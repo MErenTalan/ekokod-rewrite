@@ -103,11 +103,11 @@ func TestAnalyzerRepositoryCreateGetUpdateSoftDelete(t *testing.T) {
 //
 // The row named by a.ID, and its BuildingID, belong to mine's OWN company
 // throughout: a victim row from ANOTHER tenant would already be refused by
-// buildingVisible's own check (its BuildingID would not be visible to
-// mine's Scope either), which would make this test pass whether or not the
-// CompanyID guard exists. Only a model value that lies about its OWN row's
-// CompanyID — while keeping a BuildingID that IS visible to the Scope —
-// isolates the new guard.
+// AnalyzerUpdate's embedded exists() check (its BuildingID would not be
+// visible to mine's Scope either), which would make this test pass whether
+// or not the CompanyID guard exists. Only a model value that lies about its
+// OWN row's CompanyID — while keeping a BuildingID that IS visible to the
+// Scope — isolates the new guard.
 func TestAnalyzerRepositoryUpdateRefusesAForeignCompany(t *testing.T) {
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
@@ -230,6 +230,124 @@ func TestAnalyzerRepositoryUpdateRefusesAForeignBuilding(t *testing.T) {
 	still, err := repo.Get(ctx, mine.AdminScope, myAnalyzer.ID)
 	require.NoError(t, err)
 	require.Equal(t, myAnalyzer.BuildingID, still.BuildingID, "nothing may be written by a refused Update")
+}
+
+// TestAnalyzerRepositoryCreateRefusesABuildingOutsideItsNarrowGrant is the
+// fix-round-1 proof for Important 1 (wave-f-integration-fix1-findings.md):
+// AnalyzerCreate's embedded exists() clause (queries/analyzers.sql) must
+// refuse a building this exact Scope does not grant even when that building
+// belongs to the caller's OWN company — Buildings[1], with tenant.Scope
+// covering only Buildings[0]. TestAnalyzerRepositoryCreateRefusesAForeignBuilding
+// above only proves the company_id branch (a building from ANOTHER
+// company); this proves the building_ids branch of the same exists()
+// clause, the one a tautologised
+// "(all_buildings or b.id = any(building_ids) or true)" would defeat while
+// TestAnalyzerRepositoryCreateRefusesAForeignBuilding still passed (that
+// test's victim building already fails on company_id alone).
+func TestAnalyzerRepositoryCreateRefusesABuildingOutsideItsNarrowGrant(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
+	repo := postgres.NewAnalyzerRepository(pool)
+
+	before, err := repo.List(ctx, tenant.AdminScope, store.AnalyzerFilter{})
+	require.NoError(t, err)
+
+	outsideGrant := tenant.Buildings[1].ID
+	now := time.Now().UTC()
+	_, err = repo.Create(ctx, tenant.Scope, model.Analyzer{
+		CompanyID: tenant.Company.ID, BuildingID: &outsideGrant,
+		Provider: model.IntegrationProviderPM5340, ProviderSubtype: "Baskent",
+		InstallationNumber: "NARROW-OUTSIDE-GRANT", MeterMultiplier: decimal.RequireFromString("1"),
+		IsActive: true, CreatedAt: now, UpdatedAt: now,
+	})
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	after, err := repo.List(ctx, tenant.AdminScope, store.AnalyzerFilter{})
+	require.NoError(t, err)
+	require.Equal(t, before, after, "nothing may be written by a refused Create")
+}
+
+// TestAnalyzerRepositoryUpdateRefusesMovingToABuildingOutsideItsNarrowGrant
+// is Update's counterpart to the Create proof above: a Scope may not move
+// an analyzer it can already see into a building the same Scope does not
+// grant, even inside the caller's own company.
+func TestAnalyzerRepositoryUpdateRefusesMovingToABuildingOutsideItsNarrowGrant(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
+	repo := postgres.NewAnalyzerRepository(pool)
+
+	granted := tenant.Analyzers[0] // under Buildings[0], visible to tenant.Scope
+	outsideGrant := tenant.Buildings[1].ID
+	tampered := granted
+	tampered.BuildingID = &outsideGrant
+	tampered.UpdatedAt = time.Now().UTC()
+
+	_, err := repo.Update(ctx, tenant.Scope, tampered)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	still, err := repo.Get(ctx, tenant.AdminScope, granted.ID)
+	require.NoError(t, err)
+	require.Equal(t, granted.BuildingID, still.BuildingID, "nothing may be written by a refused Update")
+}
+
+// TestAnalyzerRepositoryCreateRefusesASoftDeletedBuilding is the
+// soft-delete proof for Important 1: AnalyzerCreate's embedded exists()
+// clause requires b.deleted_at is null, independent of the building_ids
+// branch above — an AdminScope (AllBuildings) grants every building in the
+// company, so only the deleted_at check stands between this write and a
+// building that no longer exists in any meaningful sense.
+func TestAnalyzerRepositoryCreateRefusesASoftDeletedBuilding(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
+	repo := postgres.NewAnalyzerRepository(pool)
+	buildings := postgres.NewBuildingRepository(pool)
+
+	before, err := repo.List(ctx, tenant.AdminScope, store.AnalyzerFilter{})
+	require.NoError(t, err)
+
+	deletedBuilding := tenant.Buildings[1].ID
+	require.NoError(t, buildings.SoftDelete(ctx, tenant.AdminScope, deletedBuilding, time.Now().UTC()))
+
+	now := time.Now().UTC()
+	_, err = repo.Create(ctx, tenant.AdminScope, model.Analyzer{
+		CompanyID: tenant.Company.ID, BuildingID: &deletedBuilding,
+		Provider: model.IntegrationProviderOSOS, ProviderSubtype: "Baskent",
+		InstallationNumber: "DELETED-BUILDING-CREATE", MeterMultiplier: decimal.RequireFromString("1"),
+		IsActive: true, CreatedAt: now, UpdatedAt: now,
+	})
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	after, err := repo.List(ctx, tenant.AdminScope, store.AnalyzerFilter{})
+	require.NoError(t, err)
+	require.Equal(t, before, after, "nothing may be written by a refused Create")
+}
+
+// TestAnalyzerRepositoryUpdateRefusesMovingToASoftDeletedBuilding is
+// Update's counterpart to the soft-delete Create proof above.
+func TestAnalyzerRepositoryUpdateRefusesMovingToASoftDeletedBuilding(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
+	repo := postgres.NewAnalyzerRepository(pool)
+	buildings := postgres.NewBuildingRepository(pool)
+
+	deletedBuilding := tenant.Buildings[1].ID
+	require.NoError(t, buildings.SoftDelete(ctx, tenant.AdminScope, deletedBuilding, time.Now().UTC()))
+
+	existing := tenant.Analyzers[0] // under Buildings[0], untouched
+	tampered := existing
+	tampered.BuildingID = &deletedBuilding
+	tampered.UpdatedAt = time.Now().UTC()
+
+	_, err := repo.Update(ctx, tenant.AdminScope, tampered)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	still, err := repo.Get(ctx, tenant.AdminScope, existing.ID)
+	require.NoError(t, err)
+	require.Equal(t, existing.BuildingID, still.BuildingID, "nothing may be written by a refused Update")
 }
 
 // TestAnalyzerRepositoryUnassignedIsVisibleOnlyUnderAllBuildings pins the

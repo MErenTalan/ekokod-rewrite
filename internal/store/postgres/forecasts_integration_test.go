@@ -250,6 +250,12 @@ func TestForecastRangeAndLatestRunNeverReturnForeignDataEvenWhenForeignAnalyzerH
 	_, _, err := repo.BulkInsert(ctx, tenantB.Scope, []model.Forecast{foreign})
 	require.NoError(t, err)
 
+	// Self-evident non-vacuity: the row above really exists — tenant B can
+	// read it back through its own Scope.
+	selfB, err := repo.Range(ctx, tenantB.Scope, tenantB.Analyzers[0].ID, validRange)
+	require.NoError(t, err)
+	require.Len(t, selfB, 1)
+
 	got, err := repo.Range(ctx, tenantA.AdminScope, tenantB.Analyzers[0].ID, validRange)
 	require.ErrorIs(t, err, store.ErrNotFound)
 	require.Empty(t, got)
@@ -300,6 +306,12 @@ func TestForecastGapsNeverReturnsForeignDataEvenWhenForeignAnalyzerHasGaps(t *te
 		GapStart: forecastsEpoch, GapEnd: forecastsEpoch.Add(time.Hour), MissingHours: 1,
 	}
 	require.NoError(t, repo.RecordGaps(ctx, tenantB.Scope, []model.ForecastGap{foreignGap}))
+
+	// Self-evident non-vacuity: the gap above really exists — tenant B can
+	// read it back through its own Scope.
+	selfB, err := repo.Gaps(ctx, tenantB.Scope, tenantB.Analyzers[0].ID, forecastsEpoch)
+	require.NoError(t, err)
+	require.Len(t, selfB, 1)
 
 	got, err := repo.Gaps(ctx, tenantA.AdminScope, tenantB.Analyzers[0].ID, forecastsEpoch)
 	require.ErrorIs(t, err, store.ErrNotFound)
