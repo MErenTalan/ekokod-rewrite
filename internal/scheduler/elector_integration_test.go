@@ -4,6 +4,8 @@ package scheduler_test
 
 import (
 	"context"
+	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -11,6 +13,14 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
 	"github.com/stretchr/testify/require"
 )
+
+// These tests share one Postgres advisory-lock key namespace
+// (scheduler.LockKeyScheduler) and, where several run leader-election
+// loops, contend for real wall-clock leadership transitions — running them
+// in parallel with t.Parallel() would make one test's lock acquisition or
+// backend-termination race another's, so every test in this file stays
+// serial (the existing tests above already do; new ones below follow the
+// same rule).
 
 // TestLeaderElection is named in the F0 acceptance criteria: exactly one of two
 // simultaneously started instances leads, and killing it transfers leadership.
@@ -150,4 +160,46 @@ func TestNonPositiveRetryDoesNotPanic(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("Run did not return after its context was cancelled")
 	}
+}
+
+// TestElectorBacksOffOnRepeatedLeadFailure pins Carried-forward defect 2
+// (F1 plan): consecutive lead panics/errors back off exponentially (10s
+// doubling to 5m), rather than retrying at the fixed campaign cadence. A
+// fake scheduler.WithWait records every wait duration Run asks for and
+// never actually sleeps, so the test runs instantly despite exercising
+// several "seconds"-scale backoff steps. lead deliberately returns an
+// error every single term (never merely "did not win"), which — through
+// real Postgres advisory-lock acquisition — is exactly the
+// panic-or-error path Carried-forward defect 2 targets, distinct from the
+// ordinary not-currently-leading retry cadence the other tests in this
+// file exercise.
+func TestElectorBacksOffOnRepeatedLeadFailure(t *testing.T) {
+	dsn := testfixtures.StartPostgresUnmigrated(t)
+	log := testfixtures.DiscardLogger()
+
+	var mu sync.Mutex
+	var waits []time.Duration
+	stop := errors.New("enough samples")
+	fakeWait := func(_ context.Context, d time.Duration) error {
+		mu.Lock()
+		defer mu.Unlock()
+		waits = append(waits, d)
+		if len(waits) >= 4 {
+			return stop
+		}
+		return nil
+	}
+
+	elector := scheduler.NewElector(testfixtures.NewPool(t, dsn), scheduler.LockKeyScheduler,
+		10*time.Second, log, scheduler.WithWait(fakeWait))
+
+	leadErr := errors.New("boom")
+	_ = elector.Run(context.Background(), func(context.Context) error { return leadErr })
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.GreaterOrEqual(t, len(waits), 3, "expected at least 3 recorded backoff waits")
+	require.Less(t, waits[0], waits[1], "backoff must increase after a second consecutive failure")
+	require.Less(t, waits[1], waits[2], "backoff must increase after a third consecutive failure")
+	require.Equal(t, 10*time.Second, waits[0], "the first failure must back off at the 10s base")
 }

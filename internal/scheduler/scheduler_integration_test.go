@@ -57,7 +57,17 @@ func TestSchedulerBuildsAFreshAsynqSchedulerEveryTerm(t *testing.T) {
 	redisCfg := testfixtures.RedisConfig(t)
 	log := testfixtures.DiscardLogger()
 
-	cfg := &config.Config{Redis: redisCfg, Timezone: time.UTC}
+	// F2's entries() adds two more cron entries (integration.sync_dispatch,
+	// epias.sync_prices) driven by cfg.Schedule — a zero-valued Schedule
+	// gives them an empty (invalid) cron string, which fails Register and
+	// stops the scheduler from ever reaching "running" at all. Schedule
+	// must be set to something asynq's cron parser accepts, same as every
+	// other test in this file that now exercises Run/entries() end to end.
+	cfg := &config.Config{
+		Redis:    redisCfg,
+		Timezone: time.UTC,
+		Schedule: config.Schedule{Ingestion: "0 3 * * *", EPIAS: "0 14 * * *"},
+	}
 	pool := testfixtures.NewPool(t, dsn)
 
 	opt, err := job.RedisOpt(redisCfg)

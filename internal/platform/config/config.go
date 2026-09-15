@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 // Environment is the deployment environment.
@@ -52,6 +54,7 @@ type Config struct {
 	Storage   Storage
 	External  External
 	Features  Features
+	Ingest    Ingest
 
 	resolved []Resolved
 }
@@ -141,6 +144,25 @@ type External struct {
 	MapTileURL      string
 	ISolarRedirect  string
 	PinnedCerts     map[string]string // host -> base64(DER)
+}
+
+// Ingest configures F2's ingestion pipeline (internal/ingest.Options).
+type Ingest struct {
+	// SanityMultiple is R13's configurable sanity multiple: a register jump
+	// beyond this many times a point's typical interval consumption is
+	// rejected. EKOKOD_INGEST_SANITY_MULTIPLE, default "10", must be > 1 —
+	// a multiple at or below 1 would reject every reading whose value is
+	// merely equal to (or moderately above) the typical one, which is
+	// ordinary data, not a sanity violation.
+	SanityMultiple decimal.Decimal
+	// FutureTolerance bounds how far into the future a reading's timestamp
+	// may sit before it is rejected. EKOKOD_INGEST_FUTURE_TOLERANCE,
+	// default 15m, must be > 0.
+	FutureTolerance time.Duration
+	// InitialLookback is how far back a first-ever fetch (no stored
+	// cursor) starts, for an analyzer and kind. EKOKOD_INGEST_INITIAL_LOOKBACK,
+	// default 720h (30 days), must be > 0.
+	InitialLookback time.Duration
 }
 
 // Features toggles optional platform functionality.
