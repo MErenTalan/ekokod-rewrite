@@ -6,6 +6,7 @@ package osos
 // conversions directly, with no network involved.
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -16,6 +17,16 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration"
 )
+
+// mustRaw marshals v to json.RawMessage, failing the test on error. Used
+// throughout this file since mapEnergyRow/mapHourlyValue decode raw JSON
+// bytes directly (I7's per-row decoding), not wire structs.
+func mustRaw(t *testing.T, v any) json.RawMessage {
+	t.Helper()
+	b, err := json.Marshal(v)
+	require.NoError(t, err)
+	return b
+}
 
 func TestStringOrNil(t *testing.T) {
 	require.Nil(t, stringOrNil(""))
@@ -97,8 +108,7 @@ func TestMonthsIntersecting(t *testing.T) {
 }
 
 func TestMapInstallationEmptyOptionalFieldsAreNil(t *testing.T) {
-	pt, err := mapInstallation(wireInstallation{InstalationNumber: "FX0001"})
-	require.NoError(t, err)
+	pt := mapInstallation(wireInstallation{InstalationNumber: "FX0001"})
 	require.Equal(t, "FX0001", pt.InstallationNumber)
 	require.Nil(t, pt.CustomerName)
 	require.Nil(t, pt.Address)
@@ -108,82 +118,152 @@ func TestMapInstallationEmptyOptionalFieldsAreNil(t *testing.T) {
 	require.Nil(t, pt.MeterMultiplier)
 }
 
-func TestMapInstallationRejectsUnparseableNumber(t *testing.T) {
-	_, err := mapInstallation(wireInstallation{InstalationNumber: "FX0001", KuruluGucu: "not-a-number"})
-	require.Error(t, err)
+// TestMapInstallationToleratesUnparseableNumberAsNil: task-6-fix1-findings.md
+// folded minor — mapInstallation never errors (DiscoverMeteringPoints has no
+// per-row Warnings channel to attach a field-level warning to), so a bad
+// optional numeric field becomes nil rather than failing every other
+// installation in the response.
+func TestMapInstallationToleratesUnparseableNumberAsNil(t *testing.T) {
+	pt := mapInstallation(wireInstallation{InstalationNumber: "FX0001", KuruluGucu: "not-a-number"})
+	require.Equal(t, "FX0001", pt.InstallationNumber)
+	require.Nil(t, pt.InstalledPowerKw)
 }
 
 func TestMapEnergyRowUnparseableMeterDate(t *testing.T) {
 	req := integration.FetchRequest{AnalyzerID: uuid.New(), Multiplier: decimal.NewFromInt(1)}
-	_, field, ok := mapEnergyRow(wireEnergyRow{MeterDate: "not-a-date"}, req)
+	_, field, ok := mapEnergyRow(mustRaw(t, wireEnergyRow{MeterDate: "not-a-date"}), req)
 	require.False(t, ok)
 	require.Equal(t, "meter_date", field)
 }
 
 func TestMapEnergyRowUnparseableRegister(t *testing.T) {
 	req := integration.FetchRequest{AnalyzerID: uuid.New(), Multiplier: decimal.NewFromInt(1)}
-	_, field, ok := mapEnergyRow(wireEnergyRow{
+	_, field, ok := mapEnergyRow(mustRaw(t, wireEnergyRow{
 		MeterDate: "01/08/2026 10:00:00",
 		TTop:      "not-a-number",
-	}, req)
+	}), req)
+	require.False(t, ok)
+	require.Equal(t, "t_top_kWh", field)
+}
+
+// TestMapEnergyRowRejectsTypeMismatchedRow proves I7's decode-shaped
+// failure specifically: a register sent as a JSON *number* (not a string at
+// all — t_top_kWh's wire type is string) fails json.Unmarshal itself, and
+// mapEnergyRow reports the offending field name from
+// *json.UnmarshalTypeError, not merely "row failed to parse".
+func TestMapEnergyRowRejectsTypeMismatchedRow(t *testing.T) {
+	req := integration.FetchRequest{AnalyzerID: uuid.New(), Multiplier: decimal.NewFromInt(1)}
+	raw := json.RawMessage(`{"meter_date":"01/08/2026 10:00:00","meter_serial_no":"SN0001","t_top_kWh":123}`)
+	_, field, ok := mapEnergyRow(raw, req)
 	require.False(t, ok)
 	require.Equal(t, "t_top_kWh", field)
 }
 
 func TestMapHourlyValueUnparseable(t *testing.T) {
-	_, field, ok := mapHourlyValue(wireHourlyValue{MeterDate: "garbage"})
+	_, field, ok := mapHourlyValue(mustRaw(t, wireHourlyValue{MeterDate: "garbage"}))
 	require.False(t, ok)
 	require.Equal(t, "meter_date", field)
 
-	_, field, ok = mapHourlyValue(wireHourlyValue{MeterDate: "01/08/2026 10:00:00", ActiveConsumption: "not-a-number"})
+	_, field, ok = mapHourlyValue(mustRaw(t, wireHourlyValue{MeterDate: "01/08/2026 10:00:00", ActiveConsumption: "not-a-number"}))
 	require.False(t, ok)
 	require.Equal(t, "activeConsumption", field)
+}
+
+// TestMapHourlyValueRejectsTypeMismatchedRow is TestMapEnergyRowRejectsTypeMismatchedRow's
+// hourly_values counterpart (I7).
+func TestMapHourlyValueRejectsTypeMismatchedRow(t *testing.T) {
+	raw := json.RawMessage(`{"meter_date":"01/08/2026 10:00:00","activeConsumption":42}`)
+	_, field, ok := mapHourlyValue(raw)
+	require.False(t, ok)
+	require.Equal(t, "activeConsumption", field)
+}
+
+// TestMapEnergyRowNilVsZero pins I3 at the mapping boundary: "", "null" (the
+// JSON literal — Go's json.Unmarshal leaves a string field "" for a null
+// value, exercised here through raw JSON, not a Go literal) and "-" all mean
+// nil; a genuine "0,000" is a real, present zero, never coerced to nil.
+func TestMapEnergyRowNilVsZero(t *testing.T) {
+	req := integration.FetchRequest{AnalyzerID: uuid.New(), Multiplier: decimal.NewFromInt(1)}
+	raw := json.RawMessage(`{
+		"meter_date":"01/08/2026 10:00:00",
+		"meter_serial_no":"SN0001",
+		"t_top_kWh":"",
+		"t_ri_kVarh":null,
+		"t_rc_kVarh":"-",
+		"t_t1_kWh":"0,000"
+	}`)
+	reading, field, ok := mapEnergyRow(raw, req)
+	require.True(t, ok, "unexpected unparseable field %q", field)
+	require.Nil(t, reading.ActiveImport, "empty string t_top_kWh must be nil, not zero")
+	require.Nil(t, reading.ReactiveInductiveImport, "JSON null t_ri_kVarh must be nil, not zero")
+	require.Nil(t, reading.ReactiveCapacitiveImport, `"-" t_rc_kVarh must be nil, not zero`)
+	require.NotNil(t, reading.T1Import, `"0,000" t_t1_kWh is a real, present zero`)
+	require.True(t, decimal.Zero.Equal(*reading.T1Import), "got %s", reading.T1Import.String())
 }
 
 // TestOSOSRegisterMapping is the reading-side companion to
 // Test<P>DiscoverMapsEveryField (task-6-brief.md): one fixture row with 14
 // distinct raw values (13 mapped registers + u_p_kW, which is deliberately
-// dropped — see wire.go), asserted register by register. The task brief's
-// named mutation — mapping u_ri (which belongs to
-// ReactiveInductiveExport) to ReactiveCapacitiveExport instead — must turn
-// this test red; see mapping_test_mutation_proof.md-equivalent note in the
-// task-6 report for the observed failure.
+// dropped — see wire.go), asserted register by register, with a multiplier
+// != 1 ("2.5", task-6-fix1-findings.md I1) so a bug that fails to multiply
+// one register, multiplies it twice, or reuses another register's raw
+// value cannot hide behind a multiplier of 1 (reviewer mutations a2/a3).
+// It also asserts every other template-required field on the same reading
+// (I2: Ts, Kind, AnalyzerID, SourceProvider, MultiplierApplied, MeterSerial
+// — reviewer mutation a4). The task brief's named mutation — mapping u_ri
+// (which belongs to ReactiveInductiveExport) to ReactiveCapacitiveExport
+// instead — must turn this test red; see task-6-report.md's "Fix round 1"
+// section for the observed failure (re-proven below this test's original
+// baseline in the fix round).
 func TestOSOSRegisterMapping(t *testing.T) {
 	row := wireEnergyRow{
-		MeterDate: "01/08/2026 10:00:00",
-		TTop:      "1",
-		TRi:       "2",
-		TRc:       "3",
-		TT1:       "4",
-		TT2:       "5",
-		TT3:       "6",
-		TP:        "7",
-		UTop:      "8",
-		URi:       "9",
-		URc:       "10",
-		UU1:       "11",
-		UU2:       "12",
-		UU3:       "13",
-		UP:        "14", // dropped — asserted absent nowhere below by design
+		MeterDate:     "01/08/2026 10:00:00",
+		MeterSerialNo: "SN-FIXTURE-0001",
+		TTop:          "1",
+		TRi:           "2",
+		TRc:           "3",
+		TT1:           "4",
+		TT2:           "5",
+		TT3:           "6",
+		TP:            "7",
+		UTop:          "8",
+		URi:           "9",
+		URc:           "10",
+		UU1:           "11",
+		UU2:           "12",
+		UU3:           "13",
+		UP:            "14", // dropped — asserted absent nowhere below by design
 	}
-	req := integration.FetchRequest{AnalyzerID: uuid.New(), Multiplier: decimal.NewFromInt(1)}
+	analyzerID := uuid.New()
+	multiplier := decimal.RequireFromString("2.5")
+	req := integration.FetchRequest{AnalyzerID: analyzerID, Kind: model.ReadingKindDaily, Multiplier: multiplier}
 
-	reading, field, ok := mapEnergyRow(row, req)
+	reading, field, ok := mapEnergyRow(mustRaw(t, row), req)
 	require.True(t, ok, "unexpected unparseable field %q", field)
 
-	requireDecimalEqual(t, "ActiveImport (t_top_kWh)", "1", reading.ActiveImport)
-	requireDecimalEqual(t, "ReactiveInductiveImport (t_ri_kVarh)", "2", reading.ReactiveInductiveImport)
-	requireDecimalEqual(t, "ReactiveCapacitiveImport (t_rc_kVarh)", "3", reading.ReactiveCapacitiveImport)
-	requireDecimalEqual(t, "T1Import (t_t1_kWh)", "4", reading.T1Import)
-	requireDecimalEqual(t, "T2Import (t_t2_kWh)", "5", reading.T2Import)
-	requireDecimalEqual(t, "T3Import (t_t3_kWh)", "6", reading.T3Import)
-	requireDecimalEqual(t, "MaxDemandKw (t_p_kW)", "7", reading.MaxDemandKw)
-	requireDecimalEqual(t, "ActiveExport (u_top_kWh)", "8", reading.ActiveExport)
-	requireDecimalEqual(t, "ReactiveInductiveExport (u_ri_kVarh)", "9", reading.ReactiveInductiveExport)
-	requireDecimalEqual(t, "ReactiveCapacitiveExport (u_rc_kVarh)", "10", reading.ReactiveCapacitiveExport)
-	requireDecimalEqual(t, "T1Export (u_u1_kWh)", "11", reading.T1Export)
-	requireDecimalEqual(t, "T2Export (u_u2_kWh)", "12", reading.T2Export)
-	requireDecimalEqual(t, "T3Export (u_u3_kWh)", "13", reading.T3Export)
+	// I2: every other template-required field on this same reading.
+	require.Equal(t, time.Date(2026, 8, 1, 7, 0, 0, 0, time.UTC), reading.Ts.UTC(), "meter_date -> Ts (Istanbul local -> UTC)")
+	require.Equal(t, model.ReadingKindDaily, reading.Kind)
+	require.Equal(t, analyzerID, reading.AnalyzerID)
+	require.Equal(t, model.IntegrationProviderOSOS, reading.SourceProvider)
+	require.True(t, multiplier.Equal(reading.MultiplierApplied), "MultiplierApplied: expected %s, got %s", multiplier, reading.MultiplierApplied)
+	require.NotNil(t, reading.MeterSerial)
+	require.Equal(t, "SN-FIXTURE-0001", *reading.MeterSerial)
+
+	// I1: every register = raw x 2.5, applied exactly once.
+	requireDecimalEqual(t, "ActiveImport (t_top_kWh)", "2.5", reading.ActiveImport)
+	requireDecimalEqual(t, "ReactiveInductiveImport (t_ri_kVarh)", "5", reading.ReactiveInductiveImport)
+	requireDecimalEqual(t, "ReactiveCapacitiveImport (t_rc_kVarh)", "7.5", reading.ReactiveCapacitiveImport)
+	requireDecimalEqual(t, "T1Import (t_t1_kWh)", "10", reading.T1Import)
+	requireDecimalEqual(t, "T2Import (t_t2_kWh)", "12.5", reading.T2Import)
+	requireDecimalEqual(t, "T3Import (t_t3_kWh)", "15", reading.T3Import)
+	requireDecimalEqual(t, "MaxDemandKw (t_p_kW)", "17.5", reading.MaxDemandKw)
+	requireDecimalEqual(t, "ActiveExport (u_top_kWh)", "20", reading.ActiveExport)
+	requireDecimalEqual(t, "ReactiveInductiveExport (u_ri_kVarh)", "22.5", reading.ReactiveInductiveExport)
+	requireDecimalEqual(t, "ReactiveCapacitiveExport (u_rc_kVarh)", "25", reading.ReactiveCapacitiveExport)
+	requireDecimalEqual(t, "T1Export (u_u1_kWh)", "27.5", reading.T1Export)
+	requireDecimalEqual(t, "T2Export (u_u2_kWh)", "30", reading.T2Export)
+	requireDecimalEqual(t, "T3Export (u_u3_kWh)", "32.5", reading.T3Export)
 }
 
 func requireDecimalEqual(t *testing.T, label, want string, got *decimal.Decimal) {

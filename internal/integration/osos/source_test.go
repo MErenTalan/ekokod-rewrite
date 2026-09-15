@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,6 +17,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/fake"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/httpx"
+	"github.com/MErenTalan/ekokod-rewrite/internal/integration/normalize"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/osos"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
 	lock "github.com/MErenTalan/ekokod-rewrite/internal/platform/lock"
@@ -130,6 +133,19 @@ func TestOSOSFixtureMatrix(t *testing.T) {
 				require.Nil(t, res.NextCursor)
 				require.Empty(t, res.Warnings)
 				require.Empty(t, res.HourlyValues)
+
+				// I2: assert every template-required field on one reading, not
+				// just how many came back.
+				r := res.Readings[0]
+				require.Equal(t, model.ReadingKindDaily, r.Kind)
+				require.NotEqual(t, uuid.UUID{}, r.AnalyzerID)
+				require.Equal(t, model.IntegrationProviderOSOS, r.SourceProvider)
+				require.True(t, decimal.NewFromInt(1).Equal(r.MultiplierApplied))
+				require.NotNil(t, r.MeterSerial)
+				require.Equal(t, "SN0001", *r.MeterSerial)
+				require.False(t, r.Ts.IsZero())
+				require.NotNil(t, r.ActiveImport)
+				require.True(t, decimal.RequireFromString("1000.5").Equal(*r.ActiveImport))
 			},
 		},
 		{
@@ -468,4 +484,390 @@ func TestOSOSErrorsCarryNoCredential(t *testing.T) {
 	require.Error(t, err)
 	require.NotContains(t, err.Error(), creds.Secret.Reveal())
 	require.NotContains(t, err.Error(), "fixture-password-0001")
+}
+
+// ---------------------------------------------------------------------
+// Fix round 1 (task-6-fix1-findings.md): I1-I8 and folded minors.
+// ---------------------------------------------------------------------
+
+// TestOSOSPerRowTypeMismatchWarnsWithoutFailingTheWholePage proves I7
+// end-to-end through FetchReadings (not just mapEnergyRow in isolation): a
+// row whose register is a JSON number (not the string the wire type
+// expects) produces one WarnUnparseableRow naming that field and row
+// index — the surrounding, well-shaped rows still come back, and the whole
+// energy_values page is never failed as ErrMalformedPayload just because
+// one row doesn't decode.
+func TestOSOSPerRowTypeMismatchWarnsWithoutFailingTheWholePage(t *testing.T) {
+	body := []byte(`{"energy":[
+		{"meter_date":"01/08/2026 10:00:00","meter_serial_no":"SN0001","t_top_kWh":"1,000"},
+		{"meter_date":"01/08/2026 10:15:00","meter_serial_no":"SN0001","t_top_kWh":123},
+		{"meter_date":"01/08/2026 10:30:00","meter_serial_no":"SN0001","t_top_kWh":"3,000"}
+	]}`)
+	srv := fake.NewTLSServer(t, authRoute(testToken), energyRoute(body))
+	pool, _ := ososTestPool(t, srv)
+	src := osos.New(pool, osos.Options{Clock: clock.NewFake(fixtureNow)})
+
+	req := ososTestRequest(model.ReadingKindDaily,
+		time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC))
+
+	res, err := src.FetchReadings(context.Background(), ososTestCreds(srv), req)
+	require.NoError(t, err)
+	require.Len(t, res.Readings, 2, "the two well-shaped rows must still come back")
+
+	var found bool
+	for _, w := range res.Warnings {
+		if w.Code == integration.WarnUnparseableRow && strings.Contains(w.Detail, "t_top_kWh") && strings.Contains(w.Detail, "row 1") {
+			found = true
+		}
+	}
+	require.True(t, found, "expected a WarnUnparseableRow naming t_top_kWh at row 1 (window included), got %+v", res.Warnings)
+}
+
+// TestOSOSMalformedTopLevelEnergyShapes: I6, energy_values. {} (no "energy"
+// key), an explicit top-level null, {"energy":null} and an error envelope
+// like {"message":"invalid token"} are all ErrMalformedPayload — none is a
+// silent empty success. TestOSOSFixtureMatrix/empty already covers the
+// "energy":[] genuine-empty-result case.
+func TestOSOSMalformedTopLevelEnergyShapes(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{"missing_key", `{}`},
+		{"top_level_null", `null`},
+		{"key_null", `{"energy":null}`},
+		{"error_envelope", `{"message":"invalid token"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := fake.NewTLSServer(t, authRoute(testToken), energyRoute([]byte(tc.body)))
+			pool, _ := ososTestPool(t, srv)
+			src := osos.New(pool, osos.Options{Clock: clock.NewFake(fixtureNow)})
+			req := ososTestRequest(model.ReadingKindDaily,
+				time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
+				time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC))
+			_, err := src.FetchReadings(context.Background(), ososTestCreds(srv), req)
+			require.ErrorIs(t, err, integration.ErrMalformedPayload)
+		})
+	}
+}
+
+// TestOSOSMalformedTopLevelDiscoverShapes is
+// TestOSOSMalformedTopLevelEnergyShapes' analyzers_list/instalation_list
+// counterpart.
+//
+//nolint:misspell // OSOS's own field spelling ("instalation_list"), not an English typo
+func TestOSOSMalformedTopLevelDiscoverShapes(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{"missing_key", `{}`},
+		{"top_level_null", `null`},
+		{"key_null", `{"instalation_list":null}`}, //nolint:misspell // OSOS's own field spelling
+		{"error_envelope", `{"message":"invalid token"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := fake.NewTLSServer(t, authRoute(testToken), fake.Route{
+				Method: http.MethodGet, Path: "/osos/analyzers",
+				Respond: fake.JSON(http.StatusOK, []byte(tc.body)),
+			})
+			pool, _ := ososTestPool(t, srv)
+			src := osos.New(pool, osos.Options{Clock: clock.NewFake(fixtureNow)})
+			_, err := src.DiscoverMeteringPoints(context.Background(), ososTestCreds(srv))
+			require.ErrorIs(t, err, integration.ErrMalformedPayload)
+		})
+	}
+}
+
+// TestOSOSMalformedTopLevelHourlyShapes is the hourly_values/items
+// counterpart. {"items":{}} (a genuine empty result) is proven elsewhere
+// (TestOSOSRequestsDataTypePerKind's load_profile subtest uses it and
+// expects success).
+func TestOSOSMalformedTopLevelHourlyShapes(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{"missing_key", `{}`},
+		{"top_level_null", `null`},
+		{"key_null", `{"items":null}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := fake.NewTLSServer(t,
+				authRoute(testToken),
+				energyRoute(fake.Fixture(t, "osos", "osos_empty.json")),
+				hourlyRoute([]byte(tc.body)),
+			)
+			pool, _ := ososTestPool(t, srv)
+			src := osos.New(pool, osos.Options{Clock: clock.NewFake(fixtureNow)})
+			req := ososTestRequest(model.ReadingKindLoadProfile,
+				time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
+				time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC))
+			_, err := src.FetchReadings(context.Background(), ososTestCreds(srv), req)
+			require.ErrorIs(t, err, integration.ErrMalformedPayload)
+		})
+	}
+}
+
+// TestOSOSBoundaryRowsAtFromMinusOneSecondFromAndTo proves I4: the
+// half-open window [From, To) keeps a row at exactly From, and drops rows
+// at From-1s and at exactly To.
+func TestOSOSBoundaryRowsAtFromMinusOneSecondFromAndTo(t *testing.T) {
+	from := time.Date(2026, 8, 1, 3, 0, 0, 0, time.UTC)
+	to := from.Add(2 * time.Hour)
+
+	row := func(ts time.Time, value string) string {
+		return `{"meter_date":"` + normalize.FormatOSOSDate(ts) + `","meter_serial_no":"SN0001","t_top_kWh":"` + value + `"}`
+	}
+	body := []byte(`{"energy":[` +
+		row(from.Add(-time.Second), "1,000") + `,` +
+		row(from, "2,000") + `,` +
+		row(to, "3,000") +
+		`]}`)
+
+	srv := fake.NewTLSServer(t, authRoute(testToken), energyRoute(body))
+	pool, _ := ososTestPool(t, srv)
+	src := osos.New(pool, osos.Options{Clock: clock.NewFake(fixtureNow)})
+
+	req := ososTestRequest(model.ReadingKindDaily, from, to)
+	res, err := src.FetchReadings(context.Background(), ososTestCreds(srv), req)
+	require.NoError(t, err)
+	require.Len(t, res.Readings, 1, "only the row at exactly From must survive the half-open [From, To) window")
+	require.True(t, res.Readings[0].Ts.Equal(from), "got %s", res.Readings[0].Ts)
+	require.True(t, decimal.RequireFromString("2").Equal(*res.Readings[0].ActiveImport))
+}
+
+// TestOSOSFortyFiveDayWindowMakesExactlyTwoRequestsWithExpectedDates proves
+// I5: a 45-day window makes exactly two energy_values requests, with the
+// exact start/end params windowChunks computes (30 + 15 days). Mutation d
+// (task-6-fix1-findings.md): MaxWindow mutated to 15 days would make three
+// requests, which this test's exact count and per-request date assertions
+// catch — unlike the pre-fix pagination check, which only asserted the
+// merged reading count and NextCursor.
+func TestOSOSFortyFiveDayWindowMakesExactlyTwoRequestsWithExpectedDates(t *testing.T) {
+	from := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	to := time.Date(2026, 9, 15, 0, 0, 0, 0, time.UTC) // 45 days
+	mid := from.Add(30 * 24 * time.Hour)               // Aug 31: the chunk boundary
+
+	page1 := []byte(`{"energy":[{"meter_date":"` + normalize.FormatOSOSDate(from) + `","meter_serial_no":"SN0001","t_top_kWh":"1,000"}]}`)
+	page2 := []byte(`{"energy":[{"meter_date":"` + normalize.FormatOSOSDate(mid) + `","meter_serial_no":"SN0001","t_top_kWh":"2,000"}]}`)
+
+	srv := fake.NewTLSServer(t,
+		authRoute(testToken),
+		fake.Route{
+			Method: http.MethodGet, Path: "/osos/energy",
+			Respond: fake.Sequence(fake.JSON(http.StatusOK, page1), fake.JSON(http.StatusOK, page2)),
+		},
+	)
+	pool, _ := ososTestPool(t, srv)
+	src := osos.New(pool, osos.Options{Clock: clock.NewFake(fixtureNow)})
+
+	req := ososTestRequest(model.ReadingKindDaily, from, to)
+	res, err := src.FetchReadings(context.Background(), ososTestCreds(srv), req)
+	require.NoError(t, err)
+	require.Nil(t, res.NextCursor)
+
+	var energyReqs []fake.RecordedRequest
+	for _, rr := range srv.Requests() {
+		if rr.Method == http.MethodGet && rr.Path == "/osos/energy" {
+			energyReqs = append(energyReqs, rr)
+		}
+	}
+	require.Len(t, energyReqs, 2, "a 45-day window with MaxWindow=30d must make exactly two energy_values requests")
+
+	q0, err := url.ParseQuery(energyReqs[0].RawQuery)
+	require.NoError(t, err)
+	require.Equal(t, normalize.FormatOSOSDate(from), q0.Get("start"))
+	require.Equal(t, normalize.FormatOSOSDate(mid), q0.Get("end"))
+
+	q1, err := url.ParseQuery(energyReqs[1].RawQuery)
+	require.NoError(t, err)
+	require.Equal(t, normalize.FormatOSOSDate(mid), q1.Get("start"))
+	require.Equal(t, normalize.FormatOSOSDate(to), q1.Get("end"))
+}
+
+// TestOSOSPageBudgetTruncationStillFetchesHourlyForCoveredRange proves I8 /
+// Ruling R34: PageBudget:1 over a 45-day load_profile window covers only
+// the first (30-day, Aug 1-31) energy_values chunk, NextCursor is the end
+// of that chunk, and hourly_values is still fetched — for August only, not
+// skipped outright and not reaching into September.
+func TestOSOSPageBudgetTruncationStillFetchesHourlyForCoveredRange(t *testing.T) {
+	from := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	to := time.Date(2026, 9, 15, 0, 0, 0, 0, time.UTC) // 45 days
+	mid := from.Add(30 * 24 * time.Hour)               // Aug 31
+
+	page1 := []byte(`{"energy":[{"meter_date":"` + normalize.FormatOSOSDate(from) + `","meter_serial_no":"SN0001","t_top_kWh":"1,000"}]}`)
+	hourlyAug := []byte(`{"items":{"FX0001":[{"valueList":[
+		{"meter_date":"` + normalize.FormatOSOSDate(from.Add(time.Hour)) + `","activeConsumption":"1,000","activeGeneration":"0"}
+	]}]}}`)
+
+	srv := fake.NewTLSServer(t,
+		authRoute(testToken),
+		energyRoute(page1), // PageBudget:1 -> exactly one energy_values call
+		hourlyRoute(hourlyAug),
+	)
+	pool, _ := ososTestPool(t, srv)
+	src := osos.New(pool, osos.Options{Clock: clock.NewFake(fixtureNow), PageBudget: 1})
+
+	req := ososTestRequest(model.ReadingKindLoadProfile, from, to)
+	res, err := src.FetchReadings(context.Background(), ososTestCreds(srv), req)
+	require.NoError(t, err)
+	require.NotNil(t, res.NextCursor)
+	require.True(t, res.NextCursor.Equal(mid), "NextCursor must be the end of the last fully covered chunk (Aug 31), got %s", res.NextCursor)
+
+	require.Len(t, res.HourlyValues, 1, "hourly must be fetched for the covered [From, NextCursor) range, not skipped because the call was budget-truncated")
+
+	var hourlyReqs []fake.RecordedRequest
+	for _, rr := range srv.Requests() {
+		if rr.Method == http.MethodGet && rr.Path == "/osos/hourly" {
+			hourlyReqs = append(hourlyReqs, rr)
+		}
+	}
+	require.Len(t, hourlyReqs, 1, "only August intersects the covered [From, NextCursor) range — September must not be touched this call")
+	q, err := url.ParseQuery(hourlyReqs[0].RawQuery)
+	require.NoError(t, err)
+	require.Equal(t, "2026-08", q.Get("month"))
+}
+
+// TestOSOSConflictingDuplicateTimestampsWarn: adapter-patterns.md item 13.
+// Two rows sharing a Ts but disagreeing on a register value must warn, not
+// silently drop one.
+func TestOSOSConflictingDuplicateTimestampsWarn(t *testing.T) {
+	body := []byte(`{"energy":[
+		{"meter_date":"01/08/2026 10:00:00","meter_serial_no":"SN0001","t_top_kWh":"1,000"},
+		{"meter_date":"01/08/2026 10:00:00","meter_serial_no":"SN0001","t_top_kWh":"2,000"}
+	]}`)
+	srv := fake.NewTLSServer(t, authRoute(testToken), energyRoute(body))
+	pool, _ := ososTestPool(t, srv)
+	src := osos.New(pool, osos.Options{Clock: clock.NewFake(fixtureNow)})
+
+	req := ososTestRequest(model.ReadingKindDaily,
+		time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC))
+
+	res, err := src.FetchReadings(context.Background(), ososTestCreds(srv), req)
+	require.NoError(t, err)
+	require.Len(t, res.Readings, 1, "only one reading survives per timestamp")
+
+	var found bool
+	for _, w := range res.Warnings {
+		if strings.Contains(w.Detail, "conflicting duplicate") {
+			found = true
+		}
+	}
+	require.True(t, found, "conflicting duplicate readings at the same Ts must warn, not silently drop; got %+v", res.Warnings)
+}
+
+// TestOSOSIdenticalDuplicateTimestampsDoNotWarn is
+// TestOSOSConflictingDuplicateTimestampsWarn's negative: two rows with the
+// SAME values at the same Ts (routine chunk-boundary overlap, R20) must not
+// warn.
+func TestOSOSIdenticalDuplicateTimestampsDoNotWarn(t *testing.T) {
+	body := []byte(`{"energy":[
+		{"meter_date":"01/08/2026 10:00:00","meter_serial_no":"SN0001","t_top_kWh":"1,000"},
+		{"meter_date":"01/08/2026 10:00:00","meter_serial_no":"SN0001","t_top_kWh":"1,000"}
+	]}`)
+	srv := fake.NewTLSServer(t, authRoute(testToken), energyRoute(body))
+	pool, _ := ososTestPool(t, srv)
+	src := osos.New(pool, osos.Options{Clock: clock.NewFake(fixtureNow)})
+
+	req := ososTestRequest(model.ReadingKindDaily,
+		time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC))
+
+	res, err := src.FetchReadings(context.Background(), ososTestCreds(srv), req)
+	require.NoError(t, err)
+	require.Len(t, res.Readings, 1)
+	require.Empty(t, res.Warnings)
+}
+
+// TestOSOSMissingEndpointKeyIsErrAuth: task-6-fix1-findings.md folded minor
+// — a missing endpoint template key is *integration.Error{Kind: ErrAuth}
+// (see missingEndpointErr's doc comment in source.go for why ErrAuth, not
+// ErrMalformedPayload), for every one of OSOS's four endpoints.
+func TestOSOSMissingEndpointKeyIsErrAuth(t *testing.T) {
+	for _, key := range []string{"authentication", "analyzers_list", "energy_values", "hourly_values"} {
+		t.Run(key, func(t *testing.T) {
+			srv := fake.NewTLSServer(t,
+				authRoute(testToken),
+				energyRoute(fake.Fixture(t, "osos", "osos_empty.json")),
+				hourlyRoute([]byte(`{"items":{}}`)),
+			)
+			pool, _ := ososTestPool(t, srv)
+			src := osos.New(pool, osos.Options{Clock: clock.NewFake(fixtureNow)})
+
+			creds := ososTestCreds(srv)
+			delete(creds.Endpoints, key)
+
+			var err error
+			switch key {
+			case "authentication":
+				err = src.Verify(context.Background(), creds)
+			case "analyzers_list":
+				_, err = src.DiscoverMeteringPoints(context.Background(), creds)
+			default:
+				req := ososTestRequest(model.ReadingKindLoadProfile,
+					time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
+					time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC))
+				_, err = src.FetchReadings(context.Background(), creds, req)
+			}
+			require.ErrorIs(t, err, integration.ErrAuth)
+		})
+	}
+}
+
+// TestOSOSZeroMultiplierOrEmptyInstallationErrorsBeforeAnyCall:
+// adapter-patterns.md item 12.
+func TestOSOSZeroMultiplierOrEmptyInstallationErrorsBeforeAnyCall(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		req  func(integration.FetchRequest) integration.FetchRequest
+	}{
+		{"zero_multiplier", func(r integration.FetchRequest) integration.FetchRequest {
+			r.Multiplier = decimal.Zero
+			return r
+		}},
+		{"empty_installation_number", func(r integration.FetchRequest) integration.FetchRequest {
+			r.Point.InstallationNumber = ""
+			return r
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := fake.NewTLSServer(t) // must never be called
+			pool, _ := ososTestPool(t, srv)
+			src := osos.New(pool, osos.Options{Clock: clock.NewFake(fixtureNow)})
+
+			req := tc.req(ososTestRequest(model.ReadingKindDaily,
+				time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
+				time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC)))
+
+			_, err := src.FetchReadings(context.Background(), ososTestCreds(srv), req)
+			require.Error(t, err)
+			require.Empty(t, srv.Requests(), "must fail before any network call")
+		})
+	}
+}
+
+// TestOSOSDiscoverSkipsRowsWithEmptyInstallationNumber: task-6-fix1-findings.md
+// folded minor — a row with no instalationNumber can never become an
+// identifiable MeteringPoint and is skipped, not turned into a
+// malformed-payload failure for every other installation in the response.
+func TestOSOSDiscoverSkipsRowsWithEmptyInstallationNumber(t *testing.T) {
+	//nolint:misspell // OSOS's own field spelling ("instalation_list"), not an English typo
+	body := []byte(`{"instalation_list":[
+		{"instalationNumber":"","customerName":"Fixture Skip Me"},
+		{"instalationNumber":"FX0001","customerName":"Fixture Keep Me"}
+	]}`)
+	srv := fake.NewTLSServer(t, authRoute(testToken), fake.Route{
+		Method: http.MethodGet, Path: "/osos/analyzers",
+		Respond: fake.JSON(http.StatusOK, body),
+	})
+	pool, _ := ososTestPool(t, srv)
+	src := osos.New(pool, osos.Options{Clock: clock.NewFake(fixtureNow)})
+
+	points, err := src.DiscoverMeteringPoints(context.Background(), ososTestCreds(srv))
+	require.NoError(t, err)
+	require.Len(t, points, 1)
+	require.Equal(t, "FX0001", points[0].InstallationNumber)
 }

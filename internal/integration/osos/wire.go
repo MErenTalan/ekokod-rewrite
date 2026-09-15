@@ -5,14 +5,25 @@ package osos
 // as strings, sometimes with thousands separators") — never float64 or
 // `any` — so TestIntegrationTreesDoNotParseFloats has nothing to flag here.
 
+import "encoding/json"
+
 // authResponse is POST authentication's response body.
 type authResponse struct {
 	AccessToken string `json:"access_token"`
 }
 
 // discoverResponse is GET analyzers_list's response body (06 §2 "Discover").
+// InstalationList is a pointer so a top-level body with no "instalation_list"
+// key at all, or an explicit JSON null, both decode to nil — indistinguishable
+// from each other, and both distinguishable from a present-but-empty "[]",
+// which decodes to a non-nil pointer to a zero-length slice. The former is
+// ErrMalformedPayload (adapter-patterns.md item 6: a missing/null top-level
+// key is never a silent empty success); the latter is a genuine empty
+// result. See DiscoverMeteringPoints.
+//
+//nolint:misspell // OSOS's own field spelling ("instalation_list"), not an English typo
 type discoverResponse struct {
-	InstalationList []wireInstallation `json:"instalation_list"` //nolint:misspell // OSOS's own field spelling, not an English typo
+	InstalationList *[]wireInstallation `json:"instalation_list"` //nolint:misspell // OSOS's own field spelling, not an English typo
 }
 
 // wireInstallation is one row of the discovery list, field names exactly as
@@ -43,8 +54,22 @@ type wireInstallation struct {
 // energyResponse is GET energy_values' response body (06 §2 "Fetch energy
 // values"; field list per task-6-brief.md, citing legacy
 // osos/refresh/route.ts:314-331).
+//
+// Energy is *[]json.RawMessage, not []wireEnergyRow, for two reasons
+// (task-6-fix1-findings.md I6, I7):
+//   - the pointer distinguishes a missing/null "energy" key (nil —
+//     ErrMalformedPayload) from a present-but-empty "[]" (non-nil,
+//     zero-length — a genuine empty result), exactly as discoverResponse
+//     does above;
+//   - keeping rows as raw JSON lets the caller decode one row at a time, so
+//     a single row with a type-mismatched field (e.g. a register sent as a
+//     JSON number instead of a string) produces one WarnUnparseableRow for
+//     that row instead of failing json.Unmarshal for the whole page (which
+//     would turn one bad row into a whole-page ErrMalformedPayload — exactly
+//     the non-retryable-failure-from-one-row bug adapter-patterns.md item 7
+//     warns against). See mapEnergyRow, which does the per-row decode.
 type energyResponse struct {
-	Energy []wireEnergyRow `json:"energy"`
+	Energy *[]json.RawMessage `json:"energy"`
 }
 
 // wireEnergyRow is one cumulative-index reading. UP (u_p_kW) has no
@@ -76,13 +101,20 @@ type wireEnergyRow struct {
 // hourlyResponse is GET hourly_values' response body (06 §2 "Fetch hourly
 // values"): items keyed by installation number, each holding one or more
 // meter blocks whose valueList carries the already-differenced
-// consumption/generation series.
+// consumption/generation series. Items is a pointer for the same
+// missing/null-vs-empty reason as discoverResponse.InstalationList and
+// energyResponse.Energy above: a missing/null "items" key is
+// ErrMalformedPayload; a present "items":{} is a genuine empty result (no
+// installation has hourly data this call).
 type hourlyResponse struct {
-	Items map[string][]wireHourlyBlock `json:"items"`
+	Items *map[string][]wireHourlyBlock `json:"items"`
 }
 
+// wireHourlyBlock's ValueList is raw, per-row, for the same reason
+// energyResponse.Energy is: one row with a type-mismatched field must not
+// fail every other row in the block. See mapHourlyValue.
 type wireHourlyBlock struct {
-	ValueList []wireHourlyValue `json:"valueList"`
+	ValueList []json.RawMessage `json:"valueList"`
 }
 
 type wireHourlyValue struct {

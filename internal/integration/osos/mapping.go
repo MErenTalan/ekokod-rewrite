@@ -7,6 +7,7 @@ package osos
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 
 	"github.com/shopspring/decimal"
@@ -42,27 +43,43 @@ func optionalProviderNumber(raw string) (*decimal.Decimal, error) {
 	return &v, nil
 }
 
+// tolerantOptionalProviderNumber parses raw exactly like
+// optionalProviderNumber, except a value that fails to parse (not merely an
+// empty one) is also treated as "the provider reported nothing" (nil)
+// rather than propagated as an error.
+//
+// DiscoverMeteringPoints has no per-row Warnings channel — unlike
+// FetchReadings, 06's MeterDataSource interface returns discovery as plain
+// ([]MeteringPoint, error), so there is nowhere to attach a per-field
+// warning. Per task-6-fix1-findings.md's folded minor ("discovery ...
+// tolerates a bad optional numeric field as nil"), a single installation's
+// unparseable optional number must not fail the entire discovery call for
+// every other installation — nil is the closest available signal ("the
+// provider reported nothing usable"), even though, unlike FetchReadings'
+// row-level failures, it cannot also carry an operator-facing warning
+// string today.
+func tolerantOptionalProviderNumber(raw string) *decimal.Decimal {
+	v, err := optionalProviderNumber(raw)
+	if err != nil {
+		return nil
+	}
+	return v
+}
+
 // mapInstallation converts one discovery-list row into a MeteringPoint,
 // mapping every field of 06 §2's table. kuruluGucu, koordinatX/Y and
-// meterMultiplier go through normalize.ProviderNumber (R10); everything
-// else is a direct or nil-preserving string copy.
-func mapInstallation(row wireInstallation) (integration.MeteringPoint, error) {
-	installedPower, err := optionalProviderNumber(row.KuruluGucu)
-	if err != nil {
-		return integration.MeteringPoint{}, err
-	}
-	lat, err := optionalProviderNumber(row.KoordinatX)
-	if err != nil {
-		return integration.MeteringPoint{}, err
-	}
-	lon, err := optionalProviderNumber(row.KoordinatY)
-	if err != nil {
-		return integration.MeteringPoint{}, err
-	}
-	multiplier, err := optionalProviderNumber(row.MeterMultiplier)
-	if err != nil {
-		return integration.MeteringPoint{}, err
-	}
+// meterMultiplier go through normalize.ProviderNumber (R10, tolerantly —
+// see tolerantOptionalProviderNumber); everything else is a direct or
+// nil-preserving string copy. Never errors: DiscoverMeteringPoints is
+// responsible for skipping rows with no InstalationNumber before calling
+// this (a row with no installation number cannot become an identifiable
+// MeteringPoint at all), which is the only unrecoverable condition a
+// discovery row can be in.
+func mapInstallation(row wireInstallation) integration.MeteringPoint {
+	installedPower := tolerantOptionalProviderNumber(row.KuruluGucu)
+	lat := tolerantOptionalProviderNumber(row.KoordinatX)
+	lon := tolerantOptionalProviderNumber(row.KoordinatY)
+	multiplier := tolerantOptionalProviderNumber(row.MeterMultiplier)
 
 	return integration.MeteringPoint{
 		InstallationNumber: row.InstalationNumber,
@@ -83,15 +100,39 @@ func mapInstallation(row wireInstallation) (integration.MeteringPoint, error) {
 		MeteringPointName:  stringOrNil(row.SayimNokTanim),
 		Latitude:           lat,
 		Longitude:          lon,
-	}, nil
+	}
 }
 
-// mapEnergyRow converts one energy_values row into a model.MeterReading.
-// ok is false when the row failed to parse (the "field" return names which
-// one, for the caller's Warning.Detail); a failed row is never returned
-// half-built. req.Multiplier is applied exactly once, here, via
-// normalize.Multiply (R8) — never anywhere downstream.
-func mapEnergyRow(row wireEnergyRow, req integration.FetchRequest) (reading model.MeterReading, field string, ok bool) {
+// unmarshalTypeErrorField extracts the offending struct field name from a
+// json.Unmarshal error when it is a *json.UnmarshalTypeError (e.g. a
+// register sent as a JSON number where a string was expected) — the
+// concrete manifestation of task-6-fix1-findings.md I7's "a register sent
+// as a JSON number (or other type mismatch)". Any other decode error (a
+// row that isn't even a JSON object, for instance) falls back to "row".
+func unmarshalTypeErrorField(err error) string {
+	var te *json.UnmarshalTypeError
+	if errors.As(err, &te) && te.Field != "" {
+		return te.Field
+	}
+	return "row"
+}
+
+// mapEnergyRow decodes and converts one energy_values row into a
+// model.MeterReading. raw is that row's original, unmodified JSON bytes —
+// decoding happens here, one row at a time (task-6-fix1-findings.md I7), so
+// a row that doesn't even match wireEnergyRow's shape (a type-mismatched
+// field) fails only this row, not the whole page. ok is false when the row
+// failed to decode or parse (the "field" return names which one, for the
+// caller's Warning.Detail); a failed row is never returned half-built.
+// req.Multiplier is applied exactly once, here, via normalize.Multiply (R8)
+// — never anywhere downstream. reading.Raw is raw's own bytes, unchanged
+// (adapter-patterns.md item 14: never a re-marshalled struct).
+func mapEnergyRow(raw json.RawMessage, req integration.FetchRequest) (reading model.MeterReading, field string, ok bool) {
+	var row wireEnergyRow
+	if err := json.Unmarshal(raw, &row); err != nil {
+		return model.MeterReading{}, unmarshalTypeErrorField(err), false
+	}
+
 	ts, err := normalize.OSOSDate(row.MeterDate)
 	if err != nil {
 		return model.MeterReading{}, "meter_date", false
@@ -133,8 +174,6 @@ func mapEnergyRow(row wireEnergyRow, req integration.FetchRequest) (reading mode
 		*f.dst = v
 	}
 
-	raw, _ := json.Marshal(row)
-
 	reading = model.MeterReading{
 		AnalyzerID:               req.AnalyzerID,
 		Ts:                       ts,
@@ -155,18 +194,27 @@ func mapEnergyRow(row wireEnergyRow, req integration.FetchRequest) (reading mode
 		MeterSerial:              stringOrNil(row.MeterSerialNo),
 		MultiplierApplied:        req.Multiplier,
 		SourceProvider:           model.IntegrationProviderOSOS,
-		Raw:                      raw,
+		// Raw is raw's own bytes, copied so the caller's buffer can't
+		// alias/mutate what this reading carries — never a re-marshalled
+		// struct (adapter-patterns.md item 14).
+		Raw: append(json.RawMessage(nil), raw...),
 	}
 	return reading, "", true
 }
 
-// mapHourlyValue converts one hourly_values valueList entry into an
-// integration.HourlyValue. Unlike mapEnergyRow, this is never multiplied:
-// 06 §2 describes hourly_values as "already-differenced consumption
-// values", a provider-computed cross-check series kept separate from the
-// multiplied index readings (removed-behaviour 23), not a register that
-// R8's multiply-once rule applies to.
-func mapHourlyValue(v wireHourlyValue) (hv integration.HourlyValue, field string, ok bool) {
+// mapHourlyValue decodes and converts one hourly_values valueList entry
+// into an integration.HourlyValue, one row at a time for the same I7 reason
+// as mapEnergyRow. Unlike mapEnergyRow, this is never multiplied: 06 §2
+// describes hourly_values as "already-differenced consumption values", a
+// provider-computed cross-check series kept separate from the multiplied
+// index readings (removed-behaviour 23), not a register that R8's
+// multiply-once rule applies to.
+func mapHourlyValue(raw json.RawMessage) (hv integration.HourlyValue, field string, ok bool) {
+	var v wireHourlyValue
+	if err := json.Unmarshal(raw, &v); err != nil {
+		return integration.HourlyValue{}, unmarshalTypeErrorField(err), false
+	}
+
 	ts, err := normalize.OSOSDate(v.MeterDate)
 	if err != nil {
 		return integration.HourlyValue{}, "meter_date", false
