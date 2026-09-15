@@ -31,7 +31,11 @@ func alarmPageLimits(p store.Page) (limit, offset int32) {
 	if limit > alarmMaxPageLimit {
 		limit = alarmMaxPageLimit
 	}
-	return limit, p.Offset
+	offset = p.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	return limit, offset
 }
 
 // AlarmRepository implements store.AlarmRepository.
@@ -84,10 +88,11 @@ func (r *AlarmRepository) List(ctx context.Context, s store.Scope, f store.Alarm
 	if filterAnalyzer {
 		analyzerID = *f.AnalyzerID
 	}
+	buildingIDs, all := s.BuildingFilter()
 	rows, err := r.q.AlarmList(ctx, sqlcgen.AlarmListParams{
 		CompanyID: s.CompanyID, Ids: ids, Types: types, IsEnabled: f.IsEnabled,
-		FilterAnalyzer: filterAnalyzer, AnalyzerID: analyzerID, IncludeDeleted: f.IncludeDeleted,
-		LimitVal: limit, OffsetVal: offset,
+		FilterAnalyzer: filterAnalyzer, AnalyzerID: analyzerID, AllBuildings: all, BuildingIds: buildingIDs,
+		IncludeDeleted: f.IncludeDeleted, LimitVal: limit, OffsetVal: offset,
 	})
 	if err != nil {
 		return nil, pgerr.Translate(r.pool, "list alarms", err)
@@ -114,18 +119,18 @@ func (r *AlarmRepository) Create(ctx context.Context, s store.Scope, a model.Ala
 	row, err := r.q.AlarmCreate(ctx, sqlcgen.AlarmCreateParams{
 		CompanyID: s.CompanyID, Name: a.Name, Type: sqlcgen.AlarmType(a.Type), IsEnabled: a.IsEnabled,
 		InductiveRatioThreshold: decimalPtrToNumeric(a.InductiveRatioThreshold), InductivePeriodValue: a.InductivePeriodValue,
-		InductivePeriodUnit:      nullPeriodUnit(a.InductivePeriodUnit),
+		InductivePeriodUnit:      alarmNullPeriodUnit(a.InductivePeriodUnit),
 		CapacitiveRatioThreshold: decimalPtrToNumeric(a.CapacitiveRatioThreshold), CapacitivePeriodValue: a.CapacitivePeriodValue,
-		CapacitivePeriodUnit: nullPeriodUnit(a.CapacitivePeriodUnit),
+		CapacitivePeriodUnit: alarmNullPeriodUnit(a.CapacitivePeriodUnit),
 		ActiveConsumptionMax: decimalPtrToNumeric(a.ActiveConsumptionMax), ActiveConsumptionMaxPeriodValue: a.ActiveConsumptionMaxPeriodValue,
-		ActiveConsumptionMaxPeriodUnit: nullPeriodUnit(a.ActiveConsumptionMaxPeriodUnit),
+		ActiveConsumptionMaxPeriodUnit: alarmNullPeriodUnit(a.ActiveConsumptionMaxPeriodUnit),
 		ActiveConsumptionMin:           decimalPtrToNumeric(a.ActiveConsumptionMin), ActiveConsumptionMinPeriodValue: a.ActiveConsumptionMinPeriodValue,
-		ActiveConsumptionMinPeriodUnit: nullPeriodUnit(a.ActiveConsumptionMinPeriodUnit),
+		ActiveConsumptionMinPeriodUnit: alarmNullPeriodUnit(a.ActiveConsumptionMinPeriodUnit),
 		CommunicationThresholdHours:    a.CommunicationThresholdHours,
 		VoltageMax:                     decimalPtrToNumeric(a.VoltageMax), VoltageMin: decimalPtrToNumeric(a.VoltageMin),
 		PowerMax: decimalPtrToNumeric(a.PowerMax), PowerMin: decimalPtrToNumeric(a.PowerMin),
 		InvoiceThresholdPct:        decimalPtrToNumeric(a.InvoiceThresholdPct),
-		NotificationFrequencyValue: a.NotificationFrequencyValue, NotificationFrequencyUnit: nullPeriodUnit(a.NotificationFrequencyUnit),
+		NotificationFrequencyValue: a.NotificationFrequencyValue, NotificationFrequencyUnit: alarmNullPeriodUnit(a.NotificationFrequencyUnit),
 		CreatedAt: tariffTimestamptz(a.CreatedAt),
 	})
 	if err != nil {
@@ -139,21 +144,25 @@ func (r *AlarmRepository) Update(ctx context.Context, s store.Scope, a model.Ala
 	if !s.Valid() {
 		return model.Alarm{}, store.ErrInvalidScope
 	}
+	// Important Finding 3: same CompanyID check as Create's.
+	if a.CompanyID != uuid.Nil && a.CompanyID != s.CompanyID {
+		return model.Alarm{}, store.ErrNotFound
+	}
 	row, err := r.q.AlarmUpdate(ctx, sqlcgen.AlarmUpdateParams{
 		ID: a.ID, CompanyID: s.CompanyID, Name: a.Name, Type: sqlcgen.AlarmType(a.Type), IsEnabled: a.IsEnabled,
 		InductiveRatioThreshold: decimalPtrToNumeric(a.InductiveRatioThreshold), InductivePeriodValue: a.InductivePeriodValue,
-		InductivePeriodUnit:      nullPeriodUnit(a.InductivePeriodUnit),
+		InductivePeriodUnit:      alarmNullPeriodUnit(a.InductivePeriodUnit),
 		CapacitiveRatioThreshold: decimalPtrToNumeric(a.CapacitiveRatioThreshold), CapacitivePeriodValue: a.CapacitivePeriodValue,
-		CapacitivePeriodUnit: nullPeriodUnit(a.CapacitivePeriodUnit),
+		CapacitivePeriodUnit: alarmNullPeriodUnit(a.CapacitivePeriodUnit),
 		ActiveConsumptionMax: decimalPtrToNumeric(a.ActiveConsumptionMax), ActiveConsumptionMaxPeriodValue: a.ActiveConsumptionMaxPeriodValue,
-		ActiveConsumptionMaxPeriodUnit: nullPeriodUnit(a.ActiveConsumptionMaxPeriodUnit),
+		ActiveConsumptionMaxPeriodUnit: alarmNullPeriodUnit(a.ActiveConsumptionMaxPeriodUnit),
 		ActiveConsumptionMin:           decimalPtrToNumeric(a.ActiveConsumptionMin), ActiveConsumptionMinPeriodValue: a.ActiveConsumptionMinPeriodValue,
-		ActiveConsumptionMinPeriodUnit: nullPeriodUnit(a.ActiveConsumptionMinPeriodUnit),
+		ActiveConsumptionMinPeriodUnit: alarmNullPeriodUnit(a.ActiveConsumptionMinPeriodUnit),
 		CommunicationThresholdHours:    a.CommunicationThresholdHours,
 		VoltageMax:                     decimalPtrToNumeric(a.VoltageMax), VoltageMin: decimalPtrToNumeric(a.VoltageMin),
 		PowerMax: decimalPtrToNumeric(a.PowerMax), PowerMin: decimalPtrToNumeric(a.PowerMin),
 		InvoiceThresholdPct:        decimalPtrToNumeric(a.InvoiceThresholdPct),
-		NotificationFrequencyValue: a.NotificationFrequencyValue, NotificationFrequencyUnit: nullPeriodUnit(a.NotificationFrequencyUnit),
+		NotificationFrequencyValue: a.NotificationFrequencyValue, NotificationFrequencyUnit: alarmNullPeriodUnit(a.NotificationFrequencyUnit),
 		UpdatedAt: tariffTimestamptz(a.UpdatedAt),
 	})
 	if err != nil {
@@ -179,6 +188,11 @@ func (r *AlarmRepository) SoftDelete(ctx context.Context, s store.Scope, id uuid
 
 // Analyzers — Isolation: alarm_analyzers has no company_id — join through
 // alarms.
+//
+// Important Finding 2: alarms itself is company-wide, but a narrow Scope
+// must still never see an attachment to an analyzer outside its buildings —
+// AlarmAnalyzerList filters on the analyzer's own visibility, not only the
+// alarm's.
 func (r *AlarmRepository) Analyzers(ctx context.Context, s store.Scope, alarmID uuid.UUID) ([]model.AlarmAnalyzer, error) {
 	if !s.Valid() {
 		return nil, store.ErrInvalidScope
@@ -186,7 +200,10 @@ func (r *AlarmRepository) Analyzers(ctx context.Context, s store.Scope, alarmID 
 	if err := r.requireVisible(ctx, s, alarmID); err != nil {
 		return nil, err
 	}
-	rows, err := r.q.AlarmAnalyzerList(ctx, alarmID)
+	ids, all := s.BuildingFilter()
+	rows, err := r.q.AlarmAnalyzerList(ctx, sqlcgen.AlarmAnalyzerListParams{
+		AlarmID: alarmID, CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: ids,
+	})
 	if err != nil {
 		return nil, pgerr.Translate(r.pool, "list alarm analyzers", err)
 	}
@@ -200,6 +217,11 @@ func (r *AlarmRepository) Analyzers(ctx context.Context, s store.Scope, alarmID 
 // ReplaceAnalyzers — Isolation: join alarm_analyzers through alarms; every
 // analyzerID must also be visible to the Scope, or the whole call is
 // refused with ErrNotFound.
+//
+// Important Finding 2: this replaces ONLY the attachments visible to the
+// Scope (AlarmAnalyzerDeleteVisibleForAlarm) and leaves an attachment to an
+// analyzer outside it untouched — a narrow Scope replacing "its" list must
+// not be able to silently detach Buildings[1]'s analyzer.
 func (r *AlarmRepository) ReplaceAnalyzers(ctx context.Context, s store.Scope, alarmID uuid.UUID, analyzerIDs []uuid.UUID) error {
 	if !s.Valid() {
 		return store.ErrInvalidScope
@@ -207,15 +229,15 @@ func (r *AlarmRepository) ReplaceAnalyzers(ctx context.Context, s store.Scope, a
 	if err := r.requireVisible(ctx, s, alarmID); err != nil {
 		return err
 	}
+	buildingIDs, all := s.BuildingFilter()
 	if len(analyzerIDs) > 0 {
-		buildingIDs, all := s.BuildingFilter()
 		count, err := r.q.AlarmCountVisibleAnalyzers(ctx, sqlcgen.AlarmCountVisibleAnalyzersParams{
 			CompanyID: s.CompanyID, AnalyzerIds: analyzerIDs, AllBuildings: all, BuildingIds: buildingIDs,
 		})
 		if err != nil {
 			return pgerr.Translate(r.pool, "check alarm analyzer visibility", err)
 		}
-		if count != int64(len(distinctUUIDs(analyzerIDs))) {
+		if count != int64(len(alarmDistinctUUIDs(analyzerIDs))) {
 			return store.ErrNotFound
 		}
 	}
@@ -227,11 +249,15 @@ func (r *AlarmRepository) ReplaceAnalyzers(ctx context.Context, s store.Scope, a
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := r.q.WithTx(tx)
 
-	if err := q.AlarmAnalyzerDeleteForAlarm(ctx, alarmID); err != nil {
+	if err := q.AlarmAnalyzerDeleteVisibleForAlarm(ctx, sqlcgen.AlarmAnalyzerDeleteVisibleForAlarmParams{
+		AlarmID: alarmID, CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: buildingIDs,
+	}); err != nil {
 		return pgerr.Translate(r.pool, "clear alarm analyzers", err)
 	}
 	for _, analyzerID := range analyzerIDs {
-		if err := q.AlarmAnalyzerInsert(ctx, sqlcgen.AlarmAnalyzerInsertParams{AlarmID: alarmID, AnalyzerID: analyzerID}); err != nil {
+		if _, err := q.AlarmAnalyzerInsert(ctx, sqlcgen.AlarmAnalyzerInsertParams{
+			AlarmID: alarmID, AnalyzerID: analyzerID, CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: buildingIDs,
+		}); err != nil {
 			return pgerr.Translate(r.pool, "insert alarm analyzer", err)
 		}
 	}
@@ -250,7 +276,7 @@ func (r *AlarmRepository) Channels(ctx context.Context, s store.Scope, alarmID u
 	if err := r.requireVisible(ctx, s, alarmID); err != nil {
 		return nil, err
 	}
-	rows, err := r.q.AlarmChannelList(ctx, alarmID)
+	rows, err := r.q.AlarmChannelList(ctx, sqlcgen.AlarmChannelListParams{AlarmID: alarmID, CompanyID: s.CompanyID})
 	if err != nil {
 		return nil, pgerr.Translate(r.pool, "list alarm channels", err)
 	}
@@ -277,12 +303,12 @@ func (r *AlarmRepository) ReplaceChannels(ctx context.Context, s store.Scope, al
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := r.q.WithTx(tx)
 
-	if err := q.AlarmChannelDeleteForAlarm(ctx, alarmID); err != nil {
+	if err := q.AlarmChannelDeleteForAlarm(ctx, sqlcgen.AlarmChannelDeleteForAlarmParams{AlarmID: alarmID, CompanyID: s.CompanyID}); err != nil {
 		return pgerr.Translate(r.pool, "clear alarm channels", err)
 	}
 	for _, ch := range channels {
-		if err := q.AlarmChannelInsert(ctx, sqlcgen.AlarmChannelInsertParams{
-			AlarmID: alarmID, Channel: sqlcgen.NotifyChannel(ch.Channel), Target: ch.Target,
+		if _, err := q.AlarmChannelInsert(ctx, sqlcgen.AlarmChannelInsertParams{
+			AlarmID: alarmID, Channel: sqlcgen.NotifyChannel(ch.Channel), Target: ch.Target, CompanyID: s.CompanyID,
 		}); err != nil {
 			return pgerr.Translate(r.pool, "insert alarm channel", err)
 		}
@@ -302,8 +328,8 @@ func (r *AlarmRepository) CreateEvent(ctx context.Context, s store.Scope, e mode
 	if err := r.requireVisible(ctx, s, e.AlarmID); err != nil {
 		return model.AlarmEvent{}, err
 	}
+	buildingIDs, all := s.BuildingFilter()
 	if e.AnalyzerID != nil {
-		buildingIDs, all := s.BuildingFilter()
 		count, err := r.q.AlarmCountVisibleAnalyzers(ctx, sqlcgen.AlarmCountVisibleAnalyzersParams{
 			CompanyID: s.CompanyID, AnalyzerIds: []uuid.UUID{*e.AnalyzerID}, AllBuildings: all, BuildingIds: buildingIDs,
 		})
@@ -317,7 +343,7 @@ func (r *AlarmRepository) CreateEvent(ctx context.Context, s store.Scope, e mode
 	row, err := r.q.AlarmEventCreate(ctx, sqlcgen.AlarmEventCreateParams{
 		AlarmID: e.AlarmID, AnalyzerID: e.AnalyzerID, TriggeredAt: tariffTimestamptz(e.TriggeredAt),
 		Message: e.Message, Detail: []byte(e.Detail), NotifiedAt: tariffNullableTimestamptz(e.NotifiedAt),
-		NotificationError: e.NotificationError,
+		NotificationError: e.NotificationError, CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: buildingIDs,
 	})
 	if err != nil {
 		return model.AlarmEvent{}, pgerr.Translate(r.pool, "create alarm event", err)
@@ -327,6 +353,12 @@ func (r *AlarmRepository) CreateEvent(ctx context.Context, s store.Scope, e mode
 
 // ListEvents — Isolation: join alarm_events through alarms; events of
 // alarms not visible to the Scope are never listed.
+//
+// Important Finding 2: an event's own analyzer must ALSO be visible to the
+// Scope, and an event with no analyzer at all (a company-level condition) is
+// visible only to a Scope with AllBuildings — otherwise a narrow Scope could
+// read another building's analyzer id and the event's message/detail through
+// this method even though Analyzers() and Get would both refuse it.
 func (r *AlarmRepository) ListEvents(ctx context.Context, s store.Scope, f store.AlarmEventFilter) ([]model.AlarmEvent, error) {
 	if !s.Valid() {
 		return nil, store.ErrInvalidScope
@@ -339,9 +371,10 @@ func (r *AlarmRepository) ListEvents(ctx context.Context, s store.Scope, f store
 	if f.Range != nil {
 		from, to = tariffTimestamptz(f.Range.From), tariffTimestamptz(f.Range.To)
 	}
+	buildingIDs, all := s.BuildingFilter()
 	rows, err := r.q.AlarmEventList(ctx, sqlcgen.AlarmEventListParams{
 		CompanyID: s.CompanyID, AlarmID: f.AlarmID, AnalyzerID: f.AnalyzerID, Undelivered: f.Undelivered,
-		RangeFrom: from, RangeTo: to, LimitVal: limit, OffsetVal: offset,
+		RangeFrom: from, RangeTo: to, AllBuildings: all, BuildingIds: buildingIDs, LimitVal: limit, OffsetVal: offset,
 	})
 	if err != nil {
 		return nil, pgerr.Translate(r.pool, "list alarm events", err)
@@ -388,7 +421,9 @@ func (r *AlarmRepository) MarkBillFired(ctx context.Context, s store.Scope, alar
 		return false, store.ErrNotFound
 	}
 
-	_, err = r.q.AlarmMarkBillFired(ctx, sqlcgen.AlarmMarkBillFiredParams{AlarmID: alarmID, BillID: billID})
+	_, err = r.q.AlarmMarkBillFired(ctx, sqlcgen.AlarmMarkBillFiredParams{
+		AlarmID: alarmID, BillID: billID, CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: ids,
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return false, nil
@@ -413,7 +448,7 @@ func (r *AlarmRepository) MarkIsolarForwarded(ctx context.Context, s store.Scope
 	}
 
 	_, err = r.q.AlarmMarkIsolarForwarded(ctx, sqlcgen.AlarmMarkIsolarForwardedParams{
-		PlantID: plantID, AlarmRef: alarmRef, SentAt: tariffTimestamptz(at),
+		PlantID: plantID, AlarmRef: alarmRef, SentAt: tariffTimestamptz(at), CompanyID: s.CompanyID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -435,10 +470,10 @@ func (r *AlarmRepository) requireVisible(ctx context.Context, s store.Scope, ala
 	return nil
 }
 
-// distinctUUIDs is used by ReplaceAnalyzers to compare a visibility count
+// alarmDistinctUUIDs is used by ReplaceAnalyzers to compare a visibility count
 // against the number of DISTINCT ids requested — a duplicate id in the input
 // must not make the count look short by one.
-func distinctUUIDs(ids []uuid.UUID) []uuid.UUID {
+func alarmDistinctUUIDs(ids []uuid.UUID) []uuid.UUID {
 	seen := make(map[uuid.UUID]struct{}, len(ids))
 	out := make([]uuid.UUID, 0, len(ids))
 	for _, id := range ids {
@@ -451,14 +486,14 @@ func distinctUUIDs(ids []uuid.UUID) []uuid.UUID {
 	return out
 }
 
-func nullPeriodUnit(u *model.PeriodUnit) sqlcgen.NullPeriodUnit {
+func alarmNullPeriodUnit(u *model.PeriodUnit) sqlcgen.NullPeriodUnit {
 	if u == nil {
 		return sqlcgen.NullPeriodUnit{}
 	}
 	return sqlcgen.NullPeriodUnit{PeriodUnit: sqlcgen.PeriodUnit(*u), Valid: true}
 }
 
-func periodUnitPtr(u sqlcgen.NullPeriodUnit) *model.PeriodUnit {
+func alarmPeriodUnitPtr(u sqlcgen.NullPeriodUnit) *model.PeriodUnit {
 	if !u.Valid {
 		return nil
 	}
@@ -470,15 +505,15 @@ func alarmFromRow(row sqlcgen.Alarm) (model.Alarm, error) {
 	out := model.Alarm{
 		ID: row.ID, CompanyID: row.CompanyID, Name: row.Name, Type: model.AlarmType(row.Type),
 		IsEnabled:            row.IsEnabled,
-		InductivePeriodValue: row.InductivePeriodValue, InductivePeriodUnit: periodUnitPtr(row.InductivePeriodUnit),
-		CapacitivePeriodValue: row.CapacitivePeriodValue, CapacitivePeriodUnit: periodUnitPtr(row.CapacitivePeriodUnit),
+		InductivePeriodValue: row.InductivePeriodValue, InductivePeriodUnit: alarmPeriodUnitPtr(row.InductivePeriodUnit),
+		CapacitivePeriodValue: row.CapacitivePeriodValue, CapacitivePeriodUnit: alarmPeriodUnitPtr(row.CapacitivePeriodUnit),
 		ActiveConsumptionMaxPeriodValue: row.ActiveConsumptionMaxPeriodValue,
-		ActiveConsumptionMaxPeriodUnit:  periodUnitPtr(row.ActiveConsumptionMaxPeriodUnit),
+		ActiveConsumptionMaxPeriodUnit:  alarmPeriodUnitPtr(row.ActiveConsumptionMaxPeriodUnit),
 		ActiveConsumptionMinPeriodValue: row.ActiveConsumptionMinPeriodValue,
-		ActiveConsumptionMinPeriodUnit:  periodUnitPtr(row.ActiveConsumptionMinPeriodUnit),
+		ActiveConsumptionMinPeriodUnit:  alarmPeriodUnitPtr(row.ActiveConsumptionMinPeriodUnit),
 		CommunicationThresholdHours:     row.CommunicationThresholdHours,
 		NotificationFrequencyValue:      row.NotificationFrequencyValue,
-		NotificationFrequencyUnit:       periodUnitPtr(row.NotificationFrequencyUnit),
+		NotificationFrequencyUnit:       alarmPeriodUnitPtr(row.NotificationFrequencyUnit),
 		CreatedAt:                       row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time, DeletedAt: tariffNullTimestamptz(row.DeletedAt),
 	}
 	for _, f := range []tariffNumericField{

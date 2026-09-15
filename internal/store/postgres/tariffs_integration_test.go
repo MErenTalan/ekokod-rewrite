@@ -78,7 +78,7 @@ func TestTariffListExcludesCompanyWideForNarrowScope(t *testing.T) {
 	tenant := testfixtures.NewTenant(t, ctx, pool, 10)
 	repo := postgres.NewTariffRepository(pool)
 
-	companyWide, err := repo.Create(ctx, tenant.AdminScope, tariffFixtureRow(tenant.Company.ID, nil, date(2026, 2, 1)))
+	companyWide, err := repo.Create(ctx, tenant.AdminScope, tariffFixtureRow(tenant.Company.ID, nil, tariffFixtureDate(2026, 2, 1)))
 	require.NoError(t, err)
 
 	// AdminScope (AllBuildings) sees the company-wide tariff.
@@ -114,11 +114,11 @@ func TestEffectiveTariffPicksTheLatestNotAfterTheDate(t *testing.T) {
 	// make this test pass by accident.
 	require.NoError(t, repo.SoftDelete(ctx, tenant.AdminScope, tenant.Tariffs[0].ID, time.Now().UTC()))
 
-	jan, err := repo.Create(ctx, tenant.AdminScope, tariffFixtureRow(tenant.Company.ID, &buildingID, date(2026, 1, 1)))
+	jan, err := repo.Create(ctx, tenant.AdminScope, tariffFixtureRow(tenant.Company.ID, &buildingID, tariffFixtureDate(2026, 1, 1)))
 	require.NoError(t, err)
-	mar, err := repo.Create(ctx, tenant.AdminScope, tariffFixtureRow(tenant.Company.ID, &buildingID, date(2026, 3, 1)))
+	mar, err := repo.Create(ctx, tenant.AdminScope, tariffFixtureRow(tenant.Company.ID, &buildingID, tariffFixtureDate(2026, 3, 1)))
 	require.NoError(t, err)
-	jun, err := repo.Create(ctx, tenant.AdminScope, tariffFixtureRow(tenant.Company.ID, &buildingID, date(2026, 6, 1)))
+	jun, err := repo.Create(ctx, tenant.AdminScope, tariffFixtureRow(tenant.Company.ID, &buildingID, tariffFixtureDate(2026, 6, 1)))
 	require.NoError(t, err)
 
 	cases := []struct {
@@ -126,11 +126,11 @@ func TestEffectiveTariffPicksTheLatestNotAfterTheDate(t *testing.T) {
 		on   time.Time
 		want uuid.UUID
 	}{
-		{"exactly on jan", date(2026, 1, 1), jan.ID},
-		{"between jan and mar", date(2026, 2, 15), jan.ID},
-		{"exactly on mar", date(2026, 3, 1), mar.ID},
-		{"between mar and jun", date(2026, 5, 1), mar.ID},
-		{"on or after jun", date(2026, 12, 31), jun.ID},
+		{"exactly on jan", tariffFixtureDate(2026, 1, 1), jan.ID},
+		{"between jan and mar", tariffFixtureDate(2026, 2, 15), jan.ID},
+		{"exactly on mar", tariffFixtureDate(2026, 3, 1), mar.ID},
+		{"between mar and jun", tariffFixtureDate(2026, 5, 1), mar.ID},
+		{"on or after jun", tariffFixtureDate(2026, 12, 31), jun.ID},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -141,7 +141,7 @@ func TestEffectiveTariffPicksTheLatestNotAfterTheDate(t *testing.T) {
 	}
 
 	// Before the earliest tariff, there is nothing in force yet.
-	_, err = repo.Effective(ctx, tenant.Scope, buildingID, date(2025, 12, 31))
+	_, err = repo.Effective(ctx, tenant.Scope, buildingID, tariffFixtureDate(2025, 12, 31))
 	require.ErrorIs(t, err, store.ErrNotFound)
 }
 
@@ -160,10 +160,10 @@ func TestTariffEffectiveFallsBackToCompanyWideTariff(t *testing.T) {
 	// dated 2026-01-01; soft-delete it so only the company-wide one applies.
 	require.NoError(t, repo.SoftDelete(ctx, tenant.AdminScope, tenant.Tariffs[0].ID, time.Now().UTC()))
 
-	companyWide, err := repo.Create(ctx, tenant.AdminScope, tariffFixtureRow(tenant.Company.ID, nil, date(2026, 1, 1)))
+	companyWide, err := repo.Create(ctx, tenant.AdminScope, tariffFixtureRow(tenant.Company.ID, nil, tariffFixtureDate(2026, 1, 1)))
 	require.NoError(t, err)
 
-	got, err := repo.Effective(ctx, tenant.Scope, tenant.Buildings[0].ID, date(2026, 6, 1))
+	got, err := repo.Effective(ctx, tenant.Scope, tenant.Buildings[0].ID, tariffFixtureDate(2026, 6, 1))
 	require.NoError(t, err)
 	require.Equal(t, companyWide.ID, got.ID)
 }
@@ -183,10 +183,10 @@ func TestTariffEffectiveRequiresVisibleBuilding(t *testing.T) {
 	tenant := testfixtures.NewTenant(t, ctx, pool, 40)
 	repo := postgres.NewTariffRepository(pool)
 
-	_, err := repo.Create(ctx, tenant.AdminScope, tariffFixtureRow(tenant.Company.ID, nil, date(2026, 1, 1)))
+	_, err := repo.Create(ctx, tenant.AdminScope, tariffFixtureRow(tenant.Company.ID, nil, tariffFixtureDate(2026, 1, 1)))
 	require.NoError(t, err)
 
-	_, err = repo.Effective(ctx, tenant.Scope, tenant.Buildings[1].ID, date(2026, 6, 1))
+	_, err = repo.Effective(ctx, tenant.Scope, tenant.Buildings[1].ID, tariffFixtureDate(2026, 6, 1))
 	require.ErrorIs(t, err, store.ErrNotFound)
 }
 
@@ -271,14 +271,14 @@ func TestTariffCreateRejectsBuildingOutsideScope(t *testing.T) {
 	repo := postgres.NewTariffRepository(pool)
 
 	otherBuilding := tenant.Buildings[1].ID
-	_, err := repo.Create(ctx, tenant.Scope, tariffFixtureRow(tenant.Company.ID, &otherBuilding, date(2026, 1, 1)))
+	_, err := repo.Create(ctx, tenant.Scope, tariffFixtureRow(tenant.Company.ID, &otherBuilding, tariffFixtureDate(2026, 1, 1)))
 	require.ErrorIs(t, err, store.ErrNotFound)
 
-	_, err = repo.Create(ctx, tenant.Scope, tariffFixtureRow(tenant.Company.ID, nil, date(2026, 1, 1)))
+	_, err = repo.Create(ctx, tenant.Scope, tariffFixtureRow(tenant.Company.ID, nil, tariffFixtureDate(2026, 1, 1)))
 	require.ErrorIs(t, err, store.ErrNotFound, "a narrow scope may not create a company-wide tariff")
 
 	ownBuilding := tenant.Buildings[0].ID
-	created, err := repo.Create(ctx, tenant.Scope, tariffFixtureRow(tenant.Company.ID, &ownBuilding, date(2026, 7, 1)))
+	created, err := repo.Create(ctx, tenant.Scope, tariffFixtureRow(tenant.Company.ID, &ownBuilding, tariffFixtureDate(2026, 7, 1)))
 	require.NoError(t, err)
 	require.Equal(t, ownBuilding, *created.BuildingID)
 }
@@ -294,7 +294,7 @@ func TestSolarTariffScopedToCompanyNotBuilding(t *testing.T) {
 	repo := postgres.NewSolarTariffRepository(pool)
 
 	created, err := repo.Create(ctx, tenantA.AdminScope, model.SolarTariff{
-		CompanyID: tenantA.Company.ID, PlantID: tenantA.Plants[0].ID, EffectiveFrom: date(2026, 1, 1),
+		CompanyID: tenantA.Company.ID, PlantID: tenantA.Plants[0].ID, EffectiveFrom: tariffFixtureDate(2026, 1, 1),
 		FeedInTariff: decimal.RequireFromString("1.500000"), Currency: model.CurrencyTRY, CreatedAt: time.Now().UTC(),
 	})
 	require.NoError(t, err)
@@ -309,12 +309,12 @@ func TestSolarTariffScopedToCompanyNotBuilding(t *testing.T) {
 	require.ErrorIs(t, err, store.ErrNotFound)
 
 	_, err = repo.Create(ctx, tenantB.AdminScope, model.SolarTariff{
-		CompanyID: tenantB.Company.ID, PlantID: tenantA.Plants[0].ID, EffectiveFrom: date(2026, 1, 1),
+		CompanyID: tenantB.Company.ID, PlantID: tenantA.Plants[0].ID, EffectiveFrom: tariffFixtureDate(2026, 1, 1),
 		FeedInTariff: decimal.RequireFromString("1.500000"), Currency: model.CurrencyTRY, CreatedAt: time.Now().UTC(),
 	})
 	require.ErrorIs(t, err, store.ErrNotFound, "tenant B cannot price tenant A's plant")
 
-	_, err = repo.Effective(ctx, tenantB.AdminScope, tenantA.Plants[0].ID, date(2026, 6, 1))
+	_, err = repo.Effective(ctx, tenantB.AdminScope, tenantA.Plants[0].ID, tariffFixtureDate(2026, 6, 1))
 	require.ErrorIs(t, err, store.ErrNotFound)
 }
 
@@ -344,7 +344,7 @@ func TestNationalTariffScopeValidatedButNotNarrowed(t *testing.T) {
 	require.Len(t, fromB, 1)
 	require.Equal(t, fromA[0].ID, fromB[0].ID, "the schedule is platform-wide: both tenants see the identical row")
 
-	entry, err := repo.Effective(ctx, tenantA.Scope, model.UserGroupCommercial, model.VoltageLevelLV, model.TariffTermMonomial, date(2026, 6, 1))
+	entry, err := repo.Effective(ctx, tenantA.Scope, model.UserGroupCommercial, model.VoltageLevelLV, model.TariffTermMonomial, tariffFixtureDate(2026, 6, 1))
 	require.NoError(t, err)
 	require.Equal(t, "2.500000", entry.EnergyPrice.StringFixed(6))
 }
@@ -407,7 +407,346 @@ func TestIcmalInsertRowsRefusesWholeBatchForInvisibleBuilding(t *testing.T) {
 	require.Empty(t, rows, "the whole batch must be refused, including the row with a visible building")
 }
 
-// date builds a UTC midnight time.Time for the `date`-column tests above.
-func date(year int, month time.Month, day int) time.Time {
+// TestTariffCreateRejectsCrossTenantBuildingEvenWithAdminScope is Critical
+// Finding 1's probe: Scope.AllowsBuilding is an in-memory grant check that
+// returns true for ANY id when AllBuildings is set — it cannot know which
+// company owns a building — so tenant A's AdminScope must not be able to
+// store tenant B's building id as a tariff's building_id. The guard must be
+// in SQL, not the Go-side tariffBuildingWritable pre-check alone.
+func TestTariffCreateRejectsCrossTenantBuildingEvenWithAdminScope(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 500)
+	tenantB := testfixtures.NewTenant(t, ctx, pool, 501)
+	repo := postgres.NewTariffRepository(pool)
+
+	crossBuilding := tenantB.Buildings[0].ID
+	_, err := repo.Create(ctx, tenantA.AdminScope, tariffFixtureRow(tenantA.Company.ID, &crossBuilding, tariffFixtureDate(2026, 8, 1)))
+	require.ErrorIs(t, err, store.ErrNotFound, "tenant A's AdminScope must not be able to store tenant B's building id")
+
+	// Tenant B's own Create for that building afterwards succeeds: a
+	// cross-tenant FK link must not have silently reserved anything that
+	// would deny the true owner (the CONTROLLER RULING's probe).
+	ownBuilding := tenantB.Buildings[0].ID
+	created, err := repo.Create(ctx, tenantB.AdminScope, tariffFixtureRow(tenantB.Company.ID, &ownBuilding, tariffFixtureDate(2026, 8, 1)))
+	require.NoError(t, err)
+	require.Equal(t, ownBuilding, *created.BuildingID)
+}
+
+// TestTariffUpdateRejectsMovingToCrossTenantBuilding is Critical Finding 1's
+// probe applied to Update: moving an EXISTING tariff to another tenant's
+// building is the same stored-foreign-key bug as creating one there.
+func TestTariffUpdateRejectsMovingToCrossTenantBuilding(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 502)
+	tenantB := testfixtures.NewTenant(t, ctx, pool, 503)
+	repo := postgres.NewTariffRepository(pool)
+
+	own := tenantA.Buildings[0].ID
+	created, err := repo.Create(ctx, tenantA.AdminScope, tariffFixtureRow(tenantA.Company.ID, &own, tariffFixtureDate(2026, 8, 1)))
+	require.NoError(t, err)
+
+	moved := created
+	crossBuilding := tenantB.Buildings[0].ID
+	moved.BuildingID = &crossBuilding
+	_, err = repo.Update(ctx, tenantA.AdminScope, moved)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	// The row is untouched.
+	got, err := repo.Get(ctx, tenantA.AdminScope, created.ID)
+	require.NoError(t, err)
+	require.Equal(t, own, *got.BuildingID)
+}
+
+// TestTariffCreateRejectsCreatedByOutsideCompany is Important Finding 4's
+// probe: created_by is a stored foreign key too and must name a user of the
+// same company, never taken as given.
+func TestTariffCreateRejectsCreatedByOutsideCompany(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 504)
+	tenantB := testfixtures.NewTenant(t, ctx, pool, 505)
+	repo := postgres.NewTariffRepository(pool)
+
+	own := tenantA.Buildings[0].ID
+	row := tariffFixtureRow(tenantA.Company.ID, &own, tariffFixtureDate(2026, 8, 1))
+	foreignUser := tenantB.Users[model.UserRoleCompanyAdmin].ID
+	row.CreatedBy = &foreignUser
+	_, err := repo.Create(ctx, tenantA.AdminScope, row)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	ownUser := tenantA.Users[model.UserRoleCompanyAdmin].ID
+	row.CreatedBy = &ownUser
+	created, err := repo.Create(ctx, tenantA.AdminScope, row)
+	require.NoError(t, err)
+	require.Equal(t, ownUser, *created.CreatedBy)
+}
+
+// TestTariffUpdateRejectsForeignCompanyID is Important Finding 3's probe:
+// Update must reject a model.Tariff naming another company exactly as
+// Create does, instead of silently ignoring the field.
+func TestTariffUpdateRejectsForeignCompanyID(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 506)
+	tenantB := testfixtures.NewTenant(t, ctx, pool, 507)
+	repo := postgres.NewTariffRepository(pool)
+
+	own := tenantA.Buildings[0].ID
+	created, err := repo.Create(ctx, tenantA.AdminScope, tariffFixtureRow(tenantA.Company.ID, &own, tariffFixtureDate(2026, 8, 1)))
+	require.NoError(t, err)
+
+	tampered := created
+	tampered.CompanyID = tenantB.Company.ID
+	_, err = repo.Update(ctx, tenantA.AdminScope, tampered)
+	require.ErrorIs(t, err, store.ErrNotFound)
+}
+
+// TestTariffCrossTenantUpdateAndSoftDelete is Important Finding 7's missing
+// test: cross-tenant Update and SoftDelete for tariffs.
+func TestTariffCrossTenantUpdateAndSoftDelete(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 508)
+	tenantB := testfixtures.NewTenant(t, ctx, pool, 509)
+	repo := postgres.NewTariffRepository(pool)
+
+	bOwn := tenantB.Buildings[0].ID
+	tarB, err := repo.Create(ctx, tenantB.AdminScope, tariffFixtureRow(tenantB.Company.ID, &bOwn, tariffFixtureDate(2026, 8, 1)))
+	require.NoError(t, err)
+
+	tampered := tarB
+	tampered.Name = ptrTariffTestString("renamed by tenant A")
+	_, err = repo.Update(ctx, tenantA.AdminScope, tampered)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	err = repo.SoftDelete(ctx, tenantA.AdminScope, tarB.ID, time.Now().UTC())
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	// Untouched: tenant B still sees its own, undeleted tariff.
+	got, err := repo.Get(ctx, tenantB.AdminScope, tarB.ID)
+	require.NoError(t, err)
+	require.Nil(t, got.DeletedAt)
+}
+
+func ptrTariffTestString(s string) *string { return &s }
+
+// TestTariffEffectiveIstanbulDayBoundary pins Important Finding 5: the
+// SAME instant, given as 2026-03-01T00:30+03:00 and as its equal UTC instant
+// 2026-02-28T21:30Z, must resolve to the IDENTICAL tariff — the day boundary
+// is Europe/Istanbul, never the caller's incidental time.Time Location.
+func TestTariffEffectiveIstanbulDayBoundary(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 520)
+	repo := postgres.NewTariffRepository(pool)
+	buildingID := tenant.Buildings[0].ID
+
+	require.NoError(t, repo.SoftDelete(ctx, tenant.AdminScope, tenant.Tariffs[0].ID, time.Now().UTC()))
+
+	feb, err := repo.Create(ctx, tenant.AdminScope, tariffFixtureRow(tenant.Company.ID, &buildingID, tariffFixtureDate(2026, 2, 1)))
+	require.NoError(t, err)
+	mar, err := repo.Create(ctx, tenant.AdminScope, tariffFixtureRow(tenant.Company.ID, &buildingID, tariffFixtureDate(2026, 3, 1)))
+	require.NoError(t, err)
+
+	istanbul, err := time.LoadLocation("Europe/Istanbul")
+	require.NoError(t, err)
+
+	// 2026-03-01T00:30+03:00 in Istanbul IS the calendar day March 1st there
+	// (the day boundary the ruling fixes), even though its equal instant in
+	// UTC (2026-02-28T21:30Z) falls on February 28th.
+	localInstant := time.Date(2026, 3, 1, 0, 30, 0, 0, istanbul)
+	utcInstant := localInstant.UTC()
+	require.Equal(t, 2026, utcInstant.Year())
+	require.Equal(t, time.February, utcInstant.Month())
+	require.Equal(t, 28, utcInstant.Day(), "the premise of this test: the UTC calendar day differs from the Istanbul one")
+
+	fromLocal, err := repo.Effective(ctx, tenant.Scope, buildingID, localInstant)
+	require.NoError(t, err)
+	fromUTC, err := repo.Effective(ctx, tenant.Scope, buildingID, utcInstant)
+	require.NoError(t, err)
+	require.Equal(t, mar.ID, fromLocal.ID, "the Istanbul calendar day for this instant is March 1st")
+	require.Equal(t, fromLocal.ID, fromUTC.ID, "the SAME instant must resolve identically regardless of the caller's Location")
+	require.NotEqual(t, feb.ID, fromLocal.ID)
+}
+
+// TestTariffEffectiveTieBreaksDeterministically pins Important Finding 5's
+// second half: the schema has no unique index on (building_id,
+// effective_from), so two tariffs CAN share one, and Effective must always
+// pick the SAME one — the most recently created — not whichever a query
+// planner happens to return first.
+func TestTariffEffectiveTieBreaksDeterministically(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 521)
+	repo := postgres.NewTariffRepository(pool)
+	buildingID := tenant.Buildings[0].ID
+
+	require.NoError(t, repo.SoftDelete(ctx, tenant.AdminScope, tenant.Tariffs[0].ID, time.Now().UTC()))
+
+	on := tariffFixtureDate(2026, 4, 1)
+	first, err := repo.Create(ctx, tenant.AdminScope, tariffFixtureRow(tenant.Company.ID, &buildingID, on))
+	require.NoError(t, err)
+	second, err := repo.Create(ctx, tenant.AdminScope, tariffFixtureRow(tenant.Company.ID, &buildingID, on))
+	require.NoError(t, err)
+	require.NotEqual(t, first.ID, second.ID)
+
+	for range 5 {
+		got, err := repo.Effective(ctx, tenant.Scope, buildingID, on)
+		require.NoError(t, err)
+		require.Equal(t, second.ID, got.ID, "created_at desc, id desc: the most recently written row wins the tie, every time")
+	}
+}
+
+// TestTariffOfSoftDeletedBuildingIsNotReadable is the folded-minor probe:
+// bills/tariffs of a soft-deleted building must not stay readable through
+// their own row.
+func TestTariffOfSoftDeletedBuildingIsNotReadable(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 550)
+	repo := postgres.NewTariffRepository(pool)
+
+	tar := tenant.Tariffs[0]
+	_, err := pool.Exec(ctx, `update buildings set deleted_at = now() where id = $1`, tenant.Buildings[0].ID)
+	require.NoError(t, err)
+
+	_, err = repo.Get(ctx, tenant.AdminScope, tar.ID)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	list, err := repo.List(ctx, tenant.AdminScope, store.TariffFilter{IncludeDeleted: true})
+	require.NoError(t, err)
+	for _, r := range list {
+		require.NotEqual(t, tar.ID, r.ID, "a tariff of a soft-deleted building must not stay readable")
+	}
+}
+
+// TestIcmalImportCrossTenantGetListUpdate is Important Finding 7's missing
+// test: GetImport/ListImports/UpdateImportResult cross-tenant.
+func TestIcmalImportCrossTenantGetListUpdate(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 540)
+	tenantB := testfixtures.NewTenant(t, ctx, pool, 541)
+	repo := postgres.NewIcmalRepository(pool)
+
+	impB, err := repo.CreateImport(ctx, tenantB.AdminScope, model.IcmalImport{FileName: "b.xlsx"})
+	require.NoError(t, err)
+
+	_, err = repo.GetImport(ctx, tenantA.AdminScope, impB.ID)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	list, err := repo.ListImports(ctx, tenantA.AdminScope, store.IcmalFilter{})
+	require.NoError(t, err)
+	for _, imp := range list {
+		require.NotEqual(t, impB.ID, imp.ID)
+	}
+
+	_, err = repo.UpdateImportResult(ctx, tenantA.AdminScope, impB.ID, "analysed", []byte(`{}`))
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	// Untouched.
+	stillB, err := repo.GetImport(ctx, tenantB.AdminScope, impB.ID)
+	require.NoError(t, err)
+	require.Equal(t, "pending", stillB.Status)
+
+	updated, err := repo.UpdateImportResult(ctx, tenantB.AdminScope, impB.ID, "analysed", []byte(`{"ok":true}`))
+	require.NoError(t, err)
+	require.Equal(t, "analysed", updated.Status)
+}
+
+// TestNationalTariffEffectiveRejectsInvalidScope is Important Finding 7's
+// missing test: NationalTariff.Effective with an invalid Scope.
+func TestNationalTariffEffectiveRejectsInvalidScope(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	repo := postgres.NewNationalTariffRepository(pool)
+
+	_, err := repo.Effective(ctx, store.Scope{}, model.UserGroupCommercial, model.VoltageLevelLV, model.TariffTermMonomial, tariffFixtureDate(2026, 1, 1))
+	require.ErrorIs(t, err, store.ErrInvalidScope)
+}
+
+// TestTariffPageLimitsClampNegativeOffset is the folded-minor probe: OFFSET
+// must not be negative, so a caller-supplied negative one is clamped to 0
+// rather than passed through to Postgres (which rejects it outright).
+func TestTariffPageLimitsClampNegativeOffset(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 522)
+	repo := postgres.NewTariffRepository(pool)
+
+	_, err := repo.List(ctx, tenant.AdminScope, store.TariffFilter{Page: store.Page{Limit: 10, Offset: -5}})
+	require.NoError(t, err, "a negative Offset must be clamped to 0, not rejected by Postgres or the repository")
+}
+
+// TestTariffTemplateRepositoryCRUDAndIsolation is Important Finding 7's
+// missing test: TariffTemplateRepository had NO tests at all.
+func TestTariffTemplateRepositoryCRUDAndIsolation(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 530)
+	tenantB := testfixtures.NewTenant(t, ctx, pool, 531)
+	repo := postgres.NewTariffTemplateRepository(pool)
+	now := time.Now().UTC()
+
+	created, err := repo.Create(ctx, tenantA.AdminScope, model.TariffTemplate{
+		CompanyID: tenantA.Company.ID, Name: "Standard LV", IsDefault: true,
+		Payload: []byte(`{"price_type":"single_time"}`), CreatedAt: now, UpdatedAt: now,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "Standard LV", created.Name)
+	require.True(t, created.IsDefault)
+
+	got, err := repo.Get(ctx, tenantA.AdminScope, created.ID)
+	require.NoError(t, err)
+	require.Equal(t, created.ID, got.ID)
+
+	// Cross-tenant Get, Update and Delete are all refused.
+	_, err = repo.Get(ctx, tenantB.AdminScope, created.ID)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	tampered := created
+	tampered.Name = "renamed by tenant B"
+	_, err = repo.Update(ctx, tenantB.AdminScope, tampered)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	err = repo.Delete(ctx, tenantB.AdminScope, created.ID)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	// Creating with another company's id in the model is refused too.
+	_, err = repo.Create(ctx, tenantA.AdminScope, model.TariffTemplate{
+		CompanyID: tenantB.Company.ID, Name: "Cross", Payload: []byte(`{}`), CreatedAt: now, UpdatedAt: now,
+	})
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	// The owning tenant updates and lists it.
+	updated, err := repo.Update(ctx, tenantA.AdminScope, model.TariffTemplate{
+		ID: created.ID, CompanyID: tenantA.Company.ID, Name: "Standard LV v2", IsDefault: false,
+		Payload: []byte(`{"price_type":"multi_time"}`), UpdatedAt: now,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "Standard LV v2", updated.Name)
+	require.False(t, updated.IsDefault)
+
+	list, err := repo.List(ctx, tenantA.AdminScope, store.TariffTemplateFilter{NameContains: "Standard"})
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	require.Equal(t, created.ID, list[0].ID)
+
+	// tariff_templates has no deleted_at: Delete is a real DELETE.
+	require.NoError(t, repo.Delete(ctx, tenantA.AdminScope, created.ID))
+	_, err = repo.Get(ctx, tenantA.AdminScope, created.ID)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	_, err = repo.Get(ctx, store.Scope{}, created.ID)
+	require.ErrorIs(t, err, store.ErrInvalidScope)
+}
+
+// tariffFixtureDate builds a UTC midnight time.Time for the `date`-column
+// tests above. Renamed from the package-wide-collision-prone `date`
+// (Important Finding 6, task-11a fix round 1: any bare helper name in a
+// *_test.go file must carry its file's aggregate prefix).
+func tariffFixtureDate(year int, month time.Month, day int) time.Time {
 	return time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
 }

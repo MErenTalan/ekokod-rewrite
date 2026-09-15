@@ -1,35 +1,40 @@
 -- Bills, bill lines, bill members and bill hourly detail (migration 00009).
 -- Query names are prefixed Bill…
 
+-- Folded minor (fix round 1): a bill of a soft-deleted building must not
+-- stay readable through the bill's own row — Get/List both exclude it.
 -- name: BillGet :one
 select * from bills
-where id = sqlc.arg(id) and company_id = sqlc.arg(company_id)
-  and (sqlc.arg(all_buildings)::boolean or building_id = any(sqlc.arg(building_ids)::uuid[]));
+where bills.id = sqlc.arg(id) and bills.company_id = sqlc.arg(company_id)
+  and (sqlc.arg(all_buildings)::boolean or bills.building_id = any(sqlc.arg(building_ids)::uuid[]))
+  and (bills.building_id is null or exists (select 1 from buildings b where b.id = bills.building_id and b.deleted_at is null));
 
 -- name: BillList :many
 select * from bills
-where company_id = sqlc.arg(company_id)
-  and (sqlc.arg(all_buildings)::boolean or building_id = any(sqlc.arg(building_ids)::uuid[]))
-  and (cardinality(sqlc.arg(ids)::uuid[]) = 0 or id = any(sqlc.arg(ids)::uuid[]))
-  and (sqlc.narg(building_id)::uuid is null or building_id = sqlc.narg(building_id))
-  and (sqlc.narg(analyzer_id)::uuid is null or analyzer_id = sqlc.narg(analyzer_id))
-  and (sqlc.narg(bill_scope)::bill_scope is null or scope = sqlc.narg(bill_scope))
-  and (sqlc.narg(period_key)::text is null or period_key = sqlc.narg(period_key))
+where bills.company_id = sqlc.arg(company_id)
+  and (sqlc.arg(all_buildings)::boolean or bills.building_id = any(sqlc.arg(building_ids)::uuid[]))
+  and (cardinality(sqlc.arg(ids)::uuid[]) = 0 or bills.id = any(sqlc.arg(ids)::uuid[]))
+  and (sqlc.narg(building_id)::uuid is null or bills.building_id = sqlc.narg(building_id))
+  and (sqlc.narg(analyzer_id)::uuid is null or bills.analyzer_id = sqlc.narg(analyzer_id))
+  and (sqlc.narg(bill_scope)::bill_scope is null or bills.scope = sqlc.narg(bill_scope))
+  and (sqlc.narg(period_key)::text is null or bills.period_key = sqlc.narg(period_key))
   -- Statuses is compared as text[], not bill_status[]: pgx has no codec
   -- for an array of this custom enum, and fails even on an empty slice.
-  and (cardinality(sqlc.arg(statuses)::text[]) = 0 or status::text = any(sqlc.arg(statuses)::text[]))
-  and (sqlc.arg(include_superseded)::boolean or status <> 'superseded')
-order by period_key desc, id
+  and (cardinality(sqlc.arg(statuses)::text[]) = 0 or bills.status::text = any(sqlc.arg(statuses)::text[]))
+  and (sqlc.arg(include_superseded)::boolean or bills.status <> 'superseded')
+  and (bills.building_id is null or exists (select 1 from buildings b where b.id = bills.building_id and b.deleted_at is null))
+order by bills.period_key desc, bills.id
 limit sqlc.arg(limit_val) offset sqlc.arg(offset_val);
 
 -- name: BillCurrent :one
 select * from bills
-where company_id = sqlc.arg(company_id)
-  and (sqlc.arg(all_buildings)::boolean or building_id = any(sqlc.arg(building_ids)::uuid[]))
-  and scope = sqlc.arg(bill_scope)
-  and coalesce(analyzer_id, building_id, company_id) = sqlc.arg(subject_id)
-  and period_key = sqlc.arg(period_key)
-  and status <> 'superseded';
+where bills.company_id = sqlc.arg(company_id)
+  and (sqlc.arg(all_buildings)::boolean or bills.building_id = any(sqlc.arg(building_ids)::uuid[]))
+  and bills.scope = sqlc.arg(bill_scope)
+  and coalesce(bills.analyzer_id, bills.building_id, bills.company_id) = sqlc.arg(subject_id)
+  and bills.period_key = sqlc.arg(period_key)
+  and bills.status <> 'superseded'
+  and (bills.building_id is null or exists (select 1 from buildings b where b.id = bills.building_id and b.deleted_at is null));
 
 -- name: BillVisible :one
 select exists (
@@ -48,6 +53,14 @@ where company_id = sqlc.arg(company_id) and deleted_at is null
   and id = any(sqlc.arg(analyzer_ids)::uuid[])
   and (sqlc.arg(all_buildings)::boolean or building_id = any(sqlc.arg(building_ids)::uuid[]));
 
+-- Critical Finding 1 (task-11a fix round 1): building_id is a stored foreign
+-- key and MUST be validated in SQL — Scope.AllowsBuilding cannot know which
+-- company owns a building, so the Go-side billBuildingWritable pre-check is
+-- not sufficient on its own. Important Finding 4: tariff_id is a stored
+-- foreign key too (bills.tariff_id references tariffs), validated the same
+-- way TariffVisible validates a tariff for this Scope, INCLUDING the
+-- company-wide (building_id is null) case — a narrow Scope may reference the
+-- company-wide tariff Effective can already resolve for it.
 -- name: BillCreate :one
 insert into bills (
   id, company_id, building_id, analyzer_id, scope, period_key, period_start, period_end,
@@ -60,7 +73,8 @@ insert into bills (
   reactive_penalty_applied, reactive_power_price, generation_usage, generation_price_per_kwh,
   ptf_yekdem_used, ptf_hours_matched, ptf_hours_missing, ptf_average, yekdem_used, status,
   flag_reason, pdf_path, computed_at, created_at, updated_at
-) values (
+)
+select
   gen_random_uuid(), sqlc.arg(company_id), sqlc.narg(building_id), sqlc.narg(analyzer_id),
   sqlc.arg(bill_scope), sqlc.arg(period_key), sqlc.arg(period_start), sqlc.arg(period_end),
   sqlc.arg(days_in_period), sqlc.narg(tariff_id), sqlc.narg(tariff_effective_from),
@@ -78,27 +92,66 @@ insert into bills (
   sqlc.arg(ptf_yekdem_used), sqlc.narg(ptf_hours_matched), sqlc.narg(ptf_hours_missing),
   sqlc.narg(ptf_average), sqlc.narg(yekdem_used), sqlc.arg(status), sqlc.narg(flag_reason),
   sqlc.narg(pdf_path), sqlc.arg(computed_at), sqlc.arg(created_at), sqlc.arg(created_at)
-) returning *;
-
--- name: BillLineInsert :one
-insert into bill_lines (id, bill_id, code, label, quantity, unit, unit_price, rate_pct, amount, sort_order)
-values (gen_random_uuid(), sqlc.arg(bill_id), sqlc.arg(code), sqlc.arg(label), sqlc.narg(quantity),
-        sqlc.narg(unit), sqlc.narg(unit_price), sqlc.narg(rate_pct), sqlc.arg(amount), sqlc.arg(sort_order))
+where
+  (sqlc.narg(building_id)::uuid is null or exists (
+    select 1 from buildings b
+    where b.id = sqlc.narg(building_id) and b.company_id = sqlc.arg(company_id) and b.deleted_at is null
+      and (sqlc.arg(all_buildings)::boolean or b.id = any(sqlc.arg(building_ids)::uuid[]))
+  ))
+  and (sqlc.narg(tariff_id)::uuid is null or exists (
+    select 1 from tariffs t
+    where t.id = sqlc.narg(tariff_id) and t.company_id = sqlc.arg(company_id) and t.deleted_at is null
+      and (sqlc.arg(all_buildings)::boolean or t.building_id is null or t.building_id = any(sqlc.arg(building_ids)::uuid[]))
+  ))
 returning *;
 
--- name: BillMemberInsert :exec
-insert into bill_members (bill_id, analyzer_id) values (sqlc.arg(bill_id), sqlc.arg(analyzer_id));
+-- Important Finding 1: bill_lines has no company_id of its own — join
+-- through bills. BillLineInsert re-validates bill_id against the Scope
+-- itself, so the isolation boundary holds even if the Go-side requireVisible
+-- pre-check (in BillRepository.requireVisible, run before the transaction
+-- Create/Supersede/ReplaceHourlyDetail open) were ever skipped.
+-- name: BillLineInsert :one
+insert into bill_lines (id, bill_id, code, label, quantity, unit, unit_price, rate_pct, amount, sort_order)
+select gen_random_uuid(), sqlc.arg(bill_id), sqlc.arg(code), sqlc.arg(label), sqlc.narg(quantity),
+       sqlc.narg(unit), sqlc.narg(unit_price), sqlc.narg(rate_pct), sqlc.arg(amount), sqlc.arg(sort_order)
+where exists (
+  select 1 from bills bl where bl.id = sqlc.arg(bill_id) and bl.company_id = sqlc.arg(company_id)
+    and (sqlc.arg(all_buildings)::boolean or bl.building_id = any(sqlc.arg(building_ids)::uuid[]))
+)
+returning *;
 
--- name: BillMarkSuperseded :execrows
+-- :one RETURNING true, not :exec: see AlarmAnalyzerInsert's comment in
+-- queries/alarms.sql -- an :exec insert whose WHERE EXISTS excludes every
+-- row still reports "no error", which a caller checking only err would read
+-- as success.
+-- name: BillMemberInsert :one
+insert into bill_members (bill_id, analyzer_id)
+select sqlc.arg(bill_id), sqlc.arg(analyzer_id)
+where exists (
+  select 1 from bills bl where bl.id = sqlc.arg(bill_id) and bl.company_id = sqlc.arg(company_id)
+    and (sqlc.arg(all_buildings)::boolean or bl.building_id = any(sqlc.arg(building_ids)::uuid[]))
+)
+returning true;
+
+-- Supersede's replacement-vs-original check (folded minor, fix round 1):
+-- returning the marked bill's own scope, subject and period lets the Go
+-- caller refuse a Supersede whose replacement names a different one, instead
+-- of silently letting one bill's history point at another's.
+-- name: BillMarkSuperseded :one
 update bills set status = 'superseded', updated_at = sqlc.arg(updated_at)
 where id = sqlc.arg(id) and company_id = sqlc.arg(company_id)
   and (sqlc.arg(all_buildings)::boolean or building_id = any(sqlc.arg(building_ids)::uuid[]))
-  and status <> 'superseded';
+  and status <> 'superseded'
+returning scope, coalesce(analyzer_id, building_id, company_id) as subject_id, period_key;
 
+-- Folded minor: a superseded bill is a closed record — UpdateStatus must not
+-- be able to move it to draft/issued/flagged after the fact, only Supersede
+-- may act on it again (by inserting a new replacement).
 -- name: BillUpdateStatus :one
 update bills set status = sqlc.arg(status), flag_reason = sqlc.narg(flag_reason), updated_at = sqlc.arg(updated_at)
 where id = sqlc.arg(id) and company_id = sqlc.arg(company_id)
   and (sqlc.arg(all_buildings)::boolean or building_id = any(sqlc.arg(building_ids)::uuid[]))
+  and status <> 'superseded'
 returning *;
 
 -- name: BillSetPDFPath :execrows
@@ -107,18 +160,45 @@ where id = sqlc.arg(id) and company_id = sqlc.arg(company_id)
   and (sqlc.arg(all_buildings)::boolean or building_id = any(sqlc.arg(building_ids)::uuid[]));
 
 -- name: BillLineList :many
-select * from bill_lines where bill_id = sqlc.arg(bill_id) order by sort_order, id;
+select bl.* from bill_lines bl
+where bl.bill_id = sqlc.arg(bill_id)
+  and exists (
+    select 1 from bills b where b.id = bl.bill_id and b.company_id = sqlc.arg(company_id)
+      and (sqlc.arg(all_buildings)::boolean or b.building_id = any(sqlc.arg(building_ids)::uuid[]))
+  )
+order by bl.sort_order, bl.id;
 
 -- name: BillMemberList :many
-select * from bill_members where bill_id = sqlc.arg(bill_id) order by analyzer_id;
+select bm.* from bill_members bm
+where bm.bill_id = sqlc.arg(bill_id)
+  and exists (
+    select 1 from bills b where b.id = bm.bill_id and b.company_id = sqlc.arg(company_id)
+      and (sqlc.arg(all_buildings)::boolean or b.building_id = any(sqlc.arg(building_ids)::uuid[]))
+  )
+order by bm.analyzer_id;
 
 -- name: BillHourlyDetailList :many
-select * from bill_hourly_detail where bill_id = sqlc.arg(bill_id) order by ts;
+select bhd.* from bill_hourly_detail bhd
+where bhd.bill_id = sqlc.arg(bill_id)
+  and exists (
+    select 1 from bills b where b.id = bhd.bill_id and b.company_id = sqlc.arg(company_id)
+      and (sqlc.arg(all_buildings)::boolean or b.building_id = any(sqlc.arg(building_ids)::uuid[]))
+  )
+order by bhd.ts;
 
 -- name: BillHourlyDetailDeleteForBill :exec
-delete from bill_hourly_detail where bill_id = sqlc.arg(bill_id);
+delete from bill_hourly_detail
+where bill_id = sqlc.arg(bill_id)
+  and exists (
+    select 1 from bills b where b.id = sqlc.arg(bill_id) and b.company_id = sqlc.arg(company_id)
+      and (sqlc.arg(all_buildings)::boolean or b.building_id = any(sqlc.arg(building_ids)::uuid[]))
+  );
 
 -- name: BillHourlyDetailInsert :exec
 insert into bill_hourly_detail (bill_id, ts, consumption, ptf, yekdem, kbk, unit_price, cost)
-values (sqlc.arg(bill_id), sqlc.arg(ts), sqlc.arg(consumption), sqlc.arg(ptf), sqlc.arg(yekdem),
-        sqlc.arg(kbk), sqlc.arg(unit_price), sqlc.arg(cost));
+select sqlc.arg(bill_id), sqlc.arg(ts), sqlc.arg(consumption), sqlc.arg(ptf), sqlc.arg(yekdem),
+       sqlc.arg(kbk), sqlc.arg(unit_price), sqlc.arg(cost)
+where exists (
+  select 1 from bills b where b.id = sqlc.arg(bill_id) and b.company_id = sqlc.arg(company_id)
+    and (sqlc.arg(all_buildings)::boolean or b.building_id = any(sqlc.arg(building_ids)::uuid[]))
+);

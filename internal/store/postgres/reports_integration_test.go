@@ -92,6 +92,40 @@ func TestReportUpsertRejectsBuildingOutsideScope(t *testing.T) {
 	require.ErrorIs(t, err, store.ErrNotFound)
 }
 
+// TestReportUpsertRejectsCrossTenantBuildingEvenWithAdminScope is Critical
+// Finding 1's probe applied to reports: Scope.AllowsBuilding is an in-memory
+// grant check that returns true for ANY id under AllBuildings — it cannot
+// know which company owns a building — so tenant A's AdminScope must not be
+// able to store tenant B's building id as a report's building_id.
+func TestReportUpsertRejectsCrossTenantBuildingEvenWithAdminScope(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 340)
+	tenantB := testfixtures.NewTenant(t, ctx, pool, 341)
+	repo := postgres.NewReportRepository(pool)
+
+	_, err := repo.Upsert(ctx, tenantA.AdminScope, reportFixtureRow(tenantA.Company.ID, tenantB.Buildings[0].ID, "2026-01"))
+	require.ErrorIs(t, err, store.ErrNotFound, "tenant A's AdminScope must not be able to store tenant B's building id")
+
+	// Tenant B's own Upsert for that building and period afterwards succeeds
+	// — the CONTROLLER RULING's probe against a silent cross-tenant reservation.
+	created, err := repo.Upsert(ctx, tenantB.AdminScope, reportFixtureRow(tenantB.Company.ID, tenantB.Buildings[0].ID, "2026-01"))
+	require.NoError(t, err)
+	require.Equal(t, tenantB.Buildings[0].ID, created.BuildingID)
+}
+
+// TestReportPageLimitsClampNegativeOffset is the folded-minor probe: OFFSET
+// must not be negative.
+func TestReportPageLimitsClampNegativeOffset(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 342)
+	repo := postgres.NewReportRepository(pool)
+
+	_, err := repo.List(ctx, tenant.AdminScope, store.ReportFilter{Page: store.Page{Limit: 10, Offset: -3}})
+	require.NoError(t, err, "a negative Offset must be clamped to 0")
+}
+
 func TestReportUpdateStatusIsScoped(t *testing.T) {
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)

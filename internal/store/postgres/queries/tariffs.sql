@@ -5,20 +5,24 @@
 
 -- name: TariffGet :one
 select * from tariffs
-where id = sqlc.arg(id) and company_id = sqlc.arg(company_id)
-  and (sqlc.arg(all_buildings)::boolean or building_id = any(sqlc.arg(building_ids)::uuid[]))
-  and deleted_at is null;
+where tariffs.id = sqlc.arg(id) and tariffs.company_id = sqlc.arg(company_id)
+  and (sqlc.arg(all_buildings)::boolean or tariffs.building_id = any(sqlc.arg(building_ids)::uuid[]))
+  and tariffs.deleted_at is null
+  -- Folded minor (fix round 1): a tariff of a soft-deleted building must not
+  -- stay readable through the tariff's own row.
+  and (tariffs.building_id is null or exists (select 1 from buildings b where b.id = tariffs.building_id and b.deleted_at is null));
 
 -- name: TariffList :many
 select * from tariffs
-where company_id = sqlc.arg(company_id)
-  and (sqlc.arg(all_buildings)::boolean or building_id = any(sqlc.arg(building_ids)::uuid[]))
-  and (cardinality(sqlc.arg(ids)::uuid[]) = 0 or id = any(sqlc.arg(ids)::uuid[]))
-  and (sqlc.narg(building_id)::uuid is null or building_id = sqlc.narg(building_id))
-  and (not sqlc.arg(company_wide)::boolean or building_id is null)
-  and (sqlc.narg(effective_on)::date is null or effective_from <= sqlc.narg(effective_on))
-  and (sqlc.arg(include_deleted)::boolean or deleted_at is null)
-order by effective_from desc, id
+where tariffs.company_id = sqlc.arg(company_id)
+  and (sqlc.arg(all_buildings)::boolean or tariffs.building_id = any(sqlc.arg(building_ids)::uuid[]))
+  and (cardinality(sqlc.arg(ids)::uuid[]) = 0 or tariffs.id = any(sqlc.arg(ids)::uuid[]))
+  and (sqlc.narg(building_id)::uuid is null or tariffs.building_id = sqlc.narg(building_id))
+  and (not sqlc.arg(company_wide)::boolean or tariffs.building_id is null)
+  and (sqlc.narg(effective_on)::date is null or tariffs.effective_from <= sqlc.narg(effective_on))
+  and (sqlc.arg(include_deleted)::boolean or tariffs.deleted_at is null)
+  and (tariffs.building_id is null or exists (select 1 from buildings b where b.id = tariffs.building_id and b.deleted_at is null))
+order by tariffs.effective_from desc, tariffs.id
 limit sqlc.arg(limit_val) offset sqlc.arg(offset_val);
 
 -- name: TariffCreate :one
@@ -32,7 +36,8 @@ insert into tariffs (
   use_ptf_yekdem, kbk_energy, kbk_t1, kbk_t2, kbk_t3, kbk_power_price,
   kbk_overuse_price, kbk_reactive_power, kbk_distribution_cost_tl_per_kwh,
   use_manual_yekdem, created_by, created_at, updated_at
-) values (
+)
+select
   gen_random_uuid(), sqlc.arg(company_id), sqlc.narg(building_id), sqlc.narg(name),
   sqlc.arg(effective_from), sqlc.arg(currency), sqlc.arg(energy_type),
   sqlc.arg(voltage_level), sqlc.arg(user_group), sqlc.arg(price_type), sqlc.arg(term),
@@ -46,7 +51,24 @@ insert into tariffs (
   sqlc.narg(kbk_t2), sqlc.narg(kbk_t3), sqlc.narg(kbk_power_price), sqlc.narg(kbk_overuse_price),
   sqlc.narg(kbk_reactive_power), sqlc.narg(kbk_distribution_cost_tl_per_kwh),
   sqlc.arg(use_manual_yekdem), sqlc.narg(created_by), sqlc.arg(created_at), sqlc.arg(created_at)
-) returning *;
+where
+  -- Critical Finding 1 (task-11a fix round 1): a stored building_id is a
+  -- foreign key and MUST be validated in SQL against the Scope's company,
+  -- deleted_at and building branch. Scope.AllowsBuilding is an in-memory
+  -- grant check that cannot know which company owns a building id — an
+  -- AllBuildings Scope must not be able to store ANOTHER TENANT's building
+  -- id just because the in-memory check answers "yes" for every id.
+  (sqlc.narg(building_id)::uuid is null or exists (
+    select 1 from buildings b
+    where b.id = sqlc.narg(building_id) and b.company_id = sqlc.arg(company_id) and b.deleted_at is null
+      and (sqlc.arg(all_buildings)::boolean or b.id = any(sqlc.arg(building_ids)::uuid[]))
+  ))
+  -- Important Finding 4: created_by is a stored foreign key too, and must
+  -- name a user of the same company rather than being stored as given.
+  and (sqlc.narg(created_by)::uuid is null or exists (
+    select 1 from users u where u.id = sqlc.narg(created_by) and u.company_id = sqlc.arg(company_id)
+  ))
+returning *;
 
 -- name: TariffUpdate :one
 update tariffs set
@@ -69,9 +91,18 @@ update tariffs set
   kbk_overuse_price = sqlc.narg(kbk_overuse_price), kbk_reactive_power = sqlc.narg(kbk_reactive_power),
   kbk_distribution_cost_tl_per_kwh = sqlc.narg(kbk_distribution_cost_tl_per_kwh),
   use_manual_yekdem = sqlc.arg(use_manual_yekdem), updated_at = sqlc.arg(updated_at)
-where id = sqlc.arg(id) and company_id = sqlc.arg(company_id)
-  and (sqlc.arg(all_buildings)::boolean or building_id = any(sqlc.arg(building_ids)::uuid[]))
-  and deleted_at is null
+where tariffs.id = sqlc.arg(id) and tariffs.company_id = sqlc.arg(company_id)
+  and (sqlc.arg(all_buildings)::boolean or tariffs.building_id = any(sqlc.arg(building_ids)::uuid[]))
+  and tariffs.deleted_at is null
+  -- Critical Finding 1: the NEW building_id this write stores must be
+  -- validated exactly as TariffCreate validates it — moving a tariff to
+  -- another tenant's building is the same stored-foreign-key bug as
+  -- creating one there.
+  and (sqlc.narg(building_id)::uuid is null or exists (
+    select 1 from buildings b
+    where b.id = sqlc.narg(building_id) and b.company_id = sqlc.arg(company_id) and b.deleted_at is null
+      and (sqlc.arg(all_buildings)::boolean or b.id = any(sqlc.arg(building_ids)::uuid[]))
+  ))
 returning *;
 
 -- name: TariffSoftDelete :execrows
@@ -89,18 +120,24 @@ select exists (
     and (sqlc.arg(all_buildings)::boolean or id = any(sqlc.arg(building_ids)::uuid[]))
 ) as visible;
 
+-- Important Finding 5: the day boundary is Europe/Istanbul (converted by the
+-- Go caller — see tariffTimeToDate in pgtime.go — before effective_on ever
+-- reaches this query) and ties on effective_from resolve deterministically:
+-- the schema has no unique index on (building_id, effective_from), so two
+-- rows CAN share one, and "the latest one written" must always mean the
+-- same row, not whichever the query planner happens to return first.
 -- name: TariffEffectiveForBuilding :one
 select * from tariffs
 where company_id = sqlc.arg(company_id) and building_id = sqlc.arg(building_id)
   and deleted_at is null and effective_from <= sqlc.arg(effective_on)
-order by effective_from desc
+order by effective_from desc, created_at desc, id desc
 limit 1;
 
 -- name: TariffEffectiveCompanyWide :one
 select * from tariffs
 where company_id = sqlc.arg(company_id) and building_id is null
   and deleted_at is null and effective_from <= sqlc.arg(effective_on)
-order by effective_from desc
+order by effective_from desc, created_at desc, id desc
 limit 1;
 
 -- name: TariffVisible :one
@@ -111,26 +148,67 @@ select exists (
     and deleted_at is null
 ) as visible;
 
+-- Important Finding 1: tariff_taxes has no company_id of its own, and the
+-- Go-side requireVisible check that guards Taxes/ReplaceTaxes runs OUTSIDE
+-- the write itself — every statement below re-validates that tariff_id
+-- names a tariff visible to the Scope, so the guard survives even if the
+-- Go-side pre-check were ever skipped.
 -- name: TariffTaxList :many
-select * from tariff_taxes where tariff_id = sqlc.arg(tariff_id) order by sort_order, id;
+select tt.* from tariff_taxes tt
+where tt.tariff_id = sqlc.arg(tariff_id)
+  and exists (
+    select 1 from tariffs t where t.id = tt.tariff_id and t.company_id = sqlc.arg(company_id)
+      and (sqlc.arg(all_buildings)::boolean or t.building_id = any(sqlc.arg(building_ids)::uuid[]))
+      and t.deleted_at is null
+  )
+order by tt.sort_order, tt.id;
 
 -- name: TariffTaxDeleteForTariff :exec
-delete from tariff_taxes where tariff_id = sqlc.arg(tariff_id);
+delete from tariff_taxes
+where tariff_id = sqlc.arg(tariff_id)
+  and exists (
+    select 1 from tariffs t where t.id = sqlc.arg(tariff_id) and t.company_id = sqlc.arg(company_id)
+      and (sqlc.arg(all_buildings)::boolean or t.building_id = any(sqlc.arg(building_ids)::uuid[]))
+      and t.deleted_at is null
+  );
 
 -- name: TariffTaxInsert :one
 insert into tariff_taxes (id, tariff_id, name, rate, sort_order)
-values (gen_random_uuid(), sqlc.arg(tariff_id), sqlc.arg(name), sqlc.arg(rate), sqlc.arg(sort_order))
+select gen_random_uuid(), sqlc.arg(tariff_id), sqlc.arg(name), sqlc.arg(rate), sqlc.arg(sort_order)
+where exists (
+  select 1 from tariffs t where t.id = sqlc.arg(tariff_id) and t.company_id = sqlc.arg(company_id)
+    and (sqlc.arg(all_buildings)::boolean or t.building_id = any(sqlc.arg(building_ids)::uuid[]))
+    and t.deleted_at is null
+)
 returning *;
 
 -- name: TariffManualYekdemList :many
-select * from tariff_manual_yekdem where tariff_id = sqlc.arg(tariff_id) order by year, month;
+select tmy.* from tariff_manual_yekdem tmy
+where tmy.tariff_id = sqlc.arg(tariff_id)
+  and exists (
+    select 1 from tariffs t where t.id = tmy.tariff_id and t.company_id = sqlc.arg(company_id)
+      and (sqlc.arg(all_buildings)::boolean or t.building_id = any(sqlc.arg(building_ids)::uuid[]))
+      and t.deleted_at is null
+  )
+order by tmy.year, tmy.month;
 
 -- name: TariffManualYekdemDeleteForTariff :exec
-delete from tariff_manual_yekdem where tariff_id = sqlc.arg(tariff_id);
+delete from tariff_manual_yekdem
+where tariff_id = sqlc.arg(tariff_id)
+  and exists (
+    select 1 from tariffs t where t.id = sqlc.arg(tariff_id) and t.company_id = sqlc.arg(company_id)
+      and (sqlc.arg(all_buildings)::boolean or t.building_id = any(sqlc.arg(building_ids)::uuid[]))
+      and t.deleted_at is null
+  );
 
 -- name: TariffManualYekdemInsert :one
 insert into tariff_manual_yekdem (tariff_id, year, month, value)
-values (sqlc.arg(tariff_id), sqlc.arg(year), sqlc.arg(month), sqlc.arg(value))
+select sqlc.arg(tariff_id), sqlc.arg(year), sqlc.arg(month), sqlc.arg(value)
+where exists (
+  select 1 from tariffs t where t.id = sqlc.arg(tariff_id) and t.company_id = sqlc.arg(company_id)
+    and (sqlc.arg(all_buildings)::boolean or t.building_id = any(sqlc.arg(building_ids)::uuid[]))
+    and t.deleted_at is null
+)
 returning *;
 
 -- name: TariffTemplateGet :one
@@ -175,19 +253,24 @@ limit sqlc.arg(limit_val) offset sqlc.arg(offset_val);
 
 -- name: SolarTariffCreate :one
 insert into solar_tariffs (id, company_id, plant_id, effective_from, feed_in_tariff, purchase_price, currency, notes, created_at)
-values (gen_random_uuid(), sqlc.arg(company_id), sqlc.arg(plant_id), sqlc.arg(effective_from),
-        sqlc.arg(feed_in_tariff), sqlc.narg(purchase_price), sqlc.arg(currency), sqlc.narg(notes), sqlc.arg(created_at))
+select gen_random_uuid(), sqlc.arg(company_id), sqlc.arg(plant_id), sqlc.arg(effective_from),
+       sqlc.arg(feed_in_tariff), sqlc.narg(purchase_price), sqlc.arg(currency), sqlc.narg(notes), sqlc.arg(created_at)
+where exists (
+  select 1 from power_plants p where p.id = sqlc.arg(plant_id) and p.company_id = sqlc.arg(company_id) and p.deleted_at is null
+)
 returning *;
 
 -- name: SolarTariffSoftDelete :execrows
 update solar_tariffs set deleted_at = sqlc.arg(deleted_at)
 where id = sqlc.arg(id) and company_id = sqlc.arg(company_id) and deleted_at is null;
 
+-- Important Finding 5: same Istanbul day boundary (converted by the Go
+-- caller) and deterministic tiebreak as TariffEffectiveForBuilding.
 -- name: SolarTariffEffective :one
 select * from solar_tariffs
 where company_id = sqlc.arg(company_id) and plant_id = sqlc.arg(plant_id)
   and deleted_at is null and effective_from <= sqlc.arg(effective_on)
-order by effective_from desc
+order by effective_from desc, created_at desc, id desc
 limit 1;
 
 -- name: SolarTariffPlantVisible :one
@@ -205,17 +288,21 @@ where (sqlc.narg(user_group)::distribution_user_group is null or user_group = sq
 order by effective_from desc, id
 limit sqlc.arg(limit_val) offset sqlc.arg(offset_val);
 
+-- Important Finding 5: same Istanbul day boundary and deterministic tiebreak.
 -- name: NationalTariffEffective :one
 select * from national_tariff_schedule
 where user_group = sqlc.arg(user_group) and voltage_level = sqlc.arg(voltage_level) and term = sqlc.arg(term)
   and effective_from <= sqlc.arg(effective_on)
-order by effective_from desc
+order by effective_from desc, created_at desc, id desc
 limit 1;
 
 -- name: IcmalImportCreate :one
 insert into icmal_imports (id, company_id, uploaded_by, file_name, row_count, status, result, created_at)
-values (gen_random_uuid(), sqlc.arg(company_id), sqlc.narg(uploaded_by), sqlc.arg(file_name),
-        sqlc.arg(row_count), sqlc.arg(status), sqlc.narg(result), sqlc.arg(created_at))
+select gen_random_uuid(), sqlc.arg(company_id), sqlc.narg(uploaded_by), sqlc.arg(file_name),
+       sqlc.arg(row_count), sqlc.arg(status), sqlc.narg(result), sqlc.arg(created_at)
+where sqlc.narg(uploaded_by)::uuid is null or exists (
+  select 1 from users u where u.id = sqlc.narg(uploaded_by) and u.company_id = sqlc.arg(company_id)
+)
 returning *;
 
 -- name: IcmalImportGet :one
@@ -245,13 +332,20 @@ select exists (
   select 1 from users where id = sqlc.arg(user_id) and company_id = sqlc.arg(company_id)
 ) as visible;
 
+-- Important Finding 1: icmal_rows has no company_id of its own, and the
+-- Go-side IcmalImportVisible/IcmalVisibleBuildingCount checks that guard
+-- InsertRows run OUTSIDE this statement, before the transaction the loop
+-- inserts inside even begins. Re-validating both the parent import AND (when
+-- set) the row's own building here means the guard holds even if the Go-side
+-- pre-checks were ever skipped.
 -- name: IcmalRowInsert :one
 insert into icmal_rows (
   id, import_id, building_id, period, etso_code, total_kwh, t0_kwh, t1_kwh, t2_kwh, t3_kwh,
   energy_charge, distribution_charge, reactive_charge, power_charge, overuse_charge,
   inductive_kvarh, capacitive_kvarh, demand_kw, vat_base, vat, btv, energy_fund, trt,
   price_difference, correction_amount, is_cancelled, term, voltage_level, is_multi_time, raw
-) values (
+)
+select
   gen_random_uuid(), sqlc.arg(import_id), sqlc.narg(building_id), sqlc.arg(period), sqlc.narg(etso_code),
   sqlc.narg(total_kwh), sqlc.narg(t0_kwh), sqlc.narg(t1_kwh), sqlc.narg(t2_kwh), sqlc.narg(t3_kwh),
   sqlc.narg(energy_charge), sqlc.narg(distribution_charge), sqlc.narg(reactive_charge), sqlc.narg(power_charge),
@@ -259,12 +353,21 @@ insert into icmal_rows (
   sqlc.narg(vat_base), sqlc.narg(vat), sqlc.narg(btv), sqlc.narg(energy_fund), sqlc.narg(trt),
   sqlc.narg(price_difference), sqlc.narg(correction_amount), sqlc.arg(is_cancelled), sqlc.narg(term),
   sqlc.narg(voltage_level), sqlc.narg(is_multi_time), sqlc.narg(raw)
-) returning *;
+where exists (
+    select 1 from icmal_imports i where i.id = sqlc.arg(import_id) and i.company_id = sqlc.arg(company_id)
+  )
+  and (sqlc.narg(building_id)::uuid is null or exists (
+    select 1 from buildings b
+    where b.id = sqlc.narg(building_id) and b.company_id = sqlc.arg(company_id) and b.deleted_at is null
+      and (sqlc.arg(all_buildings)::boolean or b.id = any(sqlc.arg(building_ids)::uuid[]))
+  ))
+returning *;
 
 -- name: IcmalRowList :many
-select * from icmal_rows
-where import_id = sqlc.arg(import_id)
-order by id
+select ir.* from icmal_rows ir
+where ir.import_id = sqlc.arg(import_id)
+  and exists (select 1 from icmal_imports i where i.id = ir.import_id and i.company_id = sqlc.arg(company_id))
+order by ir.id
 limit sqlc.arg(limit_val) offset sqlc.arg(offset_val);
 
 -- name: IcmalVisibleBuildingCount :one

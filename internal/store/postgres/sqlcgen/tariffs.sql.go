@@ -14,8 +14,11 @@ import (
 
 const icmalImportCreate = `-- name: IcmalImportCreate :one
 insert into icmal_imports (id, company_id, uploaded_by, file_name, row_count, status, result, created_at)
-values (gen_random_uuid(), $1, $2, $3,
-        $4, $5, $6, $7)
+select gen_random_uuid(), $1, $2, $3,
+       $4, $5, $6, $7
+where $2::uuid is null or exists (
+  select 1 from users u where u.id = $2 and u.company_id = $1
+)
 returning id, company_id, uploaded_by, file_name, row_count, status, result, created_at
 `
 
@@ -191,7 +194,8 @@ insert into icmal_rows (
   energy_charge, distribution_charge, reactive_charge, power_charge, overuse_charge,
   inductive_kvarh, capacitive_kvarh, demand_kw, vat_base, vat, btv, energy_fund, trt,
   price_difference, correction_amount, is_cancelled, term, voltage_level, is_multi_time, raw
-) values (
+)
+select
   gen_random_uuid(), $1, $2, $3, $4,
   $5, $6, $7, $8, $9,
   $10, $11, $12, $13,
@@ -199,7 +203,15 @@ insert into icmal_rows (
   $18, $19, $20, $21, $22,
   $23, $24, $25, $26,
   $27, $28, $29
-) returning id, import_id, building_id, period, etso_code, total_kwh, t0_kwh, t1_kwh, t2_kwh, t3_kwh, energy_charge, distribution_charge, reactive_charge, power_charge, overuse_charge, inductive_kvarh, capacitive_kvarh, demand_kw, vat_base, vat, btv, energy_fund, trt, price_difference, correction_amount, is_cancelled, term, voltage_level, is_multi_time, raw
+where exists (
+    select 1 from icmal_imports i where i.id = $1 and i.company_id = $30
+  )
+  and ($2::uuid is null or exists (
+    select 1 from buildings b
+    where b.id = $2 and b.company_id = $30 and b.deleted_at is null
+      and ($31::boolean or b.id = any($32::uuid[]))
+  ))
+returning id, import_id, building_id, period, etso_code, total_kwh, t0_kwh, t1_kwh, t2_kwh, t3_kwh, energy_charge, distribution_charge, reactive_charge, power_charge, overuse_charge, inductive_kvarh, capacitive_kvarh, demand_kw, vat_base, vat, btv, energy_fund, trt, price_difference, correction_amount, is_cancelled, term, voltage_level, is_multi_time, raw
 `
 
 type IcmalRowInsertParams struct {
@@ -232,8 +244,17 @@ type IcmalRowInsertParams struct {
 	VoltageLevel       *string
 	IsMultiTime        *bool
 	Raw                []byte
+	CompanyID          uuid.UUID
+	AllBuildings       bool
+	BuildingIds        []uuid.UUID
 }
 
+// Important Finding 1: icmal_rows has no company_id of its own, and the
+// Go-side IcmalImportVisible/IcmalVisibleBuildingCount checks that guard
+// InsertRows run OUTSIDE this statement, before the transaction the loop
+// inserts inside even begins. Re-validating both the parent import AND (when
+// set) the row's own building here means the guard holds even if the Go-side
+// pre-checks were ever skipped.
 func (q *Queries) IcmalRowInsert(ctx context.Context, arg IcmalRowInsertParams) (IcmalRow, error) {
 	row := q.db.QueryRow(ctx, icmalRowInsert,
 		arg.ImportID,
@@ -265,6 +286,9 @@ func (q *Queries) IcmalRowInsert(ctx context.Context, arg IcmalRowInsertParams) 
 		arg.VoltageLevel,
 		arg.IsMultiTime,
 		arg.Raw,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
 	)
 	var i IcmalRow
 	err := row.Scan(
@@ -303,20 +327,27 @@ func (q *Queries) IcmalRowInsert(ctx context.Context, arg IcmalRowInsertParams) 
 }
 
 const icmalRowList = `-- name: IcmalRowList :many
-select id, import_id, building_id, period, etso_code, total_kwh, t0_kwh, t1_kwh, t2_kwh, t3_kwh, energy_charge, distribution_charge, reactive_charge, power_charge, overuse_charge, inductive_kvarh, capacitive_kvarh, demand_kw, vat_base, vat, btv, energy_fund, trt, price_difference, correction_amount, is_cancelled, term, voltage_level, is_multi_time, raw from icmal_rows
-where import_id = $1
-order by id
-limit $3 offset $2
+select ir.id, ir.import_id, ir.building_id, ir.period, ir.etso_code, ir.total_kwh, ir.t0_kwh, ir.t1_kwh, ir.t2_kwh, ir.t3_kwh, ir.energy_charge, ir.distribution_charge, ir.reactive_charge, ir.power_charge, ir.overuse_charge, ir.inductive_kvarh, ir.capacitive_kvarh, ir.demand_kw, ir.vat_base, ir.vat, ir.btv, ir.energy_fund, ir.trt, ir.price_difference, ir.correction_amount, ir.is_cancelled, ir.term, ir.voltage_level, ir.is_multi_time, ir.raw from icmal_rows ir
+where ir.import_id = $1
+  and exists (select 1 from icmal_imports i where i.id = ir.import_id and i.company_id = $2)
+order by ir.id
+limit $4 offset $3
 `
 
 type IcmalRowListParams struct {
 	ImportID  uuid.UUID
+	CompanyID uuid.UUID
 	OffsetVal int32
 	LimitVal  int32
 }
 
 func (q *Queries) IcmalRowList(ctx context.Context, arg IcmalRowListParams) ([]IcmalRow, error) {
-	rows, err := q.db.Query(ctx, icmalRowList, arg.ImportID, arg.OffsetVal, arg.LimitVal)
+	rows, err := q.db.Query(ctx, icmalRowList,
+		arg.ImportID,
+		arg.CompanyID,
+		arg.OffsetVal,
+		arg.LimitVal,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -414,7 +445,7 @@ const nationalTariffEffective = `-- name: NationalTariffEffective :one
 select id, effective_from, user_group, voltage_level, term, energy_price, t1_price, t2_price, t3_price, distribution_price, power_price, overuse_price, daily_threshold_kwh, vat_rate, source, created_at from national_tariff_schedule
 where user_group = $1 and voltage_level = $2 and term = $3
   and effective_from <= $4
-order by effective_from desc
+order by effective_from desc, created_at desc, id desc
 limit 1
 `
 
@@ -425,6 +456,7 @@ type NationalTariffEffectiveParams struct {
 	EffectiveOn  pgtype.Date
 }
 
+// Important Finding 5: same Istanbul day boundary and deterministic tiebreak.
 func (q *Queries) NationalTariffEffective(ctx context.Context, arg NationalTariffEffectiveParams) (NationalTariffSchedule, error) {
 	row := q.db.QueryRow(ctx, nationalTariffEffective,
 		arg.UserGroup,
@@ -519,8 +551,11 @@ func (q *Queries) NationalTariffList(ctx context.Context, arg NationalTariffList
 
 const solarTariffCreate = `-- name: SolarTariffCreate :one
 insert into solar_tariffs (id, company_id, plant_id, effective_from, feed_in_tariff, purchase_price, currency, notes, created_at)
-values (gen_random_uuid(), $1, $2, $3,
-        $4, $5, $6, $7, $8)
+select gen_random_uuid(), $1, $2, $3,
+       $4, $5, $6, $7, $8
+where exists (
+  select 1 from power_plants p where p.id = $2 and p.company_id = $1 and p.deleted_at is null
+)
 returning id, company_id, plant_id, effective_from, feed_in_tariff, purchase_price, currency, notes, created_at, deleted_at
 `
 
@@ -566,7 +601,7 @@ const solarTariffEffective = `-- name: SolarTariffEffective :one
 select id, company_id, plant_id, effective_from, feed_in_tariff, purchase_price, currency, notes, created_at, deleted_at from solar_tariffs
 where company_id = $1 and plant_id = $2
   and deleted_at is null and effective_from <= $3
-order by effective_from desc
+order by effective_from desc, created_at desc, id desc
 limit 1
 `
 
@@ -576,6 +611,8 @@ type SolarTariffEffectiveParams struct {
 	EffectiveOn pgtype.Date
 }
 
+// Important Finding 5: same Istanbul day boundary (converted by the Go
+// caller) and deterministic tiebreak as TariffEffectiveForBuilding.
 func (q *Queries) SolarTariffEffective(ctx context.Context, arg SolarTariffEffectiveParams) (SolarTariff, error) {
 	row := q.db.QueryRow(ctx, solarTariffEffective, arg.CompanyID, arg.PlantID, arg.EffectiveOn)
 	var i SolarTariff
@@ -757,7 +794,8 @@ insert into tariffs (
   use_ptf_yekdem, kbk_energy, kbk_t1, kbk_t2, kbk_t3, kbk_power_price,
   kbk_overuse_price, kbk_reactive_power, kbk_distribution_cost_tl_per_kwh,
   use_manual_yekdem, created_by, created_at, updated_at
-) values (
+)
+select
   gen_random_uuid(), $1, $2, $3,
   $4, $5, $6,
   $7, $8, $9, $10,
@@ -771,7 +809,24 @@ insert into tariffs (
   $30, $31, $32, $33,
   $34, $35,
   $36, $37, $38, $38
-) returning id, company_id, building_id, name, effective_from, currency, energy_type, voltage_level, user_group, price_type, term, supply_company, single_time_price, t1_price, t2_price, t3_price, overuse_price, overuse_threshold_kwh_per_day, distribution_cost, reactive_power_price, green_energy_price, green_energy_distribution_cost, contracted_power_kw, power_unit_price, generation_usage, generation_price_per_kwh, vat_rate, use_ptf_yekdem, kbk_energy, kbk_t1, kbk_t2, kbk_t3, kbk_power_price, kbk_overuse_price, kbk_reactive_power, kbk_distribution_cost_tl_per_kwh, use_manual_yekdem, created_by, created_at, updated_at, deleted_at
+where
+  -- Critical Finding 1 (task-11a fix round 1): a stored building_id is a
+  -- foreign key and MUST be validated in SQL against the Scope's company,
+  -- deleted_at and building branch. Scope.AllowsBuilding is an in-memory
+  -- grant check that cannot know which company owns a building id — an
+  -- AllBuildings Scope must not be able to store ANOTHER TENANT's building
+  -- id just because the in-memory check answers "yes" for every id.
+  ($2::uuid is null or exists (
+    select 1 from buildings b
+    where b.id = $2 and b.company_id = $1 and b.deleted_at is null
+      and ($39::boolean or b.id = any($40::uuid[]))
+  ))
+  -- Important Finding 4: created_by is a stored foreign key too, and must
+  -- name a user of the same company rather than being stored as given.
+  and ($37::uuid is null or exists (
+    select 1 from users u where u.id = $37 and u.company_id = $1
+  ))
+returning id, company_id, building_id, name, effective_from, currency, energy_type, voltage_level, user_group, price_type, term, supply_company, single_time_price, t1_price, t2_price, t3_price, overuse_price, overuse_threshold_kwh_per_day, distribution_cost, reactive_power_price, green_energy_price, green_energy_distribution_cost, contracted_power_kw, power_unit_price, generation_usage, generation_price_per_kwh, vat_rate, use_ptf_yekdem, kbk_energy, kbk_t1, kbk_t2, kbk_t3, kbk_power_price, kbk_overuse_price, kbk_reactive_power, kbk_distribution_cost_tl_per_kwh, use_manual_yekdem, created_by, created_at, updated_at, deleted_at
 `
 
 type TariffCreateParams struct {
@@ -813,6 +868,8 @@ type TariffCreateParams struct {
 	UseManualYekdem             bool
 	CreatedBy                   *uuid.UUID
 	CreatedAt                   pgtype.Timestamptz
+	AllBuildings                bool
+	BuildingIds                 []uuid.UUID
 }
 
 func (q *Queries) TariffCreate(ctx context.Context, arg TariffCreateParams) (Tariff, error) {
@@ -855,6 +912,8 @@ func (q *Queries) TariffCreate(ctx context.Context, arg TariffCreateParams) (Tar
 		arg.UseManualYekdem,
 		arg.CreatedBy,
 		arg.CreatedAt,
+		arg.AllBuildings,
+		arg.BuildingIds,
 	)
 	var i Tariff
 	err := row.Scan(
@@ -907,7 +966,7 @@ const tariffEffectiveCompanyWide = `-- name: TariffEffectiveCompanyWide :one
 select id, company_id, building_id, name, effective_from, currency, energy_type, voltage_level, user_group, price_type, term, supply_company, single_time_price, t1_price, t2_price, t3_price, overuse_price, overuse_threshold_kwh_per_day, distribution_cost, reactive_power_price, green_energy_price, green_energy_distribution_cost, contracted_power_kw, power_unit_price, generation_usage, generation_price_per_kwh, vat_rate, use_ptf_yekdem, kbk_energy, kbk_t1, kbk_t2, kbk_t3, kbk_power_price, kbk_overuse_price, kbk_reactive_power, kbk_distribution_cost_tl_per_kwh, use_manual_yekdem, created_by, created_at, updated_at, deleted_at from tariffs
 where company_id = $1 and building_id is null
   and deleted_at is null and effective_from <= $2
-order by effective_from desc
+order by effective_from desc, created_at desc, id desc
 limit 1
 `
 
@@ -969,7 +1028,7 @@ const tariffEffectiveForBuilding = `-- name: TariffEffectiveForBuilding :one
 select id, company_id, building_id, name, effective_from, currency, energy_type, voltage_level, user_group, price_type, term, supply_company, single_time_price, t1_price, t2_price, t3_price, overuse_price, overuse_threshold_kwh_per_day, distribution_cost, reactive_power_price, green_energy_price, green_energy_distribution_cost, contracted_power_kw, power_unit_price, generation_usage, generation_price_per_kwh, vat_rate, use_ptf_yekdem, kbk_energy, kbk_t1, kbk_t2, kbk_t3, kbk_power_price, kbk_overuse_price, kbk_reactive_power, kbk_distribution_cost_tl_per_kwh, use_manual_yekdem, created_by, created_at, updated_at, deleted_at from tariffs
 where company_id = $1 and building_id = $2
   and deleted_at is null and effective_from <= $3
-order by effective_from desc
+order by effective_from desc, created_at desc, id desc
 limit 1
 `
 
@@ -979,6 +1038,12 @@ type TariffEffectiveForBuildingParams struct {
 	EffectiveOn pgtype.Date
 }
 
+// Important Finding 5: the day boundary is Europe/Istanbul (converted by the
+// Go caller — see tariffTimeToDate in pgtime.go — before effective_on ever
+// reaches this query) and ties on effective_from resolve deterministically:
+// the schema has no unique index on (building_id, effective_from), so two
+// rows CAN share one, and "the latest one written" must always mean the
+// same row, not whichever the query planner happens to return first.
 func (q *Queries) TariffEffectiveForBuilding(ctx context.Context, arg TariffEffectiveForBuildingParams) (Tariff, error) {
 	row := q.db.QueryRow(ctx, tariffEffectiveForBuilding, arg.CompanyID, arg.BuildingID, arg.EffectiveOn)
 	var i Tariff
@@ -1031,9 +1096,12 @@ func (q *Queries) TariffEffectiveForBuilding(ctx context.Context, arg TariffEffe
 const tariffGet = `-- name: TariffGet :one
 
 select id, company_id, building_id, name, effective_from, currency, energy_type, voltage_level, user_group, price_type, term, supply_company, single_time_price, t1_price, t2_price, t3_price, overuse_price, overuse_threshold_kwh_per_day, distribution_cost, reactive_power_price, green_energy_price, green_energy_distribution_cost, contracted_power_kw, power_unit_price, generation_usage, generation_price_per_kwh, vat_rate, use_ptf_yekdem, kbk_energy, kbk_t1, kbk_t2, kbk_t3, kbk_power_price, kbk_overuse_price, kbk_reactive_power, kbk_distribution_cost_tl_per_kwh, use_manual_yekdem, created_by, created_at, updated_at, deleted_at from tariffs
-where id = $1 and company_id = $2
-  and ($3::boolean or building_id = any($4::uuid[]))
-  and deleted_at is null
+where tariffs.id = $1 and tariffs.company_id = $2
+  and ($3::boolean or tariffs.building_id = any($4::uuid[]))
+  and tariffs.deleted_at is null
+  -- Folded minor (fix round 1): a tariff of a soft-deleted building must not
+  -- stay readable through the tariff's own row.
+  and (tariffs.building_id is null or exists (select 1 from buildings b where b.id = tariffs.building_id and b.deleted_at is null))
 `
 
 type TariffGetParams struct {
@@ -1103,14 +1171,15 @@ func (q *Queries) TariffGet(ctx context.Context, arg TariffGetParams) (Tariff, e
 
 const tariffList = `-- name: TariffList :many
 select id, company_id, building_id, name, effective_from, currency, energy_type, voltage_level, user_group, price_type, term, supply_company, single_time_price, t1_price, t2_price, t3_price, overuse_price, overuse_threshold_kwh_per_day, distribution_cost, reactive_power_price, green_energy_price, green_energy_distribution_cost, contracted_power_kw, power_unit_price, generation_usage, generation_price_per_kwh, vat_rate, use_ptf_yekdem, kbk_energy, kbk_t1, kbk_t2, kbk_t3, kbk_power_price, kbk_overuse_price, kbk_reactive_power, kbk_distribution_cost_tl_per_kwh, use_manual_yekdem, created_by, created_at, updated_at, deleted_at from tariffs
-where company_id = $1
-  and ($2::boolean or building_id = any($3::uuid[]))
-  and (cardinality($4::uuid[]) = 0 or id = any($4::uuid[]))
-  and ($5::uuid is null or building_id = $5)
-  and (not $6::boolean or building_id is null)
-  and ($7::date is null or effective_from <= $7)
-  and ($8::boolean or deleted_at is null)
-order by effective_from desc, id
+where tariffs.company_id = $1
+  and ($2::boolean or tariffs.building_id = any($3::uuid[]))
+  and (cardinality($4::uuid[]) = 0 or tariffs.id = any($4::uuid[]))
+  and ($5::uuid is null or tariffs.building_id = $5)
+  and (not $6::boolean or tariffs.building_id is null)
+  and ($7::date is null or tariffs.effective_from <= $7)
+  and ($8::boolean or tariffs.deleted_at is null)
+  and (tariffs.building_id is null or exists (select 1 from buildings b where b.id = tariffs.building_id and b.deleted_at is null))
+order by tariffs.effective_from desc, tariffs.id
 limit $10 offset $9
 `
 
@@ -1201,25 +1270,51 @@ func (q *Queries) TariffList(ctx context.Context, arg TariffListParams) ([]Tarif
 }
 
 const tariffManualYekdemDeleteForTariff = `-- name: TariffManualYekdemDeleteForTariff :exec
-delete from tariff_manual_yekdem where tariff_id = $1
+delete from tariff_manual_yekdem
+where tariff_id = $1
+  and exists (
+    select 1 from tariffs t where t.id = $1 and t.company_id = $2
+      and ($3::boolean or t.building_id = any($4::uuid[]))
+      and t.deleted_at is null
+  )
 `
 
-func (q *Queries) TariffManualYekdemDeleteForTariff(ctx context.Context, tariffID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, tariffManualYekdemDeleteForTariff, tariffID)
+type TariffManualYekdemDeleteForTariffParams struct {
+	TariffID     uuid.UUID
+	CompanyID    uuid.UUID
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
+}
+
+func (q *Queries) TariffManualYekdemDeleteForTariff(ctx context.Context, arg TariffManualYekdemDeleteForTariffParams) error {
+	_, err := q.db.Exec(ctx, tariffManualYekdemDeleteForTariff,
+		arg.TariffID,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
+	)
 	return err
 }
 
 const tariffManualYekdemInsert = `-- name: TariffManualYekdemInsert :one
 insert into tariff_manual_yekdem (tariff_id, year, month, value)
-values ($1, $2, $3, $4)
+select $1, $2, $3, $4
+where exists (
+  select 1 from tariffs t where t.id = $1 and t.company_id = $5
+    and ($6::boolean or t.building_id = any($7::uuid[]))
+    and t.deleted_at is null
+)
 returning tariff_id, year, month, value
 `
 
 type TariffManualYekdemInsertParams struct {
-	TariffID uuid.UUID
-	Year     int16
-	Month    int16
-	Value    pgtype.Numeric
+	TariffID     uuid.UUID
+	Year         int16
+	Month        int16
+	Value        pgtype.Numeric
+	CompanyID    uuid.UUID
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
 }
 
 func (q *Queries) TariffManualYekdemInsert(ctx context.Context, arg TariffManualYekdemInsertParams) (TariffManualYekdem, error) {
@@ -1228,6 +1323,9 @@ func (q *Queries) TariffManualYekdemInsert(ctx context.Context, arg TariffManual
 		arg.Year,
 		arg.Month,
 		arg.Value,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
 	)
 	var i TariffManualYekdem
 	err := row.Scan(
@@ -1240,11 +1338,30 @@ func (q *Queries) TariffManualYekdemInsert(ctx context.Context, arg TariffManual
 }
 
 const tariffManualYekdemList = `-- name: TariffManualYekdemList :many
-select tariff_id, year, month, value from tariff_manual_yekdem where tariff_id = $1 order by year, month
+select tmy.tariff_id, tmy.year, tmy.month, tmy.value from tariff_manual_yekdem tmy
+where tmy.tariff_id = $1
+  and exists (
+    select 1 from tariffs t where t.id = tmy.tariff_id and t.company_id = $2
+      and ($3::boolean or t.building_id = any($4::uuid[]))
+      and t.deleted_at is null
+  )
+order by tmy.year, tmy.month
 `
 
-func (q *Queries) TariffManualYekdemList(ctx context.Context, tariffID uuid.UUID) ([]TariffManualYekdem, error) {
-	rows, err := q.db.Query(ctx, tariffManualYekdemList, tariffID)
+type TariffManualYekdemListParams struct {
+	TariffID     uuid.UUID
+	CompanyID    uuid.UUID
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
+}
+
+func (q *Queries) TariffManualYekdemList(ctx context.Context, arg TariffManualYekdemListParams) ([]TariffManualYekdem, error) {
+	rows, err := q.db.Query(ctx, tariffManualYekdemList,
+		arg.TariffID,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1298,25 +1415,51 @@ func (q *Queries) TariffSoftDelete(ctx context.Context, arg TariffSoftDeletePara
 }
 
 const tariffTaxDeleteForTariff = `-- name: TariffTaxDeleteForTariff :exec
-delete from tariff_taxes where tariff_id = $1
+delete from tariff_taxes
+where tariff_id = $1
+  and exists (
+    select 1 from tariffs t where t.id = $1 and t.company_id = $2
+      and ($3::boolean or t.building_id = any($4::uuid[]))
+      and t.deleted_at is null
+  )
 `
 
-func (q *Queries) TariffTaxDeleteForTariff(ctx context.Context, tariffID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, tariffTaxDeleteForTariff, tariffID)
+type TariffTaxDeleteForTariffParams struct {
+	TariffID     uuid.UUID
+	CompanyID    uuid.UUID
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
+}
+
+func (q *Queries) TariffTaxDeleteForTariff(ctx context.Context, arg TariffTaxDeleteForTariffParams) error {
+	_, err := q.db.Exec(ctx, tariffTaxDeleteForTariff,
+		arg.TariffID,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
+	)
 	return err
 }
 
 const tariffTaxInsert = `-- name: TariffTaxInsert :one
 insert into tariff_taxes (id, tariff_id, name, rate, sort_order)
-values (gen_random_uuid(), $1, $2, $3, $4)
+select gen_random_uuid(), $1, $2, $3, $4
+where exists (
+  select 1 from tariffs t where t.id = $1 and t.company_id = $5
+    and ($6::boolean or t.building_id = any($7::uuid[]))
+    and t.deleted_at is null
+)
 returning id, tariff_id, name, rate, sort_order
 `
 
 type TariffTaxInsertParams struct {
-	TariffID  uuid.UUID
-	Name      string
-	Rate      pgtype.Numeric
-	SortOrder int16
+	TariffID     uuid.UUID
+	Name         string
+	Rate         pgtype.Numeric
+	SortOrder    int16
+	CompanyID    uuid.UUID
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
 }
 
 func (q *Queries) TariffTaxInsert(ctx context.Context, arg TariffTaxInsertParams) (TariffTax, error) {
@@ -1325,6 +1468,9 @@ func (q *Queries) TariffTaxInsert(ctx context.Context, arg TariffTaxInsertParams
 		arg.Name,
 		arg.Rate,
 		arg.SortOrder,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
 	)
 	var i TariffTax
 	err := row.Scan(
@@ -1338,11 +1484,35 @@ func (q *Queries) TariffTaxInsert(ctx context.Context, arg TariffTaxInsertParams
 }
 
 const tariffTaxList = `-- name: TariffTaxList :many
-select id, tariff_id, name, rate, sort_order from tariff_taxes where tariff_id = $1 order by sort_order, id
+select tt.id, tt.tariff_id, tt.name, tt.rate, tt.sort_order from tariff_taxes tt
+where tt.tariff_id = $1
+  and exists (
+    select 1 from tariffs t where t.id = tt.tariff_id and t.company_id = $2
+      and ($3::boolean or t.building_id = any($4::uuid[]))
+      and t.deleted_at is null
+  )
+order by tt.sort_order, tt.id
 `
 
-func (q *Queries) TariffTaxList(ctx context.Context, tariffID uuid.UUID) ([]TariffTax, error) {
-	rows, err := q.db.Query(ctx, tariffTaxList, tariffID)
+type TariffTaxListParams struct {
+	TariffID     uuid.UUID
+	CompanyID    uuid.UUID
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
+}
+
+// Important Finding 1: tariff_taxes has no company_id of its own, and the
+// Go-side requireVisible check that guards Taxes/ReplaceTaxes runs OUTSIDE
+// the write itself — every statement below re-validates that tariff_id
+// names a tariff visible to the Scope, so the guard survives even if the
+// Go-side pre-check were ever skipped.
+func (q *Queries) TariffTaxList(ctx context.Context, arg TariffTaxListParams) ([]TariffTax, error) {
+	rows, err := q.db.Query(ctx, tariffTaxList,
+		arg.TariffID,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1563,9 +1733,18 @@ update tariffs set
   kbk_overuse_price = $32, kbk_reactive_power = $33,
   kbk_distribution_cost_tl_per_kwh = $34,
   use_manual_yekdem = $35, updated_at = $36
-where id = $37 and company_id = $38
-  and ($39::boolean or building_id = any($40::uuid[]))
-  and deleted_at is null
+where tariffs.id = $37 and tariffs.company_id = $38
+  and ($39::boolean or tariffs.building_id = any($40::uuid[]))
+  and tariffs.deleted_at is null
+  -- Critical Finding 1: the NEW building_id this write stores must be
+  -- validated exactly as TariffCreate validates it — moving a tariff to
+  -- another tenant's building is the same stored-foreign-key bug as
+  -- creating one there.
+  and ($1::uuid is null or exists (
+    select 1 from buildings b
+    where b.id = $1 and b.company_id = $38 and b.deleted_at is null
+      and ($39::boolean or b.id = any($40::uuid[]))
+  ))
 returning id, company_id, building_id, name, effective_from, currency, energy_type, voltage_level, user_group, price_type, term, supply_company, single_time_price, t1_price, t2_price, t3_price, overuse_price, overuse_threshold_kwh_per_day, distribution_cost, reactive_power_price, green_energy_price, green_energy_distribution_cost, contracted_power_kw, power_unit_price, generation_usage, generation_price_per_kwh, vat_rate, use_ptf_yekdem, kbk_energy, kbk_t1, kbk_t2, kbk_t3, kbk_power_price, kbk_overuse_price, kbk_reactive_power, kbk_distribution_cost_tl_per_kwh, use_manual_yekdem, created_by, created_at, updated_at, deleted_at
 `
 

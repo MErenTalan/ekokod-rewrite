@@ -196,6 +196,178 @@ func TestAlarmMarkBillFiredJoinsThroughAlarmsAndBills(t *testing.T) {
 	require.False(t, claimedAgain)
 }
 
+// TestAlarmAnalyzersAndEventsHideBuildingOutsideNarrowScope is Important
+// Finding 2's probe: the alarm RULE is company-wide (accepted), but its
+// building-scoped children are not. A narrow Scope on Buildings[0] must
+// never learn — through Analyzers, ListEvents, or a AnalyzerID List filter —
+// that the SAME alarm also watches an analyzer under Buildings[1].
+func TestAlarmAnalyzersAndEventsHideBuildingOutsideNarrowScope(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 460)
+	repo := postgres.NewAlarmRepository(pool)
+
+	alarm, err := repo.Create(ctx, tenant.AdminScope, alarmFixtureRow(tenant.Company.ID))
+	require.NoError(t, err)
+
+	visibleAnalyzer := tenant.Analyzers[0].ID // Buildings[0]
+	hiddenAnalyzer := tenant.Analyzers[2].ID  // Buildings[1]
+	require.NoError(t, repo.ReplaceAnalyzers(ctx, tenant.AdminScope, alarm.ID, []uuid.UUID{visibleAnalyzer, hiddenAnalyzer}))
+
+	// Analyzers(): the narrow Scope sees only its own building's attachment.
+	list, err := repo.Analyzers(ctx, tenant.Scope, alarm.ID)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	require.Equal(t, visibleAnalyzer, list[0].AnalyzerID)
+
+	// ListEvents(): an event on the HIDDEN analyzer, and its message/detail
+	// payload, must never reach the narrow Scope.
+	hiddenEvent, err := repo.CreateEvent(ctx, tenant.AdminScope, model.AlarmEvent{
+		AlarmID: alarm.ID, AnalyzerID: &hiddenAnalyzer, TriggeredAt: time.Now().UTC(), Message: "secret",
+	})
+	require.NoError(t, err)
+	visibleEvent, err := repo.CreateEvent(ctx, tenant.AdminScope, model.AlarmEvent{
+		AlarmID: alarm.ID, AnalyzerID: &visibleAnalyzer, TriggeredAt: time.Now().UTC(), Message: "public",
+	})
+	require.NoError(t, err)
+
+	events, err := repo.ListEvents(ctx, tenant.Scope, store.AlarmEventFilter{AlarmID: &alarm.ID})
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	require.Equal(t, visibleEvent.ID, events[0].ID)
+	for _, e := range events {
+		require.NotEqual(t, hiddenEvent.ID, e.ID, "the narrow Scope must never see the hidden-building event")
+	}
+
+	// A company-level event (NULL analyzer_id) is visible only to AllBuildings.
+	companyEvent, err := repo.CreateEvent(ctx, tenant.AdminScope, model.AlarmEvent{
+		AlarmID: alarm.ID, TriggeredAt: time.Now().UTC(), Message: "company-wide",
+	})
+	require.NoError(t, err)
+	narrowAfter, err := repo.ListEvents(ctx, tenant.Scope, store.AlarmEventFilter{AlarmID: &alarm.ID})
+	require.NoError(t, err)
+	for _, e := range narrowAfter {
+		require.NotEqual(t, companyEvent.ID, e.ID, "a narrow Scope must never see a NULL-analyzer alarm event")
+	}
+	adminAfter, err := repo.ListEvents(ctx, tenant.AdminScope, store.AlarmEventFilter{AlarmID: &alarm.ID})
+	require.NoError(t, err)
+	require.Len(t, adminAfter, 3)
+
+	// AlarmList's AnalyzerID filter narrows the same way: filtering by the
+	// hidden analyzer must not surface the alarm to the narrow Scope.
+	byHidden, err := repo.List(ctx, tenant.Scope, store.AlarmFilter{AnalyzerID: &hiddenAnalyzer})
+	require.NoError(t, err)
+	require.Empty(t, byHidden, "the narrow Scope must not learn the alarm is attached via a hidden analyzer")
+	byVisible, err := repo.List(ctx, tenant.Scope, store.AlarmFilter{AnalyzerID: &visibleAnalyzer})
+	require.NoError(t, err)
+	require.Len(t, byVisible, 1)
+}
+
+// TestAlarmReplaceAnalyzersLeavesInvisibleAttachmentsUntouched is Important
+// Finding 2's probe on the write side: ReplaceAnalyzers must replace ONLY
+// the attachments visible to the Scope, not silently detach one outside it.
+func TestAlarmReplaceAnalyzersLeavesInvisibleAttachmentsUntouched(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 461)
+	repo := postgres.NewAlarmRepository(pool)
+
+	alarm, err := repo.Create(ctx, tenant.AdminScope, alarmFixtureRow(tenant.Company.ID))
+	require.NoError(t, err)
+
+	hiddenAnalyzer := tenant.Analyzers[2].ID // Buildings[1]
+	require.NoError(t, repo.ReplaceAnalyzers(ctx, tenant.AdminScope, alarm.ID, []uuid.UUID{hiddenAnalyzer}))
+
+	// The narrow Scope replaces its OWN (empty) list of visible attachments.
+	visibleAnalyzer := tenant.Analyzers[0].ID // Buildings[0]
+	require.NoError(t, repo.ReplaceAnalyzers(ctx, tenant.Scope, alarm.ID, []uuid.UUID{visibleAnalyzer}))
+
+	// Both attachments survive: the hidden one was never touched.
+	got, err := repo.Analyzers(ctx, tenant.AdminScope, alarm.ID)
+	require.NoError(t, err)
+	ids := make([]uuid.UUID, 0, len(got))
+	for _, aa := range got {
+		ids = append(ids, aa.AnalyzerID)
+	}
+	require.ElementsMatch(t, []uuid.UUID{hiddenAnalyzer, visibleAnalyzer}, ids,
+		"a narrow Scope's ReplaceAnalyzers must not have detached the hidden-building analyzer")
+}
+
+// TestAlarmUpdateRejectsForeignCompanyID is Important Finding 3's probe.
+func TestAlarmUpdateRejectsForeignCompanyID(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 462)
+	tenantB := testfixtures.NewTenant(t, ctx, pool, 463)
+	repo := postgres.NewAlarmRepository(pool)
+
+	created, err := repo.Create(ctx, tenantA.AdminScope, alarmFixtureRow(tenantA.Company.ID))
+	require.NoError(t, err)
+
+	tampered := created
+	tampered.CompanyID = tenantB.Company.ID
+	_, err = repo.Update(ctx, tenantA.AdminScope, tampered)
+	require.ErrorIs(t, err, store.ErrNotFound)
+}
+
+// TestAlarmCrossTenantUpdateAndSoftDelete is Important Finding 7's missing
+// test: cross-tenant Update and SoftDelete for alarms.
+func TestAlarmCrossTenantUpdateAndSoftDelete(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 464)
+	tenantB := testfixtures.NewTenant(t, ctx, pool, 465)
+	repo := postgres.NewAlarmRepository(pool)
+
+	alarmB, err := repo.Create(ctx, tenantB.AdminScope, alarmFixtureRow(tenantB.Company.ID))
+	require.NoError(t, err)
+
+	tampered := alarmB
+	tampered.Name = "renamed by tenant A"
+	_, err = repo.Update(ctx, tenantA.AdminScope, tampered)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	err = repo.SoftDelete(ctx, tenantA.AdminScope, alarmB.ID, time.Now().UTC())
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	got, err := repo.Get(ctx, tenantB.AdminScope, alarmB.ID)
+	require.NoError(t, err)
+	require.Nil(t, got.DeletedAt)
+}
+
+// TestAlarmMarkBillFiredRejectsInvisibleAlarm is Important Finding 7's
+// missing test: MarkBillFired with an invisible ALARM (as opposed to the
+// existing invisible-BILL case).
+func TestAlarmMarkBillFiredRejectsInvisibleAlarm(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 466)
+	tenantB := testfixtures.NewTenant(t, ctx, pool, 467)
+	alarmRepo := postgres.NewAlarmRepository(pool)
+	billRepo := postgres.NewBillRepository(pool)
+
+	alarmB, err := alarmRepo.Create(ctx, tenantB.AdminScope, alarmFixtureRow(tenantB.Company.ID))
+	require.NoError(t, err)
+	buildingA := tenantA.Buildings[0].ID
+	billA, err := billRepo.Create(ctx, tenantA.Scope, billFixtureRow(tenantA.Company.ID, &buildingA, nil, model.BillScopeBuilding, "2026-01"), nil, nil)
+	require.NoError(t, err)
+
+	_, err = alarmRepo.MarkBillFired(ctx, tenantA.AdminScope, alarmB.ID, billA.ID)
+	require.ErrorIs(t, err, store.ErrNotFound, "tenant A cannot claim firing for tenant B's alarm even against its OWN bill")
+}
+
+// TestAlarmPageLimitsClampNegativeOffset is the folded-minor probe: OFFSET
+// must not be negative.
+func TestAlarmPageLimitsClampNegativeOffset(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 468)
+	repo := postgres.NewAlarmRepository(pool)
+
+	_, err := repo.List(ctx, tenant.AdminScope, store.AlarmFilter{Page: store.Page{Limit: 10, Offset: -1}})
+	require.NoError(t, err, "a negative Offset must be clamped to 0")
+}
+
 // TestAlarmMarkIsolarForwardedJoinsThroughPlant covers the mandatory method
 // on isolar_forwarded_alarms.
 func TestAlarmMarkIsolarForwardedJoinsThroughPlant(t *testing.T) {

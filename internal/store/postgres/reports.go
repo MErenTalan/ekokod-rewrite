@@ -28,7 +28,11 @@ func reportPageLimits(p store.Page) (limit, offset int32) {
 	if limit > reportMaxPageLimit {
 		limit = reportMaxPageLimit
 	}
-	return limit, p.Offset
+	offset = p.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	return limit, offset
 }
 
 // ReportRepository implements store.ReportRepository.
@@ -99,11 +103,18 @@ func (r *ReportRepository) Upsert(ctx context.Context, s store.Scope, rp model.R
 	if rp.CompanyID != uuid.Nil && rp.CompanyID != s.CompanyID {
 		return model.Report{}, store.ErrNotFound
 	}
+	// Fast pre-check only — see Scope.AllowsBuilding's doc comment and
+	// Critical Finding 1 (task-11a fix round 1): an AllBuildings Scope
+	// answers true here for ANY building id, including another tenant's.
+	// ReportUpsert validates the stored building_id itself, in SQL, against
+	// this Scope's company, deleted_at and building branch, so the write is
+	// refused even if this check were skipped entirely.
 	if !s.AllowsBuilding(rp.BuildingID) {
 		return model.Report{}, store.ErrNotFound
 	}
+	ids, all := s.BuildingFilter()
 	row, err := r.q.ReportUpsert(ctx, sqlcgen.ReportUpsertParams{
-		CompanyID: s.CompanyID, BuildingID: rp.BuildingID, ReportType: sqlcgen.ReportType(rp.Type),
+		CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: ids, BuildingID: rp.BuildingID, ReportType: sqlcgen.ReportType(rp.Type),
 		Period: rp.Period, PlantSelection: sqlcgen.PlantSelection(rp.PlantSelection), Payload: rp.Payload,
 		PdfPath: rp.PdfPath, ExcelPath: rp.ExcelPath, EmailSubject: rp.EmailSubject, EmailBody: rp.EmailBody,
 		Status: sqlcgen.ReportStatus(rp.Status), ErrorMessage: rp.ErrorMessage,

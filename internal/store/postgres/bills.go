@@ -29,7 +29,11 @@ func billPageLimits(p store.Page) (limit, offset int32) {
 	if limit > billMaxPageLimit {
 		limit = billMaxPageLimit
 	}
-	return limit, p.Offset
+	offset = p.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	return limit, offset
 }
 
 // errBillCannotSetSuperseded is returned by UpdateStatus for an attempt to
@@ -38,6 +42,14 @@ func billPageLimits(p store.Page) (limit, offset int32) {
 // wrapping it as ErrNotFound or ErrConflict would make it indistinguishable
 // from either at the call site.
 var errBillCannotSetSuperseded = errors.New("bill status superseded may only be set by Supersede")
+
+// errBillSupersedeMismatch is returned by Supersede when the replacement
+// bill's (scope, subject, period) does not match the bill being replaced.
+// Like errBillCannotSetSuperseded, this is a caller programming error —
+// recomputing bill X with a payload that names a different scope, subject or
+// period — not a scope or existence question, so it is not one of the store
+// sentinels either.
+var errBillSupersedeMismatch = errors.New("supersede replacement must keep the replaced bill's scope, subject and period")
 
 // BillRepository implements store.BillRepository.
 type BillRepository struct {
@@ -147,7 +159,7 @@ func (r *BillRepository) Create(ctx context.Context, s store.Scope, b model.Bill
 	if err != nil {
 		return model.Bill{}, err
 	}
-	if err := billInsertLinesAndMembers(ctx, q, r.pool, row.ID, lines, members); err != nil {
+	if err := billInsertLinesAndMembers(ctx, q, r.pool, s, row.ID, lines, members); err != nil {
 		return model.Bill{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -180,27 +192,47 @@ func (r *BillRepository) Supersede(ctx context.Context, s store.Scope, replacing
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := r.q.WithTx(tx)
 
-	n, err := q.BillMarkSuperseded(ctx, sqlcgen.BillMarkSupersededParams{
+	old, err := q.BillMarkSuperseded(ctx, sqlcgen.BillMarkSupersededParams{
 		UpdatedAt: tariffTimestamptz(at), ID: replacing, CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: ids,
 	})
 	if err != nil {
 		return model.Bill{}, pgerr.Translate(r.pool, "mark bill superseded", err)
 	}
-	if n == 0 {
-		return model.Bill{}, store.ErrNotFound
+	// Folded minor (fix round 1): the replacement must keep the replaced
+	// bill's (scope, subject, period) — Supersede is a recomputation of ONE
+	// bill's history, not a way to attach an unrelated bill's row where
+	// another one used to be.
+	if old.Scope != sqlcgen.BillScope(b.Scope) || old.SubjectID != billSubjectID(s, b) || old.PeriodKey != b.PeriodKey {
+		return model.Bill{}, errBillSupersedeMismatch
 	}
 
 	row, err := billInsert(ctx, q, r.pool, s, b)
 	if err != nil {
 		return model.Bill{}, err
 	}
-	if err := billInsertLinesAndMembers(ctx, q, r.pool, row.ID, lines, members); err != nil {
+	if err := billInsertLinesAndMembers(ctx, q, r.pool, s, row.ID, lines, members); err != nil {
 		return model.Bill{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return model.Bill{}, pgerr.Translate(r.pool, "commit supersede bill", err)
 	}
 	return billFromRow(row)
+}
+
+// billSubjectID computes coalesce(analyzer_id, building_id, company_id)
+// exactly as the bills table's own unique index and BillCurrent/
+// BillMarkSuperseded do, so a replacement's subject can be compared against
+// the replaced bill's stored one. s.CompanyID, not b.CompanyID, is the
+// fallback: it is s.CompanyID that Create/Supersede actually stores.
+func billSubjectID(s store.Scope, b model.Bill) uuid.UUID {
+	switch {
+	case b.AnalyzerID != nil:
+		return *b.AnalyzerID
+	case b.BuildingID != nil:
+		return *b.BuildingID
+	default:
+		return s.CompanyID
+	}
 }
 
 // UpdateStatus moves a bill between draft, issued and flagged.
@@ -248,7 +280,10 @@ func (r *BillRepository) Lines(ctx context.Context, s store.Scope, billID uuid.U
 	if err := r.requireVisible(ctx, s, billID); err != nil {
 		return nil, err
 	}
-	rows, err := r.q.BillLineList(ctx, billID)
+	ids, all := s.BuildingFilter()
+	rows, err := r.q.BillLineList(ctx, sqlcgen.BillLineListParams{
+		BillID: billID, CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: ids,
+	})
 	if err != nil {
 		return nil, pgerr.Translate(r.pool, "list bill lines", err)
 	}
@@ -271,7 +306,10 @@ func (r *BillRepository) Members(ctx context.Context, s store.Scope, billID uuid
 	if err := r.requireVisible(ctx, s, billID); err != nil {
 		return nil, err
 	}
-	rows, err := r.q.BillMemberList(ctx, billID)
+	ids, all := s.BuildingFilter()
+	rows, err := r.q.BillMemberList(ctx, sqlcgen.BillMemberListParams{
+		BillID: billID, CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: ids,
+	})
 	if err != nil {
 		return nil, pgerr.Translate(r.pool, "list bill members", err)
 	}
@@ -291,7 +329,10 @@ func (r *BillRepository) HourlyDetail(ctx context.Context, s store.Scope, billID
 	if err := r.requireVisible(ctx, s, billID); err != nil {
 		return nil, err
 	}
-	rows, err := r.q.BillHourlyDetailList(ctx, billID)
+	ids, all := s.BuildingFilter()
+	rows, err := r.q.BillHourlyDetailList(ctx, sqlcgen.BillHourlyDetailListParams{
+		BillID: billID, CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: ids,
+	})
 	if err != nil {
 		return nil, pgerr.Translate(r.pool, "list bill hourly detail", err)
 	}
@@ -315,6 +356,7 @@ func (r *BillRepository) ReplaceHourlyDetail(ctx context.Context, s store.Scope,
 		return 0, err
 	}
 
+	ids, all := s.BuildingFilter()
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return 0, pgerr.Translate(r.pool, "begin replace bill hourly detail", err)
@@ -322,7 +364,9 @@ func (r *BillRepository) ReplaceHourlyDetail(ctx context.Context, s store.Scope,
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := r.q.WithTx(tx)
 
-	if err := q.BillHourlyDetailDeleteForBill(ctx, billID); err != nil {
+	if err := q.BillHourlyDetailDeleteForBill(ctx, sqlcgen.BillHourlyDetailDeleteForBillParams{
+		BillID: billID, CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: ids,
+	}); err != nil {
 		return 0, pgerr.Translate(r.pool, "clear bill hourly detail", err)
 	}
 	var n int64
@@ -331,6 +375,7 @@ func (r *BillRepository) ReplaceHourlyDetail(ctx context.Context, s store.Scope,
 			BillID: billID, Ts: tariffTimestamptz(d.Ts), Consumption: decimalToNumeric(d.Consumption),
 			Ptf: decimalToNumeric(d.PTF), Yekdem: decimalToNumeric(d.Yekdem), Kbk: decimalToNumeric(d.Kbk),
 			UnitPrice: decimalToNumeric(d.UnitPrice), Cost: decimalToNumeric(d.Cost),
+			CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: ids,
 		}); err != nil {
 			return 0, pgerr.Translate(r.pool, "insert bill hourly detail", err)
 		}
@@ -388,6 +433,15 @@ func (r *BillRepository) requireAnalyzersVisible(ctx context.Context, s store.Sc
 
 // billBuildingWritable mirrors tariffBuildingWritable: a NULL building_id
 // (a company-level bill) may be written only by a Scope with AllBuildings.
+//
+// This is a FAST PRE-CHECK, not the guard: it decides the narrow-Scope
+// business rule above, but it cannot tell whether a non-nil buildingID
+// belongs to this Scope's company at all (Scope.AllowsBuilding's own doc
+// comment explains why — an AllBuildings Scope answers true for ANY id).
+// Critical Finding 1 (task-11a fix round 1): BillCreate validates the stored
+// building_id (and tariff_id) itself, in SQL, against the Scope's company,
+// deleted_at and building branch — see queries/bills.sql — so the write is
+// refused even if this Go-side check were skipped entirely.
 func billBuildingWritable(s store.Scope, buildingID *uuid.UUID) bool {
 	if buildingID == nil {
 		return s.AllBuildings
@@ -396,8 +450,9 @@ func billBuildingWritable(s store.Scope, buildingID *uuid.UUID) bool {
 }
 
 func billInsert(ctx context.Context, q *sqlcgen.Queries, pool *pgxpool.Pool, s store.Scope, b model.Bill) (sqlcgen.Bill, error) {
+	ids, all := s.BuildingFilter()
 	row, err := q.BillCreate(ctx, sqlcgen.BillCreateParams{
-		CompanyID: s.CompanyID, BuildingID: b.BuildingID, AnalyzerID: b.AnalyzerID,
+		CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: ids, BuildingID: b.BuildingID, AnalyzerID: b.AnalyzerID,
 		BillScope: sqlcgen.BillScope(b.Scope), PeriodKey: b.PeriodKey,
 		PeriodStart: tariffTimestamptz(b.PeriodStart), PeriodEnd: tariffTimestamptz(b.PeriodEnd),
 		DaysInPeriod: b.DaysInPeriod, TariffID: b.TariffID, TariffEffectiveFrom: tariffTimePtrToDate(b.TariffEffectiveFrom),
@@ -429,18 +484,30 @@ func billInsert(ctx context.Context, q *sqlcgen.Queries, pool *pgxpool.Pool, s s
 	return row, nil
 }
 
-func billInsertLinesAndMembers(ctx context.Context, q *sqlcgen.Queries, pool *pgxpool.Pool, billID uuid.UUID, lines []model.BillLine, members []uuid.UUID) error {
+// billInsertLinesAndMembers writes lines and members under billID.
+//
+// Important Finding 1: BillLineInsert and BillMemberInsert both re-validate
+// billID against the Scope themselves (queries/bills.sql), so this join
+// through bills holds even if the caller's own requireVisible /
+// requireAnalyzersVisible pre-checks were ever skipped — that is why s is
+// threaded all the way down here rather than trusting the caller's checks
+// alone.
+func billInsertLinesAndMembers(ctx context.Context, q *sqlcgen.Queries, pool *pgxpool.Pool, s store.Scope, billID uuid.UUID, lines []model.BillLine, members []uuid.UUID) error {
+	ids, all := s.BuildingFilter()
 	for _, line := range lines {
 		if _, err := q.BillLineInsert(ctx, sqlcgen.BillLineInsertParams{
 			BillID: billID, Code: line.Code, Label: line.Label, Quantity: decimalPtrToNumeric(line.Quantity),
 			Unit: line.Unit, UnitPrice: decimalPtrToNumeric(line.UnitPrice), RatePct: decimalPtrToNumeric(line.RatePct),
 			Amount: decimalToNumeric(line.Amount), SortOrder: line.SortOrder,
+			CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: ids,
 		}); err != nil {
 			return pgerr.Translate(pool, "insert bill line", err)
 		}
 	}
 	for _, analyzerID := range members {
-		if err := q.BillMemberInsert(ctx, sqlcgen.BillMemberInsertParams{BillID: billID, AnalyzerID: analyzerID}); err != nil {
+		if _, err := q.BillMemberInsert(ctx, sqlcgen.BillMemberInsertParams{
+			BillID: billID, AnalyzerID: analyzerID, CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: ids,
+		}); err != nil {
 			return pgerr.Translate(pool, "insert bill member", err)
 		}
 	}

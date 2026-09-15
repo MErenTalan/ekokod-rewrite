@@ -15,8 +15,9 @@ import (
 const reportGet = `-- name: ReportGet :one
 
 select id, company_id, building_id, type, period, plant_selection, payload, pdf_path, excel_path, email_subject, email_body, status, error_message, processed_at, created_at, updated_at from reports
-where id = $1 and company_id = $2
-  and ($3::boolean or building_id = any($4::uuid[]))
+where reports.id = $1 and reports.company_id = $2
+  and ($3::boolean or reports.building_id = any($4::uuid[]))
+  and exists (select 1 from buildings b where b.id = reports.building_id and b.deleted_at is null)
 `
 
 type ReportGetParams struct {
@@ -28,6 +29,8 @@ type ReportGetParams struct {
 
 // Generated building reports (migration 00010). Query names are prefixed
 // Report…
+// Folded minor (fix round 1): a report of a soft-deleted building must not
+// stay readable through the report's own row.
 func (q *Queries) ReportGet(ctx context.Context, arg ReportGetParams) (Report, error) {
 	row := q.db.QueryRow(ctx, reportGet,
 		arg.ID,
@@ -59,15 +62,16 @@ func (q *Queries) ReportGet(ctx context.Context, arg ReportGetParams) (Report, e
 
 const reportList = `-- name: ReportList :many
 select id, company_id, building_id, type, period, plant_selection, payload, pdf_path, excel_path, email_subject, email_body, status, error_message, processed_at, created_at, updated_at from reports
-where company_id = $1
-  and ($2::boolean or building_id = any($3::uuid[]))
-  and ($4::uuid is null or building_id = $4)
-  and ($5::report_type is null or type = $5)
-  and ($6::text is null or period = $6)
+where reports.company_id = $1
+  and ($2::boolean or reports.building_id = any($3::uuid[]))
+  and ($4::uuid is null or reports.building_id = $4)
+  and ($5::report_type is null or reports.type = $5)
+  and ($6::text is null or reports.period = $6)
   -- Statuses is compared as text[], not report_status[]: pgx has no codec
   -- for an array of this custom enum, and fails even on an empty slice.
-  and (cardinality($7::text[]) = 0 or status::text = any($7::text[]))
-order by created_at desc, id
+  and (cardinality($7::text[]) = 0 or reports.status::text = any($7::text[]))
+  and exists (select 1 from buildings b where b.id = reports.building_id and b.deleted_at is null)
+order by reports.created_at desc, reports.id
 limit $9 offset $8
 `
 
@@ -184,11 +188,16 @@ const reportUpsert = `-- name: ReportUpsert :one
 insert into reports (
   id, company_id, building_id, type, period, plant_selection, payload, pdf_path, excel_path,
   email_subject, email_body, status, error_message, processed_at, created_at, updated_at
-) values (
+)
+select
   gen_random_uuid(), $1, $2, $3,
   $4, $5, $6, $7,
   $8, $9, $10, $11,
   $12, $13, $14, $14
+where exists (
+  select 1 from buildings b
+  where b.id = $2 and b.company_id = $1 and b.deleted_at is null
+    and ($15::boolean or b.id = any($16::uuid[]))
 )
 on conflict (building_id, type, period) do update set
   plant_selection = excluded.plant_selection,
@@ -220,8 +229,16 @@ type ReportUpsertParams struct {
 	ErrorMessage   *string
 	ProcessedAt    pgtype.Timestamptz
 	CreatedAt      pgtype.Timestamptz
+	AllBuildings   bool
+	BuildingIds    []uuid.UUID
 }
 
+// Critical Finding 1 (task-11a fix round 1): building_id is NOT NULL on
+// reports, and is a stored foreign key — Scope.AllowsBuilding is an
+// in-memory grant check that cannot know which company owns a building, so
+// an AllBuildings Scope's Go-side pre-check alone could store ANOTHER
+// TENANT's building id here. Validated in SQL instead, exactly as
+// TariffCreate/BillCreate validate theirs.
 func (q *Queries) ReportUpsert(ctx context.Context, arg ReportUpsertParams) (Report, error) {
 	row := q.db.QueryRow(ctx, reportUpsert,
 		arg.CompanyID,
@@ -238,6 +255,8 @@ func (q *Queries) ReportUpsert(ctx context.Context, arg ReportUpsertParams) (Rep
 		arg.ErrorMessage,
 		arg.ProcessedAt,
 		arg.CreatedAt,
+		arg.AllBuildings,
+		arg.BuildingIds,
 	)
 	var i Report
 	err := row.Scan(

@@ -27,7 +27,10 @@ const (
 )
 
 // tariffPageLimits clamps a caller's Page to this file's bounds. A zero Limit
-// means "the repository's default", never "unbounded".
+// means "the repository's default", never "unbounded". A negative Offset is
+// clamped to 0: OFFSET must not be negative, and a caller-supplied negative
+// value is a caller bug, not a request for "no offset" that Postgres would
+// reject outright.
 func tariffPageLimits(p store.Page) (limit, offset int32) {
 	limit = p.Limit
 	if limit <= 0 {
@@ -36,62 +39,19 @@ func tariffPageLimits(p store.Page) (limit, offset int32) {
 	if limit > tariffMaxPageLimit {
 		limit = tariffMaxPageLimit
 	}
-	return limit, p.Offset
-}
-
-// tariffDateToTime and tariffTimeToDate convert between a `date` column and
-// time.Time for a NOT NULL date column. Only the calendar date carried by
-// pgtype.Date is meaningful; the pair is deliberately not the numeric.go
-// pair, which exists for `numeric` columns only.
-func tariffDateToTime(d pgtype.Date) time.Time {
-	if !d.Valid {
-		return time.Time{}
+	offset = p.Offset
+	if offset < 0 {
+		offset = 0
 	}
-	return d.Time
+	return limit, offset
 }
 
-func tariffTimeToDate(t time.Time) pgtype.Date {
-	return pgtype.Date{Time: t, Valid: true}
-}
-
-// tariffDateToTimePtr and tariffTimePtrToDate are the nullable-date pair,
-// used by BillRepository for bills.tariff_effective_from.
-func tariffDateToTimePtr(d pgtype.Date) *time.Time {
-	if !d.Valid {
-		return nil
-	}
-	t := d.Time
-	return &t
-}
-
-func tariffTimePtrToDate(t *time.Time) pgtype.Date {
-	if t == nil {
-		return pgtype.Date{}
-	}
-	return pgtype.Date{Time: *t, Valid: true}
-}
-
-// tariffNullTimestamptz reports a nullable timestamptz as *time.Time,
-// reused by every file in this package that needs the same nullable
-// conversion (DeletedAt, ProcessedAt, NotifiedAt, …).
-func tariffNullTimestamptz(ts pgtype.Timestamptz) *time.Time {
-	if !ts.Valid {
-		return nil
-	}
-	t := ts.Time
-	return &t
-}
-
-func tariffTimestamptz(t time.Time) pgtype.Timestamptz {
-	return pgtype.Timestamptz{Time: t, Valid: true}
-}
-
-func tariffNullableTimestamptz(t *time.Time) pgtype.Timestamptz {
-	if t == nil {
-		return pgtype.Timestamptz{}
-	}
-	return pgtype.Timestamptz{Time: *t, Valid: true}
-}
+// The date/timestamptz <-> time.Time conversion pairs used across this
+// package (tariffDateToTime, tariffTimeToDate, tariffNullTimestamptz, …) live
+// in pgtime.go now, not here — see Important Finding 6 of the task-11a
+// fix-round-1 review: no sibling Wave F task defines that file, so this
+// package-wide concern gets its own file instead of staying "the tariffs.go
+// helpers every other file imports".
 
 // ---------------------------------------------------------------------------
 // TariffRepository
@@ -171,8 +131,9 @@ func (r *TariffRepository) Create(ctx context.Context, s store.Scope, t model.Ta
 	if !tariffBuildingWritable(s, t.BuildingID) {
 		return model.Tariff{}, store.ErrNotFound
 	}
+	ids, all := s.BuildingFilter()
 	row, err := r.q.TariffCreate(ctx, sqlcgen.TariffCreateParams{
-		CompanyID: s.CompanyID, BuildingID: t.BuildingID, Name: t.Name,
+		CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: ids, BuildingID: t.BuildingID, Name: t.Name,
 		EffectiveFrom: tariffTimeToDate(t.EffectiveFrom), Currency: sqlcgen.CurrencyCode(t.Currency),
 		EnergyType: sqlcgen.EnergyType(t.EnergyType), VoltageLevel: sqlcgen.VoltageLevel(t.VoltageLevel),
 		UserGroup: sqlcgen.DistributionUserGroup(t.UserGroup), PriceType: sqlcgen.PriceType(t.PriceType),
@@ -213,6 +174,12 @@ func (r *TariffRepository) Create(ctx context.Context, s store.Scope, t model.Ta
 func (r *TariffRepository) Update(ctx context.Context, s store.Scope, t model.Tariff) (model.Tariff, error) {
 	if !s.Valid() {
 		return model.Tariff{}, store.ErrInvalidScope
+	}
+	// Important Finding 3: Update must reject a foreign CompanyID exactly as
+	// Create does — uuid.Nil means "unset, use the Scope's company", anything
+	// else must match it — instead of silently ignoring the field.
+	if t.CompanyID != uuid.Nil && t.CompanyID != s.CompanyID {
+		return model.Tariff{}, store.ErrNotFound
 	}
 	if !tariffBuildingWritable(s, t.BuildingID) {
 		return model.Tariff{}, store.ErrNotFound
@@ -279,6 +246,13 @@ func (r *TariffRepository) SoftDelete(ctx context.Context, s store.Scope, id uui
 // building itself must be visible to the Scope FIRST — the one place this
 // repository resolves to a company-wide row for a Scope that could not List
 // or Get one directly (see repository.go's NULL building_id ruling).
+//
+// on's calendar day is taken in Europe/Istanbul (02-domain-rules §1: day
+// boundaries are Istanbul), not in on's own Location and not in UTC — see
+// tariffTimeToDate in pgtime.go. Two tariffs tied on the same effective_from
+// (the schema has no unique index preventing it) resolve deterministically:
+// effective_from desc, created_at desc, id desc — see
+// TariffEffectiveForBuilding/TariffEffectiveCompanyWide.
 func (r *TariffRepository) Effective(ctx context.Context, s store.Scope, buildingID uuid.UUID, on time.Time) (model.Tariff, error) {
 	if !s.Valid() {
 		return model.Tariff{}, store.ErrInvalidScope
@@ -322,7 +296,10 @@ func (r *TariffRepository) Taxes(ctx context.Context, s store.Scope, tariffID uu
 	if err := r.requireVisible(ctx, s, tariffID); err != nil {
 		return nil, err
 	}
-	rows, err := r.q.TariffTaxList(ctx, tariffID)
+	ids, all := s.BuildingFilter()
+	rows, err := r.q.TariffTaxList(ctx, sqlcgen.TariffTaxListParams{
+		TariffID: tariffID, CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: ids,
+	})
 	if err != nil {
 		return nil, pgerr.Translate(r.pool, "list tariff taxes", err)
 	}
@@ -347,6 +324,7 @@ func (r *TariffRepository) ReplaceTaxes(ctx context.Context, s store.Scope, tari
 		return nil, err
 	}
 
+	ids, all := s.BuildingFilter()
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, pgerr.Translate(r.pool, "begin replace tariff taxes", err)
@@ -354,13 +332,19 @@ func (r *TariffRepository) ReplaceTaxes(ctx context.Context, s store.Scope, tari
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := r.q.WithTx(tx)
 
-	if err := q.TariffTaxDeleteForTariff(ctx, tariffID); err != nil {
+	// Important Finding 1: TariffTaxDeleteForTariff and TariffTaxInsert both
+	// re-validate tariffID against the Scope themselves (queries/tariffs.sql)
+	// — this requireVisible call above is a fast pre-check, not the guard.
+	if err := q.TariffTaxDeleteForTariff(ctx, sqlcgen.TariffTaxDeleteForTariffParams{
+		TariffID: tariffID, CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: ids,
+	}); err != nil {
 		return nil, pgerr.Translate(r.pool, "clear tariff taxes", err)
 	}
 	out := make([]model.TariffTax, 0, len(taxes))
 	for _, tax := range taxes {
 		row, err := q.TariffTaxInsert(ctx, sqlcgen.TariffTaxInsertParams{
 			TariffID: tariffID, Name: tax.Name, Rate: decimalToNumeric(tax.Rate), SortOrder: tax.SortOrder,
+			CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: ids,
 		})
 		if err != nil {
 			return nil, pgerr.Translate(r.pool, "insert tariff tax", err)
@@ -386,7 +370,10 @@ func (r *TariffRepository) ManualYekdem(ctx context.Context, s store.Scope, tari
 	if err := r.requireVisible(ctx, s, tariffID); err != nil {
 		return nil, err
 	}
-	rows, err := r.q.TariffManualYekdemList(ctx, tariffID)
+	ids, all := s.BuildingFilter()
+	rows, err := r.q.TariffManualYekdemList(ctx, sqlcgen.TariffManualYekdemListParams{
+		TariffID: tariffID, CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: ids,
+	})
 	if err != nil {
 		return nil, pgerr.Translate(r.pool, "list tariff manual yekdem", err)
 	}
@@ -411,6 +398,7 @@ func (r *TariffRepository) ReplaceManualYekdem(ctx context.Context, s store.Scop
 		return nil, err
 	}
 
+	ids, all := s.BuildingFilter()
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, pgerr.Translate(r.pool, "begin replace tariff manual yekdem", err)
@@ -418,13 +406,16 @@ func (r *TariffRepository) ReplaceManualYekdem(ctx context.Context, s store.Scop
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := r.q.WithTx(tx)
 
-	if err := q.TariffManualYekdemDeleteForTariff(ctx, tariffID); err != nil {
+	if err := q.TariffManualYekdemDeleteForTariff(ctx, sqlcgen.TariffManualYekdemDeleteForTariffParams{
+		TariffID: tariffID, CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: ids,
+	}); err != nil {
 		return nil, pgerr.Translate(r.pool, "clear tariff manual yekdem", err)
 	}
 	out := make([]model.TariffManualYekdem, 0, len(values))
 	for _, v := range values {
 		row, err := q.TariffManualYekdemInsert(ctx, sqlcgen.TariffManualYekdemInsertParams{
 			TariffID: tariffID, Year: v.Year, Month: v.Month, Value: decimalToNumeric(v.Value),
+			CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: ids,
 		})
 		if err != nil {
 			return nil, pgerr.Translate(r.pool, "insert tariff manual yekdem", err)
@@ -629,6 +620,10 @@ func (r *TariffTemplateRepository) Update(ctx context.Context, s store.Scope, t 
 	if !s.Valid() {
 		return model.TariffTemplate{}, store.ErrInvalidScope
 	}
+	// Important Finding 3: same CompanyID check as Create's.
+	if t.CompanyID != uuid.Nil && t.CompanyID != s.CompanyID {
+		return model.TariffTemplate{}, store.ErrNotFound
+	}
 	row, err := r.q.TariffTemplateUpdate(ctx, sqlcgen.TariffTemplateUpdateParams{
 		ID: t.ID, CompanyID: s.CompanyID, Name: t.Name, Description: t.Description,
 		IsDefault: t.IsDefault, Payload: []byte(t.Payload), UpdatedAt: tariffTimestamptz(t.UpdatedAt),
@@ -769,7 +764,8 @@ func (r *SolarTariffRepository) SoftDelete(ctx context.Context, s store.Scope, i
 
 // Effective resolves by EffectiveFrom exactly as TariffRepository.Effective
 // does, but with no company-wide fallback: solar_tariffs.plant_id is NOT
-// NULL, so every row already names one plant.
+// NULL, so every row already names one plant. Same Europe/Istanbul day
+// boundary and deterministic tiebreak as TariffRepository.Effective.
 func (r *SolarTariffRepository) Effective(ctx context.Context, s store.Scope, plantID uuid.UUID, on time.Time) (model.SolarTariff, error) {
 	if !s.Valid() {
 		return model.SolarTariff{}, store.ErrInvalidScope
@@ -869,7 +865,9 @@ func (r *NationalTariffRepository) List(ctx context.Context, s store.Scope, f st
 	return out, nil
 }
 
-// Effective resolves the published schedule row in force on a date.
+// Effective resolves the published schedule row in force on a date. Same
+// Europe/Istanbul day boundary and deterministic tiebreak as
+// TariffRepository.Effective.
 func (r *NationalTariffRepository) Effective(ctx context.Context, s store.Scope, group model.DistributionUserGroup, level model.VoltageLevel, term model.TariffTerm, on time.Time) (model.NationalTariffScheduleEntry, error) {
 	if !s.Valid() {
 		return model.NationalTariffScheduleEntry{}, store.ErrInvalidScope
@@ -1042,6 +1040,12 @@ func (r *IcmalRepository) UpdateImportResult(ctx context.Context, s store.Scope,
 // icmal_imports. A row's BuildingID, when set, must be a building visible
 // to the Scope; if any is not, the whole call is refused with ErrNotFound
 // and nothing is written.
+//
+// Important Finding 1: the IcmalImportVisible/IcmalVisibleBuildingCount
+// checks above are a fast pre-check outside the transaction, not the guard
+// itself — IcmalRowInsert re-validates both import_id and building_id
+// against the Scope inside the statement (queries/tariffs.sql), so the
+// isolation boundary holds even if this pre-check were ever skipped.
 func (r *IcmalRepository) InsertRows(ctx context.Context, s store.Scope, importID uuid.UUID, rows []model.IcmalRow) (int64, error) {
 	if !s.Valid() {
 		return 0, store.ErrInvalidScope
@@ -1055,7 +1059,7 @@ func (r *IcmalRepository) InsertRows(ctx context.Context, s store.Scope, importI
 	}
 
 	buildingIDs, all := s.BuildingFilter()
-	checkIDs := distinctBuildingIDs(rows)
+	checkIDs := tariffDistinctBuildingIDs(rows)
 	if len(checkIDs) > 0 {
 		count, err := r.q.IcmalVisibleBuildingCount(ctx, sqlcgen.IcmalVisibleBuildingCountParams{
 			CompanyID: s.CompanyID, CheckIds: checkIDs, AllBuildings: all, BuildingIds: buildingIDs,
@@ -1078,7 +1082,8 @@ func (r *IcmalRepository) InsertRows(ctx context.Context, s store.Scope, importI
 	var n int64
 	for _, row := range rows {
 		_, err := q.IcmalRowInsert(ctx, sqlcgen.IcmalRowInsertParams{
-			ImportID: importID, BuildingID: row.BuildingID, Period: row.Period, EtsoCode: row.EtsoCode,
+			ImportID: importID, CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: buildingIDs,
+			BuildingID: row.BuildingID, Period: row.Period, EtsoCode: row.EtsoCode,
 			TotalKwh: decimalPtrToNumeric(row.TotalKwh), T0Kwh: decimalPtrToNumeric(row.T0Kwh),
 			T1Kwh: decimalPtrToNumeric(row.T1Kwh), T2Kwh: decimalPtrToNumeric(row.T2Kwh), T3Kwh: decimalPtrToNumeric(row.T3Kwh),
 			EnergyCharge: decimalPtrToNumeric(row.EnergyCharge), DistributionCharge: decimalPtrToNumeric(row.DistributionCharge),
@@ -1115,7 +1120,9 @@ func (r *IcmalRepository) ListRows(ctx context.Context, s store.Scope, importID 
 		return nil, store.ErrNotFound
 	}
 	limit, offset := tariffPageLimits(p)
-	rows, err := r.q.IcmalRowList(ctx, sqlcgen.IcmalRowListParams{ImportID: importID, LimitVal: limit, OffsetVal: offset})
+	rows, err := r.q.IcmalRowList(ctx, sqlcgen.IcmalRowListParams{
+		ImportID: importID, CompanyID: s.CompanyID, LimitVal: limit, OffsetVal: offset,
+	})
 	if err != nil {
 		return nil, pgerr.Translate(r.pool, "list icmal rows", err)
 	}
@@ -1130,10 +1137,10 @@ func (r *IcmalRepository) ListRows(ctx context.Context, s store.Scope, importID 
 	return out, nil
 }
 
-// distinctBuildingIDs collects the distinct, non-nil BuildingID values across
+// tariffDistinctBuildingIDs collects the distinct, non-nil BuildingID values across
 // a batch of icmal rows, for the one visibility-count round trip
 // InsertRows makes rather than one per row.
-func distinctBuildingIDs(rows []model.IcmalRow) []uuid.UUID {
+func tariffDistinctBuildingIDs(rows []model.IcmalRow) []uuid.UUID {
 	seen := make(map[uuid.UUID]struct{})
 	out := make([]uuid.UUID, 0, len(rows))
 	for _, row := range rows {

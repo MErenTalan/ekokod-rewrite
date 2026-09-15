@@ -45,6 +45,23 @@ func (s Scope) Valid() bool { return s.CompanyID != uuid.Nil }
 // Everything about it fails closed: an invalid scope allows nothing whatever
 // else is set, the zero uuid is never a building, and an empty set is never
 // widened into "all".
+//
+// THIS IS AN IN-MEMORY GRANT CHECK, NOT AN EXISTENCE CHECK. It answers "does
+// the grant this Scope carries cover id", never "does id belong to this
+// Scope's company" — it has no way to know that, because it never touches the
+// database. A Scope with AllBuildings set returns true here for ANY id
+// whatsoever, including a uuid that belongs to a different company entirely,
+// or no company at all. Calling this to authorise STORING id as a foreign key
+// (a tariff's or bill's building_id, a report's building_id, …) is therefore
+// the bug Critical Finding 1 of the task-11a fix-round-1 review named: an
+// AllBuildings Scope could store another tenant's building id, because
+// AllowsBuilding said yes to every id it was asked about. Every stored
+// foreign-key id MUST be validated in SQL instead — company_id = the Scope's
+// company, deleted_at is null, and the Scope's building branch — inside the
+// write statement or by a companion …Visible query in the same transaction.
+// AllowsBuilding remains correct and sufficient for narrowing a READ (Get,
+// List, WHERE), where the predicate is applied against rows the query itself
+// already restricts to the right company.
 func (s Scope) AllowsBuilding(id uuid.UUID) bool {
 	if !s.Valid() || id == uuid.Nil {
 		return false

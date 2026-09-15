@@ -54,7 +54,8 @@ insert into bills (
   reactive_penalty_applied, reactive_power_price, generation_usage, generation_price_per_kwh,
   ptf_yekdem_used, ptf_hours_matched, ptf_hours_missing, ptf_average, yekdem_used, status,
   flag_reason, pdf_path, computed_at, created_at, updated_at
-) values (
+)
+select
   gen_random_uuid(), $1, $2, $3,
   $4, $5, $6, $7,
   $8, $9, $10,
@@ -72,7 +73,18 @@ insert into bills (
   $47, $48, $49,
   $50, $51, $52, $53,
   $54, $55, $56, $56
-) returning id, company_id, building_id, analyzer_id, scope, period_key, period_start, period_end, days_in_period, tariff_id, tariff_effective_from, active_import, t1_kwh, t2_kwh, t3_kwh, inductive_kvarh, capacitive_kvarh, active_export, net_consumption, low_tier_kwh, high_tier_kwh, max_demand_kw, tiered_applied, index_start, index_end, effective_energy_price, low_tier_price, high_tier_price, energy_cost, distribution_cost, green_energy_cost, power_cost, demand_overrun_cost, reactive_penalty, other_taxes_cost, vat_base, vat_cost, generation_credit, total_cost, inductive_ratio, capacitive_ratio, inductive_threshold, capacitive_threshold, reactive_penalty_applied, reactive_power_price, generation_usage, generation_price_per_kwh, ptf_yekdem_used, ptf_hours_matched, ptf_hours_missing, ptf_average, yekdem_used, status, flag_reason, pdf_path, computed_at, created_at, updated_at
+where
+  ($2::uuid is null or exists (
+    select 1 from buildings b
+    where b.id = $2 and b.company_id = $1 and b.deleted_at is null
+      and ($57::boolean or b.id = any($58::uuid[]))
+  ))
+  and ($9::uuid is null or exists (
+    select 1 from tariffs t
+    where t.id = $9 and t.company_id = $1 and t.deleted_at is null
+      and ($57::boolean or t.building_id is null or t.building_id = any($58::uuid[]))
+  ))
+returning id, company_id, building_id, analyzer_id, scope, period_key, period_start, period_end, days_in_period, tariff_id, tariff_effective_from, active_import, t1_kwh, t2_kwh, t3_kwh, inductive_kvarh, capacitive_kvarh, active_export, net_consumption, low_tier_kwh, high_tier_kwh, max_demand_kw, tiered_applied, index_start, index_end, effective_energy_price, low_tier_price, high_tier_price, energy_cost, distribution_cost, green_energy_cost, power_cost, demand_overrun_cost, reactive_penalty, other_taxes_cost, vat_base, vat_cost, generation_credit, total_cost, inductive_ratio, capacitive_ratio, inductive_threshold, capacitive_threshold, reactive_penalty_applied, reactive_power_price, generation_usage, generation_price_per_kwh, ptf_yekdem_used, ptf_hours_matched, ptf_hours_missing, ptf_average, yekdem_used, status, flag_reason, pdf_path, computed_at, created_at, updated_at
 `
 
 type BillCreateParams struct {
@@ -132,8 +144,18 @@ type BillCreateParams struct {
 	PdfPath                *string
 	ComputedAt             pgtype.Timestamptz
 	CreatedAt              pgtype.Timestamptz
+	AllBuildings           bool
+	BuildingIds            []uuid.UUID
 }
 
+// Critical Finding 1 (task-11a fix round 1): building_id is a stored foreign
+// key and MUST be validated in SQL — Scope.AllowsBuilding cannot know which
+// company owns a building, so the Go-side billBuildingWritable pre-check is
+// not sufficient on its own. Important Finding 4: tariff_id is a stored
+// foreign key too (bills.tariff_id references tariffs), validated the same
+// way TariffVisible validates a tariff for this Scope, INCLUDING the
+// company-wide (building_id is null) case — a narrow Scope may reference the
+// company-wide tariff Effective can already resolve for it.
 func (q *Queries) BillCreate(ctx context.Context, arg BillCreateParams) (Bill, error) {
 	row := q.db.QueryRow(ctx, billCreate,
 		arg.CompanyID,
@@ -192,6 +214,8 @@ func (q *Queries) BillCreate(ctx context.Context, arg BillCreateParams) (Bill, e
 		arg.PdfPath,
 		arg.ComputedAt,
 		arg.CreatedAt,
+		arg.AllBuildings,
+		arg.BuildingIds,
 	)
 	var i Bill
 	err := row.Scan(
@@ -259,12 +283,13 @@ func (q *Queries) BillCreate(ctx context.Context, arg BillCreateParams) (Bill, e
 
 const billCurrent = `-- name: BillCurrent :one
 select id, company_id, building_id, analyzer_id, scope, period_key, period_start, period_end, days_in_period, tariff_id, tariff_effective_from, active_import, t1_kwh, t2_kwh, t3_kwh, inductive_kvarh, capacitive_kvarh, active_export, net_consumption, low_tier_kwh, high_tier_kwh, max_demand_kw, tiered_applied, index_start, index_end, effective_energy_price, low_tier_price, high_tier_price, energy_cost, distribution_cost, green_energy_cost, power_cost, demand_overrun_cost, reactive_penalty, other_taxes_cost, vat_base, vat_cost, generation_credit, total_cost, inductive_ratio, capacitive_ratio, inductive_threshold, capacitive_threshold, reactive_penalty_applied, reactive_power_price, generation_usage, generation_price_per_kwh, ptf_yekdem_used, ptf_hours_matched, ptf_hours_missing, ptf_average, yekdem_used, status, flag_reason, pdf_path, computed_at, created_at, updated_at from bills
-where company_id = $1
-  and ($2::boolean or building_id = any($3::uuid[]))
-  and scope = $4
-  and coalesce(analyzer_id, building_id, company_id) = $5
-  and period_key = $6
-  and status <> 'superseded'
+where bills.company_id = $1
+  and ($2::boolean or bills.building_id = any($3::uuid[]))
+  and bills.scope = $4
+  and coalesce(bills.analyzer_id, bills.building_id, bills.company_id) = $5
+  and bills.period_key = $6
+  and bills.status <> 'superseded'
+  and (bills.building_id is null or exists (select 1 from buildings b where b.id = bills.building_id and b.deleted_at is null))
 `
 
 type BillCurrentParams struct {
@@ -352,8 +377,9 @@ func (q *Queries) BillCurrent(ctx context.Context, arg BillCurrentParams) (Bill,
 const billGet = `-- name: BillGet :one
 
 select id, company_id, building_id, analyzer_id, scope, period_key, period_start, period_end, days_in_period, tariff_id, tariff_effective_from, active_import, t1_kwh, t2_kwh, t3_kwh, inductive_kvarh, capacitive_kvarh, active_export, net_consumption, low_tier_kwh, high_tier_kwh, max_demand_kw, tiered_applied, index_start, index_end, effective_energy_price, low_tier_price, high_tier_price, energy_cost, distribution_cost, green_energy_cost, power_cost, demand_overrun_cost, reactive_penalty, other_taxes_cost, vat_base, vat_cost, generation_credit, total_cost, inductive_ratio, capacitive_ratio, inductive_threshold, capacitive_threshold, reactive_penalty_applied, reactive_power_price, generation_usage, generation_price_per_kwh, ptf_yekdem_used, ptf_hours_matched, ptf_hours_missing, ptf_average, yekdem_used, status, flag_reason, pdf_path, computed_at, created_at, updated_at from bills
-where id = $1 and company_id = $2
-  and ($3::boolean or building_id = any($4::uuid[]))
+where bills.id = $1 and bills.company_id = $2
+  and ($3::boolean or bills.building_id = any($4::uuid[]))
+  and (bills.building_id is null or exists (select 1 from buildings b where b.id = bills.building_id and b.deleted_at is null))
 `
 
 type BillGetParams struct {
@@ -365,6 +391,8 @@ type BillGetParams struct {
 
 // Bills, bill lines, bill members and bill hourly detail (migration 00009).
 // Query names are prefixed Bill…
+// Folded minor (fix round 1): a bill of a soft-deleted building must not
+// stay readable through the bill's own row — Get/List both exclude it.
 func (q *Queries) BillGet(ctx context.Context, arg BillGetParams) (Bill, error) {
 	row := q.db.QueryRow(ctx, billGet,
 		arg.ID,
@@ -437,29 +465,53 @@ func (q *Queries) BillGet(ctx context.Context, arg BillGetParams) (Bill, error) 
 }
 
 const billHourlyDetailDeleteForBill = `-- name: BillHourlyDetailDeleteForBill :exec
-delete from bill_hourly_detail where bill_id = $1
+delete from bill_hourly_detail
+where bill_id = $1
+  and exists (
+    select 1 from bills b where b.id = $1 and b.company_id = $2
+      and ($3::boolean or b.building_id = any($4::uuid[]))
+  )
 `
 
-func (q *Queries) BillHourlyDetailDeleteForBill(ctx context.Context, billID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, billHourlyDetailDeleteForBill, billID)
+type BillHourlyDetailDeleteForBillParams struct {
+	BillID       uuid.UUID
+	CompanyID    uuid.UUID
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
+}
+
+func (q *Queries) BillHourlyDetailDeleteForBill(ctx context.Context, arg BillHourlyDetailDeleteForBillParams) error {
+	_, err := q.db.Exec(ctx, billHourlyDetailDeleteForBill,
+		arg.BillID,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
+	)
 	return err
 }
 
 const billHourlyDetailInsert = `-- name: BillHourlyDetailInsert :exec
 insert into bill_hourly_detail (bill_id, ts, consumption, ptf, yekdem, kbk, unit_price, cost)
-values ($1, $2, $3, $4, $5,
-        $6, $7, $8)
+select $1, $2, $3, $4, $5,
+       $6, $7, $8
+where exists (
+  select 1 from bills b where b.id = $1 and b.company_id = $9
+    and ($10::boolean or b.building_id = any($11::uuid[]))
+)
 `
 
 type BillHourlyDetailInsertParams struct {
-	BillID      uuid.UUID
-	Ts          pgtype.Timestamptz
-	Consumption pgtype.Numeric
-	Ptf         pgtype.Numeric
-	Yekdem      pgtype.Numeric
-	Kbk         pgtype.Numeric
-	UnitPrice   pgtype.Numeric
-	Cost        pgtype.Numeric
+	BillID       uuid.UUID
+	Ts           pgtype.Timestamptz
+	Consumption  pgtype.Numeric
+	Ptf          pgtype.Numeric
+	Yekdem       pgtype.Numeric
+	Kbk          pgtype.Numeric
+	UnitPrice    pgtype.Numeric
+	Cost         pgtype.Numeric
+	CompanyID    uuid.UUID
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
 }
 
 func (q *Queries) BillHourlyDetailInsert(ctx context.Context, arg BillHourlyDetailInsertParams) error {
@@ -472,16 +524,37 @@ func (q *Queries) BillHourlyDetailInsert(ctx context.Context, arg BillHourlyDeta
 		arg.Kbk,
 		arg.UnitPrice,
 		arg.Cost,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
 	)
 	return err
 }
 
 const billHourlyDetailList = `-- name: BillHourlyDetailList :many
-select bill_id, ts, consumption, ptf, yekdem, kbk, unit_price, cost from bill_hourly_detail where bill_id = $1 order by ts
+select bhd.bill_id, bhd.ts, bhd.consumption, bhd.ptf, bhd.yekdem, bhd.kbk, bhd.unit_price, bhd.cost from bill_hourly_detail bhd
+where bhd.bill_id = $1
+  and exists (
+    select 1 from bills b where b.id = bhd.bill_id and b.company_id = $2
+      and ($3::boolean or b.building_id = any($4::uuid[]))
+  )
+order by bhd.ts
 `
 
-func (q *Queries) BillHourlyDetailList(ctx context.Context, billID uuid.UUID) ([]BillHourlyDetail, error) {
-	rows, err := q.db.Query(ctx, billHourlyDetailList, billID)
+type BillHourlyDetailListParams struct {
+	BillID       uuid.UUID
+	CompanyID    uuid.UUID
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
+}
+
+func (q *Queries) BillHourlyDetailList(ctx context.Context, arg BillHourlyDetailListParams) ([]BillHourlyDetail, error) {
+	rows, err := q.db.Query(ctx, billHourlyDetailList,
+		arg.BillID,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -511,23 +584,35 @@ func (q *Queries) BillHourlyDetailList(ctx context.Context, billID uuid.UUID) ([
 
 const billLineInsert = `-- name: BillLineInsert :one
 insert into bill_lines (id, bill_id, code, label, quantity, unit, unit_price, rate_pct, amount, sort_order)
-values (gen_random_uuid(), $1, $2, $3, $4,
-        $5, $6, $7, $8, $9)
+select gen_random_uuid(), $1, $2, $3, $4,
+       $5, $6, $7, $8, $9
+where exists (
+  select 1 from bills bl where bl.id = $1 and bl.company_id = $10
+    and ($11::boolean or bl.building_id = any($12::uuid[]))
+)
 returning id, bill_id, code, label, quantity, unit, unit_price, rate_pct, amount, sort_order
 `
 
 type BillLineInsertParams struct {
-	BillID    uuid.UUID
-	Code      string
-	Label     string
-	Quantity  pgtype.Numeric
-	Unit      *string
-	UnitPrice pgtype.Numeric
-	RatePct   pgtype.Numeric
-	Amount    pgtype.Numeric
-	SortOrder int16
+	BillID       uuid.UUID
+	Code         string
+	Label        string
+	Quantity     pgtype.Numeric
+	Unit         *string
+	UnitPrice    pgtype.Numeric
+	RatePct      pgtype.Numeric
+	Amount       pgtype.Numeric
+	SortOrder    int16
+	CompanyID    uuid.UUID
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
 }
 
+// Important Finding 1: bill_lines has no company_id of its own — join
+// through bills. BillLineInsert re-validates bill_id against the Scope
+// itself, so the isolation boundary holds even if the Go-side requireVisible
+// pre-check (in BillRepository.requireVisible, run before the transaction
+// Create/Supersede/ReplaceHourlyDetail open) were ever skipped.
 func (q *Queries) BillLineInsert(ctx context.Context, arg BillLineInsertParams) (BillLine, error) {
 	row := q.db.QueryRow(ctx, billLineInsert,
 		arg.BillID,
@@ -539,6 +624,9 @@ func (q *Queries) BillLineInsert(ctx context.Context, arg BillLineInsertParams) 
 		arg.RatePct,
 		arg.Amount,
 		arg.SortOrder,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
 	)
 	var i BillLine
 	err := row.Scan(
@@ -557,11 +645,29 @@ func (q *Queries) BillLineInsert(ctx context.Context, arg BillLineInsertParams) 
 }
 
 const billLineList = `-- name: BillLineList :many
-select id, bill_id, code, label, quantity, unit, unit_price, rate_pct, amount, sort_order from bill_lines where bill_id = $1 order by sort_order, id
+select bl.id, bl.bill_id, bl.code, bl.label, bl.quantity, bl.unit, bl.unit_price, bl.rate_pct, bl.amount, bl.sort_order from bill_lines bl
+where bl.bill_id = $1
+  and exists (
+    select 1 from bills b where b.id = bl.bill_id and b.company_id = $2
+      and ($3::boolean or b.building_id = any($4::uuid[]))
+  )
+order by bl.sort_order, bl.id
 `
 
-func (q *Queries) BillLineList(ctx context.Context, billID uuid.UUID) ([]BillLine, error) {
-	rows, err := q.db.Query(ctx, billLineList, billID)
+type BillLineListParams struct {
+	BillID       uuid.UUID
+	CompanyID    uuid.UUID
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
+}
+
+func (q *Queries) BillLineList(ctx context.Context, arg BillLineListParams) ([]BillLine, error) {
+	rows, err := q.db.Query(ctx, billLineList,
+		arg.BillID,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -593,18 +699,19 @@ func (q *Queries) BillLineList(ctx context.Context, billID uuid.UUID) ([]BillLin
 
 const billList = `-- name: BillList :many
 select id, company_id, building_id, analyzer_id, scope, period_key, period_start, period_end, days_in_period, tariff_id, tariff_effective_from, active_import, t1_kwh, t2_kwh, t3_kwh, inductive_kvarh, capacitive_kvarh, active_export, net_consumption, low_tier_kwh, high_tier_kwh, max_demand_kw, tiered_applied, index_start, index_end, effective_energy_price, low_tier_price, high_tier_price, energy_cost, distribution_cost, green_energy_cost, power_cost, demand_overrun_cost, reactive_penalty, other_taxes_cost, vat_base, vat_cost, generation_credit, total_cost, inductive_ratio, capacitive_ratio, inductive_threshold, capacitive_threshold, reactive_penalty_applied, reactive_power_price, generation_usage, generation_price_per_kwh, ptf_yekdem_used, ptf_hours_matched, ptf_hours_missing, ptf_average, yekdem_used, status, flag_reason, pdf_path, computed_at, created_at, updated_at from bills
-where company_id = $1
-  and ($2::boolean or building_id = any($3::uuid[]))
-  and (cardinality($4::uuid[]) = 0 or id = any($4::uuid[]))
-  and ($5::uuid is null or building_id = $5)
-  and ($6::uuid is null or analyzer_id = $6)
-  and ($7::bill_scope is null or scope = $7)
-  and ($8::text is null or period_key = $8)
+where bills.company_id = $1
+  and ($2::boolean or bills.building_id = any($3::uuid[]))
+  and (cardinality($4::uuid[]) = 0 or bills.id = any($4::uuid[]))
+  and ($5::uuid is null or bills.building_id = $5)
+  and ($6::uuid is null or bills.analyzer_id = $6)
+  and ($7::bill_scope is null or bills.scope = $7)
+  and ($8::text is null or bills.period_key = $8)
   -- Statuses is compared as text[], not bill_status[]: pgx has no codec
   -- for an array of this custom enum, and fails even on an empty slice.
-  and (cardinality($9::text[]) = 0 or status::text = any($9::text[]))
-  and ($10::boolean or status <> 'superseded')
-order by period_key desc, id
+  and (cardinality($9::text[]) = 0 or bills.status::text = any($9::text[]))
+  and ($10::boolean or bills.status <> 'superseded')
+  and (bills.building_id is null or exists (select 1 from buildings b where b.id = bills.building_id and b.deleted_at is null))
+order by bills.period_key desc, bills.id
 limit $12 offset $11
 `
 
@@ -715,11 +822,12 @@ func (q *Queries) BillList(ctx context.Context, arg BillListParams) ([]Bill, err
 	return items, nil
 }
 
-const billMarkSuperseded = `-- name: BillMarkSuperseded :execrows
+const billMarkSuperseded = `-- name: BillMarkSuperseded :one
 update bills set status = 'superseded', updated_at = $1
 where id = $2 and company_id = $3
   and ($4::boolean or building_id = any($5::uuid[]))
   and status <> 'superseded'
+returning scope, coalesce(analyzer_id, building_id, company_id) as subject_id, period_key
 `
 
 type BillMarkSupersededParams struct {
@@ -730,40 +838,88 @@ type BillMarkSupersededParams struct {
 	BuildingIds  []uuid.UUID
 }
 
-func (q *Queries) BillMarkSuperseded(ctx context.Context, arg BillMarkSupersededParams) (int64, error) {
-	result, err := q.db.Exec(ctx, billMarkSuperseded,
+type BillMarkSupersededRow struct {
+	Scope     BillScope
+	SubjectID uuid.UUID
+	PeriodKey string
+}
+
+// Supersede's replacement-vs-original check (folded minor, fix round 1):
+// returning the marked bill's own scope, subject and period lets the Go
+// caller refuse a Supersede whose replacement names a different one, instead
+// of silently letting one bill's history point at another's.
+func (q *Queries) BillMarkSuperseded(ctx context.Context, arg BillMarkSupersededParams) (BillMarkSupersededRow, error) {
+	row := q.db.QueryRow(ctx, billMarkSuperseded,
 		arg.UpdatedAt,
 		arg.ID,
 		arg.CompanyID,
 		arg.AllBuildings,
 		arg.BuildingIds,
 	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+	var i BillMarkSupersededRow
+	err := row.Scan(&i.Scope, &i.SubjectID, &i.PeriodKey)
+	return i, err
 }
 
-const billMemberInsert = `-- name: BillMemberInsert :exec
-insert into bill_members (bill_id, analyzer_id) values ($1, $2)
+const billMemberInsert = `-- name: BillMemberInsert :one
+insert into bill_members (bill_id, analyzer_id)
+select $1, $2
+where exists (
+  select 1 from bills bl where bl.id = $1 and bl.company_id = $3
+    and ($4::boolean or bl.building_id = any($5::uuid[]))
+)
+returning true
 `
 
 type BillMemberInsertParams struct {
-	BillID     uuid.UUID
-	AnalyzerID uuid.UUID
+	BillID       uuid.UUID
+	AnalyzerID   uuid.UUID
+	CompanyID    uuid.UUID
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
 }
 
-func (q *Queries) BillMemberInsert(ctx context.Context, arg BillMemberInsertParams) error {
-	_, err := q.db.Exec(ctx, billMemberInsert, arg.BillID, arg.AnalyzerID)
-	return err
+// :one RETURNING true, not :exec: see AlarmAnalyzerInsert's comment in
+// queries/alarms.sql -- an :exec insert whose WHERE EXISTS excludes every
+// row still reports "no error", which a caller checking only err would read
+// as success.
+func (q *Queries) BillMemberInsert(ctx context.Context, arg BillMemberInsertParams) (bool, error) {
+	row := q.db.QueryRow(ctx, billMemberInsert,
+		arg.BillID,
+		arg.AnalyzerID,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
+	)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const billMemberList = `-- name: BillMemberList :many
-select bill_id, analyzer_id from bill_members where bill_id = $1 order by analyzer_id
+select bm.bill_id, bm.analyzer_id from bill_members bm
+where bm.bill_id = $1
+  and exists (
+    select 1 from bills b where b.id = bm.bill_id and b.company_id = $2
+      and ($3::boolean or b.building_id = any($4::uuid[]))
+  )
+order by bm.analyzer_id
 `
 
-func (q *Queries) BillMemberList(ctx context.Context, billID uuid.UUID) ([]BillMember, error) {
-	rows, err := q.db.Query(ctx, billMemberList, billID)
+type BillMemberListParams struct {
+	BillID       uuid.UUID
+	CompanyID    uuid.UUID
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
+}
+
+func (q *Queries) BillMemberList(ctx context.Context, arg BillMemberListParams) ([]BillMember, error) {
+	rows, err := q.db.Query(ctx, billMemberList,
+		arg.BillID,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -814,6 +970,7 @@ const billUpdateStatus = `-- name: BillUpdateStatus :one
 update bills set status = $1, flag_reason = $2, updated_at = $3
 where id = $4 and company_id = $5
   and ($6::boolean or building_id = any($7::uuid[]))
+  and status <> 'superseded'
 returning id, company_id, building_id, analyzer_id, scope, period_key, period_start, period_end, days_in_period, tariff_id, tariff_effective_from, active_import, t1_kwh, t2_kwh, t3_kwh, inductive_kvarh, capacitive_kvarh, active_export, net_consumption, low_tier_kwh, high_tier_kwh, max_demand_kw, tiered_applied, index_start, index_end, effective_energy_price, low_tier_price, high_tier_price, energy_cost, distribution_cost, green_energy_cost, power_cost, demand_overrun_cost, reactive_penalty, other_taxes_cost, vat_base, vat_cost, generation_credit, total_cost, inductive_ratio, capacitive_ratio, inductive_threshold, capacitive_threshold, reactive_penalty_applied, reactive_power_price, generation_usage, generation_price_per_kwh, ptf_yekdem_used, ptf_hours_matched, ptf_hours_missing, ptf_average, yekdem_used, status, flag_reason, pdf_path, computed_at, created_at, updated_at
 `
 
@@ -827,6 +984,9 @@ type BillUpdateStatusParams struct {
 	BuildingIds  []uuid.UUID
 }
 
+// Folded minor: a superseded bill is a closed record — UpdateStatus must not
+// be able to move it to draft/issued/flagged after the fact, only Supersede
+// may act on it again (by inserting a new replacement).
 func (q *Queries) BillUpdateStatus(ctx context.Context, arg BillUpdateStatusParams) (Bill, error) {
 	row := q.db.QueryRow(ctx, billUpdateStatus,
 		arg.Status,
