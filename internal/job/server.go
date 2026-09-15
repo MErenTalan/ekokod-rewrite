@@ -63,6 +63,7 @@ func NewServer(redisCfg config.Redis, worker config.Worker, log *slog.Logger, on
 			QueueLow:      1,
 		},
 		ShutdownTimeout: ShutdownTimeout(worker.Timeout),
+		RetryDelayFunc:  RetryDelay,
 		ErrorHandler: asynq.ErrorHandlerFunc(func(ctx context.Context, task *asynq.Task, err error) {
 			// Never swallowed: every failure is logged with its task type and
 			// surfaced as an operational message from F7 onwards.

@@ -145,6 +145,8 @@ var scopeIsoRegisteredRepositories = map[string]bool{
 	"NewSMTPRepository":           true,
 	"NewCalendarRepository":       true,
 	"NewOpsRepository":            true,
+	"NewGenerationRepository":     true,
+	"NewProviderSeriesRepository": true,
 }
 
 // scopeIsoCtorPattern matches an exported repository constructor: New,
@@ -716,6 +718,32 @@ func seedScopeIsoFixtures(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	cursorRepo := postgres.NewCursorRepository(pool)
 	require.NoError(t, cursorRepo.RecordSuccess(ctx, adminScope, f.analyzerID, f.cursorKind, scopeIsoEpoch, scopeIsoEpoch.Add(time.Minute)))
 
+	// --- generation anchor, provider hourly values (analyzer-parented, F2) --
+	// Both tables (migrations 00012/00013) have no company_id at all —
+	// isolation is entirely the analyzers join, exactly like readings and
+	// cursors above. Ts values reuse f.readingsFrom/f.readingsTo's window
+	// (scopeIsoEpoch, already the readingRepo/narrowRange window) rather than
+	// a new field, since every subtest below reads inside that same range.
+	genRepo := postgres.NewGenerationRepository(pool)
+	require.NoError(t, genRepo.SetAnchor(ctx, adminScope, model.GenerationAnchor{
+		AnalyzerID:   f.analyzerID,
+		AnchorTs:     f.readingsFrom,
+		ActiveExport: decimal.RequireFromString("500.0000"),
+		Source:       "initial",
+	}))
+
+	seriesRepo := postgres.NewProviderSeriesRepository(pool)
+	activeGeneration := decimal.RequireFromString("12.0000")
+	_, _, err = seriesRepo.UpsertHourly(ctx, adminScope, []model.ProviderHourlyValue{
+		{
+			AnalyzerID:       f.analyzerID,
+			Ts:               f.readingsFrom,
+			ActiveGeneration: &activeGeneration,
+			SourceProvider:   model.IntegrationProviderOSOS,
+		},
+	})
+	require.NoError(t, err)
+
 	anomalyRepo := postgres.NewAnomalyRepository(pool)
 	anomaly, err := anomalyRepo.Create(ctx, adminScope, anomaliesFixture(f.analyzerID))
 	require.NoError(t, err)
@@ -1245,6 +1273,38 @@ func TestScopeIsolation(t *testing.T) {
 		ownNarrowList, err := repo.List(ctx, tenantA.AdminScope, []uuid.UUID{af.analyzerID})
 		require.NoError(t, err)
 		require.NotEmpty(t, ownNarrowList, "positive control")
+	})
+
+	// --- GenerationRepository (analyzer-parented, no company_id; F2) -------
+	t.Run("GenerationRepository", func(t *testing.T) {
+		repo := postgres.NewGenerationRepository(pool)
+
+		_, err := repo.Anchor(ctx, tenantA.AdminScope, bf.analyzerID)
+		require.ErrorIs(t, err, store.ErrNotFound)
+		_, err = repo.Anchor(ctx, tenantB.AdminScope, bf.analyzerID)
+		require.NoError(t, err, "positive control")
+
+		_, err = repo.Anchor(ctx, tenantA.Scope, af.analyzerID)
+		require.ErrorIs(t, err, store.ErrNotFound)
+		_, err = repo.Anchor(ctx, tenantA.AdminScope, af.analyzerID)
+		require.NoError(t, err, "positive control")
+	})
+
+	// --- ProviderSeriesRepository (analyzer-parented, no company_id; F2) ---
+	t.Run("ProviderSeriesRepository", func(t *testing.T) {
+		repo := postgres.NewProviderSeriesRepository(pool)
+
+		_, err := repo.HourlyRange(ctx, tenantA.AdminScope, bf.analyzerID, narrowRange)
+		require.ErrorIs(t, err, store.ErrNotFound)
+		ownCrossRange, err := repo.HourlyRange(ctx, tenantB.AdminScope, bf.analyzerID, narrowRange)
+		require.NoError(t, err)
+		require.NotEmpty(t, ownCrossRange, "positive control")
+
+		_, err = repo.HourlyRange(ctx, tenantA.Scope, af.analyzerID, narrowRange)
+		require.ErrorIs(t, err, store.ErrNotFound)
+		ownNarrowRange, err := repo.HourlyRange(ctx, tenantA.AdminScope, af.analyzerID, narrowRange)
+		require.NoError(t, err)
+		require.NotEmpty(t, ownNarrowRange, "positive control")
 	})
 
 	// --- AnomalyRepository (building-scoped via analyzers) ----------------------

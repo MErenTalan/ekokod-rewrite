@@ -1384,6 +1384,71 @@ type OpsRepository interface {
 	ListMessages(ctx context.Context, s Scope, f MessageFilter) ([]model.OperationalMessage, error)
 }
 
+// ---------------------------------------------------------------------------
+// F2 integration layer (migrations 00012 and 00013)
+// ---------------------------------------------------------------------------
+
+// GenerationRepository reads and writes generation_anchors — the last known
+// cumulative export register value for one analyzer, which PM5340's interval
+// energy (MeterReading.IntervalGenerationKwh) is reconciled against.
+//
+// Isolation: generation_anchors has no company_id; every method joins
+// through analyzers, per repository.go's "ROWS WITHOUT company_id" header.
+type GenerationRepository interface {
+	// Anchor returns ErrNotFound when the analyzer has no anchor yet, OR is
+	// not visible to s — the two are indistinguishable from outside the
+	// company, by design.
+	Anchor(ctx context.Context, s Scope, analyzerID uuid.UUID) (model.GenerationAnchor, error)
+
+	// SetAnchor upserts on analyzer_id, as a single atomic statement. The
+	// analyzer's visibility is validated IN THE WRITE STATEMENT ITSELF (the
+	// F1 ba2fb97 pattern: `insert … select … from analyzers where … and
+	// company_id = $n and deleted_at is null and (all_buildings or
+	// building_id = any(building_ids))`), never by a Go-side
+	// Scope.AllowsBuilding pre-check against the stored analyzer_id — that
+	// would be using AllowsBuilding to validate a stored foreign key, which
+	// it cannot do (see Scope.AllowsBuilding's own doc). Not visible →
+	// ErrNotFound, nothing written.
+	SetAnchor(ctx context.Context, s Scope, a model.GenerationAnchor) error
+}
+
+// ProviderSeriesRepository reads and writes provider_hourly_values — OSOS's
+// own labelled hourly cross-check series (06 §2, removed-behaviour 23).
+// NEVER read by consumption or billing; it exists only so an operator can
+// compare it against meter_readings' own figures.
+//
+// Isolation: provider_hourly_values has no company_id; every method joins
+// through analyzers.
+type ProviderSeriesRepository interface {
+	// UpsertHourly writes rows idempotently, keyed on (analyzer_id, ts): the
+	// same COPY-into-staging-then-upsert shape ReadingRepository.BulkInsert
+	// uses, for the same reason (a per-call temporary table cannot appear in
+	// sqlc's schema catalogue).
+	//
+	// Isolation: the batch's distinct analyzer ids are locked FOR SHARE and
+	// checked against s in one transaction, exactly once per batch — this
+	// IS the tenant predicate for this write, not a predicate embedded in
+	// the upsert SQL itself (unlike SetAnchor, which writes exactly one
+	// analyzer's row and so embeds its own check). Fewer visible ids than
+	// distinct input ids refuses the WHOLE batch with ErrNotFound and writes
+	// nothing.
+	//
+	// A duplicate (analyzer_id, ts) key WITHIN the caller's own batch is
+	// refused before any database round trip, with an error for which
+	// errors.Is(err, ErrConflict) is true, naming the key; nothing is
+	// written — the same defence ReadingRepository.BulkInsert uses against
+	// `on conflict … do update` silently arbitrating between two batched
+	// rows.
+	UpsertHourly(ctx context.Context, s Scope, rows []model.ProviderHourlyValue) (inserted, updated int, err error)
+
+	// HourlyRange returns one analyzer's rows over the half-open window r.
+	// An invalid r returns ErrInvalidRange before any database call. Join
+	// through analyzers, like every other method here: an analyzer not
+	// visible to s returns ErrNotFound; a visible one with nothing in r
+	// returns an empty slice.
+	HourlyRange(ctx context.Context, s Scope, analyzerID uuid.UUID, r TimeRange) ([]model.ProviderHourlyValue, error)
+}
+
 // ===========================================================================
 // UNSCOPED ADMIN INTERFACES
 // Implemented ONLY by package internal/store/postgres/admin.
@@ -1549,4 +1614,17 @@ type AdminJournalRepository interface {
 	// NULL. A message whose CompanyID is non-nil is refused with ErrNotFound.
 	// As with OpsRepository, the text must already be scrubbed.
 	AppendPlatformMessage(ctx context.Context, m model.OperationalMessage) (model.OperationalMessage, error)
+}
+
+// AdminIngestionRepository lists the credentials the scheduled dispatcher
+// must fan out to. It cannot take a Scope: the dispatcher acts for no
+// tenant and must see every tenant's active credentials in one pass, the
+// same reason AdminMarketDataRepository and AdminCatalogueRepository cannot
+// take one. Implemented by F2 Task 5.
+type AdminIngestionRepository interface {
+	// ActiveCredentials returns every is_active credential of a non-deleted
+	// company, ordered by (company_id, credential id). No secret column
+	// (secret_enc, extra_enc) is selected — model.CredentialRef has no field
+	// to carry one.
+	ActiveCredentials(ctx context.Context) ([]model.CredentialRef, error)
 }

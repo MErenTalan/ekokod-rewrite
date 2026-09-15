@@ -88,16 +88,37 @@ linters:
         #
         # The field-level half is TestNoFloatFieldsInModelOrStore in
         # internal/arch/arch_test.go. Its floatGuardPatterns are
-        # ./internal/domain/... and ./internal/store/... — the same two
-        # recursive trees as the globs below — and it fails on any struct field
-        # that is or contains float32/float64 through pointers, containers,
-        # aliases, defined types, generic type arguments, this module's structs
-        # and pgtype/database/sql value wrappers (pgtype.Float8, sql.NullFloat64).
+        # ./internal/domain/..., ./internal/store/..., ./internal/integration/...,
+        # ./internal/ingest/..., ./internal/marketdata/... and
+        # ./internal/credentials/... — the same six recursive trees as the
+        # globs below — and it fails on any struct field that is or contains
+        # float32/float64 through pointers, containers, aliases, defined
+        # types, generic type arguments, this module's structs and
+        # pgtype/database/sql value wrappers (pgtype.Float8, sql.NullFloat64).
+        # A second guard, TestIntegrationTreesDoNotParseFloats, covers the
+        # same four F2 trees for the two routes a float can enter without
+        # ever being a struct field: strconv.ParseFloat and a JSON decode
+        # into a float or an untyped interface.
         # Change both or neither.
+        # internal/integration/fake/server.go (F2 task-4; integration commit
+        # ruling) is excluded by name, the same way
+        # internal/integration/fake/sanitise.go is named in arch_test.go's
+        # f2guardCallFloatSkip: it is the TLS test harness's self-signed
+        # certificate generator, and its one math/big use is
+        # crypto/rand.Int's own required big.Int argument type for a
+        # certificate serial number — never money, energy or a provider
+        # value, and nothing this rule exists to catch. No other file is,
+        # or should ever be, exempt; a future math/big use anywhere else
+        # under these trees still fails.
         no-float-money:
           files:
             - "**/internal/domain/**"
             - "**/internal/store/**"
+            - "**/internal/integration/**"
+            - "!**/internal/integration/fake/server.go"
+            - "**/internal/ingest/**"
+            - "**/internal/marketdata/**"
+            - "**/internal/credentials/**"
           deny:
             - pkg: "math/big"
               desc: "use github.com/shopspring/decimal for monetary arithmetic"

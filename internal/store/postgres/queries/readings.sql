@@ -9,6 +9,12 @@
 -- for it is ReadingVisibleAnalyzerIDs, the `for share` row lock that closes
 -- the gap a plain, unlocked pre-check would leave open for a concurrent
 -- reassignment of one of the batch's analyzers.
+--
+-- interval_generation_kwh (migration 00012, F2 Task 5) needs no change
+-- below: every query here selects `mr.*`, which already picks up the new
+-- column once sqlc regenerates against the migration. The BulkInsert
+-- staging-and-upsert path that DOES need to carry it explicitly lives in
+-- readings.go, for the reason above.
 
 -- name: ReadingVisibleAnalyzerIDs :many
 -- Returns the subset of analyzer_ids visible to the scope, AND LOCKS them

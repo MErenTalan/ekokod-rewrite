@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"testing"
 
@@ -149,11 +150,109 @@ func TestOnlyTheCLIImportsTheAPIPackage(t *testing.T) {
 	}
 }
 
+// TestStoreAndIntegrationDoNotImportAPIOrService is widened for F2: its name
+// has always claimed to cover internal/integration, but until this guard
+// gained an ./internal/integration/... pattern it only ever loaded
+// ./internal/store/.... internal/integration is the other package this
+// codebase requires to stay free of the HTTP layer (06 §1 rule 2: adapters
+// are pure clients, and an import of internal/api would let one reach for
+// an HTTP request/response type instead of its own).
 func TestStoreAndIntegrationDoNotImportAPIOrService(t *testing.T) {
-	for _, pkg := range loadPackages(t, "./internal/store/...") {
-		for imported := range pkg.Imports {
-			require.False(t, underPackage(imported, modulePath+"/internal/api"),
-				"%s must not import the HTTP layer", pkg.PkgPath)
+	for _, pattern := range []string{"./internal/store/...", "./internal/integration/..."} {
+		for _, pkg := range loadPackages(t, pattern) {
+			for imported := range pkg.Imports {
+				require.False(t, underPackage(imported, modulePath+"/internal/api"),
+					"%s must not import the HTTP layer", pkg.PkgPath)
+			}
+		}
+	}
+}
+
+// f2guardAdapterForbidden are the packages TestAdaptersDoNotImportTheStore
+// forbids internal/integration/... from importing: the store layer and the
+// pgx driver it sits on (an adapter that reached either could write to the
+// database directly, violating 06 §1 rule 2 "adapters never write"), and
+// internal/ingest, internal/credentials and internal/marketdata, which
+// depend ON internal/integration and would form an import cycle — or, short
+// of an actual cycle, exactly the coupling that makes an adapter no longer
+// a pure client — if internal/integration ever imported back into them.
+var f2guardAdapterForbidden = []string{
+	modulePath + "/internal/store",
+	modulePath + "/internal/ingest",
+	modulePath + "/internal/credentials",
+	modulePath + "/internal/marketdata",
+	"github.com/jackc/pgx",
+}
+
+// f2guardLoadPackagesWithDeps is loadPackages' counterpart for a guard that
+// must see the FULL transitive import graph, not just each package's direct
+// imports. packages.Load with only NeedImports (loadPackages' mode)
+// populates pkg.Imports with direct dependencies, but those dependency
+// Package objects are themselves left as incomplete stubs — their own
+// .Imports is empty — so a recursive walk over them finds nothing. NeedDeps
+// tells the loader to fully populate every transitively reached package
+// too, so pkg.Imports[x].Imports is real data all the way down (I4).
+func f2guardLoadPackagesWithDeps(t *testing.T, pattern string) []*packages.Package {
+	t.Helper()
+	cfg := &packages.Config{
+		Mode: packages.NeedName | packages.NeedImports | packages.NeedDeps,
+		Dir:  repoRoot(t),
+	}
+	pkgs, err := packages.Load(cfg, pattern)
+	require.NoError(t, err)
+	require.NotEmpty(t, pkgs)
+	return pkgs
+}
+
+// f2guardTransitiveOffender walks pkg's full import graph (direct and
+// indirect, via pkg.Imports which f2guardLoadPackagesWithDeps populated
+// transitively) and returns the import chain from pkg to the first package
+// matching one of forbidden, or nil if none is reachable. visited prevents
+// revisiting a package already walked (import graphs are DAGs but commonly
+// diamond-shaped) and must be seeded with pkg.PkgPath by the caller.
+func f2guardTransitiveOffender(pkg *packages.Package, forbidden []string, visited map[string]bool) []string {
+	// Deterministic order: map iteration order is random, and a test that
+	// sometimes reports package A and sometimes package B for the same
+	// violation (both present) makes the failure message flaky to read,
+	// even though the test itself fails reliably either way.
+	paths := make([]string, 0, len(pkg.Imports))
+	for path := range pkg.Imports {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+
+	for _, path := range paths {
+		for _, f := range forbidden {
+			if underPackage(path, f) {
+				return []string{path}
+			}
+		}
+		if visited[path] {
+			continue
+		}
+		visited[path] = true
+		if chain := f2guardTransitiveOffender(pkg.Imports[path], forbidden, visited); chain != nil {
+			return append([]string{path}, chain...)
+		}
+	}
+	return nil
+}
+
+// TestAdaptersDoNotImportTheStore enforces 06 §1 rule 2, "adapters are pure
+// clients; persistence is the ingestion job's responsibility": nothing under
+// internal/integration may import the store layer, the pgx driver, or any
+// of the three packages that themselves depend on internal/integration —
+// TRANSITIVELY, not just directly (I4): internal/integration ->
+// internal/f2probehelper -> internal/store must be caught exactly like
+// internal/integration -> internal/store, because a helper package one hop
+// away is just as much a route to the database as importing it directly.
+func TestAdaptersDoNotImportTheStore(t *testing.T) {
+	pkgs := f2guardLoadPackagesWithDeps(t, "./internal/integration/...")
+	require.NotEmpty(t, pkgs, "the guard walked zero packages: it would pass whatever the code said")
+	for _, pkg := range pkgs {
+		if chain := f2guardTransitiveOffender(pkg, f2guardAdapterForbidden, map[string]bool{pkg.PkgPath: true}); chain != nil {
+			t.Errorf("%s transitively imports a forbidden package via %s: adapters must be pure — no store, no pgx, no dependency (direct or transitive) on the packages that depend on internal/integration",
+				pkg.PkgPath, strings.Join(chain, " -> "))
 		}
 	}
 }
@@ -428,6 +527,7 @@ var storeScopeAllowlist = map[string]bool{
 	"Ping":              true, // internal/store/postgres/pool.go
 	"MigrateUp":         true, // internal/store/postgres/migrate.go
 	"MigrateDownAll":    true, // internal/store/postgres/migrate.go
+	"MigrateDownN":      true, // internal/store/postgres/migrate.go (F2 task-5: rolls back the N most recent migrations; migration infrastructure like MigrateUp/MigrateDownAll, not a repository read or write)
 	"MigrateStatus":     true, // internal/store/postgres/migrate.go
 	"PendingMigrations": true, // internal/store/postgres/migrate.go
 	"MigrationsCheck":   true, // internal/store/postgres/health.go (no ctx param today; listed so an added one stays exempt without a guard edit)
@@ -622,11 +722,23 @@ func TestTheJobPackageDoesNotImportTheStore(t *testing.T) {
 // internal/domain/billing package passed while .golangci.yml claimed the two
 // halves covered the same trees.
 //
-// .golangci.yml's no-float-money depguard rule lists exactly these two trees
-// (**/internal/domain/** and **/internal/store/**). Change both or neither.
+// .golangci.yml's no-float-money depguard rule lists exactly these six trees
+// (**/internal/domain/**, **/internal/store/**, **/internal/integration/**,
+// **/internal/ingest/**, **/internal/marketdata/** and
+// **/internal/credentials/**). Change both or neither.
+//
+// The four F2 trees were added once internal/integration/doc.go and the
+// three placeholder doc.go files existed to give each pattern something
+// non-empty to match — loadTypedPackages requires a non-empty match, so a
+// pattern added before its package exists would fail the guard for the
+// wrong reason (a broken load, not a real violation).
 var floatGuardPatterns = []string{
 	"./internal/domain/...",
 	"./internal/store/...",
+	"./internal/integration/...",
+	"./internal/ingest/...",
+	"./internal/marketdata/...",
+	"./internal/credentials/...",
 }
 
 // floatCarrierPackages are the FOREIGN packages whose struct types the float
@@ -856,4 +968,349 @@ func floatGuardDescendsInto(t *types.Named) bool {
 		return false
 	}
 	return underPackage(pkg.Path(), modulePath) || floatCarrierPackages[pkg.Path()]
+}
+
+// f2guardCallFloatSkip names source files, relative to the module root and
+// slash-separated, that TestIntegrationTreesDoNotParseFloats does not walk.
+//
+// internal/integration/httpx/ratelimit.go (added by Task 2, in Wave B —
+// this file does not exist yet when Task 1 runs) legitimately converts a
+// time.Duration to golang.org/x/time/rate.Limit, a float64-based type
+// required by that library's own rate-limiter API. That is the only float
+// in the file, it is not money, energy or anything this guard exists to
+// catch, and there is no way to express "rate.Limit is fine but nothing
+// else is" other than exempting the one file where it appears. No other
+// file is, or should ever be, exempt.
+//
+// internal/integration/fake/sanitise.go (added by Task 4; integration
+// commit ruling) is the fixture-fake's log/response scanner: it decodes an
+// arbitrary, unknown-shaped JSON body with json.Decoder.UseNumber() into
+// `any` purely to walk the resulting tree looking for PII-shaped keys —
+// UseNumber means any JSON number in that tree is held as json.Number, not
+// parsed as a float, so the interface-decode-target hazard this guard
+// flags does not apply to it. It never touches money, energy or provider
+// values: it is test-harness log hygiene, not a decode path any real
+// value flows through. No other file is, or should ever be, exempt.
+var f2guardCallFloatSkip = map[string]bool{
+	"internal/integration/httpx/ratelimit.go": true,
+	"internal/integration/fake/sanitise.go":   true,
+}
+
+// f2guardIsJSONDecoderRecv reports whether fn is a method whose receiver is
+// *encoding/json.Decoder — the precise target of the "(*json.Decoder).Decode"
+// half of TestIntegrationTreesDoNotParseFloats, as opposed to some other
+// package's unrelated Decode method that also happens to live in a package
+// literally named encoding/json (there is none, but matching on the
+// receiver type rather than only the package+name pair is the same
+// discipline isNamed already applies to isScopeType and isContextType).
+func f2guardIsJSONDecoderRecv(fn *types.Func) bool {
+	sig, ok := fn.Type().(*types.Signature)
+	if !ok || sig.Recv() == nil {
+		return false
+	}
+	return isNamed(sig.Recv().Type(), "encoding/json", "Decoder")
+}
+
+// f2guardIsJSONNumberRecv reports whether fn is a method whose receiver is
+// encoding/json.Number — the target of the (M3) json.Number.Float64 case:
+// json.Number exists specifically so a caller can hold a JSON number as a
+// string and defer parsing it (typically into decimal.Decimal), and calling
+// its own Float64() throws that away, parsing straight into the float this
+// whole guard tree exists to keep out of money/energy/provider values.
+func f2guardIsJSONNumberRecv(fn *types.Func) bool {
+	sig, ok := fn.Type().(*types.Signature)
+	if !ok || sig.Recv() == nil {
+		return false
+	}
+	return isNamed(sig.Recv().Type(), "encoding/json", "Number")
+}
+
+// f2guardJSONTargetHazard reports whether typ — the static type of an
+// argument passed to json.Unmarshal or (*json.Decoder).Decode — is, or
+// contains, a float32/float64 or an interface type. It is reached through
+// pointers, slices, arrays, maps (key AND element) and struct fields, and
+// through a named type's underlying type, mirroring floatKindInSeen's
+// traversal above but with one addition: encoding/json decodes a JSON
+// number straight into a float64 the moment the target is `any`/
+// `interface{}` (map[string]any, a bare `any` field, …) without a single
+// struct field ever spelling "float" — a route TestNoFloatFieldsInModelOrStore
+// cannot see because it inspects field TYPES, not decode CALL SITES.
+func f2guardJSONTargetHazard(typ types.Type, seen map[string]bool) (string, bool) {
+	if typ == nil {
+		return "", false
+	}
+	switch t := types.Unalias(typ).(type) {
+	case *types.Basic:
+		if t.Kind() == types.Float32 || t.Kind() == types.Float64 {
+			return t.Name(), true
+		}
+		return "", false
+	case *types.Interface:
+		return "an interface type (any JSON number decoded into it becomes an untyped float64)", true
+	case *types.Pointer:
+		return f2guardJSONTargetHazard(t.Elem(), seen)
+	case *types.Slice:
+		return f2guardJSONTargetHazard(t.Elem(), seen)
+	case *types.Array:
+		return f2guardJSONTargetHazard(t.Elem(), seen)
+	case *types.Map:
+		if kind, ok := f2guardJSONTargetHazard(t.Key(), seen); ok {
+			return kind, true
+		}
+		return f2guardJSONTargetHazard(t.Elem(), seen)
+	case *types.Struct:
+		for i := range t.NumFields() {
+			if kind, ok := f2guardJSONTargetHazard(t.Field(i).Type(), seen); ok {
+				return kind, true
+			}
+		}
+		return "", false
+	case *types.Named:
+		key := types.TypeString(t, nil)
+		if seen[key] {
+			return "", false
+		}
+		seen[key] = true
+		if args := t.TypeArgs(); args != nil {
+			for i := range args.Len() {
+				if kind, ok := f2guardJSONTargetHazard(args.At(i), seen); ok {
+					return kind, true
+				}
+			}
+		}
+		return f2guardJSONTargetHazard(t.Underlying(), seen)
+	case *types.TypeParam:
+		// I2: a generic decode helper — func decode[T any](b []byte) (T,
+		// error) { var v T; return v, json.Unmarshal(b, &v) } — has a
+		// json.Unmarshal call whose target's STATIC type, inside the
+		// generic function's own body, is *T, a type parameter: the
+		// switch above cannot see through it to whatever concrete type an
+		// individual call site instantiates T with (that substitution
+		// only exists at each instantiation's call site, not inside the
+		// generic body being walked here). Flagging every type parameter
+		// as a hazard is the conservative fix the finding names as an
+		// accepted alternative to walking every instantiation's type
+		// arguments via TypesInfo.Instances: a generic decode helper in
+		// these trees must decode into a concrete, non-generic type (or
+		// be written non-generically), never leave T's safety for a caller
+		// to get right silently.
+		return "a generic type parameter (its instantiation cannot be statically ruled safe here; decode into a concrete type instead)", true
+	default:
+		return "", false
+	}
+}
+
+// f2guardCheckJSONTarget resolves arg's static type and fails t if it is a
+// hazard under f2guardJSONTargetHazard.
+func f2guardCheckJSONTarget(t *testing.T, pkg *packages.Package, arg ast.Expr) {
+	t.Helper()
+	typ := pkg.TypesInfo.TypeOf(arg)
+	if typ == nil {
+		t.Errorf("%s: could not resolve the type of this decode target", pkg.Fset.Position(arg.Pos()))
+		return
+	}
+	if kind, bad := f2guardJSONTargetHazard(typ, map[string]bool{}); bad {
+		t.Errorf("%s: decode target resolves to %s: money, energy and provider numbers are decimal.Decimal, json.Number or a string end to end, never a float and never an untyped interface",
+			pkg.Fset.Position(arg.Pos()), kind)
+	}
+}
+
+// TestIntegrationTreesDoNotParseFloats extends the money/energy purity rule
+// from struct fields (TestNoFloatFieldsInModelOrStore) to the two routes
+// that let a float enter this codebase WITHOUT ever being named in a struct
+// field: strconv.ParseFloat, and decoding JSON into a target whose type is,
+// or contains, float32/float64 or an untyped interface (which lets
+// encoding/json decode a JSON number as float64 with no static type ever
+// spelling "float"). It walks every non-test file of the four F2 trees that
+// carry provider numbers: internal/integration, internal/ingest,
+// internal/marketdata and internal/credentials.
+func TestIntegrationTreesDoNotParseFloats(t *testing.T) {
+	patterns := []string{
+		"./internal/integration/...",
+		"./internal/ingest/...",
+		"./internal/marketdata/...",
+		"./internal/credentials/...",
+	}
+
+	filesInspected := 0
+	for _, pattern := range patterns {
+		for _, pkg := range loadTypedPackages(t, pattern) {
+			for _, file := range pkg.Syntax {
+				pos := pkg.Fset.Position(file.Pos())
+				rel, err := filepath.Rel(repoRoot(t), pos.Filename)
+				require.NoError(t, err)
+				rel = filepath.ToSlash(rel)
+				if f2guardCallFloatSkip[rel] {
+					continue
+				}
+				filesInspected++
+
+				ast.Inspect(file, func(n ast.Node) bool {
+					call, ok := n.(*ast.CallExpr)
+					if !ok {
+						return true
+					}
+					sel, ok := call.Fun.(*ast.SelectorExpr)
+					if !ok {
+						return true
+					}
+					fn, ok := pkg.TypesInfo.Uses[sel.Sel].(*types.Func)
+					if !ok || fn.Pkg() == nil {
+						return true
+					}
+					switch {
+					case fn.Pkg().Path() == "strconv" && fn.Name() == "ParseFloat":
+						t.Errorf("%s: calls strconv.ParseFloat: money and energy are decimal.Decimal end to end, never parsed as a float",
+							pkg.Fset.Position(call.Pos()))
+					case fn.Pkg().Path() == "encoding/json" && fn.Name() == "Unmarshal" && len(call.Args) == 2:
+						f2guardCheckJSONTarget(t, pkg, call.Args[1])
+					case fn.Pkg().Path() == "encoding/json" && fn.Name() == "Decode" && len(call.Args) == 1 && f2guardIsJSONDecoderRecv(fn):
+						f2guardCheckJSONTarget(t, pkg, call.Args[0])
+					// M3: two more routes a float can enter without ever
+					// being named in a struct field or an Unmarshal/Decode
+					// target. Method-VALUE resolution (a bound method,
+					// e.g. `f := n.Float64; f()`, or a method used as a
+					// func value passed elsewhere) is deliberately not
+					// attempted here — Uses[sel.Sel] only resolves a
+					// direct call's selector, and reaching the same
+					// *types.Func through a value requires tracking data
+					// flow this AST walk does not do. Flagged as a known
+					// gap in the task report rather than silently claimed
+					// as covered.
+					case fn.Pkg().Path() == "encoding/json" && fn.Name() == "Float64" && f2guardIsJSONNumberRecv(fn):
+						t.Errorf("%s: calls json.Number.Float64: decode provider numbers as decimal.Decimal or keep them as json.Number/string, never parse them as a float",
+							pkg.Fset.Position(call.Pos()))
+					case fn.Pkg().Path() == "encoding/json" && fn.Name() == "Token" && f2guardIsJSONDecoderRecv(fn):
+						t.Errorf("%s: calls (*json.Decoder).Token: token-by-token JSON numbers decode as float64 with no static type to catch — parse provider numbers through a typed struct with decimal.Decimal/json.Number fields instead",
+							pkg.Fset.Position(call.Pos()))
+					}
+					return true
+				})
+			}
+		}
+	}
+
+	require.Positive(t, filesInspected,
+		"the guard walked zero non-test files across the F2 trees: it would pass whatever the code said")
+}
+
+// f2guardTLSDangerousFields are the crypto/tls.Config fields that, set in a
+// composite literal, bypass certificate verification: InsecureSkipVerify
+// disables it outright, and VerifyPeerCertificate/VerifyConnection replace
+// Go's own verification with caller code that can just as easily always
+// return nil.
+var f2guardTLSDangerousFields = map[string]bool{
+	"InsecureSkipVerify":    true,
+	"VerifyPeerCertificate": true,
+	"VerifyConnection":      true,
+}
+
+// f2guardLoadTypedPackagesWithTests is loadTypedPackages' counterpart that
+// also loads _test.go files (via packages.Config.Tests), for guards that
+// must see test code too — TestNoTLSConfigDisablesVerification's mutation
+// must be caught wherever it appears, including in a test fixture that
+// builds its own tls.Config. Loading with Tests:true produces extra
+// synthetic package variants (the in-package test binary, the external
+// _test package); a real file may therefore be visited more than once,
+// which only means a real violation is reported more than once, never
+// missed.
+func f2guardLoadTypedPackagesWithTests(t *testing.T, pattern string) []*packages.Package {
+	t.Helper()
+	cfg := &packages.Config{
+		Mode: packages.NeedName | packages.NeedImports | packages.NeedDeps |
+			packages.NeedTypes | packages.NeedSyntax | packages.NeedTypesInfo,
+		Dir:   repoRoot(t),
+		Tests: true,
+	}
+	pkgs, err := packages.Load(cfg, pattern)
+	require.NoError(t, err)
+	require.NotEmpty(t, pkgs, "pattern %q matched no packages: the guard would pass vacuously", pattern)
+	for _, pkg := range pkgs {
+		for _, pkgErr := range pkg.Errors {
+			t.Errorf("loading %s: %v", pkg.PkgPath, pkgErr)
+		}
+	}
+	return pkgs
+}
+
+// TestNoTLSConfigDisablesVerification closes the gap
+// TestNoTLSVerificationBypass leaves open. That guard is a substring scan
+// for "InsecureSkipVerify" in file text, so it misses a tls.Config built
+// with the dangerous field set through a variable holding the field's name,
+// through reflection, or under any spelling that does not literally contain
+// that identifier as a substring of the source text (none exists in Go
+// syntax today, but the point of a type-resolving guard is not to depend on
+// that staying true). This guard instead resolves every composite literal's
+// TYPE through the type checker and inspects its keyed fields directly:
+// it fails on ANY internal/ composite literal of crypto/tls.Config, test
+// file or not, that sets InsecureSkipVerify, VerifyPeerCertificate or
+// VerifyConnection — regardless of what value it sets the field to, because
+// even a VerifyPeerCertificate func that happens to always return nil is
+// exactly the shape a bypass takes.
+func TestNoTLSConfigDisablesVerification(t *testing.T) {
+	pkgs := f2guardLoadTypedPackagesWithTests(t, "./internal/...")
+
+	filesInspected := 0
+	for _, pkg := range pkgs {
+		for _, file := range pkg.Syntax {
+			filesInspected++
+			ast.Inspect(file, func(n ast.Node) bool {
+				switch node := n.(type) {
+				case *ast.CompositeLit:
+					if !isNamed(pkg.TypesInfo.TypeOf(node), "crypto/tls", "Config") {
+						return true
+					}
+					for _, elt := range node.Elts {
+						kv, ok := elt.(*ast.KeyValueExpr)
+						if !ok {
+							continue
+						}
+						key, ok := kv.Key.(*ast.Ident)
+						if !ok {
+							continue
+						}
+						if f2guardTLSDangerousFields[key.Name] {
+							t.Errorf("%s: tls.Config sets %s: TLS verification is never disabled (06 §1 rule 7, removed-behaviour 16)",
+								pkg.Fset.Position(kv.Pos()), key.Name)
+						}
+					}
+				case *ast.AssignStmt:
+					// I3: a composite literal only catches a tls.Config
+					// built and filled in one expression. `cfg :=
+					// &tls.Config{}; cfg.VerifyConnection = f` sets the
+					// same dangerous field through a field assignment
+					// after construction, which the composite-literal walk
+					// above never sees. TypesInfo.Selections resolves the
+					// LHS SelectorExpr to the *types.Var field it actually
+					// writes — by type, not by the string "tls" appearing
+					// anywhere — so this also catches the field being set
+					// through a renamed import or a value reached via
+					// another pointer to the same struct.
+					for _, lhs := range node.Lhs {
+						sel, ok := lhs.(*ast.SelectorExpr)
+						if !ok {
+							continue
+						}
+						selection, ok := pkg.TypesInfo.Selections[sel]
+						// Selection.Recv() for a FieldVal already reports
+						// the struct type itself (T), not *T, even when
+						// the expression's own type is a pointer — see
+						// go/types' Selection doc: "p.x FieldVal T x int".
+						if !ok || selection.Kind() != types.FieldVal ||
+							!isNamed(selection.Recv(), "crypto/tls", "Config") {
+							continue
+						}
+						if f2guardTLSDangerousFields[sel.Sel.Name] {
+							t.Errorf("%s: tls.Config field %s assigned after construction: TLS verification is never disabled (06 §1 rule 7, removed-behaviour 16)",
+								pkg.Fset.Position(node.Pos()), sel.Sel.Name)
+						}
+					}
+				}
+				return true
+			})
+		}
+	}
+
+	require.Positive(t, filesInspected,
+		"the guard walked zero files under internal/: it would pass whatever the code said")
 }

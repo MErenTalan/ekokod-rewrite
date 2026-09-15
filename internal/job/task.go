@@ -37,12 +37,39 @@ func RedisOpt(cfg config.Redis) (asynq.RedisClientOpt, error) {
 	}, nil
 }
 
-// Handlers holds the dependencies every task handler needs.
+// Handlers holds the dependencies every task handler needs. The
+// integration fields are optional: a process that never runs the
+// integration tasks (for example a test harness, or a worker deliberately
+// split off by task type) simply leaves them nil, and Register registers
+// no handler for the task types they would have served.
 type Handlers struct {
 	Log *slog.Logger
+
+	Ingestion Ingestion
+	Backfill  Backfiller
+	Prices    PriceSyncer
 }
 
-// Register attaches every handler to the mux.
+// Register attaches every handler to the mux. TypeNoop is always
+// registered. Each integration task type is registered only when the
+// Handlers field that serves it is non-nil, through an adapter that
+// decodes the payload, calls the method, and returns
+// ClassifyForRetry(err) — so a worker process that was not given an
+// Ingestion, Backfiller or PriceSyncer simply has no route for the task
+// types they would have served, rather than panicking on a nil interface
+// the first time one arrives.
 func Register(mux *asynq.ServeMux, h *Handlers) {
 	mux.HandleFunc(TypeNoop, h.Noop)
+
+	if h.Ingestion != nil {
+		mux.HandleFunc(TypeIntegrationSyncDispatch, h.integHandleSyncDispatch)
+		mux.HandleFunc(TypeIntegrationSyncAnalyzers, h.integHandleSyncAnalyzers)
+		mux.HandleFunc(TypeIntegrationFetchReadings, h.integHandleFetchReadings)
+	}
+	if h.Backfill != nil {
+		mux.HandleFunc(TypeIntegrationBackfill, h.integHandleBackfill)
+	}
+	if h.Prices != nil {
+		mux.HandleFunc(TypeEPIASSyncPrices, h.integHandleSyncPrices)
+	}
 }

@@ -82,6 +82,21 @@ type IntegrationCredential struct {
 	UpdatedAt time.Time
 }
 
+// CredentialRef identifies an active credential for platform dispatch. It
+// carries NO ciphertext — not SecretEnc, ExtraEnc, nor anything else that
+// would let the scheduled dispatcher (which fans work out to every tenant's
+// adapter without ever holding a Scope) leak a secret through a diagnostic
+// log or an operational message. A caller that needs the plaintext to
+// actually call a provider asks for it separately, through the credential
+// package's own decrypting lookup.
+type CredentialRef struct {
+	CredentialID uuid.UUID
+	CompanyID    uuid.UUID
+	DefinitionID uuid.UUID
+	Provider     IntegrationProvider
+	Subtype      string
+}
+
 // SMTPSettings is one company's outbound mail configuration. Mirrors table
 // `smtp_settings` (migration 00008), whose primary key IS company_id: a
 // company has at most one.
