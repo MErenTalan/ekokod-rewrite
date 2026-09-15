@@ -527,6 +527,7 @@ var storeScopeAllowlist = map[string]bool{
 	"Ping":              true, // internal/store/postgres/pool.go
 	"MigrateUp":         true, // internal/store/postgres/migrate.go
 	"MigrateDownAll":    true, // internal/store/postgres/migrate.go
+	"MigrateDownN":      true, // internal/store/postgres/migrate.go (F2 task-5: rolls back the N most recent migrations; migration infrastructure like MigrateUp/MigrateDownAll, not a repository read or write)
 	"MigrateStatus":     true, // internal/store/postgres/migrate.go
 	"PendingMigrations": true, // internal/store/postgres/migrate.go
 	"MigrationsCheck":   true, // internal/store/postgres/health.go (no ctx param today; listed so an added one stays exempt without a guard edit)
@@ -980,8 +981,19 @@ func floatGuardDescendsInto(t *types.Named) bool {
 // catch, and there is no way to express "rate.Limit is fine but nothing
 // else is" other than exempting the one file where it appears. No other
 // file is, or should ever be, exempt.
+//
+// internal/integration/fake/sanitise.go (added by Task 4; integration
+// commit ruling) is the fixture-fake's log/response scanner: it decodes an
+// arbitrary, unknown-shaped JSON body with json.Decoder.UseNumber() into
+// `any` purely to walk the resulting tree looking for PII-shaped keys —
+// UseNumber means any JSON number in that tree is held as json.Number, not
+// parsed as a float, so the interface-decode-target hazard this guard
+// flags does not apply to it. It never touches money, energy or provider
+// values: it is test-harness log hygiene, not a decode path any real
+// value flows through. No other file is, or should ever be, exempt.
 var f2guardCallFloatSkip = map[string]bool{
 	"internal/integration/httpx/ratelimit.go": true,
+	"internal/integration/fake/sanitise.go":   true,
 }
 
 // f2guardIsJSONDecoderRecv reports whether fn is a method whose receiver is

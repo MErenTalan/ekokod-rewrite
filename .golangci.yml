@@ -100,11 +100,22 @@ linters:
         # ever being a struct field: strconv.ParseFloat and a JSON decode
         # into a float or an untyped interface.
         # Change both or neither.
+        # internal/integration/fake/server.go (F2 task-4; integration commit
+        # ruling) is excluded by name, the same way
+        # internal/integration/fake/sanitise.go is named in arch_test.go's
+        # f2guardCallFloatSkip: it is the TLS test harness's self-signed
+        # certificate generator, and its one math/big use is
+        # crypto/rand.Int's own required big.Int argument type for a
+        # certificate serial number — never money, energy or a provider
+        # value, and nothing this rule exists to catch. No other file is,
+        # or should ever be, exempt; a future math/big use anywhere else
+        # under these trees still fails.
         no-float-money:
           files:
             - "**/internal/domain/**"
             - "**/internal/store/**"
             - "**/internal/integration/**"
+            - "!**/internal/integration/fake/server.go"
             - "**/internal/ingest/**"
             - "**/internal/marketdata/**"
             - "**/internal/credentials/**"
