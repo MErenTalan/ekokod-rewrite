@@ -26,8 +26,9 @@ import (
 // analyzers(provider, provider_subtype, installation_number) and
 // power_plants(isolar_ps_id) — if any fixture value stops carrying the seed.
 func TestTwoTenantsCoexistInOneDatabase(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	pool := testfixtures.NewMigratedPool(t)
+	pool := testfixtures.NewIsolatedDB(t)
 
 	mine := testfixtures.NewTenant(t, ctx, pool, 1)
 	theirs := testfixtures.NewTenant(t, ctx, pool, 2)
@@ -48,10 +49,11 @@ func TestTwoTenantsCoexistInOneDatabase(t *testing.T) {
 // and values, in a DIFFERENT database. Reproducing a failure means re-running
 // with the seed it printed, and that only works if the seed decides everything.
 func TestNewTenantIsDeterministic(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
-	first := testfixtures.NewTenant(t, ctx, testfixtures.NewMigratedPool(t), 7)
-	second := testfixtures.NewTenant(t, ctx, testfixtures.NewMigratedPool(t), 7)
+	first := testfixtures.NewTenant(t, ctx, testfixtures.NewIsolatedDB(t), 7)
+	second := testfixtures.NewTenant(t, ctx, testfixtures.NewIsolatedDB(t), 7)
 
 	require.Equal(t, first.Company, second.Company)
 	require.Equal(t, first.Users, second.Users)
@@ -67,8 +69,9 @@ func TestNewTenantIsDeterministic(t *testing.T) {
 // way it does. Every assertion here is something Task 13's isolation test
 // silently relies on.
 func TestTenantShapeMakesScopeLeaksObservable(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	tenant := testfixtures.NewTenant(t, ctx, testfixtures.NewMigratedPool(t), 3)
+	tenant := testfixtures.NewTenant(t, ctx, testfixtures.NewIsolatedDB(t), 3)
 
 	require.GreaterOrEqual(t, len(tenant.Buildings), 2,
 		"with one building an unscoped repository is indistinguishable from a scoped one")
@@ -98,8 +101,9 @@ func TestTenantShapeMakesScopeLeaksObservable(t *testing.T) {
 // to a real row, or a repository test would fail on a missing row rather than
 // on the behaviour it meant to test.
 func TestTenantRowsAreActuallyInTheDatabase(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	pool := testfixtures.NewMigratedPool(t)
+	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 5)
 
 	count := func(sql string, args ...any) int {

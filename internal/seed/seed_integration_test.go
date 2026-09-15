@@ -57,6 +57,7 @@ func seedTableCounts(t *testing.T, ctx context.Context, pool *pgxpool.Pool) map[
 // second run that duplicated rows would corrupt the factor catalogue every
 // release.
 func TestSeedRunTwiceProducesTheSameRowCounts(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	log := testfixtures.DiscardLogger()
@@ -87,6 +88,7 @@ func TestSeedRunTwiceProducesTheSameRowCounts(t *testing.T) {
 // shipped value back, otherwise "idempotent" would just mean "does nothing
 // the second time" and a corrupted catalogue would never heal.
 func TestSeedRepairsAModifiedRow(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	log := testfixtures.DiscardLogger()
@@ -134,6 +136,7 @@ func TestSeedRepairsAModifiedRow(t *testing.T) {
 // values completely alone while still (re)writing the platform row under
 // the same key.
 func TestSeedCompanyOwnedOverrideSurvivesSeeding(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	log := testfixtures.DiscardLogger()
@@ -189,6 +192,7 @@ func TestSeedCompanyOwnedOverrideSurvivesSeeding(t *testing.T) {
 // real platform factor row, then re-runs Load and asserts the ghost is gone
 // while the dataset's real conversions remain.
 func TestSeedReplacesConversionsExactly(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	log := testfixtures.DiscardLogger()

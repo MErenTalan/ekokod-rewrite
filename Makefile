@@ -21,7 +21,7 @@ test: ## Run unit tests
 	go test ./... -race -coverprofile=coverage.out -covermode=atomic
 
 test-integration: ## Run integration tests (requires Docker)
-	go test ./... -tags=integration -race -count=1
+	go test ./... -tags=integration -race -count=1 -parallel 8
 
 # test-perf runs Task 13's slow F1 acceptance suite: 1,000,000 synthetic
 # readings across 100 analyzers, asserting the chunk layout and EXPLAIN plan

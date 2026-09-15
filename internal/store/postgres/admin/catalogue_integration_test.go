@@ -20,6 +20,7 @@ import (
 func catalogueDec(s string) decimal.Decimal { return decimal.RequireFromString(s) }
 
 func TestAdminUpsertNationalTariffScheduleIsIdempotent(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	repo := admin.NewCatalogueRepository(pool)
@@ -53,6 +54,7 @@ func TestAdminUpsertNationalTariffScheduleIsIdempotent(t *testing.T) {
 }
 
 func TestAdminUpsertPlatformFactorNeverTouchesACompanyOwnedRow(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	catalogueRepo := admin.NewCatalogueRepository(pool)
@@ -95,6 +97,7 @@ func TestAdminUpsertPlatformFactorNeverTouchesACompanyOwnedRow(t *testing.T) {
 }
 
 func TestAdminReplacePlatformConversionsRefusesACompanyOwnedFactor(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	catalogueRepo := admin.NewCatalogueRepository(pool)
@@ -132,6 +135,7 @@ func TestAdminReplacePlatformConversionsRefusesACompanyOwnedFactor(t *testing.T)
 }
 
 func TestAdminUpsertIntegrationDefinitionsIsIdempotent(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	repo := admin.NewCatalogueRepository(pool)
@@ -160,6 +164,7 @@ func TestAdminUpsertIntegrationDefinitionsIsIdempotent(t *testing.T) {
 // ErrConflict-matching error naming the key — matching Task 10's BulkInsert
 // duplicate-key ruling.
 func TestAdminUpsertNationalTariffScheduleRefusesInBatchDuplicateKey(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	repo := admin.NewCatalogueRepository(pool)
@@ -190,6 +195,7 @@ func TestAdminUpsertNationalTariffScheduleRefusesInBatchDuplicateKey(t *testing.
 // conversions with a SMALLER set removes exactly the rows no longer
 // present, not just adds/updates the new ones.
 func TestAdminReplacePlatformConversionsSmallerReplaceRemovesExactly(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	repo := admin.NewCatalogueRepository(pool)

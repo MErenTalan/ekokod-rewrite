@@ -18,6 +18,7 @@ import (
 // TestAdminAuditAppendPlatformRefusesATenantEntry pins the admin-wide rule:
 // a model value with a non-nil CompanyID is refused with ErrNotFound.
 func TestAdminAuditAppendPlatformRefusesATenantEntry(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
