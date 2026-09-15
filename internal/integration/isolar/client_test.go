@@ -2,6 +2,7 @@ package isolar_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"sync"
@@ -12,12 +13,15 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
+	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/fake"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/httpx"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/isolar"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/normalize"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
+	"github.com/MErenTalan/ekokod-rewrite/internal/platform/lock"
+	"github.com/MErenTalan/ekokod-rewrite/internal/seed"
 )
 
 // --- shared test plumbing ---------------------------------------------------
@@ -51,6 +55,15 @@ func isolarTestPool(t *testing.T, srv *fake.Server) *httpx.Pool {
 	return pool
 }
 
+// isolarTestPoolWithLocker is isolarTestPool plus a Locker — used only by
+// TestISolarSerializeKeyCoversAuthAndData (I6).
+func isolarTestPoolWithLocker(t *testing.T, srv *fake.Server, locker lock.Locker) *httpx.Pool {
+	t.Helper()
+	pool, err := httpx.NewPool(httpx.PoolOptions{PinnedCerts: srv.Pins, Sleep: (&recordingSleep{}).fn, Locker: locker})
+	require.NoError(t, err)
+	return pool
+}
+
 // The fixture credential material below is all FIXTURE-/FX-placeholder
 // shaped (fake.TestFixturesAreSanitised's rules): none of it is real.
 const (
@@ -60,24 +73,32 @@ const (
 	fixtureAccessToken = "FIXTURE-ACCESSTOKEN-c3"
 	fixtureRefreshTok  = "FIXTURE-REFRESHTOKEN-d4"
 
-	// isolarOpToken etc. duplicate isolar's own unexported op* constants:
-	// this is an external test package (isolar_test), so it cannot
-	// reference them directly, and creds.Endpoints keys must match them
-	// byte-for-byte for the Client to find its own templates.
-	isolarOpAuthorize                          = "authorize"
+	// isolarEndpointGateway etc. and isolarOpToken etc. duplicate isolar's
+	// own unexported endpoint*/op* constants: this is an external test
+	// package (isolar_test), so it cannot reference them directly, and
+	// creds.Endpoints keys must match them byte-for-byte — R40: these are
+	// EXACTLY internal/seed/data/integration_definitions.json's isolar row
+	// keys — for the Client to find its own templates.
+	isolarEndpointGateway         = "gateway"
+	isolarEndpointAuthorizeOrigin = "authorize_origin"
+	isolarEndpointCloudID         = "cloud_id"
+
 	isolarOpToken                              = "token"
-	isolarOpRefreshToken                       = "refreshToken"
-	isolarOpQueryPowerStationList              = "queryPowerStationList"
-	isolarOpGetDeviceListByPsId                = "getDeviceListByPsId"
-	isolarOpGetDevicePointMinuteDataList       = "getDevicePointMinuteDataList"
-	isolarOpGetPowerStationPointMinuteDataList = "getPowerStationPointMinuteDataList"
-	isolarOpGetFaultAlarmInfo                  = "getFaultAlarmInfo"
+	isolarOpRefreshToken                       = "refresh_token"
+	isolarOpQueryPowerStationList              = "query_power_station_list"
+	isolarOpGetDeviceListByPsID                = "get_device_list_by_ps_id"
+	isolarOpGetDevicePointMinuteDataList       = "get_device_point_minute_data_list"
+	isolarOpGetPowerStationPointMinuteDataList = "get_power_station_point_minute_data_list"
+	isolarOpGetFaultAlarmInfo                  = "get_fault_alarm_info"
 )
 
-// isolarTestCreds builds Credentials whose Endpoints all point at srv, for
-// region EU (cloud id 3, per 06 §6's Regions table).
+// isolarTestCreds builds Credentials whose Endpoints mirror
+// internal/seed/data/integration_definitions.json's isolar/EU row exactly
+// (R40): gateway is srv's own URL, every op key names its REAL relative
+// path (token/refreshToken under /openapi/apiManage/, everything else
+// under /openapi/platform/), and cloud_id/authorize_origin are the seed's
+// own EU values.
 func isolarTestCreds(srv *fake.Server) integration.Credentials {
-	base := srv.URL + "/openapi/apiManage/"
 	return integration.Credentials{
 		CredentialID: uuid.New(),
 		CompanyID:    uuid.New(),
@@ -85,14 +106,16 @@ func isolarTestCreds(srv *fake.Server) integration.Credentials {
 		Subtype:      "EU",
 		Region:       "EU",
 		Endpoints: map[string]string{
-			isolarOpAuthorize:                          "https://web3.isolarcloud.eu",
-			isolarOpToken:                              base + "token",
-			isolarOpRefreshToken:                       base + "refreshToken",
-			isolarOpQueryPowerStationList:              base + "queryPowerStationList",
-			isolarOpGetDeviceListByPsId:                base + "getDeviceListByPsId",
-			isolarOpGetDevicePointMinuteDataList:       base + "getDevicePointMinuteDataList",
-			isolarOpGetPowerStationPointMinuteDataList: base + "getPowerStationPointMinuteDataList",
-			isolarOpGetFaultAlarmInfo:                  base + "getFaultAlarmInfo",
+			isolarEndpointGateway:                      srv.URL,
+			isolarEndpointAuthorizeOrigin:              "https://web3.isolarcloud.eu",
+			isolarEndpointCloudID:                      "3",
+			isolarOpToken:                              "/openapi/apiManage/token",
+			isolarOpRefreshToken:                       "/openapi/apiManage/refreshToken",
+			isolarOpQueryPowerStationList:              "/openapi/platform/queryPowerStationList",
+			isolarOpGetDeviceListByPsID:                "/openapi/platform/getDeviceListByPsId",
+			isolarOpGetDevicePointMinuteDataList:       "/openapi/platform/getDevicePointMinuteDataList",
+			isolarOpGetPowerStationPointMinuteDataList: "/openapi/platform/getPowerStationPointMinuteDataList",
+			isolarOpGetFaultAlarmInfo:                  "/openapi/platform/getFaultAlarmInfo",
 		},
 		Extra: map[string]integration.Secret{
 			"app_key":       integration.NewSecret([]byte(fixtureAppKey)),
@@ -109,17 +132,55 @@ var (
 	fixtureTo   = time.Date(2026, time.January, 1, 1, 0, 0, 0, normalize.Istanbul)
 )
 
+// TestISolarEndpointKeysMatchSeedDefinition is R40's anti-drift proof (I1):
+// it reads internal/seed/data/integration_definitions.json's isolar/EU row
+// directly (the actual embedded seed data, not a copy) and asserts every
+// key this package's op/endpoint constants use (duplicated above as
+// isolarOp*/isolarEndpoint* — see their doc comment) is present in it. A
+// key renamed in the seed WITHOUT this test package's constants being
+// updated to match fails here, not silently in production. MUTATION PROOF
+// (task's fix-round-1 requirement): renaming one seed-derived fixture key
+// (e.g. isolarOpGetFaultAlarmInfo above to "get_fault_alarm_infoX") makes
+// this test fail with "seed isolar/EU endpoints must carry key
+// \"get_fault_alarm_infoX\"" — see task-13-report.md's Fix round 1 section
+// for the observed failure output.
+func TestISolarEndpointKeysMatchSeedDefinition(t *testing.T) {
+	defs, err := seed.IntegrationDefinitions()
+	require.NoError(t, err)
+
+	var euEndpoints json.RawMessage
+	for _, d := range defs {
+		if d.Provider == model.IntegrationProviderISolar && d.Subtype == "EU" {
+			euEndpoints = d.Endpoints
+		}
+	}
+	require.NotNil(t, euEndpoints, "seed must carry an isolar/EU integration_definitions row")
+
+	var endpoints map[string]string
+	require.NoError(t, json.Unmarshal(euEndpoints, &endpoints))
+
+	for _, key := range []string{
+		isolarEndpointGateway, isolarEndpointAuthorizeOrigin, isolarEndpointCloudID,
+		isolarOpToken, isolarOpRefreshToken, isolarOpQueryPowerStationList,
+		isolarOpGetDeviceListByPsID, isolarOpGetDevicePointMinuteDataList,
+		isolarOpGetPowerStationPointMinuteDataList, isolarOpGetFaultAlarmInfo,
+	} {
+		_, ok := endpoints[key]
+		require.True(t, ok, "seed isolar/EU endpoints must carry key %q — this package's op constants must match the seed verbatim (R40)", key)
+	}
+}
+
 // --- TestISolarFixtureMatrix ------------------------------------------------
 
 // TestISolarFixtureMatrix is the F2 acceptance criterion "every adapter has
 // recorded fixtures covering success, empty result, partial data,
 // authentication failure, malformed payload, rate limiting, and
 // pagination" (fake.RequiredCases). It is exercised on DeviceMinuteSeries
-// for every case except "pagination", which iSolar's minute-series calls
-// do not themselves paginate (each call covers exactly the window it is
-// given — see series.go); "pagination" instead exercises Devices, whose
-// getDeviceListByPsId call follows rowCount across pages (task brief:
-// "(plus pagination on Devices)").
+// for every case except "pagination" (iSolar's minute-series calls do not
+// themselves paginate — R42 splits by TIME, not by page — see series.go);
+// "pagination" instead exercises Devices, whose getDeviceListByPsId call
+// follows rowCount across pages (task brief: "(plus pagination on
+// Devices)").
 func TestISolarFixtureMatrix(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -224,12 +285,30 @@ func TestISolarFixtureMatrix(t *testing.T) {
 				_, err := tc.call(t, c, creds)
 				require.NoError(t, err)
 			}
+
+			if tc.name == "pagination" {
+				// I7: pagination must be proven by counting recorded
+				// requests and asserting their OWN page params, not merely
+				// that the merged result has the right length (which a
+				// hard-coded page=1 sent twice could also produce if the
+				// fake server ignored the param — fake.Sequence instead
+				// serves page1 then page2 unconditionally, so this only
+				// proves real progression if the CLIENT actually sent
+				// page=1 then page=2).
+				reqs := srv.Requests()
+				require.Len(t, reqs, 2)
+				var body1, body2 map[string]any
+				require.NoError(t, json.Unmarshal(reqs[0].Body, &body1))
+				require.NoError(t, json.Unmarshal(reqs[1].Body, &body2))
+				require.EqualValues(t, 1, body1["page"], "first request must carry page=1")
+				require.EqualValues(t, 2, body2["page"], "second request must carry page=2, not another page=1")
+			}
 		})
 	}
 }
 
 func deviceMinuteRoute(respond fake.Responder) fake.Route {
-	return fake.Route{Method: http.MethodPost, Path: "/openapi/apiManage/getDevicePointMinuteDataList", Respond: respond}
+	return fake.Route{Method: http.MethodPost, Path: "/openapi/platform/getDevicePointMinuteDataList", Respond: respond}
 }
 
 // devicesPagedRoute serves isolar_devices_page1.json on the first call to
@@ -238,7 +317,7 @@ func deviceMinuteRoute(respond fake.Responder) fake.Route {
 func devicesPagedRoute(t *testing.T) fake.Route {
 	return fake.Route{
 		Method: http.MethodPost,
-		Path:   "/openapi/apiManage/getDeviceListByPsId",
+		Path:   "/openapi/platform/getDeviceListByPsId",
 		Respond: fake.Sequence(
 			fake.JSON(http.StatusOK, fake.Fixture(t, "isolar", "isolar_devices_page1.json")),
 			fake.JSON(http.StatusOK, fake.Fixture(t, "isolar", "isolar_devices_page2.json")),
@@ -317,12 +396,40 @@ func TestISolarUnitsAreNormalised(t *testing.T) {
 	require.True(t, checked, "the 1500Wh/2400W row must be present")
 }
 
+// TestISolarPointsNilNeverZero: adapter-patterns.md item 3 / fix-round-1 I5
+// — null, "" and "-" all parse to nil, never a fabricated zero; a genuine
+// "0" stays a real zero decimal, distinguishable from nil. MUTATION PROOF
+// (task's fix-round-1 requirement): changing normalize.OptionalNumber's
+// null-handling to return &zero instead of nil makes this test's nil
+// assertions fail — see task-13-report.md's Fix round 1 section for the
+// observed failure output.
+func TestISolarPointsNilNeverZero(t *testing.T) {
+	body := []byte(`{"result_code":"1","result_msg":"success","result_data":{"FX1001":[
+		{"time_stamp":"20260101000500","p1":null,"p24":"","p2001":"-","p2009":"0","p2010":"1.5"}
+	]}}`)
+	srv := fake.NewTLSServer(t, deviceMinuteRoute(fake.JSON(http.StatusOK, body)))
+	c := isolar.New(isolarTestPool(t, srv), isolar.Options{Clock: clock.NewFake(fixtureFrom)})
+	creds := isolarTestCreds(srv)
+
+	samples, err := c.DeviceMinuteSeries(context.Background(), creds, []string{"FX1001"}, fixtureFrom, fixtureTo)
+	require.NoError(t, err)
+	require.Len(t, samples, 1)
+	s := samples[0]
+	require.Nil(t, s.ProductionKwh, "null p1 must be nil, never a fabricated zero")
+	require.Nil(t, s.ActivePowerKw, "\"\" p24 must be nil")
+	require.Nil(t, s.IrradianceWm2, "\"-\" p2001 must be nil")
+	require.NotNil(t, s.AmbientTempC, "a genuine \"0\" p2009 must stay a real zero, not nil")
+	require.True(t, decimal.NewFromInt(0).Equal(*s.AmbientTempC))
+	require.NotNil(t, s.ModuleTempC)
+	require.True(t, decimal.RequireFromString("1.5").Equal(*s.ModuleTempC))
+}
+
 // TestISolarHeadersCarrySecretsOnlyInHeaders: the recorded request has
 // x-access-key and the bearer header; on failure, err.Error() contains
 // neither secret.
 func TestISolarHeadersCarrySecretsOnlyInHeaders(t *testing.T) {
 	srv := fake.NewTLSServer(t, fake.Route{
-		Method: http.MethodPost, Path: "/openapi/apiManage/getDevicePointMinuteDataList",
+		Method: http.MethodPost, Path: "/openapi/platform/getDevicePointMinuteDataList",
 		Respond: fake.JSON(http.StatusOK, fake.Fixture(t, "isolar", "isolar_auth_failure.json")),
 	})
 	c := isolar.New(isolarTestPool(t, srv), isolar.Options{Clock: clock.NewFake(fixtureFrom)})
@@ -357,6 +464,13 @@ func TestISolarConfigErrorsAreErrAuth(t *testing.T) {
 		require.ErrorIs(t, err, integration.ErrAuth)
 	})
 
+	t.Run("missing gateway", func(t *testing.T) {
+		creds := isolarTestCreds(srv)
+		delete(creds.Endpoints, isolarEndpointGateway)
+		_, err := c.DeviceMinuteSeries(context.Background(), creds, []string{"FX1001"}, fixtureFrom, fixtureTo)
+		require.ErrorIs(t, err, integration.ErrAuth)
+	})
+
 	t.Run("missing app_key", func(t *testing.T) {
 		creds := isolarTestCreds(srv)
 		delete(creds.Extra, "app_key")
@@ -379,10 +493,10 @@ func TestISolarConfigErrorsAreErrAuth(t *testing.T) {
 // fixture matrix). Field mapping is checked here so both calls are still
 // proven correct end to end.
 func TestISolarPlantsAndFaultsMapEveryField(t *testing.T) {
-	plantsBody := []byte(`{"result_code":"1","result_msg":"success","result_data":{"rowCount":1,"pageList":[{"ps_id":"FX3001","ps_name":"Fixture Plant","total_capacity":"220.500"}]}}`)
+	plantsBody := []byte(`{"result_code":"1","result_msg":"success","result_data":{"rowCount":1,"pageList":[{"ps_id":"FX3001","ps_name":"Fixture Plant","installed_power":"220.500"}]}}`)
 	srv := fake.NewTLSServer(t,
-		fake.Route{Method: http.MethodPost, Path: "/openapi/apiManage/queryPowerStationList", Respond: fake.JSON(http.StatusOK, plantsBody)},
-		fake.Route{Method: http.MethodPost, Path: "/openapi/apiManage/getFaultAlarmInfo", Respond: fake.JSON(http.StatusOK, fake.Fixture(t, "isolar", "isolar_faults.json"))},
+		fake.Route{Method: http.MethodPost, Path: "/openapi/platform/queryPowerStationList", Respond: fake.JSON(http.StatusOK, plantsBody)},
+		fake.Route{Method: http.MethodPost, Path: "/openapi/platform/getFaultAlarmInfo", Respond: fake.JSON(http.StatusOK, fake.Fixture(t, "isolar", "isolar_faults.json"))},
 	)
 	c := isolar.New(isolarTestPool(t, srv), isolar.Options{Clock: clock.NewFake(fixtureFrom)})
 	creds := isolarTestCreds(srv)
@@ -395,10 +509,11 @@ func TestISolarPlantsAndFaultsMapEveryField(t *testing.T) {
 	require.NotNil(t, plants[0].InstalledKw)
 	require.True(t, decimal.RequireFromString("220.500").Equal(*plants[0].InstalledKw))
 
-	faults, err := c.Faults(context.Background(), creds, fixtureFrom, fixtureTo.Add(24*time.Hour))
+	// isolar_faults.json's create_time sits inside [fixtureFrom, fixtureFrom+48h).
+	faults, err := c.Faults(context.Background(), creds, fixtureFrom, fixtureFrom.Add(48*time.Hour))
 	require.NoError(t, err)
 	require.Len(t, faults, 1)
-	require.Equal(t, "FX_ALARM_0001", faults[0].Ref)
+	require.Equal(t, "W-01", faults[0].Ref)
 	require.Equal(t, "FX3001", faults[0].PSID)
 	require.NotNil(t, faults[0].PSKey)
 	require.Equal(t, "FX2001", *faults[0].PSKey)
@@ -407,11 +522,51 @@ func TestISolarPlantsAndFaultsMapEveryField(t *testing.T) {
 	require.False(t, faults[0].OccurredAt.IsZero())
 }
 
+// TestISolarFaultsAcceptsRowCountAndPageListFallback: wire.go's
+// wirePagedFaults doc — a real getFaultAlarmInfo response has been observed
+// spelling this call's paging keys BOTH page_list/row_count (snake_case)
+// and pageList/rowCount (camelCase); this package must decode either.
+func TestISolarFaultsAcceptsRowCountAndPageListFallback(t *testing.T) {
+	body := []byte(`{"result_code":"1","result_msg":"success","result_data":{"row_count":1,"page_list":[
+		{"ps_id":"FX3002","ps_key":"FX2002","fault_code":"W-02","fault_name":"Snake Case Fault","create_time":"20260102090000"}
+	]}}`)
+	srv := fake.NewTLSServer(t, fake.Route{Method: http.MethodPost, Path: "/openapi/platform/getFaultAlarmInfo", Respond: fake.JSON(http.StatusOK, body)})
+	c := isolar.New(isolarTestPool(t, srv), isolar.Options{Clock: clock.NewFake(fixtureFrom)})
+	creds := isolarTestCreds(srv)
+
+	faults, err := c.Faults(context.Background(), creds, fixtureFrom, fixtureFrom.Add(48*time.Hour))
+	require.NoError(t, err)
+	require.Len(t, faults, 1)
+	require.Equal(t, "FX3002", faults[0].PSID)
+	require.Equal(t, "Snake Case Fault", faults[0].Message)
+}
+
+// TestISolarDevicesAcceptsRowCountAndPageDataFallback: wire.go's
+// wirePagedDevices doc — bcem-energy's OWN two call sites disagree on
+// getDeviceListByPsId's response shape (plants/route.ts hedges pageList/
+// page_data with a comment saying pageList is real; devices/route.ts reads
+// ONLY page_data/row_count with no fallback at all). This package must
+// decode either.
+func TestISolarDevicesAcceptsRowCountAndPageDataFallback(t *testing.T) {
+	body := []byte(`{"result_code":"1","result_msg":"success","result_data":{"row_count":1,"page_data":[
+		{"ps_key":"FX2003","device_sn":"FX_0003","device_type":1,"device_name":"Snake Case Device"}
+	]}}`)
+	srv := fake.NewTLSServer(t, fake.Route{Method: http.MethodPost, Path: "/openapi/platform/getDeviceListByPsId", Respond: fake.JSON(http.StatusOK, body)})
+	c := isolar.New(isolarTestPool(t, srv), isolar.Options{Clock: clock.NewFake(fixtureFrom)})
+	creds := isolarTestCreds(srv)
+
+	devices, err := c.Devices(context.Background(), creds, "FX3003")
+	require.NoError(t, err)
+	require.Len(t, devices, 1)
+	require.Equal(t, "FX2003", devices[0].PSKey)
+	require.Equal(t, "FX_0003", devices[0].DeviceSN)
+}
+
 // TestISolarVerifyMapsAuthFailure mirrors the meter adapters'
 // Test<P>VerifyMapsAuthFailure.
 func TestISolarVerifyMapsAuthFailure(t *testing.T) {
 	srv := fake.NewTLSServer(t, fake.Route{
-		Method: http.MethodPost, Path: "/openapi/apiManage/queryPowerStationList",
+		Method: http.MethodPost, Path: "/openapi/platform/queryPowerStationList",
 		Respond: fake.JSON(http.StatusOK, fake.Fixture(t, "isolar", "isolar_auth_failure.json")),
 	})
 	c := isolar.New(isolarTestPool(t, srv), isolar.Options{Clock: clock.NewFake(fixtureFrom)})
@@ -425,7 +580,7 @@ func TestISolarVerifyMapsAuthFailure(t *testing.T) {
 // route through that same type).
 func TestISolarErrorsCarryNoCredential(t *testing.T) {
 	srv := fake.NewTLSServer(t, fake.Route{
-		Method: http.MethodPost, Path: "/openapi/apiManage/queryPowerStationList",
+		Method: http.MethodPost, Path: "/openapi/platform/queryPowerStationList",
 		Respond: fake.JSON(http.StatusOK, fake.Fixture(t, "isolar", "isolar_auth_failure.json")),
 	})
 	c := isolar.New(isolarTestPool(t, srv), isolar.Options{Clock: clock.NewFake(fixtureFrom)})
@@ -434,4 +589,64 @@ func TestISolarErrorsCarryNoCredential(t *testing.T) {
 	for _, secret := range []string{fixtureAppKey, fixtureSecretKey, fixtureAccessToken, fixtureRefreshTok} {
 		require.False(t, strings.Contains(err.Error(), secret), "error text must not contain %q", secret)
 	}
+}
+
+// --- fix round 1: recording-Locker SerializeKey coverage (I6) --------------
+
+// recordingLocker is a minimal lock.Locker that records every key Acquire
+// was called with and always succeeds immediately — enough to prove WHICH
+// SerializeKey each httpx.Client call used, without a real distributed
+// lock.
+type recordingLocker struct {
+	mu   sync.Mutex
+	keys []string
+}
+
+func (r *recordingLocker) Acquire(_ context.Context, key string, _ time.Duration) (lock.Lease, error) {
+	r.mu.Lock()
+	r.keys = append(r.keys, key)
+	r.mu.Unlock()
+	return recordingLease{}, nil
+}
+
+func (r *recordingLocker) recorded() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]string, len(r.keys))
+	copy(out, r.keys)
+	return out
+}
+
+type recordingLease struct{}
+
+func (recordingLease) Release(context.Context) error { return nil }
+
+// TestISolarSerializeKeyCoversAuthAndData proves adapter-patterns.md item
+// 15 end to end: EVERY httpx.Client this package builds — an auth call
+// (ExchangeCode, which goes through token.go/auth.go) AND a data call
+// (DeviceMinuteSeries) — acquires the SAME SerializeKey,
+// "isolar:<company id>". MUTATION PROOF (task's fix-round-1 requirement):
+// removing SerializeKey from httpClient (or hard-coding it without the
+// company id) makes this test fail with either zero recorded keys or a key
+// that does not equal wantKey — see task-13-report.md's Fix round 1
+// section for the observed failure output.
+func TestISolarSerializeKeyCoversAuthAndData(t *testing.T) {
+	srv := fake.NewTLSServer(t,
+		fake.Route{Method: http.MethodPost, Path: "/openapi/apiManage/token", Respond: fake.JSON(http.StatusOK, fake.Fixture(t, "isolar", "isolar_token.json"))},
+		deviceMinuteRoute(fake.JSON(http.StatusOK, fake.Fixture(t, "isolar", "isolar_device_minute.json"))),
+	)
+	rl := &recordingLocker{}
+	c := isolar.New(isolarTestPoolWithLocker(t, srv, rl), isolar.Options{Clock: clock.NewFake(fixtureFrom)})
+	creds := isolarTestCreds(srv)
+
+	_, err := c.ExchangeCode(context.Background(), creds, "FIXTURE-CODE-1", "https://app.example.invalid/callback")
+	require.NoError(t, err)
+	_, err = c.DeviceMinuteSeries(context.Background(), creds, []string{"FX1001"}, fixtureFrom, fixtureTo)
+	require.NoError(t, err)
+
+	wantKey := "isolar:" + creds.CompanyID.String()
+	keys := rl.recorded()
+	require.Len(t, keys, 2, "both the auth call and the data call must acquire the lock exactly once each")
+	require.Equal(t, wantKey, keys[0], "the auth call (ExchangeCode) must carry the SerializeKey")
+	require.Equal(t, wantKey, keys[1], "the data call (DeviceMinuteSeries) must carry the SerializeKey")
 }

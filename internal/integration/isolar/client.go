@@ -16,7 +16,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"mime"
 	"net/http"
 	"regexp"
@@ -32,15 +31,46 @@ import (
 // (06 §6: "\"1\" means success, otherwise R21").
 const resultSuccess = "1"
 
-// defaultMinuteInterval is the legacy default (06 §6's brief: "minute
-// series requests use minute_interval \"60\" (legacy default)").
+// defaultMinuteInterval is the legacy default (isolarClient.ts:614,643:
+// "minute_interval: options.minuteInterval || \"60\"").
 const defaultMinuteInterval = "60"
 
-// maxPages bounds every paginated call in this package (queryPowerStationList,
-// getDeviceListByPsId, getFaultAlarmInfo), the same "page budget" R4 gives
-// the meter adapters, so a provider bug (rowCount that never shrinks, an
-// empty page that is not the last one) cannot loop forever.
-const maxPages = 10
+// isolarTimestampLayout is every timestamp this package sends or parses on
+// the wire: request start_time_stamp/end_time_stamp and response
+// time_stamp are documented "yyyyMMddHHmmss" (isolarClient.ts:594,622's own
+// comments: "timestamp format: yyyyMMddHHmmss"). getFaultAlarmInfo's
+// create_time has no format documented anywhere in the legacy source; this
+// package assumes the same family convention (R41 allows "one F14 verify
+// against real responses note" for exactly this kind of gap) rather than
+// inventing an unrelated format — flagged for F14 verification alongside
+// R21/R35's other unverified-against-a-real-response items.
+const isolarTimestampLayout = "20060102150405"
+
+// maxPageBudget bounds every non-cursor paginated call in this package
+// (queryPowerStationList, getDeviceListByPsId, getFaultAlarmInfo) — R44's
+// "hard cap (e.g. 100)". Unlike round 1's maxPages=10 silent-truncation
+// loop, exceeding this budget is a non-retryable *integration.Error
+// (pageBudgetExceeded below), never a quietly-truncated result: a provider
+// bug (rowCount that never shrinks, a rowCount far larger than this
+// credential could plausibly have) must be visible, not swallowed.
+const maxPageBudget = 100
+
+// MaxWindowMinute is R42/Provider-defaults' isolar row: "1 d minute
+// series". DeviceMinuteSeries and PlantMinuteSeries refuse a request whose
+// [from, to) exceeds this BEFORE any call, and internally split an
+// accepted window into contiguous <=3h sub-windows (legacyMaxSubWindow in
+// series.go) — the legacy API's own documented per-request cap
+// (isolarClient.ts:593,621: "API supports max 3-hour time intervals per
+// request").
+const MaxWindowMinute = 24 * time.Hour
+
+// MaxWindowDay is Provider-defaults' isolar row: "31 d day series". No
+// day-series call exists in this task's brief (only the two minute-series
+// methods), so nothing in this package enforces it yet — it is exported
+// now, per R42's literal instruction ("the adapter exports its MaxWindow
+// per series"), so a future day-series method has a single documented
+// source for this bound instead of a second invented constant.
+const MaxWindowDay = 31 * 24 * time.Hour
 
 // pointIDList is the fixed set of measurement points every minute-series
 // call asks for (06 §6): 1 yield today (Wh), 24 total active power (W),
@@ -48,15 +78,17 @@ const maxPages = 10
 // 2010 module temperature (°C).
 const pointIDList = "1,24,2001,2009,2010"
 
-// regionCloudID is 06 §6's Regions table's Cloud id column, keyed by
-// Credentials.Region. It is fixed platform knowledge, not something any
-// integration_definitions row carries, so it is a constant here rather than
-// read from creds.Endpoints.
-var regionCloudID = map[string]int{
-	"EU": 3,
-	"CN": 1,
-	"AU": 2,
-}
+// Endpoints keys this package never hard-codes a value for (R40): every
+// call resolves its path from creds.Endpoints, and the gateway origin,
+// OAuth authorize origin and cloud id come from creds.Endpoints too — all
+// four are integration_definitions.json's isolar row, verbatim
+// (internal/seed/data/integration_definitions.json). No endpoint table, no
+// per-region constant map, lives in this package.
+const (
+	endpointGateway         = "gateway"
+	endpointAuthorizeOrigin = "authorize_origin"
+	endpointCloudID         = "cloud_id"
+)
 
 // authFailureMsgPattern matches a result_msg that names an authentication
 // problem (R21's mapping is isolated to classifyResult below, the one place
@@ -133,8 +165,9 @@ func (c *Client) httpClient(creds integration.Credentials) *httpx.Client {
 	})
 }
 
-// callOptions is one call's shape: which endpoint, whether it carries the
-// bearer access-token header (every call except token/refreshToken — 06 §6:
+// callOptions is one call's shape: which endpoint (an
+// integration_definitions.json key — R40), whether it carries the bearer
+// access-token header (every call except token/refreshToken — 06 §6:
 // "Every platform call carries the app key, the signed secret header and
 // the access token" — token/refreshToken are the two exceptions, since the
 // access token does not exist yet, or is being replaced), whether it must
@@ -147,15 +180,20 @@ type callOptions struct {
 	body    map[string]any
 }
 
-// call is the ONE place every iSolarCloud request is built and sent: it
-// resolves the endpoint template from creds.Endpoints (never anywhere
-// else — "Endpoints come from creds.Endpoints"), attaches appkey to the
-// body and x-access-key/Authorization to the headers, and decodes the
+// call is the ONE place every iSolarCloud request is built and sent (R40):
+// it builds the URL as creds.Endpoints["gateway"] + creds.Endpoints[o.op]
+// (the relative path integration_definitions.json's isolar row carries for
+// this operation — never a hard-coded endpoint table), attaches appkey to
+// the body and x-access-key/Authorization to the headers, and decodes the
 // {result_code, result_msg, result_data} envelope. It returns the raw
 // result_data for the caller to unmarshal into its own wire type.
 func (c *Client) call(ctx context.Context, creds integration.Credentials, o callOptions) (json.RawMessage, error) {
-	tmpl, ok := creds.Endpoints[o.op]
-	if !ok || tmpl == "" {
+	gateway, ok := creds.Endpoints[endpointGateway]
+	if !ok || gateway == "" {
+		return nil, c.configError(endpointGateway)
+	}
+	path, ok := creds.Endpoints[o.op]
+	if !ok || path == "" {
 		return nil, c.configError(o.op)
 	}
 
@@ -187,7 +225,7 @@ func (c *Client) call(ctx context.Context, creds integration.Credentials, o call
 	resp, err := c.httpClient(creds).Do(ctx, httpx.Request{
 		Op:          o.op,
 		Method:      http.MethodPost,
-		Template:    tmpl,
+		Template:    gateway + path,
 		Header:      header,
 		Body:        raw,
 		ContentType: "application/json",
@@ -201,16 +239,28 @@ func (c *Client) call(ctx context.Context, creds integration.Credentials, o call
 
 // configError is returned for every configuration/credential-incompleteness
 // failure this package detects before ever sending a request: a missing
-// endpoint template, a missing app_key/secret_key/access_token. CHOSEN
-// KIND: ErrAuth. No dedicated config Kind exists in internal/integration
-// today (a planned follow-up per the task brief); ErrMalformedPayload is
-// documented as the wrong choice for a config error (adapter-patterns.md
-// item 9), and ErrAuth is the closest existing sentinel to "this call
-// cannot be authenticated/addressed without configuration that is
-// missing" — every case this function covers is exactly that. Revisit this
-// choice once a dedicated Kind exists.
+// gateway/endpoint template, a missing app_key/secret_key/access_token/
+// cloud_id, an empty required identifier (psID/psKeys — adapter-patterns.md
+// item 12), or a window larger than MaxWindowMinute (R42). CHOSEN KIND:
+// ErrAuth. No dedicated config Kind exists in internal/integration today (a
+// planned follow-up per the task brief); ErrMalformedPayload is documented
+// as the wrong choice for a config error (adapter-patterns.md item 9), and
+// ErrAuth is the closest existing sentinel to "this call cannot be
+// addressed or authenticated without configuration/arguments that are
+// missing or invalid" — every case this function covers is exactly that,
+// and every one is non-retryable (integration.Retryable never matches
+// ErrAuth). Revisit this choice once a dedicated Kind exists.
 func (c *Client) configError(op string) error {
 	return &integration.Error{Kind: integration.ErrAuth, Provider: integration.ProviderISolar, Op: op}
+}
+
+// pageBudgetExceeded is returned when a non-cursor list (plants, devices,
+// faults) reports, via rowCount, more rows than maxPageBudget pages can
+// cover (R44) — a provider-shape anomaly distinct from configError's
+// caller-input/config problems, so it gets ErrMalformedPayload rather than
+// reusing configError's ErrAuth. Both are non-retryable.
+func (c *Client) pageBudgetExceeded(op string) error {
+	return &integration.Error{Kind: integration.ErrMalformedPayload, Provider: integration.ProviderISolar, Op: op}
 }
 
 // appAndSecretKey resolves the two credential-shaped Extra values every
@@ -230,7 +280,12 @@ func (c *Client) appAndSecretKey(creds integration.Credentials) (appKey, secretK
 // non-null (else ErrMalformedPayload, adapter-patterns.md item 6 — a
 // missing/null top-level key is never treated as an empty success).
 // result_code == "1" is success; any other value goes through
-// classifyResult.
+// classifyResult. I4: on a success code, result_data itself missing or
+// JSON null is ALSO ErrMalformedPayload — never silently decoded into a
+// zero-value struct/empty map downstream (json.Unmarshal(null, &x) is a
+// documented no-op in encoding/json, so without this check a null
+// result_data on "result_code":"1" would produce an empty-but-valid Token/
+// Plant/Device list instead of surfacing the shape violation).
 func (c *Client) decodeEnvelope(op string, resp httpx.Response) (json.RawMessage, error) {
 	if mt, _, mimeErr := mime.ParseMediaType(resp.Header.Get("Content-Type")); mimeErr != nil || mt != "application/json" {
 		return nil, &integration.Error{Kind: integration.ErrMalformedPayload, Provider: integration.ProviderISolar, Op: op, HTTPStatus: resp.Status}
@@ -245,15 +300,25 @@ func (c *Client) decodeEnvelope(op string, resp httpx.Response) (json.RawMessage
 	if *env.ResultCode != resultSuccess {
 		return nil, &integration.Error{Kind: classifyResult(*env.ResultCode, env.ResultMsg), Provider: integration.ProviderISolar, Op: op, HTTPStatus: resp.Status}
 	}
+	if isNullOrEmpty(env.ResultData) {
+		return nil, &integration.Error{Kind: integration.ErrMalformedPayload, Provider: integration.ProviderISolar, Op: op, HTTPStatus: resp.Status}
+	}
 	return env.ResultData, nil
 }
 
+// isNullOrEmpty reports whether raw is absent (nil/zero-length, the key
+// was missing entirely) or the literal JSON token "null".
+func isNullOrEmpty(raw json.RawMessage) bool {
+	trimmed := bytes.TrimSpace(raw)
+	return len(trimmed) == 0 || string(trimmed) == "null"
+}
+
 // formatIsolarTime renders t (any instant) as Europe/Istanbul local
-// "yyyy-MM-dd HH:mm:ss" — the inverse of parseIsolarTime in series.go/
-// alarms.go, and the format every from/to request parameter in this
-// package uses.
+// yyyyMMddHHmmss — the inverse of parsing with isolarTimestampLayout, and
+// the format every from/to request parameter in this package uses
+// (isolarClient.ts:594,622).
 func formatIsolarTime(t time.Time) string {
-	return t.In(normalize.Istanbul).Format("2006-01-02 15:04:05")
+	return t.In(normalize.Istanbul).Format(isolarTimestampLayout)
 }
 
 // malformedErr wraps a json.Unmarshal failure into ErrMalformedPayload,
@@ -267,14 +332,4 @@ func formatIsolarTime(t time.Time) string {
 // resulting error.
 func malformedErr(op string) error {
 	return &integration.Error{Kind: integration.ErrMalformedPayload, Provider: integration.ProviderISolar, Op: op}
-}
-
-// requireRegion resolves creds.Region to its Cloud id, or a configError for
-// an unrecognised region.
-func (c *Client) requireRegion(creds integration.Credentials) (int, error) {
-	id, ok := regionCloudID[creds.Region]
-	if !ok {
-		return 0, c.configError(fmt.Sprintf("region:%s", creds.Region))
-	}
-	return id, nil
 }

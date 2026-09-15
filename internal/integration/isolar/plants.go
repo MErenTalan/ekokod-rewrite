@@ -9,12 +9,13 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// opQueryPowerStationList / opGetDeviceListByPsId are 06 §6's operation
-// names, verbatim, used as both this file's creds.Endpoints keys and the
-// httpx.Request.Op recorded on every error from these calls.
+// opQueryPowerStationList / opGetDeviceListByPsID are
+// integration_definitions.json's isolar row keys (R40) — the source of
+// truth is internal/seed/data/integration_definitions.json, read verbatim
+// as creds.Endpoints; this package never hard-codes a path.
 const (
-	opQueryPowerStationList = "queryPowerStationList"
-	opGetDeviceListByPsId   = "getDeviceListByPsId" //nolint:stylecheck // 06 §6's own operation name, verbatim
+	opQueryPowerStationList = "query_power_station_list"
+	opGetDeviceListByPsID   = "get_device_list_by_ps_id"
 )
 
 // plantsPageSize / devicesPageSize are the brief's stated page sizes:
@@ -42,14 +43,24 @@ type Device struct {
 }
 
 // Plants lists every power station the credential can see, following
-// rowCount across pages of plantsPageSize (bounded by maxPages).
+// rowCount across pages of plantsPageSize. R44: pages are derived from
+// rowCount against a hard budget (maxPageBudget) — exceeding it is a
+// non-retryable *integration.Error, never a silently truncated list; the
+// rowCount comparison counts every row this call has RECEIVED so far
+// (received, incremented per raw page length), not only the ones that
+// mapped cleanly, so a page containing one bad row cannot make this loop
+// think there is more data left than there really is.
 func (c *Client) Plants(ctx context.Context, creds integration.Credentials) ([]Plant, error) {
 	var out []Plant
-	for page := 1; page <= maxPages; page++ {
+	received := 0
+	for page := 1; ; page++ {
+		if page > maxPageBudget {
+			return nil, c.pageBudgetExceeded(opQueryPowerStationList)
+		}
 		raw, err := c.call(ctx, creds, callOptions{
 			op:     opQueryPowerStationList,
 			bearer: true,
-			body:   map[string]any{"curPage": page, "size": plantsPageSize},
+			body:   map[string]any{"page": page, "size": plantsPageSize},
 		})
 		if err != nil {
 			return nil, err
@@ -58,6 +69,7 @@ func (c *Client) Plants(ctx context.Context, creds integration.Credentials) ([]P
 		if err := json.Unmarshal(raw, &pd); err != nil {
 			return nil, malformedErr(opQueryPowerStationList)
 		}
+		received += len(pd.PageList)
 		for _, wp := range pd.PageList {
 			p, mapErr := mapPlant(wp)
 			if mapErr != nil {
@@ -71,7 +83,7 @@ func (c *Client) Plants(ctx context.Context, creds integration.Credentials) ([]P
 			out = append(out, p)
 		}
 		rowCount, rcErr := pd.RowCount.Int64()
-		if rcErr != nil || len(out) >= int(rowCount) || len(pd.PageList) == 0 {
+		if rcErr != nil || received >= int(rowCount) || len(pd.PageList) == 0 {
 			break
 		}
 	}
@@ -82,7 +94,7 @@ func mapPlant(w wirePlant) (Plant, error) {
 	if w.PsID == "" {
 		return Plant{}, malformedErr(opQueryPowerStationList)
 	}
-	kw, err := normalize.OptionalNumber(derefOr(w.TotalCapacity, ""))
+	kw, err := normalize.OptionalNumber(derefOr(w.InstalledPower, ""))
 	if err != nil {
 		return Plant{}, err
 	}
@@ -90,46 +102,77 @@ func mapPlant(w wirePlant) (Plant, error) {
 }
 
 // Devices lists every device under plant psID, following rowCount across
-// pages of devicesPageSize (bounded by maxPages).
+// pages of devicesPageSize — same R44 page-budget/received-count rule as
+// Plants. psID is refused empty before any call (adapter-patterns.md item
+// 12).
 func (c *Client) Devices(ctx context.Context, creds integration.Credentials, psID string) ([]Device, error) {
+	if psID == "" {
+		return nil, c.configError(opGetDeviceListByPsID)
+	}
 	var out []Device
-	for page := 1; page <= maxPages; page++ {
+	received := 0
+	for page := 1; ; page++ {
+		if page > maxPageBudget {
+			return nil, c.pageBudgetExceeded(opGetDeviceListByPsID)
+		}
 		raw, err := c.call(ctx, creds, callOptions{
-			op:     opGetDeviceListByPsId,
+			op:     opGetDeviceListByPsID,
 			bearer: true,
-			body:   map[string]any{"ps_id": psID, "curPage": page, "size": devicesPageSize},
+			body: map[string]any{
+				"ps_id":                   psID,
+				"page":                    page,
+				"size":                    devicesPageSize,
+				"is_virtual_unit":         "0",
+				"is_get_firmware_version": "0",
+				"device_type_list":        []int{},
+			},
 		})
 		if err != nil {
 			return nil, err
 		}
 		var pd wirePagedDevices
 		if err := json.Unmarshal(raw, &pd); err != nil {
-			return nil, malformedErr(opGetDeviceListByPsId)
+			return nil, malformedErr(opGetDeviceListByPsID)
 		}
-		for _, wd := range pd.PageList {
+		pageList := pd.PageListCamel
+		if len(pageList) == 0 {
+			pageList = pd.PageListSnake
+		}
+		received += len(pageList)
+		for _, wd := range pageList {
 			d, mapErr := mapDevice(wd)
 			if mapErr != nil {
 				continue
 			}
 			out = append(out, d)
 		}
-		rowCount, rcErr := pd.RowCount.Int64()
-		if rcErr != nil || len(out) >= int(rowCount) || len(pd.PageList) == 0 {
+		rowCount, rcErr := devicesRowCount(pd)
+		if rcErr != nil || received >= int(rowCount) || len(pageList) == 0 {
 			break
 		}
 	}
 	return out, nil
 }
 
+// devicesRowCount prefers rowCount (camelCase), falling back to row_count
+// when rowCount's json.Number is empty (the key was absent) — see wire.go's
+// wirePagedDevices doc for why this call hedges both spellings.
+func devicesRowCount(pd wirePagedDevices) (int64, error) {
+	if pd.RowCountCamel.String() != "" {
+		return pd.RowCountCamel.Int64()
+	}
+	return pd.RowCountSnake.Int64()
+}
+
 func mapDevice(w wireDevice) (Device, error) {
 	if w.PsKey == "" || w.DeviceSN == "" {
-		return Device{}, malformedErr(opGetDeviceListByPsId)
+		return Device{}, malformedErr(opGetDeviceListByPsID)
 	}
 	var deviceType *int32
 	if w.DeviceType != nil {
 		n, err := w.DeviceType.Int64()
 		if err != nil {
-			return Device{}, malformedErr(opGetDeviceListByPsId)
+			return Device{}, malformedErr(opGetDeviceListByPsID)
 		}
 		v := int32(n)
 		deviceType = &v

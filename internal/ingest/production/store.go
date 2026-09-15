@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/isolar"
@@ -41,14 +42,17 @@ import (
 // row this package writes carries — the column's own documented default.
 const productionSource = "isolar"
 
-// quarantineCode / unknownDeviceCode are the operational-message codes this
-// package writes into OperationalMessage.Metadata's "code" field —
-// OperationalMessage has no dedicated code column (internal/domain/model/
-// operations.go), so BLOCKER item 2's "code plant_level_production_unstorable"
-// and the task brief's "code unknown_device" both live in Metadata.
+// quarantineCode / unknownDeviceCode / conflictingDuplicateCode are the
+// operational-message codes this package writes into
+// OperationalMessage.Metadata's "code" field — OperationalMessage has no
+// dedicated code column (internal/domain/model/operations.go), so BLOCKER
+// item 2's "code plant_level_production_unstorable", the task brief's
+// "code unknown_device" and fix-round-1 finding I3's
+// "conflicting_duplicate" all live in Metadata.
 const (
-	quarantineCode    = "plant_level_production_unstorable"
-	unknownDeviceCode = "unknown_device"
+	quarantineCode           = "plant_level_production_unstorable"
+	unknownDeviceCode        = "unknown_device"
+	conflictingDuplicateCode = "conflicting_duplicate"
 )
 
 // Deps is the store surface Store needs: F1's PlantRepository (to resolve
@@ -62,10 +66,13 @@ type Deps struct {
 
 // Result is Store's outcome for one call: how many rows were written
 // (split into inserted/updated, matching ProductionRepository.BulkInsert's
-// own two counts), how many samples were quarantined (the BLOCKER case) and
-// how many named a device not yet known to this plant.
+// own two counts), how many samples were quarantined (the BLOCKER case),
+// how many named a device not yet known to this plant, and how many were
+// discarded as conflicting duplicates (fix-round-1 finding I3: two samples
+// sharing (ts, device) whose values genuinely differ are ALL rejected and
+// counted here — never silently resolved by "last value wins").
 type Result struct {
-	Inserted, Updated, Quarantined, UnknownDevice int
+	Inserted, Updated, Quarantined, UnknownDevice, ConflictingDuplicate int
 }
 
 // Store persists device-attributed samples and quarantines plant-level ones
@@ -74,7 +81,17 @@ type Result struct {
 // (global constraint: "background jobs act for a whole company through
 // store.SystemScope"); Store itself never constructs one.
 //
-// Steps (task brief, verbatim):
+// from/to is the FETCH WINDOW [From, To) the caller asked isolar for these
+// samples over (e.g. the window it passed to DeviceMinuteSeries/
+// PlantMinuteSeries) — fix-round-1 ruling R43: every operational message's
+// metadata.from/to is this window, NOT min/max sample.Ts (a window can be
+// wider than what happens to be present in the samples, and round 1
+// derived it from the samples themselves, which is the bug this ruling
+// fixes). R43 also documents: one message per Store call — a re-run over
+// the same window that quarantines again appends ANOTHER message, it does
+// not collapse into the first.
+//
+// Steps (task brief, as amended by fix-round-1 rulings R43/I3):
 //  1. Resolve Devices(s, plantID) into a map[ProviderKey]id, falling back to
 //     DeviceSN when a sample carries no PSKey match.
 //  2. A sample with PSKey == nil is the BLOCKER case: Quarantined++, never
@@ -82,16 +99,20 @@ type Result struct {
 //  3. A sample whose PSKey/DeviceSN matches no known device is
 //     UnknownDevice++ — device sync is F9's job; this function never
 //     creates a power_plant_devices row.
-//  4. The remaining samples are deduplicated on (ts, device) — Task 10 rule
-//     D1, last-value-wins (this package's own tie-break choice: D1 does not
-//     specify one, and BulkInsert refuses the whole batch on ANY duplicate
-//     key, so silently letting `on conflict` arbitrate is not an option) —
-//     then written with one BulkInsert call.
+//  4. The remaining samples are grouped by (ts, device) — Task 10 rule D1,
+//     as fix-round-1 finding I3 spells it out: a group whose members are
+//     ALL identical on every stored field collapses to one row; a group
+//     with genuinely differing values is entirely rejected (none of its
+//     rows are stored) and counted as ConflictingDuplicate — never
+//     silently arbitrated by "last value wins", since BulkInsert itself
+//     refuses the whole batch on any duplicate key.
 //  5. Exactly one AppendMessage when Quarantined > 0 (kind job, category
-//     plant-production, status warning, code plant_level_production_unstorable,
-//     metadata {plant_id, samples, from, to}) and exactly one more when
-//     UnknownDevice > 0 (same kind/category/status, code unknown_device).
-func Store(ctx context.Context, s store.Scope, d Deps, plantID uuid.UUID, samples []isolar.ProductionSample) (Result, error) {
+//     plant-production, status warning, code plant_level_production_unstorable),
+//     one more when UnknownDevice > 0 (code unknown_device), and one more
+//     when ConflictingDuplicate > 0 (code conflicting_duplicate) — each
+//     metadata {plant_id, samples, from, to} with from/to the fetch window
+//     above.
+func Store(ctx context.Context, s store.Scope, d Deps, plantID uuid.UUID, from, to time.Time, samples []isolar.ProductionSample) (Result, error) {
 	if !s.Valid() {
 		return Result{}, store.ErrInvalidScope
 	}
@@ -115,19 +136,11 @@ func Store(ctx context.Context, s store.Scope, d Deps, plantID uuid.UUID, sample
 		ts       time.Time
 		deviceID uuid.UUID
 	}
-	rows := make([]model.PlantProduction, 0, len(samples))
-	index := make(map[rowKey]int, len(samples))
+	groups := make(map[rowKey][]model.PlantProduction, len(samples))
+	var order []rowKey
 
 	var quarantined, unknownDevice int
-	var windowFrom, windowTo time.Time
 	for _, sample := range samples {
-		if windowFrom.IsZero() || sample.Ts.Before(windowFrom) {
-			windowFrom = sample.Ts
-		}
-		if sample.Ts.After(windowTo) {
-			windowTo = sample.Ts
-		}
-
 		if sample.PSKey == nil {
 			// The BLOCKER: a plant-level sample carries no device
 			// attribution and is never stored, never attributed to a
@@ -157,12 +170,25 @@ func Store(ctx context.Context, s store.Scope, d Deps, plantID uuid.UUID, sample
 			Source:        productionSource,
 		}
 		key := rowKey{ts: sample.Ts, deviceID: deviceID}
-		if i, exists := index[key]; exists {
-			rows[i] = row // dedupe (Task 10 rule D1): last value wins.
+		if _, seen := groups[key]; !seen {
+			order = append(order, key)
+		}
+		groups[key] = append(groups[key], row)
+	}
+
+	rows := make([]model.PlantProduction, 0, len(order))
+	var conflicting int
+	for _, key := range order {
+		group := groups[key]
+		if len(group) == 1 || rowsIdentical(group) {
+			// A single sample, or several IDENTICAL ones (I3: "identical
+			// duplicates collapse") — keep exactly one.
+			rows = append(rows, group[0])
 			continue
 		}
-		index[key] = len(rows)
-		rows = append(rows, row)
+		// I3: duplicate keys with DIFFERENT values are ALL rejected, never
+		// arbitrated by "last value wins".
+		conflicting += len(group)
 	}
 
 	inserted, updated, err := d.Production.BulkInsert(ctx, s, rows)
@@ -170,14 +196,14 @@ func Store(ctx context.Context, s store.Scope, d Deps, plantID uuid.UUID, sample
 		return Result{}, err
 	}
 
-	result := Result{Inserted: inserted, Updated: updated, Quarantined: quarantined, UnknownDevice: unknownDevice}
+	result := Result{Inserted: inserted, Updated: updated, Quarantined: quarantined, UnknownDevice: unknownDevice, ConflictingDuplicate: conflicting}
 
 	if quarantined > 0 {
 		if err := appendMessage(ctx, s, d.Ops, plantID, quarantineCode,
 			fmt.Sprintf("iSolarCloud reported %d plant-level production sample(s) for plant %s with no device attribution; "+
 				"plant_production's primary key requires a device id, so they were discarded rather than stored against a "+
 				"fabricated device. See the plant_production primary-key blocker.", quarantined, plantID),
-			quarantined, windowFrom, windowTo); err != nil {
+			quarantined, from, to); err != nil {
 			return result, err
 		}
 	}
@@ -185,12 +211,49 @@ func Store(ctx context.Context, s store.Scope, d Deps, plantID uuid.UUID, sample
 		if err := appendMessage(ctx, s, d.Ops, plantID, unknownDeviceCode,
 			fmt.Sprintf("iSolarCloud reported %d production sample(s) for plant %s referencing a device not yet known to this "+
 				"plant; they were skipped. Device discovery is a separate sync.", unknownDevice, plantID),
-			unknownDevice, windowFrom, windowTo); err != nil {
+			unknownDevice, from, to); err != nil {
+			return result, err
+		}
+	}
+	if conflicting > 0 {
+		if err := appendMessage(ctx, s, d.Ops, plantID, conflictingDuplicateCode,
+			fmt.Sprintf("iSolarCloud reported %d production sample(s) for plant %s sharing the same timestamp and device with "+
+				"conflicting values; none were stored (Task 10 rule D1). Investigate the upstream fetch for duplicate or "+
+				"overlapping windows.", conflicting, plantID),
+			conflicting, from, to); err != nil {
 			return result, err
 		}
 	}
 
 	return result, nil
+}
+
+// rowsIdentical reports whether every row in group carries the same
+// measurement values (ProductionKwh/ActivePowerKw/IrradianceWm2/
+// ModuleTempC/AmbientTempC) as group[0] — I3's "identical duplicates
+// collapse" test. group is never empty (called only for len(group) > 1).
+func rowsIdentical(group []model.PlantProduction) bool {
+	first := group[0]
+	for _, row := range group[1:] {
+		if !decimalPtrEqual(first.ProductionKwh, row.ProductionKwh) ||
+			!decimalPtrEqual(first.ActivePowerKw, row.ActivePowerKw) ||
+			!decimalPtrEqual(first.IrradianceWm2, row.IrradianceWm2) ||
+			!decimalPtrEqual(first.ModuleTempC, row.ModuleTempC) ||
+			!decimalPtrEqual(first.AmbientTempC, row.AmbientTempC) {
+			return false
+		}
+	}
+	return true
+}
+
+// decimalPtrEqual is a nil-safe decimal.Decimal.Equal: both nil is equal,
+// exactly one nil is never equal, both non-nil compares by value (never by
+// pointer identity or by scale-sensitive ==).
+func decimalPtrEqual(a, b *decimal.Decimal) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Equal(*b)
 }
 
 // appendMessage writes one OperationalMessage of kind "job", category

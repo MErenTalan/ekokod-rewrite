@@ -17,7 +17,7 @@ import (
 
 // TestISolarAuthorizeURLFormat: exact string for region EU with a fixture
 // app id and a redirect carrying "?state=" — the redirect is query-escaped
-// once (R22's legacy format).
+// once (R22's legacy format, isolarClient.ts:676-684).
 func TestISolarAuthorizeURLFormat(t *testing.T) {
 	srv := fake.NewTLSServer(t)
 	c := isolar.New(isolarTestPool(t, srv), isolar.Options{Clock: clock.NewFake(fixtureFrom)})
@@ -37,14 +37,19 @@ func TestISolarAuthorizeURLFormat(t *testing.T) {
 	require.NotContains(t, got, "%253F")
 }
 
-// TestISolarAuthorizeURLRejectsUnknownRegion proves regionCloudID is
-// actually consulted: an unrecognised Region is a config error, not a URL
-// with a zero/garbage cloudId.
-func TestISolarAuthorizeURLRejectsUnknownRegion(t *testing.T) {
+// TestISolarAuthorizeURLRequiresCloudID: R40 — cloud_id comes from
+// creds.Endpoints (integration_definitions.json's isolar row), never a
+// per-Region constant table, so a credential whose Endpoints carries no
+// cloud_id is a config error, not a URL with a zero/garbage cloudId. (This
+// replaces round 1's TestISolarAuthorizeURLRejectsUnknownRegion, whose
+// premise — that AuthorizeURL resolves cloud_id FROM creds.Region via a
+// hard-coded map — is exactly what R40 forbids; creds.Region is no longer
+// read by this package at all.)
+func TestISolarAuthorizeURLRequiresCloudID(t *testing.T) {
 	srv := fake.NewTLSServer(t)
 	c := isolar.New(isolarTestPool(t, srv), isolar.Options{Clock: clock.NewFake(fixtureFrom)})
 	creds := isolarTestCreds(srv)
-	creds.Region = "MARS"
+	delete(creds.Endpoints, isolarEndpointCloudID)
 
 	_, err := c.AuthorizeURL(creds, "https://app.example.invalid/callback")
 	require.ErrorIs(t, err, integration.ErrAuth)
@@ -95,7 +100,7 @@ func TestISolarRefreshRequiresRefreshToken(t *testing.T) {
 // MaxAttempts=3 times) still reaches the server EXACTLY ONCE.
 //
 // MUTATION PROOF (task brief Step 5): removing authCall's noRetry:true
-// (setting it false) makes this test fail with reqCount == 3, not 1 — see
+// (setting it false) makes this test fail with reqCount == 6, not 2 — see
 // the task report for the observed failure output.
 func TestISolarTokenCallsAreNeverRetried(t *testing.T) {
 	srv := fake.NewTLSServer(t,
@@ -112,4 +117,54 @@ func TestISolarTokenCallsAreNeverRetried(t *testing.T) {
 
 	reqs := srv.Requests()
 	require.Len(t, reqs, 2, "exactly one attempt per call: NoRetry must suppress httpx's normal 3-attempt retry")
+}
+
+// TestISolarExchangeCodeRejectsEmptyAccessToken: I4 — an access_token
+// missing/empty on an otherwise-success envelope is ErrAuth (isolarClient.ts's
+// own "No access_token in response" failure mode), never a Token whose
+// Secret silently reveals "".
+func TestISolarExchangeCodeRejectsEmptyAccessToken(t *testing.T) {
+	srv := fake.NewTLSServer(t, fake.Route{
+		Method: http.MethodPost, Path: "/openapi/apiManage/token",
+		Respond: fake.JSON(http.StatusOK, []byte(`{"result_code":"1","result_msg":"success","result_data":{"access_token":"","refresh_token":"x"}}`)),
+	})
+	c := isolar.New(isolarTestPool(t, srv), isolar.Options{Clock: clock.NewFake(fixtureFrom)})
+	creds := isolarTestCreds(srv)
+
+	_, err := c.ExchangeCode(context.Background(), creds, "FIXTURE-CODE-1", "https://app.example.invalid/callback")
+	require.ErrorIs(t, err, integration.ErrAuth)
+}
+
+// TestISolarRefreshExposesZeroRefreshTokenWhenAbsent: I4 — a null (or
+// missing) refresh_token on a successful refresh must not be silently
+// dropped or defaulted; Token.RefreshToken.IsZero() must be true so Task 14
+// knows to KEEP the prior refresh token rather than overwrite it with an
+// empty one (see token.go's Token.RefreshToken doc).
+func TestISolarRefreshExposesZeroRefreshTokenWhenAbsent(t *testing.T) {
+	srv := fake.NewTLSServer(t, fake.Route{
+		Method: http.MethodPost, Path: "/openapi/apiManage/refreshToken",
+		Respond: fake.JSON(http.StatusOK, []byte(`{"result_code":"1","result_msg":"success","result_data":{"access_token":"FIXTURE-ACCESS-new","refresh_token":null}}`)),
+	})
+	c := isolar.New(isolarTestPool(t, srv), isolar.Options{Clock: clock.NewFake(fixtureFrom)})
+	creds := isolarTestCreds(srv)
+
+	tok, err := c.Refresh(context.Background(), creds)
+	require.NoError(t, err)
+	require.Equal(t, "FIXTURE-ACCESS-new", tok.AccessToken.Reveal())
+	require.True(t, tok.RefreshToken.IsZero(), "a null refresh_token must expose a zero Secret, never a fabricated or dropped-but-non-zero one")
+}
+
+// TestISolarResultDataNullIsMalformed: I4 — a success envelope
+// (result_code "1") whose result_data is JSON null is ErrMalformedPayload,
+// never silently decoded into a zero-value Token/empty list.
+func TestISolarResultDataNullIsMalformed(t *testing.T) {
+	srv := fake.NewTLSServer(t, fake.Route{
+		Method: http.MethodPost, Path: "/openapi/apiManage/token",
+		Respond: fake.JSON(http.StatusOK, []byte(`{"result_code":"1","result_msg":"success","result_data":null}`)),
+	})
+	c := isolar.New(isolarTestPool(t, srv), isolar.Options{Clock: clock.NewFake(fixtureFrom)})
+	creds := isolarTestCreds(srv)
+
+	_, err := c.ExchangeCode(context.Background(), creds, "FIXTURE-CODE-1", "https://app.example.invalid/callback")
+	require.ErrorIs(t, err, integration.ErrMalformedPayload)
 }

@@ -3,8 +3,8 @@
   "result_msg": "success",
   "result_data": {
     "FX1001": [
-      {"time_stamp": "2026-01-01 00:05:00", "point_id_1": "1500", "point_id_24": "2400", "point_id_2001": "300", "point_id_2009": "18.5", "point_id_2010": "22.1"},
-      {"time_stamp": "not-a-timestamp", "point_id_1": "999", "point_id_24": "999", "point_id_2001": "1", "point_id_2009": "1", "point_id_2010": "1"}
+      {"time_stamp": "20260101000500", "p1": "1500", "p24": "2400", "p2001": "300", "p2009": "18.5", "p2010": "22.1"},
+      {"time_stamp": "not-a-timestamp", "p1": "999", "p24": "999", "p2001": "1", "p2009": "1", "p2010": "1"}
     ]
   }
 }
