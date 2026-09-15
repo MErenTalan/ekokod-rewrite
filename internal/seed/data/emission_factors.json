@@ -1,0 +1,5438 @@
+[
+  {
+    "key": "stationary_space_heating_coal_domestic",
+    "label": "Ortam Isıtması > Kömür (Endüstriyel)",
+    "main_category": "cat_stationary",
+    "sub_categories": [
+      "sub_space_heating"
+    ],
+    "category_path": [
+      "coal",
+      "coal_domestic"
+    ],
+    "base_factor": "2.904",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      },
+      {
+        "unit": "kg",
+        "multiplier": "0.001",
+        "label": "Kilogram"
+      }
+    ]
+  },
+  {
+    "key": "stationary_space_heating_coal_industrial",
+    "label": "Ortam Isıtması > Kömür (Endüstriyel)",
+    "main_category": "cat_stationary",
+    "sub_categories": [
+      "sub_space_heating"
+    ],
+    "category_path": [
+      "coal",
+      "coal_industrial"
+    ],
+    "base_factor": "2.395",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      },
+      {
+        "unit": "kg",
+        "multiplier": "0.001",
+        "label": "Kilogram"
+      }
+    ]
+  },
+  {
+    "key": "stationary_space_heating_diesel",
+    "label": "Ortam Isıtması > Gaz/Dizel Yağı",
+    "main_category": "cat_stationary",
+    "sub_categories": [
+      "sub_space_heating"
+    ],
+    "category_path": [
+      "gas_diesel_oil"
+    ],
+    "base_factor": "2.75541",
+    "base_unit": "liter",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "IPCC",
+    "source_year": 2006,
+    "source_url": "https://www.ipcc-nggip.iges.or.jp/public/2006gl/",
+    "conversions": [
+      {
+        "unit": "liter",
+        "multiplier": "1",
+        "label": "Litre"
+      }
+    ]
+  },
+  {
+    "key": "stationary_space_heating_lpg",
+    "label": "Ortam Isıtması > LPG",
+    "main_category": "cat_stationary",
+    "sub_categories": [
+      "sub_space_heating"
+    ],
+    "category_path": [
+      "lpg"
+    ],
+    "base_factor": "1.55713",
+    "base_unit": "liter",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "IPCC",
+    "source_year": 2006,
+    "source_url": "https://www.ipcc-nggip.iges.or.jp/public/2006gl/",
+    "conversions": [
+      {
+        "unit": "liter",
+        "multiplier": "1",
+        "label": "Litre"
+      }
+    ]
+  },
+  {
+    "key": "stationary_space_heating_gasoline",
+    "label": "Ortam Isıtması > Motor Benzini",
+    "main_category": "cat_stationary",
+    "sub_categories": [
+      "sub_space_heating"
+    ],
+    "category_path": [
+      "gasolina"
+    ],
+    "base_factor": "2.06916",
+    "base_unit": "liter",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "IPCC",
+    "source_year": 2006,
+    "source_url": "https://www.ipcc-nggip.iges.or.jp/public/2006gl/",
+    "conversions": [
+      {
+        "unit": "liter",
+        "multiplier": "1",
+        "label": "Litre"
+      }
+    ]
+  },
+  {
+    "key": "stationary_space_heating_natural_gas",
+    "label": "Ortam Isıtması > Doğalgaz",
+    "main_category": "cat_stationary",
+    "sub_categories": [
+      "sub_space_heating"
+    ],
+    "category_path": [
+      "natural_gas"
+    ],
+    "base_factor": "2.06672",
+    "base_unit": "m3",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "IPCC",
+    "source_year": 2006,
+    "source_url": "https://www.ipcc-nggip.iges.or.jp/public/2006gl/",
+    "conversions": [
+      {
+        "unit": "m3",
+        "multiplier": "1",
+        "label": "Metreküp"
+      }
+    ]
+  },
+  {
+    "key": "stationary_process_combustion_coal",
+    "label": "Proses Amaçlı Yanma > Kömür (Endüstriyel)",
+    "main_category": "cat_stationary",
+    "sub_categories": [
+      "sub_process_combustion"
+    ],
+    "category_path": [
+      "coal"
+    ],
+    "base_factor": "2.395",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      },
+      {
+        "unit": "kg",
+        "multiplier": "0.001",
+        "label": "Kilogram"
+      }
+    ]
+  },
+  {
+    "key": "stationary_process_combustion_diesel",
+    "label": "Proses Amaçlı Yanma > Gaz/Dizel Yağı",
+    "main_category": "cat_stationary",
+    "sub_categories": [
+      "sub_process_combustion"
+    ],
+    "category_path": [
+      "gas_diesel_oil"
+    ],
+    "base_factor": "2.75541",
+    "base_unit": "liter",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "IPCC",
+    "source_year": 2006,
+    "source_url": "https://www.ipcc-nggip.iges.or.jp/public/2006gl/",
+    "conversions": [
+      {
+        "unit": "liter",
+        "multiplier": "1",
+        "label": "Litre"
+      }
+    ]
+  },
+  {
+    "key": "stationary_process_combustion_lpg",
+    "label": "Proses Amaçlı Yanma > Sıvılaştırılmış Petrol Gazları (LPG)",
+    "main_category": "cat_stationary",
+    "sub_categories": [
+      "sub_process_combustion"
+    ],
+    "category_path": [
+      "lpg"
+    ],
+    "base_factor": "1.55713",
+    "base_unit": "liter",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "IPCC",
+    "source_year": 2006,
+    "source_url": "https://www.ipcc-nggip.iges.or.jp/public/2006gl/",
+    "conversions": [
+      {
+        "unit": "liter",
+        "multiplier": "1",
+        "label": "Litre"
+      }
+    ]
+  },
+  {
+    "key": "stationary_process_combustion_gasoline",
+    "label": "Proses Amaçlı Yanma > Motor Benzini",
+    "main_category": "cat_stationary",
+    "sub_categories": [
+      "sub_process_combustion"
+    ],
+    "category_path": [
+      "gasolina"
+    ],
+    "base_factor": "2.06916",
+    "base_unit": "liter",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "IPCC",
+    "source_year": 2006,
+    "source_url": "https://www.ipcc-nggip.iges.or.jp/public/2006gl/",
+    "conversions": [
+      {
+        "unit": "liter",
+        "multiplier": "1",
+        "label": "Litre"
+      }
+    ]
+  },
+  {
+    "key": "stationary_process_combustion_natural_gas",
+    "label": "Proses Amaçlı Yanma > Doğalgaz",
+    "main_category": "cat_stationary",
+    "sub_categories": [
+      "sub_process_combustion"
+    ],
+    "category_path": [
+      "natural_gas"
+    ],
+    "base_factor": "2.06672",
+    "base_unit": "m3",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "IPCC",
+    "source_year": 2006,
+    "source_url": "https://www.ipcc-nggip.iges.or.jp/public/2006gl/",
+    "conversions": [
+      {
+        "unit": "m3",
+        "multiplier": "1",
+        "label": "Metreküp"
+      }
+    ]
+  },
+  {
+    "key": "stationary_other_combustion_coal",
+    "label": "Diğer Yanma > Kömür (Endüstriyel)",
+    "main_category": "cat_stationary",
+    "sub_categories": [
+      "sub_other_combustion"
+    ],
+    "category_path": [
+      "coal",
+      "coal_industrial"
+    ],
+    "base_factor": "2.395",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      },
+      {
+        "unit": "kg",
+        "multiplier": "0.001",
+        "label": "Kilogram"
+      }
+    ]
+  },
+  {
+    "key": "stationary_other_combustion_diesel",
+    "label": "Diğer Yanma > Gaz/Dizel Yağı",
+    "main_category": "cat_stationary",
+    "sub_categories": [
+      "sub_other_combustion"
+    ],
+    "category_path": [
+      "gas_diesel_oil"
+    ],
+    "base_factor": "2.75541",
+    "base_unit": "liter",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "IPCC",
+    "source_year": 2006,
+    "source_url": "https://www.ipcc-nggip.iges.or.jp/public/2006gl/",
+    "conversions": [
+      {
+        "unit": "liter",
+        "multiplier": "1",
+        "label": "Litre"
+      }
+    ]
+  },
+  {
+    "key": "stationary_other_combustion_lpg",
+    "label": "Diğer Yanma > Sıvılaştırılmış Petrol Gazları (LPG)",
+    "main_category": "cat_stationary",
+    "sub_categories": [
+      "sub_other_combustion"
+    ],
+    "category_path": [
+      "lpg"
+    ],
+    "base_factor": "1.55713",
+    "base_unit": "liter",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "IPCC",
+    "source_year": 2006,
+    "source_url": "https://www.ipcc-nggip.iges.or.jp/public/2006gl/",
+    "conversions": [
+      {
+        "unit": "liter",
+        "multiplier": "1",
+        "label": "Litre"
+      }
+    ]
+  },
+  {
+    "key": "stationary_other_combustion_gasoline",
+    "label": "Diğer Yanma > Motor Benzini",
+    "main_category": "cat_stationary",
+    "sub_categories": [
+      "sub_other_combustion"
+    ],
+    "category_path": [
+      "gasolina"
+    ],
+    "base_factor": "2.06916",
+    "base_unit": "liter",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "IPCC",
+    "source_year": 2006,
+    "source_url": "https://www.ipcc-nggip.iges.or.jp/public/2006gl/",
+    "conversions": [
+      {
+        "unit": "liter",
+        "multiplier": "1",
+        "label": "Litre"
+      }
+    ]
+  },
+  {
+    "key": "stationary_other_combustion_natural_gas",
+    "label": "Diğer Yanma > Doğalgaz",
+    "main_category": "cat_stationary",
+    "sub_categories": [
+      "sub_other_combustion"
+    ],
+    "category_path": [
+      "natural_gas"
+    ],
+    "base_factor": "2.06672",
+    "base_unit": "m3",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "IPCC",
+    "source_year": 2006,
+    "source_url": "https://www.ipcc-nggip.iges.or.jp/public/2006gl/",
+    "conversions": [
+      {
+        "unit": "m3",
+        "multiplier": "1",
+        "label": "Metreküp"
+      }
+    ]
+  },
+  {
+    "key": "mobility_car_gasoline",
+    "label": "Personel Taşımacılığı > Otomobil > Benzin",
+    "main_category": "cat_mobility",
+    "sub_categories": [
+      "sub_passenger_transport"
+    ],
+    "category_path": [
+      "car"
+    ],
+    "base_factor": "2.06916",
+    "base_unit": "liter",
+    "fuel_type": "gasoline",
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "liter",
+        "multiplier": "1",
+        "label": "Litre"
+      }
+    ]
+  },
+  {
+    "key": "mobility_car_diesel",
+    "label": "Personel Taşımacılığı > Otomobil > Dizel",
+    "main_category": "cat_mobility",
+    "sub_categories": [
+      "sub_passenger_transport"
+    ],
+    "category_path": [
+      "car"
+    ],
+    "base_factor": "2.57082",
+    "base_unit": "liter",
+    "fuel_type": "diesel",
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "liter",
+        "multiplier": "1",
+        "label": "Litre"
+      }
+    ]
+  },
+  {
+    "key": "mobility_car_lpg",
+    "label": "Personel Taşımacılığı > Otomobil > LPG",
+    "main_category": "cat_mobility",
+    "sub_categories": [
+      "sub_passenger_transport"
+    ],
+    "category_path": [
+      "car"
+    ],
+    "base_factor": "1.55713",
+    "base_unit": "liter",
+    "fuel_type": "lpg",
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "liter",
+        "multiplier": "1",
+        "label": "Litre"
+      }
+    ]
+  },
+  {
+    "key": "mobility_bus_city_diesel",
+    "label": "Personel Taşımacılığı > Otobüs > Şehir İçi Otobüs > Dizel",
+    "main_category": "cat_mobility",
+    "sub_categories": [
+      "sub_passenger_transport"
+    ],
+    "category_path": [
+      "bus"
+    ],
+    "base_factor": "0.10385",
+    "base_unit": "pkm",
+    "fuel_type": "diesel",
+    "vehicle_type": "city_bus",
+    "scope": "scope_3",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "pkm",
+        "multiplier": "1",
+        "label": "Passenger-km"
+      }
+    ]
+  },
+  {
+    "key": "mobility_bus_intercity_diesel",
+    "label": "Personel Taşımacılığı > Otobüs > Şehirler Arası Otobüs > Dizel",
+    "main_category": "cat_mobility",
+    "sub_categories": [
+      "sub_passenger_transport"
+    ],
+    "category_path": [
+      "bus"
+    ],
+    "base_factor": "0.02776",
+    "base_unit": "pkm",
+    "fuel_type": "diesel",
+    "vehicle_type": "intercity_bus",
+    "scope": "scope_3",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "pkm",
+        "multiplier": "1",
+        "label": "Passenger-km"
+      }
+    ]
+  },
+  {
+    "key": "business_travel_domestic_air",
+    "label": "İş Seyahati > Havayolu Seyahati > Yurtiçi",
+    "main_category": "cat_mobility",
+    "sub_categories": [
+      "sub_business_travel"
+    ],
+    "category_path": [
+      "det_air",
+      "domestic"
+    ],
+    "base_factor": "0.22928",
+    "base_unit": "pkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "pkm",
+        "multiplier": "1",
+        "label": "Passenger-km"
+      }
+    ]
+  },
+  {
+    "key": "business_travel_short_haul_air_average",
+    "label": "İş Seyahati > Havayolu Seyahati > Kısa Mesafe > Ortalama Yolcu",
+    "main_category": "cat_mobility",
+    "sub_categories": [
+      "sub_business_travel"
+    ],
+    "category_path": [
+      "det_air",
+      "short_haul",
+      "average_passenger"
+    ],
+    "base_factor": "0.12786",
+    "base_unit": "pkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "pkm",
+        "multiplier": "1",
+        "label": "Passenger-km"
+      }
+    ]
+  },
+  {
+    "key": "business_travel_short_haul_air_economy",
+    "label": "İş Seyahati > Havayolu Seyahati > Kısa Mesafe > Economy Class",
+    "main_category": "cat_mobility",
+    "sub_categories": [
+      "sub_business_travel"
+    ],
+    "category_path": [
+      "det_air",
+      "short_haul",
+      "economy_class"
+    ],
+    "base_factor": "0.12576",
+    "base_unit": "pkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "pkm",
+        "multiplier": "1",
+        "label": "Passenger-km"
+      }
+    ]
+  },
+  {
+    "key": "business_travel_short_haul_air_business",
+    "label": "İş Seyahati > Havayolu Seyahati > Kısa Mesafe > Business Class",
+    "main_category": "cat_mobility",
+    "sub_categories": [
+      "sub_business_travel"
+    ],
+    "category_path": [
+      "det_air",
+      "short_haul",
+      "business_class"
+    ],
+    "base_factor": "0.18863",
+    "base_unit": "pkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "pkm",
+        "multiplier": "1",
+        "label": "Passenger-km"
+      }
+    ]
+  },
+  {
+    "key": "business_travel_long_haul_air_average",
+    "label": "İş Seyahati > Havayolu Seyahati > Uzun Mesafe > Ortalama Yolcu",
+    "main_category": "cat_mobility",
+    "sub_categories": [
+      "sub_business_travel"
+    ],
+    "category_path": [
+      "det_air",
+      "long_haul",
+      "average_passenger"
+    ],
+    "base_factor": "0.15282",
+    "base_unit": "pkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "pkm",
+        "multiplier": "1",
+        "label": "Passenger-km"
+      }
+    ]
+  },
+  {
+    "key": "business_travel_long_haul_air_economy",
+    "label": "İş Seyahati > Havayolu Seyahati > Uzun Mesafe > Economy Class",
+    "main_category": "cat_mobility",
+    "sub_categories": [
+      "sub_business_travel"
+    ],
+    "category_path": [
+      "det_air",
+      "long_haul",
+      "economy_class"
+    ],
+    "base_factor": "0.11704",
+    "base_unit": "pkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "pkm",
+        "multiplier": "1",
+        "label": "Passenger-km"
+      }
+    ]
+  },
+  {
+    "key": "business_travel_long_haul_air_premium_economy",
+    "label": "İş Seyahati > Havayolu Seyahati > Uzun Mesafe > Premium Economy Class",
+    "main_category": "cat_mobility",
+    "sub_categories": [
+      "sub_business_travel"
+    ],
+    "category_path": [
+      "det_air",
+      "long_haul",
+      "premium_economy_class"
+    ],
+    "base_factor": "0.18726",
+    "base_unit": "pkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "pkm",
+        "multiplier": "1",
+        "label": "Passenger-km"
+      }
+    ]
+  },
+  {
+    "key": "business_travel_long_haul_air_business",
+    "label": "İş Seyahati > Havayolu Seyahati > Uzun Mesafe > Business Class",
+    "main_category": "cat_mobility",
+    "sub_categories": [
+      "sub_business_travel"
+    ],
+    "category_path": [
+      "det_air",
+      "long_haul",
+      "business_class"
+    ],
+    "base_factor": "0.33940",
+    "base_unit": "pkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "pkm",
+        "multiplier": "1",
+        "label": "Passenger-km"
+      }
+    ]
+  },
+  {
+    "key": "business_travel_long_haul_air_first",
+    "label": "İş Seyahati > Havayolu Seyahati > Uzun Mesafe > First Class",
+    "main_category": "cat_mobility",
+    "sub_categories": [
+      "sub_business_travel"
+    ],
+    "category_path": [
+      "det_air",
+      "long_haul",
+      "first_class"
+    ],
+    "base_factor": "0.46814",
+    "base_unit": "pkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "pkm",
+        "multiplier": "1",
+        "label": "Passenger-km"
+      }
+    ]
+  },
+  {
+    "key": "business_travel_international_average_air_average",
+    "label": "İş Seyahati > Havayolu Seyahati > Uluslararası Ortalama > Ortalama Yolcu",
+    "main_category": "cat_mobility",
+    "sub_categories": [
+      "sub_business_travel"
+    ],
+    "category_path": [
+      "det_air",
+      "intercontinental",
+      "average_passenger"
+    ],
+    "base_factor": "0.14253",
+    "base_unit": "pkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "pkm",
+        "multiplier": "1",
+        "label": "Passenger-km"
+      }
+    ]
+  },
+  {
+    "key": "business_travel_international_average_air_economy",
+    "label": "İş Seyahati > Havayolu Seyahati > Uluslararası Ortalama > Economy Class",
+    "main_category": "cat_mobility",
+    "sub_categories": [
+      "sub_business_travel"
+    ],
+    "category_path": [
+      "det_air",
+      "intercontinental",
+      "economy_class"
+    ],
+    "base_factor": "0.10916",
+    "base_unit": "pkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "pkm",
+        "multiplier": "1",
+        "label": "Passenger-km"
+      }
+    ]
+  },
+  {
+    "key": "business_travel_international_average_air_premium_economy",
+    "label": "İş Seyahati > Havayolu Seyahati > Uluslararası Ortalama > Premium Economy Class",
+    "main_category": "cat_mobility",
+    "sub_categories": [
+      "sub_business_travel"
+    ],
+    "category_path": [
+      "det_air",
+      "intercontinental",
+      "premium_economy_class"
+    ],
+    "base_factor": "0.17465",
+    "base_unit": "pkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "pkm",
+        "multiplier": "1",
+        "label": "Passenger-km"
+      }
+    ]
+  },
+  {
+    "key": "business_travel_international_average_air_business",
+    "label": "İş Seyahati > Havayolu Seyahati > Uluslararası Ortalama > Business Class",
+    "main_category": "cat_mobility",
+    "sub_categories": [
+      "sub_business_travel"
+    ],
+    "category_path": [
+      "det_air",
+      "intercontinental",
+      "business_class"
+    ],
+    "base_factor": "0.31656",
+    "base_unit": "pkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "pkm",
+        "multiplier": "1",
+        "label": "Passenger-km"
+      }
+    ]
+  },
+  {
+    "key": "business_travel_international_average_air_first",
+    "label": "İş Seyahati > Havayolu Seyahati > Uluslararası Ortalama > First Class",
+    "main_category": "cat_mobility",
+    "sub_categories": [
+      "sub_business_travel"
+    ],
+    "category_path": [
+      "det_air",
+      "intercontinental",
+      "first_class"
+    ],
+    "base_factor": "0.43663",
+    "base_unit": "pkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "pkm",
+        "multiplier": "1",
+        "label": "Passenger-km"
+      }
+    ]
+  },
+  {
+    "key": "business_travel_road_local_bus_not_london",
+    "label": "İş Seyahati > Karayolu Seyahati > Local Bus (Not London)",
+    "main_category": "cat_mobility",
+    "sub_categories": [
+      "sub_business_travel"
+    ],
+    "category_path": [
+      "det_road",
+      "local_bus_not_london"
+    ],
+    "base_factor": "0.12525",
+    "base_unit": "pkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "pkm",
+        "multiplier": "1",
+        "label": "Passenger-km"
+      }
+    ]
+  },
+  {
+    "key": "business_travel_road_local_bus_london",
+    "label": "İş Seyahati > Karayolu Seyahati > Local Bus (London)",
+    "main_category": "cat_mobility",
+    "sub_categories": [
+      "sub_business_travel"
+    ],
+    "category_path": [
+      "det_road",
+      "local_bus_london"
+    ],
+    "base_factor": "0.06875",
+    "base_unit": "pkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "pkm",
+        "multiplier": "1",
+        "label": "Passenger-km"
+      }
+    ]
+  },
+  {
+    "key": "business_travel_road_average_local_bus",
+    "label": "İş Seyahati > Karayolu Seyahati > Average Local Bus",
+    "main_category": "cat_mobility",
+    "sub_categories": [
+      "sub_business_travel"
+    ],
+    "category_path": [
+      "det_road",
+      "average_local_bus"
+    ],
+    "base_factor": "0.10385",
+    "base_unit": "pkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "pkm",
+        "multiplier": "1",
+        "label": "Passenger-km"
+      }
+    ]
+  },
+  {
+    "key": "business_travel_road_average_taxi",
+    "label": "İş Seyahati > Karayolu Seyahati > Average Taxi",
+    "main_category": "cat_mobility",
+    "sub_categories": [
+      "sub_business_travel"
+    ],
+    "category_path": [
+      "det_road",
+      "average_taxi"
+    ],
+    "base_factor": "0.14861",
+    "base_unit": "pkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "pkm",
+        "multiplier": "1",
+        "label": "Passenger-km"
+      }
+    ]
+  },
+  {
+    "key": "business_travel_road_black_cap_london_taxi",
+    "label": "İş Seyahati > Karayolu Seyahati > Black Cab (London Taxi)",
+    "main_category": "cat_mobility",
+    "sub_categories": [
+      "sub_business_travel"
+    ],
+    "category_path": [
+      "det_road",
+      "black_cap_london_black_taxi"
+    ],
+    "base_factor": "0.20402",
+    "base_unit": "pkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "pkm",
+        "multiplier": "1",
+        "label": "Passenger-km"
+      }
+    ]
+  },
+  {
+    "key": "business_travel_rail_national",
+    "label": "İş Seyahati > Demiryolu Seyahati > National rail",
+    "main_category": "cat_mobility",
+    "sub_categories": [
+      "sub_business_travel"
+    ],
+    "category_path": [
+      "det_rail",
+      "national_rail"
+    ],
+    "base_factor": "0.03546",
+    "base_unit": "pkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "pkm",
+        "multiplier": "1",
+        "label": "Passenger-km"
+      }
+    ]
+  },
+  {
+    "key": "business_travel_rail_international",
+    "label": "İş Seyahati > Demiryolu Seyahati > International rail",
+    "main_category": "cat_mobility",
+    "sub_categories": [
+      "sub_business_travel"
+    ],
+    "category_path": [
+      "det_rail",
+      "international_rail"
+    ],
+    "base_factor": "0.00446",
+    "base_unit": "pkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "pkm",
+        "multiplier": "1",
+        "label": "Passenger-km"
+      }
+    ]
+  },
+  {
+    "key": "business_travel_rail_light_rail_tram",
+    "label": "İş Seyahati > Demiryolu Seyahati > Light rail and Tram",
+    "main_category": "cat_mobility",
+    "sub_categories": [
+      "sub_business_travel"
+    ],
+    "category_path": [
+      "det_rail",
+      "light_rail_and_tram"
+    ],
+    "base_factor": "0.02860",
+    "base_unit": "pkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "pkm",
+        "multiplier": "1",
+        "label": "Passenger-km"
+      }
+    ]
+  },
+  {
+    "key": "business_travel_rail_london_underground",
+    "label": "İş Seyahati > Demiryolu Seyahati > London underground",
+    "main_category": "cat_mobility",
+    "sub_categories": [
+      "sub_business_travel"
+    ],
+    "category_path": [
+      "det_rail",
+      "london_underground"
+    ],
+    "base_factor": "0.02780",
+    "base_unit": "pkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "pkm",
+        "multiplier": "1",
+        "label": "Passenger-km"
+      }
+    ]
+  },
+  {
+    "key": "business_travel_sea_foot_passenger",
+    "label": "İş Seyahati > Denizyolu Seyahati > Foot Passenger",
+    "main_category": "cat_mobility",
+    "sub_categories": [
+      "sub_business_travel"
+    ],
+    "category_path": [
+      "det_sea",
+      "foot_passenger"
+    ],
+    "base_factor": "0.01871",
+    "base_unit": "pkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "pkm",
+        "multiplier": "1",
+        "label": "Passenger-km"
+      }
+    ]
+  },
+  {
+    "key": "business_travel_sea_car_passenger",
+    "label": "İş Seyahati > Denizyolu Seyahati > Car Passenger",
+    "main_category": "cat_mobility",
+    "sub_categories": [
+      "sub_business_travel"
+    ],
+    "category_path": [
+      "det_sea",
+      "car_passenger"
+    ],
+    "base_factor": "0.12933",
+    "base_unit": "pkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "pkm",
+        "multiplier": "1",
+        "label": "Passenger-km"
+      }
+    ]
+  },
+  {
+    "key": "business_travel_sea_average_all_passenger",
+    "label": "İş Seyahati > Denizyolu Seyahati > Average(All Passenger)",
+    "main_category": "cat_mobility",
+    "sub_categories": [
+      "sub_business_travel"
+    ],
+    "category_path": [
+      "det_sea",
+      "average_all_passenger"
+    ],
+    "base_factor": "0.11273",
+    "base_unit": "pkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "pkm",
+        "multiplier": "1",
+        "label": "Passenger-km"
+      }
+    ]
+  },
+  {
+    "key": "employee_commuting_personnel_service",
+    "label": "Çalışanların İşe Geliş Gidişleri > Personel Servisleri",
+    "main_category": "cat_mobility",
+    "sub_categories": [
+      "sub_employee_commuting"
+    ],
+    "category_path": [
+      "personel_service"
+    ],
+    "base_factor": "0.02776",
+    "base_unit": "pkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "pkm",
+        "multiplier": "1",
+        "label": "Passenger-km"
+      }
+    ]
+  },
+  {
+    "key": "freight_air_domestic_inbound",
+    "label": "Gelen Mal Taşıma > Hava Kargo > Yurtiçi",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "air_freight",
+      "domestic"
+    ],
+    "base_factor": "4.60397",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "freight_air_short_haul_inbound",
+    "label": "Gelen Mal Taşıma > Hava Kargo > Kısa Mesafe",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "air_freight",
+      "short_haul"
+    ],
+    "base_factor": "1.27835",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "freight_air_long_haul_inbound",
+    "label": "Gelen Mal Taşıma > Hava Kargo > Uzun Mesafe",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "air_freight",
+      "long_haul"
+    ],
+    "base_factor": "0.89939",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "freight_air_international_average_inbound",
+    "label": "Gelen Mal Taşıma > Hava Kargo > Uluslararası Ortalama",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "air_freight",
+      "international_average"
+    ],
+    "base_factor": "0.89939",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "freight_rail_inbound",
+    "label": "Gelen Mal Taşıma > Demiryolu Kargo",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "rail_freight"
+    ],
+    "base_factor": "0.2779",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "freight_road_van_class_1_up_to_1_305",
+    "label": "Karayolu Kargo > Van > Class I (up to 1.305 tonnes)",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "road_cargo",
+      "transport_van",
+      "van_class_1_up_to_1_305"
+    ],
+    "base_factor": "0.87423",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "km",
+        "multiplier": "1",
+        "label": "Km"
+      }
+    ]
+  },
+  {
+    "key": "freight_road_van_class_2_1_305_to_1_74",
+    "label": "Karayolu Kargo > Van > Class II (1.305 to 1.74 tonnes)",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "road_cargo",
+      "transport_van",
+      "van_class_2_1_305_to_1_74"
+    ],
+    "base_factor": "0.62562",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "km",
+        "multiplier": "1",
+        "label": "Km"
+      }
+    ]
+  },
+  {
+    "key": "freight_road_van_class_3_1_74_to_3_5",
+    "label": "Karayolu Kargo > Van > Class III (1.74 to 3.5 tonnes)",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "road_cargo",
+      "transport_van",
+      "van_class_3_1_74_to_3_5"
+    ],
+    "base_factor": "0.62849",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "km",
+        "multiplier": "1",
+        "label": "Km"
+      }
+    ]
+  },
+  {
+    "key": "freight_road_van_average_up_to_3_5",
+    "label": "Karayolu Kargo > Van > Average (up to 3.5 tonnes)",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "road_cargo",
+      "transport_van",
+      "van_average_up_to_3_5"
+    ],
+    "base_factor": "0.6313",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "km",
+        "multiplier": "1",
+        "label": "Km"
+      }
+    ]
+  },
+  {
+    "key": "freight_road_hgv_rigid_3_5_to_7_5",
+    "label": "Karayolu Kargo > HGV > Rigid (3.5 - 7.5 tonnes)",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "road_cargo",
+      "transport_hgv",
+      "hgv_rigid_3_5_to_7_5"
+    ],
+    "base_factor": "0.46138",
+    "base_unit": "km",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "km",
+        "multiplier": "1",
+        "label": "Km"
+      }
+    ]
+  },
+  {
+    "key": "freight_road_hgv_rigid_7_5_to_17",
+    "label": "Karayolu Kargo > HGV > Rigid (7.5 - 17 tonnes)",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "road_cargo",
+      "transport_hgv",
+      "hgv_rigid_7_5_to_17"
+    ],
+    "base_factor": "0.55061",
+    "base_unit": "km",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "km",
+        "multiplier": "1",
+        "label": "Km"
+      }
+    ]
+  },
+  {
+    "key": "freight_road_hgv_rigid_over_17",
+    "label": "Karayolu Kargo > HGV > Rigid (>17 tonnes)",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "road_cargo",
+      "transport_hgv",
+      "hgv_rigid_over_17"
+    ],
+    "base_factor": "0.77400",
+    "base_unit": "km",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "km",
+        "multiplier": "1",
+        "label": "Km"
+      }
+    ]
+  },
+  {
+    "key": "freight_road_hgv_all_rigid",
+    "label": "Karayolu Kargo > HGV > All Rigid",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "road_cargo",
+      "transport_hgv",
+      "hgv_all_rigid"
+    ],
+    "base_factor": "0.67912",
+    "base_unit": "km",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "km",
+        "multiplier": "1",
+        "label": "Km"
+      }
+    ]
+  },
+  {
+    "key": "freight_road_hgv_articulated_3_5_to_33",
+    "label": "Karayolu Kargo > HGV > Articulated (3.5 - 33 tonnes)",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "road_cargo",
+      "transport_hgv",
+      "hgv_articulated_3_5_to_33"
+    ],
+    "base_factor": "0.62775",
+    "base_unit": "km",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "km",
+        "multiplier": "1",
+        "label": "Km"
+      }
+    ]
+  },
+  {
+    "key": "freight_road_hgv_articulated_over_33",
+    "label": "Karayolu Kargo > HGV > Articulated (>33 tonnes)",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "road_cargo",
+      "transport_hgv",
+      "hgv_articulated_over_33"
+    ],
+    "base_factor": "0.64734",
+    "base_unit": "km",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "km",
+        "multiplier": "1",
+        "label": "Km"
+      }
+    ]
+  },
+  {
+    "key": "freight_road_hgv_all_articulated",
+    "label": "Karayolu Kargo > HGV > All Articulated",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "road_cargo",
+      "transport_hgv",
+      "hgv_all_articulated"
+    ],
+    "base_factor": "0.64659",
+    "base_unit": "km",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "km",
+        "multiplier": "1",
+        "label": "Km"
+      }
+    ]
+  },
+  {
+    "key": "freight_road_hgv_all",
+    "label": "Karayolu Kargo > HGV > All HGVs",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "road_cargo",
+      "transport_hgv",
+      "hgv_all"
+    ],
+    "base_factor": "0.65975",
+    "base_unit": "km",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "km",
+        "multiplier": "1",
+        "label": "Km"
+      }
+    ]
+  },
+  {
+    "key": "freight_road_refrigerated_hgv_rigid_3_5_to_7_5",
+    "label": "Gelen Mal Taşıma > Karayolu Kargo (Road Freight) > HGV refrigerated (all Diesel) > Rigid (3.5 - 7.5 tonnes)",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "road_cargo",
+      "transport_refriegerated_hgv",
+      "refrigerated_hgv_rigid_3_5_to_7_5"
+    ],
+    "base_factor": "0.54937",
+    "base_unit": "km",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "km",
+        "multiplier": "1",
+        "label": "Km"
+      }
+    ]
+  },
+  {
+    "key": "freight_road_refrigerated_hgv_rigid_7_5_to_17",
+    "label": "Gelen Mal Taşıma > Karayolu Kargo (Road Freight) > HGV refrigerated (all Diesel) > Rigid (7.5 - 17 tonnes)",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "road_cargo",
+      "transport_refriegerated_hgv",
+      "refrigerated_hgv_rigid_7_5_to_17"
+    ],
+    "base_factor": "0.65559",
+    "base_unit": "km",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "km",
+        "multiplier": "1",
+        "label": "Km"
+      }
+    ]
+  },
+  {
+    "key": "freight_road_refrigerated_hgv_rigid_over_17",
+    "label": "Gelen Mal Taşıma > Karayolu Kargo (Road Freight) > HGV refrigerated (all Diesel) > Rigid (>17 tonnes)",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "road_cargo",
+      "transport_refriegerated_hgv",
+      "refrigerated_hgv_rigid_over_17"
+    ],
+    "base_factor": "0.92128",
+    "base_unit": "km",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "km",
+        "multiplier": "1",
+        "label": "Km"
+      }
+    ]
+  },
+  {
+    "key": "freight_road_refrigerated_hgv_all_rigid",
+    "label": "Gelen Mal Taşıma > Karayolu Kargo (Road Freight) > HGV refrigerated (all Diesel) > All Rigid",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "road_cargo",
+      "transport_refriegerated_hgv",
+      "refrigerated_hgv_all_rigid"
+    ],
+    "base_factor": "0.80843",
+    "base_unit": "km",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "km",
+        "multiplier": "1",
+        "label": "Km"
+      }
+    ]
+  },
+  {
+    "key": "freight_road_refrigerated_hgv_articulated_3_5_to_33",
+    "label": "Gelen Mal Taşıma > Karayolu Kargo (Road Freight) > HGV refrigerated (all Diesel) > Articulated (3.5 - 33 tonnes)",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "road_cargo",
+      "transport_refriegerated_hgv",
+      "refrigerated_hgv_articulated_3_5_to_33"
+    ],
+    "base_factor": "0.72566",
+    "base_unit": "km",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "km",
+        "multiplier": "1",
+        "label": "Km"
+      }
+    ]
+  },
+  {
+    "key": "freight_road_refrigerated_hgv_articulated_over_33",
+    "label": "Gelen Mal Taşıma > Karayolu Kargo (Road Freight) > HGV refrigerated (all Diesel) > Articulated (>33 tonnes)",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "road_cargo",
+      "transport_refriegerated_hgv",
+      "refrigerated_hgv_articulated_over_33"
+    ],
+    "base_factor": "0.7480",
+    "base_unit": "km",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "km",
+        "multiplier": "1",
+        "label": "Km"
+      }
+    ]
+  },
+  {
+    "key": "freight_road_refrigerated_hgv_all_articulated",
+    "label": "Gelen Mal Taşıma > Karayolu Kargo (Road Freight) > HGV refrigerated (all Diesel) > All Articulated",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "road_cargo",
+      "transport_refriegerated_hgv",
+      "refrigerated_hgv_all_articulated"
+    ],
+    "base_factor": "0.74715",
+    "base_unit": "km",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "km",
+        "multiplier": "1",
+        "label": "Km"
+      }
+    ]
+  },
+  {
+    "key": "freight_road_refrigerated_hgv_all",
+    "label": "Gelen Mal Taşıma > Karayolu Kargo (Road Freight) > HGV refrigerated (all Diesel) > AllHGVs",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "road_cargo",
+      "transport_refriegerated_hgv",
+      "refrigerated_hgv_all"
+    ],
+    "base_factor": "0.77175",
+    "base_unit": "km",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "km",
+        "multiplier": "1",
+        "label": "Km"
+      }
+    ]
+  },
+  {
+    "key": "sea_tanker_crude_200k_plus",
+    "label": "Denizyolu Kargo > Sea Tanker > Crude tanker > 200,000+ dwt",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "sea_tanker_crude",
+      "sea_tanker_crude_200k_plus_dwt"
+    ],
+    "base_factor": "0.00294",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_tanker_crude_120k_to_199k",
+    "label": "Denizyolu Kargo > Sea Tanker > Crude tanker > 120,000–199,999 dwt",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "sea_tanker_crude",
+      "sea_tanker_crude_120k_to_199k_dwt"
+    ],
+    "base_factor": "0.00445",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_tanker_crude_80k_to_119k",
+    "label": "Denizyolu Kargo > Sea Tanker > Crude tanker > 80,000–119,999 dwt",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "sea_tanker_crude",
+      "sea_tanker_crude_80k_to_119k_dwt"
+    ],
+    "base_factor": "0.00597",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_tanker_crude_60k_to_79k",
+    "label": "Denizyolu Kargo > Sea Tanker > Crude tanker > 60,000–79,999 dwt",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "sea_tanker_crude",
+      "sea_tanker_crude_60k_to_79k_dwt"
+    ],
+    "base_factor": "0.00759",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_tanker_crude_10k_to_59k",
+    "label": "Denizyolu Kargo > Sea Tanker > Crude tanker > 10,000–59,999 dwt",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "sea_tanker_crude",
+      "sea_tanker_crude_10k_to_59k_dwt"
+    ],
+    "base_factor": "0.00921",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_tanker_crude_0_to_9999",
+    "label": "Denizyolu Kargo > Sea Tanker > Crude tanker > 0–9999 dwt",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "sea_tanker_crude",
+      "sea_tanker_crude_0_to_9999_dwt"
+    ],
+    "base_factor": "0.03371",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_tanker_crude_average",
+    "label": "Denizyolu Kargo > Sea Tanker > Crude tanker > Average",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "sea_tanker_crude",
+      "sea_tanker_crude_average"
+    ],
+    "base_factor": "0.00457",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_tanker_products_60k_plus",
+    "label": "Denizyolu Kargo > Sea Tanker > Products tanker > 60,000+ dwt",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "sea_tanker_products",
+      "sea_tanker_products_60k_plus_dwt"
+    ],
+    "base_factor": "0.00577",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_tanker_products_20k_to_59k",
+    "label": "Denizyolu Kargo > Sea Tanker > Products tanker > 20,000–59,999 dwt",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "sea_tanker_products",
+      "sea_tanker_products_20k_to_59k_dwt"
+    ],
+    "base_factor": "0.01043",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_tanker_products_10k_to_19k",
+    "label": "Denizyolu Kargo > Sea Tanker > Products tanker > 10,000–19,999 dwt",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "sea_tanker_products",
+      "sea_tanker_products_10k_to_19k_dwt"
+    ],
+    "base_factor": "0.01893",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_tanker_products_5k_to_9999",
+    "label": "Denizyolu Kargo > Sea Tanker > Products tanker > 5000–9999 dwt",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "sea_tanker_products",
+      "sea_tanker_products_5k_to_9999_dwt"
+    ],
+    "base_factor": "0.02956",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_tanker_products_0_to_4999",
+    "label": "Denizyolu Kargo > Sea Tanker > Products tanker > 0–4999 dwt",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "sea_tanker_products",
+      "sea_tanker_products_0_to_4999_dwt"
+    ],
+    "base_factor": "0.04556",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_tanker_products_average",
+    "label": "Denizyolu Kargo > Sea Tanker > Products tanker > Average",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "sea_tanker_products",
+      "sea_tanker_products_average"
+    ],
+    "base_factor": "0.00902",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_tanker_chemical_20k_plus",
+    "label": "Denizyolu Kargo > Sea Tanker > Chemical tanker > 20,000+ dwt",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "sea_tanker_chemical",
+      "sea_tanker_chemical_20k_plus_dwt"
+    ],
+    "base_factor": "0.00850",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_tanker_chemical_10k_to_19k",
+    "label": "Denizyolu Kargo > Sea Tanker > Chemical tanker > 10,000–19,999 dwt",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "sea_tanker_chemical",
+      "sea_tanker_chemical_10k_to_19k_dwt"
+    ],
+    "base_factor": "0.01093",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_tanker_chemical_5k_to_9999",
+    "label": "Denizyolu Kargo > Sea Tanker > Chemical tanker > 5000–9999 dwt",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "sea_tanker_chemical",
+      "sea_tanker_chemical_5k_to_9999_dwt"
+    ],
+    "base_factor": "0.01529",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_tanker_chemical_0_to_4999",
+    "label": "Denizyolu Kargo > Sea Tanker > Chemical tanker > 0–4999 dwt",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "sea_tanker_chemical",
+      "sea_tanker_chemical_0_to_4999_dwt"
+    ],
+    "base_factor": "0.02248",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_tanker_chemical_average",
+    "label": "Denizyolu Kargo > Sea Tanker > Chemical tanker > Average",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "sea_tanker_chemical",
+      "sea_tanker_chemical_average"
+    ],
+    "base_factor": "0.01031",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_tanker_lng_200k_plus",
+    "label": "Denizyolu Kargo > Sea Tanker > LNG tanker > 200,000+ m3",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "sea_tanker_lng",
+      "sea_tanker_lng_200k_plus_m3"
+    ],
+    "base_factor": "0.00942",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_tanker_lng_0_to_199k",
+    "label": "Denizyolu Kargo > Sea Tanker > LNG tanker > 0–199,999 m3",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "sea_tanker_lng",
+      "sea_tanker_lng_0_to_199k_m3"
+    ],
+    "base_factor": "0.01468",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_tanker_lng_average",
+    "label": "Denizyolu Kargo > Sea Tanker > LNG tanker > Average",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "sea_tanker_lng",
+      "sea_tanker_lng_average"
+    ],
+    "base_factor": "0.01153",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_tanker_lpg_50k_plus",
+    "label": "Denizyolu Kargo > Sea Tanker > LPG Tanker > 50,000+ m3",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "sea_tanker_lpg",
+      "sea_tanker_lpg_50k_plus_m3"
+    ],
+    "base_factor": "0.00911",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_tanker_lpg_0_to_49k",
+    "label": "Denizyolu Kargo > Sea Tanker > LPG Tanker > 0–49,999 m3",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "sea_tanker_lpg",
+      "sea_tanker_lpg_0_to_49k_m3"
+    ],
+    "base_factor": "0.04404",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_tanker_lpg_average",
+    "label": "Denizyolu Kargo > Sea Tanker > LPG Tanker > Average",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "sea_tanker_lpg",
+      "sea_tanker_lpg_average"
+    ],
+    "base_factor": "0.01037",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_cargo_bulk_200k_plus_dwt",
+    "label": "Denizyolu Kargo > Cargo Ship > Bulk Carrier > 200,000+ dwt",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "cargo_ship_bulk_carrier",
+      "sea_cargo_bulk_200k_plus_dwt"
+    ],
+    "base_factor": "0.00253",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_cargo_bulk_100k_to_199k_dwt",
+    "label": "Denizyolu Kargo > Cargo Ship > Bulk Carrier > 100,000–199,999 dwt",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "cargo_ship_bulk_carrier",
+      "sea_cargo_bulk_100k_to_199k_dwt"
+    ],
+    "base_factor": "0.00304",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_cargo_bulk_60k_to_99k_dwt",
+    "label": "Denizyolu Kargo > Cargo Ship > Bulk Carrier > 60,000–99,999 dwt",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "cargo_ship_bulk_carrier",
+      "sea_cargo_bulk_60k_to_99k_dwt"
+    ],
+    "base_factor": "0.00415",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_cargo_bulk_35k_to_59k_dwt",
+    "label": "Denizyolu Kargo > Cargo Ship > Bulk Carrier > 35,000–59,999 dwt",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "cargo_ship_bulk_carrier",
+      "sea_cargo_bulk_35k_to_59k_dwt"
+    ],
+    "base_factor": "0.00577",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_cargo_bulk_10k_to_34k_dwt",
+    "label": "Denizyolu Kargo > Cargo Ship > Bulk Carrier > 10,000–34,999 dwt",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "cargo_ship_bulk_carrier",
+      "sea_cargo_bulk_10k_to_34k_dwt"
+    ],
+    "base_factor": "0.00800",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_cargo_bulk_0_to_9999_dwt",
+    "label": "Denizyolu Kargo > Cargo Ship > Bulk Carrier > 0–9999 dwt",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "cargo_ship_bulk_carrier",
+      "sea_cargo_bulk_0_to_9999_dwt"
+    ],
+    "base_factor": "0.02956",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_cargo_bulk_average",
+    "label": "Denizyolu Kargo > Cargo Ship > Bulk Carrier > Average",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "cargo_ship_bulk_carrier",
+      "sea_cargo_bulk_average"
+    ],
+    "base_factor": "0.00353",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_cargo_general_10k_plus_dwt",
+    "label": "Denizyolu Kargo > Cargo Ship > General Cargo > 10,000+ dwt",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "cargo_ship_general_cargo",
+      "sea_cargo_general_10k_plus_dwt"
+    ],
+    "base_factor": "0.01205",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_cargo_general_5k_to_9999_dwt",
+    "label": "Denizyolu Kargo > Cargo Ship > General Cargo > 5000–9999 dwt",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "cargo_ship_general_cargo",
+      "sea_cargo_general_5k_to_9999_dwt"
+    ],
+    "base_factor": "0.01600",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_cargo_general_0_to_4999_dwt",
+    "label": "Denizyolu Kargo > Cargo Ship > General Cargo > 0–4999 dwt",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "cargo_ship_general_cargo",
+      "sea_cargo_general_0_to_4999_dwt"
+    ],
+    "base_factor": "0.01407",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "freight_sea_cargo_container_10k_plus_dwt_100_plus_teu",
+    "label": "Gelen Mal Taşıma > Denizyolu Kargo (Sea Freight) > Cargo ship > General cargo > 10,000+ dwt 100+ TEU",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "cargo_ship_general_cargo",
+      "sea_cargo_general_10k_plus_dwt_100_plus_teu"
+    ],
+    "base_factor": "0.01114",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "km",
+        "multiplier": "1",
+        "label": "Ton.Km"
+      }
+    ]
+  },
+  {
+    "key": "freight_sea_cargo_container_5k_to_9999_dwt_100_plus_teu",
+    "label": "Gelen Mal Taşıma > Denizyolu Kargo (Sea Freight) > Cargo ship > General cargo > 5000–9999 dwt 100+ TEU",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "cargo_ship_general_cargo",
+      "sea_cargo_general_5k_to_9999_dwt_100_plus_teu"
+    ],
+    "base_factor": "0.01772",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Ton.Km"
+      }
+    ]
+  },
+  {
+    "key": "freight_sea_cargo_container_0_to_4999_dwt_100_plus_teu",
+    "label": "Gelen Mal Taşıma > Denizyolu Kargo (Sea Freight) > Cargo ship > General cargo > 0–4999 dwt 100+ TEU",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "cargo_ship_general_cargo",
+      "sea_cargo_general_0_to_4999_dwt_100_plus_teu"
+    ],
+    "base_factor": "0.02005",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Ton.Km"
+      }
+    ]
+  },
+  {
+    "key": "sea_cargo_general_average",
+    "label": "Denizyolu Kargo > Cargo Ship > General Cargo > Average",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "cargo_ship_general_cargo",
+      "sea_cargo_general_average"
+    ],
+    "base_factor": "0.01321",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_cargo_container_8000_plus_teu",
+    "label": "Denizyolu Kargo > Cargo Ship > Container Ship > 8000+ TEU",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "cargo_ship_container_ship",
+      "sea_cargo_container_8000_plus_teu"
+    ],
+    "base_factor": "0.01266",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_cargo_container_5000_to_7999_teu",
+    "label": "Denizyolu Kargo > Cargo Ship > Container Ship > 5000–7999 TEU",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "cargo_ship_container_ship",
+      "sea_cargo_container_5000_to_7999_teu"
+    ],
+    "base_factor": "0.01681",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_cargo_container_3000_to_4999_teu",
+    "label": "Denizyolu Kargo > Cargo Ship > Container Ship > 3000–4999 TEU",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "cargo_ship_container_ship",
+      "sea_cargo_container_3000_to_4999_teu"
+    ],
+    "base_factor": "0.01681",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_cargo_container_2000_to_2999_teu",
+    "label": "Denizyolu Kargo > Cargo Ship > Container Ship > 2000–2999 TEU",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "cargo_ship_container_ship",
+      "sea_cargo_container_2000_to_2999_teu"
+    ],
+    "base_factor": "0.02025",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_cargo_container_1000_to_1999_teu",
+    "label": "Denizyolu Kargo > Cargo Ship > Container Ship > 1000–1999 TEU",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "cargo_ship_container_ship",
+      "sea_cargo_container_1000_to_1999_teu"
+    ],
+    "base_factor": "0.03250",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_cargo_container_0_to_999_teu",
+    "label": "Denizyolu Kargo > Cargo Ship > Container Ship > 0–999 TEU",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "cargo_ship_container_ship",
+      "sea_cargo_container_0_to_999_teu"
+    ],
+    "base_factor": "0.03675",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "sea_cargo_container_average",
+    "label": "Denizyolu Kargo > Cargo Ship > Container Ship > Average",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "cargo_ship_container_ship",
+      "sea_cargo_container_average"
+    ],
+    "base_factor": "0.01612",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Tonne-km"
+      }
+    ]
+  },
+  {
+    "key": "freight_sea_cargo_vehicle_4000_plus_ceu",
+    "label": "Gelen Mal Taşıma > Denizyolu Kargo (Sea Freight) > Cargo ship > Vehicle transport > 4000+ CEU",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "cargo_ship_vehicle_transport",
+      "sea_cargo_vehicle_4000_plus_ceu"
+    ],
+    "base_factor": "0.0324",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Ton.Km"
+      }
+    ]
+  },
+  {
+    "key": "freight_sea_cargo_vehicle_0_to_3999_ceu",
+    "label": "Gelen Mal Taşıma > Denizyolu Kargo (Sea Freight) > Cargo ship > Vehicle transport > 0–3999 CEU",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "cargo_ship_vehicle_transport",
+      "sea_cargo_vehicle_0_to_3999_ceu"
+    ],
+    "base_factor": "0.05832",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Ton.Km"
+      }
+    ]
+  },
+  {
+    "key": "freight_sea_cargo_vehicle_average",
+    "label": "Gelen Mal Taşıma > Denizyolu Kargo (Sea Freight) > Cargo ship > Vehicle transport > Average",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "cargo_ship_vehicle_transport",
+      "sea_cargo_vehicle_average"
+    ],
+    "base_factor": "0.03852",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Ton.Km"
+      }
+    ]
+  },
+  {
+    "key": "freight_sea_cargo_roro_ferry_2000_plus_lm",
+    "label": "Gelen Mal Taşıma > Denizyolu Kargo (Sea Freight) > Cargo ship > RoRo-Ferry > 2000+ LM",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "cargo_ship_roro_ferry",
+      "sea_cargo_roro_ferry_2000_plus_lm"
+    ],
+    "base_factor": "0.05012",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Ton.Km"
+      }
+    ]
+  },
+  {
+    "key": "freight_sea_cargo_roro_ferry_0_to_1999_lm",
+    "label": "Gelen Mal Taşıma > Denizyolu Kargo (Sea Freight) > Cargo ship > RoRo-Ferry > 0–1999 LM",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "cargo_ship_roro_ferry",
+      "sea_cargo_roro_ferry_0_to_1999_lm"
+    ],
+    "base_factor": "0.06105",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Ton.Km"
+      }
+    ]
+  },
+  {
+    "key": "freight_sea_cargo_roro_ferry_average",
+    "label": "Gelen Mal Taşıma > Denizyolu Kargo (Sea Freight) > Cargo ship > RoRo-Ferry > Average",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "cargo_ship_roro_ferry",
+      "sea_cargo_roro_ferry_average"
+    ],
+    "base_factor": "0.05158",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Ton.Km"
+      }
+    ]
+  },
+  {
+    "key": "freight_sea_cargo_large_ropax_ferry_average",
+    "label": "Gelen Mal Taşıma > Denizyolu Kargo (Sea Freight) > Cargo ship > Large RoPax ferry > Average",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "cargo_ship_large_ropax_ferry",
+      "sea_cargo_large_ropax_ferry_average"
+    ],
+    "base_factor": "0.37612",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Ton.Km"
+      }
+    ]
+  },
+  {
+    "key": "freight_sea_cargo_refrigarated_all_dwt",
+    "label": "Gelen Mal Taşıma > Denizyolu Kargo (Sea Freight) > Cargo ship > Refrigerated cargo > All dwt",
+    "main_category": "cat_logistics",
+    "sub_categories": [
+      "sub_inbound_freight",
+      "sub_outbound_freight"
+    ],
+    "category_path": [
+      "sea_freight",
+      "cargo_ship_refrigerated_cargo",
+      "sea_cargo_refrigerated_all_dwt"
+    ],
+    "base_factor": "0.01306",
+    "base_unit": "tkm",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_3",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tkm",
+        "multiplier": "1",
+        "label": "Ton.Km"
+      }
+    ]
+  },
+  {
+    "key": "process_emission_carbon_dioxide",
+    "label": "Proses Emisyonları > Karbondioksit (CO₂)",
+    "main_category": "cat_gas_emissions",
+    "sub_categories": [
+      "sub_process_emissions"
+    ],
+    "category_path": [
+      "carbon_dioxide"
+    ],
+    "base_factor": "1",
+    "base_unit": "kg",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "kg",
+        "multiplier": "1",
+        "label": "Kilogram"
+      },
+      {
+        "unit": "tonne",
+        "multiplier": "1000",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "process_emission_hcfc_22",
+    "label": "Proses Emisyonları > HCFC-22",
+    "main_category": "cat_gas_emissions",
+    "sub_categories": [
+      "sub_process_emissions"
+    ],
+    "category_path": [
+      "hcfc_22"
+    ],
+    "base_factor": "1760",
+    "base_unit": "kg",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "kg",
+        "multiplier": "1",
+        "label": "Kilogram"
+      },
+      {
+        "unit": "tonne",
+        "multiplier": "1000",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "process_emission_hfc_134a",
+    "label": "Proses Emisyonları > HFC-134a",
+    "main_category": "cat_gas_emissions",
+    "sub_categories": [
+      "sub_process_emissions"
+    ],
+    "category_path": [
+      "hfc_134a"
+    ],
+    "base_factor": "1300",
+    "base_unit": "kg",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "kg",
+        "multiplier": "1",
+        "label": "Kilogram"
+      },
+      {
+        "unit": "tonne",
+        "multiplier": "1000",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "process_emission_hfc_227ea",
+    "label": "Proses Emisyonları > HFC-227ea",
+    "main_category": "cat_gas_emissions",
+    "sub_categories": [
+      "sub_process_emissions"
+    ],
+    "category_path": [
+      "hfc_227ea"
+    ],
+    "base_factor": "3350",
+    "base_unit": "kg",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "kg",
+        "multiplier": "1",
+        "label": "Kilogram"
+      },
+      {
+        "unit": "tonne",
+        "multiplier": "1000",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "process_emission_hfc_32",
+    "label": "Proses Emisyonları > HFC-32",
+    "main_category": "cat_gas_emissions",
+    "sub_categories": [
+      "sub_process_emissions"
+    ],
+    "category_path": [
+      "hfc_32"
+    ],
+    "base_factor": "677",
+    "base_unit": "kg",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "kg",
+        "multiplier": "1",
+        "label": "Kilogram"
+      },
+      {
+        "unit": "tonne",
+        "multiplier": "1000",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "process_emission_methane",
+    "label": "Proses Emisyonları > Metan (CH₄)",
+    "main_category": "cat_gas_emissions",
+    "sub_categories": [
+      "sub_process_emissions"
+    ],
+    "category_path": [
+      "methane"
+    ],
+    "base_factor": "28",
+    "base_unit": "kg",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "kg",
+        "multiplier": "1",
+        "label": "Kilogram"
+      },
+      {
+        "unit": "tonne",
+        "multiplier": "1000",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "process_emission_r404a",
+    "label": "Proses Emisyonları > R-404A",
+    "main_category": "cat_gas_emissions",
+    "sub_categories": [
+      "sub_process_emissions"
+    ],
+    "category_path": [
+      "r404a"
+    ],
+    "base_factor": "3943",
+    "base_unit": "kg",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "kg",
+        "multiplier": "1",
+        "label": "Kilogram"
+      },
+      {
+        "unit": "tonne",
+        "multiplier": "1000",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "process_emission_r410a",
+    "label": "Proses Emisyonları > R-410A",
+    "main_category": "cat_gas_emissions",
+    "sub_categories": [
+      "sub_process_emissions"
+    ],
+    "category_path": [
+      "r410a"
+    ],
+    "base_factor": "1924",
+    "base_unit": "kg",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "kg",
+        "multiplier": "1",
+        "label": "Kilogram"
+      },
+      {
+        "unit": "tonne",
+        "multiplier": "1000",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "process_emission_r432a",
+    "label": "Proses Emisyonları > R432A",
+    "main_category": "cat_gas_emissions",
+    "sub_categories": [
+      "sub_process_emissions"
+    ],
+    "category_path": [
+      "r432a"
+    ],
+    "base_factor": "1.8",
+    "base_unit": "kg",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "kg",
+        "multiplier": "1",
+        "label": "Kilogram"
+      },
+      {
+        "unit": "tonne",
+        "multiplier": "1000",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "process_emission_r600a_isobutane",
+    "label": "Proses Emisyonları > R600A (İzobütan)",
+    "main_category": "cat_gas_emissions",
+    "sub_categories": [
+      "sub_process_emissions"
+    ],
+    "category_path": [
+      "r600a_isobutane"
+    ],
+    "base_factor": "3",
+    "base_unit": "kg",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "kg",
+        "multiplier": "1",
+        "label": "Kilogram"
+      },
+      {
+        "unit": "tonne",
+        "multiplier": "1000",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "fugitive_carbon_dioxide",
+    "label": "Kaçak Gaz Emisyonları > Karbondioksit (Carbon dioxide)",
+    "main_category": "cat_gas_emissions",
+    "sub_categories": [
+      "sub_fugitive_emissions"
+    ],
+    "category_path": [
+      "carbon_dioxide"
+    ],
+    "base_factor": "1",
+    "base_unit": "kg",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "kg",
+        "multiplier": "1",
+        "label": "Kg"
+      }
+    ]
+  },
+  {
+    "key": "fugitive_hcfc_22",
+    "label": "Kaçak Gaz Emisyonları > HCFC-22",
+    "main_category": "cat_gas_emissions",
+    "sub_categories": [
+      "sub_fugitive_emissions"
+    ],
+    "category_path": [
+      "hcfc_22"
+    ],
+    "base_factor": "1760",
+    "base_unit": "kg",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "kg",
+        "multiplier": "1",
+        "label": "Kg"
+      }
+    ]
+  },
+  {
+    "key": "fugitive_hfc_134a",
+    "label": "Kaçak Gaz Emisyonları > HFC-134a",
+    "main_category": "cat_gas_emissions",
+    "sub_categories": [
+      "sub_fugitive_emissions"
+    ],
+    "category_path": [
+      "hfc_134a"
+    ],
+    "base_factor": "1300",
+    "base_unit": "kg",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "kg",
+        "multiplier": "1",
+        "label": "Kg"
+      }
+    ]
+  },
+  {
+    "key": "fugitive_hfc_227ea",
+    "label": "Kaçak Gaz Emisyonları > HFC-227ea",
+    "main_category": "cat_gas_emissions",
+    "sub_categories": [
+      "sub_fugitive_emissions"
+    ],
+    "category_path": [
+      "hfc_227ea"
+    ],
+    "base_factor": "3350",
+    "base_unit": "kg",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "kg",
+        "multiplier": "1",
+        "label": "Kg"
+      }
+    ]
+  },
+  {
+    "key": "fugitive_hfc_32",
+    "label": "Kaçak Gaz Emisyonları > HFC-32",
+    "main_category": "cat_gas_emissions",
+    "sub_categories": [
+      "sub_fugitive_emissions"
+    ],
+    "category_path": [
+      "hfc_32"
+    ],
+    "base_factor": "677",
+    "base_unit": "kg",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "kg",
+        "multiplier": "1",
+        "label": "Kg"
+      }
+    ]
+  },
+  {
+    "key": "fugitive_methane",
+    "label": "Kaçak Gaz Emisyonları > Metan (Methane)",
+    "main_category": "cat_gas_emissions",
+    "sub_categories": [
+      "sub_fugitive_emissions"
+    ],
+    "category_path": [
+      "methane"
+    ],
+    "base_factor": "28",
+    "base_unit": "kg",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "kg",
+        "multiplier": "1",
+        "label": "Kg"
+      }
+    ]
+  },
+  {
+    "key": "fugitive_r404a",
+    "label": "Kaçak Gaz Emisyonları > R-404A",
+    "main_category": "cat_gas_emissions",
+    "sub_categories": [
+      "sub_fugitive_emissions"
+    ],
+    "category_path": [
+      "r404a"
+    ],
+    "base_factor": "3943",
+    "base_unit": "kg",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "kg",
+        "multiplier": "1",
+        "label": "Kg"
+      }
+    ]
+  },
+  {
+    "key": "fugitive_r410a",
+    "label": "Kaçak Gaz Emisyonları > R-410A",
+    "main_category": "cat_gas_emissions",
+    "sub_categories": [
+      "sub_fugitive_emissions"
+    ],
+    "category_path": [
+      "r410a"
+    ],
+    "base_factor": "1924",
+    "base_unit": "kg",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "kg",
+        "multiplier": "1",
+        "label": "Kg"
+      }
+    ]
+  },
+  {
+    "key": "fugitive_r432a",
+    "label": "Kaçak Gaz Emisyonları > R432A",
+    "main_category": "cat_gas_emissions",
+    "sub_categories": [
+      "sub_fugitive_emissions"
+    ],
+    "category_path": [
+      "r432a"
+    ],
+    "base_factor": "1.8",
+    "base_unit": "kg",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "kg",
+        "multiplier": "1",
+        "label": "Kg"
+      }
+    ]
+  },
+  {
+    "key": "fugitive_r600a_isobutane",
+    "label": "Kaçak Gaz Emisyonları > R600A (İzobütan)",
+    "main_category": "cat_gas_emissions",
+    "sub_categories": [
+      "sub_fugitive_emissions"
+    ],
+    "category_path": [
+      "r600a_isobutane"
+    ],
+    "base_factor": "3",
+    "base_unit": "kg",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "kg",
+        "multiplier": "1",
+        "label": "Kg"
+      }
+    ]
+  },
+  {
+    "key": "grid_electricity_tr_2022",
+    "label": "Şebekeden Elektrik Tüketimi > Elektrik Üretimi",
+    "main_category": "cat_electricity",
+    "sub_categories": [
+      "sub_grid_electricity"
+    ],
+    "category_path": [
+      "grid_electricity"
+    ],
+    "base_factor": "0.469",
+    "base_unit": "kWh",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_2",
+    "iso_category": "category_2",
+    "status": "active",
+    "source": "Türkiye Ulusal Envanteri",
+    "source_year": 2025,
+    "source_url": "https://enerji.gov.tr/evced-cevre-ve-iklim-elektrik-uretim-tuketim-emisyon-faktorleri",
+    "conversions": [
+      {
+        "unit": "kWh",
+        "multiplier": "1",
+        "label": "kWh"
+      }
+    ]
+  },
+  {
+    "key": "electricity_generation_tr_2022",
+    "label": "Elektrik Üretimi",
+    "main_category": "cat_electricity",
+    "sub_categories": [
+      "sub_elec_generation"
+    ],
+    "category_path": [
+      "electricity_generation"
+    ],
+    "base_factor": "0.436",
+    "base_unit": "kWh",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_1",
+    "iso_category": "category_1",
+    "status": "active",
+    "source": "Türkiye Ulusal Envanteri",
+    "source_year": 2025,
+    "source_url": "https://enerji.gov.tr/evced-cevre-ve-iklim-elektrik-uretim-tuketim-emisyon-faktorleri",
+    "conversions": [
+      {
+        "unit": "kWh",
+        "multiplier": "1",
+        "label": "kWh"
+      }
+    ]
+  },
+  {
+    "key": "purchased_heat_cooling",
+    "label": "Satın Alınan Isıtma / Soğutma > Isı ve Buhar (Heat and steam)",
+    "main_category": "cat_external_energy",
+    "sub_categories": [
+      "sub_purchased_hc"
+    ],
+    "category_path": [
+      "purchased_heat_and_cooling"
+    ],
+    "base_factor": "0.03341",
+    "base_unit": "kWh",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_2",
+    "iso_category": "category_2",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "kWh",
+        "multiplier": "1",
+        "label": "kWh"
+      }
+    ]
+  },
+  {
+    "key": "purchased_steam",
+    "label": "Satın Alınan Buhar > Isı ve Buhar (Heat and steam)",
+    "main_category": "cat_external_energy",
+    "sub_categories": [
+      "sub_purchased_steam"
+    ],
+    "category_path": [
+      "purchased_steam"
+    ],
+    "base_factor": "0.03341",
+    "base_unit": "kWh",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_2",
+    "iso_category": "category_2",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "kWh",
+        "multiplier": "1",
+        "label": "kWh"
+      }
+    ]
+  },
+  {
+    "key": "purchased_goods_glass",
+    "label": "Satın Alınan Ürün ve Hizmetler > Cam",
+    "main_category": "cat_products",
+    "sub_categories": [
+      "sub_purchased_goods"
+    ],
+    "category_path": [
+      "glass"
+    ],
+    "base_factor": "1402.7667",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_4",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "purchased_goods_metal_aluminium_cans_foil",
+    "label": "Satın Alınan Ürün ve Hizmetler > Metal > Alüminyum kutular ve folyo",
+    "main_category": "cat_products",
+    "sub_categories": [
+      "sub_purchased_goods"
+    ],
+    "category_path": [
+      "metal_aluminium_cans_and_foil"
+    ],
+    "base_factor": "9115.90131",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_4",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "purchased_goods_metal_mixed_cans",
+    "label": "Satın Alınan Ürün ve Hizmetler > Metal > Karışık kutular",
+    "main_category": "cat_products",
+    "sub_categories": [
+      "sub_purchased_goods"
+    ],
+    "category_path": [
+      "metal_mixed_cans"
+    ],
+    "base_factor": "5114.62131",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_4",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "purchased_goods_metal_scrap",
+    "label": "Satın Alınan Ürün ve Hizmetler > Metal > Hurda Metal",
+    "main_category": "cat_products",
+    "sub_categories": [
+      "sub_purchased_goods"
+    ],
+    "category_path": [
+      "metal_scrap"
+    ],
+    "base_factor": "3473.11953",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_4",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "purchased_goods_metal_steel_cans",
+    "label": "Satın Alınan Ürün ve Hizmetler > Metal > Çelik kutular",
+    "main_category": "cat_products",
+    "sub_categories": [
+      "sub_purchased_goods"
+    ],
+    "category_path": [
+      "metal_steel_cans"
+    ],
+    "base_factor": "2863.90131",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_4",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "purchased_goods_mineral_oil",
+    "label": "Satın Alınan Ürün ve Hizmetler > Madeni Yağ",
+    "main_category": "cat_products",
+    "sub_categories": [
+      "sub_purchased_goods"
+    ],
+    "category_path": [
+      "mineral_oil"
+    ],
+    "base_factor": "1401",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_4",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "purchased_goods_cardboard",
+    "label": "Satın Alınan Ürün ve Hizmetler > Kağıt ve Karton > Karton",
+    "main_category": "cat_products",
+    "sub_categories": [
+      "sub_purchased_goods"
+    ],
+    "category_path": [
+      "cardboard"
+    ],
+    "base_factor": "1199.72542",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_4",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "purchased_goods_mixed_paper_cardboard",
+    "label": "Satın Alınan Ürün ve Hizmetler > Kağıt ve Karton > Karışık",
+    "main_category": "cat_products",
+    "sub_categories": [
+      "sub_purchased_goods"
+    ],
+    "category_path": [
+      "mixed_paper_cardboard"
+    ],
+    "base_factor": "1288.50358",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_4",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "purchased_goods_paper",
+    "label": "Satın Alınan Ürün ve Hizmetler > Kağıt ve Karton > Kağıt",
+    "main_category": "cat_products",
+    "sub_categories": [
+      "sub_purchased_goods"
+    ],
+    "category_path": [
+      "paper"
+    ],
+    "base_factor": "1345.07790",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_4",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "purchased_goods_plastic_hdpe",
+    "label": "Satın Alınan Ürün ve Hizmetler > Plastik > HDPE",
+    "main_category": "cat_products",
+    "sub_categories": [
+      "sub_purchased_goods"
+    ],
+    "category_path": [
+      "plastic_hdpe"
+    ],
+    "base_factor": "3095.15524",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_4",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "purchased_goods_plastic_average",
+    "label": "Satın Alınan Ürün ve Hizmetler > Plastik > Ortalama Plastik",
+    "main_category": "cat_products",
+    "sub_categories": [
+      "sub_purchased_goods"
+    ],
+    "category_path": [
+      "plastic_average"
+    ],
+    "base_factor": "3172.49932",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_4",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "purchased_goods_water_supply",
+    "label": "Satın Alınan Ürün ve Hizmetler > Su Temini",
+    "main_category": "cat_products",
+    "sub_categories": [
+      "sub_purchased_goods"
+    ],
+    "category_path": [
+      "water_supply"
+    ],
+    "base_factor": "0.10130",
+    "base_unit": "m3",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_4",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "m3",
+        "multiplier": "1",
+        "label": "m³"
+      }
+    ]
+  },
+  {
+    "key": "purchased_goods_wood",
+    "label": "Satın Alınan Ürün ve Hizmetler > Ahşap",
+    "main_category": "cat_products",
+    "sub_categories": [
+      "sub_purchased_goods"
+    ],
+    "category_path": [
+      "wood"
+    ],
+    "base_factor": "269.50416",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_4",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "capital_goods_large_electrical_products",
+    "label": "Sermaye Malları > Elektrikli Ürünler - Büyük",
+    "main_category": "cat_products",
+    "sub_categories": [
+      "sub_capital_goods"
+    ],
+    "category_path": [
+      "large_electrical_products"
+    ],
+    "base_factor": "3267",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_4",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "capital_goods_metal_mixed_cans",
+    "label": "Sermaye Malları > Metal > Karışık kutular",
+    "main_category": "cat_products",
+    "sub_categories": [
+      "sub_capital_goods"
+    ],
+    "category_path": [
+      "metal_mixed_cans"
+    ],
+    "base_factor": "5114.62131",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_4",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "capital_goods_plastic_average",
+    "label": "Sermaye Malları > Plastik > Ortalama plastikler",
+    "main_category": "cat_products",
+    "sub_categories": [
+      "sub_capital_goods"
+    ],
+    "category_path": [
+      "plastic_average"
+    ],
+    "base_factor": "3172.49932",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_4",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "eol_fridges_and_freezers",
+    "label": "Satılan Ürünlerin Yaşam Sonu > Fridges and freezers",
+    "main_category": "cat_products",
+    "sub_categories": [
+      "sub_eol_sold_products"
+    ],
+    "category_path": [
+      "eol_fridges_and_freezers"
+    ],
+    "base_factor": "4.68568",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_5",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "eol_large_electrical",
+    "label": "Satılan Ürünlerin Yaşam Sonu > Large",
+    "main_category": "cat_products",
+    "sub_categories": [
+      "sub_eol_sold_products"
+    ],
+    "category_path": [
+      "eol_large_electrical"
+    ],
+    "base_factor": "4.68568",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_5",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "eol_mixed_electrical",
+    "label": "Satılan Ürünlerin Yaşam Sonu > Mixed",
+    "main_category": "cat_products",
+    "sub_categories": [
+      "sub_eol_sold_products"
+    ],
+    "category_path": [
+      "eol_mixed_electrical"
+    ],
+    "base_factor": "4.68568",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_5",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "eol_small_electrical",
+    "label": "Satılan Ürünlerin Yaşam Sonu > Small",
+    "main_category": "cat_products",
+    "sub_categories": [
+      "sub_eol_sold_products"
+    ],
+    "category_path": [
+      "eol_small_electrical"
+    ],
+    "base_factor": "4.68568",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_5",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "eol_batteries",
+    "label": "Satılan Ürünlerin Yaşam Sonu > Batteries",
+    "main_category": "cat_products",
+    "sub_categories": [
+      "sub_eol_sold_products"
+    ],
+    "category_path": [
+      "eol_batteries"
+    ],
+    "base_factor": "4.68568",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_5",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "eol_metal_aluminium_cans_and_foil",
+    "label": "Satılan Ürünlerin Yaşam Sonu > Metal > Alüminyum kutular ve folyo",
+    "main_category": "cat_products",
+    "sub_categories": [
+      "sub_eol_sold_products"
+    ],
+    "category_path": [
+      "eol_metal_aluminium_cans_and_foil"
+    ],
+    "base_factor": "4.68568",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_5",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "eol_metal_mixed_cans",
+    "label": "Satılan Ürünlerin Yaşam Sonu > Metal > Karışık kutular",
+    "main_category": "cat_products",
+    "sub_categories": [
+      "sub_eol_sold_products"
+    ],
+    "category_path": [
+      "eol_metal_mixed_cans"
+    ],
+    "base_factor": "4.68568",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_5",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "eol_metal_scrap",
+    "label": "Satılan Ürünlerin Yaşam Sonu > Metal > Hurda Metal",
+    "main_category": "cat_products",
+    "sub_categories": [
+      "sub_eol_sold_products"
+    ],
+    "category_path": [
+      "eol_metal_scrap"
+    ],
+    "base_factor": "4.68568",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_5",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "eol_metal_steel_cans",
+    "label": "Satılan Ürünlerin Yaşam Sonu > Metal > Çelik kutular",
+    "main_category": "cat_products",
+    "sub_categories": [
+      "sub_eol_sold_products"
+    ],
+    "category_path": [
+      "eol_metal_steel_cans"
+    ],
+    "base_factor": "4.68568",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_5",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "eol_plastic_hdpe",
+    "label": "Satılan Ürünlerin Yaşam Sonu > Plastik > HDPE",
+    "main_category": "cat_products",
+    "sub_categories": [
+      "sub_eol_sold_products"
+    ],
+    "category_path": [
+      "eol_plastic_hdpe"
+    ],
+    "base_factor": "4.68568",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_5",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "eol_plastic_average",
+    "label": "Satılan Ürünlerin Yaşam Sonu > Plastik > Ortalama plastikler",
+    "main_category": "cat_products",
+    "sub_categories": [
+      "sub_eol_sold_products"
+    ],
+    "category_path": [
+      "eol_plastic_average"
+    ],
+    "base_factor": "4.68568",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_5",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "waste_construction",
+    "label": "Atık Bertarafı > İnşaat Atığı",
+    "main_category": "cat_waste",
+    "sub_categories": [
+      "sub_waste_disposal"
+    ],
+    "category_path": [
+      "construction_waste"
+    ],
+    "base_factor": "1.26338",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_6",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "waste_electrical_products",
+    "label": "Atık Bertarafı > Elektrikli Ürünler",
+    "main_category": "cat_waste",
+    "sub_categories": [
+      "sub_waste_disposal"
+    ],
+    "category_path": [
+      "waste_electrical_products"
+    ],
+    "base_factor": "8.98311",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_6",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "waste_paper",
+    "label": "Atık Bertarafı > Kağıt",
+    "main_category": "cat_waste",
+    "sub_categories": [
+      "sub_waste_disposal"
+    ],
+    "category_path": [
+      "waste_paper"
+    ],
+    "base_factor": "1164.48940",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_6",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "waste_plastic",
+    "label": "Atık Bertarafı > Plastik",
+    "main_category": "cat_waste",
+    "sub_categories": [
+      "sub_waste_disposal"
+    ],
+    "category_path": [
+      "waste_plastic"
+    ],
+    "base_factor": "8.98311",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_6",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      }
+    ]
+  },
+  {
+    "key": "waste_refuse",
+    "label": "Atık Bertarafı > Çöp/Atık",
+    "main_category": "cat_waste",
+    "sub_categories": [
+      "sub_waste_disposal"
+    ],
+    "category_path": [
+      "waste_refuse"
+    ],
+    "base_factor": "520.53270",
+    "base_unit": "tonne",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": "scope_3",
+    "iso_category": "category_6",
+    "status": "active",
+    "source": "Defra",
+    "source_year": 2025,
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025",
+    "conversions": [
+      {
+        "unit": "tonne",
+        "multiplier": "1",
+        "label": "Ton"
+      }
+    ]
+  }
+]

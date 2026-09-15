@@ -1,0 +1,65 @@
+[
+  {
+    "provider": "isolar",
+    "subtype": "EU",
+    "endpoints": {
+      "gateway": "https://gateway.isolarcloud.eu",
+      "authorize_origin": "https://web3.isolarcloud.eu",
+      "cloud_id": "3",
+      "token": "/openapi/apiManage/token",
+      "refresh_token": "/openapi/apiManage/refreshToken",
+      "query_power_station_list": "/openapi/platform/queryPowerStationList",
+      "get_power_station_detail": "/openapi/platform/getPowerStationDetail",
+      "get_device_list_by_ps_id": "/openapi/platform/getDeviceListByPsId",
+      "get_device_real_time_data": "/openapi/platform/getDeviceRealTimeData",
+      "get_power_station_real_time_data": "/openapi/platform/getPowerStationRealTimeData",
+      "get_device_point_day_month_year_data_list": "/openapi/platform/getDevicePointDayMonthYearDataList",
+      "get_power_station_point_day_month_year_data_list": "/openapi/platform/getPowerStationPointDayMonthYearDataList",
+      "get_power_station_point_minute_data_list": "/openapi/platform/getPowerStationPointMinuteDataList",
+      "get_device_point_minute_data_list": "/openapi/platform/getDevicePointMinuteDataList",
+      "get_fault_alarm_info": "/openapi/platform/getFaultAlarmInfo"
+    }
+  },
+  {
+    "provider": "isolar",
+    "subtype": "CN",
+    "endpoints": {
+      "gateway": "https://gateway.isolarcloud.com.cn",
+      "authorize_origin": "https://www.isolarcloud.com",
+      "cloud_id": "1",
+      "token": "/openapi/apiManage/token",
+      "refresh_token": "/openapi/apiManage/refreshToken",
+      "query_power_station_list": "/openapi/platform/queryPowerStationList",
+      "get_power_station_detail": "/openapi/platform/getPowerStationDetail",
+      "get_device_list_by_ps_id": "/openapi/platform/getDeviceListByPsId",
+      "get_device_real_time_data": "/openapi/platform/getDeviceRealTimeData",
+      "get_power_station_real_time_data": "/openapi/platform/getPowerStationRealTimeData",
+      "get_device_point_day_month_year_data_list": "/openapi/platform/getDevicePointDayMonthYearDataList",
+      "get_power_station_point_day_month_year_data_list": "/openapi/platform/getPowerStationPointDayMonthYearDataList",
+      "get_power_station_point_minute_data_list": "/openapi/platform/getPowerStationPointMinuteDataList",
+      "get_device_point_minute_data_list": "/openapi/platform/getDevicePointMinuteDataList",
+      "get_fault_alarm_info": "/openapi/platform/getFaultAlarmInfo"
+    }
+  },
+  {
+    "provider": "isolar",
+    "subtype": "AU",
+    "endpoints": {
+      "gateway": "https://augateway.isolarcloud.com",
+      "authorize_origin": "https://au.isolarcloud.com",
+      "cloud_id": "2",
+      "token": "/openapi/apiManage/token",
+      "refresh_token": "/openapi/apiManage/refreshToken",
+      "query_power_station_list": "/openapi/platform/queryPowerStationList",
+      "get_power_station_detail": "/openapi/platform/getPowerStationDetail",
+      "get_device_list_by_ps_id": "/openapi/platform/getDeviceListByPsId",
+      "get_device_real_time_data": "/openapi/platform/getDeviceRealTimeData",
+      "get_power_station_real_time_data": "/openapi/platform/getPowerStationRealTimeData",
+      "get_device_point_day_month_year_data_list": "/openapi/platform/getDevicePointDayMonthYearDataList",
+      "get_power_station_point_day_month_year_data_list": "/openapi/platform/getPowerStationPointDayMonthYearDataList",
+      "get_power_station_point_minute_data_list": "/openapi/platform/getPowerStationPointMinuteDataList",
+      "get_device_point_minute_data_list": "/openapi/platform/getDevicePointMinuteDataList",
+      "get_fault_alarm_info": "/openapi/platform/getFaultAlarmInfo"
+    }
+  }
+]

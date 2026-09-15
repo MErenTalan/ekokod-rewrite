@@ -1,0 +1,50 @@
+[
+  {
+    "effective_from": "2020-01-01",
+    "user_group": "residential",
+    "voltage_level": "lv",
+    "term": "monomial",
+    "energy_price": "1.000000",
+    "t1_price": null,
+    "t2_price": null,
+    "t3_price": null,
+    "distribution_price": "0.100000",
+    "power_price": null,
+    "overuse_price": null,
+    "daily_threshold_kwh": null,
+    "vat_rate": "18.000",
+    "source": "SYNTHETIC TEST FIXTURE - not real tariff data"
+  },
+  {
+    "effective_from": "2020-01-01",
+    "user_group": "commercial",
+    "voltage_level": "mv",
+    "term": "binomial",
+    "energy_price": "2.000000",
+    "t1_price": "1.500000",
+    "t2_price": "2.500000",
+    "t3_price": "3.500000",
+    "distribution_price": "0.200000",
+    "power_price": "50.000000",
+    "overuse_price": "4.000000",
+    "daily_threshold_kwh": "100.000",
+    "vat_rate": "20.000",
+    "source": "SYNTHETIC TEST FIXTURE - not real tariff data"
+  },
+  {
+    "effective_from": "2021-06-01",
+    "user_group": "residential",
+    "voltage_level": "lv",
+    "term": "monomial",
+    "energy_price": "1.100000",
+    "t1_price": null,
+    "t2_price": null,
+    "t3_price": null,
+    "distribution_price": "0.110000",
+    "power_price": null,
+    "overuse_price": null,
+    "daily_threshold_kwh": null,
+    "vat_rate": "18.000",
+    "source": "SYNTHETIC TEST FIXTURE - not real tariff data"
+  }
+]
