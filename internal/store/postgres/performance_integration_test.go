@@ -8,10 +8,12 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -178,7 +180,7 @@ func TestOneMillionReadingsChunkLayout(t *testing.T) {
 	queryFrom := start.Add(60 * 24 * time.Hour)   // well inside the generated span
 	queryTo := queryFrom.Add(30 * 24 * time.Hour) // one month
 
-	touchedChunks := explainTouchedChunks(t, ctx, pool, queryAnalyzer, queryFrom, queryTo)
+	touchedChunks := explainTouchedChunks(t, ctx, pool, scope, queryAnalyzer, model.ReadingKindLoadProfile, queryFrom, queryTo)
 	require.NotEmpty(t, touchedChunks, "the query must touch at least one chunk")
 	require.Less(t, len(touchedChunks), actualChunks,
 		"a one-month single-analyzer query must name strictly fewer chunks than the "+
@@ -210,26 +212,86 @@ func seedPerfAnalyzers(t *testing.T, ctx context.Context, pool *pgxpool.Pool, co
 	return ids
 }
 
-// explainTouchedChunks runs EXPLAIN (FORMAT JSON) over the same
-// scoped-join shape ReadingRange uses (queries/readings.sql) and returns
-// every "_hyper_*_chunk" relation the plan names, at any nesting depth
-// (chunk exclusion at planning time removes non-matching chunks from the
-// Append node's Plans list rather than adding a filter node, so the
-// remaining "Plans" entries ARE the touched-chunk list).
-func explainTouchedChunks(t *testing.T, ctx context.Context, pool *pgxpool.Pool, analyzerID uuid.UUID, from, to time.Time) []string {
+// rangeQueryTracer is a pgx.QueryTracer that records the SQL text and bound
+// arguments of every query pgx sends over the pool it is attached to.
+// explainTouchedChunks uses it to capture the EXACT statement
+// ReadingRepository.Range hands to Postgres, so the EXPLAIN this test runs
+// is over the real repository query path, not a hand-copied stand-in for
+// it.
+type rangeQueryTracer struct {
+	mu      sync.Mutex
+	queries []struct {
+		sql  string
+		args []any
+	}
+}
+
+func (rt *rangeQueryTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	rt.queries = append(rt.queries, struct {
+		sql  string
+		args []any
+	}{sql: data.SQL, args: data.Args})
+	return ctx
+}
+
+func (rt *rangeQueryTracer) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
+
+// explainTouchedChunks runs EXPLAIN (FORMAT JSON) over the EXACT statement
+// ReadingRepository.Range sends to Postgres for this call — including
+// ReadingRange's company_id and all_buildings/building_ids scope predicates
+// (queries/readings.sql) — and returns every "_hyper_*_chunk" relation the
+// plan names, at any nesting depth (chunk exclusion at planning time removes
+// non-matching chunks from the Append node's Plans list rather than adding a
+// filter node, so the remaining "Plans" entries ARE the touched-chunk list).
+//
+// The SQL text and bound args are captured off the wire with a
+// pgx.QueryTracer attached to a pool built for this call only (copied from
+// the caller's pool config, so it targets the same isolated database): a
+// hand-written copy of ReadingRange's SQL previously used here dropped the
+// company_id and all_buildings/building_ids predicates readings.sql actually
+// has, so it silently could not have caught a regression in either one. A
+// tracer, rather than referencing sqlcgen's unexported `readingRange`
+// constant directly, also captures the ARGS sqlc binds (company_id,
+// all_buildings, building_ids, and the Kind/Timestamptz conversions
+// ReadingRange's Params type applies) exactly as the repository sends them,
+// which this test package cannot reconstruct by hand without risking the
+// same kind of drift the SQL text itself just had.
+func explainTouchedChunks(t *testing.T, ctx context.Context, pool *pgxpool.Pool, scope store.Scope, analyzerID uuid.UUID, kind model.ReadingKind, from, to time.Time) []string {
 	t.Helper()
+
+	tracer := &rangeQueryTracer{}
+	tracedCfg := pool.Config()
+	tracedCfg.ConnConfig.Tracer = tracer
+	tracedPool, err := pgxpool.NewWithConfig(ctx, tracedCfg)
+	require.NoError(t, err, "building a traced pool for EXPLAIN capture")
+	defer tracedPool.Close()
+
+	repo := postgres.NewReadingRepository(tracedPool)
+	rangeRows, err := repo.Range(ctx, scope, analyzerID, store.TimeRange{From: from, To: to}, kind)
+	require.NoError(t, err)
+	require.NotEmpty(t, rangeRows, "the captured query must return rows for its plan to be meaningful")
+
+	tracer.mu.Lock()
+	captured := tracer.queries
+	tracer.mu.Unlock()
+
+	var capturedSQL string
+	var capturedArgs []any
+	found := false
+	for _, q := range captured {
+		if !strings.Contains(q.sql, "from meter_readings mr") {
+			continue
+		}
+		require.False(t, found, "expected exactly one ReadingRange query traced on the dedicated pool, found a second")
+		capturedSQL, capturedArgs = q.sql, q.args
+		found = true
+	}
+	require.True(t, found, "ReadingRange's query was not captured off the traced pool")
+
 	var planJSON []byte
-	require.NoError(t, pool.QueryRow(ctx, `
-		explain (format json)
-		select mr.* from meter_readings mr
-		join analyzers a on a.id = mr.analyzer_id
-		where mr.analyzer_id = $1
-		  and mr.kind = 'load_profile'
-		  and mr.ts >= $2::timestamptz
-		  and mr.ts <  $3::timestamptz
-		  and a.deleted_at is null
-		order by mr.ts`,
-		analyzerID, from, to).Scan(&planJSON))
+	require.NoError(t, pool.QueryRow(ctx, "explain (format json) "+capturedSQL, capturedArgs...).Scan(&planJSON))
 
 	var plan []struct {
 		Plan map[string]any `json:"Plan"`
