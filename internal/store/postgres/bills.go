@@ -407,6 +407,13 @@ func (r *BillRepository) requireVisible(ctx context.Context, s store.Scope, bill
 // a bill write touches — its own AnalyzerID plus every member — belongs to
 // the Scope's company and one of its visible buildings. The whole write is
 // refused if any is not.
+//
+// F1 final review pass A, Important Finding 1 (fix round): this used to be
+// the ONLY guard on bills.analyzer_id and bill_members.analyzer_id — run on
+// r.pool, before r.pool.Begin, unlocked. BillCreate and BillMemberInsert
+// (queries/bills.sql) now re-validate both ids in SQL, inside the same
+// transaction as the write, so this pre-check is defence in depth (a fast,
+// friendly ErrNotFound before the round trip) rather than the sole guard.
 func (r *BillRepository) requireAnalyzersVisible(ctx context.Context, s store.Scope, analyzerID *uuid.UUID, members []uuid.UUID) error {
 	seen := make(map[uuid.UUID]struct{}, len(members)+1)
 	if analyzerID != nil {

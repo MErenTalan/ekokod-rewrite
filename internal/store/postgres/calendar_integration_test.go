@@ -305,6 +305,50 @@ func TestCalendarVacationsRangeOverlapAndInvalidRange(t *testing.T) {
 	require.ErrorIs(t, err, store.ErrInvalidRange)
 }
 
+// TestCalendarVacationsIstanbulDayBoundary is F1 final review pass A,
+// Important Finding 2's proof, reproduced as a test: Vacations converted a
+// TimeRange's instants to `date` bounds via .UTC() instead of Europe/
+// Istanbul, so a query for the Istanbul calendar day 2026-03-01 — the
+// half-open instant window [2026-02-28T21:00Z, 2026-03-01T21:00Z), since
+// Istanbul is a fixed UTC+3 with no DST — returned the WRONG single-day
+// vacation (2026-02-28's) and excluded the RIGHT one (2026-03-01's).
+//
+// Pre-fix this test fails: got contains feb28's id (wrongly included) and
+// is missing mar1's id (wrongly excluded) — exactly the report's proof.
+func TestCalendarVacationsIstanbulDayBoundary(t *testing.T) {
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 8072)
+	repo := postgres.NewCalendarRepository(pool)
+
+	feb28, err := repo.CreateVacation(ctx, tenantA.Scope, calendarVacationFixture(tenantA.Company.ID,
+		time.Date(2026, time.February, 28, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, time.February, 28, 0, 0, 0, 0, time.UTC)))
+	require.NoError(t, err)
+	mar1, err := repo.CreateVacation(ctx, tenantA.Scope, calendarVacationFixture(tenantA.Company.ID,
+		time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC)))
+	require.NoError(t, err)
+
+	istanbul, err := time.LoadLocation("Europe/Istanbul")
+	require.NoError(t, err)
+
+	// The Istanbul calendar day 2026-03-01, expressed as its own half-open
+	// midnight-to-midnight instant window in Europe/Istanbul.
+	window := store.TimeRange{
+		From: time.Date(2026, time.March, 1, 0, 0, 0, 0, istanbul),
+		To:   time.Date(2026, time.March, 2, 0, 0, 0, 0, istanbul),
+	}
+	got, err := repo.Vacations(ctx, tenantA.Scope, &window)
+	require.NoError(t, err)
+	ids := make([]uuid.UUID, 0, len(got))
+	for _, v := range got {
+		ids = append(ids, v.ID)
+	}
+	require.Contains(t, ids, mar1.ID, "the 2026-03-01 vacation must be included in the 2026-03-01 Istanbul-day window")
+	require.NotContains(t, ids, feb28.ID, "the 2026-02-28 vacation must NOT be included in the 2026-03-01 Istanbul-day window")
+}
+
 func TestCalendarRepositoryRejectsInvalidScope(t *testing.T) {
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()

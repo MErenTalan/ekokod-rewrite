@@ -260,6 +260,49 @@ func TestBillCreateRejectsCrossTenantTariffID(t *testing.T) {
 	require.Equal(t, ownTariff, *created.TariffID)
 }
 
+// TestBillCreateAndMemberInsertRejectCrossTenantAnalyzerID is F1 final
+// review pass A, Important Finding 1's probe: bills.analyzer_id and
+// bill_members.analyzer_id are stored foreign keys and must be refused even
+// under the OTHER tenant's AdminScope (binding ruling 4) — never taken as
+// given. Both are now validated in SQL, inside BillCreate's and
+// BillMemberInsert's own statements (queries/bills.sql), not only by
+// BillRepository's Go-side requireAnalyzersVisible pre-check, which still
+// runs first as defence in depth. final-fix-A-report.md records the
+// procedural proof that the SQL clauses alone — with requireAnalyzersVisible
+// temporarily disabled — still refuse both cases below, and that
+// tautologising either new clause with the pre-check still disabled lets the
+// corresponding write through.
+func TestBillCreateAndMemberInsertRejectCrossTenantAnalyzerID(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 258)
+	tenantB := testfixtures.NewTenant(t, ctx, pool, 259)
+	repo := postgres.NewBillRepository(pool)
+
+	ownBuilding := tenantA.Buildings[0].ID
+	foreignAnalyzer := tenantB.Analyzers[0].ID
+
+	// The bill's own analyzer_id (an analyzer-scope bill) naming tenant B's
+	// analyzer is refused under tenant A's AdminScope.
+	row := billFixtureRow(tenantA.Company.ID, &ownBuilding, &foreignAnalyzer, model.BillScopeAnalyzer, "2026-01")
+	_, err := repo.Create(ctx, tenantA.AdminScope, row, nil, nil)
+	require.ErrorIs(t, err, store.ErrNotFound, "bill analyzer_id naming another tenant's analyzer")
+
+	// A member analyzer naming tenant B's analyzer is refused too, even
+	// though the bill itself has no analyzer_id and one member IS visible.
+	ownAnalyzer := tenantA.Analyzers[0].ID
+	buildingRow := billFixtureRow(tenantA.Company.ID, &ownBuilding, nil, model.BillScopeBuilding, "2026-02")
+	_, err = repo.Create(ctx, tenantA.AdminScope, buildingRow, nil, []uuid.UUID{ownAnalyzer, foreignAnalyzer})
+	require.ErrorIs(t, err, store.ErrNotFound, "bill member analyzer naming another tenant's analyzer")
+
+	// Positive control: tenant B's own AdminScope may bill its own analyzer.
+	tenantBBuilding := tenantB.Buildings[0].ID
+	own := billFixtureRow(tenantB.Company.ID, &tenantBBuilding, &foreignAnalyzer, model.BillScopeAnalyzer, "2026-01")
+	created, err := repo.Create(ctx, tenantB.AdminScope, own, nil, nil)
+	require.NoError(t, err, "positive control: tenant B's own AdminScope must be able to bill its own analyzer")
+	require.Equal(t, foreignAnalyzer, *created.AnalyzerID)
+}
+
 // TestSupersedeRejectsReplacementNamingADifferentScopeSubjectOrPeriod is the
 // folded-minor probe: the replacement must keep the replaced bill's (scope,
 // subject, period) — Supersede is a recomputation of ONE bill's history, not

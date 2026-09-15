@@ -124,7 +124,7 @@ where aa.analyzer_id = an.id and aa.alarm_id = sqlc.arg(alarm_id)
 -- name: AlarmAnalyzerInsert :one
 insert into alarm_analyzers (alarm_id, analyzer_id)
 select sqlc.arg(alarm_id), sqlc.arg(analyzer_id)
-where exists (select 1 from alarms a where a.id = sqlc.arg(alarm_id) and a.company_id = sqlc.arg(company_id))
+where exists (select 1 from alarms a where a.id = sqlc.arg(alarm_id) and a.company_id = sqlc.arg(company_id) and a.deleted_at is null)
   and exists (
     select 1 from analyzers an
     where an.id = sqlc.arg(analyzer_id) and an.company_id = sqlc.arg(company_id) and an.deleted_at is null
@@ -143,19 +143,19 @@ where company_id = sqlc.arg(company_id) and deleted_at is null
 -- name: AlarmChannelList :many
 select ac.* from alarm_channels ac
 where ac.alarm_id = sqlc.arg(alarm_id)
-  and exists (select 1 from alarms a where a.id = ac.alarm_id and a.company_id = sqlc.arg(company_id))
+  and exists (select 1 from alarms a where a.id = ac.alarm_id and a.company_id = sqlc.arg(company_id) and a.deleted_at is null)
 order by ac.channel, ac.target;
 
 -- name: AlarmChannelDeleteForAlarm :exec
 delete from alarm_channels
 where alarm_id = sqlc.arg(alarm_id)
-  and exists (select 1 from alarms a where a.id = sqlc.arg(alarm_id) and a.company_id = sqlc.arg(company_id));
+  and exists (select 1 from alarms a where a.id = sqlc.arg(alarm_id) and a.company_id = sqlc.arg(company_id) and a.deleted_at is null);
 
 -- Same :one/RETURNING true reasoning as AlarmAnalyzerInsert above.
 -- name: AlarmChannelInsert :one
 insert into alarm_channels (alarm_id, channel, target)
 select sqlc.arg(alarm_id), sqlc.arg(channel), sqlc.arg(target)
-where exists (select 1 from alarms a where a.id = sqlc.arg(alarm_id) and a.company_id = sqlc.arg(company_id))
+where exists (select 1 from alarms a where a.id = sqlc.arg(alarm_id) and a.company_id = sqlc.arg(company_id) and a.deleted_at is null)
 returning true;
 
 -- Important Finding 1 and 2: alarm_events has no company_id of its own, and
@@ -165,7 +165,7 @@ returning true;
 insert into alarm_events (id, alarm_id, analyzer_id, triggered_at, message, detail, notified_at, notification_error)
 select gen_random_uuid(), sqlc.arg(alarm_id), sqlc.narg(analyzer_id), sqlc.arg(triggered_at),
        sqlc.arg(message), sqlc.narg(detail), sqlc.narg(notified_at), sqlc.narg(notification_error)
-where exists (select 1 from alarms a where a.id = sqlc.arg(alarm_id) and a.company_id = sqlc.arg(company_id))
+where exists (select 1 from alarms a where a.id = sqlc.arg(alarm_id) and a.company_id = sqlc.arg(company_id) and a.deleted_at is null)
   and (sqlc.narg(analyzer_id)::uuid is null or exists (
     select 1 from analyzers an
     where an.id = sqlc.narg(analyzer_id) and an.company_id = sqlc.arg(company_id) and an.deleted_at is null
@@ -177,11 +177,17 @@ returning *;
 -- an event with NO analyzer (a company-level condition) is visible only to a
 -- Scope with AllBuildings — otherwise this method would hand a narrow Scope
 -- another building's analyzer id and the event's own message/detail payload.
+--
+-- F1 final review pass A, Important Finding 3 (fix round): a.deleted_at is
+-- null was missing — a soft-deleted alarm's events stayed listable, in
+-- violation of ruling 4 (a child of a soft-deleted parent must not be
+-- reachable) and of AlarmVisible's own treatment of a soft-deleted alarm as
+-- not visible.
 -- name: AlarmEventList :many
 select ae.* from alarm_events ae
 join alarms a on a.id = ae.alarm_id
 left join analyzers an on an.id = ae.analyzer_id
-where a.company_id = sqlc.arg(company_id)
+where a.company_id = sqlc.arg(company_id) and a.deleted_at is null
   and (sqlc.narg(alarm_id)::uuid is null or ae.alarm_id = sqlc.narg(alarm_id))
   and (sqlc.narg(analyzer_id)::uuid is null or ae.analyzer_id = sqlc.narg(analyzer_id))
   and (not sqlc.arg(undelivered)::boolean or ae.notified_at is null)
@@ -195,10 +201,26 @@ where a.company_id = sqlc.arg(company_id)
 order by ae.triggered_at desc, ae.id
 limit sqlc.arg(limit_val) offset sqlc.arg(offset_val);
 
+-- F1 final review pass A, Important Finding 3 (fix round): MarkNotified
+-- previously checked only alarms.company_id — no a.deleted_at guard (a
+-- soft-deleted alarm's events stayed writable) and no building/analyzer
+-- visibility disjunction at all (a narrow Scope could mark ANY event in the
+-- company notified, including one on an analyzer outside its buildings, or
+-- a NULL-analyzer company-level event it can't even list). This now mirrors
+-- AlarmEventList's own visibility rule exactly, so an event unreachable by
+-- ListEvents is unreachable by MarkNotified too.
 -- name: AlarmMarkNotified :execrows
 update alarm_events ae set notified_at = sqlc.arg(notified_at), notification_error = sqlc.narg(notification_error)
 where ae.id = sqlc.arg(id)
-  and exists (select 1 from alarms a where a.id = ae.alarm_id and a.company_id = sqlc.arg(company_id));
+  and exists (select 1 from alarms a where a.id = ae.alarm_id and a.company_id = sqlc.arg(company_id) and a.deleted_at is null)
+  and (
+    (ae.analyzer_id is null and sqlc.arg(all_buildings)::boolean)
+    or (ae.analyzer_id is not null and exists (
+          select 1 from analyzers an
+          where an.id = ae.analyzer_id and an.company_id = sqlc.arg(company_id) and an.deleted_at is null
+            and (sqlc.arg(all_buildings)::boolean or an.building_id = any(sqlc.arg(building_ids)::uuid[]))
+        ))
+  );
 
 -- Important Finding 1: alarm_fired_bills has no company_id of its own and
 -- names TWO parents (alarms and bills) — both are re-validated against the
@@ -206,7 +228,7 @@ where ae.id = sqlc.arg(id)
 -- name: AlarmMarkBillFired :one
 insert into alarm_fired_bills (alarm_id, bill_id)
 select sqlc.arg(alarm_id), sqlc.arg(bill_id)
-where exists (select 1 from alarms a where a.id = sqlc.arg(alarm_id) and a.company_id = sqlc.arg(company_id))
+where exists (select 1 from alarms a where a.id = sqlc.arg(alarm_id) and a.company_id = sqlc.arg(company_id) and a.deleted_at is null)
   and exists (
     select 1 from bills b where b.id = sqlc.arg(bill_id) and b.company_id = sqlc.arg(company_id)
       and (sqlc.arg(all_buildings)::boolean or b.building_id = any(sqlc.arg(building_ids)::uuid[]))

@@ -44,7 +44,7 @@ func (q *Queries) AlarmAnalyzerDeleteVisibleForAlarm(ctx context.Context, arg Al
 const alarmAnalyzerInsert = `-- name: AlarmAnalyzerInsert :one
 insert into alarm_analyzers (alarm_id, analyzer_id)
 select $1, $2
-where exists (select 1 from alarms a where a.id = $1 and a.company_id = $3)
+where exists (select 1 from alarms a where a.id = $1 and a.company_id = $3 and a.deleted_at is null)
   and exists (
     select 1 from analyzers an
     where an.id = $2 and an.company_id = $3 and an.deleted_at is null
@@ -132,7 +132,7 @@ func (q *Queries) AlarmAnalyzerList(ctx context.Context, arg AlarmAnalyzerListPa
 const alarmChannelDeleteForAlarm = `-- name: AlarmChannelDeleteForAlarm :exec
 delete from alarm_channels
 where alarm_id = $1
-  and exists (select 1 from alarms a where a.id = $1 and a.company_id = $2)
+  and exists (select 1 from alarms a where a.id = $1 and a.company_id = $2 and a.deleted_at is null)
 `
 
 type AlarmChannelDeleteForAlarmParams struct {
@@ -148,7 +148,7 @@ func (q *Queries) AlarmChannelDeleteForAlarm(ctx context.Context, arg AlarmChann
 const alarmChannelInsert = `-- name: AlarmChannelInsert :one
 insert into alarm_channels (alarm_id, channel, target)
 select $1, $2, $3
-where exists (select 1 from alarms a where a.id = $1 and a.company_id = $4)
+where exists (select 1 from alarms a where a.id = $1 and a.company_id = $4 and a.deleted_at is null)
 returning true
 `
 
@@ -175,7 +175,7 @@ func (q *Queries) AlarmChannelInsert(ctx context.Context, arg AlarmChannelInsert
 const alarmChannelList = `-- name: AlarmChannelList :many
 select ac.alarm_id, ac.channel, ac.target from alarm_channels ac
 where ac.alarm_id = $1
-  and exists (select 1 from alarms a where a.id = ac.alarm_id and a.company_id = $2)
+  and exists (select 1 from alarms a where a.id = ac.alarm_id and a.company_id = $2 and a.deleted_at is null)
 order by ac.channel, ac.target
 `
 
@@ -349,7 +349,7 @@ const alarmEventCreate = `-- name: AlarmEventCreate :one
 insert into alarm_events (id, alarm_id, analyzer_id, triggered_at, message, detail, notified_at, notification_error)
 select gen_random_uuid(), $1, $2, $3,
        $4, $5, $6, $7
-where exists (select 1 from alarms a where a.id = $1 and a.company_id = $8)
+where exists (select 1 from alarms a where a.id = $1 and a.company_id = $8 and a.deleted_at is null)
   and ($2::uuid is null or exists (
     select 1 from analyzers an
     where an.id = $2 and an.company_id = $8 and an.deleted_at is null
@@ -405,7 +405,7 @@ const alarmEventList = `-- name: AlarmEventList :many
 select ae.id, ae.alarm_id, ae.analyzer_id, ae.triggered_at, ae.message, ae.detail, ae.notified_at, ae.notification_error from alarm_events ae
 join alarms a on a.id = ae.alarm_id
 left join analyzers an on an.id = ae.analyzer_id
-where a.company_id = $1
+where a.company_id = $1 and a.deleted_at is null
   and ($2::uuid is null or ae.alarm_id = $2)
   and ($3::uuid is null or ae.analyzer_id = $3)
   and (not $4::boolean or ae.notified_at is null)
@@ -437,6 +437,12 @@ type AlarmEventListParams struct {
 // an event with NO analyzer (a company-level condition) is visible only to a
 // Scope with AllBuildings — otherwise this method would hand a narrow Scope
 // another building's analyzer id and the event's own message/detail payload.
+//
+// F1 final review pass A, Important Finding 3 (fix round): a.deleted_at is
+// null was missing — a soft-deleted alarm's events stayed listable, in
+// violation of ruling 4 (a child of a soft-deleted parent must not be
+// reachable) and of AlarmVisible's own treatment of a soft-deleted alarm as
+// not visible.
 func (q *Queries) AlarmEventList(ctx context.Context, arg AlarmEventListParams) ([]AlarmEvent, error) {
 	rows, err := q.db.Query(ctx, alarmEventList,
 		arg.CompanyID,
@@ -632,7 +638,7 @@ func (q *Queries) AlarmList(ctx context.Context, arg AlarmListParams) ([]Alarm, 
 const alarmMarkBillFired = `-- name: AlarmMarkBillFired :one
 insert into alarm_fired_bills (alarm_id, bill_id)
 select $1, $2
-where exists (select 1 from alarms a where a.id = $1 and a.company_id = $3)
+where exists (select 1 from alarms a where a.id = $1 and a.company_id = $3 and a.deleted_at is null)
   and exists (
     select 1 from bills b where b.id = $2 and b.company_id = $3
       and ($4::boolean or b.building_id = any($5::uuid[]))
@@ -700,7 +706,15 @@ func (q *Queries) AlarmMarkIsolarForwarded(ctx context.Context, arg AlarmMarkIso
 const alarmMarkNotified = `-- name: AlarmMarkNotified :execrows
 update alarm_events ae set notified_at = $1, notification_error = $2
 where ae.id = $3
-  and exists (select 1 from alarms a where a.id = ae.alarm_id and a.company_id = $4)
+  and exists (select 1 from alarms a where a.id = ae.alarm_id and a.company_id = $4 and a.deleted_at is null)
+  and (
+    (ae.analyzer_id is null and $5::boolean)
+    or (ae.analyzer_id is not null and exists (
+          select 1 from analyzers an
+          where an.id = ae.analyzer_id and an.company_id = $4 and an.deleted_at is null
+            and ($5::boolean or an.building_id = any($6::uuid[]))
+        ))
+  )
 `
 
 type AlarmMarkNotifiedParams struct {
@@ -708,14 +722,26 @@ type AlarmMarkNotifiedParams struct {
 	NotificationError *string
 	ID                uuid.UUID
 	CompanyID         uuid.UUID
+	AllBuildings      bool
+	BuildingIds       []uuid.UUID
 }
 
+// F1 final review pass A, Important Finding 3 (fix round): MarkNotified
+// previously checked only alarms.company_id — no a.deleted_at guard (a
+// soft-deleted alarm's events stayed writable) and no building/analyzer
+// visibility disjunction at all (a narrow Scope could mark ANY event in the
+// company notified, including one on an analyzer outside its buildings, or
+// a NULL-analyzer company-level event it can't even list). This now mirrors
+// AlarmEventList's own visibility rule exactly, so an event unreachable by
+// ListEvents is unreachable by MarkNotified too.
 func (q *Queries) AlarmMarkNotified(ctx context.Context, arg AlarmMarkNotifiedParams) (int64, error) {
 	result, err := q.db.Exec(ctx, alarmMarkNotified,
 		arg.NotifiedAt,
 		arg.NotificationError,
 		arg.ID,
 		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
 	)
 	if err != nil {
 		return 0, err

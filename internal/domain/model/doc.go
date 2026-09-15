@@ -20,8 +20,13 @@
 //     TestNoFloatFieldsInModelOrStore). Money and energy are numeric in SQL
 //     and decimal.Decimal here; a float would silently round exactly the
 //     values this phase exists to keep exact.
-//   - Every time.Time is UTC, because every timestamp column is timestamptz.
-//     Business rules that need calendar boundaries convert to
+//   - Every time.Time is a UTC-equivalent instant, because every timestamp
+//     column is timestamptz: two time.Time values naming the same instant
+//     are interchangeable regardless of Location, and code must compare and
+//     store instants, never a Location. The Location on a value decoded from
+//     the database is NOT guaranteed to be UTC (pgx decodes timestamptz in
+//     time.Local) — callers that need UTC call .UTC() themselves. Business
+//     rules that need calendar boundaries convert the instant to
 //     Europe/Istanbul at the point of use, never by storing local time.
 //
 // The structs mirror the migrations in internal/store/postgres/migrations,
