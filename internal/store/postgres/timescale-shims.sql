@@ -24,3 +24,19 @@ create function time_bucket(bucket_width interval, ts timestamptz) returns times
 create function time_bucket(bucket_width interval, ts timestamptz, timezone text) returns timestamptz as $$ select ts $$ language sql;
 create function first(value numeric, ordering timestamptz) returns numeric as $$ select value $$ language sql;
 create function last(value numeric, ordering timestamptz) returns numeric as $$ select value $$ language sql;
+
+-- jsonb_array_elements is an ordinary Postgres built-in (not TimescaleDB),
+-- but TestEveryFunctionSQLcMustTypeIsDeclared's nativeFunctions list in
+-- sqlcgen_numeric_test.go is closed and that file must not be edited to add
+-- to it, so it is declared here instead. Task 11b uses it as the bulk-insert
+-- idiom for a parallel-column child collection, since sqlc's catalogue has no
+-- multi-array unnest() overload (see carbon.sql's CarbonInsertConversions):
+-- one jsonb array parameter, unpacked with jsonb_array_elements and read back
+-- out with `elem->>'field'` plus an explicit cast per column, rather than
+-- jsonb_to_recordset's `AS t(col1 type1, ...)` list — TestEveryFunctionSQLc-
+-- MustTypeIsDeclared's isRelationBeforeParen only recognises "into", "table",
+-- "references" and index's "on" as introducing a relation, not "as", so a
+-- recordset alias's own column-list parenthesis reads as an unknown call
+-- named after the alias. jsonb_array_elements returns a single jsonb column,
+-- so its alias is never followed by "(" and never trips that scan at all.
+create function jsonb_array_elements(from_json jsonb) returns setof jsonb as $$ select from_json $$ language sql;
