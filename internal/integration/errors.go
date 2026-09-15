@@ -9,12 +9,28 @@ import (
 // Sentinel error kinds (06 §1 rule 5). Every adapter failure is wrapped in
 // an *Error carrying one of these as Kind, so callers classify failures
 // with errors.Is against a small, closed set instead of parsing text.
+//
+// ErrConfig (R48/I5) is a missing/invalid configuration or precondition —
+// a missing endpoint template or placeholder, a zero multiplier, an empty
+// installation/device id, an iSolar window wider than MaxWindow, a missing
+// PM5340 base URL, a missing EPİAŞ username/password. It is deliberately
+// NOT ErrAuth: every adapter used to report these as ErrAuth (round-1's
+// documented stop-gap, "no dedicated configuration sentinel exists yet"),
+// which meant one misconfigured analyzer, or a missing endpoint
+// definition, rendered as "authentication failed" and would flag a whole
+// credential as bad-password to F3's credential-health/"re-authenticate"
+// logic. ErrConfig is non-retryable (job.ClassifyForRetry → SkipRetry,
+// same as ErrAuth) but callers must never mark a credential as
+// failed-auth, or show an "authentication failed"/"re-authenticate"
+// message, for it. A genuine 401/403 response, or a provider's own
+// "login succeeded but returned an empty token" response, remains ErrAuth.
 var (
 	ErrAuth                = errors.New("integration: authentication failed")
 	ErrRateLimited         = errors.New("integration: rate limited")
 	ErrUpstreamUnavailable = errors.New("integration: upstream unavailable")
 	ErrMalformedPayload    = errors.New("integration: malformed payload")
 	ErrNotFound            = errors.New("integration: not found")
+	ErrConfig              = errors.New("integration: configuration incomplete or invalid")
 )
 
 // Error is what every adapter call returns on failure. It carries enough
@@ -29,7 +45,7 @@ type Error struct {
 	RetryAfter time.Duration
 }
 
-// kindText renders Kind as one of the five sentinels' own text — never
+// kindText renders Kind as one of the six sentinels' own text — never
 // Kind.Error() directly. Kind is documented as "one of the sentinels
 // above", but nothing in the type system enforces that: a caller can build
 // an *Error with any error as Kind, including one built from live request
@@ -49,6 +65,8 @@ func kindText(kind error) string {
 		return ErrMalformedPayload.Error()
 	case errors.Is(kind, ErrNotFound):
 		return ErrNotFound.Error()
+	case errors.Is(kind, ErrConfig):
+		return ErrConfig.Error()
 	default:
 		return "unknown"
 	}
@@ -56,7 +74,7 @@ func kindText(kind error) string {
 
 // Error renders using only Provider, Op, Kind and HTTPStatus — never a URL,
 // query string or body — e.g. "gridbox load_profiles: integration: rate
-// limited (HTTP 429)". Kind renders as one of the five sentinel strings
+// limited (HTTP 429)". Kind renders as one of the six sentinel strings
 // (via kindText) or "unknown"; it never echoes an arbitrary Kind error's
 // own text, which could otherwise carry request data into an operational
 // message.
@@ -70,8 +88,8 @@ func (e *Error) Unwrap() error { return e.Kind }
 
 // Retryable reports whether err is an integration failure that is worth
 // retrying: rate limiting and upstream unavailability are transient by
-// nature, while auth, malformed-payload and not-found failures will not
-// resolve themselves on a retry.
+// nature, while auth, malformed-payload, not-found and config failures
+// will not resolve themselves on a retry.
 func Retryable(err error) bool {
 	return errors.Is(err, ErrRateLimited) || errors.Is(err, ErrUpstreamUnavailable)
 }

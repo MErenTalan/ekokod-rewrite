@@ -83,8 +83,14 @@ func (s *Source) client(creds integration.Credentials) *httpx.Client {
 	})
 }
 
+// configError reports a deliberately-classified configuration problem: a
+// missing/blank PM5340 base URL, or (wrapDo) a malformed request template.
+// R48/I5: this used to report ErrAuth (round 1's documented stop-gap,
+// before integration.ErrConfig existed) — non-retryable like a rejected
+// password, but NOT an authentication failure; F3's credential-health
+// logic must never treat it as one. Use ErrConfig.
 func configError(op string) error {
-	return &integration.Error{Kind: integration.ErrAuth, Provider: integration.ProviderPM5340, Op: op}
+	return &integration.Error{Kind: integration.ErrConfig, Provider: integration.ProviderPM5340, Op: op}
 }
 
 func wrapDo(err error, op string) error {

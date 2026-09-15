@@ -169,13 +169,16 @@ func (c *Client) PlantMinuteSeries(ctx context.Context, creds integration.Creden
 }
 
 // checkMaxWindow refuses (R42), before any call, a [from, to) wider than
-// max or empty/inverted (to <= from). Non-retryable — see configError.
+// max or empty/inverted (to <= from). Non-retryable — R48/I5: ErrConfig
+// (this used to report ErrAuth; an over-wide window request is a caller
+// precondition failure, not an authentication failure — see configError's
+// doc in client.go for the same reclassification).
 func checkMaxWindow(from, to time.Time, max time.Duration) error {
 	if !from.Before(to) {
-		return &integration.Error{Kind: integration.ErrAuth, Provider: integration.ProviderISolar, Op: "window"}
+		return &integration.Error{Kind: integration.ErrConfig, Provider: integration.ProviderISolar, Op: "window"}
 	}
 	if to.Sub(from) > max {
-		return &integration.Error{Kind: integration.ErrAuth, Provider: integration.ProviderISolar, Op: "window"}
+		return &integration.Error{Kind: integration.ErrConfig, Provider: integration.ProviderISolar, Op: "window"}
 	}
 	return nil
 }

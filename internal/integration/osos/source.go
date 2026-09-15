@@ -110,17 +110,18 @@ func (s *Source) client(creds integration.Credentials) *httpx.Client {
 }
 
 // missingEndpointErr and wrapConfigErr both classify OSOS's config/credential
-// errors as ErrAuth, never ErrMalformedPayload (adapter-patterns.md item 9,
-// task-6-fix1-findings.md folded minor "missing endpoint key / placeholder
-// -> *integration.Error with a deliberate Kind"). Endpoints is a field of
-// Credentials (06 §1): a template this adapter cannot even build a request
-// from means the credential is incomplete for this call, which is the same
-// class of "we cannot proceed as this caller" failure Verify reports for a
-// rejected password — ErrMalformedPayload would instead wrongly claim "the
-// call went out and the provider's response was bad", which never happened.
-// Kind chosen: ErrAuth.
+// errors as ErrConfig (R48/I5), never ErrMalformedPayload (adapter-patterns.md
+// item 9, task-6-fix1-findings.md folded minor "missing endpoint key /
+// placeholder -> *integration.Error with a deliberate Kind"). Endpoints is a
+// field of Credentials (06 §1): a template this adapter cannot even build a
+// request from means the credential is incomplete for this call —
+// ErrMalformedPayload would instead wrongly claim "the call went out and
+// the provider's response was bad", which never happened. Round 1 chose
+// ErrAuth for lack of a dedicated config Kind; now that integration.ErrConfig
+// exists, use it — a missing endpoint template is not an authentication
+// failure, and F3's credential-health logic must never treat it as one.
 func missingEndpointErr(op string) error {
-	return &integration.Error{Kind: integration.ErrAuth, Provider: integration.ProviderOSOS, Op: op}
+	return &integration.Error{Kind: integration.ErrConfig, Provider: integration.ProviderOSOS, Op: op}
 }
 
 // wrapConfigErr classifies an error from cl.Do that is not already an
@@ -403,11 +404,15 @@ func (s *Source) FetchReadings(ctx context.Context, creds integration.Credential
 	// multiplier or an empty installation number can never produce a
 	// meaningful reading, so fail before any network call rather than
 	// silently fetching data that will be discarded or mis-scaled.
+	// R48/I5: ErrConfig, not ErrMalformedPayload (round 1's inconsistency
+	// vs. ARIL/PM5340, which already routed the same two preconditions
+	// through their own configError) — this is a caller-input precondition
+	// failure, never a payload OSOS actually sent.
 	if req.Multiplier.IsZero() {
-		return integration.FetchResult{}, &integration.Error{Kind: integration.ErrMalformedPayload, Provider: integration.ProviderOSOS, Op: "energy_values"}
+		return integration.FetchResult{}, &integration.Error{Kind: integration.ErrConfig, Provider: integration.ProviderOSOS, Op: "energy_values"}
 	}
 	if req.Point.InstallationNumber == "" {
-		return integration.FetchResult{}, &integration.Error{Kind: integration.ErrMalformedPayload, Provider: integration.ProviderOSOS, Op: "energy_values"}
+		return integration.FetchResult{}, &integration.Error{Kind: integration.ErrConfig, Provider: integration.ProviderOSOS, Op: "energy_values"}
 	}
 
 	cl := s.client(creds)

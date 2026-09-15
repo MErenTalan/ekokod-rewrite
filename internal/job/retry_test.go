@@ -19,12 +19,27 @@ func TestClassifyForRetrySkipsNonRetryableKinds(t *testing.T) {
 		{&integration.Error{Kind: integration.ErrAuth}, true},
 		{&integration.Error{Kind: integration.ErrMalformedPayload}, true},
 		{&integration.Error{Kind: integration.ErrNotFound}, true},
+		{&integration.Error{Kind: integration.ErrConfig}, true},
 		{&integration.Error{Kind: integration.ErrRateLimited}, false},
 		{&integration.Error{Kind: integration.ErrUpstreamUnavailable}, false},
 		{errors.New("db down"), false},
 	} {
 		require.Equal(t, tc.skip, errors.Is(job.ClassifyForRetry(tc.err), asynq.SkipRetry), "%v", tc.err)
 	}
+}
+
+// TestClassifyForRetryConfigIsNotAuth is R48/I5's classification-contract
+// regression: ErrConfig must skip retry (config errors are non-retryable,
+// same as ErrAuth) WITHOUT ever satisfying errors.Is(_, integration.ErrAuth)
+// — a caller building F3's credential-health/"re-authenticate" logic on
+// errors.Is(err, integration.ErrAuth) must never see a config error (a
+// missing endpoint template, a zero multiplier, …) misclassified as a
+// failed credential.
+func TestClassifyForRetryConfigIsNotAuth(t *testing.T) {
+	wrapped := job.ClassifyForRetry(&integration.Error{Kind: integration.ErrConfig, Op: "config:token"})
+	require.ErrorIs(t, wrapped, asynq.SkipRetry)
+	require.ErrorIs(t, wrapped, integration.ErrConfig)
+	require.NotErrorIs(t, wrapped, integration.ErrAuth)
 }
 
 func TestRetryDelayIsBoundedAndHonoursRetryAfter(t *testing.T) {

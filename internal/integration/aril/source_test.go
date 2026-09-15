@@ -551,6 +551,40 @@ func TestARILMaxDemandIsMonthlyMaximum(t *testing.T) {
 	requireDecimalEqual(t, "75", res.Readings[0].MaxDemandKw) // max(50,75,60) from aril_current_endexes.json
 }
 
+// TestARILBillingResumeWindowKeepsMaxDemand is R49/C1's regression test
+// (final-review-A-report.md's runtime probe
+// TestProbeARILBillingResumeWindowDropsMaxDemand): a cursor-driven resume
+// fetch starts exactly AT the stored end_of_month_endexes reading's own Ts
+// (inclusive resume, R4) — here Sep 1 12:00 Istanbul, the same fixture
+// reading TestARILMaxDemandIsMonthlyMaximum exercises — so every
+// current_endexes row EARLIER in the same month (00:30/01:00/01:30 in
+// aril_current_endexes.json, MaxDemand 50/75/60) falls OUTSIDE
+// [resumeFrom, resumeTo) when that second call is bounded by req.From/To
+// like the first. The computed max demand then silently becomes <nil>,
+// which the store upserts over a previously-stored 75 (readings.go:131
+// "max_demand_kw = excluded.max_demand_kw"). Before the fix this asserts
+// "75" and FAILS with "" (nil) — see final-fix-X-report.md for the
+// observed RED output.
+func TestARILBillingResumeWindowKeepsMaxDemand(t *testing.T) {
+	monthStart, _ := istanbulDay(2026, 9, 1)
+	resumeFrom := monthStart.Add(12 * time.Hour) // Sep 1 12:00 Istanbul == eom reading's own Ts
+	resumeTo := resumeFrom.Add(30 * 24 * time.Hour)
+
+	srv := fake.NewTLSServer(t,
+		arilAuthRoute(t),
+		fake.Route{Method: http.MethodPost, Path: "/aril/end-of-month-endexes", Respond: fake.JSON(200, fake.Fixture(t, "aril", "aril_end_of_month.json"))},
+		fake.Route{Method: http.MethodPost, Path: "/aril/current-endexes", Respond: fake.JSON(200, fake.Fixture(t, "aril", "aril_current_endexes.json"))},
+	)
+	pool, _ := arilTestPool(t, srv)
+	src := arilNewSource(pool, 0)
+	creds := arilTestCreds(srv)
+
+	res, err := src.FetchReadings(context.Background(), creds, arilTestRequest(model.ReadingKindBilling, resumeFrom, resumeTo, decimal.NewFromInt(1)))
+	require.NoError(t, err)
+	require.Len(t, res.Readings, 1)
+	requireDecimalEqual(t, "75", res.Readings[0].MaxDemandKw) // max(50,75,60): the whole of September, not just [resumeFrom, resumeTo)
+}
+
 func TestARILProfileDateIsIstanbulLocal(t *testing.T) {
 	from, to := istanbulDay(2026, 9, 1)
 	body := []byte(`{"LoadProfiles":[{"ProfileDate":20260901100000,"TSum":"1"}]}`)
@@ -817,8 +851,8 @@ func TestARILDuplicateTimestampConflictWarns(t *testing.T) {
 
 // TestARILConfigErrorsAreDeliberate is adapter review patterns 9 and 12: a
 // missing endpoint template, a blank OwnerSerno or a zero multiplier is
-// reported as a deliberately-classified *integration.Error, before ANY
-// HTTP call is attempted.
+// reported as a deliberately-classified *integration.Error (ErrConfig —
+// R48/I5), before ANY HTTP call is attempted, and MUST NOT be ErrAuth.
 func TestARILConfigErrorsAreDeliberate(t *testing.T) {
 	from, to := istanbulDay(2026, 9, 1)
 
@@ -830,7 +864,8 @@ func TestARILConfigErrorsAreDeliberate(t *testing.T) {
 		delete(creds.Endpoints, "owner_consumptions")
 
 		_, err := src.FetchReadings(context.Background(), creds, arilTestRequest(model.ReadingKindLoadProfile, from, to, decimal.NewFromInt(1)))
-		require.ErrorIs(t, err, integration.ErrAuth)
+		require.ErrorIs(t, err, integration.ErrConfig)
+		require.NotErrorIs(t, err, integration.ErrAuth)
 		var ierr *integration.Error
 		require.ErrorAs(t, err, &ierr)
 		require.Equal(t, "config:owner_consumptions", ierr.Op)
@@ -846,7 +881,8 @@ func TestARILConfigErrorsAreDeliberate(t *testing.T) {
 		req.Point.InstallationNumber = ""
 
 		_, err := src.FetchReadings(context.Background(), creds, req)
-		require.ErrorIs(t, err, integration.ErrAuth)
+		require.ErrorIs(t, err, integration.ErrConfig)
+		require.NotErrorIs(t, err, integration.ErrAuth)
 		require.Empty(t, srv.Requests())
 	})
 
@@ -859,7 +895,8 @@ func TestARILConfigErrorsAreDeliberate(t *testing.T) {
 		req.Point.DefinitionType = nil
 
 		_, err := src.FetchReadings(context.Background(), creds, req)
-		require.ErrorIs(t, err, integration.ErrAuth)
+		require.ErrorIs(t, err, integration.ErrConfig)
+		require.NotErrorIs(t, err, integration.ErrAuth)
 		require.Empty(t, srv.Requests())
 	})
 
@@ -870,7 +907,8 @@ func TestARILConfigErrorsAreDeliberate(t *testing.T) {
 		creds := arilTestCreds(srv)
 
 		_, err := src.FetchReadings(context.Background(), creds, arilTestRequest(model.ReadingKindLoadProfile, from, to, decimal.Zero))
-		require.ErrorIs(t, err, integration.ErrAuth)
+		require.ErrorIs(t, err, integration.ErrConfig)
+		require.NotErrorIs(t, err, integration.ErrAuth)
 		require.Empty(t, srv.Requests())
 	})
 }
@@ -903,9 +941,16 @@ func TestARILAuthenticationNeverRetries(t *testing.T) {
 // pattern 5/8) -------------------------------------------------------------
 
 // TestARILDiscoverPageBudgetLimitsPages proves Options.PageBudget stops
-// analyzers_list paging after that many pages, without erroring, and that
-// a smaller-than-default budget genuinely truncates (request-count
+// analyzers_list paging after that many pages, and that a smaller-than-
+// default budget genuinely truncates the REQUEST count (request-count
 // checked, not just a result-count check, per adapter review pattern 5).
+// It does NOT silently return the partial result: page 1 is a FULL page
+// (subscriptionPageSize=1000 rows), the provider-shape signal that more
+// data may exist, so exhausting the budget there is exactly M8/R44's
+// "budget exhaustion is a non-retryable error, never a quiet truncation"
+// — see TestARILDiscoverPageBudgetExceededIsNonRetryable below for the
+// full assertion on the returned error; this test's own job is only the
+// request-count half.
 func TestARILDiscoverPageBudgetLimitsPages(t *testing.T) {
 	srv := fake.NewTLSServer(t,
 		arilAuthRoute(t),
@@ -918,9 +963,8 @@ func TestARILDiscoverPageBudgetLimitsPages(t *testing.T) {
 	src := arilNewSource(pool, 1) // budget of exactly one page
 	creds := arilTestCreds(srv)
 
-	points, err := src.DiscoverMeteringPoints(context.Background(), creds)
-	require.NoError(t, err)
-	require.Len(t, points, 1000, "page 1's own 1000 rows, page 2 never fetched")
+	_, err := src.DiscoverMeteringPoints(context.Background(), creds)
+	require.Error(t, err, "M8/R44: budget exhaustion on a FULL last page must error, not silently truncate")
 
 	var calls int
 	for _, r := range srv.Requests() {
@@ -929,6 +973,34 @@ func TestARILDiscoverPageBudgetLimitsPages(t *testing.T) {
 		}
 	}
 	require.Equal(t, 1, calls, "PageBudget=1 must stop after exactly one page")
+}
+
+// TestARILDiscoverPageBudgetExceededIsNonRetryable is M8's regression:
+// analyzers_list's page budget exhaustion, with the last page still FULL
+// (subscriptionPageSize rows — the provider-shape signal that more data
+// may exist), is a deliberately-classified, non-retryable
+// *integration.Error — never a silent partial-result success. Before the
+// fix, DiscoverMeteringPoints returned (points, nil) here, truncating at
+// PageBudget×subscriptionPageSize with no indication anything was cut off.
+func TestARILDiscoverPageBudgetExceededIsNonRetryable(t *testing.T) {
+	srv := fake.NewTLSServer(t,
+		arilAuthRoute(t),
+		fake.Route{Method: http.MethodPost, Path: "/aril/analyzers-list", Respond: fake.Sequence(
+			fake.JSON(200, fake.Fixture(t, "aril", "aril_subscriptions_page1.json")),
+			fake.JSON(200, fake.Fixture(t, "aril", "aril_subscriptions_page1.json")),
+		)},
+	)
+	pool, _ := arilTestPool(t, srv)
+	src := arilNewSource(pool, 2)
+	creds := arilTestCreds(srv)
+
+	points, err := src.DiscoverMeteringPoints(context.Background(), creds)
+	require.Nil(t, points)
+	require.Error(t, err)
+	require.False(t, integration.Retryable(err), "page-budget exhaustion must be non-retryable")
+	var ierr *integration.Error
+	require.ErrorAs(t, err, &ierr)
+	require.Equal(t, "analyzers_list", ierr.Op)
 }
 
 // --- helpers ---------------------------------------------------------------

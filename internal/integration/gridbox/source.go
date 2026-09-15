@@ -122,14 +122,14 @@ var gridboxEndpointKeys = []string{"token", "last_success_date", "last_endex", "
 // configError reports a deliberately-classified configuration problem: a
 // missing/blank endpoint template, or (fetchConfigError) a blank wiring
 // number. Neither is a payload GridBox ever sent us, so ErrMalformedPayload
-// is the wrong Kind (adapter review pattern 9); task-7-brief.md defines no
-// dedicated configuration sentinel, and Task 1's errors.go has none either,
-// so — per the review's own explicitly sanctioned fallback ("or ErrAuth if
-// credentials incomplete") — this is reported as ErrAuth: an incomplete
-// credential/endpoint configuration is, like a rejected password, a
-// "this account cannot be used until fixed" state that must not be retried.
+// is the wrong Kind (adapter review pattern 9). R48/I5: this used to report
+// ErrAuth (round 1's documented stop-gap, before integration.ErrConfig
+// existed) — an incomplete credential/endpoint configuration is non-
+// retryable like a rejected password, but it is NOT an authentication
+// failure, and F3's credential-health logic must never treat it as one.
+// integration.ErrConfig now exists precisely for this; use it.
 func configError(op string) error {
-	return &integration.Error{Kind: integration.ErrAuth, Provider: integration.ProviderGridBox, Op: op}
+	return &integration.Error{Kind: integration.ErrConfig, Provider: integration.ProviderGridBox, Op: op}
 }
 
 // tokenConfigError validates the one endpoint Verify/DiscoverMeteringPoints/
@@ -299,10 +299,23 @@ func (s *Source) DiscoverMeteringPoints(ctx context.Context, creds integration.C
 }
 
 // FetchReadings is 06 §3's Flow, steps 1-2, for one kind: authenticate,
-// bound the window from below with last_success_date, always fetch
-// last_endex (multiplier priority 1, and — kind == current_index — the
-// call's only data), then either map that single snapshot or page through
-// the kind's windowed endpoint.
+// cap the window from ABOVE with last_success_date (R50/R18/R37 re-ruled —
+// see below), always fetch last_endex (multiplier priority 1, and — kind
+// == current_index — the call's only data), then either map that single
+// snapshot or page through the kind's windowed endpoint.
+//
+// R50/R18/R37 re-ruling: last_success_date is the PROVIDER's own high-water
+// mark, not this pipeline's cursor. Round 1 used it to raise `from`, which
+// would silently skip every row between the pipeline's own cursor and that
+// mark the moment a row at or after the mark persisted (I1's "part 2"). The
+// pipeline's cursor (req.From, resolved by ingest.resolveFetchWindow) is
+// the only thing allowed to govern From. last_success_date is used here
+// only to cap `to`: this adapter must never ask GridBox for data beyond
+// what GridBox itself has ever successfully produced for this wiring
+// number — legacy never bounded a request window with it at all (it only
+// stored it as `lastLoadProfileDate`, gridbox/refresh/route.ts:142), so
+// capping `to` is this adapter's own conservative addition, not a legacy
+// behaviour being replicated.
 func (s *Source) FetchReadings(ctx context.Context, creds integration.Credentials, req integration.FetchRequest) (integration.FetchResult, error) {
 	wiringNo := req.Point.InstallationNumber
 	if err := fetchConfigError(creds, wiringNo); err != nil {
@@ -326,9 +339,15 @@ func (s *Source) FetchReadings(ctx context.Context, creds integration.Credential
 	if decErr != nil {
 		return integration.FetchResult{}, &integration.Error{Kind: integration.ErrMalformedPayload, Provider: integration.ProviderGridBox, Op: "last_success_date"}
 	}
-	if lsd.LastSuccessDate != nil {
-		if t, parseErr := normalize.ISO8601(*lsd.LastSuccessDate); parseErr == nil && t.After(from) {
-			from = t
+	if trimmed := strings.TrimSpace(lsd); trimmed != "" {
+		// Cap To only (never raise From — see the doc above): a window
+		// that would reach past the provider's own last success is
+		// shortened to end there instead. When that leaves an empty or
+		// inverted window (to <= from — the cursor is already at or past
+		// the provider's high-water mark), the `!from.Before(to)`
+		// short-circuit a few lines below reports a clean empty result.
+		if t, parseErr := normalize.ISO8601(trimmed); parseErr == nil && t.Before(to) {
+			to = t
 		}
 	}
 
@@ -343,7 +362,7 @@ func (s *Source) FetchReadings(ctx context.Context, creds integration.Credential
 	}
 
 	if !from.Before(to) {
-		mult := ResolveMultiplier(&lastEndex, nil)
+		mult := ResolveMultiplier(&lastEndex, nil, req.Multiplier)
 		return integration.FetchResult{ResolvedMultiplier: &mult}, nil
 	}
 
@@ -390,10 +409,10 @@ func (s *Source) call(ctx context.Context, client *httpx.Client, token, op, temp
 // (model.MeterReading.Raw — adapter review pattern 14: never a
 // re-marshalled struct).
 func (s *Source) currentIndexResult(req integration.FetchRequest, wiringNo string, lastEndex LastEndex, raw json.RawMessage, from, to time.Time) integration.FetchResult {
-	mult := ResolveMultiplier(&lastEndex, nil)
+	mult := ResolveMultiplier(&lastEndex, nil, req.Multiplier)
 	var warnings []integration.Warning
-	if mult.Source == integration.MultiplierFallbackOne {
-		warnings = append(warnings, fallbackWarning(wiringNo))
+	if !mult.ProviderResolved {
+		warnings = append(warnings, fallbackWarning(wiringNo, mult))
 	}
 
 	ts, field, tsErr := resolveTimestamp(lastEndex.register)
@@ -509,9 +528,9 @@ func (s *Source) windowedResult(ctx context.Context, client *httpx.Client, token
 // re-sends the same snapshot across overlapping windows) is deduplicated
 // silently, since it carries no new information and no conflict.
 func (s *Source) finishWindowed(req integration.FetchRequest, wiringNo string, lastEndex LastEndex, pending []pendingRow, profiles []LoadProfileRow, warnings []integration.Warning, next *time.Time) integration.FetchResult {
-	mult := ResolveMultiplier(&lastEndex, profiles)
-	if mult.Source == integration.MultiplierFallbackOne {
-		warnings = append(warnings, fallbackWarning(wiringNo))
+	mult := ResolveMultiplier(&lastEndex, profiles, req.Multiplier)
+	if !mult.ProviderResolved {
+		warnings = append(warnings, fallbackWarning(wiringNo, mult))
 	}
 
 	mapped := make([]model.MeterReading, 0, len(pending))
@@ -584,14 +603,23 @@ func (s *Source) stamp(reading model.MeterReading, req integration.FetchRequest,
 	return reading
 }
 
-// fallbackWarning is 06 §3 "Multiplier resolution" priority 3's required
+// fallbackWarning is 06 §3 "Multiplier resolution" priority 3/4's required
 // warning, naming the wiring number (Task 7 brief's acceptance test: "res.
 // Warnings contains exactly one WarnMultiplierFallback naming the wiring
-// number").
-func fallbackWarning(wiringNo string) integration.Warning {
+// number"). mult.Source distinguishes R51's two not-provider-resolved
+// outcomes: reusing the analyzer's own stored multiplier (informational —
+// nothing was guessed) from the true fallback-to-1 (06 §3's own "silently
+// assuming 1 can misprice an entire account" warning).
+func fallbackWarning(wiringNo string, mult integration.ResolvedMultiplier) integration.Warning {
+	if mult.Source == integration.MultiplierFromRequest {
+		return integration.Warning{
+			Code:   integration.WarnMultiplierFallback,
+			Detail: fmt.Sprintf("wiring %s: no multiplier source available (no last_endex.Multiplier, no usable load-profile ratio); reusing the analyzer's stored multiplier %s (not provider-resolved)", wiringNo, mult.Value.String()),
+		}
+	}
 	return integration.Warning{
 		Code:   integration.WarnMultiplierFallback,
-		Detail: fmt.Sprintf("wiring %s: no multiplier source available (no last_endex.Multiplier, no usable load-profile ratio); falling back to 1", wiringNo),
+		Detail: fmt.Sprintf("wiring %s: no multiplier source available (no last_endex.Multiplier, no usable load-profile ratio, no stored multiplier); falling back to 1", wiringNo),
 	}
 }
 
@@ -715,8 +743,13 @@ func decodeTokenResponse(body []byte) (tokenResponse, error) {
 	return v, err
 }
 
-func decodeLastSuccessDate(body json.RawMessage) (lastSuccessDateResponse, error) {
-	var v lastSuccessDateResponse
+// decodeLastSuccessDate decodes last_success_date's ResultObject as a bare
+// string (R50 — see wire.go's doc above where lastSuccessDateResponse used
+// to be). A JSON `null` ResultObject unmarshals into "" with no error (Go's
+// documented null-into-non-pointer behaviour), which the caller treats the
+// same as an absent value.
+func decodeLastSuccessDate(body json.RawMessage) (string, error) {
+	var v string
 	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.UseNumber()
 	err := dec.Decode(&v)

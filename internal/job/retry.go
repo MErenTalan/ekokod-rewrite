@@ -12,19 +12,20 @@ import (
 
 // ClassifyForRetry wraps err with asynq.SkipRetry for the integration
 // failure kinds that will not resolve themselves on a retry — auth,
-// malformed payload, not found — so asynq stops after the first attempt
-// instead of burning the retry budget on a task that can never succeed. A
-// nil err, a retryable integration error (rate limited, upstream
-// unavailable) and any error that is not an *integration.Error at all are
-// returned unchanged, so asynq's ordinary retry/backoff policy applies to
-// them.
+// malformed payload, not found, config (R48/I5) — so asynq stops after the
+// first attempt instead of burning the retry budget on a task that can
+// never succeed. A nil err, a retryable integration error (rate limited,
+// upstream unavailable) and any error that is not an *integration.Error at
+// all are returned unchanged, so asynq's ordinary retry/backoff policy
+// applies to them.
 func ClassifyForRetry(err error) error {
 	if err == nil {
 		return nil
 	}
 	if errors.Is(err, integration.ErrAuth) ||
 		errors.Is(err, integration.ErrMalformedPayload) ||
-		errors.Is(err, integration.ErrNotFound) {
+		errors.Is(err, integration.ErrNotFound) ||
+		errors.Is(err, integration.ErrConfig) {
 		return SkipRetry(err)
 	}
 	return err

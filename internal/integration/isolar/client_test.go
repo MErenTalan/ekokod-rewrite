@@ -450,10 +450,13 @@ func TestISolarHeadersCarrySecretsOnlyInHeaders(t *testing.T) {
 	require.NotContains(t, string(reqs[0].Body), fixtureAccessToken)
 }
 
-// TestISolarConfigErrorsAreErrAuth: a missing endpoint template or a missing
-// credential-shaped Extra value is refused before any request is sent, with
-// the chosen config-error Kind (ErrAuth — see client.go's configError doc).
-func TestISolarConfigErrorsAreErrAuth(t *testing.T) {
+// TestISolarConfigErrorsAreErrConfig: a missing endpoint template or a
+// missing credential-shaped Extra value is refused before any request is
+// sent, with the chosen config-error Kind (ErrConfig — R48/I5; see
+// client.go's configError doc) and MUST NOT be ErrAuth, so F3's
+// credential-health logic never treats a misconfiguration as a rejected
+// credential.
+func TestISolarConfigErrorsAreErrConfig(t *testing.T) {
 	srv := fake.NewTLSServer(t)
 	c := isolar.New(isolarTestPool(t, srv), isolar.Options{Clock: clock.NewFake(fixtureFrom)})
 
@@ -461,28 +464,32 @@ func TestISolarConfigErrorsAreErrAuth(t *testing.T) {
 		creds := isolarTestCreds(srv)
 		delete(creds.Endpoints, isolarOpGetDevicePointMinuteDataList)
 		_, err := c.DeviceMinuteSeries(context.Background(), creds, []string{"FX1001"}, fixtureFrom, fixtureTo)
-		require.ErrorIs(t, err, integration.ErrAuth)
+		require.ErrorIs(t, err, integration.ErrConfig)
+		require.NotErrorIs(t, err, integration.ErrAuth)
 	})
 
 	t.Run("missing gateway", func(t *testing.T) {
 		creds := isolarTestCreds(srv)
 		delete(creds.Endpoints, isolarEndpointGateway)
 		_, err := c.DeviceMinuteSeries(context.Background(), creds, []string{"FX1001"}, fixtureFrom, fixtureTo)
-		require.ErrorIs(t, err, integration.ErrAuth)
+		require.ErrorIs(t, err, integration.ErrConfig)
+		require.NotErrorIs(t, err, integration.ErrAuth)
 	})
 
 	t.Run("missing app_key", func(t *testing.T) {
 		creds := isolarTestCreds(srv)
 		delete(creds.Extra, "app_key")
 		_, err := c.DeviceMinuteSeries(context.Background(), creds, []string{"FX1001"}, fixtureFrom, fixtureTo)
-		require.ErrorIs(t, err, integration.ErrAuth)
+		require.ErrorIs(t, err, integration.ErrConfig)
+		require.NotErrorIs(t, err, integration.ErrAuth)
 	})
 
 	t.Run("missing access_token", func(t *testing.T) {
 		creds := isolarTestCreds(srv)
 		delete(creds.Extra, "access_token")
 		_, err := c.DeviceMinuteSeries(context.Background(), creds, []string{"FX1001"}, fixtureFrom, fixtureTo)
-		require.ErrorIs(t, err, integration.ErrAuth)
+		require.ErrorIs(t, err, integration.ErrConfig)
+		require.NotErrorIs(t, err, integration.ErrAuth)
 	})
 
 	require.Empty(t, srv.Requests(), "a config error must never reach the network")

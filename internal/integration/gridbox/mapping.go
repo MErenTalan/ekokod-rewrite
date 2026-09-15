@@ -128,21 +128,31 @@ func mapRegisters(r register, m decimal.Decimal) (model.MeterReading, error) {
 //     accepting it as-is would silently zero out every register it is
 //     applied to, the same class of silent misprice 06 §3 calls out for
 //     the fallback-to-1 case (adapter review pattern 12's "zero multiplier
-//     … error/skip before use").
+//     … error/skip before use"). ProviderResolved: true.
 //  2. Derived from the first row of profiles where both
 //     ActiveEndexWithMultiplier and a non-zero ActiveEndex are present, as
 //     ActiveEndexWithMultiplier / ActiveEndex (decimal division,
 //     DivRound(…, 6)). A row with a zero or absent ActiveEndex, or an
 //     absent ActiveEndexWithMultiplier, is skipped in favour of the next.
-//  3. Fall back to 1. The caller (not this pure function) is responsible
-//     for recording WarnMultiplierFallback — 06 §3 "silently assuming 1
-//     can misprice an entire account".
+//     ProviderResolved: true.
+//  3. stored (FetchRequest.Multiplier — R51/I2), when it is strictly
+//     positive: the analyzer's own already-known multiplier, reused rather
+//     than assumed-to-be-1 when this call's kind (daily, reset,
+//     current_index, billing — none of which carries its own multiplier
+//     source) has neither of the two provider sources above.
+//     ProviderResolved: FALSE — this did not come from the provider THIS
+//     call, so the pipeline must never treat it as new information to
+//     persist (see ResolvedMultiplier's doc).
+//  4. Fall back to 1, when stored is also zero/unset. ProviderResolved:
+//     false. The caller (not this pure function) is responsible for
+//     recording WarnMultiplierFallback — 06 §3 "silently assuming 1 can
+//     misprice an entire account".
 //
 // Exported so it is tested directly, independent of any HTTP call.
-func ResolveMultiplier(lastEndex *LastEndex, profiles []LoadProfileRow) integration.ResolvedMultiplier {
+func ResolveMultiplier(lastEndex *LastEndex, profiles []LoadProfileRow, stored decimal.Decimal) integration.ResolvedMultiplier {
 	if lastEndex != nil && lastEndex.Multiplier != nil {
 		if v, err := normalize.JSONNumber(*lastEndex.Multiplier); err == nil && v.IsPositive() {
-			return integration.ResolvedMultiplier{Value: v, Source: integration.MultiplierFromLastEndex}
+			return integration.ResolvedMultiplier{Value: v, Source: integration.MultiplierFromLastEndex, ProviderResolved: true}
 		}
 	}
 
@@ -158,8 +168,12 @@ func ResolveMultiplier(lastEndex *LastEndex, profiles []LoadProfileRow) integrat
 		if err != nil || den.IsZero() {
 			continue
 		}
-		return integration.ResolvedMultiplier{Value: num.DivRound(den, 6), Source: integration.MultiplierFromLoadProfile}
+		return integration.ResolvedMultiplier{Value: num.DivRound(den, 6), Source: integration.MultiplierFromLoadProfile, ProviderResolved: true}
 	}
 
-	return integration.ResolvedMultiplier{Value: decimal.NewFromInt(1), Source: integration.MultiplierFallbackOne}
+	if stored.IsPositive() {
+		return integration.ResolvedMultiplier{Value: stored, Source: integration.MultiplierFromRequest, ProviderResolved: false}
+	}
+
+	return integration.ResolvedMultiplier{Value: decimal.NewFromInt(1), Source: integration.MultiplierFallbackOne, ProviderResolved: false}
 }

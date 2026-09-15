@@ -52,7 +52,8 @@ func TestISolarAuthorizeURLRequiresCloudID(t *testing.T) {
 	delete(creds.Endpoints, isolarEndpointCloudID)
 
 	_, err := c.AuthorizeURL(creds, "https://app.example.invalid/callback")
-	require.ErrorIs(t, err, integration.ErrAuth)
+	require.ErrorIs(t, err, integration.ErrConfig) // R48/I5
+	require.NotErrorIs(t, err, integration.ErrAuth)
 }
 
 // TestISolarExchangeAndRefreshParseTokens: expires_in absent -> +7200s from
@@ -89,7 +90,8 @@ func TestISolarRefreshRequiresRefreshToken(t *testing.T) {
 	delete(creds.Extra, "refresh_token")
 
 	_, err := c.Refresh(context.Background(), creds)
-	require.ErrorIs(t, err, integration.ErrAuth)
+	require.ErrorIs(t, err, integration.ErrConfig) // R48/I5
+	require.NotErrorIs(t, err, integration.ErrAuth)
 	require.Empty(t, srv.Requests())
 }
 

@@ -59,7 +59,8 @@ func TestISolarPlantMinuteSeriesRejectsEmptyPSID(t *testing.T) {
 	creds := isolarTestCreds(srv)
 
 	_, err := c.PlantMinuteSeries(context.Background(), creds, "", fixtureFrom, fixtureTo)
-	require.ErrorIs(t, err, integration.ErrAuth)
+	require.ErrorIs(t, err, integration.ErrConfig) // R48/I5
+	require.NotErrorIs(t, err, integration.ErrAuth)
 	require.Empty(t, srv.Requests())
 }
 
@@ -115,7 +116,8 @@ func TestISolarDeviceMinuteSeriesRefusesWindowLargerThanMaxWindow(t *testing.T) 
 	from := fixtureFrom
 	to := from.Add(isolar.MaxWindowMinute + time.Hour)
 	_, err := c.DeviceMinuteSeries(context.Background(), creds, []string{"FX1001"}, from, to)
-	require.ErrorIs(t, err, integration.ErrAuth)
+	require.ErrorIs(t, err, integration.ErrConfig) // R48/I5
+	require.NotErrorIs(t, err, integration.ErrAuth)
 	require.Empty(t, srv.Requests(), "a window larger than MaxWindowMinute must never reach the network")
 }
 
@@ -129,7 +131,8 @@ func TestISolarPlantMinuteSeriesRefusesWindowLargerThanMaxWindow(t *testing.T) {
 	from := fixtureFrom
 	to := from.Add(isolar.MaxWindowMinute + time.Minute)
 	_, err := c.PlantMinuteSeries(context.Background(), creds, "FX3001", from, to)
-	require.ErrorIs(t, err, integration.ErrAuth)
+	require.ErrorIs(t, err, integration.ErrConfig) // R48/I5
+	require.NotErrorIs(t, err, integration.ErrAuth)
 	require.Empty(t, srv.Requests())
 }
 

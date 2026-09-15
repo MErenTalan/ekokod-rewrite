@@ -585,11 +585,13 @@ func TestEPIASConfigErrorsNameTheEnvVarNotTheValue(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = epias.New(pool, epias.Options{Password: integration.NewSecret([]byte(testPass))})
-	require.ErrorIs(t, err, integration.ErrAuth)
+	require.ErrorIs(t, err, integration.ErrConfig) // R48/I5
+	require.NotErrorIs(t, err, integration.ErrAuth)
 	require.Contains(t, err.Error(), "EKOKOD_EPIAS_USERNAME")
 
 	_, err = epias.New(pool, epias.Options{Username: testUser})
-	require.ErrorIs(t, err, integration.ErrAuth)
+	require.ErrorIs(t, err, integration.ErrConfig)
+	require.NotErrorIs(t, err, integration.ErrAuth)
 	require.Contains(t, err.Error(), "EKOKOD_EPIAS_PASSWORD")
 }
 
