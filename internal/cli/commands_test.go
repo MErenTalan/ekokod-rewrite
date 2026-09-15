@@ -54,10 +54,15 @@ func TestUnknownSubcommandIsAnError(t *testing.T) {
 // the fixed values below.
 //
 // This helper's DB/Redis values point at unreachable localhost ports on
-// purpose, so it must never be combined with a test that actually dials
-// them: `api`, `worker`, and an *enabled* `scheduler` all do. It is safe
-// with `seed` (opens no connection in F0) and a *disabled* `scheduler`
-// (returns before opening one).
+// purpose, so it must never be combined with a test that actually needs a
+// live connection to succeed: `api`, `worker`, and an *enabled* `scheduler`
+// all do. It is safe with a *disabled* `scheduler` (returns before opening
+// one) and with `seed` PROVIDED the test only checks behaviour that happens
+// before or during the dial (the production --yes guard, and what is
+// printed before the dial fails) — `seed` opens a real connection since F1
+// (see internal/cli/seed.go), so a test that needs `seed` to actually
+// SUCCEED needs a live database instead (see
+// internal/cli/seed_integration_test.go).
 func setValidEnv(t *testing.T, overrides map[string]string) {
 	t.Helper()
 	env := map[string]string{
@@ -89,11 +94,11 @@ func setValidEnv(t *testing.T, overrides map[string]string) {
 	}
 }
 
-// TestSeedRefusesProductionWithoutYes pins the F0 seed footgun guard: F0
-// defines zero datasets, so this is the only behaviour of `ekokod seed`
-// that matters yet, and it must never silently run against production. The
-// command must refuse before ever touching a database (there is nothing to
-// seed in F0), so this test needs no database.
+// TestSeedRefusesProductionWithoutYes pins the seed footgun guard: `ekokod
+// seed` must never silently run against production. The command must
+// refuse before ever touching a database (the guard check runs before
+// config.FromEnv's DB URL is ever dialled — see newSeedCmd), so this test
+// needs no database despite F1 seed.Load doing real writes.
 func TestSeedRefusesProductionWithoutYes(t *testing.T) {
 	var out bytes.Buffer
 	setValidEnv(t, map[string]string{"EKOKOD_ENV": "production"})
@@ -104,34 +109,61 @@ func TestSeedRefusesProductionWithoutYes(t *testing.T) {
 	require.Contains(t, out.String(), "production", "the target environment must be printed before refusing")
 }
 
-func TestSeedAllowsProductionWithExplicitYes(t *testing.T) {
+// TestSeedAllowsProductionWithExplicitYesPastTheGuard pins that
+// production + --yes gets PAST the production guard: setValidEnv's DSN
+// points at an unreachable localhost:5432 (deliberately, so this test needs
+// no real database), so the command still fails — but on a database dial,
+// never on the production refusal. Renamed from
+// TestSeedAllowsProductionWithExplicitYes (F0, when seed.Load did not exist
+// and there was nothing to dial): F1's seed.Load performs real writes, so a
+// unit-tier test asserting the WHOLE command succeeds would need a live
+// database; TestCLISeedLoadsRealDatasets (seed_integration_test.go) is
+// that test. This one stays a fast, DB-less guard check.
+func TestSeedAllowsProductionWithExplicitYesPastTheGuard(t *testing.T) {
 	var out bytes.Buffer
 	setValidEnv(t, map[string]string{"EKOKOD_ENV": "production"})
 
-	err := cli.Execute(context.Background(), []string{"seed", "--yes"}, &out)
-	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err := cli.Execute(ctx, []string{"seed", "--yes"}, &out)
+	require.Error(t, err, "the fixture DSN points at an unreachable database")
+	require.NotContains(t, err.Error(), "refusing to seed the production database",
+		"--yes must have gotten past the production guard; the error must be a dial failure, not the guard")
+	require.Contains(t, out.String(), "production", "the target environment is still printed before dialling")
 }
 
+// TestSeedOnNonProductionRunsWithoutYes pins that a non-production
+// environment never hits the production guard at all: like
+// TestSeedAllowsProductionWithExplicitYesPastTheGuard, the fixture DSN is
+// unreachable, so the command still errors — but never with the
+// production-refusal message.
 func TestSeedOnNonProductionRunsWithoutYes(t *testing.T) {
 	var out bytes.Buffer
 	setValidEnv(t, map[string]string{"EKOKOD_ENV": "development"})
 
-	err := cli.Execute(context.Background(), []string{"seed"}, &out)
-	require.NoError(t, err)
-	require.Contains(t, out.String(), "no reference datasets", "F0 defines zero datasets")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err := cli.Execute(ctx, []string{"seed"}, &out)
+	require.Error(t, err, "the fixture DSN points at an unreachable database")
+	require.NotContains(t, err.Error(), "refusing to seed the production database",
+		"non-production must never hit the --yes guard at all")
 }
 
 // TestSeedPrintsTargetEnvironmentAndMaskedDatabaseURL pins the switch away
 // from the hand-rolled maskedDBHost (task 9 review, Minor-1/Minor-2) to
 // reusing config's already-tested redactDSN via cfg.Resolved()'s
 // EKOKOD_DB_URL row. That row masks the password but keeps the host and
-// database name readable.
+// database name readable. The command still fails overall (the fixture DSN
+// is unreachable — deliberately, so this needs no real database), but the
+// environment and masked DSN must already be on out before that failure.
 func TestSeedPrintsTargetEnvironmentAndMaskedDatabaseURL(t *testing.T) {
 	var out bytes.Buffer
 	setValidEnv(t, map[string]string{"EKOKOD_ENV": "development"})
 
-	err := cli.Execute(context.Background(), []string{"seed"}, &out)
-	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err := cli.Execute(ctx, []string{"seed"}, &out)
+	require.Error(t, err)
 	require.Contains(t, out.String(), "development")
 	require.Contains(t, out.String(), "localhost:5432")
 	require.Contains(t, out.String(), "ekokod", "the database name should be visible, not just the host")
