@@ -88,16 +88,26 @@ linters:
         #
         # The field-level half is TestNoFloatFieldsInModelOrStore in
         # internal/arch/arch_test.go. Its floatGuardPatterns are
-        # ./internal/domain/... and ./internal/store/... — the same two
-        # recursive trees as the globs below — and it fails on any struct field
-        # that is or contains float32/float64 through pointers, containers,
-        # aliases, defined types, generic type arguments, this module's structs
-        # and pgtype/database/sql value wrappers (pgtype.Float8, sql.NullFloat64).
+        # ./internal/domain/..., ./internal/store/..., ./internal/integration/...,
+        # ./internal/ingest/..., ./internal/marketdata/... and
+        # ./internal/credentials/... — the same six recursive trees as the
+        # globs below — and it fails on any struct field that is or contains
+        # float32/float64 through pointers, containers, aliases, defined
+        # types, generic type arguments, this module's structs and
+        # pgtype/database/sql value wrappers (pgtype.Float8, sql.NullFloat64).
+        # A second guard, TestIntegrationTreesDoNotParseFloats, covers the
+        # same four F2 trees for the two routes a float can enter without
+        # ever being a struct field: strconv.ParseFloat and a JSON decode
+        # into a float or an untyped interface.
         # Change both or neither.
         no-float-money:
           files:
             - "**/internal/domain/**"
             - "**/internal/store/**"
+            - "**/internal/integration/**"
+            - "**/internal/ingest/**"
+            - "**/internal/marketdata/**"
+            - "**/internal/credentials/**"
           deny:
             - pkg: "math/big"
               desc: "use github.com/shopspring/decimal for monetary arithmetic"
