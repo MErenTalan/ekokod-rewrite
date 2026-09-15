@@ -265,7 +265,10 @@ func TestBackfillEnqueuesEveryWindowOnce(t *testing.T) {
 // TestBackfillRerunIsResumable: 2 of the 4 windows from the fixture above
 // are already enqueued (simulating a previous, partial run); re-running the
 // same backfill request enqueues only the 2 that are new and counts the 2
-// pre-existing ones as skipped, never failed.
+// pre-existing ones as skipped, never failed. R53: a run with any skipped
+// (already_enqueued) window is "partial", never "success" — resumability
+// working as intended must still be visible to an operator as "this run did
+// not do everything", not silently read as a clean success.
 func TestBackfillRerunIsResumable(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -308,7 +311,73 @@ func TestBackfillRerunIsResumable(t *testing.T) {
 	require.EqualValues(t, 2, runs[0].Processed, "analyzerY's 2 new windows")
 	require.EqualValues(t, 2, runs[0].Skipped, "analyzerX's 2 already-queued windows, counted skipped not failed")
 	require.EqualValues(t, 0, runs[0].Failed, "a task-ID conflict is resumability working as intended, never a failure")
-	require.Equal(t, "success", runs[0].Status)
+	require.Equal(t, "partial", runs[0].Status, "R53: any skipped window forces partial, never success")
+
+	var detail struct {
+		AlreadyEnqueued int32 `json:"already_enqueued"`
+	}
+	require.NoError(t, json.Unmarshal(runs[0].Detail, &detail))
+	require.EqualValues(t, 2, detail.AlreadyEnqueued, "the 2 skipped windows must be counted as already_enqueued in job_runs.detail (R53)")
+}
+
+// TestBackfillForceReEnqueuesAlreadySeenWindows is R53's Force half: the
+// exact same "2 of 4 windows already seen" fixture
+// TestBackfillRerunIsResumable uses, but with Force: true — every window,
+// including analyzerX's two that would otherwise collide on the plain
+// deterministic id, must be enqueued again (a re-run after fixing a bad
+// credential must never silently no-op), processed=4, skipped=0, and the
+// run reports a clean "success" (nothing was skipped this time).
+func TestBackfillForceReEnqueuesAlreadySeenWindows(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tn := testfixtures.NewTenant(t, ctx, pool, 15009)
+
+	analyzerX := tn.Analyzers[0] // OSOS
+	analyzerY := tn.Analyzers[2] // OSOS
+
+	creds := integration.Credentials{CredentialID: uuid.New(), CompanyID: tn.Company.ID, Provider: integration.ProviderOSOS, Subtype: analyzerX.ProviderSubtype}
+	maxWindow := 30 * 24 * time.Hour
+	src := &fakePlanner{provider: integration.ProviderOSOS, kinds: []model.ReadingKind{model.ReadingKindLoadProfile}, maxWindow: maxWindow}
+	clk := clock.NewFake(backfillTestNow)
+
+	from := backfillTestNow.Add(-60 * 24 * time.Hour)
+	to := from.Add(45 * 24 * time.Hour)
+
+	// analyzerX's two windows are already "enqueued" from an earlier run —
+	// this time under a PLAIN (non-Force) id, exactly the id a Force run
+	// must NOT collide with.
+	windows := backfill.Windows(from, to, maxWindow)
+	require.Len(t, windows, 2, "45 days at a 30-day max is 2 windows")
+	enq := newRecordingEnqueuer()
+	for _, w := range windows {
+		enq.markSeen(backfillTestTaskKey(t, tn.Company.ID, creds.CredentialID, analyzerX.ID, model.ReadingKindLoadProfile, w))
+	}
+
+	b := backfill.New(backfillTestDeps(pool, creds, src, enq, clk))
+	payload := job.BackfillPayload{
+		CompanyID: tn.Company.ID, CredentialID: creds.CredentialID,
+		AnalyzerIDs: []uuid.UUID{analyzerX.ID, analyzerY.ID},
+		From:        from, To: to,
+		Force: true,
+	}
+
+	require.NoError(t, b.Backfill(ctx, payload))
+
+	require.Len(t, enq.enqueued(), 4, "Force re-mints every window's id, so nothing collides with the earlier plain-id run")
+
+	runs := backfillTestRuns(t, ctx, postgres.NewOpsRepository(pool), tn.Scope)
+	require.Len(t, runs, 1)
+	require.EqualValues(t, 4, runs[0].Processed)
+	require.EqualValues(t, 0, runs[0].Skipped, "Force means nothing collides, so nothing is skipped")
+	require.EqualValues(t, 0, runs[0].Failed)
+	require.Equal(t, "success", runs[0].Status, "a Force run that skips nothing is a clean success")
+
+	var detail struct {
+		AlreadyEnqueued int32 `json:"already_enqueued"`
+	}
+	require.NoError(t, json.Unmarshal(runs[0].Detail, &detail))
+	require.EqualValues(t, 0, detail.AlreadyEnqueued)
 }
 
 // TestBackfillEmptyAnalyzerListMeansActiveAnalyzersNotAll: with no

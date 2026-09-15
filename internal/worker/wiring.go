@@ -308,7 +308,14 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		Sources:        registry,
 		Enqueuer:       jobClient,
 		Hooks: map[model.IntegrationProvider][]ingest.PostPersistHook{
-			model.IntegrationProviderPM5340: {generation.New(readingRepo, generationRepo, clock.System())},
+			// R52/M12: the generation hook shares the SAME redisLock every
+			// other Locker consumer in this graph does (I3), and is bounded
+			// by the SAME configured cfg.Ingest.FutureTolerance the
+			// ingest.Service below is built with (M12) — never the
+			// package's own default. wiring_internal_test.go's
+			// TestBuildGraphGenerationHookUsesRedisLockAndConfiguredFutureTolerance
+			// pins both.
+			model.IntegrationProviderPM5340: {generation.New(readingRepo, generationRepo, clock.System(), redisLock, cfg.Ingest.FutureTolerance)},
 		},
 		ConsumptionRefresh: nil, // R17: consumption.refresh is declared, never enqueued, in F2
 		Clock:              clock.System(),

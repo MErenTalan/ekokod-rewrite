@@ -163,6 +163,10 @@ type BackfillInput struct {
 	AnalyzerIDs []uuid.UUID
 	Kinds       []model.ReadingKind
 	From, To    time.Time
+	// Force is R53's re-run escape hatch, threaded straight through to
+	// job.BackfillPayload.Force: see its doc. False (the default) keeps the
+	// resumable, plain-id behaviour every existing caller already gets.
+	Force bool
 }
 
 // Verifier proves one set of credentials can authenticate against its
@@ -352,7 +356,12 @@ func zeroExtraPlain(m map[string]string) {
 	}
 }
 
-// validatePM5340URL is R28: scheme http/https and a non-empty host.
+// validatePM5340URL is R28: scheme http/https and a non-empty host. M5
+// (final-review-A): userinfo (http://user:pass@host) is refused outright —
+// pm5340_url is stored in plaintext (never sealed, unlike Secret/Extra) and
+// returned verbatim by the write-only View (view.go), so a credential
+// embedded in it would be stored unsealed and handed straight back to any
+// caller of View, defeating this whole package's write-only design.
 func validatePM5340URL(raw *string) error {
 	if raw == nil {
 		return nil
@@ -366,6 +375,9 @@ func validatePM5340URL(raw *string) error {
 	}
 	if u.Host == "" {
 		return fmt.Errorf("%w: pm5340_url must have a host", ErrInvalidSettings)
+	}
+	if u.User != nil {
+		return fmt.Errorf("%w: pm5340_url must not contain userinfo", ErrInvalidSettings)
 	}
 	return nil
 }
@@ -800,7 +812,7 @@ func (s *Service) Backfill(ctx context.Context, sc store.Scope, id uuid.UUID, in
 		job.BackfillPayload{
 			CompanyID: sc.CompanyID, CredentialID: id,
 			AnalyzerIDs: in.AnalyzerIDs, Kinds: in.Kinds,
-			From: in.From, To: in.To,
+			From: in.From, To: in.To, Force: in.Force,
 		},
 		job.TaskOptions{MaxRetry: s.deps.MaxRetry},
 	)

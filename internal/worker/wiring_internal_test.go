@@ -144,6 +144,37 @@ func TestBuildGraphRegistersOnePM5340GenerationHook(t *testing.T) {
 	require.True(t, ok, "the PM5340 hook must be a *generation.Accumulator")
 }
 
+// TestBuildGraphGenerationHookUsesRedisLockAndConfiguredFutureTolerance is
+// the final-review-A R52/M12 test: it proves the PM5340 generation hook
+// build() wires is NOT built with a nil lock or a hard-coded tolerance —
+// I3's finding was exactly that no lock was wired at all, and M12's was
+// that hook.go used its own package default instead of
+// cfg.Ingest.FutureTolerance.
+//
+// g.credentialsDeps.Locker is the SAME redisLock variable build() passes to
+// every other Locker consumer in the graph (httpx's pool, the EPİAŞ
+// client, credentials.Deps) — comparing the hook's own Locker() against it
+// by equality proves it is that one shared instance, not some other
+// (possibly no-op) Locker.
+func TestBuildGraphGenerationHookUsesRedisLockAndConfiguredFutureTolerance(t *testing.T) {
+	pool := testfixtures.NewIsolatedDB(t)
+	redisCfg := testfixtures.RedisConfig(t)
+	g := buildGraph(t, pool, redisCfg)
+	cfg := graphTestConfig(t, unusedButValidDSN, redisCfg)
+
+	hooks := g.ingestDeps.Hooks[model.IntegrationProviderPM5340]
+	require.Len(t, hooks, 1)
+	hook, ok := hooks[0].(*generation.Accumulator)
+	require.True(t, ok)
+
+	require.NotNil(t, hook.Locker(), "the generation hook must have a Locker, not nil (I3)")
+	require.Equal(t, g.credentialsDeps.Locker, hook.Locker(),
+		"the generation hook must share the SAME redis lock every other Locker consumer in the graph uses (I3)")
+
+	require.Equal(t, cfg.Ingest.FutureTolerance, hook.FutureTolerance(),
+		"the generation hook's recompute upper bound must come from cfg.Ingest.FutureTolerance, not its own package default (M12)")
+}
+
 // TestBuildGraphOpensNamedClosersForRedisAndJobClient is the fix-round-1 I4
 // test: it proves build() actually attaches a closer for the job client
 // (not only the redis client the connected-clients metric can observe), by
