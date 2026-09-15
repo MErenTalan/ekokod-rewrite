@@ -118,6 +118,15 @@ var notFunctions = map[string]bool{
 	"distinct": true, "as": true, "with": true, "returns": true, "function": true,
 	"numeric": true, "decimal": true, "varchar": true, "char": true,
 	"timestamp": true, "timestamptz": true, "interval": true, "time": true,
+	// DDL / constraint clause keywords: each one is, by SQL grammar, the
+	// word that sits directly before the "(" in question — "primary
+	// KEY (id)", "UNIQUE (id)", "foreign KEY (id) references t (id)",
+	// "CHECK (price > 0)", "on CONFLICT (id)", "as MATERIALIZED (...)".
+	// Unlike a table name (see isRelationBeforeParen below), these are a
+	// closed, fixed set of reserved words, so a keyword list is the right
+	// tool here, not a growing one.
+	"check": true, "unique": true, "key": true, "foreign": true,
+	"primary": true, "constraint": true, "conflict": true, "materialized": true,
 }
 
 // schema is what the migrations say, as opposed to what the generated models
@@ -441,7 +450,12 @@ func TestEveryFunctionSQLcMustTypeIsDeclared(t *testing.T) {
 
 	byFn := map[string]int{}
 	for _, src := range typeInferringSQL(t) {
-		for _, call := range functionCalls(src.sql) {
+		calls, truncated := functionCalls(src.sql)
+		require.False(t, truncated,
+			"%s has an unterminated '...' literal; functionCalls cannot tell what is real "+
+				"code after that point, so a call written after it would be silently invisible "+
+				"to this guard", src.name)
+		for _, call := range calls {
 			if notFunctions[call.name] {
 				continue
 			}
@@ -518,11 +532,21 @@ type sqlSource struct {
 // This function and functionCalls below therefore share one lexing
 // primitive, skipNonCode, so both agree on where a comment or a literal
 // begins and ends.
-func stripComments(sql string) string {
+//
+// truncated reports whether any comment or literal ran off the end of sql
+// unterminated — see skipNonCode's EOF discussion. That matters here more
+// than it sounds: an unterminated /* */ comment is DROPPED, not kept
+// verbatim like a literal, so if it swallows real code containing a call,
+// that call is gone from the output entirely, not merely re-scanned later.
+// Callers must treat truncated=true as a failure, not a silent pass.
+func stripComments(sql string) (out string, truncated bool) {
 	var b strings.Builder
 	b.Grow(len(sql))
 	for i := 0; i < len(sql); {
-		if end, isComment, ok := skipNonCode(sql, i); ok {
+		if end, isComment, terminated, ok := skipNonCode(sql, i); ok {
+			if !terminated {
+				truncated = true
+			}
 			if !isComment {
 				b.WriteString(sql[i:end]) // a literal: keep it verbatim
 			}
@@ -532,19 +556,46 @@ func stripComments(sql string) string {
 		b.WriteByte(sql[i])
 		i++
 	}
-	return b.String()
+	return b.String(), truncated
 }
 
 // skipNonCode reports whether sql, starting at i, is a "--" line comment, a
 // NESTED "/* */" block comment (Postgres nests them, unlike the ANSI
-// standard), a '...' string literal (” is an escaped quote), or a
-// $tag$...$tag$ dollar-quoted string (including the common bare $$...$$) —
-// and if so, the index just past it, and whether it was a COMMENT (dropped
-// by stripComments) as opposed to a LITERAL (kept verbatim, and never
-// scanned for an identifier by functionCalls). An unterminated literal or
-// comment consumes the rest of sql: there is nothing safe to do with
-// malformed input other than stop.
-func skipNonCode(sql string, i int) (end int, isComment bool, ok bool) {
+// standard), a '...' string literal, or a $tag$...$tag$ dollar-quoted string
+// (including the common bare $$...$$) — and if so, the index just past it,
+// whether it was a COMMENT (dropped by stripComments) as opposed to a
+// LITERAL (kept verbatim, and never scanned for an identifier by
+// functionCalls), and whether it was properly TERMINATED before sql ran out.
+//
+// '...' STRING LITERALS AND BACKSLASH ESCAPES. Postgres has two dialects of
+// '...' literal. A STANDARD literal (`'...'`) follows
+// standard_conforming_strings: ” is the only escape (a doubled quote) and a
+// bare backslash is just a literal character, so `'C:\'` is a complete,
+// two-character-content literal that closes at that quote. An EXTENDED
+// literal — one whose opening quote is immediately preceded by `E` or `e`,
+// as in `E'it\'s'` — additionally treats `\` as an escape character, so
+// `\'` inside it is an escaped quote, not the closing one. Task 8c fix round
+// 2's finding: the first version of this scanner applied ONLY the ”-escape
+// rule to every '...' literal, so in `E'it\'s'` it read the `\'` as the real
+// close, then re-entered string state at the literal `'` after `s` and
+// swallowed the rest of the file as "still inside a string" — hiding every
+// call after it. The `E`/`e` prefix is checked against the byte immediately
+// before it too (isIdentByte), so an identifier merely ENDING in `e`, as in
+// `where name='x'`, is never mistaken for the extended-string prefix.
+//
+// TERMINATION AND EOF. An unterminated literal or comment consumes the rest
+// of sql — there is nothing safe to do with malformed input other than
+// stop — but the caller must not treat that silently: any call already
+// collected before the unterminated span stays collected (functionCalls
+// appends as it scans left to right, so nothing already found is lost), but
+// a call written AFTER an unterminated '...' literal or /* */ comment is
+// invisible to this scan, exactly like the finding above before its fix. So
+// `terminated=false` is reported all the way out (through stripComments and
+// functionCalls) and both tests in this file that drive them turn it into a
+// failure instead of a silent, possibly-vacuous pass. A "--" line comment is
+// the one exception: it is defined to run to end of line OR end of file, so
+// hitting EOF ends it cleanly and is always reported as terminated.
+func skipNonCode(sql string, i int) (end int, isComment bool, terminated bool, ok bool) {
 	n := len(sql)
 	switch {
 	case sql[i] == '-' && i+1 < n && sql[i+1] == '-':
@@ -552,7 +603,7 @@ func skipNonCode(sql string, i int) (end int, isComment bool, ok bool) {
 		for j < n && sql[j] != '\n' {
 			j++
 		}
-		return j, true, true
+		return j, true, true, true
 
 	case sql[i] == '/' && i+1 < n && sql[i+1] == '*':
 		depth := 1
@@ -569,33 +620,39 @@ func skipNonCode(sql string, i int) (end int, isComment bool, ok bool) {
 				j++
 			}
 		}
-		return j, true, true
+		return j, true, depth == 0, true
 
 	case sql[i] == '\'':
+		extended := i > 0 && (sql[i-1] == 'E' || sql[i-1] == 'e') &&
+			(i < 2 || !isIdentByte(sql[i-2]))
 		j := i + 1
 		for j < n {
+			if extended && sql[j] == '\\' && j+1 < n {
+				j += 2 // extended-string escape: the next byte, even a ', does not close it
+				continue
+			}
 			if sql[j] == '\'' {
 				if j+1 < n && sql[j+1] == '\'' {
 					j += 2 // '' escape: still inside the literal
 					continue
 				}
 				j++
-				break
+				return j, false, true, true
 			}
 			j++
 		}
-		return j, false, true
+		return j, false, false, true // ran off the end: unterminated
 
 	case sql[i] == '$':
 		if contentStart, ok := dollarQuoteTag(sql, i); ok {
 			closer := sql[i:contentStart] // "$tag$" or "$$", byte-identical to the opener
 			if idx := strings.Index(sql[contentStart:], closer); idx >= 0 {
-				return contentStart + idx + len(closer), false, true
+				return contentStart + idx + len(closer), false, true, true
 			}
-			return n, false, true
+			return n, false, false, true // ran off the end: unterminated
 		}
 	}
-	return 0, false, false
+	return 0, false, false, false
 }
 
 // dollarQuoteTag reports whether sql opens a dollar-quoted string at the '$'
@@ -634,7 +691,11 @@ func typeInferringSQL(t *testing.T) []sqlSource {
 		name := migrationsDir + "/" + entry.Name()
 		raw, err := migrationsFS.ReadFile(name)
 		require.NoError(t, err)
-		sql := stripComments(string(raw))
+		sql, truncated := stripComments(string(raw))
+		require.False(t, truncated,
+			"%s has an unterminated '...' literal or /* */ comment; stripComments cannot "+
+				"tell what is real code after that point, so this migration cannot be scanned "+
+				"for calls at all", name)
 		for _, block := range matViewBodyRe.FindAllStringSubmatch(sql, -1) {
 			out = append(out, sqlSource{
 				name: name + " (view " + block[1] + ")",
@@ -653,10 +714,15 @@ func typeInferringSQL(t *testing.T) []sqlSource {
 		name := queriesDir + "/" + entry.Name()
 		raw, err := os.ReadFile(name)
 		require.NoError(t, err)
+		sql, truncated := stripComments(string(raw))
+		require.False(t, truncated,
+			"%s has an unterminated '...' literal or /* */ comment; stripComments cannot "+
+				"tell what is real code after that point, so this file cannot be scanned for "+
+				"calls at all", name)
 		out = append(out, sqlSource{
 			name: name,
 			kind: "query file",
-			sql:  stripComments(string(raw)),
+			sql:  sql,
 		})
 	}
 
@@ -733,13 +799,22 @@ var sqlcPseudoFunctions = map[string]bool{
 // `interface{}` this file exists to prevent. Any other qualifier (a schema,
 // or a table/alias as in `b.name`) is checked like an unqualified call;
 // `b.name` is still never reported, because nothing follows it with "(".
-func functionCalls(sql string) []funcCall {
-	var out []funcCall
+//
+// truncated reports whether scanning ran into an unterminated '...' or
+// $tag$...$tag$ literal — see skipNonCode's EOF discussion and
+// stripComments' truncated. Every caller in this file treats it as a
+// failure: a call written after the unterminated span would otherwise be
+// silently invisible, exactly the hole Task 8c fix round 2 closed for
+// `E'it\'s'`.
+func functionCalls(sql string) (out []funcCall, truncated bool) {
 	for i := 0; i < len(sql); {
-		if end, _, ok := skipNonCode(sql, i); ok {
+		if end, _, terminated, ok := skipNonCode(sql, i); ok {
 			// A comment (already stripped by the caller, but harmless to
 			// skip again) or a literal — either way, not a place a call's
 			// name can start.
+			if !terminated {
+				truncated = true
+			}
 			i = end
 			continue
 		}
@@ -749,7 +824,7 @@ func functionCalls(sql string) []funcCall {
 			if !closed {
 				break // unterminated quote: nothing more to scan
 			}
-			out = appendIfCall(out, sql, name, j)
+			out = appendIfCall(out, sql, i, name, j)
 			i = j
 			continue
 		}
@@ -767,10 +842,65 @@ func functionCalls(sql string) []funcCall {
 			i = j
 			continue
 		}
-		out = appendIfCall(out, sql, name, j)
+		out = appendIfCall(out, sql, i, name, j)
 		i = j
 	}
-	return out
+	return out, truncated
+}
+
+// createIndexOnRe matches a CREATE INDEX statement's "... on " immediately
+// before the table name that follows it — the one place "on" genuinely
+// introduces a relation rather than a join or WHERE condition. It is
+// deliberately narrow, not a blanket "on precedes a relation" rule: "on" is
+// also how a join condition or WHERE clause is spelled, as in
+// `join meters m on wobble_undeclared(m.id) = readings.meter_id`, and a
+// blanket rule would hide a real call written there. Anchoring on `on\s*$`
+// against the text immediately preceding the identifier means it only
+// matches when "create ... index ... <name> on" reads contiguously right up
+// to this exact position, which a join's "on" never does.
+var createIndexOnRe = regexp.MustCompile(
+	`(?is)create\s+(unique\s+)?index\s+(concurrently\s+)?(if\s+not\s+exists\s+)?\S+\s+on\s*$`)
+
+// isRelationBeforeParen reports whether the identifier that starts at
+// nameStart — which the caller already knows is followed by "(" — names a
+// RELATION rather than a function: `insert into t (...)`, `create table t
+// (...)`, `references t (...)`, or the one legitimate `on`-introduced
+// relation, `create index ... on t (...)`. It walks back over any "schema."
+// qualification first, so `insert into public.buildings (` and `insert into
+// "Buildings" (` are recognised exactly like the unqualified form.
+//
+// This is a POSITIONAL rule, not a keyword list, and deliberately so: a
+// table name is arbitrary user schema, not a fixed SQL vocabulary, so no
+// list of names could ever cover every table this guard will ever see —
+// that is exactly the "growing keyword list" this file's own nativeFunctions
+// comment warns against. Constraint/clause keywords that sit directly
+// before the "(" themselves (`unique (`, `check (`, `primary key (`, `on
+// conflict (`) don't need this: they're in notFunctions instead, because
+// there the word immediately before "(" already IS the fixed keyword.
+func isRelationBeforeParen(sql string, nameStart int) bool {
+	start := nameStart
+	for start > 0 && sql[start-1] == '.' {
+		start-- // step back onto the '.'
+		for start > 0 && isIdentByte(sql[start-1]) {
+			start--
+		}
+	}
+
+	k := start
+	for k > 0 && isSpaceByte(sql[k-1]) {
+		k--
+	}
+	wordEnd := k
+	for k > 0 && isIdentByte(sql[k-1]) {
+		k--
+	}
+	switch strings.ToLower(sql[k:wordEnd]) {
+	case "into", "table", "references":
+		return true
+	case "on":
+		return createIndexOnRe.MatchString(sql[:wordEnd])
+	}
+	return false
 }
 
 // scanQuotedIdentifier reads a "..." double-quoted identifier starting at
@@ -796,13 +926,15 @@ func scanQuotedIdentifier(sql string, i int) (end int, name string, closed bool)
 }
 
 // appendIfCall appends a funcCall named name to out if sql, starting at
-// from, is optional whitespace followed by "(".
-func appendIfCall(out []funcCall, sql, name string, from int) []funcCall {
+// from, is optional whitespace followed by "(" — UNLESS nameStart (name's
+// own start index, before qualification) marks a relation reference rather
+// than a function call; see isRelationBeforeParen.
+func appendIfCall(out []funcCall, sql string, nameStart int, name string, from int) []funcCall {
 	k := from
 	for k < len(sql) && isSpaceByte(sql[k]) {
 		k++
 	}
-	if k < len(sql) && sql[k] == '(' {
+	if k < len(sql) && sql[k] == '(' && !isRelationBeforeParen(sql, nameStart) {
 		out = append(out, funcCall{name: name, arity: argCount(sql, k)})
 	}
 	return out
@@ -903,6 +1035,40 @@ func sortedKeys(m map[int]bool) []int {
 // look reasonable in the first place: sqlc's own pseudo-namespace
 // (sqlc.arg/narg/slice) must still be skipped, and a plain column reference
 // such as `b.name` must still never be reported.
+// callsOrFail runs the real pipeline — stripComments then functionCalls —
+// and fails the (sub)test outright if either stage reports an unterminated
+// literal or comment, instead of letting a truncated scan masquerade as a
+// clean "no calls found". Nothing in the table below expects truncation, so
+// every case in it is entitled to that assertion for free.
+func callsOrFail(t *testing.T, sql string) []funcCall {
+	t.Helper()
+	stripped, commentsTruncated := stripComments(sql)
+	require.False(t, commentsTruncated, "stripComments hit an unterminated literal or comment in %q", sql)
+	calls, callsTruncated := functionCalls(stripped)
+	require.False(t, callsTruncated, "functionCalls hit an unterminated literal in %q", sql)
+	return calls
+}
+
+// callsNeedingDeclaration mirrors the ONE layer of filtering
+// TestEveryFunctionSQLcMustTypeIsDeclared applies on top of functionCalls's
+// raw output — dropping notFunctions AND nativeFunctions — so a
+// false-positive test case below can pin exactly what the real guard would
+// see, not merely what functionCalls returns before that filter runs. (A
+// keyword such as "conflict" or "check" still comes back from functionCalls
+// itself, same as "any" always has — see the sqlc.narg case below — and is
+// only removed here, same as it only is one layer up in the real guard.)
+func callsNeedingDeclaration(t *testing.T, sql string) []funcCall {
+	t.Helper()
+	var out []funcCall
+	for _, c := range callsOrFail(t, sql) {
+		if notFunctions[c.name] || nativeFunctions[c.name] {
+			continue
+		}
+		out = append(out, c)
+	}
+	return out
+}
+
 func TestFunctionCallsRecognisesEveryCallSpelling(t *testing.T) {
 	t.Parallel()
 
@@ -1007,22 +1173,76 @@ func TestFunctionCallsRecognisesEveryCallSpelling(t *testing.T) {
 			sql:   `select $tag$ wobble_undeclared($1) $tag$, $$ another_undeclared($2) $$ from buildings where id = $1`,
 			calls: nil,
 		},
+		{
+			// Task 8c fix round 2, finding 1: the OLD '...' state applied the
+			// ''-doubling escape to every literal, including an EXTENDED
+			// (E'...') one, so it read the \' here as the real closing quote,
+			// then re-entered string state at the '  after "s" and swallowed
+			// the rest of the file as "still inside a string" — hiding
+			// wobble_undeclared entirely.
+			name:  `E'it\'s' (an extended-string backslash escape) does not hide a later real call`,
+			sql:   `select E'it\'s', wobble_undeclared(id) from buildings;`,
+			calls: []funcCall{{name: "wobble_undeclared", arity: 1}},
+		},
+		{
+			// e'a\\' is an ESCAPED backslash (\\), so the literal's content
+			// is "a\" and the very next ' really does close it — unlike the
+			// case above, the closing quote here is genuine, not escaped.
+			name:  `e'a\\' (an escaped backslash, then a real close) does not hide a later real call`,
+			sql:   `select e'a\\', wobble_undeclared(id) from buildings;`,
+			calls: []funcCall{{name: "wobble_undeclared", arity: 1}},
+		},
+		{
+			// A STANDARD (non-E-prefixed) literal never treats \ as an
+			// escape at all — standard_conforming_strings semantics — so
+			// 'C:\' is a complete, two-byte-content literal that closes at
+			// that very quote, exactly as it always has.
+			name:  `a standard 'C:\' literal (backslash is a literal character) does not hide a later real call`,
+			sql:   `select 'C:\', wobble_undeclared(id) from buildings;`,
+			calls: []funcCall{{name: "wobble_undeclared", arity: 1}},
+		},
+		{
+			// The realistic shape from the findings doc: an ordinary
+			// column='literal' comparison, nowhere near an E-prefix, keeps
+			// working — included for direct traceability to the finding.
+			name:  "an ordinary column='literal' comparison still works",
+			sql:   `select * from buildings where name='x' and wobble_undeclared(id) > 0;`,
+			calls: []funcCall{{name: "wobble_undeclared", arity: 1}},
+		},
+		{
+			// The load-bearing boundary case: "name" ENDS in 'e' and is
+			// immediately (no operator) followed by a literal containing a
+			// backslash-then-quote. If the extended-prefix check only looked
+			// at the byte before the quote (the 'e'), this would be
+			// wrongly treated as extended: the \' would be read as an escape
+			// rather than the close, the literal would run unterminated to
+			// EOF, and wobble_undeclared would never be seen. The check
+			// additionally requires the byte before THAT ('m', part of the
+			// same identifier) not be an identifier byte, which correctly
+			// makes this a STANDARD literal instead.
+			name:  "an identifier merely ending in e is not mistaken for the E-prefix",
+			sql:   `select name'a\', wobble_undeclared(id) from buildings;`,
+			calls: []funcCall{{name: "wobble_undeclared", arity: 1}},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.calls, functionCalls(stripComments(tc.sql)))
+			require.Equal(t, tc.calls, callsOrFail(t, tc.sql))
 		})
 	}
 
 	t.Run("block comment between name and parenthesis is stripped first", func(t *testing.T) {
-		sql := stripComments("select locf/* x */(ts) from consumption_hourly")
+		sql, truncated := stripComments("select locf/* x */(ts) from consumption_hourly")
+		require.False(t, truncated)
 		require.NotContains(t, sql, "/*", "the block comment must be gone before the scanner ever runs")
-		require.Equal(t, []funcCall{{name: "locf", arity: 1}}, functionCalls(sql))
+		calls, truncated := functionCalls(sql)
+		require.False(t, truncated)
+		require.Equal(t, []funcCall{{name: "locf", arity: 1}}, calls)
 	})
 
 	t.Run("a block comment spanning multiple lines is stripped too", func(t *testing.T) {
-		sql := stripComments("select locf/* spans\nmultiple\nlines */(ts) from consumption_hourly")
-		require.Equal(t, []funcCall{{name: "locf", arity: 1}}, functionCalls(sql))
+		require.Equal(t, []funcCall{{name: "locf", arity: 1}},
+			callsOrFail(t, "select locf/* spans\nmultiple\nlines */(ts) from consumption_hourly"))
 	})
 
 	// A NON-nested reading (Postgres nests /* */; the ANSI standard does
@@ -1033,8 +1253,172 @@ func TestFunctionCallsRecognisesEveryCallSpelling(t *testing.T) {
 	// (the real call sits after the true end, so hiding it was never the
 	// risk this particular case tests).
 	t.Run("nested block comments close only at the matching depth", func(t *testing.T) {
-		sql := stripComments(
-			"/* outer /* inner */ text_that_looks_like_a_call(x) */ select locf(ts) from consumption_hourly")
-		require.Equal(t, []funcCall{{name: "locf", arity: 1}}, functionCalls(sql))
+		require.Equal(t, []funcCall{{name: "locf", arity: 1}}, callsOrFail(t,
+			"/* outer /* inner */ text_that_looks_like_a_call(x) */ select locf(ts) from consumption_hourly"))
 	})
+
+	// Task 8c fix round 2, finding 1 (EOF discussion): calls collected
+	// BEFORE an unterminated literal or comment are never lost — they were
+	// already appended while scanning left to right — but a call written
+	// AFTER one is invisible to the scan. That must surface as a reported
+	// failure, not a silent, possibly-vacuous pass.
+	t.Run("an unterminated string literal is reported as truncated, not silently swallowed", func(t *testing.T) {
+		calls, truncated := functionCalls(`select wobble_undeclared(id), 'unterminated`)
+		require.True(t, truncated, "an unterminated '...' literal must be reported")
+		require.Equal(t, []funcCall{{name: "wobble_undeclared", arity: 1}}, calls,
+			"the call collected before the unterminated literal must still come back")
+	})
+
+	t.Run("an unterminated block comment is reported as truncated by stripComments", func(t *testing.T) {
+		_, truncated := stripComments("select wobble_undeclared(id) from buildings; /* unterminated")
+		require.True(t, truncated, "an unterminated /* */ comment must be reported")
+	})
+
+	t.Run("an unterminated dollar-quoted string is reported as truncated", func(t *testing.T) {
+		_, truncated := functionCalls(`select $tag$ unterminated`)
+		require.True(t, truncated, "an unterminated $tag$...$tag$ literal must be reported")
+	})
+
+	// Task 8c fix round 2, finding 2: ordinary DML and DDL syntax that is
+	// shaped exactly like a call — an identifier (or reserved keyword)
+	// directly followed by "(" — must not be reported as one. Each case
+	// pairs the false-positive shape (must NOT be reported, checked against
+	// callsNeedingDeclaration — the same filter the real guard applies) with
+	// a same-shape REAL call (must still be reported) proving the fix does
+	// not overreach.
+	dmlTests := []struct {
+		name  string
+		sql   string
+		calls []funcCall
+	}{
+		{
+			name:  "insert into <table> (<cols>) is not a call",
+			sql:   `insert into buildings (id, company_id, name) values ($1, $2, $3);`,
+			calls: nil,
+		},
+		{
+			name:  "insert into <schema>.<table> (<cols>) is not a call",
+			sql:   `insert into public.buildings (id) values ($1);`,
+			calls: nil,
+		},
+		{
+			name:  `insert into "<quoted table>" (<cols>) is not a call`,
+			sql:   `insert into "Buildings" (id) values ($1);`,
+			calls: nil,
+		},
+		{
+			name:  "on conflict (<cols>) is not a call",
+			sql:   `insert into buildings (id) values ($1) on conflict (id) do nothing;`,
+			calls: nil,
+		},
+		{
+			name: "on conflict on constraint <name> is not a call",
+			sql: `insert into buildings (id) values ($1) ` +
+				`on conflict on constraint buildings_pkey do nothing;`,
+			calls: nil,
+		},
+		{
+			name:  "multi-row values (...), (...) is not a call",
+			sql:   `insert into buildings (id, name) values ($1, $2), ($3, $4);`,
+			calls: nil,
+		},
+		{
+			name: "in (...), exists (...), any (...) and all (...) are not calls",
+			sql: `select * from buildings where id in ($1, $2) and exists (select 1) ` +
+				`and company_id = any($3) and company_id = all($4);`,
+			calls: nil,
+		},
+		{
+			name:  "using (<cols>) in a join is not a call",
+			sql:   `select * from buildings b join companies c using (company_id);`,
+			calls: nil,
+		},
+		{
+			name: "over (...), filter (where ...) and within group (...) are not calls",
+			sql: `select sum(x) over (partition by y), count(*) filter (where y > 0), ` +
+				`percentile_cont(0.5) within group (order by x) from buildings;`,
+			calls: nil,
+		},
+		{
+			name:  "a CTE's as (...) body is not a call",
+			sql:   `with x as (select 1) select * from x;`,
+			calls: nil,
+		},
+		{
+			name:  "a CTE's as materialized (...) body is not a call",
+			sql:   `with x as materialized (select 1) select * from x;`,
+			calls: nil,
+		},
+		{
+			name: "numeric(18,4), varchar(10) and timestamp(3) type modifiers are not calls",
+			sql: `select cast(x as numeric(18,4)), cast(y as varchar(10)), ` +
+				`cast(z as timestamp(3)) from buildings;`,
+			calls: nil,
+		},
+		{
+			name:  "row (...) and array[...] are not calls",
+			sql:   `select row(1,2,3), array[1,2,3] from buildings;`,
+			calls: nil,
+		},
+		{
+			name:  "create index ... on t (...) is not a call",
+			sql:   `create index idx_buildings_name on buildings (name);`,
+			calls: nil,
+		},
+		{
+			name:  "primary key (...) as a table constraint is not a call",
+			sql:   `create table t (id uuid, primary key (id));`,
+			calls: nil,
+		},
+		{
+			name:  "unique (...) as a table constraint is not a call",
+			sql:   `create table t (id uuid, name text, unique (name));`,
+			calls: nil,
+		},
+		{
+			name:  "foreign key (...) references t (...) is not a call",
+			sql:   `create table t (building_id uuid, foreign key (building_id) references buildings (id));`,
+			calls: nil,
+		},
+		{
+			name:  "check (...) is not a call",
+			sql:   `create table t (price numeric, check (price > 0));`,
+			calls: nil,
+		},
+		{
+			// The real-call pins: the same shapes above, but with an
+			// undeclared function written in the exact positions the fix
+			// must not blind itself to.
+			name:  "a real call inside values (...) is still reported",
+			sql:   `insert into buildings (id) values (wobble_undeclared($1));`,
+			calls: []funcCall{{name: "wobble_undeclared", arity: 1}},
+		},
+		{
+			name: "a real call in an on conflict do update SET expression is still reported",
+			sql: `insert into buildings (id, v) values (wobble_undeclared($1), $2) ` +
+				`on conflict (id) do update set v = wobble_undeclared(excluded.v);`,
+			calls: []funcCall{{name: "wobble_undeclared", arity: 1}, {name: "wobble_undeclared", arity: 1}},
+		},
+		{
+			name:  "a real call inside a CTE body is still reported",
+			sql:   `with x as (select wobble_undeclared(id) from buildings) select * from x;`,
+			calls: []funcCall{{name: "wobble_undeclared", arity: 1}},
+		},
+		{
+			// The case the "on" heuristic must not break: a JOIN condition
+			// also puts an identifier directly after "on" and directly
+			// before "(" — the same shape as "create index ... on t (" —
+			// but here it is a real call and must still be caught. See
+			// createIndexOnRe's own comment for why these are
+			// distinguishable.
+			name:  `a real call directly after "on" in a join condition is still reported`,
+			sql:   `select * from meters m join readings r on wobble_undeclared(m.id) = r.meter_id;`,
+			calls: []funcCall{{name: "wobble_undeclared", arity: 1}},
+		},
+	}
+	for _, tc := range dmlTests {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.calls, callsNeedingDeclaration(t, tc.sql))
+		})
+	}
 }
