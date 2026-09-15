@@ -189,27 +189,70 @@ func TestIntegMaxRetryOptionsAlwaysExplicit(t *testing.T) {
 }
 
 // TestFetchTaskWithWindowHasDeterministicTaskID proves
-// integFetchReadingsTaskID — what NewFetchReadingsTask feeds asynq.TaskID
-// for a windowed payload — is a pure function of the payload: the same
-// analyzer, kind and window always produce the same ID, and changing the
-// window changes it.
+// integFetchReadingsTaskID — the REAL production formula
+// NewFetchReadingsTask feeds asynq.TaskID for a windowed payload, called
+// directly here (not through a fake enqueuer's own dedup key, which is a
+// faithful-by-construction substitute for THIS payload shape but does not
+// itself exercise the formula) — is a pure function of exactly
+// (analyzer, kind, window.From, window.To): identical for identical inputs,
+// including when CompanyID/CredentialID differ (neither feeds the ID at
+// all — a windowed fetch_readings task is deliberately dedup'd across
+// company/credential boundaries by analyzer+kind+window alone), and
+// DIFFERENT when analyzer, kind, From or To differs.
+//
+// Fix round 1 / I1: dropping Window.To from the formula must fail this
+// test — proved and recorded in task-15-report.md's "Fix round 1" section,
+// not left as a standing mutation here.
 func TestFetchTaskWithWindowHasDeterministicTaskID(t *testing.T) {
 	analyzer := uuid.New()
+	otherAnalyzer := uuid.New()
 	from := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	to := time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)
 
-	pA := FetchReadingsPayload{AnalyzerID: analyzer, Kind: model.ReadingKindLoadProfile, Window: &Window{From: from, To: to}}
-	pB := FetchReadingsPayload{AnalyzerID: analyzer, Kind: model.ReadingKindLoadProfile, Window: &Window{From: from, To: to}}
-	require.Equal(t, integFetchReadingsTaskID(pA), integFetchReadingsTaskID(pB),
-		"the same payload must produce the same task ID")
-
-	pDifferentWindow := FetchReadingsPayload{
-		AnalyzerID: analyzer,
-		Kind:       model.ReadingKindLoadProfile,
-		Window:     &Window{From: from, To: to.Add(24 * time.Hour)},
+	base := FetchReadingsPayload{
+		CompanyID: uuid.New(), CredentialID: uuid.New(),
+		AnalyzerID: analyzer, Kind: model.ReadingKindLoadProfile,
+		Window: &Window{From: from, To: to},
 	}
-	require.NotEqual(t, integFetchReadingsTaskID(pA), integFetchReadingsTaskID(pDifferentWindow),
-		"a different window must produce a different task ID")
+
+	t.Run("identical company/credential/analyzer/kind/window -> identical ID", func(t *testing.T) {
+		same := base
+		w := *base.Window
+		same.Window = &w
+		require.Equal(t, integFetchReadingsTaskID(base), integFetchReadingsTaskID(same))
+	})
+
+	t.Run("company/credential differ, analyzer/kind/window identical -> identical ID", func(t *testing.T) {
+		differentCompanyCred := base
+		differentCompanyCred.CompanyID = uuid.New()
+		differentCompanyCred.CredentialID = uuid.New()
+		require.Equal(t, integFetchReadingsTaskID(base), integFetchReadingsTaskID(differentCompanyCred),
+			"CompanyID/CredentialID must not feed the deterministic ID")
+	})
+
+	t.Run("different From -> different ID", func(t *testing.T) {
+		differentFrom := base
+		differentFrom.Window = &Window{From: from.Add(-24 * time.Hour), To: to}
+		require.NotEqual(t, integFetchReadingsTaskID(base), integFetchReadingsTaskID(differentFrom))
+	})
+
+	t.Run("different To -> different ID", func(t *testing.T) {
+		differentTo := base
+		differentTo.Window = &Window{From: from, To: to.Add(24 * time.Hour)}
+		require.NotEqual(t, integFetchReadingsTaskID(base), integFetchReadingsTaskID(differentTo))
+	})
+
+	t.Run("different kind -> different ID", func(t *testing.T) {
+		differentKind := base
+		differentKind.Kind = model.ReadingKindDaily
+		require.NotEqual(t, integFetchReadingsTaskID(base), integFetchReadingsTaskID(differentKind))
+	})
+
+	t.Run("different analyzer -> different ID", func(t *testing.T) {
+		differentAnalyzer := base
+		differentAnalyzer.AnalyzerID = otherAnalyzer
+		require.NotEqual(t, integFetchReadingsTaskID(base), integFetchReadingsTaskID(differentAnalyzer))
+	})
 }
 
 // TestRegisterSkipsNilIntegrationHandlers proves a Handlers with no

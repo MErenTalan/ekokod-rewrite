@@ -4,6 +4,7 @@ package backfill_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
@@ -104,13 +105,19 @@ var _ ingest.SourceResolver = (sourceMap)(nil)
 // UNEXPORTED field (asynq.Task.opts — see NewTask/EnqueueContext in
 // github.com/hibiken/asynq/asynq.go and client.go), so a fake enqueuer
 // outside that package cannot read the real TaskID back off task at all.
-// This is a faithful substitute here specifically because
-// job.FetchReadingsPayload's JSON encoding already carries AnalyzerID, Kind
-// and Window.From/To — exactly the fields integFetchReadingsTaskID's
+// job.FetchReadingsPayload's JSON encoding happens to carry AnalyzerID,
+// Kind and Window.From/To — the same fields integFetchReadingsTaskID's
 // deterministic ID is a function of — so "same type+payload" and "same
-// TaskID" are the same equivalence relation for this payload shape; two
-// enqueue calls collide here if and only if the real client would also
-// collide on TaskID.
+// TaskID" collide on the same pairs of calls for this payload shape, which
+// is what makes this key a faithful stand-in for exercising Backfill's own
+// enqueue loop and its asynq.ErrTaskIDConflict -> skipped handling.
+//
+// It does NOT verify the real integFetchReadingsTaskID formula itself
+// (a different formula producing "same key iff same real TaskID" would
+// pass every test in this file unchanged) — that formula is proved
+// directly, as a pure function in package job, by
+// TestFetchTaskWithWindowHasDeterministicTaskID in
+// internal/job/integration_test.go (fix round 1 / I1).
 type recordingEnqueuer struct {
 	mu    sync.Mutex
 	tasks []*asynq.Task
@@ -345,6 +352,72 @@ func TestBackfillEmptyAnalyzerListMeansActiveAnalyzersNotAll(t *testing.T) {
 	runs := backfillTestRuns(t, ctx, postgres.NewOpsRepository(pool), tn.Scope)
 	require.Len(t, runs, 1)
 	require.EqualValues(t, 1, runs[0].Processed)
+}
+
+// TestBackfillMissingAnalyzerIDsRunPartialAndOnlyEnqueueVisible is fix
+// round 1 / I2: AnalyzerIDs naming the credential's own active analyzer, a
+// random uuid that names no analyzer at all, and another company's analyzer
+// id must run "partial" (own analyzer's windows enqueue normally, the two
+// bad ids each count failed, never silently skipped or silently
+// succeeding), name BOTH missing ids in job_runs.detail.failures, and
+// enqueue only the own analyzer's windows — never the cross-company one
+// (SystemScope(p.CompanyID) narrows Analyzers.List by company, so the other
+// tenant's analyzer id is invisible and reported missing exactly like the
+// random uuid, not silently included).
+func TestBackfillMissingAnalyzerIDsRunPartialAndOnlyEnqueueVisible(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tn := testfixtures.NewTenant(t, ctx, pool, 15007)
+	other := testfixtures.NewTenant(t, ctx, pool, 15008)
+
+	own := tn.Analyzers[0] // OSOS, building 0, tn's own company
+	randomID := uuid.New()
+	crossCompanyID := other.Analyzers[0].ID // visible to `other`, not to tn
+
+	creds := integration.Credentials{CredentialID: uuid.New(), CompanyID: tn.Company.ID, Provider: integration.ProviderOSOS, Subtype: own.ProviderSubtype}
+	src := &fakePlanner{provider: integration.ProviderOSOS, kinds: []model.ReadingKind{model.ReadingKindLoadProfile}, maxWindow: 30 * 24 * time.Hour}
+	enq := newRecordingEnqueuer()
+	clk := clock.NewFake(backfillTestNow)
+	b := backfill.New(backfillTestDeps(pool, creds, src, enq, clk))
+
+	from := backfillTestNow.Add(-10 * 24 * time.Hour)
+	to := backfillTestNow.Add(-5 * 24 * time.Hour)
+	payload := job.BackfillPayload{
+		CompanyID: tn.Company.ID, CredentialID: creds.CredentialID,
+		AnalyzerIDs: []uuid.UUID{own.ID, randomID, crossCompanyID},
+		From:        from, To: to,
+	}
+
+	require.NoError(t, b.Backfill(ctx, payload))
+
+	tasks := enq.enqueued()
+	require.Len(t, tasks, 1, "only the own, visible analyzer's single window is enqueued")
+	wantKey := backfillTestTaskKey(t, tn.Company.ID, creds.CredentialID, own.ID, model.ReadingKindLoadProfile, job.Window{From: from, To: to})
+	require.Equal(t, wantKey, recordingEnqueuerKey(tasks[0]))
+
+	runs := backfillTestRuns(t, ctx, postgres.NewOpsRepository(pool), tn.Scope)
+	require.Len(t, runs, 1)
+	require.Equal(t, "partial", runs[0].Status, "one visible analyzer succeeded and two ids were missing: partial, not success or failed")
+	require.EqualValues(t, 1, runs[0].Processed)
+	require.EqualValues(t, 0, runs[0].Skipped)
+	require.EqualValues(t, 2, runs[0].Failed, "the random id and the cross-company id each count failed")
+
+	var detail struct {
+		Failures []struct {
+			AnalyzerID *uuid.UUID `json:"analyzer_id"`
+			Reason     string     `json:"reason"`
+		} `json:"failures"`
+	}
+	require.NoError(t, json.Unmarshal(runs[0].Detail, &detail))
+	require.Len(t, detail.Failures, 2, "both missing ids must be named, never merged or dropped")
+	named := make(map[uuid.UUID]bool, 2)
+	for _, f := range detail.Failures {
+		require.NotNil(t, f.AnalyzerID)
+		named[*f.AnalyzerID] = true
+	}
+	require.True(t, named[randomID], "the random, non-existent id must be named in job_runs.detail.failures")
+	require.True(t, named[crossCompanyID], "the other company's analyzer id must be named in job_runs.detail.failures")
 }
 
 // TestBackfillRejectsInvertedAndFutureRanges proves the brief's three range
