@@ -143,6 +143,50 @@ func TestMemoryReleaseIsOwnerOnly(t *testing.T) {
 	require.NoError(t, newLease.Release(context.Background()))
 }
 
+// TestMemoryAcquireRejectsNonPositiveTTL proves M1: a zero or negative ttl
+// is rejected up front rather than silently held forever (a zero ttl would
+// have no expiry to fall back on the way Redis's SET...PX 0 does not
+// expire).
+func TestMemoryAcquireRejectsNonPositiveTTL(t *testing.T) {
+	m := lock.NewMemory(nil)
+
+	_, err := m.Acquire(context.Background(), "k", 0)
+	require.ErrorIs(t, err, lock.ErrInvalidTTL)
+
+	_, err = m.Acquire(context.Background(), "k", -time.Second)
+	require.ErrorIs(t, err, lock.ErrInvalidTTL)
+}
+
+// TestMemoryConsumeRejectsNonPositiveTTL is TestMemoryAcquireRejectsNonPositiveTTL's
+// Consume counterpart (M1).
+func TestMemoryConsumeRejectsNonPositiveTTL(t *testing.T) {
+	m := lock.NewMemory(nil)
+
+	_, err := m.Consume(context.Background(), "nonce", 0)
+	require.ErrorIs(t, err, lock.ErrInvalidTTL)
+
+	_, err = m.Consume(context.Background(), "nonce", -time.Second)
+	require.ErrorIs(t, err, lock.ErrInvalidTTL)
+}
+
+// TestMemoryConsumeDoesNotBlockAcquire proves M2's namespace-separation
+// requirement holds for Memory (it already does — held and consumed are
+// separate maps — this is the regression test; Redis needed the actual fix,
+// see TestRedisConsumeDoesNotBlockAcquire).
+func TestMemoryConsumeDoesNotBlockAcquire(t *testing.T) {
+	m := lock.NewMemory(nil)
+
+	found, err := m.Consume(context.Background(), "x", time.Minute)
+	require.NoError(t, err)
+	require.True(t, found)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	lease, err := m.Acquire(ctx, "x", time.Minute)
+	require.NoError(t, err, "Consume(\"x\") must not block Acquire(\"x\")")
+	require.NoError(t, lease.Release(context.Background()))
+}
+
 // fakeClock is a minimal, single-goroutine-use clock: every test above uses
 // it sequentially (Acquire/Consume calls happen in the test goroutine, with
 // no concurrent advance), so it needs no locking.

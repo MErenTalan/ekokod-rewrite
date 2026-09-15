@@ -4,6 +4,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -28,8 +29,17 @@ type FixtureFile struct {
 	Body []byte
 }
 
-// FixtureFiles globs internal/integration/*/testdata/**/*.json relative to
-// the module root. It returns nil (never an error) when
+// fixtureExtensions are the file types TestFixturesAreSanitised scans (M5:
+// .xml/.csv/.txt fixtures are sanitised too, not just .json).
+var fixtureExtensions = map[string]bool{
+	".json": true,
+	".xml":  true,
+	".csv":  true,
+	".txt":  true,
+}
+
+// FixtureFiles globs internal/integration/*/testdata/**/*.{json,xml,csv,txt}
+// relative to the module root. It returns nil (never an error) when
 // internal/integration does not yet exist or has no provider directories —
 // TestFixturesAreSanitised passes vacuously on that empty tree today.
 func FixtureFiles(t *testing.T) []FixtureFile {
@@ -58,7 +68,7 @@ func FixtureFiles(t *testing.T) []FixtureFile {
 			if walkErr != nil {
 				return walkErr
 			}
-			if d.IsDir() || filepath.Ext(path) != ".json" {
+			if d.IsDir() || !fixtureExtensions[strings.ToLower(filepath.Ext(path))] {
 				return nil
 			}
 			body, readErr := os.ReadFile(path)

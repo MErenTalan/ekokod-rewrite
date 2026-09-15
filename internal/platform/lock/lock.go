@@ -23,6 +23,13 @@ import (
 // ctx was done.
 var ErrNotAcquired = errors.New("lock: not acquired")
 
+// ErrInvalidTTL is returned by Acquire and Consume when ttl <= 0 (fix-round-1
+// finding M1). A non-positive ttl reaching Redis's SET...PX would mean "no
+// expiry" (SetNX with px=0 sets no TTL at all), holding the lock/consume
+// mark forever instead of the caller's evident intent; both Memory and
+// Redis reject it up front instead.
+var ErrInvalidTTL = errors.New("lock: ttl must be positive")
+
 // Locker acquires exclusive, TTL-bounded leases on a named key. Acquire
 // blocks, polling, until it obtains the lease or ctx is done.
 type Locker interface {

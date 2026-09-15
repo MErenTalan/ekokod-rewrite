@@ -62,6 +62,10 @@ func NewMemory(now func() time.Time) *Memory {
 // Acquire blocks, polling every memoryPollInterval, until key is free or ctx
 // is done.
 func (m *Memory) Acquire(ctx context.Context, key string, ttl time.Duration) (Lease, error) {
+	if ttl <= 0 {
+		return nil, ErrInvalidTTL
+	}
+
 	token := newMemoryToken()
 	for {
 		if err := ctx.Err(); err != nil {
@@ -95,6 +99,9 @@ func (m *Memory) tryAcquire(key string, ttl time.Duration, token string) (Lease,
 // Consume is a single lookup-and-set under one mutex critical section — no
 // loop, no wait. See Consumer.
 func (m *Memory) Consume(ctx context.Context, key string, ttl time.Duration) (bool, error) {
+	if ttl <= 0 {
+		return false, ErrInvalidTTL
+	}
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}

@@ -10,9 +10,18 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
-// redisKeyPrefix namespaces every key this package touches in the shared
-// Redis keyspace.
-const redisKeyPrefix = "ekokod:lock:"
+// redisKeyPrefix namespaces every Acquire/Release key in the shared Redis
+// keyspace. redisConsumePrefix is a SEPARATE namespace for Consume (M2): it
+// must not share redisKeyPrefix with Acquire/Release, or Consume("x") and
+// Acquire("x") would collide on the same Redis key — Consume marking "x" as
+// used would make Acquire("x") block (and a held Acquire("x") lease would
+// make Consume("x") report found=false), even though the two are unrelated
+// operations. This mirrors Memory, whose held and consumed maps are already
+// separate.
+const (
+	redisKeyPrefix     = "ekokod:lock:"
+	redisConsumePrefix = "ekokod:consume:"
+)
 
 // redisPollStart and redisPollMax bound Acquire's polling backoff against a
 // busy key: it waits redisPollStart, doubling on every retry, capped at
@@ -52,6 +61,10 @@ func NewRedis(client goredis.UniversalClient) *Redis {
 // Acquire issues SET key token NX PX ttl, retrying with doubling backoff
 // (redisPollStart to redisPollMax) until it succeeds or ctx is done.
 func (r *Redis) Acquire(ctx context.Context, key string, ttl time.Duration) (Lease, error) {
+	if ttl <= 0 {
+		return nil, ErrInvalidTTL
+	}
+
 	token, err := randomToken()
 	if err != nil {
 		return nil, fmt.Errorf("lock: generate token: %w", err)
@@ -87,7 +100,11 @@ func (r *Redis) Acquire(ctx context.Context, key string, ttl time.Duration) (Lea
 // signal — there is no separate poll/wait path here to accidentally
 // introduce, unlike Acquire.
 func (r *Redis) Consume(ctx context.Context, key string, ttl time.Duration) (bool, error) {
-	fullKey := redisKeyPrefix + key
+	if ttl <= 0 {
+		return false, ErrInvalidTTL
+	}
+
+	fullKey := redisConsumePrefix + key
 	ok, err := r.client.SetNX(ctx, fullKey, "1", ttl).Result()
 	if err != nil {
 		return false, fmt.Errorf("lock: consume %q: %w", key, err)
