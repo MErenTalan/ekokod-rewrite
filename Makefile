@@ -12,7 +12,7 @@ GOLANGCI_VERSION := v2.13.2
 GOVULNCHECK_VERSION := v1.8.0
 SQLC_VERSION := v1.30.0
 
-.PHONY: build test test-integration lint fmt tidy tools vuln ci
+.PHONY: build test test-integration test-perf lint fmt tidy tools vuln ci
 
 build: ## Build the ekokod binary
 	go build -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/ekokod
@@ -22,6 +22,17 @@ test: ## Run unit tests
 
 test-integration: ## Run integration tests (requires Docker)
 	go test ./... -tags=integration -race -count=1
+
+# test-perf runs Task 13's slow F1 acceptance suite: 1,000,000 synthetic
+# readings across 100 analyzers, asserting the chunk layout and EXPLAIN plan
+# TestOneMillionReadingsChunkLayout expects (~70s insert + assertions on this
+# machine). It is gated by EKOKOD_PERF=1, NOT by an extra build tag: the test
+# still builds under plain -tags=integration (so `-run` can name it and CI's
+# scheduled job needs no extra tag), but is skipped unless this variable is
+# set — which is why test-integration above runs fast and unchanged. CI runs
+# this target on a schedule, not per push.
+test-perf: ## Run the slow F1 performance/acceptance suite (requires Docker; CI runs this on a schedule, not per push)
+	EKOKOD_PERF=1 go test ./internal/store/postgres/ -tags=integration -race -count=1 -run 'TestOneMillionReadingsChunkLayout' -v
 
 fmt:
 	gofmt -w ./cmd ./internal
