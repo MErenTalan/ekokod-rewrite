@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -57,6 +56,11 @@ func (r *GenerationRepository) Anchor(ctx context.Context, s store.Scope, analyz
 // own doc says it cannot do. RowsAffected == 0 means the select-from-
 // analyzers source came back empty — the analyzer is not visible to s — and
 // nothing was written.
+//
+// a.UpdatedAt is ignored: GenerationAnchorUpsert stamps updated_at with SQL
+// `now()` (insert default and, explicitly, the conflict branch), never a
+// caller-supplied or Go wall-clock value — the caller cannot backdate the
+// bookkeeping timestamp.
 func (r *GenerationRepository) SetAnchor(ctx context.Context, s store.Scope, a model.GenerationAnchor) error {
 	if !s.Valid() {
 		return store.ErrInvalidScope
@@ -67,7 +71,6 @@ func (r *GenerationRepository) SetAnchor(ctx context.Context, s store.Scope, a m
 		AnchorTs:     timeseriesToTimestamptz(a.AnchorTs),
 		ActiveExport: decimalToNumeric(a.ActiveExport),
 		Source:       a.Source,
-		UpdatedAt:    timeseriesToTimestamptz(f2genUpdatedAtOrNow(a.UpdatedAt)),
 		AnalyzerID:   a.AnalyzerID,
 		CompanyID:    s.CompanyID,
 		AllBuildings: allBuildings,
@@ -80,16 +83,6 @@ func (r *GenerationRepository) SetAnchor(ctx context.Context, s store.Scope, a m
 		return store.ErrNotFound
 	}
 	return nil
-}
-
-// f2genUpdatedAtOrNow defaults a zero UpdatedAt to the current instant, so a
-// caller that only fills in the anchor's own fields does not also have to
-// think about a bookkeeping timestamp.
-func f2genUpdatedAtOrNow(t time.Time) time.Time {
-	if t.IsZero() {
-		return time.Now().UTC()
-	}
-	return t
 }
 
 // f2genAnchorFromRow converts a generated GenerationAnchor row to the domain

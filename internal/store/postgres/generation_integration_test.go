@@ -172,6 +172,80 @@ func TestGenerationAnchorRefusesNarrowScopeOnOtherBuilding(t *testing.T) {
 	require.ErrorIs(t, err, store.ErrNotFound)
 }
 
+// TestGenerationAnchorGetExcludesSoftDeletedAnalyzer is fix-round-1 finding
+// M1's refusal test for the read path: GenerationAnchorGet's own
+// "a.deleted_at is null" predicate must exclude a soft-deleted analyzer's
+// anchor even under AdminScope, the widest legitimate grant. A positive
+// control proves the same anchor was readable before the soft-delete.
+func TestGenerationAnchorGetExcludesSoftDeletedAnalyzer(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
+	repo := postgres.NewGenerationRepository(pool)
+
+	analyzerID := tenant.Analyzers[0].ID
+	require.NoError(t, repo.SetAnchor(ctx, tenant.AdminScope, model.GenerationAnchor{
+		AnalyzerID:   analyzerID,
+		AnchorTs:     f2genEpoch,
+		ActiveExport: decimal.RequireFromString("5.0000"),
+		Source:       "initial",
+	}))
+
+	// Positive control: the anchor is readable before the soft-delete.
+	_, err := repo.Anchor(ctx, tenant.AdminScope, analyzerID)
+	require.NoError(t, err)
+
+	_, err = pool.Exec(ctx, `update analyzers set deleted_at = now() where id = $1`, analyzerID)
+	require.NoError(t, err)
+
+	_, err = repo.Anchor(ctx, tenant.AdminScope, analyzerID)
+	require.ErrorIs(t, err, store.ErrNotFound, "a soft-deleted analyzer's anchor must not be readable")
+}
+
+// TestGenerationAnchorUpsertRefusesSoftDeletedAnalyzer is fix-round-1 finding
+// M1's refusal test for the write path: GenerationAnchorUpsert's
+// select-from-analyzers source requires a.deleted_at is null, so a
+// soft-deleted analyzer's row is refused (RowsAffected == 0 → ErrNotFound)
+// even under AdminScope. Proves nothing was written by restoring the
+// analyzer and reading the anchor back via AdminScope, unchanged.
+func TestGenerationAnchorUpsertRefusesSoftDeletedAnalyzer(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
+	repo := postgres.NewGenerationRepository(pool)
+
+	analyzerID := tenant.Analyzers[0].ID
+
+	// Positive control: the analyzer accepts a write before the soft-delete.
+	require.NoError(t, repo.SetAnchor(ctx, tenant.Scope, model.GenerationAnchor{
+		AnalyzerID:   analyzerID,
+		AnchorTs:     f2genEpoch,
+		ActiveExport: decimal.RequireFromString("5.0000"),
+		Source:       "initial",
+	}))
+
+	_, err := pool.Exec(ctx, `update analyzers set deleted_at = now() where id = $1`, analyzerID)
+	require.NoError(t, err)
+
+	err = repo.SetAnchor(ctx, tenant.AdminScope, model.GenerationAnchor{
+		AnalyzerID:   analyzerID,
+		AnchorTs:     f2genEpoch.Add(time.Hour),
+		ActiveExport: decimal.RequireFromString("999.0000"),
+		Source:       "operator",
+	})
+	require.ErrorIs(t, err, store.ErrNotFound, "a soft-deleted analyzer's anchor must not be writable")
+
+	// Nothing was written by the refused attempt: restore the analyzer and
+	// read the anchor back via AdminScope — it must still hold the positive
+	// control's value, not the refused write's.
+	_, err = pool.Exec(ctx, `update analyzers set deleted_at = null where id = $1`, analyzerID)
+	require.NoError(t, err)
+	got, err := repo.Anchor(ctx, tenant.AdminScope, analyzerID)
+	require.NoError(t, err)
+	require.True(t, got.ActiveExport.Equal(decimal.RequireFromString("5.0000")),
+		"the refused write to a soft-deleted analyzer must not have changed the stored anchor")
+}
+
 // TestGenerationAnchorInvalidScopeIsRejected pins the before-any-I/O
 // contract every repository method shares.
 func TestGenerationAnchorInvalidScopeIsRejected(t *testing.T) {

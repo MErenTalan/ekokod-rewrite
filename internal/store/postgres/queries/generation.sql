@@ -26,8 +26,14 @@ where ga.analyzer_id = sqlc.arg(analyzer_id)
 --
 -- One atomic statement upserts on analyzer_id: a fresh reconciliation always
 -- replaces the prior anchor rather than accumulating history.
-insert into generation_anchors (analyzer_id, anchor_ts, active_export, source, updated_at)
-select a.id, sqlc.arg(anchor_ts)::timestamptz, sqlc.arg(active_export)::numeric, sqlc.arg(source)::text, sqlc.arg(updated_at)::timestamptz
+--
+-- updated_at is owned by SQL, never the caller: the insert list omits it
+-- entirely (the column default `now()` stamps a fresh row) and the conflict
+-- branch stamps it explicitly with `now()` — never `excluded.updated_at`,
+-- which would let a caller backdate or forward-date the bookkeeping
+-- timestamp with its own wall clock.
+insert into generation_anchors (analyzer_id, anchor_ts, active_export, source)
+select a.id, sqlc.arg(anchor_ts)::timestamptz, sqlc.arg(active_export)::numeric, sqlc.arg(source)::text
 from analyzers a
 where a.id = sqlc.arg(analyzer_id)
   and a.company_id = sqlc.arg(company_id)
@@ -37,4 +43,4 @@ on conflict (analyzer_id) do update set
     anchor_ts     = excluded.anchor_ts,
     active_export = excluded.active_export,
     source        = excluded.source,
-    updated_at    = excluded.updated_at;
+    updated_at    = now();

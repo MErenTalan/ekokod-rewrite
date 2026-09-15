@@ -65,12 +65,27 @@ const f2seriesCreateProviderHourlyStaging = `create temporary table provider_hou
 // store.ErrConflict, before the staging table even exists, the moment two
 // rows in the caller's own slice share an (analyzer_id, ts) key (see
 // f2seriesDuplicateKey).
+//
+// Defence in depth: the select joins analyzers again, on the SAME predicate
+// ProviderHourlyVisibleAnalyzerIDs already locked ($1 company_id, $2/$3
+// building branch, deleted_at is null) — params bound from the caller's own
+// Scope, never trusted from the staging rows. This is redundant with the
+// `for share` check above under normal operation; it exists so that if that
+// check is ever weakened or bypassed, the write itself still cannot smuggle
+// another tenant's row in. UpsertHourly additionally asserts the returned
+// row count equals len(rows); a mismatch — this join silently dropping a row
+// the Go-side check let through — rolls the whole batch back with
+// store.ErrNotFound rather than reporting a partial success.
 const f2seriesUpsertProviderHourlyFromStaging = `insert into provider_hourly_values (
 	analyzer_id, ts, active_consumption, active_generation, source_provider
 )
 select
-	analyzer_id, ts, active_consumption, active_generation, source_provider
-from provider_hourly_values_staging
+	s.analyzer_id, s.ts, s.active_consumption, s.active_generation, s.source_provider
+from provider_hourly_values_staging s
+join analyzers a on a.id = s.analyzer_id
+	and a.company_id = $1
+	and a.deleted_at is null
+	and ($2::boolean or a.building_id = any($3::uuid[]))
 on conflict (analyzer_id, ts) do update set
 	active_consumption = excluded.active_consumption,
 	active_generation  = excluded.active_generation,
@@ -158,13 +173,23 @@ func (r *ProviderSeriesRepository) UpsertHourly(ctx context.Context, s store.Sco
 		return 0, 0, pgerr.Translate(r.pool, op, err)
 	}
 
-	upsertRows, err := tx.Query(ctx, f2seriesUpsertProviderHourlyFromStaging)
+	upsertRows, err := tx.Query(ctx, f2seriesUpsertProviderHourlyFromStaging, s.CompanyID, allBuildings, buildingIDs)
 	if err != nil {
 		return 0, 0, pgerr.Translate(r.pool, op, err)
 	}
 	inserted, updated, err = timeseriesScanUpsertCounts(upsertRows)
 	if err != nil {
 		return 0, 0, pgerr.Translate(r.pool, op, err)
+	}
+	if inserted+updated != len(rows) {
+		// Defence in depth: the upsert's own analyzers join (see
+		// f2seriesUpsertProviderHourlyFromStaging) returned fewer rows than
+		// the batch had — some row's analyzer failed the join's own
+		// company/building/deleted_at predicate even though the earlier
+		// ProviderHourlyVisibleAnalyzerIDs check let it through. Refuse the
+		// whole batch rather than report a partial success; the deferred
+		// Rollback above discards everything written so far.
+		return 0, 0, store.ErrNotFound
 	}
 
 	if err := tx.Commit(ctx); err != nil {

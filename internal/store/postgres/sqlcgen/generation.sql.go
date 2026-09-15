@@ -55,25 +55,24 @@ func (q *Queries) GenerationAnchorGet(ctx context.Context, arg GenerationAnchorG
 }
 
 const generationAnchorUpsert = `-- name: GenerationAnchorUpsert :execrows
-insert into generation_anchors (analyzer_id, anchor_ts, active_export, source, updated_at)
-select a.id, $1::timestamptz, $2::numeric, $3::text, $4::timestamptz
+insert into generation_anchors (analyzer_id, anchor_ts, active_export, source)
+select a.id, $1::timestamptz, $2::numeric, $3::text
 from analyzers a
-where a.id = $5
-  and a.company_id = $6
+where a.id = $4
+  and a.company_id = $5
   and a.deleted_at is null
-  and ($7::boolean or a.building_id = any($8::uuid[]))
+  and ($6::boolean or a.building_id = any($7::uuid[]))
 on conflict (analyzer_id) do update set
     anchor_ts     = excluded.anchor_ts,
     active_export = excluded.active_export,
     source        = excluded.source,
-    updated_at    = excluded.updated_at
+    updated_at    = now()
 `
 
 type GenerationAnchorUpsertParams struct {
 	AnchorTs     pgtype.Timestamptz
 	ActiveExport pgtype.Numeric
 	Source       string
-	UpdatedAt    pgtype.Timestamptz
 	AnalyzerID   uuid.UUID
 	CompanyID    uuid.UUID
 	AllBuildings bool
@@ -91,12 +90,17 @@ type GenerationAnchorUpsertParams struct {
 //
 // One atomic statement upserts on analyzer_id: a fresh reconciliation always
 // replaces the prior anchor rather than accumulating history.
+//
+// updated_at is owned by SQL, never the caller: the insert list omits it
+// entirely (the column default `now()` stamps a fresh row) and the conflict
+// branch stamps it explicitly with `now()` — never `excluded.updated_at`,
+// which would let a caller backdate or forward-date the bookkeeping
+// timestamp with its own wall clock.
 func (q *Queries) GenerationAnchorUpsert(ctx context.Context, arg GenerationAnchorUpsertParams) (int64, error) {
 	result, err := q.db.Exec(ctx, generationAnchorUpsert,
 		arg.AnchorTs,
 		arg.ActiveExport,
 		arg.Source,
-		arg.UpdatedAt,
 		arg.AnalyzerID,
 		arg.CompanyID,
 		arg.AllBuildings,
