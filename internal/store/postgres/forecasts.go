@@ -88,7 +88,9 @@ func (r *ForecastRepository) BulkInsert(ctx context.Context, s store.Scope, rows
 	}
 	distinctAnalyzerIDs := distinctUUIDs(analyzerIDs)
 
-	visible, err := r.q.WithTx(tx).ForecastVisibleAnalyzerCount(ctx, sqlcgen.ForecastVisibleAnalyzerCountParams{
+	// `for share` locks every visible analyzer row for the rest of this
+	// transaction — see ReadingRepository.BulkInsert's identical comment.
+	visibleIDs, err := r.q.WithTx(tx).ForecastVisibleAnalyzerIDs(ctx, sqlcgen.ForecastVisibleAnalyzerIDsParams{
 		AnalyzerIds:  distinctAnalyzerIDs,
 		CompanyID:    s.CompanyID,
 		AllBuildings: allBuildings,
@@ -97,7 +99,7 @@ func (r *ForecastRepository) BulkInsert(ctx context.Context, s store.Scope, rows
 	if err != nil {
 		return 0, 0, pgerr.Translate(r.pool, op, err)
 	}
-	if visible != int64(len(distinctAnalyzerIDs)) {
+	if len(visibleIDs) != len(distinctAnalyzerIDs) {
 		return 0, 0, store.ErrNotFound
 	}
 
@@ -139,7 +141,10 @@ func (r *ForecastRepository) BulkInsert(ctx context.Context, s store.Scope, rows
 	return inserted, updated, nil
 }
 
-// Range implements store.ForecastRepository.Range.
+// Range implements store.ForecastRepository.Range. The scope is carried by
+// ForecastRange's OWN join through analyzers; requireAnalyzerVisible is
+// consulted only to choose an error once that query has already come back
+// empty — see ReadingRepository.Range's identical comment.
 func (r *ForecastRepository) Range(ctx context.Context, s store.Scope, analyzerID uuid.UUID, tr store.TimeRange) ([]model.Forecast, error) {
 	if !s.Valid() {
 		return nil, store.ErrInvalidScope
@@ -148,18 +153,24 @@ func (r *ForecastRepository) Range(ctx context.Context, s store.Scope, analyzerI
 		return nil, store.ErrInvalidRange
 	}
 	const op = "forecast range"
-
-	if err := r.requireAnalyzerVisible(ctx, s, analyzerID, op); err != nil {
-		return nil, err
-	}
+	buildingIDs, allBuildings := s.BuildingFilter()
 
 	rows, err := r.q.ForecastRange(ctx, sqlcgen.ForecastRangeParams{
-		AnalyzerID: analyzerID,
-		FromTs:     toTimestamptz(tr.From),
-		ToTs:       toTimestamptz(tr.To),
+		AnalyzerID:   analyzerID,
+		FromTs:       toTimestamptz(tr.From),
+		ToTs:         toTimestamptz(tr.To),
+		CompanyID:    s.CompanyID,
+		AllBuildings: allBuildings,
+		BuildingIds:  buildingIDs,
 	})
 	if err != nil {
 		return nil, pgerr.Translate(r.pool, op, err)
+	}
+	if len(rows) == 0 {
+		if err := r.requireAnalyzerVisible(ctx, s, analyzerID, op); err != nil {
+			return nil, err
+		}
+		return []model.Forecast{}, nil
 	}
 	return forecastsFromRows(rows)
 }
@@ -173,23 +184,36 @@ func (r *ForecastRepository) LatestRun(ctx context.Context, s store.Scope, analy
 		return nil, store.ErrInvalidRange
 	}
 	const op = "forecast latest run"
-
-	if err := r.requireAnalyzerVisible(ctx, s, analyzerID, op); err != nil {
-		return nil, err
-	}
+	buildingIDs, allBuildings := s.BuildingFilter()
 
 	rows, err := r.q.ForecastLatestRun(ctx, sqlcgen.ForecastLatestRunParams{
-		AnalyzerID: analyzerID,
-		FromTs:     toTimestamptz(tr.From),
-		ToTs:       toTimestamptz(tr.To),
+		AnalyzerID:   analyzerID,
+		FromTs:       toTimestamptz(tr.From),
+		ToTs:         toTimestamptz(tr.To),
+		CompanyID:    s.CompanyID,
+		AllBuildings: allBuildings,
+		BuildingIds:  buildingIDs,
 	})
 	if err != nil {
 		return nil, pgerr.Translate(r.pool, op, err)
+	}
+	if len(rows) == 0 {
+		if err := r.requireAnalyzerVisible(ctx, s, analyzerID, op); err != nil {
+			return nil, err
+		}
+		return []model.Forecast{}, nil
 	}
 	return forecastsFromRows(rows)
 }
 
 // RecordGaps implements store.ForecastRepository.RecordGaps.
+//
+// A genuinely multi-statement write (the batch-visibility check and the
+// insert are two separate statements), so — per the isolation ruling for
+// tables without company_id — both run inside ONE transaction, and the
+// check takes a `for share` row lock rather than a plain, unlocked read: a
+// concurrent reassignment of one of the batch's analyzers cannot open a gap
+// between the check and the insert that follows it.
 func (r *ForecastRepository) RecordGaps(ctx context.Context, s store.Scope, gaps []model.ForecastGap) error {
 	if !s.Valid() {
 		return store.ErrInvalidScope
@@ -200,13 +224,19 @@ func (r *ForecastRepository) RecordGaps(ctx context.Context, s store.Scope, gaps
 	const op = "forecast record gaps"
 	buildingIDs, allBuildings := s.BuildingFilter()
 
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return pgerr.Translate(r.pool, op, err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }() // no-op once committed
+
 	analyzerIDs := make([]uuid.UUID, len(gaps))
 	for i, g := range gaps {
 		analyzerIDs[i] = g.AnalyzerID
 	}
 	distinctAnalyzerIDs := distinctUUIDs(analyzerIDs)
 
-	visible, err := r.q.ForecastVisibleAnalyzerCount(ctx, sqlcgen.ForecastVisibleAnalyzerCountParams{
+	visibleIDs, err := r.q.WithTx(tx).ForecastVisibleAnalyzerIDs(ctx, sqlcgen.ForecastVisibleAnalyzerIDsParams{
 		AnalyzerIds:  distinctAnalyzerIDs,
 		CompanyID:    s.CompanyID,
 		AllBuildings: allBuildings,
@@ -215,7 +245,7 @@ func (r *ForecastRepository) RecordGaps(ctx context.Context, s store.Scope, gaps
 	if err != nil {
 		return pgerr.Translate(r.pool, op, err)
 	}
-	if visible != int64(len(distinctAnalyzerIDs)) {
+	if len(visibleIDs) != len(distinctAnalyzerIDs) {
 		return store.ErrNotFound
 	}
 
@@ -236,15 +266,18 @@ func (r *ForecastRepository) RecordGaps(ctx context.Context, s store.Scope, gaps
 		missingHours[i] = g.MissingHours
 	}
 
-	err = r.q.ForecastInsertGaps(ctx, sqlcgen.ForecastInsertGapsParams{
+	if err := r.q.WithTx(tx).ForecastInsertGaps(ctx, sqlcgen.ForecastInsertGapsParams{
 		Ids:          ids,
 		AnalyzerIds:  analyzerIDs,
 		GeneratedAts: generatedAts,
 		GapStarts:    gapStarts,
 		GapEnds:      gapEnds,
 		MissingHours: missingHours,
-	})
-	if err != nil {
+	}); err != nil {
+		return pgerr.Translate(r.pool, op, err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
 		return pgerr.Translate(r.pool, op, err)
 	}
 	return nil
@@ -256,17 +289,23 @@ func (r *ForecastRepository) Gaps(ctx context.Context, s store.Scope, analyzerID
 		return nil, store.ErrInvalidScope
 	}
 	const op = "forecast gaps"
-
-	if err := r.requireAnalyzerVisible(ctx, s, analyzerID, op); err != nil {
-		return nil, err
-	}
+	buildingIDs, allBuildings := s.BuildingFilter()
 
 	rows, err := r.q.ForecastGapsByRun(ctx, sqlcgen.ForecastGapsByRunParams{
-		AnalyzerID:  analyzerID,
-		GeneratedAt: toTimestamptz(generatedAt),
+		AnalyzerID:   analyzerID,
+		GeneratedAt:  toTimestamptz(generatedAt),
+		CompanyID:    s.CompanyID,
+		AllBuildings: allBuildings,
+		BuildingIds:  buildingIDs,
 	})
 	if err != nil {
 		return nil, pgerr.Translate(r.pool, op, err)
+	}
+	if len(rows) == 0 {
+		if err := r.requireAnalyzerVisible(ctx, s, analyzerID, op); err != nil {
+			return nil, err
+		}
+		return []model.ForecastGap{}, nil
 	}
 	out := make([]model.ForecastGap, len(rows))
 	for i, row := range rows {
@@ -282,6 +321,9 @@ func (r *ForecastRepository) Gaps(ctx context.Context, s store.Scope, analyzerID
 	return out, nil
 }
 
+// requireAnalyzerVisible exists only to choose an error after Range/
+// LatestRun/Gaps' own scoped query has already come back empty — see
+// ReadingRepository.requireAnalyzerVisible's identical comment.
 func (r *ForecastRepository) requireAnalyzerVisible(ctx context.Context, s store.Scope, analyzerID uuid.UUID, op string) error {
 	buildingIDs, allBuildings := s.BuildingFilter()
 	visible, err := r.q.ForecastAnalyzerVisible(ctx, sqlcgen.ForecastAnalyzerVisibleParams{

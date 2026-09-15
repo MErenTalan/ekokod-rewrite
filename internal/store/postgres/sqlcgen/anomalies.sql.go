@@ -115,7 +115,10 @@ type AnomalyGetParams struct {
 
 // AnomalyRepository's queries. consumption_anomalies has no company_id:
 // every method joins through analyzers. Resolve additionally requires the
-// resolver to be a user of the scope's company, checked by AnomalyUserVisible.
+// resolver to be a user of the scope's company — folded into the UPDATE's
+// own WHERE as an `exists(...)`, in the same single statement as the write,
+// rather than a separate pre-check that could race a concurrent change to
+// resolved_by's own company.
 func (q *Queries) AnomalyGet(ctx context.Context, arg AnomalyGetParams) (ConsumptionAnomaly, error) {
 	row := q.db.QueryRow(ctx, anomalyGet,
 		arg.ID,
@@ -225,6 +228,10 @@ where an.id = $5
         and ($7::boolean or a.building_id = any($8::uuid[]))
         and a.deleted_at is null
   )
+  and exists (
+      select 1 from users u
+      where u.id = $2 and u.company_id = $6 and u.deleted_at is null
+  )
 returning id, analyzer_id, period_start, period_end, reason, detail, resolved_at, resolved_by, resolution, override_values, created_at
 `
 
@@ -265,23 +272,4 @@ func (q *Queries) AnomalyResolve(ctx context.Context, arg AnomalyResolveParams) 
 		&i.CreatedAt,
 	)
 	return i, err
-}
-
-const anomalyUserVisible = `-- name: AnomalyUserVisible :one
-select exists (
-    select 1 from users
-    where id = $1 and company_id = $2 and deleted_at is null
-)
-`
-
-type AnomalyUserVisibleParams struct {
-	UserID    uuid.UUID
-	CompanyID uuid.UUID
-}
-
-func (q *Queries) AnomalyUserVisible(ctx context.Context, arg AnomalyUserVisibleParams) (bool, error) {
-	row := q.db.QueryRow(ctx, anomalyUserVisible, arg.UserID, arg.CompanyID)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
 }

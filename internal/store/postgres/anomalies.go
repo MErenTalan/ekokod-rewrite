@@ -133,22 +133,16 @@ func (r *AnomalyRepository) Create(ctx context.Context, s store.Scope, a model.C
 }
 
 // Resolve implements store.AnomalyRepository.Resolve.
+//
+// The check that resolvedBy is a user of s.CompanyID is folded into
+// AnomalyResolve's own WHERE (an `exists(...)` against users), in the same
+// single UPDATE statement as the write — not a separate pre-check that could
+// race a concurrent change to resolvedBy's own company_id.
 func (r *AnomalyRepository) Resolve(ctx context.Context, s store.Scope, id uuid.UUID, resolvedBy uuid.UUID, resolution string, overrides []byte, at time.Time) (model.ConsumptionAnomaly, error) {
 	if !s.Valid() {
 		return model.ConsumptionAnomaly{}, store.ErrInvalidScope
 	}
 	buildingIDs, allBuildings := s.BuildingFilter()
-
-	userVisible, err := r.q.AnomalyUserVisible(ctx, sqlcgen.AnomalyUserVisibleParams{
-		UserID:    resolvedBy,
-		CompanyID: s.CompanyID,
-	})
-	if err != nil {
-		return model.ConsumptionAnomaly{}, pgerr.Translate(r.pool, "anomaly resolve", err)
-	}
-	if !userVisible {
-		return model.ConsumptionAnomaly{}, store.ErrNotFound
-	}
 
 	row, err := r.q.AnomalyResolve(ctx, sqlcgen.AnomalyResolveParams{
 		ID:             id,

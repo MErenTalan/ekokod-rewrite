@@ -105,14 +105,16 @@ func (r *ProductionRepository) BulkInsert(ctx context.Context, s store.Scope, ro
 	}
 	distinctPlantIDs := distinctUUIDs(plantIDs)
 
-	visiblePlants, err := r.q.WithTx(tx).ProductionVisiblePlantCount(ctx, sqlcgen.ProductionVisiblePlantCountParams{
+	// `for share` locks every visible plant row for the rest of this
+	// transaction — see ReadingRepository.BulkInsert's identical comment.
+	visiblePlantIDs, err := r.q.WithTx(tx).ProductionVisiblePlantIDs(ctx, sqlcgen.ProductionVisiblePlantIDsParams{
 		PlantIds:  distinctPlantIDs,
 		CompanyID: s.CompanyID,
 	})
 	if err != nil {
 		return 0, 0, pgerr.Translate(r.pool, op, err)
 	}
-	if visiblePlants != int64(len(distinctPlantIDs)) {
+	if len(visiblePlantIDs) != len(distinctPlantIDs) {
 		return 0, 0, store.ErrNotFound
 	}
 
@@ -169,7 +171,10 @@ func (r *ProductionRepository) BulkInsert(ctx context.Context, s store.Scope, ro
 	return inserted, updated, nil
 }
 
-// Range implements store.ProductionRepository.Range.
+// Range implements store.ProductionRepository.Range. Like
+// ReadingRepository.Range, the scope is carried by ProductionRange's OWN
+// join through power_plants; requirePlantVisible is consulted only to choose
+// an error once that query has already come back empty.
 func (r *ProductionRepository) Range(ctx context.Context, s store.Scope, plantID uuid.UUID, tr store.TimeRange) ([]model.PlantProduction, error) {
 	if !s.Valid() {
 		return nil, store.ErrInvalidScope
@@ -179,17 +184,20 @@ func (r *ProductionRepository) Range(ctx context.Context, s store.Scope, plantID
 	}
 	const op = "production range"
 
-	if err := r.requirePlantVisible(ctx, s, plantID, op); err != nil {
-		return nil, err
-	}
-
 	rows, err := r.q.ProductionRange(ctx, sqlcgen.ProductionRangeParams{
-		PlantID: plantID,
-		FromTs:  toTimestamptz(tr.From),
-		ToTs:    toTimestamptz(tr.To),
+		PlantID:   plantID,
+		FromTs:    toTimestamptz(tr.From),
+		ToTs:      toTimestamptz(tr.To),
+		CompanyID: s.CompanyID,
 	})
 	if err != nil {
 		return nil, pgerr.Translate(r.pool, op, err)
+	}
+	if len(rows) == 0 {
+		if err := r.requirePlantVisible(ctx, s, plantID, op); err != nil {
+			return nil, err
+		}
+		return []model.PlantProduction{}, nil
 	}
 	out := make([]model.PlantProduction, len(rows))
 	for i, row := range rows {
@@ -212,21 +220,21 @@ func (r *ProductionRepository) Latest(ctx context.Context, s store.Scope, plantI
 	}
 	const op = "production latest"
 
-	if err := r.requirePlantVisible(ctx, s, plantID, op); err != nil {
-		return nil, err
-	}
-
 	row, err := r.q.ProductionLatest(ctx, sqlcgen.ProductionLatestParams{
-		PlantID: plantID,
-		FromTs:  toTimestamptz(tr.From),
-		ToTs:    toTimestamptz(tr.To),
+		PlantID:   plantID,
+		FromTs:    toTimestamptz(tr.From),
+		ToTs:      toTimestamptz(tr.To),
+		CompanyID: s.CompanyID,
 	})
 	if err != nil {
 		translated := pgerr.Translate(r.pool, op, err)
-		if isNotFound(translated) {
-			return nil, nil
+		if !isNotFound(translated) {
+			return nil, translated
 		}
-		return nil, translated
+		if err := r.requirePlantVisible(ctx, s, plantID, op); err != nil {
+			return nil, err
+		}
+		return nil, nil
 	}
 	pp, err := productionFromRow(row)
 	if err != nil {
@@ -235,6 +243,9 @@ func (r *ProductionRepository) Latest(ctx context.Context, s store.Scope, plantI
 	return &pp, nil
 }
 
+// requirePlantVisible exists only to choose an error after Range/Latest's own
+// scoped query has already come back empty — see
+// ReadingRepository.requireAnalyzerVisible's identical comment.
 func (r *ProductionRepository) requirePlantVisible(ctx context.Context, s store.Scope, plantID uuid.UUID, op string) error {
 	visible, err := r.q.ProductionPlantVisible(ctx, sqlcgen.ProductionPlantVisibleParams{
 		PlantID:   plantID,

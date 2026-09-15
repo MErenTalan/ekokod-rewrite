@@ -29,6 +29,8 @@ type ForecastAnalyzerVisibleParams struct {
 	BuildingIds  []uuid.UUID
 }
 
+// Used ONLY to choose an error, never to gate a data read — see
+// ReadingAnalyzerVisible's comment in readings.sql for the same reasoning.
 func (q *Queries) ForecastAnalyzerVisible(ctx context.Context, arg ForecastAnalyzerVisibleParams) (bool, error) {
 	row := q.db.QueryRow(ctx, forecastAnalyzerVisible,
 		arg.AnalyzerID,
@@ -42,18 +44,32 @@ func (q *Queries) ForecastAnalyzerVisible(ctx context.Context, arg ForecastAnaly
 }
 
 const forecastGapsByRun = `-- name: ForecastGapsByRun :many
-select id, analyzer_id, generated_at, gap_start, gap_end, missing_hours from forecast_gaps
-where analyzer_id = $1 and generated_at = $2
-order by gap_start
+select fg.id, fg.analyzer_id, fg.generated_at, fg.gap_start, fg.gap_end, fg.missing_hours from forecast_gaps fg
+join analyzers a on a.id = fg.analyzer_id
+where fg.analyzer_id = $1
+  and fg.generated_at = $2
+  and a.company_id = $3
+  and ($4::boolean or a.building_id = any($5::uuid[]))
+  and a.deleted_at is null
+order by fg.gap_start
 `
 
 type ForecastGapsByRunParams struct {
-	AnalyzerID  uuid.UUID
-	GeneratedAt pgtype.Timestamptz
+	AnalyzerID   uuid.UUID
+	GeneratedAt  pgtype.Timestamptz
+	CompanyID    uuid.UUID
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
 }
 
 func (q *Queries) ForecastGapsByRun(ctx context.Context, arg ForecastGapsByRunParams) ([]ForecastGap, error) {
-	rows, err := q.db.Query(ctx, forecastGapsByRun, arg.AnalyzerID, arg.GeneratedAt)
+	rows, err := q.db.Query(ctx, forecastGapsByRun,
+		arg.AnalyzerID,
+		arg.GeneratedAt,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -101,6 +117,11 @@ type ForecastInsertGapsParams struct {
 // NOTE: TestEveryFunctionSQLcMustTypeIsDeclared currently flags the
 // "forecast_gaps (" below as a call to an undeclared function — a known
 // false positive being fixed in parallel on f1/task-8c; see the task report.
+// The batch-visibility check is ForecastVisibleAnalyzerIDs, run with `for
+// share` inside the SAME transaction as this insert (forecasts.go) — this
+// statement itself carries no further scope predicate because every
+// analyzer_id it writes has already been locked-and-verified visible in that
+// same transaction.
 func (q *Queries) ForecastInsertGaps(ctx context.Context, arg ForecastInsertGapsParams) error {
 	_, err := q.db.Exec(ctx, forecastInsertGaps,
 		arg.Ids,
@@ -115,32 +136,52 @@ func (q *Queries) ForecastInsertGaps(ctx context.Context, arg ForecastInsertGaps
 
 const forecastLatestRun = `-- name: ForecastLatestRun :many
 with latest as (
-    select max(generated_at) as generated_at
-    from forecasts
-    where analyzer_id = $1
-      and ts >= $2::timestamptz
-      and ts < $3::timestamptz
+    select max(f.generated_at) as generated_at
+    from forecasts f
+    join analyzers a on a.id = f.analyzer_id
+    where f.analyzer_id = $1
+      and f.ts >= $2::timestamptz
+      and f.ts < $3::timestamptz
+      and a.company_id = $4
+      and ($5::boolean or a.building_id = any($6::uuid[]))
+      and a.deleted_at is null
 )
-select f.analyzer_id, f.ts, f.generated_at, f.horizon_hours, f.median, f.p10, f.p90, f.model_id, f.model_version from forecasts f, latest
+select f.analyzer_id, f.ts, f.generated_at, f.horizon_hours, f.median, f.p10, f.p90, f.model_id, f.model_version from forecasts f
+join analyzers a on a.id = f.analyzer_id
+cross join latest
 where f.analyzer_id = $1
   and f.generated_at = latest.generated_at
   and f.ts >= $2::timestamptz
   and f.ts < $3::timestamptz
+  and a.company_id = $4
+  and ($5::boolean or a.building_id = any($6::uuid[]))
+  and a.deleted_at is null
 order by f.ts
 `
 
 type ForecastLatestRunParams struct {
-	AnalyzerID uuid.UUID
-	FromTs     pgtype.Timestamptz
-	ToTs       pgtype.Timestamptz
+	AnalyzerID   uuid.UUID
+	FromTs       pgtype.Timestamptz
+	ToTs         pgtype.Timestamptz
+	CompanyID    uuid.UUID
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
 }
 
 // The most recent run (max generated_at) among the rows already inside the
-// window, per repository.go's LatestRun doc. When there is no row in the
-// window, latest.generated_at is null and the join below matches nothing —
-// an empty slice, not an error.
+// window AND visible to the scope, per repository.go's LatestRun doc. When
+// there is no such row, latest.generated_at is null and the final select's
+// equality join matches nothing — an empty slice, not an error. Both the CTE
+// and the final select carry the scope join independently.
 func (q *Queries) ForecastLatestRun(ctx context.Context, arg ForecastLatestRunParams) ([]Forecast, error) {
-	rows, err := q.db.Query(ctx, forecastLatestRun, arg.AnalyzerID, arg.FromTs, arg.ToTs)
+	rows, err := q.db.Query(ctx, forecastLatestRun,
+		arg.AnalyzerID,
+		arg.FromTs,
+		arg.ToTs,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -170,21 +211,36 @@ func (q *Queries) ForecastLatestRun(ctx context.Context, arg ForecastLatestRunPa
 }
 
 const forecastRange = `-- name: ForecastRange :many
-select analyzer_id, ts, generated_at, horizon_hours, median, p10, p90, model_id, model_version from forecasts
-where analyzer_id = $1
-  and ts >= $2::timestamptz
-  and ts < $3::timestamptz
-order by ts, generated_at
+select f.analyzer_id, f.ts, f.generated_at, f.horizon_hours, f.median, f.p10, f.p90, f.model_id, f.model_version from forecasts f
+join analyzers a on a.id = f.analyzer_id
+where f.analyzer_id = $1
+  and f.ts >= $2::timestamptz
+  and f.ts < $3::timestamptz
+  and a.company_id = $4
+  and ($5::boolean or a.building_id = any($6::uuid[]))
+  and a.deleted_at is null
+order by f.ts, f.generated_at
 `
 
 type ForecastRangeParams struct {
-	AnalyzerID uuid.UUID
-	FromTs     pgtype.Timestamptz
-	ToTs       pgtype.Timestamptz
+	AnalyzerID   uuid.UUID
+	FromTs       pgtype.Timestamptz
+	ToTs         pgtype.Timestamptz
+	CompanyID    uuid.UUID
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
 }
 
+// The join through analyzers carries the scope IN THIS QUERY.
 func (q *Queries) ForecastRange(ctx context.Context, arg ForecastRangeParams) ([]Forecast, error) {
-	rows, err := q.db.Query(ctx, forecastRange, arg.AnalyzerID, arg.FromTs, arg.ToTs)
+	rows, err := q.db.Query(ctx, forecastRange,
+		arg.AnalyzerID,
+		arg.FromTs,
+		arg.ToTs,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -213,16 +269,17 @@ func (q *Queries) ForecastRange(ctx context.Context, arg ForecastRangeParams) ([
 	return items, nil
 }
 
-const forecastVisibleAnalyzerCount = `-- name: ForecastVisibleAnalyzerCount :one
+const forecastVisibleAnalyzerIDs = `-- name: ForecastVisibleAnalyzerIDs :many
 
-select count(*) from analyzers
+select id from analyzers
 where id = any($1::uuid[])
   and company_id = $2
   and ($3::boolean or building_id = any($4::uuid[]))
   and deleted_at is null
+for share
 `
 
-type ForecastVisibleAnalyzerCountParams struct {
+type ForecastVisibleAnalyzerIDsParams struct {
 	AnalyzerIds  []uuid.UUID
 	CompanyID    uuid.UUID
 	AllBuildings bool
@@ -230,17 +287,37 @@ type ForecastVisibleAnalyzerCountParams struct {
 }
 
 // ForecastRepository's queries. forecasts and forecast_gaps have no
-// company_id: every method joins through analyzers. BulkInsert's
-// COPY-into-staging-then-upsert is plain SQL in forecasts.go, for the same
-// reason ReadingRepository.BulkInsert's is.
-func (q *Queries) ForecastVisibleAnalyzerCount(ctx context.Context, arg ForecastVisibleAnalyzerCountParams) (int64, error) {
-	row := q.db.QueryRow(ctx, forecastVisibleAnalyzerCount,
+// company_id: every method's DATA READ carries the scope in its own join
+// through analyzers, never a bare read guarded only by a separate Go-side
+// check. BulkInsert's COPY-into-staging-then-upsert is plain SQL in
+// forecasts.go, for the same reason ReadingRepository.BulkInsert's is.
+// Returns the subset of analyzer_ids visible to the scope, AND LOCKS them
+// (`for share`) for the rest of the caller's transaction — see
+// ReadingVisibleAnalyzerIDs in readings.sql. BulkInsert and RecordGaps both
+// run this inside their transaction, never on the bare pool before one
+// begins, and both compare the result's length against the batch's DISTINCT
+// analyzer ids before writing anything.
+func (q *Queries) ForecastVisibleAnalyzerIDs(ctx context.Context, arg ForecastVisibleAnalyzerIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, forecastVisibleAnalyzerIDs,
 		arg.AnalyzerIds,
 		arg.CompanyID,
 		arg.AllBuildings,
 		arg.BuildingIds,
 	)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

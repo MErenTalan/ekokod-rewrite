@@ -13,22 +13,31 @@ import (
 )
 
 const productionLatest = `-- name: ProductionLatest :one
-select plant_id, ts, device_id, production_kwh, active_power_kw, efficiency_pct, irradiance_wm2, module_temp_c, ambient_temp_c, source from plant_production
-where plant_id = $1
-  and ts >= $2::timestamptz
-  and ts < $3::timestamptz
-order by ts desc
+select pp.plant_id, pp.ts, pp.device_id, pp.production_kwh, pp.active_power_kw, pp.efficiency_pct, pp.irradiance_wm2, pp.module_temp_c, pp.ambient_temp_c, pp.source from plant_production pp
+join power_plants p on p.id = pp.plant_id
+where pp.plant_id = $1
+  and pp.ts >= $2::timestamptz
+  and pp.ts < $3::timestamptz
+  and p.company_id = $4
+  and p.deleted_at is null
+order by pp.ts desc
 limit 1
 `
 
 type ProductionLatestParams struct {
-	PlantID uuid.UUID
-	FromTs  pgtype.Timestamptz
-	ToTs    pgtype.Timestamptz
+	PlantID   uuid.UUID
+	FromTs    pgtype.Timestamptz
+	ToTs      pgtype.Timestamptz
+	CompanyID uuid.UUID
 }
 
 func (q *Queries) ProductionLatest(ctx context.Context, arg ProductionLatestParams) (PlantProduction, error) {
-	row := q.db.QueryRow(ctx, productionLatest, arg.PlantID, arg.FromTs, arg.ToTs)
+	row := q.db.QueryRow(ctx, productionLatest,
+		arg.PlantID,
+		arg.FromTs,
+		arg.ToTs,
+		arg.CompanyID,
+	)
 	var i PlantProduction
 	err := row.Scan(
 		&i.PlantID,
@@ -57,6 +66,8 @@ type ProductionPlantVisibleParams struct {
 	CompanyID uuid.UUID
 }
 
+// Used ONLY to choose an error, never to gate a data read — see
+// ReadingAnalyzerVisible's comment in readings.sql for the same reasoning.
 func (q *Queries) ProductionPlantVisible(ctx context.Context, arg ProductionPlantVisibleParams) (bool, error) {
 	row := q.db.QueryRow(ctx, productionPlantVisible, arg.PlantID, arg.CompanyID)
 	var exists bool
@@ -65,21 +76,31 @@ func (q *Queries) ProductionPlantVisible(ctx context.Context, arg ProductionPlan
 }
 
 const productionRange = `-- name: ProductionRange :many
-select plant_id, ts, device_id, production_kwh, active_power_kw, efficiency_pct, irradiance_wm2, module_temp_c, ambient_temp_c, source from plant_production
-where plant_id = $1
-  and ts >= $2::timestamptz
-  and ts < $3::timestamptz
-order by ts
+select pp.plant_id, pp.ts, pp.device_id, pp.production_kwh, pp.active_power_kw, pp.efficiency_pct, pp.irradiance_wm2, pp.module_temp_c, pp.ambient_temp_c, pp.source from plant_production pp
+join power_plants p on p.id = pp.plant_id
+where pp.plant_id = $1
+  and pp.ts >= $2::timestamptz
+  and pp.ts < $3::timestamptz
+  and p.company_id = $4
+  and p.deleted_at is null
+order by pp.ts
 `
 
 type ProductionRangeParams struct {
-	PlantID uuid.UUID
-	FromTs  pgtype.Timestamptz
-	ToTs    pgtype.Timestamptz
+	PlantID   uuid.UUID
+	FromTs    pgtype.Timestamptz
+	ToTs      pgtype.Timestamptz
+	CompanyID uuid.UUID
 }
 
+// The join through power_plants carries the scope IN THIS QUERY.
 func (q *Queries) ProductionRange(ctx context.Context, arg ProductionRangeParams) ([]PlantProduction, error) {
-	rows, err := q.db.Query(ctx, productionRange, arg.PlantID, arg.FromTs, arg.ToTs)
+	rows, err := q.db.Query(ctx, productionRange,
+		arg.PlantID,
+		arg.FromTs,
+		arg.ToTs,
+		arg.CompanyID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +146,9 @@ type ProductionValidDevicePairCountParams struct {
 // Counts how many of the (plant_id, device_id) pairs in the batch are a real
 // device of that same plant. BulkInsert compares this against the number of
 // DISTINCT pairs in the batch: a mismatch means at least one row's device_id
-// does not belong to that row's plant_id.
+// does not belong to that row's plant_id. Not a tenant-scope check (the plant
+// itself is already locked by ProductionVisiblePlantIDs above) — this is a
+// referential-integrity check within an already-scoped plant.
 func (q *Queries) ProductionValidDevicePairCount(ctx context.Context, arg ProductionValidDevicePairCountParams) (int64, error) {
 	row := q.db.QueryRow(ctx, productionValidDevicePairCount, arg.PlantIds, arg.DeviceIds)
 	var count int64
@@ -133,28 +156,47 @@ func (q *Queries) ProductionValidDevicePairCount(ctx context.Context, arg Produc
 	return count, err
 }
 
-const productionVisiblePlantCount = `-- name: ProductionVisiblePlantCount :one
+const productionVisiblePlantIDs = `-- name: ProductionVisiblePlantIDs :many
 
-select count(*) from power_plants
+select id from power_plants
 where id = any($1::uuid[])
   and company_id = $2
   and deleted_at is null
+for share
 `
 
-type ProductionVisiblePlantCountParams struct {
+type ProductionVisiblePlantIDsParams struct {
 	PlantIds  []uuid.UUID
 	CompanyID uuid.UUID
 }
 
 // ProductionRepository's queries. plant_production has no company_id: every
-// method joins through power_plants, which itself has no building_id — a
-// Scope narrows a plant to the company and no further (repository.go's
-// PlantRepository doc). BulkInsert's COPY-into-staging-then-upsert is plain
-// SQL in production.go, for the same reason ReadingRepository.BulkInsert's is
-// not here.
-func (q *Queries) ProductionVisiblePlantCount(ctx context.Context, arg ProductionVisiblePlantCountParams) (int64, error) {
-	row := q.db.QueryRow(ctx, productionVisiblePlantCount, arg.PlantIds, arg.CompanyID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
+// method's DATA READ carries the scope in its own join through power_plants
+// (which itself has no building_id — a Scope narrows a plant to the company
+// and no further, per repository.go's PlantRepository doc), never a bare
+// read guarded only by a separate Go-side check. BulkInsert's
+// COPY-into-staging-then-upsert is plain SQL in production.go, for the same
+// reason ReadingRepository.BulkInsert's is not here.
+// Returns the subset of plant_ids visible to the scope, AND LOCKS them
+// (`for share`) for the rest of the caller's transaction — see
+// ReadingVisibleAnalyzerIDs in readings.sql for why a lock, not a plain
+// count, closes the TOCTOU gap a pre-check run before the write leaves open.
+func (q *Queries) ProductionVisiblePlantIDs(ctx context.Context, arg ProductionVisiblePlantIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, productionVisiblePlantIDs, arg.PlantIds, arg.CompanyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

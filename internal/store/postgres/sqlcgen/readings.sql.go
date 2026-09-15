@@ -29,6 +29,12 @@ type ReadingAnalyzerVisibleParams struct {
 	BuildingIds  []uuid.UUID
 }
 
+// Used ONLY to pick an error, never to gate a data read: Range/
+// BoundaryReadings/Latest run their own scoped query FIRST and unconditionally,
+// and call this only when that query came back empty, to tell "the analyzer
+// itself is not visible" (ErrNotFound) from "visible, nothing in this window"
+// (empty/nil). It is deliberately never the sole reason a row is or is not
+// returned.
 func (q *Queries) ReadingAnalyzerVisible(ctx context.Context, arg ReadingAnalyzerVisibleParams) (bool, error) {
 	row := q.db.QueryRow(ctx, readingAnalyzerVisible,
 		arg.AnalyzerID,
@@ -42,24 +48,39 @@ func (q *Queries) ReadingAnalyzerVisible(ctx context.Context, arg ReadingAnalyze
 }
 
 const readingBoundaryAtOrBefore = `-- name: ReadingBoundaryAtOrBefore :one
-select analyzer_id, ts, kind, active_import, reactive_inductive_import, reactive_capacitive_import, t1_import, t2_import, t3_import, active_export, reactive_inductive_export, reactive_capacitive_export, t1_export, t2_export, t3_export, max_demand_kw, meter_serial, multiplier_applied, source_provider, ingested_at, raw from meter_readings
-where analyzer_id = $1
-  and kind = $2::reading_kind
-  and ts <= $3::timestamptz
-order by ts desc
+select mr.analyzer_id, mr.ts, mr.kind, mr.active_import, mr.reactive_inductive_import, mr.reactive_capacitive_import, mr.t1_import, mr.t2_import, mr.t3_import, mr.active_export, mr.reactive_inductive_export, mr.reactive_capacitive_export, mr.t1_export, mr.t2_export, mr.t3_export, mr.max_demand_kw, mr.meter_serial, mr.multiplier_applied, mr.source_provider, mr.ingested_at, mr.raw from meter_readings mr
+join analyzers a on a.id = mr.analyzer_id
+where mr.analyzer_id = $1
+  and mr.kind = $2::reading_kind
+  and mr.ts <= $3::timestamptz
+  and a.company_id = $4
+  and ($5::boolean or a.building_id = any($6::uuid[]))
+  and a.deleted_at is null
+order by mr.ts desc
 limit 1
 `
 
 type ReadingBoundaryAtOrBeforeParams struct {
-	AnalyzerID uuid.UUID
-	Kind       ReadingKind
-	At         pgtype.Timestamptz
+	AnalyzerID   uuid.UUID
+	Kind         ReadingKind
+	At           pgtype.Timestamptz
+	CompanyID    uuid.UUID
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
 }
 
 // The one hypertable read bounded on one side only, per repository.go's
 // BoundaryReadings doc: the last reading at or before `at`, however long ago.
+// Scoped the same way ReadingRange is, for the same reason.
 func (q *Queries) ReadingBoundaryAtOrBefore(ctx context.Context, arg ReadingBoundaryAtOrBeforeParams) (MeterReading, error) {
-	row := q.db.QueryRow(ctx, readingBoundaryAtOrBefore, arg.AnalyzerID, arg.Kind, arg.At)
+	row := q.db.QueryRow(ctx, readingBoundaryAtOrBefore,
+		arg.AnalyzerID,
+		arg.Kind,
+		arg.At,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
+	)
 	var i MeterReading
 	err := row.Scan(
 		&i.AnalyzerID,
@@ -88,20 +109,27 @@ func (q *Queries) ReadingBoundaryAtOrBefore(ctx context.Context, arg ReadingBoun
 }
 
 const readingLatest = `-- name: ReadingLatest :one
-select analyzer_id, ts, kind, active_import, reactive_inductive_import, reactive_capacitive_import, t1_import, t2_import, t3_import, active_export, reactive_inductive_export, reactive_capacitive_export, t1_export, t2_export, t3_export, max_demand_kw, meter_serial, multiplier_applied, source_provider, ingested_at, raw from meter_readings
-where analyzer_id = $1
-  and kind = $2::reading_kind
-  and ts >= $3::timestamptz
-  and ts < $4::timestamptz
-order by ts desc
+select mr.analyzer_id, mr.ts, mr.kind, mr.active_import, mr.reactive_inductive_import, mr.reactive_capacitive_import, mr.t1_import, mr.t2_import, mr.t3_import, mr.active_export, mr.reactive_inductive_export, mr.reactive_capacitive_export, mr.t1_export, mr.t2_export, mr.t3_export, mr.max_demand_kw, mr.meter_serial, mr.multiplier_applied, mr.source_provider, mr.ingested_at, mr.raw from meter_readings mr
+join analyzers a on a.id = mr.analyzer_id
+where mr.analyzer_id = $1
+  and mr.kind = $2::reading_kind
+  and mr.ts >= $3::timestamptz
+  and mr.ts < $4::timestamptz
+  and a.company_id = $5
+  and ($6::boolean or a.building_id = any($7::uuid[]))
+  and a.deleted_at is null
+order by mr.ts desc
 limit 1
 `
 
 type ReadingLatestParams struct {
-	AnalyzerID uuid.UUID
-	Kind       ReadingKind
-	FromTs     pgtype.Timestamptz
-	ToTs       pgtype.Timestamptz
+	AnalyzerID   uuid.UUID
+	Kind         ReadingKind
+	FromTs       pgtype.Timestamptz
+	ToTs         pgtype.Timestamptz
+	CompanyID    uuid.UUID
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
 }
 
 func (q *Queries) ReadingLatest(ctx context.Context, arg ReadingLatestParams) (MeterReading, error) {
@@ -110,6 +138,9 @@ func (q *Queries) ReadingLatest(ctx context.Context, arg ReadingLatestParams) (M
 		arg.Kind,
 		arg.FromTs,
 		arg.ToTs,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
 	)
 	var i MeterReading
 	err := row.Scan(
@@ -139,27 +170,41 @@ func (q *Queries) ReadingLatest(ctx context.Context, arg ReadingLatestParams) (M
 }
 
 const readingRange = `-- name: ReadingRange :many
-select analyzer_id, ts, kind, active_import, reactive_inductive_import, reactive_capacitive_import, t1_import, t2_import, t3_import, active_export, reactive_inductive_export, reactive_capacitive_export, t1_export, t2_export, t3_export, max_demand_kw, meter_serial, multiplier_applied, source_provider, ingested_at, raw from meter_readings
-where analyzer_id = $1
-  and kind = $2::reading_kind
-  and ts >= $3::timestamptz
-  and ts < $4::timestamptz
-order by ts
+select mr.analyzer_id, mr.ts, mr.kind, mr.active_import, mr.reactive_inductive_import, mr.reactive_capacitive_import, mr.t1_import, mr.t2_import, mr.t3_import, mr.active_export, mr.reactive_inductive_export, mr.reactive_capacitive_export, mr.t1_export, mr.t2_export, mr.t3_export, mr.max_demand_kw, mr.meter_serial, mr.multiplier_applied, mr.source_provider, mr.ingested_at, mr.raw from meter_readings mr
+join analyzers a on a.id = mr.analyzer_id
+where mr.analyzer_id = $1
+  and mr.kind = $2::reading_kind
+  and mr.ts >= $3::timestamptz
+  and mr.ts < $4::timestamptz
+  and a.company_id = $5
+  and ($6::boolean or a.building_id = any($7::uuid[]))
+  and a.deleted_at is null
+order by mr.ts
 `
 
 type ReadingRangeParams struct {
-	AnalyzerID uuid.UUID
-	Kind       ReadingKind
-	FromTs     pgtype.Timestamptz
-	ToTs       pgtype.Timestamptz
+	AnalyzerID   uuid.UUID
+	Kind         ReadingKind
+	FromTs       pgtype.Timestamptz
+	ToTs         pgtype.Timestamptz
+	CompanyID    uuid.UUID
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
 }
 
+// The join through analyzers carries the scope IN THIS QUERY: a caller
+// supplying another tenant's real analyzer_id gets zero rows because the
+// join excludes it, not because some earlier, separate check happened to
+// catch it first.
 func (q *Queries) ReadingRange(ctx context.Context, arg ReadingRangeParams) ([]MeterReading, error) {
 	rows, err := q.db.Query(ctx, readingRange,
 		arg.AnalyzerID,
 		arg.Kind,
 		arg.FromTs,
 		arg.ToTs,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
 	)
 	if err != nil {
 		return nil, err
@@ -201,16 +246,17 @@ func (q *Queries) ReadingRange(ctx context.Context, arg ReadingRangeParams) ([]M
 	return items, nil
 }
 
-const readingVisibleAnalyzerCount = `-- name: ReadingVisibleAnalyzerCount :one
+const readingVisibleAnalyzerIDs = `-- name: ReadingVisibleAnalyzerIDs :many
 
-select count(*) from analyzers
+select id from analyzers
 where id = any($1::uuid[])
   and company_id = $2
   and ($3::boolean or building_id = any($4::uuid[]))
   and deleted_at is null
+for share
 `
 
-type ReadingVisibleAnalyzerCountParams struct {
+type ReadingVisibleAnalyzerIDsParams struct {
 	AnalyzerIds  []uuid.UUID
 	CompanyID    uuid.UUID
 	AllBuildings bool
@@ -218,28 +264,45 @@ type ReadingVisibleAnalyzerCountParams struct {
 }
 
 // ReadingRepository's queries. meter_readings has no company_id (see
-// repository.go's "ROWS WITHOUT company_id" header): every method joins
-// through analyzers, or checks analyzer visibility explicitly before reading
-// the hypertable directly, which is why the *_range/*_latest queries below do
-// not themselves join anything.
-//
-// BulkInsert's COPY-into-staging-then-upsert is NOT here: a per-call
-// temporary table cannot appear in sqlc's schema catalogue (it does not exist
-// until the transaction that creates it), so that statement is built and run
-// as plain SQL in readings.go. The queries below back only the pre-write
-// visibility check and the three plain reads.
-// Counts how many of analyzer_ids are visible to the scope. BulkInsert
-// compares this against the number of DISTINCT analyzer ids in the batch: a
-// mismatch means at least one row's analyzer is not visible, and the whole
-// batch is refused.
-func (q *Queries) ReadingVisibleAnalyzerCount(ctx context.Context, arg ReadingVisibleAnalyzerCountParams) (int64, error) {
-	row := q.db.QueryRow(ctx, readingVisibleAnalyzerCount,
+// repository.go's "ROWS WITHOUT company_id" header): every method's DATA
+// READ carries the scope in its own join — never a bare `select * from
+// meter_readings` guarded only by a separate Go-side check. The one
+// exception in shape is BulkInsert's COPY-into-staging-then-upsert, which is
+// NOT here: a per-call temporary table cannot appear in sqlc's schema
+// catalogue (it does not exist until the transaction that creates it), so
+// that statement is built and run as plain SQL in readings.go; what IS here
+// for it is ReadingVisibleAnalyzerIDs, the `for share` row lock that closes
+// the gap a plain, unlocked pre-check would leave open for a concurrent
+// reassignment of one of the batch's analyzers.
+// Returns the subset of analyzer_ids visible to the scope, AND LOCKS them
+// (`for share`) for the rest of the caller's transaction: BulkInsert compares
+// the result against the DISTINCT analyzer ids in the batch, and the lock
+// means a concurrent reassignment or soft-delete of one of them cannot slip
+// in between this check and the write that follows it in the same
+// transaction — the exact TOCTOU gap an unlocked count-only check leaves
+// open. A mismatch in the caller means at least one row's analyzer is not
+// visible, and the whole batch is refused.
+func (q *Queries) ReadingVisibleAnalyzerIDs(ctx context.Context, arg ReadingVisibleAnalyzerIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, readingVisibleAnalyzerIDs,
 		arg.AnalyzerIds,
 		arg.CompanyID,
 		arg.AllBuildings,
 		arg.BuildingIds,
 	)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

@@ -307,3 +307,29 @@ func TestReadingLatestAnalyzerNotVisibleReturnsNotFound(t *testing.T) {
 	_, err := repo.Latest(ctx, tenantA.Scope, tenantB.Analyzers[0].ID, validRange, model.ReadingKindLoadProfile)
 	require.ErrorIs(t, err, store.ErrNotFound)
 }
+
+// TestReadingRangeNeverReturnsForeignDataEvenWhenForeignAnalyzerHasReadings
+// is the guard-failure-provable form of the isolation test above: tenant B's
+// analyzer here actually HAS readings, so a query whose own scope predicate
+// were tautologised would return them, not merely fail to distinguish
+// "not visible" from "no error". ReadingRange's join through analyzers
+// carries the scope IN THE QUERY ITSELF (readings.sql); this is what proves
+// that, independent of the separate requireAnalyzerVisible existence check
+// Range also consults.
+func TestReadingRangeNeverReturnsForeignDataEvenWhenForeignAnalyzerHasReadings(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)
+	tenantB := testfixtures.NewTenant(t, ctx, pool, 2)
+	repo := postgres.NewReadingRepository(pool)
+	validRange := store.TimeRange{From: readingsEpoch, To: readingsEpoch.Add(time.Hour)}
+
+	foreign := readingsRow(tenantB.Analyzers[0].ID, readingsEpoch, model.ReadingKindLoadProfile, "999.0000", "1")
+	_, _, err := repo.BulkInsert(ctx, tenantB.Scope, []model.MeterReading{foreign})
+	require.NoError(t, err)
+
+	// tenant A's scope, tenant B's real (and populated) analyzer id.
+	got, err := repo.Range(ctx, tenantA.Scope, tenantB.Analyzers[0].ID, validRange, model.ReadingKindLoadProfile)
+	require.ErrorIs(t, err, store.ErrNotFound)
+	require.Empty(t, got)
+}

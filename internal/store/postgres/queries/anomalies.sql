@@ -1,6 +1,9 @@
 -- AnomalyRepository's queries. consumption_anomalies has no company_id:
 -- every method joins through analyzers. Resolve additionally requires the
--- resolver to be a user of the scope's company, checked by AnomalyUserVisible.
+-- resolver to be a user of the scope's company — folded into the UPDATE's
+-- own WHERE as an `exists(...)`, in the same single statement as the write,
+-- rather than a separate pre-check that could race a concurrent change to
+-- resolved_by's own company.
 
 -- name: AnomalyGet :one
 select an.* from consumption_anomalies an
@@ -49,12 +52,6 @@ where a.id = sqlc.arg(analyzer_id)
   and a.deleted_at is null
 returning *;
 
--- name: AnomalyUserVisible :one
-select exists (
-    select 1 from users
-    where id = sqlc.arg(user_id) and company_id = sqlc.arg(company_id) and deleted_at is null
-);
-
 -- name: AnomalyResolve :one
 update consumption_anomalies an set
     resolved_at = sqlc.arg(at)::timestamptz,
@@ -67,5 +64,9 @@ where an.id = sqlc.arg(id)
       where a.company_id = sqlc.arg(company_id)
         and (sqlc.arg(all_buildings)::boolean or a.building_id = any(sqlc.arg(building_ids)::uuid[]))
         and a.deleted_at is null
+  )
+  and exists (
+      select 1 from users u
+      where u.id = sqlc.arg(resolved_by) and u.company_id = sqlc.arg(company_id) and u.deleted_at is null
   )
 returning *;

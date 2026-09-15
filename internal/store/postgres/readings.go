@@ -153,7 +153,13 @@ func (r *ReadingRepository) BulkInsert(ctx context.Context, s store.Scope, rows 
 	}
 	distinctAnalyzerIDs := distinctUUIDs(analyzerIDs)
 
-	visible, err := r.q.WithTx(tx).ReadingVisibleAnalyzerCount(ctx, sqlcgen.ReadingVisibleAnalyzerCountParams{
+	// `for share` locks every visible analyzer row for the rest of this
+	// transaction, so a concurrent reassignment or soft-delete cannot open a
+	// gap between this check and the write below — the reason this is a
+	// locking SELECT and not the plain COUNT(*) a first draft used (which
+	// cannot take FOR SHARE at all: Postgres rejects FOR UPDATE/SHARE
+	// combined with an aggregate).
+	visibleIDs, err := r.q.WithTx(tx).ReadingVisibleAnalyzerIDs(ctx, sqlcgen.ReadingVisibleAnalyzerIDsParams{
 		AnalyzerIds:  distinctAnalyzerIDs,
 		CompanyID:    s.CompanyID,
 		AllBuildings: allBuildings,
@@ -162,7 +168,7 @@ func (r *ReadingRepository) BulkInsert(ctx context.Context, s store.Scope, rows 
 	if err != nil {
 		return 0, 0, pgerr.Translate(r.pool, op, err)
 	}
-	if visible != int64(len(distinctAnalyzerIDs)) {
+	if len(visibleIDs) != len(distinctAnalyzerIDs) {
 		// At least one row's analyzer is not visible to the Scope: the whole
 		// batch is refused and nothing is written (the deferred Rollback
 		// above does that).
@@ -219,6 +225,12 @@ func (r *ReadingRepository) BulkInsert(ctx context.Context, s store.Scope, rows 
 }
 
 // Range implements store.ReadingRepository.Range.
+//
+// The scope is carried by ReadingRange's OWN join through analyzers, not by
+// a separate check run first: this method runs that query unconditionally
+// and consults requireAnalyzerVisible only to choose an error when it comes
+// back empty, so a bug in the (redundant) existence check can never be the
+// reason foreign data is or is not returned — the query's own predicate is.
 func (r *ReadingRepository) Range(ctx context.Context, s store.Scope, analyzerID uuid.UUID, tr store.TimeRange, kind model.ReadingKind) ([]model.MeterReading, error) {
 	if !s.Valid() {
 		return nil, store.ErrInvalidScope
@@ -227,19 +239,27 @@ func (r *ReadingRepository) Range(ctx context.Context, s store.Scope, analyzerID
 		return nil, store.ErrInvalidRange
 	}
 	const op = "reading range"
-
-	if err := r.requireAnalyzerVisible(ctx, s, analyzerID, op); err != nil {
-		return nil, err
-	}
+	buildingIDs, allBuildings := s.BuildingFilter()
 
 	rows, err := r.q.ReadingRange(ctx, sqlcgen.ReadingRangeParams{
-		AnalyzerID: analyzerID,
-		Kind:       sqlcgen.ReadingKind(kind),
-		FromTs:     toTimestamptz(tr.From),
-		ToTs:       toTimestamptz(tr.To),
+		AnalyzerID:   analyzerID,
+		Kind:         sqlcgen.ReadingKind(kind),
+		FromTs:       toTimestamptz(tr.From),
+		ToTs:         toTimestamptz(tr.To),
+		CompanyID:    s.CompanyID,
+		AllBuildings: allBuildings,
+		BuildingIds:  buildingIDs,
 	})
 	if err != nil {
 		return nil, pgerr.Translate(r.pool, op, err)
+	}
+	if len(rows) == 0 {
+		// Zero rows either means the analyzer is not visible, or it is
+		// visible with nothing in this window — disambiguate.
+		if err := r.requireAnalyzerVisible(ctx, s, analyzerID, op); err != nil {
+			return nil, err
+		}
+		return []model.MeterReading{}, nil
 	}
 	out := make([]model.MeterReading, len(rows))
 	for i, row := range rows {
@@ -259,35 +279,42 @@ func (r *ReadingRepository) BoundaryReadings(ctx context.Context, s store.Scope,
 	}
 	const op = "reading boundary"
 
-	if err := r.requireAnalyzerVisible(ctx, s, analyzerID, op); err != nil {
-		return nil, nil, err
-	}
-
-	startReading, err = r.boundaryAtOrBefore(ctx, analyzerID, kind, start, op)
+	startReading, err = r.boundaryAtOrBefore(ctx, s, analyzerID, kind, start, op)
 	if err != nil {
 		return nil, nil, err
 	}
-	endReading, err = r.boundaryAtOrBefore(ctx, analyzerID, kind, end, op)
+	endReading, err = r.boundaryAtOrBefore(ctx, s, analyzerID, kind, end, op)
 	if err != nil {
 		return nil, nil, err
 	}
 	return startReading, endReading, nil
 }
 
-func (r *ReadingRepository) boundaryAtOrBefore(ctx context.Context, analyzerID uuid.UUID, kind model.ReadingKind, at time.Time, op string) (*model.MeterReading, error) {
+// boundaryAtOrBefore, like Range, runs ReadingBoundaryAtOrBefore's own
+// scoped query first and unconditionally, and calls requireAnalyzerVisible
+// only when it comes back empty.
+func (r *ReadingRepository) boundaryAtOrBefore(ctx context.Context, s store.Scope, analyzerID uuid.UUID, kind model.ReadingKind, at time.Time, op string) (*model.MeterReading, error) {
+	buildingIDs, allBuildings := s.BuildingFilter()
 	row, err := r.q.ReadingBoundaryAtOrBefore(ctx, sqlcgen.ReadingBoundaryAtOrBeforeParams{
-		AnalyzerID: analyzerID,
-		Kind:       sqlcgen.ReadingKind(kind),
-		At:         toTimestamptz(at),
+		AnalyzerID:   analyzerID,
+		Kind:         sqlcgen.ReadingKind(kind),
+		At:           toTimestamptz(at),
+		CompanyID:    s.CompanyID,
+		AllBuildings: allBuildings,
+		BuildingIds:  buildingIDs,
 	})
 	if err != nil {
 		translated := pgerr.Translate(r.pool, op, err)
-		if isNotFound(translated) {
-			// No reading at or before `at`: a real, nil-shaped absence, not
-			// an error — 02-domain-rules.md §3.1.
-			return nil, nil
+		if !isNotFound(translated) {
+			return nil, translated
 		}
-		return nil, translated
+		// Zero rows: disambiguate "not visible" (ErrNotFound) from "visible,
+		// nothing at or before `at`" (nil — 02-domain-rules.md §3.1: a real,
+		// nil-shaped absence, not an error).
+		if err := r.requireAnalyzerVisible(ctx, s, analyzerID, op); err != nil {
+			return nil, err
+		}
+		return nil, nil
 	}
 	mr, err := readingFromRow(row)
 	if err != nil {
@@ -305,23 +332,26 @@ func (r *ReadingRepository) Latest(ctx context.Context, s store.Scope, analyzerI
 		return nil, store.ErrInvalidRange
 	}
 	const op = "reading latest"
-
-	if err := r.requireAnalyzerVisible(ctx, s, analyzerID, op); err != nil {
-		return nil, err
-	}
+	buildingIDs, allBuildings := s.BuildingFilter()
 
 	row, err := r.q.ReadingLatest(ctx, sqlcgen.ReadingLatestParams{
-		AnalyzerID: analyzerID,
-		Kind:       sqlcgen.ReadingKind(kind),
-		FromTs:     toTimestamptz(tr.From),
-		ToTs:       toTimestamptz(tr.To),
+		AnalyzerID:   analyzerID,
+		Kind:         sqlcgen.ReadingKind(kind),
+		FromTs:       toTimestamptz(tr.From),
+		ToTs:         toTimestamptz(tr.To),
+		CompanyID:    s.CompanyID,
+		AllBuildings: allBuildings,
+		BuildingIds:  buildingIDs,
 	})
 	if err != nil {
 		translated := pgerr.Translate(r.pool, op, err)
-		if isNotFound(translated) {
-			return nil, nil
+		if !isNotFound(translated) {
+			return nil, translated
 		}
-		return nil, translated
+		if err := r.requireAnalyzerVisible(ctx, s, analyzerID, op); err != nil {
+			return nil, err
+		}
+		return nil, nil
 	}
 	mr, err := readingFromRow(row)
 	if err != nil {
@@ -332,8 +362,10 @@ func (r *ReadingRepository) Latest(ctx context.Context, s store.Scope, analyzerI
 
 // requireAnalyzerVisible returns store.ErrNotFound when analyzerID is not
 // visible to s — missing, another tenant's, or outside the Scope's
-// buildings. Every ReadingRepository read but BulkInsert (which checks a
-// whole batch at once) calls this before touching meter_readings.
+// buildings. It exists only to CHOOSE AN ERROR after a properly-scoped data
+// query has already come back empty (Range, boundaryAtOrBefore, Latest); it
+// is never the sole gate on whether data is returned, and BulkInsert (which
+// checks a whole batch at once, with a row lock) does not use it at all.
 func (r *ReadingRepository) requireAnalyzerVisible(ctx context.Context, s store.Scope, analyzerID uuid.UUID, op string) error {
 	buildingIDs, allBuildings := s.BuildingFilter()
 	visible, err := r.q.ReadingAnalyzerVisible(ctx, sqlcgen.ReadingAnalyzerVisibleParams{
