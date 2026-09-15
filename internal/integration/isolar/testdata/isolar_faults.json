@@ -1,0 +1,10 @@
+{
+  "result_code": "1",
+  "result_msg": "success",
+  "result_data": {
+    "rowCount": 1,
+    "pageList": [
+      {"ps_id": "FX3001", "ps_key": "FX2001", "fault_code": "W-01", "fault_name": "Fixture Fault", "create_time": "20260102090000"}
+    ]
+  }
+}
