@@ -75,6 +75,130 @@ func TestSanitiserRejects(t *testing.T) {
 		`{"customerName":"Fixture Customer 1","instalationNumber":"FX0000001","access_token":"FIXTURE-TOKEN-1","url":"https://127.0.0.1/x"}`)))
 }
 
+// TestSanitiserWholeKeyProvinceMatch is fix-round-2's R1 controller ruling:
+// the OSOS province key `il` must be matched as a WHOLE key (`^il$`,
+// case-insensitive), never a suffix — the old unanchored `il$` stem matched
+// any key ENDING in "il", so a compliant `{"email":"..."}` fixture was
+// rejected as if "email" were the Turkish province field. Must-pass cases
+// prove the fix; the must-reject case proves the real `il` field is still
+// caught.
+func TestSanitiserWholeKeyProvinceMatch(t *testing.T) {
+	for name, body := range map[string]string{
+		"email key, valid @example.com address":        `{"email":"someone@example.com"}`,
+		"mail key, valid @example.com address":         `{"mail":"another@example.com"}`,
+		"contactEmail key, valid @example.com address": `{"contactEmail":"x@example.com"}`,
+	} {
+		require.Empty(t, fake.Violations("ok.json", []byte(body)), name)
+	}
+
+	require.NotEmpty(t, fake.Violations("probe.json", []byte(`{"il":"Ankara"}`)), "il")
+}
+
+// TestSanitiserWordTokenisedKeyMatching is fix-round-3's controller ruling
+// test table in full: PII key matching decides on whole WORDS
+// (tokeniseKey/isNameLikePII/piiWords in sanitise.go), never substrings and
+// never a single exact whole-key anchor — both of which earlier rounds
+// tried, and each had a false result in the opposite direction:
+//
+//   - fix-round-1's unanchored `il$` SUBSTRING stem rejected any key ending
+//     in "il", including the compliant "email"/"mail"/"contactEmail".
+//   - fix-round-2's `^il$`/`^sayimnoktanim$` EXACT WHOLE-KEY anchors fixed
+//     that, but an exact whole-key anchor stops matching the instant the
+//     key is spelled with an extra separator/case/suffix: `ilAdi`,
+//     `il_adi`, `musteriIl`, `adresIl` (never equal "il"), and
+//     `sayimNoktaTanimi`/`SAYIM_NOK_TANIM`/`sayim-nokta-tanimi` (never
+//     byte-equal to "sayimnoktanim" after lower-casing) all wrongly passed.
+//
+// Word tokenisation catches every spelling of the must-reject cases while
+// still passing "tesisatTurTanim" (a bare "tanim" word, no "sayim" word —
+// not PII on its own) and the other non-PII protocol/English keys.
+func TestSanitiserWordTokenisedKeyMatching(t *testing.T) {
+	mustReject := map[string]string{
+		"il":                 `{"il":"Ankara"}`,
+		"ilAdi":              `{"ilAdi":"Ankara"}`,
+		"il_adi":             `{"il_adi":"Ankara"}`,
+		"musteriIl":          `{"musteriIl":"Ankara"}`,
+		"adresIl":            `{"adresIl":"Ankara"}`,
+		"sayimNokTanim":      `{"sayimNokTanim":"Acme Fabrika"}`,
+		"sayimNoktaTanimi":   `{"sayimNoktaTanimi":"Acme Fabrika"}`,
+		"SAYIM_NOK_TANIM":    `{"SAYIM_NOK_TANIM":"Acme Fabrika"}`,
+		"sayim-nokta-tanimi": `{"sayim-nokta-tanimi":"Acme Fabrika"}`,
+		"customerAdress":     `{"customerAdress":"Gerçek Adres 123"}`, //nolint:misspell // OSOS field spelling, not a typo
+		"koyMahallesi":       `{"koyMahallesi":"Gerçek Mahalle"}`,
+		"caddesiSokagi":      `{"caddesiSokagi":"Gerçek Cadde"}`,
+		"İlçe":               `{"İlçe":"Çankaya"}`,
+	}
+	for name, body := range mustReject {
+		require.NotEmpty(t, fake.Violations("probe.json", []byte(body)), name)
+	}
+
+	mustPass := map[string]string{
+		"email":           `{"email":"someone@example.com"}`,
+		"mail":            `{"mail":"another@example.com"}`,
+		"contactEmail":    `{"contactEmail":"x@example.com"}`,
+		"tesisatTurTanim": `{"tesisatTurTanim":"Sanayi"}`,
+		"deviceName":      `{"deviceName":"Inverter-1"}`,
+		"unitName":        `{"unitName":"Unit-7"}`,
+		"result_code":     `{"result_code":"0"}`,
+		"currencyCode":    `{"currencyCode":"TRY"}`,
+		"detail":          `{"detail":"ok"}`,
+		"utilization":     `{"utilization":"72.3"}`,
+	}
+	for name, body := range mustPass {
+		require.Empty(t, fake.Violations("ok.json", []byte(body)), name)
+	}
+}
+
+// TestSanitiserAcronymBoundaryTokenisation is fix-round-4's controller
+// ruling: tokeniseKey's lower→upper boundary rule alone never fires
+// inside a run of consecutive uppercase letters, so a leading acronym
+// fuses with the word that follows it instead of tokenising separately —
+// "XMLCustomerID" tokenised to the single fused word "xmlcustomer" plus
+// "id", which never matches the "customer" PII word (false negative).
+// The added acronym rule splits an uppercase letter off as the start of a
+// new word when the letter immediately after it is lowercase and the
+// letter immediately before it is also uppercase, so "XML" + "Customer"
+// (and "ID" + "No") tokenise as separate words. Must-reject cases prove
+// the acronym-prefixed PII words are now caught; must-pass cases prove
+// acronym-prefixed non-PII words (and a bare acronym-only word, "IDNo")
+// still pass.
+func TestSanitiserAcronymBoundaryTokenisation(t *testing.T) {
+	mustReject := map[string]string{
+		"XMLCustomerID":   `{"XMLCustomerID":"Acme Fabrika"}`,
+		"APICustomerName": `{"APICustomerName":"Acme Fabrika"}`,
+		"HTTPAdres":       `{"HTTPAdres":"Gerçek Adres 123"}`, //nolint:misspell // OSOS field spelling, not a typo
+		"IDMusteri":       `{"IDMusteri":"Acme Fabrika"}`,
+	}
+	for name, body := range mustReject {
+		require.NotEmpty(t, fake.Violations("probe.json", []byte(body)), name)
+	}
+
+	mustPass := map[string]string{
+		"XMLVersion": `{"XMLVersion":"1.0"}`,
+		"HTTPStatus": `{"HTTPStatus":"200"}`,
+		"IDNo":       `{"IDNo":"FX0000001"}`,
+		"URLPath":    `{"URLPath":"/x"}`,
+	}
+	for name, body := range mustPass {
+		require.Empty(t, fake.Violations("ok.json", []byte(body)), name)
+	}
+}
+
+// TestSanitiserAllowsNonPIIProtocolKeys is R1's second check: no OTHER
+// nameKeyPattern stem should reject a plausible non-PII protocol key from
+// 06-integrations.md's field tables. The one real hit found was "tanim":
+// OSOS's mapping table lists BOTH `sayimNokTanim` (a name-shaped,
+// genuinely-PII field — still must-reject, see TestSanitiserRejects) and
+// `tesisatTurTanim` (an installation/tariff-KIND classification field, in
+// the same table row as tarifeTipi/tarifeTuru — never PII), and both keys
+// end in "Tanim", so the generic "tanim" stem could not tell them apart.
+// Resolved with an exact `^sayimnoktanim$` entry instead of the generic
+// stem, so these classification fields now pass unflagged.
+func TestSanitiserAllowsNonPIIProtocolKeys(t *testing.T) {
+	require.Empty(t, fake.Violations("ok.json", []byte(
+		`{"tesisatTurTanim":"Sanayi","tarifeTipi":"TT","tarifeTuru":"Tek Terimli"}`)))
+}
+
 // TestSanitiserRejectsPhoneNumber proves the phone rule from the brief's
 // table, which TestSanitiserRejects above (copied verbatim from the brief)
 // does not itself exercise.

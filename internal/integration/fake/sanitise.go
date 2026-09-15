@@ -7,8 +7,10 @@ import (
 	"net/url"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
+	"unicode"
+
+	"github.com/shopspring/decimal"
 )
 
 // Rule patterns are derived from the F2 Task 4 brief's sanitisation table
@@ -59,25 +61,69 @@ var (
 	authKeyPattern   = regexp.MustCompile(`(?i)auth`)
 	authorKeyPattern = regexp.MustCompile(`(?i)author`)
 
-	// nameKeyPattern matches keys whose values must start "Fixture ":
-	// customer/company/plant/title/address/street/district/neighbourhood
-	// names. Built from 06-integrations.md's OSOS (customerAdress, il,
-	// ilce, koyMahallesi, caddesiSokagi, sayimNokTanim) and ARIL
-	// (Title, Address) field tables, plus the Turkish-spelling stems I2
-	// found evading the original English-only pattern.
+	// piiWords is the PII key WORD set (fix-round-3 controller ruling): a
+	// key is name/address-shaped PII if tokeniseKey(key) produces a word
+	// that is a member of this set — never by substring match. Built from
+	// 06-integrations.md's OSOS (customerAdress, il, ilce, koyMahallesi,
+	// caddesiSokagi → province/district/neighbourhood/street; muhatapNo,
+	// sayimNokTanim) and ARIL (Title, Address) field tables, plus the
+	// round-1/round-2 Turkish-spelling stems (I2, R1).
 	//
-	// Known trade-off: the "il$" stem (the OSOS `il` field) also matches
-	// any key ending "il" such as "mail"/"email" — accepted as directed by
-	// I2's literal stem list; a value under such a key still gets the
-	// independent e-mail shape check via shapeViolations regardless of
-	// which branch fires.
-	nameKeyPattern = regexp.MustCompile(`(?i)adres|adress|address|company|customer|musteri|müşteri|firma|unvan|mahalle|sokak|cadde|il$|ilce|ilçe|neighbo|muhatap|tanim|tanım|name|title|street|district`) //nolint:misspell // "adres" is the OSOS provider's own (Turkish) key spelling, not an English typo
+	// fix-round-2 R1 found that substring/suffix stems (`il$`) and later a
+	// single exact-whole-key anchor (`^sayimnoktanim$`) both fail: a suffix
+	// stem catches unrelated keys that happen to END in the stem
+	// ("email"/"mail" end in "il"; the pre-fix-round-2 bug), while an exact
+	// whole-key anchor stops matching the instant the key is spelled with
+	// ANY extra separator or suffix — `SAYIM_NOK_TANIM` (underscores) and
+	// `sayimNoktaTanimi` (the "-ta"/"-i" suffix forms) both lower to a
+	// string that is not byte-identical to "sayimnoktanim", so the anchor
+	// wrongly let them through (fix-round-3's regression). Word
+	// tokenisation (tokeniseKey below) fixes both failure modes at once:
+	// "email"/"mail" never produce an "il" WORD (there is no camelCase/
+	// separator boundary before "il" in either), so they are not caught by
+	// the "il" entry below, while `SAYIM_NOK_TANIM`/`sayimNoktaTanimi`/
+	// `sayim-nokta-tanimi` all tokenise to a "sayim"(-ish) word plus a
+	// "tanim"/"tanimi" word regardless of case/separator spelling, so
+	// hasSayimTanimCombo (below) still catches every spelling. "tanim" is
+	// NOT in this set on its own, so a word-for-word `tesisatTurTanim` (→
+	// installation_kind, a tariff/installation-CATEGORY field in the same
+	// OSOS table row as tarifeTipi/tarifeTuru, never PII) does not trip the
+	// sayim/tanim combo and is not otherwise a member of piiWords.
+	//
+	// "name" is deliberately NOT a member: 06-integrations.md's only
+	// Provider-field hit for it is the genuinely-PII `customerName`, and
+	// that key is still caught via its "customer" word. A bare "name" word
+	// alone (`deviceName`, `unitName` — neither is a Provider-field column
+	// entry anywhere in the doc) must pass; see TestSanitiserWordTokenisedKeyMatching.
+	piiWords = map[string]bool{
+		"il":           true,
+		"ilce":         true,
+		"mahalle":      true,
+		"koy":          true,
+		"cadde":        true,
+		"caddesi":      true,
+		"sokak":        true,
+		"sokagi":       true,
+		"adres":        true, //nolint:misspell // OSOS's own (Turkish) key spelling, not an English typo
+		"adress":       true, //nolint:misspell // OSOS's own (Turkish/misspelled) key spelling, not an English typo
+		"address":      true,
+		"company":      true,
+		"customer":     true,
+		"musteri":      true, // covers müşteri too: foldWord maps ü→u, ş→s
+		"firma":        true,
+		"unvan":        true,
+		"neighborhood": true,
+		"muhatap":      true,
+		"title":        true,
+		"street":       true,
+		"district":     true,
+	}
 
 	// installationKeys are exact (case-insensitive) identifier keys whose
 	// values must be in FX placeholder form: installation/wiring/
 	// subscription numbers, meter serials, ps_id/ps_key/device_sn — plus
-	// muhatapNo, which I2 carves out of nameKeyPattern above (its stem
-	// "muhatap" would otherwise classify it as a name) because its
+	// muhatapNo, which I2 carves out of piiWords above (its word "muhatap"
+	// would otherwise classify it as a name) because its
 	// canonical field is counterparty_no, a numeric identifier, not a name.
 	installationKeys = map[string]bool{
 		"instalationnumber":  true,
@@ -100,6 +146,14 @@ var (
 	coordXKeyPattern = regexp.MustCompile(`(?i)^koordinatx$|^latitude$|^lat$`)
 	coordYKeyPattern = regexp.MustCompile(`(?i)^koordinaty$|^longitude$|^lon$|^lng$`)
 
+	// coordLatMin/Max and coordLonMin/Max are the allowed fixture bounds
+	// (I2), as exact decimals — no float64 anywhere in this package (see
+	// coordinateViolations).
+	coordLatMin = decimal.RequireFromString("39.0")
+	coordLatMax = decimal.RequireFromString("39.999999")
+	coordLonMin = decimal.RequireFromString("32.0")
+	coordLonMax = decimal.RequireFromString("32.999999")
+
 	// allowedHosts are the only hostnames a fixture's URL (scheme-bearing
 	// or bare) may reference.
 	allowedHosts = map[string]bool{
@@ -107,6 +161,143 @@ var (
 		"example.invalid": true,
 	}
 )
+
+// tokeniseKey splits key into lowercase, Turkish-folded WORDS (fix-round-3
+// controller ruling, extended by fix-round-4's acronym rule) on:
+//   - camelCase/PascalCase boundaries (a lowercase letter immediately
+//     followed by an uppercase letter);
+//   - acronym boundaries (fix-round-4): an uppercase letter that is
+//     immediately followed by a lowercase letter, when the letter BEFORE
+//     it is also uppercase — the standard rule for splitting a leading
+//     acronym run off the word that follows it. Without this rule the
+//     lower→upper rule above never fires inside an all-uppercase run, so
+//     an acronym fuses with the next word instead of tokenising
+//     separately: "XMLCustomerID" → ["xmlcustomer", "id"] (one fused word
+//     that never matches the "customer" PII word) instead of the correct
+//     ["xml", "customer", "id"]. With the rule, "XMLCustomer" splits into
+//     "XML" + "Customer" (boundary before the "C": the "L" before it is
+//     upper, the "C" is upper, the "u" after it is lower) and "IDNo"
+//     splits into "ID" + "No" (same shape, boundary before the "N").
+//     "XMLVersion", "HTTPStatus", "IDNo" itself and "URLPath" still pass
+//     as non-PII, since none of "xml"/"version"/"http"/"status"/"id"/
+//     "no"/"url"/"path" is a PII word;
+//   - digit boundaries (a letter immediately followed by a digit, or a
+//     digit immediately followed by a letter);
+//   - any run of one or more non-alphanumeric separators (`_`, `-`, `.`,
+//     whitespace, or anything else that is not a letter or digit).
+//
+// Boundary detection runs on the ORIGINAL runes, before folding: folding
+// lower-cases Turkish letters (İ→i, ı→i, ...), and doing that first would
+// erase the very upper/lower distinction camelCase and acronym splitting
+// depend on. Each extracted word is folded (see foldWord) only after its
+// boundaries are decided, so "İlçe" (one Titlecase word, no internal
+// boundary) still becomes the single folded word "ilce", while
+// "sayimNoktaTanimi" becomes three words ("sayim", "nokta", "tanimi").
+func tokeniseKey(key string) []string {
+	runes := []rune(key)
+	var words []string
+	start := -1
+	flush := func(end int) {
+		if start >= 0 && end > start {
+			words = append(words, foldWord(string(runes[start:end])))
+		}
+		start = -1
+	}
+	for i, r := range runes {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+			flush(i)
+			continue
+		}
+		if start < 0 {
+			start = i
+			continue
+		}
+		prev := runes[i-1]
+		boundary := unicode.IsDigit(r) != unicode.IsDigit(prev) ||
+			(unicode.IsLower(prev) && unicode.IsUpper(r))
+		if !boundary && unicode.IsUpper(prev) && unicode.IsUpper(r) &&
+			i+1 < len(runes) && unicode.IsLower(runes[i+1]) {
+			boundary = true
+		}
+		if boundary {
+			flush(i)
+			start = i
+		}
+	}
+	flush(len(runes))
+	return words
+}
+
+// foldWord lower-cases a single extracted word, mapping Turkish letters to
+// their closest ASCII equivalent (ı/İ→i, ş/Ş→s, ç/Ç→c, ğ/Ğ→g, ö/Ö→o,
+// ü/Ü→u) so a key spelled with or without Turkish diacritics tokenises to
+// the same word (e.g. "müşteri" and "musteri" both fold to "musteri").
+func foldWord(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch r {
+		case 'ı', 'İ':
+			b.WriteRune('i')
+		case 'ş', 'Ş':
+			b.WriteRune('s')
+		case 'ç', 'Ç':
+			b.WriteRune('c')
+		case 'ğ', 'Ğ':
+			b.WriteRune('g')
+		case 'ö', 'Ö':
+			b.WriteRune('o')
+		case 'ü', 'Ü':
+			b.WriteRune('u')
+		default:
+			b.WriteRune(unicode.ToLower(r))
+		}
+	}
+	return b.String()
+}
+
+// hasSayimTanimCombo reports whether words (already tokenised/folded)
+// contain the "sayim nokta tanim(i)" counting-point-description
+// combination (fix-round-3 controller ruling): a "sayim"/"sayimnok" word
+// together with a "tanim"/"tanimi" word — however many words separate
+// them, and regardless of case/separator spelling — OR a single fused
+// word that itself starts with "sayimnok" and contains "tanim" (the
+// no-separator-at-all spelling, e.g. "sayimnoktanim" as one token). A
+// bare "tanim" word with no accompanying "sayim" word is NOT PII on its
+// own (see piiWords' doc comment: "tesisatTurTanim").
+func hasSayimTanimCombo(words []string) bool {
+	hasSayim, hasTanim := false, false
+	for _, w := range words {
+		if w == "sayim" || w == "sayimnok" {
+			hasSayim = true
+		}
+		if w == "tanim" || w == "tanimi" {
+			hasTanim = true
+		}
+		if strings.HasPrefix(w, "sayimnok") && strings.Contains(w, "tanim") {
+			return true
+		}
+	}
+	return hasSayim && hasTanim
+}
+
+// isNameLikePII reports whether key is name/company/address-shaped PII
+// per the fix-round-3 word-tokenised ruling: true if tokeniseKey(key)
+// yields any word in piiWords, or the sayim/tanim combination
+// (hasSayimTanimCombo) — decided on whole words, never substrings, so a
+// word ENDING in a PII stem (e.g. "il" inside "email"/"mail") never
+// matches, and only a genuine PII WORD does.
+func isNameLikePII(key string) bool {
+	words := tokeniseKey(key)
+	if hasSayimTanimCombo(words) {
+		return true
+	}
+	for _, w := range words {
+		if piiWords[w] {
+			return true
+		}
+	}
+	return false
+}
 
 // Violations reports every sanitisation rule broken by the fixture at path
 // with the given body.
@@ -185,7 +376,7 @@ func checkStringValue(key, value string) []string {
 		if !strings.HasPrefix(value, "FIXTURE-") && !strings.HasPrefix(value, "TGT-FIXTURE-") {
 			violations = append(violations, fmt.Sprintf("key %q: value %q is not in FIXTURE- placeholder form", key, value))
 		}
-	case nameKeyPattern.MatchString(key):
+	case isNameLikePII(key):
 		if !strings.HasPrefix(value, "Fixture ") {
 			violations = append(violations, fmt.Sprintf("key %q: value %q does not start with \"Fixture \"", key, value))
 		}
@@ -209,23 +400,31 @@ func isSecretKey(key string) bool {
 // coordinateViolations range-checks OSOS's koordinatX/koordinatY (and their
 // canonical latitude/longitude names) against the allowed fixture bounds
 // (I2: "koordinatX/Y out of the allowed range ... reject out-of-range").
+//
+// fix-round-2 (controller, merge-with-Task-1 finding): uses
+// github.com/shopspring/decimal, never strconv.ParseFloat/float64 — Task 1's
+// merged arch guard (TestIntegrationTreesDoNotParseFloats / depguard's
+// no-float-money rule) forbids float parsing anywhere under
+// internal/integration/..., non-test files included, so this exact-decimal
+// comparison replaces the prior float64 bounds check with the same accepted/
+// rejected cases.
 func coordinateViolations(key, lowerKey, value string) []string {
-	var lo, hi float64
+	var lo, hi decimal.Decimal
 	switch {
 	case coordXKeyPattern.MatchString(lowerKey):
-		lo, hi = 39.0, 39.999999
+		lo, hi = coordLatMin, coordLatMax
 	case coordYKeyPattern.MatchString(lowerKey):
-		lo, hi = 32.0, 32.999999
+		lo, hi = coordLonMin, coordLonMax
 	default:
 		return nil
 	}
 
-	f, err := strconv.ParseFloat(value, 64)
+	d, err := decimal.NewFromString(value)
 	if err != nil {
 		return []string{fmt.Sprintf("key %q: coordinate value %q is not numeric", key, value)}
 	}
-	if f < lo || f > hi {
-		return []string{fmt.Sprintf("key %q: coordinate value %v is outside the allowed fixture range [%v, %v]", key, f, lo, hi)}
+	if d.LessThan(lo) || d.GreaterThan(hi) {
+		return []string{fmt.Sprintf("key %q: coordinate value %s is outside the allowed fixture range [%s, %s]", key, d.String(), lo.String(), hi.String())}
 	}
 	return nil
 }
