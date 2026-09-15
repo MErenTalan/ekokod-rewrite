@@ -1,0 +1,410 @@
+//go:build integration
+
+package postgres_test
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/require"
+
+	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
+	"github.com/MErenTalan/ekokod-rewrite/internal/store"
+	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
+	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
+)
+
+// carbonDec is this file's fixture-literal decimal parser, prefixed per the
+// package-wide test-helper naming rule (wave-f-context.md rule 6).
+func carbonDec(s string) decimal.Decimal { return decimal.RequireFromString(s) }
+
+// --- emission_factors: nullable company_id -------------------------------
+
+func TestCarbonFactorPlatformReadableCompanyWritable(t *testing.T) {
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenant := testfixtures.NewTenant(t, ctx, pool, 4001)
+	repo := postgres.NewCarbonRepository(pool)
+
+	// A platform factor (company_id null) is inserted directly: only the
+	// admin surface may write one.
+	var platformID uuid.UUID
+	require.NoError(t, pool.QueryRow(ctx, `insert into emission_factors
+		(company_id, key, label, main_category, base_factor, base_unit)
+		values (null, 'diesel', 'Diesel', 'fuel', 2.68, 'kg')
+		returning id`).Scan(&platformID))
+
+	// Any valid tenant scope can read the platform factor.
+	got, err := repo.Factor(ctx, tenant.Scope, platformID)
+	require.NoError(t, err)
+	require.Nil(t, got.CompanyID)
+	require.Equal(t, "diesel", got.Key)
+
+	// An invalid scope is rejected before any database call.
+	_, err = repo.Factor(ctx, store.Scope{}, platformID)
+	require.ErrorIs(t, err, store.ErrInvalidScope)
+
+	// UpsertFactor with a nil CompanyID (as if trying to write the platform
+	// factor through the scoped surface) is refused with ErrNotFound.
+	_, err = repo.UpsertFactor(ctx, tenant.Scope, model.EmissionFactor{
+		Key: "diesel", Label: "x", MainCategory: "fuel", BaseFactor: carbonDec("1"), BaseUnit: "kg",
+	})
+	require.ErrorIs(t, err, store.ErrNotFound, "a nil CompanyID must be refused before any write")
+
+	// A company-owned upsert with the tenant's own CompanyID succeeds and
+	// shadows the platform key without touching it.
+	companyID := tenant.Company.ID
+	own, err := repo.UpsertFactor(ctx, tenant.Scope, model.EmissionFactor{
+		CompanyID: &companyID, Key: "diesel", Label: "Our Diesel", MainCategory: "fuel",
+		BaseFactor: carbonDec("2.70"), BaseUnit: "kg",
+	})
+	require.NoError(t, err)
+	require.NotEqual(t, platformID, own.ID, "the company's row must be a DIFFERENT row from the platform one")
+
+	platformStill, err := repo.Factor(ctx, tenant.Scope, platformID)
+	require.NoError(t, err)
+	require.True(t, platformStill.BaseFactor.Equal(carbonDec("2.68000000")), "the platform row must be untouched")
+
+	// Re-upserting the same key converges on the SAME row (idempotent on the
+	// natural key), not a new one.
+	again, err := repo.UpsertFactor(ctx, tenant.Scope, model.EmissionFactor{
+		CompanyID: &companyID, Key: "diesel", Label: "Our Diesel Updated", MainCategory: "fuel",
+		BaseFactor: carbonDec("2.71"), BaseUnit: "kg",
+	})
+	require.NoError(t, err)
+	require.Equal(t, own.ID, again.ID)
+	require.Equal(t, "Our Diesel Updated", again.Label)
+}
+
+// TestCarbonUpsertFactorRefusesAnotherCompanysID proves the ID-ownership
+// guard: an id already naming another company's factor is refused with
+// ErrNotFound and nothing is written, even though the key differs.
+func TestCarbonUpsertFactorRefusesAnotherCompanysID(t *testing.T) {
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 4002)
+	tenantB := testfixtures.NewTenant(t, ctx, pool, 4003)
+	repo := postgres.NewCarbonRepository(pool)
+
+	companyA := tenantA.Company.ID
+	ownA, err := repo.UpsertFactor(ctx, tenantA.Scope, model.EmissionFactor{
+		CompanyID: &companyA, Key: "petrol", Label: "Petrol", MainCategory: "fuel",
+		BaseFactor: carbonDec("2.30"), BaseUnit: "kg",
+	})
+	require.NoError(t, err)
+
+	companyB := tenantB.Company.ID
+	_, err = repo.UpsertFactor(ctx, tenantB.Scope, model.EmissionFactor{
+		ID: ownA.ID, CompanyID: &companyB, Key: "brand-new-key-for-b", Label: "x", MainCategory: "fuel",
+		BaseFactor: carbonDec("1"), BaseUnit: "kg",
+	})
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	list, err := repo.ListFactors(ctx, tenantB.Scope, store.EmissionFactorFilter{})
+	require.NoError(t, err)
+	for _, f := range list {
+		require.NotEqual(t, "brand-new-key-for-b", f.Key, "the refused write must not have gone through under any key")
+	}
+}
+
+// --- emission_factor_conversions: no company_id at all --------------------
+
+// TestCarbonConversionsIsolation is the mandatory isolation test for
+// emission_factor_conversions: readable for a platform factor or one of the
+// caller's own; another company's factorID returns ErrNotFound both for the
+// read and for ReplaceConversions.
+func TestCarbonConversionsIsolation(t *testing.T) {
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 4010)
+	tenantB := testfixtures.NewTenant(t, ctx, pool, 4011)
+	repo := postgres.NewCarbonRepository(pool)
+
+	companyA := tenantA.Company.ID
+	factor, err := repo.UpsertFactor(ctx, tenantA.Scope, model.EmissionFactor{
+		CompanyID: &companyA, Key: "lpg", Label: "LPG", MainCategory: "fuel",
+		BaseFactor: carbonDec("1.51"), BaseUnit: "kg",
+	})
+	require.NoError(t, err)
+
+	err = repo.ReplaceConversions(ctx, tenantA.Scope, factor.ID, []model.EmissionFactorConversion{
+		{Unit: "litre", Multiplier: carbonDec("0.55"), Label: "per litre"},
+	})
+	require.NoError(t, err)
+
+	conversions, err := repo.Conversions(ctx, tenantA.Scope, factor.ID)
+	require.NoError(t, err)
+	require.Len(t, conversions, 1)
+	require.True(t, conversions[0].Multiplier.Equal(carbonDec("0.55000000")))
+
+	// Tenant B cannot read tenant A's factor's conversions.
+	_, err = repo.Conversions(ctx, tenantB.Scope, factor.ID)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	// Tenant B cannot replace them either, and nothing changes.
+	err = repo.ReplaceConversions(ctx, tenantB.Scope, factor.ID, []model.EmissionFactorConversion{
+		{Unit: "hacked", Multiplier: carbonDec("999"), Label: "x"},
+	})
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	stillA, err := repo.Conversions(ctx, tenantA.Scope, factor.ID)
+	require.NoError(t, err)
+	require.Len(t, stillA, 1)
+	require.Equal(t, "litre", stillA[0].Unit, "tenant B's refused replace must not have touched tenant A's row")
+
+	// A platform factor's conversions are readable by any tenant.
+	var platformFactorID uuid.UUID
+	require.NoError(t, pool.QueryRow(ctx, `insert into emission_factors
+		(company_id, key, label, main_category, base_factor, base_unit)
+		values (null, 'natural_gas', 'Natural Gas', 'fuel', 1.89, 'm3')
+		returning id`).Scan(&platformFactorID))
+	_, err = pool.Exec(ctx, `insert into emission_factor_conversions (factor_id, unit, multiplier, label)
+		values ($1, 'kwh', 0.1832, 'per kwh')`, platformFactorID)
+	require.NoError(t, err)
+
+	platformConversions, err := repo.Conversions(ctx, tenantB.Scope, platformFactorID)
+	require.NoError(t, err)
+	require.Len(t, platformConversions, 1)
+
+	// And ReplaceConversions on a platform factor is refused too: the scoped
+	// surface never writes a company_id-null row.
+	err = repo.ReplaceConversions(ctx, tenantB.Scope, platformFactorID, nil)
+	require.ErrorIs(t, err, store.ErrNotFound)
+}
+
+// --- carbon_selected_activities --------------------------------------------
+
+func TestCarbonSelectedActivitiesReplace(t *testing.T) {
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenant := testfixtures.NewTenant(t, ctx, pool, 4020)
+	repo := postgres.NewCarbonRepository(pool)
+
+	buildingID := tenant.Buildings[0].ID
+	err := repo.ReplaceSelectedActivities(ctx, tenant.Scope, buildingID, []string{"electricity", "natural_gas"})
+	require.NoError(t, err)
+
+	list, err := repo.SelectedActivities(ctx, tenant.Scope, buildingID)
+	require.NoError(t, err)
+	require.Len(t, list, 2)
+
+	// Replacing again converges rather than accumulating.
+	err = repo.ReplaceSelectedActivities(ctx, tenant.Scope, buildingID, []string{"electricity"})
+	require.NoError(t, err)
+	list, err = repo.SelectedActivities(ctx, tenant.Scope, buildingID)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	require.Equal(t, "electricity", list[0].ActivityKey)
+
+	// A narrow scope (covers Buildings[0] only) cannot replace Buildings[1]'s
+	// selection: the building is locked FOR SHARE and found invisible.
+	err = repo.ReplaceSelectedActivities(ctx, tenant.Scope, tenant.Buildings[1].ID, []string{"x"})
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	// The admin scope (AllBuildings) can.
+	err = repo.ReplaceSelectedActivities(ctx, tenant.AdminScope, tenant.Buildings[1].ID, []string{"water"})
+	require.NoError(t, err)
+}
+
+// --- carbon_activities ------------------------------------------------------
+
+func carbonActivityFixture(companyID, buildingID uuid.UUID) model.CarbonActivity {
+	return model.CarbonActivity{
+		CompanyID: companyID, BuildingID: buildingID,
+		MainCategory: "energy", SubCategory: "grid", ActivityType: "electricity",
+		PeriodStart: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		PeriodEnd:   time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		Quantity:    carbonDec("1000.500000"), Unit: "kWh",
+		ConversionMultiplier: carbonDec("1.00000000"), EmissionKgco2e: carbonDec("485.230000"),
+		Scope: model.CarbonScope2, IsoCategory: "cat1", Status: model.CarbonStatusPending,
+	}
+}
+
+func TestCarbonActivityCRUDAndScopeNarrowing(t *testing.T) {
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenant := testfixtures.NewTenant(t, ctx, pool, 4030)
+	repo := postgres.NewCarbonRepository(pool)
+
+	a := carbonActivityFixture(tenant.Company.ID, tenant.Buildings[0].ID)
+	created, err := repo.CreateActivity(ctx, tenant.Scope, a)
+	require.NoError(t, err)
+	require.True(t, created.Quantity.Equal(carbonDec("1000.500000")))
+
+	got, err := repo.Activity(ctx, tenant.Scope, created.ID)
+	require.NoError(t, err)
+	require.Equal(t, created.ID, got.ID)
+
+	created.Quantity = carbonDec("1200.750000")
+	created.CompanyID = tenant.Company.ID
+	updated, err := repo.UpdateActivity(ctx, tenant.Scope, created)
+	require.NoError(t, err)
+	require.True(t, updated.Quantity.Equal(carbonDec("1200.750000")))
+
+	statusUpdated, err := repo.SetActivityStatus(ctx, tenant.Scope, created.ID, model.CarbonStatusApproved, time.Now().UTC())
+	require.NoError(t, err)
+	require.Equal(t, model.CarbonStatusApproved, statusUpdated.Status)
+
+	list, err := repo.ListActivities(ctx, tenant.Scope, store.CarbonActivityFilter{})
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+
+	// A row created (via the admin scope) under Buildings[1] is invisible to
+	// the narrow Scope.
+	other := carbonActivityFixture(tenant.Company.ID, tenant.Buildings[1].ID)
+	otherCreated, err := repo.CreateActivity(ctx, tenant.AdminScope, other)
+	require.NoError(t, err)
+
+	_, err = repo.Activity(ctx, tenant.Scope, otherCreated.ID)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	err = repo.DeleteActivity(ctx, tenant.Scope, otherCreated.ID)
+	require.ErrorIs(t, err, store.ErrNotFound, "a narrow scope must not be able to delete another building's activity")
+
+	require.NoError(t, repo.DeleteActivity(ctx, tenant.AdminScope, otherCreated.ID))
+}
+
+func TestCarbonCreateActivityRefusesInvisibleBuildingAndWrongCompany(t *testing.T) {
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 4040)
+	tenantB := testfixtures.NewTenant(t, ctx, pool, 4041)
+	repo := postgres.NewCarbonRepository(pool)
+
+	// Narrow scope cannot create against Buildings[1].
+	_, err := repo.CreateActivity(ctx, tenantA.Scope, carbonActivityFixture(tenantA.Company.ID, tenantA.Buildings[1].ID))
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	// A CompanyID mismatch is refused before any database call, even for a
+	// visible building id borrowed from another tenant.
+	_, err = repo.CreateActivity(ctx, tenantA.Scope, carbonActivityFixture(tenantB.Company.ID, tenantA.Buildings[0].ID))
+	require.ErrorIs(t, err, store.ErrNotFound)
+}
+
+func TestCarbonUpsertAutomatedActivityConvergesOnOneRow(t *testing.T) {
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenant := testfixtures.NewTenant(t, ctx, pool, 4050)
+	repo := postgres.NewCarbonRepository(pool)
+
+	a := carbonActivityFixture(tenant.Company.ID, tenant.Buildings[0].ID)
+	first, err := repo.UpsertAutomatedActivity(ctx, tenant.Scope, a)
+	require.NoError(t, err)
+	require.True(t, first.IsAutomated)
+
+	a.EmissionKgco2e = carbonDec("999.990000")
+	second, err := repo.UpsertAutomatedActivity(ctx, tenant.Scope, a)
+	require.NoError(t, err)
+	require.Equal(t, first.ID, second.ID, "the partial unique index must converge on one row")
+	require.True(t, second.EmissionKgco2e.Equal(carbonDec("999.990000")))
+
+	list, err := repo.ListActivities(ctx, tenant.Scope, store.CarbonActivityFilter{IsAutomated: boolPtrCarbon(true)})
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+}
+
+func boolPtrCarbon(b bool) *bool { return &b }
+
+// --- carbon_reports ----------------------------------------------------------
+
+func TestCarbonReportsCreateAndList(t *testing.T) {
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenant := testfixtures.NewTenant(t, ctx, pool, 4060)
+	repo := postgres.NewCarbonRepository(pool)
+
+	rep := model.CarbonReport{
+		CompanyID: tenant.Company.ID, BuildingID: tenant.Buildings[0].ID,
+		Name: "Q1 GHG", ReportType: "ghg", Period: "2026-Q1", Payload: []byte(`{"total":1}`),
+	}
+	created, err := repo.CreateReport(ctx, tenant.Scope, rep)
+	require.NoError(t, err)
+	require.NotEqual(t, uuid.Nil, created.ID)
+
+	list, err := repo.ListReports(ctx, tenant.Scope, nil, store.Page{})
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+
+	// A narrow scope cannot create a report against Buildings[1].
+	_, err = repo.CreateReport(ctx, tenant.Scope, model.CarbonReport{
+		CompanyID: tenant.Company.ID, BuildingID: tenant.Buildings[1].ID,
+		Name: "x", ReportType: "ghg", Period: "2026-Q1", Payload: []byte(`{}`),
+	})
+	require.ErrorIs(t, err, store.ErrNotFound)
+}
+
+// --- invalid scope, before any database call --------------------------------
+
+func TestCarbonRepositoryRejectsInvalidScope(t *testing.T) {
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	repo := postgres.NewCarbonRepository(pool)
+	var invalid store.Scope
+
+	_, err := repo.ListFactors(ctx, invalid, store.EmissionFactorFilter{})
+	require.ErrorIs(t, err, store.ErrInvalidScope)
+	_, err = repo.Conversions(ctx, invalid, uuid.New())
+	require.ErrorIs(t, err, store.ErrInvalidScope)
+	_, err = repo.ListActivities(ctx, invalid, store.CarbonActivityFilter{})
+	require.ErrorIs(t, err, store.ErrInvalidScope)
+	_, err = repo.ListReports(ctx, invalid, nil, store.Page{})
+	require.ErrorIs(t, err, store.ErrInvalidScope)
+}
+
+// TestCarbonAdminScopeCannotStoreAnotherTenantsForeignKeys proves that
+// AdminScope (AllBuildings: true) — the widest legitimate scope a single
+// tenant can hold — still cannot be used to store ANOTHER tenant's building
+// or user id. Scope.AllowsBuilding returns true for any id at all under
+// AllBuildings, so every write here embeds the real ownership check
+// (company_id = the caller's own) directly in its SQL rather than trusting
+// that Go-level helper.
+func TestCarbonAdminScopeCannotStoreAnotherTenantsForeignKeys(t *testing.T) {
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 4070)
+	tenantB := testfixtures.NewTenant(t, ctx, pool, 4071)
+	repo := postgres.NewCarbonRepository(pool)
+
+	foreignBuilding := tenantB.Buildings[0].ID
+	foreignUser := tenantB.Users[model.UserRoleCompanyAdmin].ID
+
+	// CreateActivity: tenant A's AdminScope cannot store tenant B's building.
+	_, err := repo.CreateActivity(ctx, tenantA.AdminScope, carbonActivityFixture(tenantA.Company.ID, foreignBuilding))
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	// CreateActivity: a valid, own building but a created_by from another
+	// tenant is refused too.
+	withForeignCreator := carbonActivityFixture(tenantA.Company.ID, tenantA.Buildings[0].ID)
+	withForeignCreator.CreatedBy = &foreignUser
+	_, err = repo.CreateActivity(ctx, tenantA.AdminScope, withForeignCreator)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	// UpsertAutomatedActivity: same two checks.
+	_, err = repo.UpsertAutomatedActivity(ctx, tenantA.AdminScope, carbonActivityFixture(tenantA.Company.ID, foreignBuilding))
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	withForeignCreator2 := carbonActivityFixture(tenantA.Company.ID, tenantA.Buildings[0].ID)
+	withForeignCreator2.CreatedBy = &foreignUser
+	_, err = repo.UpsertAutomatedActivity(ctx, tenantA.AdminScope, withForeignCreator2)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	// CreateReport: tenant A's AdminScope cannot store tenant B's building.
+	_, err = repo.CreateReport(ctx, tenantA.AdminScope, model.CarbonReport{
+		CompanyID: tenantA.Company.ID, BuildingID: foreignBuilding,
+		Name: "x", ReportType: "ghg", Period: "2026-Q1", Payload: []byte(`{}`),
+	})
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	// ReplaceSelectedActivities: tenant A's AdminScope cannot replace tenant
+	// B's building's selection.
+	err = repo.ReplaceSelectedActivities(ctx, tenantA.AdminScope, foreignBuilding, []string{"electricity"})
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	// Nothing was written to tenant B's data by any of the refused attempts.
+	activities, err := repo.ListActivities(ctx, tenantB.AdminScope, store.CarbonActivityFilter{})
+	require.NoError(t, err)
+	require.Empty(t, activities, "no refused write must have landed under tenant B")
+}
