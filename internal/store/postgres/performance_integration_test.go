@@ -73,6 +73,12 @@ func perfWeekIndex(t time.Time) int64 {
 	return t.Unix() / int64(perfChunkTimeInterval/time.Second)
 }
 
+// Deliberately NOT t.Parallel() (F2 Task 0P2, step 8): this is the one test
+// in the package gated to run alone via `make test-perf` (EKOKOD_PERF=1),
+// specifically so its own 1,000,000-row insert rate (insertElapsed, logged
+// below) and the pool's 300-max_connections budget are not shared with 8-way
+// parallel fan-out from the rest of the package — a concern the rest of this
+// package's tests, which never touch this row count, do not have.
 func TestOneMillionReadingsChunkLayout(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow: inserts 1,000,000 rows")

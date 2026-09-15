@@ -18,6 +18,7 @@ import (
 )
 
 func TestPlantRepositoryNeverReturnsAnotherCompanysRows(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	mine := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -36,12 +37,14 @@ func TestPlantRepositoryNeverReturnsAnotherCompanysRows(t *testing.T) {
 }
 
 func TestPlantRepositoryRejectsAnInvalidScope(t *testing.T) {
+	t.Parallel()
 	repo := postgres.NewPlantRepository(testfixtures.NewIsolatedDB(t))
 	_, err := repo.List(context.Background(), store.Scope{}, store.PlantFilter{})
 	require.ErrorIs(t, err, store.ErrInvalidScope)
 }
 
 func TestPlantRepositoryCreateGetUpdateSoftDelete(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -86,6 +89,7 @@ func TestPlantRepositoryCreateGetUpdateSoftDelete(t *testing.T) {
 // whether or not the guard exists. Only a model value that lies about its
 // OWN row's CompanyID exercises the guard.
 func TestPlantRepositoryUpdateRefusesAForeignCompany(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	mine := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -110,6 +114,7 @@ func TestPlantRepositoryUpdateRefusesAForeignCompany(t *testing.T) {
 // rule 4 for PlantDevicesList's LEFT JOIN shape: a child of a soft-deleted
 // parent must not be readable through the parent-scoped query either.
 func TestPlantRepositoryDevicesExcludeASoftDeletedParent(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -134,6 +139,7 @@ func TestPlantRepositoryDevicesExcludeASoftDeletedParent(t *testing.T) {
 // UPDATE-then-INSERT-if-absent shape. See the task report for the failing
 // run against that old shape, captured before this fix.
 func TestPlantRepositoryUpsertDeviceConvergesUnderConcurrency(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -167,6 +173,7 @@ func TestPlantRepositoryUpsertDeviceConvergesUnderConcurrency(t *testing.T) {
 // mandatory isolation test for "PlantRepository.MonthlyTargets,
 // ReplaceMonthlyTargets — power_plant_monthly_targets -> power_plants".
 func TestPlantRepositoryMonthlyTargetsIsolateThroughTheParentPlant(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	mine := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -206,6 +213,7 @@ func TestPlantRepositoryMonthlyTargetsIsolateThroughTheParentPlant(t *testing.T)
 // UpsertDevice (d.PlantID; plant_id never updated) — power_plant_devices ->
 // power_plants".
 func TestPlantRepositoryDevicesIsolateThroughTheParentPlantAndUpsertConverges(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	mine := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -246,6 +254,7 @@ func TestPlantRepositoryDevicesIsolateThroughTheParentPlantAndUpsertConverges(t 
 // mandatory isolation test for "PlantRepository.AlarmRecipients,
 // ReplaceAlarmRecipients — power_plant_alarm_recipients -> power_plants".
 func TestPlantRepositoryAlarmRecipientsIsolateThroughTheParentPlant(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	mine := testfixtures.NewTenant(t, ctx, pool, 1)

@@ -18,6 +18,7 @@ import (
 )
 
 func TestAdminAuthUserByEmailIsCaseInsensitiveAndExcludesASoftDeletedUser(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -37,6 +38,7 @@ func TestAdminAuthUserByEmailIsCaseInsensitiveAndExcludesASoftDeletedUser(t *tes
 }
 
 func TestAdminAuthUserByEmailExcludesUsersOfASoftDeletedCompany(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -55,6 +57,7 @@ func TestAdminAuthUserByEmailExcludesUsersOfASoftDeletedCompany(t *testing.T) {
 // rejecting them is the caller's job, and the deleted-user exclusion it
 // must apply on top.
 func TestAdminAuthSessionByRefreshTokenHashReturnsRevokedAndExpiredSessions(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -85,6 +88,7 @@ func TestAdminAuthSessionByRefreshTokenHashReturnsRevokedAndExpiredSessions(t *t
 }
 
 func TestAdminAuthSessionByRefreshTokenHashExcludesASoftDeletedCompany(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)

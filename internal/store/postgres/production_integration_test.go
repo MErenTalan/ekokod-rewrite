@@ -46,6 +46,7 @@ func productionRow(plantID, deviceID uuid.UUID, ts time.Time, kwh string) model.
 }
 
 func TestProductionBulkInsertIsIdempotent(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -67,6 +68,7 @@ func TestProductionBulkInsertIsIdempotent(t *testing.T) {
 }
 
 func TestProductionRangeAndLatest(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -95,6 +97,7 @@ func TestProductionRangeAndLatest(t *testing.T) {
 }
 
 func TestProductionLatestReturnsNilWhenNoneInRange(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -109,6 +112,7 @@ func TestProductionLatestReturnsNilWhenNoneInRange(t *testing.T) {
 // --- scope / range validation ----------------------------------------------
 
 func TestProductionRepositoryRejectsInvalidScope(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	repo := postgres.NewProductionRepository(pool)
@@ -127,6 +131,7 @@ func TestProductionRepositoryRejectsInvalidScope(t *testing.T) {
 }
 
 func TestProductionRepositoryRejectsInvalidRange(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -144,6 +149,7 @@ func TestProductionRepositoryRejectsInvalidRange(t *testing.T) {
 // power_plants; device_id must belong to that row's plant ------------------
 
 func TestProductionBulkInsertRefusesWholeBatchWhenPlantNotVisible(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -169,6 +175,7 @@ func TestProductionBulkInsertRefusesWholeBatchWhenPlantNotVisible(t *testing.T) 
 }
 
 func TestProductionBulkInsertRefusesWholeBatchWhenDeviceBelongsToAnotherPlant(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -190,6 +197,7 @@ func TestProductionBulkInsertRefusesWholeBatchWhenDeviceBelongsToAnotherPlant(t 
 }
 
 func TestProductionRangeAndLatestPlantNotVisibleReturnsNotFound(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -211,6 +219,7 @@ func TestProductionRangeAndLatestPlantNotVisibleReturnsNotFound(t *testing.T) {
 // scope predicate would STILL return zero rows and that test would still
 // pass. Here tenant B's plant actually HAS production in the queried window.
 func TestProductionRangeAndLatestNeverReturnForeignDataEvenWhenForeignPlantHasProduction(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -233,6 +242,7 @@ func TestProductionRangeAndLatestNeverReturnForeignDataEvenWhenForeignPlantHasPr
 }
 
 func TestProductionBulkInsertRefusesDuplicateKeyWithinBatch(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)

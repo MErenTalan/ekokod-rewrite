@@ -1,97 +1,44 @@
 //go:build integration
 
-package postgres
+package postgres_test
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
-	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
-	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
+	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
+	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/internal/pgnum"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/sqlcgen"
+	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
 )
-
-// billProofPostgresImage/DB/User/Password mirror internal/testfixtures'
-// unexported constants of the same values. This file cannot import
-// testfixtures: testfixtures imports this package (postgres) to run
-// migrations, so package postgres importing testfixtures back would be an
-// import cycle — which is also exactly why this proof has to live here, in
-// package postgres, rather than in the postgres_test external test package
-// every other integration test in this directory uses: only same-package
-// code can reach BillRepository's unexported q field, which is what lets
-// this test call the generated query directly and bypass
-// BillRepository.requireVisible entirely.
-const (
-	billProofPostgresImage = "timescale/timescaledb:2.30.0-pg16"
-	billProofDB            = "ekokod"
-	billProofUser          = "ekokod"
-	billProofPassword      = "ekokod"
-)
-
-// newBillProofPool boots a fresh, migrated TimescaleDB container and returns
-// a pool over it. It is a deliberately minimal, single-purpose duplicate of
-// testfixtures.StartPostgres + postgres.NewPool — seeing exactly one
-// container per run of this test, reaped by the ryuk sidecar like every
-// other testcontainers-backed test in this repository when the test binary
-// exits.
-func newBillProofPool(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-	ctx := context.Background()
-
-	container, err := tcpostgres.Run(ctx, billProofPostgresImage,
-		tcpostgres.WithDatabase(billProofDB),
-		tcpostgres.WithUsername(billProofUser),
-		tcpostgres.WithPassword(billProofPassword),
-		tcpostgres.WithSQLDriver("pgx"),
-		testcontainers.WithWaitStrategyAndDeadline(180*time.Second,
-			wait.ForLog("database system is ready to accept connections").WithOccurrence(2),
-			wait.ForListeningPort("5432/tcp").WithStartupTimeout(180*time.Second),
-		),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = container.Terminate(context.Background()) })
-
-	dsn, err := container.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-
-	logger := slog.New(slog.DiscardHandler)
-	require.NoError(t, MigrateUp(ctx, dsn, logger), "migrating the fixture database")
-
-	pool, err := NewPool(ctx, config.DB{URL: dsn, MaxConns: 5, MinConns: 1}, logger)
-	require.NoError(t, err)
-	t.Cleanup(pool.Close)
-	return pool
-}
-
-// insertBillProofCompany inserts the one companies row a bill needs. Every
-// other companies column is nullable or defaulted (migrations/00002_tenancy.sql).
-func insertBillProofCompany(t *testing.T, ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, name string) {
-	t.Helper()
-	_, err := pool.Exec(ctx, `insert into companies (id, name) values ($1, $2)`, id, name)
-	require.NoError(t, err)
-}
 
 // TestBillHourlyDetailInsertRefusesForeignBillEvenWithoutGoPreCheck proves the
 // SQL-level guard on BillHourlyDetailInsert itself, independently of
 // BillRepository.requireVisible — the Go-side pre-check ReplaceHourlyDetail
 // normally runs before ever reaching this query. It calls
-// BillRepository's unexported q.BillHourlyDetailInsert directly, with
-// company A's scope but company B's bill id, so requireVisible is never
-// consulted at all.
+// BillRepository's exported-for-tests Queries() to reach
+// q.BillHourlyDetailInsert directly, with company A's scope but company B's
+// bill id, so requireVisible is never consulted at all.
+//
+// F2 Task 0P2, step 4: this test used to live in package postgres (that
+// package cannot import testfixtures — testfixtures imports postgres for
+// MigrateUp, so the reverse import would cycle) and duplicated ~20 lines of
+// testfixtures.StartPostgres + postgres.NewPool locally, booting its own
+// container. export_test.go now exposes BillRepository.Queries() for
+// exactly this purpose, so the test moves to the external postgres_test
+// package everything else in this directory uses and shares
+// testfixtures.NewIsolatedDB's one container instead of booting its own.
 //
 // This is the same class of proof fix round 1 used for
 // AlarmAnalyzerInsert/AlarmChannelInsert/BillMemberInsert (see
@@ -106,16 +53,19 @@ func insertBillProofCompany(t *testing.T, ctx context.Context, pool *pgxpool.Poo
 // RETURNING true): the guard miss surfaces as pgx.ErrNoRows and the
 // assertion passes.
 func TestBillHourlyDetailInsertRefusesForeignBillEvenWithoutGoPreCheck(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	pool := newBillProofPool(t)
+	pool := testfixtures.NewIsolatedDB(t)
 
 	companyA := uuid.New()
 	companyB := uuid.New()
-	insertBillProofCompany(t, ctx, pool, companyA, "Bill Proof Tenant A")
-	insertBillProofCompany(t, ctx, pool, companyB, "Bill Proof Tenant B")
+	_, err := pool.Exec(ctx, `insert into companies (id, name) values ($1, $2)`, companyA, "Bill Proof Tenant A")
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `insert into companies (id, name) values ($1, $2)`, companyB, "Bill Proof Tenant B")
+	require.NoError(t, err)
 
 	scopeB := store.Scope{CompanyID: companyB, AllBuildings: true}
-	repo := NewBillRepository(pool)
+	repo := postgres.NewBillRepository(pool)
 
 	now := time.Now().UTC()
 	billB, err := repo.Create(ctx, scopeB, model.Bill{
@@ -129,19 +79,19 @@ func TestBillHourlyDetailInsertRefusesForeignBillEvenWithoutGoPreCheck(t *testin
 	}, nil, nil)
 	require.NoError(t, err)
 
-	one := decimal.RequireFromString("1.0000")
+	one := pgnum.DecimalToNumeric(decimal.RequireFromString("1.0000"))
 
 	// Bypasses requireVisible entirely: calls the generated query directly
 	// with company A's company/AllBuildings scope but company B's bill id.
-	ok, err := repo.q.BillHourlyDetailInsert(ctx, sqlcgen.BillHourlyDetailInsertParams{
+	ok, err := repo.Queries().BillHourlyDetailInsert(ctx, sqlcgen.BillHourlyDetailInsertParams{
 		BillID:       billB.ID,
-		Ts:           tariffTimestamptz(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)),
-		Consumption:  decimalToNumeric(one),
-		Ptf:          decimalToNumeric(one),
-		Yekdem:       decimalToNumeric(one),
-		Kbk:          decimalToNumeric(one),
-		UnitPrice:    decimalToNumeric(one),
-		Cost:         decimalToNumeric(one),
+		Ts:           pgtype.Timestamptz{Time: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Valid: true},
+		Consumption:  one,
+		Ptf:          one,
+		Yekdem:       one,
+		Kbk:          one,
+		UnitPrice:    one,
+		Cost:         one,
 		CompanyID:    companyA,
 		AllBuildings: true,
 		BuildingIds:  nil,

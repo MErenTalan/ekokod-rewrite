@@ -44,6 +44,7 @@ import (
 // in toModelNationalTariffSchedule (seed.go) and this test fails — see the
 // fix-round-1 report for the observed failure.
 func TestLoadNationalTariffScheduleFixtureMapsEveryField(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	log := testfixtures.DiscardLogger()

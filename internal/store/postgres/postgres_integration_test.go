@@ -16,8 +16,9 @@ import (
 )
 
 func TestMigrateUpDownUp(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	dsn := testfixtures.StartPostgresUnmigrated(t)
+	dsn := testfixtures.NewEmptyDB(t)
 	log := testfixtures.DiscardLogger()
 
 	require.NoError(t, postgres.MigrateUp(ctx, dsn, log))
@@ -39,8 +40,9 @@ func TestMigrateUpDownUp(t *testing.T) {
 }
 
 func TestTimescaleExtensionIsInstalled(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	dsn := testfixtures.StartPostgresUnmigrated(t)
+	dsn := testfixtures.NewEmptyDB(t)
 	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
 
 	pool, err := postgres.NewPool(ctx, config.DB{URL: dsn, MaxConns: 4, MinConns: 1,
@@ -55,8 +57,9 @@ func TestTimescaleExtensionIsInstalled(t *testing.T) {
 }
 
 func TestPoolCheckReportsHealth(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	dsn := testfixtures.StartPostgresUnmigrated(t)
+	dsn := testfixtures.NewEmptyDB(t)
 
 	pool, err := postgres.NewPool(ctx, config.DB{URL: dsn, MaxConns: 4, MinConns: 1,
 		MaxConnLifetime: time.Hour, StatementTimeout: 10 * time.Second}, testfixtures.DiscardLogger())
@@ -71,8 +74,9 @@ func TestPoolCheckReportsHealth(t *testing.T) {
 }
 
 func TestMigrationsCheckReportsPendingThenCurrent(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	dsn := testfixtures.StartPostgresUnmigrated(t)
+	dsn := testfixtures.NewEmptyDB(t)
 	log := testfixtures.DiscardLogger()
 
 	pool, err := postgres.NewPool(ctx, config.DB{URL: dsn, MaxConns: 4, MinConns: 1,
@@ -93,8 +97,9 @@ func TestMigrationsCheckReportsPendingThenCurrent(t *testing.T) {
 }
 
 func TestStatementTimeoutIsApplied(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	dsn := testfixtures.StartPostgresUnmigrated(t)
+	dsn := testfixtures.NewEmptyDB(t)
 
 	pool, err := postgres.NewPool(ctx, config.DB{URL: dsn, MaxConns: 2, MinConns: 1,
 		MaxConnLifetime: time.Hour, StatementTimeout: 250 * time.Millisecond}, testfixtures.DiscardLogger())
@@ -113,8 +118,9 @@ func TestStatementTimeoutIsApplied(t *testing.T) {
 // database depends on, cascading through every hypertable built on
 // timescaledb.
 func TestDownMigrationLeavesExtensionsInstalled(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	dsn := testfixtures.StartPostgresUnmigrated(t)
+	dsn := testfixtures.NewEmptyDB(t)
 	log := testfixtures.DiscardLogger()
 
 	require.NoError(t, postgres.MigrateUp(ctx, dsn, log))
@@ -168,8 +174,9 @@ func TestDownMigrationLeavesExtensionsInstalled(t *testing.T) {
 // Unwrapping deliberately yields unredacted text; only the logging and HTTP
 // paths, which print err.Error(), are bound by the redaction.
 func TestMigrationsCheckErrorIsScrubbed(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	dsn := testfixtures.StartPostgresUnmigrated(t)
+	dsn := testfixtures.NewEmptyDB(t)
 
 	pool, err := postgres.NewPool(ctx, config.DB{URL: dsn, MaxConns: 2, MinConns: 1,
 		MaxConnLifetime: time.Hour, StatementTimeout: 10 * time.Second}, testfixtures.DiscardLogger())

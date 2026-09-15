@@ -6,7 +6,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/sqlcgen"
 	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
 	"github.com/google/uuid"
@@ -51,11 +50,9 @@ import (
 // TestGeneratedUUIDRoundTripsThroughPostgres covers the not-null path end to
 // end through sqlc-generated code.
 func TestGeneratedUUIDRoundTripsThroughPostgres(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	dsn := testfixtures.StartPostgresUnmigrated(t)
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
-
-	pool := testfixtures.NewPool(t, dsn)
+	pool := testfixtures.NewIsolatedDB(t)
 	q := sqlcgen.New(pool)
 	companyID, buildingID := seedCompanyAndBuilding(t, ctx, pool)
 
@@ -72,11 +69,9 @@ func TestGeneratedUUIDRoundTripsThroughPostgres(t *testing.T) {
 // TestGeneratedNullableUUIDDecodesAsNilNotUUIDNil is the specific guard against
 // a SQL NULL arriving as uuid.Nil.
 func TestGeneratedNullableUUIDDecodesAsNilNotUUIDNil(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	dsn := testfixtures.StartPostgresUnmigrated(t)
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
-
-	pool := testfixtures.NewPool(t, dsn)
+	pool := testfixtures.NewIsolatedDB(t)
 	q := sqlcgen.New(pool)
 	companyID, buildingID := seedCompanyAndBuilding(t, ctx, pool)
 
@@ -115,11 +110,9 @@ func TestGeneratedNullableUUIDDecodesAsNilNotUUIDNil(t *testing.T) {
 // This is the pattern every scoped list query in Tasks 9-11 copies, and it is a
 // separate pgx code path from a scalar uuid parameter.
 func TestGeneratedUUIDArrayParameterRoundTrips(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	dsn := testfixtures.StartPostgresUnmigrated(t)
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
-
-	pool := testfixtures.NewPool(t, dsn)
+	pool := testfixtures.NewIsolatedDB(t)
 	q := sqlcgen.New(pool)
 	companyID, wantedID := seedCompanyAndBuilding(t, ctx, pool)
 
@@ -151,11 +144,9 @@ func TestGeneratedUUIDArrayParameterRoundTrips(t *testing.T) {
 // analyzers has no generated query yet, so this reads the column directly into
 // the same *uuid.UUID shape sqlc generates for Analyzer.BuildingID.
 func TestNullableUUIDForeignKeyOnAnalyzers(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	dsn := testfixtures.StartPostgresUnmigrated(t)
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
-
-	pool := testfixtures.NewPool(t, dsn)
+	pool := testfixtures.NewIsolatedDB(t)
 	companyID, buildingID := seedCompanyAndBuilding(t, ctx, pool)
 
 	insert := `insert into analyzers (company_id, building_id, provider, provider_subtype, installation_number)

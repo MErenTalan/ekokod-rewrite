@@ -24,6 +24,7 @@ import (
 // isolation test: a company IS the tenant, so the cross-tenant case is
 // "another company's id", never "another company's row of mine".
 func TestCompanyRepositoryOnlyEverSeesItsOwnCompany(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	mine := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -40,12 +41,14 @@ func TestCompanyRepositoryOnlyEverSeesItsOwnCompany(t *testing.T) {
 }
 
 func TestCompanyRepositoryRejectsAnInvalidScope(t *testing.T) {
+	t.Parallel()
 	repo := postgres.NewCompanyRepository(testfixtures.NewIsolatedDB(t))
 	_, err := repo.List(context.Background(), store.Scope{}, store.CompanyFilter{})
 	require.ErrorIs(t, err, store.ErrInvalidScope)
 }
 
 func TestCompanyRepositoryCreateGetUpdateSoftDelete(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	repo := postgres.NewCompanyRepository(pool)
@@ -84,6 +87,7 @@ func TestCompanyRepositoryCreateGetUpdateSoftDelete(t *testing.T) {
 // ("WRITES STORE THE SCOPE'S COMPANY") for the one repository where the
 // tenant IS the row: a Scope may only ever create or update its own id.
 func TestCompanyRepositoryCreateRefusesAnotherCompanysID(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	repo := postgres.NewCompanyRepository(pool)
@@ -101,6 +105,7 @@ func TestCompanyRepositoryCreateRefusesAnotherCompanysID(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestUserRepositoryNeverReturnsAnotherCompanysRows(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	mine := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -120,12 +125,14 @@ func TestUserRepositoryNeverReturnsAnotherCompanysRows(t *testing.T) {
 }
 
 func TestUserRepositoryRejectsAnInvalidScope(t *testing.T) {
+	t.Parallel()
 	repo := postgres.NewUserRepository(testfixtures.NewIsolatedDB(t))
 	_, err := repo.List(context.Background(), store.Scope{}, store.UserFilter{})
 	require.ErrorIs(t, err, store.ErrInvalidScope)
 }
 
 func TestUserRepositoryCreateGetUpdateSoftDelete(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -174,6 +181,7 @@ func TestUserRepositoryCreateGetUpdateSoftDelete(t *testing.T) {
 // "guard proven a no-op the first time" note). Only a model value that
 // lies about its OWN company's row's CompanyID exercises the guard.
 func TestUserRepositoryUpdateRefusesAForeignCompany(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	mine := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -198,6 +206,7 @@ func TestUserRepositoryUpdateRefusesAForeignCompany(t *testing.T) {
 // wave-f-context rule 4 (a child of a soft-deleted parent is not readable)
 // for the UserVisible-gated PasswordHistory path.
 func TestUserRepositoryPasswordHistoryExcludesASoftDeletedUsersHistory(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -218,6 +227,7 @@ func TestUserRepositoryPasswordHistoryExcludesASoftDeletedUsersHistory(t *testin
 }
 
 func TestUserRepositoryCreateRefusesAnotherCompany(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	mine := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -236,6 +246,7 @@ func TestUserRepositoryCreateRefusesAnotherCompany(t *testing.T) {
 // mandatory isolation test for the task-8b dispatch row "UserRepository.
 // SetPassword, PasswordHistory — user_password_history -> users".
 func TestUserRepositorySetPasswordAndPasswordHistoryIsolateByCompany(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	mine := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -283,6 +294,7 @@ func TestUserRepositorySetPasswordAndPasswordHistoryIsolateByCompany(t *testing.
 // and creating half of the mandatory isolation row "SessionRepository.Get,
 // List (f.UserID narrows), Create (sess.UserID must be the company's) ...".
 func TestSessionRepositoryIsolatesReadsAndCreateByCompany(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	mine := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -328,6 +340,7 @@ func TestSessionRepositoryIsolatesReadsAndCreateByCompany(t *testing.T) {
 // TestSessionRepositoryRevokeIsolatesByCompany covers Revoke and
 // RevokeAllForUser from the same mandatory isolation row.
 func TestSessionRepositoryRevokeIsolatesByCompany(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	mine := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -367,6 +380,7 @@ func TestSessionRepositoryRevokeIsolatesByCompany(t *testing.T) {
 // re-revoking an already-revoked session must not overwrite revoked_at,
 // because replay detection compares against the ORIGINAL instant.
 func TestSessionRepositoryRevokeKeepsTheOriginalRevokedAt(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -400,6 +414,7 @@ func TestSessionRepositoryRevokeKeepsTheOriginalRevokedAt(t *testing.T) {
 // TestSessionRepositoryDeleteExpiredOnlyTouchesTheCompanysUsers is the last
 // method in the same mandatory isolation row.
 func TestSessionRepositoryDeleteExpiredOnlyTouchesTheCompanysUsers(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	mine := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -427,6 +442,7 @@ func TestSessionRepositoryDeleteExpiredOnlyTouchesTheCompanysUsers(t *testing.T)
 }
 
 func TestSessionRepositoryRejectsAnInvalidScope(t *testing.T) {
+	t.Parallel()
 	repo := postgres.NewSessionRepository(testfixtures.NewIsolatedDB(t))
 	_, err := repo.List(context.Background(), store.Scope{}, store.SessionFilter{})
 	require.ErrorIs(t, err, store.ErrInvalidScope)
@@ -440,6 +456,7 @@ func TestSessionRepositoryRejectsAnInvalidScope(t *testing.T) {
 // nullable-company_id test: Append stores and sees only company_id =
 // s.CompanyID, never a NULL (platform) row.
 func TestAuditRepositoryAppendRefusesPlatformAndForeignEntries(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	mine := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -476,12 +493,14 @@ func TestAuditRepositoryAppendRefusesPlatformAndForeignEntries(t *testing.T) {
 }
 
 func TestAuditRepositoryRejectsAnInvalidScope(t *testing.T) {
+	t.Parallel()
 	repo := postgres.NewAuditRepository(testfixtures.NewIsolatedDB(t))
 	_, err := repo.List(context.Background(), store.Scope{}, store.AuditFilter{})
 	require.ErrorIs(t, err, store.ErrInvalidScope)
 }
 
 func TestAuditRepositoryListRejectsAnInvalidRange(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)

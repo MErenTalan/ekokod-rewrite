@@ -44,6 +44,7 @@ var dsnFormsThatHideThePassword = []struct {
 // the DSN parses but we cannot identify a credential in it, we do not know
 // what to redact, so nothing from the driver error may be shown at all.
 func TestScrubErrWithholdsWhenNoPasswordIsFound(t *testing.T) {
+	t.Parallel()
 	for _, form := range dsnFormsThatHideThePassword {
 		t.Run(form.name, func(t *testing.T) {
 			cause := fmt.Errorf("failed to connect: password authentication failed using %q: %w", "s3cret", errDriver)
@@ -65,6 +66,7 @@ func TestScrubErrWithholdsWhenNoPasswordIsFound(t *testing.T) {
 // failing closed on an unlocatable credential must not turn every error into
 // a content-free one when the credential IS locatable.
 func TestScrubErrStillRedactsWhenThePasswordIsFound(t *testing.T) {
+	t.Parallel()
 	cause := fmt.Errorf("dial tcp s3cret.example.com:5432: %w", errDriver)
 
 	err := scrubErr("postgres://ekokod:s3cret@host:5432/db", "ping database", cause)
@@ -88,6 +90,7 @@ func TestScrubErrStillRedactsWhenThePasswordIsFound(t *testing.T) {
 // whether or not any redaction ran. Supplying the cause directly is what
 // makes the assertion mean something.
 func TestScrubPoolErrRedactsTheCredentialOnTheReadinessPath(t *testing.T) {
+	t.Parallel()
 	cause := fmt.Errorf("FATAL: password authentication failed for user %q (tried %q): %w", "ekokod", "ekokod", errDriver)
 
 	err := scrubPoolErr("ekokod", "read schema version", cause)
@@ -106,6 +109,7 @@ func TestScrubPoolErrRedactsTheCredentialOnTheReadinessPath(t *testing.T) {
 // query parameter pgx understands but our net/url read does not), and an
 // empty password used to mean "redact nothing".
 func TestScrubPoolErrWithholdsWhenThePoolHasNoPassword(t *testing.T) {
+	t.Parallel()
 	cause := fmt.Errorf("FATAL: password authentication failed using %q: %w", "s3cret", errDriver)
 
 	err := scrubPoolErr("", "read schema version", cause)
@@ -129,6 +133,7 @@ func TestScrubPoolErrWithholdsWhenThePoolHasNoPassword(t *testing.T) {
 // The uniformity argument for attaching it is reasonable, which is exactly
 // why this test exists rather than a comment alone.
 func TestScrubErrAttachesNoCauseWhenTheDSNDidNotParse(t *testing.T) {
+	t.Parallel()
 	// url.Parse rejects this outright, and its error quotes the whole DSN.
 	// Assembled at runtime rather than written as a literal because
 	// staticcheck's SA1007 rejects a constant invalid URL passed to

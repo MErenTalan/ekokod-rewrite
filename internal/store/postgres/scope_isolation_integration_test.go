@@ -163,6 +163,7 @@ var scopeIsoCtorPattern = regexp.MustCompile(`^New[A-Za-z0-9]*Repository$`)
 // commenting out one entry from scopeIsoRegisteredRepositories makes this
 // test FAIL, naming the omitted constructor.
 func TestScopeIsolationCoversEveryRepository(t *testing.T) {
+	t.Parallel()
 	_, thisFile, _, ok := runtime.Caller(0)
 	require.True(t, ok, "runtime.Caller must resolve this file's own path")
 	dir := filepath.Dir(thisFile)
@@ -959,6 +960,7 @@ func scopeIsoRequireExcludes[T any](t *testing.T, items []T, forbidden uuid.UUID
 // the two-proof design (cross-tenant under AdminScope, narrow-scope under a
 // same-tenant Buildings[1] grant) and for why the admin package is excluded.
 func TestScopeIsolation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 

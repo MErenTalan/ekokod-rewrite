@@ -23,6 +23,7 @@ func smtpSettingsFixture(companyID uuid.UUID) model.SMTPSettings {
 }
 
 func TestSMTPUpsertGetDelete(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 8100)
@@ -66,6 +67,7 @@ func TestSMTPUpsertGetDelete(t *testing.T) {
 }
 
 func TestSMTPUpsertRefusesMismatchedCompanyID(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 8110)
@@ -84,6 +86,7 @@ func TestSMTPUpsertRefusesMismatchedCompanyID(t *testing.T) {
 // TestIntegrationCredentialsAreNeverReturnedInPlaintext for
 // integration_credentials.
 func TestSMTPPasswordIsNeverReturnedInPlaintext(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 8120)
@@ -129,6 +132,7 @@ func TestSMTPPasswordIsNeverReturnedInPlaintext(t *testing.T) {
 // ciphertext sealed for one company does not open under another company's
 // row, even with the same cipher.
 func TestSMTPPasswordSealingBindsToItsOwnRow(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	cipher := integrationCipher(t)
@@ -158,6 +162,7 @@ func TestSMTPPasswordSealingBindsToItsOwnRow(t *testing.T) {
 // Upsert sealed the nil password unconditionally, so OpenPassword returned
 // "" afterwards with no error and no signal.
 func TestSMTPUpsertNilPasswordKeepsStoredPassword(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 8140)
@@ -181,6 +186,7 @@ func TestSMTPUpsertNilPasswordKeepsStoredPassword(t *testing.T) {
 // TestSMTPUpsertNilPasswordKeepsStoredPassword with an explicit empty slice
 // rather than nil: both must be treated as "no new password supplied".
 func TestSMTPUpsertEmptyPasswordKeepsStoredPassword(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 8141)
@@ -205,6 +211,7 @@ func TestSMTPUpsertEmptyPasswordKeepsStoredPassword(t *testing.T) {
 // password is refused, and writes no row -- smtp_settings.password_enc is
 // NOT NULL, so an SMTP configuration without a password is not storable.
 func TestSMTPUpsertRefusesFirstInsertWithNilPassword(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 8142)
@@ -219,6 +226,7 @@ func TestSMTPUpsertRefusesFirstInsertWithNilPassword(t *testing.T) {
 }
 
 func TestSMTPRepositoryRejectsInvalidScope(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	repo := postgres.NewSMTPRepository(pool, integrationCipher(t))

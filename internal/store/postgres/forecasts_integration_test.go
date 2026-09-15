@@ -31,6 +31,7 @@ func forecastsRow(analyzerID uuid.UUID, ts, generatedAt time.Time, median string
 }
 
 func TestForecastBulkInsertIsIdempotent(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -50,6 +51,7 @@ func TestForecastBulkInsertIsIdempotent(t *testing.T) {
 }
 
 func TestForecastSuccessiveRunsAccumulate(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -78,6 +80,7 @@ func TestForecastSuccessiveRunsAccumulate(t *testing.T) {
 }
 
 func TestForecastLatestRunEmptyWhenNoneInWindow(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -89,6 +92,7 @@ func TestForecastLatestRunEmptyWhenNoneInWindow(t *testing.T) {
 }
 
 func TestForecastRecordGapsAndGaps(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -114,6 +118,7 @@ func TestForecastRecordGapsAndGaps(t *testing.T) {
 // --- scope / range validation ----------------------------------------------
 
 func TestForecastRepositoryRejectsInvalidScope(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	repo := postgres.NewForecastRepository(pool)
@@ -138,6 +143,7 @@ func TestForecastRepositoryRejectsInvalidScope(t *testing.T) {
 }
 
 func TestForecastRepositoryRejectsInvalidRange(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -155,6 +161,7 @@ func TestForecastRepositoryRejectsInvalidRange(t *testing.T) {
 // through analyzers ---------------------------------------------------------
 
 func TestForecastBulkInsertRefusesWholeBatchWhenAnalyzerNotVisible(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -176,6 +183,7 @@ func TestForecastBulkInsertRefusesWholeBatchWhenAnalyzerNotVisible(t *testing.T)
 }
 
 func TestForecastRangeAndLatestRunAnalyzerNotVisibleReturnsNotFound(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -191,6 +199,7 @@ func TestForecastRangeAndLatestRunAnalyzerNotVisibleReturnsNotFound(t *testing.T
 }
 
 func TestForecastRecordGapsRefusesWholeCallWhenAnalyzerNotVisible(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -212,6 +221,7 @@ func TestForecastRecordGapsRefusesWholeCallWhenAnalyzerNotVisible(t *testing.T) 
 }
 
 func TestForecastGapsAnalyzerNotVisibleReturnsNotFound(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -231,6 +241,7 @@ func TestForecastGapsAnalyzerNotVisibleReturnsNotFound(t *testing.T) {
 // that test would still pass. Here both analyzers actually HAVE a forecast
 // in the queried window.
 func TestForecastRangeAndLatestRunNeverReturnForeignDataEvenWhenForeignAnalyzerHasForecasts(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -289,6 +300,7 @@ func TestForecastRangeAndLatestRunNeverReturnForeignDataEvenWhenForeignAnalyzerH
 // Gaps' guard-failure-provable isolation test, for the same reason as the
 // Range/LatestRun test above.
 func TestForecastGapsNeverReturnsForeignDataEvenWhenForeignAnalyzerHasGaps(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -335,6 +347,7 @@ func TestForecastGapsNeverReturnsForeignDataEvenWhenForeignAnalyzerHasGaps(t *te
 }
 
 func TestForecastBulkInsertRefusesDuplicateKeyWithinBatch(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)

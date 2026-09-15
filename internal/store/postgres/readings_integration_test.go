@@ -40,6 +40,7 @@ func readingsRow(analyzerID uuid.UUID, ts time.Time, kind model.ReadingKind, act
 var readingsEpoch = time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
 
 func TestBulkInsertIsIdempotent(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -72,6 +73,7 @@ func TestBulkInsertIsIdempotent(t *testing.T) {
 }
 
 func TestBulkInsertMixedInsertAndUpdateCountsAreReal(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -99,6 +101,7 @@ func TestBulkInsertMixedInsertAndUpdateCountsAreReal(t *testing.T) {
 }
 
 func TestReadingsStoreMultipliedValues(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -121,6 +124,7 @@ func TestReadingsStoreMultipliedValues(t *testing.T) {
 }
 
 func TestBoundaryReadingsYieldsNoRowWhenAReadingIsMissing(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -141,6 +145,7 @@ func TestBoundaryReadingsYieldsNoRowWhenAReadingIsMissing(t *testing.T) {
 }
 
 func TestBoundaryReadingsDistinguishesKindsAtTheSameInstant(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -164,6 +169,7 @@ func TestBoundaryReadingsDistinguishesKindsAtTheSameInstant(t *testing.T) {
 }
 
 func TestReadingLatestReturnsNilWhenNoneInRange(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -180,6 +186,7 @@ func TestReadingLatestReturnsNilWhenNoneInRange(t *testing.T) {
 // --- scope validation, before any database round trip ----------------------
 
 func TestReadingRepositoryRejectsInvalidScope(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	repo := postgres.NewReadingRepository(pool)
@@ -201,6 +208,7 @@ func TestReadingRepositoryRejectsInvalidScope(t *testing.T) {
 }
 
 func TestReadingRepositoryRejectsInvalidRange(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -218,6 +226,7 @@ func TestReadingRepositoryRejectsInvalidRange(t *testing.T) {
 // --- isolation: meter_readings has no company_id, joins through analyzers --
 
 func TestReadingBulkInsertRefusesWholeBatchWhenAnalyzerNotVisible(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -244,6 +253,7 @@ func TestReadingBulkInsertRefusesWholeBatchWhenAnalyzerNotVisible(t *testing.T) 
 }
 
 func TestReadingBulkInsertRefusesForAnalyzerOutsideNarrowScope(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -264,6 +274,7 @@ func TestReadingBulkInsertRefusesForAnalyzerOutsideNarrowScope(t *testing.T) {
 }
 
 func TestReadingRangeAnalyzerNotVisibleReturnsNotFound(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -286,6 +297,7 @@ func TestReadingRangeAnalyzerNotVisibleReturnsNotFound(t *testing.T) {
 }
 
 func TestReadingBoundaryReadingsAnalyzerNotVisibleReturnsNotFound(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -297,6 +309,7 @@ func TestReadingBoundaryReadingsAnalyzerNotVisibleReturnsNotFound(t *testing.T) 
 }
 
 func TestReadingLatestAnalyzerNotVisibleReturnsNotFound(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -309,6 +322,7 @@ func TestReadingLatestAnalyzerNotVisibleReturnsNotFound(t *testing.T) {
 }
 
 func TestReadingBulkInsertRefusesDuplicateKeyWithinBatch(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -342,6 +356,7 @@ func TestReadingBulkInsertRefusesDuplicateKeyWithinBatch(t *testing.T) {
 // that, independent of the separate requireAnalyzerVisible existence check
 // Range also consults.
 func TestReadingRangeNeverReturnsForeignDataEvenWhenForeignAnalyzerHasReadings(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -400,6 +415,7 @@ func TestReadingRangeNeverReturnsForeignDataEvenWhenForeignAnalyzerHasReadings(t
 // Buildings[0] also has one, so a tautologised predicate on either query
 // shape would surface real data instead of merely failing to disambiguate.
 func TestReadingBoundaryReadingsNeverReturnsForeignDataEvenWhenForeignAnalyzerHasReadings(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -453,6 +469,7 @@ func TestReadingBoundaryReadingsNeverReturnsForeignDataEvenWhenForeignAnalyzerHa
 // is Latest's guard-failure-provable isolation test, for the same reason as
 // the BoundaryReadings test above.
 func TestReadingLatestNeverReturnsForeignDataEvenWhenForeignAnalyzerHasReadings(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)

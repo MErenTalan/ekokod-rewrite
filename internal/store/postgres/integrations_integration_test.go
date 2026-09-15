@@ -39,6 +39,7 @@ func integrationInsertDefinition(t *testing.T, ctx context.Context, pool *pgxpoo
 }
 
 func TestIntegrationDefinitionsArePlatformWideButScopeValidated(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenant := testfixtures.NewTenant(t, ctx, pool, 7001)
@@ -67,6 +68,7 @@ func TestIntegrationDefinitionsArePlatformWideButScopeValidated(t *testing.T) {
 // returns ciphertext or a decrypted value only through the explicit
 // OpenSecret method, and that Get/List never carry the secret.
 func TestIntegrationCredentialsAreNeverReturnedInPlaintext(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenant := testfixtures.NewTenant(t, ctx, pool, 7010)
@@ -132,6 +134,7 @@ func TestIntegrationCredentialsAreNeverReturnedInPlaintext(t *testing.T) {
 // a ciphertext sealed for one (company, definition) pair does not open under
 // another company's key material, even with the same cipher.
 func TestIntegrationCredentialSealingBindsToItsOwnRow(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	cipher := integrationCipher(t)
@@ -160,6 +163,7 @@ func TestIntegrationCredentialSealingBindsToItsOwnRow(t *testing.T) {
 }
 
 func TestIntegrationRecordVerificationAndDeleteAreScoped(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 7030)
@@ -196,6 +200,7 @@ func TestIntegrationRecordVerificationAndDeleteAreScoped(t *testing.T) {
 // definition_id, a stored foreign key, must name a real
 // integration_definitions row before the write is allowed.
 func TestIntegrationUpsertCredentialRefusesANonexistentDefinition(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenant := testfixtures.NewTenant(t, ctx, pool, 7040)
@@ -216,6 +221,7 @@ func TestIntegrationUpsertCredentialRefusesANonexistentDefinition(t *testing.T) 
 // secret/extra on an existing row must NOT wipe the previously stored
 // ciphertext — it means "leave it as it was", not "clear it".
 func TestIntegrationUpsertCredentialNilSecretKeepsStoredCiphertext(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenant := testfixtures.NewTenant(t, ctx, pool, 7050)
@@ -253,6 +259,7 @@ func strPtrIntegration(s string) *string { return &s }
 // immediately, with a clear message, rather than compiling silently and
 // panicking later at the first Seal/Open call.
 func TestNewIntegrationRepositoryPanicsOnNilCipher(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	require.Panics(t, func() {
 		postgres.NewIntegrationRepository(pool, nil)

@@ -35,6 +35,7 @@ const wantEmissionFactorCount = 182
 const wantIntegrationDefinitionCount = 3
 
 func TestEmissionFactorsDecodeAndValidate(t *testing.T) {
+	t.Parallel()
 	factors, err := EmissionFactors()
 	require.NoError(t, err)
 	require.Len(t, factors, wantEmissionFactorCount)
@@ -80,6 +81,7 @@ func TestEmissionFactorsDecodeAndValidate(t *testing.T) {
 }
 
 func TestEmissionFactorsRejectsDuplicateKey(t *testing.T) {
+	t.Parallel()
 	broken := mustReplaceFirst(t, emissionFactorsData,
 		`"key": "stationary_space_heating_coal_industrial",`,
 		`"key": "stationary_space_heating_coal_domestic",`)
@@ -91,6 +93,7 @@ func TestEmissionFactorsRejectsDuplicateKey(t *testing.T) {
 }
 
 func TestEmissionFactorsRejectsInvalidScope(t *testing.T) {
+	t.Parallel()
 	broken := mustReplaceFirst(t, emissionFactorsData, `"scope": "scope_1",`, `"scope": "scope_9",`)
 
 	_, err := parseEmissionFactors(broken)
@@ -100,6 +103,7 @@ func TestEmissionFactorsRejectsInvalidScope(t *testing.T) {
 }
 
 func TestEmissionFactorsRejectsScaleOverflow(t *testing.T) {
+	t.Parallel()
 	// numeric(18,8): nine fractional digits is one more than the column
 	// allows. This is not a float-vs-string question (both "2.904" and
 	// "2.1234567890" are valid decimal STRINGS); it's a precision question,
@@ -114,6 +118,7 @@ func TestEmissionFactorsRejectsScaleOverflow(t *testing.T) {
 }
 
 func TestEmissionFactorsRejectsUnknownField(t *testing.T) {
+	t.Parallel()
 	broken := mustReplaceFirst(t, emissionFactorsData,
 		`"key": "stationary_space_heating_coal_domestic",`,
 		`"key": "stationary_space_heating_coal_domestic", "not_a_real_column": "surprise",`)
@@ -125,6 +130,7 @@ func TestEmissionFactorsRejectsUnknownField(t *testing.T) {
 }
 
 func TestEmissionFactorsRejectsMissingRequiredField(t *testing.T) {
+	t.Parallel()
 	broken := mustReplaceFirst(t, emissionFactorsData,
 		`"key": "stationary_space_heating_coal_domestic",`, `"key": "",`)
 
@@ -135,6 +141,7 @@ func TestEmissionFactorsRejectsMissingRequiredField(t *testing.T) {
 }
 
 func TestIntegrationDefinitionsDecodeAndValidate(t *testing.T) {
+	t.Parallel()
 	defs, err := IntegrationDefinitions()
 	require.NoError(t, err)
 	require.Len(t, defs, wantIntegrationDefinitionCount)
@@ -154,6 +161,7 @@ func TestIntegrationDefinitionsDecodeAndValidate(t *testing.T) {
 }
 
 func TestIntegrationDefinitionsRejectsInvalidProvider(t *testing.T) {
+	t.Parallel()
 	broken := mustReplaceFirst(t, integrationDefinitionsData, `"provider": "isolar",`, `"provider": "not_a_provider",`)
 
 	_, err := parseIntegrationDefinitions(broken)
@@ -163,6 +171,7 @@ func TestIntegrationDefinitionsRejectsInvalidProvider(t *testing.T) {
 }
 
 func TestIntegrationDefinitionsRejectsDuplicateNaturalKey(t *testing.T) {
+	t.Parallel()
 	broken := mustReplaceFirst(t, integrationDefinitionsData, `"subtype": "CN",`, `"subtype": "EU",`)
 
 	_, err := parseIntegrationDefinitions(broken)
@@ -172,6 +181,7 @@ func TestIntegrationDefinitionsRejectsDuplicateNaturalKey(t *testing.T) {
 }
 
 func TestIntegrationDefinitionsRejectsUnknownField(t *testing.T) {
+	t.Parallel()
 	broken := mustReplaceFirst(t, integrationDefinitionsData, `"subtype": "EU",`, `"subtype": "EU", "bogus_field": true,`)
 
 	_, err := parseIntegrationDefinitions(broken)
@@ -185,6 +195,7 @@ func TestIntegrationDefinitionsRejectsUnknownField(t *testing.T) {
 // MongoDB-only and not in this repository. This must return an empty,
 // non-nil slice and no error, never a placeholder row.
 func TestNationalTariffScheduleShipsEmpty(t *testing.T) {
+	t.Parallel()
 	rows, err := NationalTariffSchedule()
 	require.NoError(t, err)
 	require.NotNil(t, rows)
@@ -200,6 +211,7 @@ func TestNationalTariffScheduleShipsEmpty(t *testing.T) {
 // itself is well-formed and that this package's parser handles real rows, not
 // only the empty case.
 func TestNationalTariffScheduleFixtureDecodesAndValidates(t *testing.T) {
+	t.Parallel()
 	raw := mustReadFile(t, "testdata/national_tariff_schedule_fixture.json")
 
 	rows, err := parseNationalTariffSchedule(raw)
@@ -230,6 +242,7 @@ func TestNationalTariffScheduleFixtureDecodesAndValidates(t *testing.T) {
 }
 
 func TestNationalTariffScheduleFixtureRejectsDuplicateNaturalKey(t *testing.T) {
+	t.Parallel()
 	raw := mustReadFile(t, "testdata/national_tariff_schedule_fixture.json")
 	broken := mustReplaceFirst(t, raw, `"effective_from": "2021-06-01",`, `"effective_from": "2020-01-01",`)
 
@@ -240,6 +253,7 @@ func TestNationalTariffScheduleFixtureRejectsDuplicateNaturalKey(t *testing.T) {
 }
 
 func TestNationalTariffScheduleFixtureRejectsInvalidEnum(t *testing.T) {
+	t.Parallel()
 	raw := mustReadFile(t, "testdata/national_tariff_schedule_fixture.json")
 	broken := mustReplaceFirst(t, raw, `"voltage_level": "lv",`, `"voltage_level": "extra_high_voltage",`)
 
@@ -250,6 +264,7 @@ func TestNationalTariffScheduleFixtureRejectsInvalidEnum(t *testing.T) {
 }
 
 func TestNationalTariffScheduleFixtureRejectsScaleOverflow(t *testing.T) {
+	t.Parallel()
 	raw := mustReadFile(t, "testdata/national_tariff_schedule_fixture.json")
 	// numeric(6,3): four integer digits plus three fractional digits is 7
 	// significant digits, one over precision 6.
@@ -262,6 +277,7 @@ func TestNationalTariffScheduleFixtureRejectsScaleOverflow(t *testing.T) {
 }
 
 func TestNationalTariffScheduleFixtureRejectsUnknownField(t *testing.T) {
+	t.Parallel()
 	raw := mustReadFile(t, "testdata/national_tariff_schedule_fixture.json")
 	broken := mustReplaceFirst(t, raw, `"vat_rate": "18.000",`, `"vat_rate": "18.000", "unexpected": "field",`)
 
@@ -275,6 +291,7 @@ func TestNationalTariffScheduleFixtureRejectsUnknownField(t *testing.T) {
 // independent of any dataset, so a future change to it is caught even if
 // every shipped value happens to stay within bounds.
 func TestFitsNumeric(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name      string
 		value     string
@@ -292,6 +309,7 @@ func TestFitsNumeric(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			d := decimal.RequireFromString(tc.value)
 			require.Equal(t, tc.want, fitsNumeric(d, tc.precision, tc.scale))
 		})
