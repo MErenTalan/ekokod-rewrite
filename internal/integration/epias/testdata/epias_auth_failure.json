@@ -1,0 +1,3 @@
+{
+  "note": "unused: auth_failure fails at CAS, before any data fixture is served"
+}
