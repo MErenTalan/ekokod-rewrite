@@ -2,6 +2,7 @@ package integration_test
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -52,6 +53,29 @@ func TestRetryableClassification(t *testing.T) {
 			require.Equal(t, tc.want, integration.Retryable(tc.err))
 		})
 	}
+}
+
+// TestErrorRendersOnlyKnownKindText proves *Error.Error() never echoes an
+// arbitrary Kind error's own text (M1): a Kind built from live request data
+// — the shape a careless call site could construct — must never leak
+// through the rendered message, and a nil Kind must render "unknown"
+// rather than fmt's "%!s(<nil>)".
+func TestErrorRendersOnlyKnownKindText(t *testing.T) {
+	const pw = "FIXTURE-PLAINTEXT-9c1e"
+	leaky := &integration.Error{
+		Kind:     fmt.Errorf("login %s rejected", pw),
+		Provider: integration.ProviderGridBox,
+		Op:       "auth",
+	}
+	require.NotContains(t, leaky.Error(), pw, "Error() must never echo an unrecognised Kind's own text")
+	require.Contains(t, leaky.Error(), "unknown")
+
+	nilKind := &integration.Error{Provider: integration.ProviderGridBox, Op: "auth"}
+	require.Contains(t, nilKind.Error(), "unknown")
+	require.NotContains(t, nilKind.Error(), "%!s")
+
+	sentinel := &integration.Error{Kind: integration.ErrRateLimited, Provider: integration.ProviderGridBox, Op: "load_profiles", HTTPStatus: 429}
+	require.Equal(t, "gridbox load_profiles: integration: rate limited (HTTP 429)", sentinel.Error())
 }
 
 // TestRetryAfterOnlyFromRateLimited proves RetryAfter reports ok=true only

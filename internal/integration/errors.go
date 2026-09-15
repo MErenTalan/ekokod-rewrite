@@ -29,11 +29,39 @@ type Error struct {
 	RetryAfter time.Duration
 }
 
+// kindText renders Kind as one of the five sentinels' own text — never
+// Kind.Error() directly. Kind is documented as "one of the sentinels
+// above", but nothing in the type system enforces that: a caller can build
+// an *Error with any error as Kind, including one built from live request
+// data (e.g. fmt.Errorf("login %s rejected", pw)), and Error() must never
+// echo that text — only the fixed, known-safe sentinel strings, or
+// "unknown" for anything else (including a nil Kind, which would otherwise
+// render as fmt's "%!s(<nil>)").
+func kindText(kind error) string {
+	switch {
+	case errors.Is(kind, ErrAuth):
+		return ErrAuth.Error()
+	case errors.Is(kind, ErrRateLimited):
+		return ErrRateLimited.Error()
+	case errors.Is(kind, ErrUpstreamUnavailable):
+		return ErrUpstreamUnavailable.Error()
+	case errors.Is(kind, ErrMalformedPayload):
+		return ErrMalformedPayload.Error()
+	case errors.Is(kind, ErrNotFound):
+		return ErrNotFound.Error()
+	default:
+		return "unknown"
+	}
+}
+
 // Error renders using only Provider, Op, Kind and HTTPStatus — never a URL,
 // query string or body — e.g. "gridbox load_profiles: integration: rate
-// limited (HTTP 429)".
+// limited (HTTP 429)". Kind renders as one of the five sentinel strings
+// (via kindText) or "unknown"; it never echoes an arbitrary Kind error's
+// own text, which could otherwise carry request data into an operational
+// message.
 func (e *Error) Error() string {
-	return fmt.Sprintf("%s %s: %s (HTTP %d)", e.Provider, e.Op, e.Kind, e.HTTPStatus)
+	return fmt.Sprintf("%s %s: %s (HTTP %d)", e.Provider, e.Op, kindText(e.Kind), e.HTTPStatus)
 }
 
 // Unwrap exposes Kind to errors.Is/errors.As, so callers match against the

@@ -113,9 +113,10 @@ func TestIntegrationPayloadsRoundTrip(t *testing.T) {
 	})
 }
 
-// TestDecodeRefusesUnknownFields proves every Decode<Name> rejects a
-// payload carrying a field it does not know about, rather than silently
-// discarding it — a payload a newer worker wrote and an older one must not
+// TestDecodeRefusesUnknownFields proves every Decode<Name> — all four
+// decoders the brief lists, not just two of them (M5) — rejects a payload
+// carrying a field it does not know about, rather than silently discarding
+// it — a payload a newer worker wrote and an older one must not
 // half-understand.
 func TestDecodeRefusesUnknownFields(t *testing.T) {
 	raw, err := json.Marshal(map[string]any{
@@ -124,9 +125,7 @@ func TestDecodeRefusesUnknownFields(t *testing.T) {
 		"bogus_field":  "should not be allowed",
 	})
 	require.NoError(t, err)
-
-	task := asynq.NewTask(TypeIntegrationSyncAnalyzers, raw)
-	_, err = DecodeSyncAnalyzers(task)
+	_, err = DecodeSyncAnalyzers(asynq.NewTask(TypeIntegrationSyncAnalyzers, raw))
 	require.Error(t, err)
 
 	rawFetch, err := json.Marshal(map[string]any{
@@ -137,9 +136,56 @@ func TestDecodeRefusesUnknownFields(t *testing.T) {
 		"extra":        "nope",
 	})
 	require.NoError(t, err)
-	taskFetch := asynq.NewTask(TypeIntegrationFetchReadings, rawFetch)
-	_, err = DecodeFetchReadings(taskFetch)
+	_, err = DecodeFetchReadings(asynq.NewTask(TypeIntegrationFetchReadings, rawFetch))
 	require.Error(t, err)
+
+	rawBackfill, err := json.Marshal(map[string]any{
+		"CompanyID":    uuid.New(),
+		"CredentialID": uuid.New(),
+		"bogus_field":  "should not be allowed",
+	})
+	require.NoError(t, err)
+	_, err = DecodeBackfill(asynq.NewTask(TypeIntegrationBackfill, rawBackfill))
+	require.Error(t, err)
+
+	rawPrices, err := json.Marshal(map[string]any{
+		"bogus_field": "should not be allowed",
+	})
+	require.NoError(t, err)
+	_, err = DecodeSyncPrices(asynq.NewTask(TypeEPIASSyncPrices, rawPrices))
+	require.Error(t, err)
+}
+
+// TestDecodeRefusesTrailingData proves integDecode rejects bytes left over
+// after the one JSON object it decodes (M5): asynq's Task.Payload is a bare
+// byte slice, not a framed single value, so a stray second JSON value (or
+// any trailing garbage) appended after the object must be noticed rather
+// than silently ignored.
+func TestDecodeRefusesTrailingData(t *testing.T) {
+	valid, err := json.Marshal(SyncAnalyzersPayload{CompanyID: uuid.New(), CredentialID: uuid.New()})
+	require.NoError(t, err)
+
+	trailing := append(append([]byte{}, valid...), []byte(`{}`)...)
+	_, err = DecodeSyncAnalyzers(asynq.NewTask(TypeIntegrationSyncAnalyzers, trailing))
+	require.Error(t, err)
+
+	trailingGarbage := append(append([]byte{}, valid...), []byte(`garbage`)...)
+	_, err = DecodeSyncAnalyzers(asynq.NewTask(TypeIntegrationSyncAnalyzers, trailingGarbage))
+	require.Error(t, err)
+}
+
+// TestIntegMaxRetryOptionsAlwaysExplicit proves TaskOptions.MaxRetry is
+// always passed to asynq as an explicit asynq.MaxRetry option, including
+// zero (I5): a TaskOptions{} — "no retries", a legitimate configuration per
+// Global Constraints — must produce asynq.MaxRetry(0), never silently fall
+// back to asynq's own built-in default of 25 by omitting the option.
+func TestIntegMaxRetryOptionsAlwaysExplicit(t *testing.T) {
+	for _, n := range []int{0, 5} {
+		opts := integMaxRetryOptions(TaskOptions{MaxRetry: n})
+		require.Len(t, opts, 1, "MaxRetry=%d must always produce exactly one explicit option", n)
+		require.Equal(t, asynq.MaxRetryOpt, opts[0].Type())
+		require.Equal(t, n, opts[0].Value())
+	}
 }
 
 // TestFetchTaskWithWindowHasDeterministicTaskID proves
@@ -217,4 +263,49 @@ func TestRegisterRoutesFetchReadingsToIngestion(t *testing.T) {
 
 	require.Len(t, fake.fetchCalls, 1)
 	require.Equal(t, want, fake.fetchCalls[0])
+}
+
+// integFakeBackfiller and integFakePriceSyncer are minimal Backfiller/
+// PriceSyncer implementations, used only so TestIntegrationHandlersSkipRetryOnDecodeFailure
+// can register every integration task type and reach every integHandle*
+// adapter's decode-failure path — none of these fakes' methods are ever
+// meant to run, since a bad payload must be skipped before the call.
+type integFakeBackfiller struct{}
+
+func (integFakeBackfiller) Backfill(context.Context, BackfillPayload) error { return nil }
+
+type integFakePriceSyncer struct{}
+
+func (integFakePriceSyncer) SyncPrices(context.Context, SyncPricesPayload) error { return nil }
+
+// TestIntegrationHandlersSkipRetryOnDecodeFailure proves every
+// integHandle* adapter wraps a payload decode failure with asynq.SkipRetry
+// (M6): a payload that cannot be decoded will fail identically on every
+// retry, so asynq must not spend its retry budget re-attempting it.
+func TestIntegrationHandlersSkipRetryOnDecodeFailure(t *testing.T) {
+	mux := asynq.NewServeMux()
+	Register(mux, &Handlers{
+		Log:       integTestLogger(),
+		Ingestion: &integFakeIngestion{},
+		Backfill:  integFakeBackfiller{},
+		Prices:    integFakePriceSyncer{},
+	})
+
+	for _, taskType := range []string{
+		TypeIntegrationSyncAnalyzers,
+		TypeIntegrationFetchReadings,
+		TypeIntegrationBackfill,
+		TypeEPIASSyncPrices,
+	} {
+		t.Run(taskType, func(t *testing.T) {
+			task := asynq.NewTask(taskType, []byte("not valid json"))
+			handler, pattern := mux.Handler(task)
+			require.Equal(t, taskType, pattern)
+
+			err := handler.ProcessTask(context.Background(), task)
+			require.Error(t, err)
+			require.ErrorIs(t, err, asynq.SkipRetry,
+				"a payload decode failure must be classified non-retryable, not left to burn the retry budget")
+		})
+	}
 }

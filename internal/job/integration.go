@@ -71,18 +71,25 @@ type ConsumptionRefreshPayload struct {
 }
 
 // TaskOptions carries the one per-enqueue override every integration task
-// constructor accepts. A zero TaskOptions leaves the task's retry count at
-// asynq's own default.
+// constructor accepts. Unlike a typical "zero means unset" option struct,
+// TaskOptions.MaxRetry is always passed through to asynq explicitly — see
+// integMaxRetryOptions. A caller that wants the platform's configured
+// default (config.Worker.MaxRetries, itself defaulted to 5 where config is
+// loaded — platform/config/load.go) passes that resolved value here; F2
+// never lets a zero TaskOptions silently fall through to asynq's own
+// built-in default of 25, which would make "0 retries" and "did not think
+// about it" indistinguishable.
 type TaskOptions struct{ MaxRetry int }
 
-// integMaxRetryOption returns the asynq.MaxRetry option for o, or nil when
-// o asks for no override — asynq.MaxRetry(0) would explicitly set zero
-// retries, which is not what an unset TaskOptions means.
-func integMaxRetryOption(o TaskOptions) []asynq.Option {
-	if o.MaxRetry > 0 {
-		return []asynq.Option{asynq.MaxRetry(o.MaxRetry)}
-	}
-	return nil
+// integMaxRetryOptions always returns an explicit asynq.MaxRetry(o.MaxRetry)
+// option, including for o.MaxRetry == 0. Config documents 0 as a legitimate
+// "no retries" (platform/config/load.go), so treating a zero TaskOptions as
+// "leave retry count unset" would silently substitute asynq's built-in
+// default of 25 for an operator's deliberate "do not retry this" — the
+// opposite of what they configured. The platform's own default (5) is
+// applied once, where config is loaded, never here.
+func integMaxRetryOptions(o TaskOptions) []asynq.Option {
+	return []asynq.Option{asynq.MaxRetry(o.MaxRetry)}
 }
 
 // integEncode marshals a payload for a task of the given type, wrapping any
@@ -99,12 +106,20 @@ func integEncode(taskType string, payload any) ([]byte, error) {
 // integDecode is Decode<Name>'s shared body: unknown JSON fields are
 // refused, so a payload produced by a newer version of this code (a field
 // a running worker does not know about) fails loudly instead of silently
-// discarding data the worker never even reads.
+// discarding data the worker never even reads. Trailing bytes after the one
+// JSON object are refused too (dec.More reports whether the stream has
+// another token left once the object is consumed) — asynq's Task.Payload is
+// a byte slice, not a framed single value, so nothing else guarantees a
+// stray second value (or trailing garbage) appended after the object gets
+// noticed rather than silently ignored.
 func integDecode(taskType string, data []byte, v any) error {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(v); err != nil {
 		return fmt.Errorf("decode %s payload: %w", taskType, err)
+	}
+	if dec.More() {
+		return fmt.Errorf("decode %s payload: trailing data after JSON value", taskType)
 	}
 	return nil
 }
@@ -117,7 +132,7 @@ func NewSyncDispatchTask(o TaskOptions) (*asynq.Task, error) {
 		asynq.Unique(time.Hour),
 		asynq.Timeout(10 * time.Minute),
 		asynq.Queue(QueueDefault),
-	}, integMaxRetryOption(o)...)
+	}, integMaxRetryOptions(o)...)
 	return asynq.NewTask(TypeIntegrationSyncDispatch, []byte("{}"), opts...), nil
 }
 
@@ -130,7 +145,7 @@ func NewSyncAnalyzersTask(p SyncAnalyzersPayload, o TaskOptions) (*asynq.Task, e
 	opts := append([]asynq.Option{
 		asynq.Unique(time.Hour),
 		asynq.Timeout(10 * time.Minute),
-	}, integMaxRetryOption(o)...)
+	}, integMaxRetryOptions(o)...)
 	return asynq.NewTask(TypeIntegrationSyncAnalyzers, payload, opts...), nil
 }
 
@@ -164,7 +179,7 @@ func NewFetchReadingsTask(p FetchReadingsPayload, o TaskOptions) (*asynq.Task, e
 	if err != nil {
 		return nil, err
 	}
-	opts := append([]asynq.Option{asynq.Timeout(10 * time.Minute)}, integMaxRetryOption(o)...)
+	opts := append([]asynq.Option{asynq.Timeout(10 * time.Minute)}, integMaxRetryOptions(o)...)
 	if p.Window == nil {
 		opts = append(opts, asynq.Unique(time.Hour))
 	} else {
@@ -196,7 +211,7 @@ func NewBackfillTask(p BackfillPayload, o TaskOptions) (*asynq.Task, error) {
 	opts := append([]asynq.Option{
 		asynq.Timeout(30 * time.Minute),
 		asynq.Queue(QueueLow),
-	}, integMaxRetryOption(o)...)
+	}, integMaxRetryOptions(o)...)
 	return asynq.NewTask(TypeIntegrationBackfill, payload, opts...), nil
 }
 
@@ -218,7 +233,7 @@ func NewSyncPricesTask(p SyncPricesPayload, o TaskOptions) (*asynq.Task, error) 
 	opts := append([]asynq.Option{
 		asynq.Unique(time.Hour),
 		asynq.Timeout(10 * time.Minute),
-	}, integMaxRetryOption(o)...)
+	}, integMaxRetryOptions(o)...)
 	return asynq.NewTask(TypeEPIASSyncPrices, payload, opts...), nil
 }
 
@@ -261,7 +276,7 @@ func (h *Handlers) integHandleSyncDispatch(ctx context.Context, _ *asynq.Task) e
 func (h *Handlers) integHandleSyncAnalyzers(ctx context.Context, task *asynq.Task) error {
 	p, err := DecodeSyncAnalyzers(task)
 	if err != nil {
-		return err
+		return SkipRetry(err)
 	}
 	return ClassifyForRetry(h.Ingestion.SyncAnalyzers(ctx, p))
 }
@@ -271,7 +286,7 @@ func (h *Handlers) integHandleSyncAnalyzers(ctx context.Context, task *asynq.Tas
 func (h *Handlers) integHandleFetchReadings(ctx context.Context, task *asynq.Task) error {
 	p, err := DecodeFetchReadings(task)
 	if err != nil {
-		return err
+		return SkipRetry(err)
 	}
 	return ClassifyForRetry(h.Ingestion.FetchReadings(ctx, p))
 }
@@ -281,7 +296,7 @@ func (h *Handlers) integHandleFetchReadings(ctx context.Context, task *asynq.Tas
 func (h *Handlers) integHandleBackfill(ctx context.Context, task *asynq.Task) error {
 	p, err := DecodeBackfill(task)
 	if err != nil {
-		return err
+		return SkipRetry(err)
 	}
 	return ClassifyForRetry(h.Backfill.Backfill(ctx, p))
 }
@@ -291,7 +306,7 @@ func (h *Handlers) integHandleBackfill(ctx context.Context, task *asynq.Task) er
 func (h *Handlers) integHandleSyncPrices(ctx context.Context, task *asynq.Task) error {
 	p, err := DecodeSyncPrices(task)
 	if err != nil {
-		return err
+		return SkipRetry(err)
 	}
 	return ClassifyForRetry(h.Prices.SyncPrices(ctx, p))
 }

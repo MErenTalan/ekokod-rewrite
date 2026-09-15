@@ -36,3 +36,12 @@ func TestRetryDelayIsBoundedAndHonoursRetryAfter(t *testing.T) {
 	ra := &integration.Error{Kind: integration.ErrRateLimited, RetryAfter: 90 * time.Second}
 	require.Equal(t, 90*time.Second, job.RetryDelay(3, ra, nil))
 }
+
+// TestRetryDelayCapsFarFutureRetryAfter proves a provider-supplied
+// Retry-After is capped at the same 30-minute ceiling the exponential
+// fallback obeys (M4, R5): a misconfigured or hostile far-future value must
+// not park a task for hours.
+func TestRetryDelayCapsFarFutureRetryAfter(t *testing.T) {
+	ra := &integration.Error{Kind: integration.ErrRateLimited, RetryAfter: 6 * time.Hour}
+	require.Equal(t, 30*time.Minute, job.RetryDelay(0, ra, nil))
+}

@@ -25,9 +25,22 @@ func ClassifyForRetry(err error) error {
 	if errors.Is(err, integration.ErrAuth) ||
 		errors.Is(err, integration.ErrMalformedPayload) ||
 		errors.Is(err, integration.ErrNotFound) {
-		return fmt.Errorf("%w: %w", err, asynq.SkipRetry)
+		return SkipRetry(err)
 	}
 	return err
+}
+
+// SkipRetry wraps a non-nil err with asynq.SkipRetry unconditionally. Every
+// integHandle* adapter uses it for a payload that fails to decode: that
+// failure is deterministic given the bytes asynq stored for the task, so it
+// will fail exactly the same way on every retry, and letting asynq burn its
+// retry budget (and delay) on a poison payload gains nothing while it makes
+// the task appear to hang instead of failing fast.
+func SkipRetry(err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("%w: %w", err, asynq.SkipRetry)
 }
 
 // integRetryBase and integRetryCap bound the exponential backoff RetryDelay
@@ -71,7 +84,11 @@ func integJitter(d time.Duration) time.Duration {
 // lockstep.
 func RetryDelay(n int, err error, _ *asynq.Task) time.Duration {
 	if d, ok := integration.RetryAfter(err); ok {
-		return d
+		// A provider-supplied Retry-After is honoured, but never past the
+		// same 30-minute cap the exponential fallback obeys: a
+		// misconfigured or hostile far-future value must not park a task
+		// for hours (R5 cap).
+		return min(d, integRetryCap)
 	}
 	return integJitter(integBackoff(n))
 }

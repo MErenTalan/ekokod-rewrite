@@ -16,6 +16,23 @@ import (
 // with the others.
 const redacted = "[REDACTED]"
 
+// secretBytes is the plaintext, held one indirection away from Secret
+// itself. This indirection is the fix for a real leak: when a Secret is
+// held in an unexported field of some OTHER struct (e.g. `struct{ s
+// Secret }`), fmt's reflection-based printer cannot call Interface() on
+// that field (Go forbids it for values obtained from an unexported field),
+// so it cannot even discover that Secret implements fmt.Formatter — it
+// falls back to printing the field's raw underlying representation
+// directly via reflection, which previously meant walking straight into
+// Secret's own (also unexported) []byte field and dumping its bytes. fmt's
+// fallback printer prints a nested pointer FIELD as a bare hex address
+// (0xc0001…) rather than dereferencing it — only a value passed directly
+// as a Print/Sprintf argument gets that one-level "&{...}" expansion — so
+// holding the plaintext behind a pointer here means that fallback path can
+// only ever reach the pointer's address, never the bytes it points to. See
+// credentials_test.go's unexported-holder cases for the proof.
+type secretBytes struct{ b []byte }
+
 // Secret holds one piece of plaintext credential material — a password, an
 // API key, a token — that must never reach a log line, an error message, a
 // JSON response or a debugger's default %v. 03 §7 states this is never
@@ -23,24 +40,30 @@ const redacted = "[REDACTED]"
 // to exist, and every formatting path it might be pushed through by
 // accident renders "[REDACTED]" instead. See credentials_test.go for the
 // exhaustive proof.
-type Secret struct{ b []byte }
+type Secret struct{ p *secretBytes }
 
 // NewSecret copies b so the caller's own slice can be zeroed or reused
 // without aliasing the Secret's contents.
 func NewSecret(b []byte) Secret {
 	cp := make([]byte, len(b))
 	copy(cp, b)
-	return Secret{b: cp}
+	return Secret{p: &secretBytes{b: cp}}
 }
 
 // Reveal returns the plaintext. It is the ONLY method on this type that
 // does; every caller of Reveal is a deliberate, reviewable decision to
 // handle real credential material (building an Authorization header, an
-// encrypted column, secret.Redact's fragment list).
-func (s Secret) Reveal() string { return string(s.b) }
+// encrypted column, secret.Redact's fragment list). A zero-value Secret
+// (p == nil) reveals "".
+func (s Secret) Reveal() string {
+	if s.p == nil {
+		return ""
+	}
+	return string(s.p.b)
+}
 
 // IsZero reports whether the secret carries no bytes at all.
-func (s Secret) IsZero() bool { return len(s.b) == 0 }
+func (s Secret) IsZero() bool { return s.p == nil || len(s.p.b) == 0 }
 
 // Format implements fmt.Formatter. It ignores the verb entirely — %v, %+v,
 // %#v, %s, %q, %x and any other verb all print "[REDACTED]" — because a
@@ -86,6 +109,13 @@ type Settings struct {
 // address a provider: identity (CredentialID, CompanyID, Provider,
 // Subtype), addressing (Endpoints, BaseURL, Region) and secret material
 // (Username is not secret; Secret and Extra are).
+//
+// Do not require.Equal/assert.Equal two Credentials values in a test.
+// testify renders a failure diff with go-spew, which follows pointers
+// (including Secret's, since NewSecret fix I1) and would print the
+// plaintext it holds straight into the test log. Compare individual
+// non-secret fields, or compare Secret.Reveal() values explicitly when a
+// test genuinely needs to assert on the plaintext.
 type Credentials struct {
 	CredentialID, CompanyID uuid.UUID
 	Provider                Provider
@@ -100,11 +130,21 @@ type Credentials struct {
 	TokenExpiresAt          *time.Time
 }
 
-// Fragments returns every secret's plaintext held by c, for
-// secret.Redact(msg, c.Fragments()) to scrub out of operator-facing error
-// text. The Extra map is walked in sorted key order so the result is
-// deterministic across calls. Never log the result of this call — it exists
-// to be fed into a redactor, not printed.
+// Fragments returns every secret's plaintext held by c, deduplicated and
+// sorted longest-first, for secret.Redact(msg, c.Fragments()) to scrub out
+// of operator-facing error text. Longest-first matters: if one secret's
+// plaintext is a prefix of another's (e.g. Secret "pw" and an Extra token
+// "pw-tok"), a redactor that walks the list in the wrong order replaces the
+// short match first and leaves the longer secret's suffix exposed
+// ("••••••••-tok" instead of a clean redaction) — sorting longest-first
+// makes the redactor always replace the longest, most specific match at
+// each position before any of its own prefixes get a chance to. Dedup
+// avoids redacting (and therefore scanning for) the same plaintext twice
+// when, for example, Secret and an Extra entry happen to hold the same
+// value. The result's order is otherwise deterministic (ties break by
+// string comparison), since it is built by walking Extra in sorted key
+// order before the final sort. Never log the result of this call — it
+// exists to be fed into a redactor, not printed.
 func (c Credentials) Fragments() []string {
 	var frags []string
 	if !c.Secret.IsZero() {
@@ -120,5 +160,22 @@ func (c Credentials) Fragments() []string {
 			frags = append(frags, s.Reveal())
 		}
 	}
-	return frags
+
+	seen := make(map[string]bool, len(frags))
+	deduped := frags[:0]
+	for _, f := range frags {
+		if seen[f] {
+			continue
+		}
+		seen[f] = true
+		deduped = append(deduped, f)
+	}
+
+	sort.Slice(deduped, func(i, j int) bool {
+		if len(deduped[i]) != len(deduped[j]) {
+			return len(deduped[i]) > len(deduped[j])
+		}
+		return deduped[i] < deduped[j]
+	})
+	return deduped
 }
