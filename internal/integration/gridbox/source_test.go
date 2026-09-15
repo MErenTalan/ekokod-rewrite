@@ -23,6 +23,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/httpx"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/normalize"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
+	lock "github.com/MErenTalan/ekokod-rewrite/internal/platform/lock"
 )
 
 // --- test harness ---------------------------------------------------------
@@ -57,6 +58,51 @@ func gridboxTestPool(t *testing.T, srv *fake.Server) (*httpx.Pool, *recordingSle
 	t.Helper()
 	rs := &recordingSleep{}
 	pool, err := httpx.NewPool(httpx.PoolOptions{PinnedCerts: srv.Pins, Sleep: rs.fn})
+	require.NoError(t, err)
+	return pool, rs
+}
+
+// fakeLocker is a Locker that records Acquire/Release pairs in order, for
+// TestGridBoxDataCallsSerializePerCompany (I1: fix round 1 finding). Mirrors
+// httpx/client_test.go's own copy (unexported to that package).
+type fakeLocker struct {
+	mu     sync.Mutex
+	events []string
+}
+
+type fakeLease struct {
+	l   *fakeLocker
+	key string
+}
+
+func (l *fakeLocker) Acquire(_ context.Context, key string, _ time.Duration) (lock.Lease, error) {
+	l.mu.Lock()
+	l.events = append(l.events, "acquire:"+key)
+	l.mu.Unlock()
+	return &fakeLease{l: l, key: key}, nil
+}
+
+func (l *fakeLease) Release(_ context.Context) error {
+	l.l.mu.Lock()
+	l.l.events = append(l.l.events, "release:"+l.key)
+	l.l.mu.Unlock()
+	return nil
+}
+
+func (l *fakeLocker) recorded() []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	out := make([]string, len(l.events))
+	copy(out, l.events)
+	return out
+}
+
+// gridboxTestPoolWithLocker is gridboxTestPool plus a recording Locker — the
+// only harness variant that needs one (SerializeKey observation).
+func gridboxTestPoolWithLocker(t *testing.T, srv *fake.Server, locker httpx.Locker) (*httpx.Pool, *recordingSleep) {
+	t.Helper()
+	rs := &recordingSleep{}
+	pool, err := httpx.NewPool(httpx.PoolOptions{PinnedCerts: srv.Pins, Sleep: rs.fn, Locker: locker})
 	require.NoError(t, err)
 	return pool, rs
 }
@@ -545,6 +591,50 @@ func TestGridBoxVerifyMapsAuthFailure(t *testing.T) {
 	require.ErrorIs(t, err, integration.ErrAuth)
 }
 
+// TestGridBoxDataCallsSerializePerCompany is fix round 1 finding I1: a
+// recording Locker must see the per-company key on every DATA-endpoint call
+// a real FetchReadings makes (last_success_date, last_endex, load_profiles),
+// not only on the token exchange — provider-defaults.md's `gridbox` row
+// marks "Serialise per company: yes" for the whole provider. The token
+// exchange acquires its own, distinct key ("gridbox:token:<company>" —
+// tokenClient's doc in source.go explains why the two are kept separate).
+//
+// Mutation proof (fix round 1): removing dataClientConfig's SerializeKey
+// (source.go) makes the "data key" assertion below FAIL with 0 acquires of
+// "gridbox:<company>" — recorded in task-7-report.md's "Fix round 1"
+// section.
+func TestGridBoxDataCallsSerializePerCompany(t *testing.T) {
+	from, to := istanbulDay(2026, 9, 1)
+	srv := fake.NewTLSServer(t, append(gridboxBaseRoutes(t),
+		fake.Route{Method: http.MethodGet, Path: "/gridbox/last-endex", Respond: fake.JSON(200, fake.Fixture(t, "gridbox", "gridbox_last_endex.json"))},
+		fake.Route{Method: http.MethodGet, Path: "/gridbox/load-profiles", Respond: fake.JSON(200, fake.Fixture(t, "gridbox", "gridbox_success.json"))},
+	)...)
+	locker := &fakeLocker{}
+	pool, _ := gridboxTestPoolWithLocker(t, srv, locker)
+	src := gridboxNewSource(pool, 0)
+	creds := gridboxTestCreds(srv, false)
+
+	_, err := src.FetchReadings(context.Background(), creds, gridboxTestRequest(model.ReadingKindLoadProfile, from, to))
+	require.NoError(t, err)
+
+	dataKey := "gridbox:" + creds.CompanyID.String()
+	tokenKey := "gridbox:token:" + creds.CompanyID.String()
+
+	var dataAcquires, tokenAcquires int
+	for _, e := range locker.recorded() {
+		switch e {
+		case "acquire:" + dataKey:
+			dataAcquires++
+		case "acquire:" + tokenKey:
+			tokenAcquires++
+		}
+	}
+	// Three data-endpoint calls this fetch makes: last_success_date,
+	// last_endex, load_profiles.
+	require.Equal(t, 3, dataAcquires, "every data-endpoint call must acquire the per-company data serialise key")
+	require.Equal(t, 1, tokenAcquires, "the token exchange must acquire its own, distinct serialise key")
+}
+
 // TestGridBoxDiscoverHasNoListingEndpoint documents source.go's
 // DiscoverMeteringPoints doc: 06 §3's Endpoints table has no
 // discovery/listing endpoint for GridBox, so Discover always returns zero
@@ -755,33 +845,57 @@ func TestGridBoxMalformedEnvelopeShapes(t *testing.T) {
 // but a genuine shape mismatch on a *json.Number field) produces a
 // WarnUnparseableRow for that row alone, never an ErrMalformedPayload for
 // the whole page.
+// M4 (fix round 1 finding): every register field decodes into *json.Number
+// (wire.go), so normalize.OptionalNumber's own "no value" sentinel strings
+// — "" and "-" — are NOT valid JSON for that type (unlike a genuine bare
+// number or null): encoding/json refuses to unmarshal them into a
+// json.Number at all. A row sending one is therefore a per-row decode
+// FAILURE exactly like a structurally wrong-shaped value ({}), isolated to
+// a WarnUnparseableRow (pattern 7) — never silently treated as a zero
+// register (pattern 3, nil-never-zero): the row is dropped entirely, not
+// mapped with a zero-valued ActiveEndex.
 func TestGridBoxPerRowDecodeFailureIsolated(t *testing.T) {
-	from, to := istanbulDay(2026, 9, 1)
-	body := []byte(`{"ResultStatus":1,"ResultObject":[
-		{"ProfileDateTime":"2026-09-01T10:00:00+03:00","ActiveEndex":100},
-		{"ProfileDateTime":"2026-09-01T10:15:00+03:00","ActiveEndex":{}},
-		{"ProfileDateTime":"2026-09-01T10:30:00+03:00","ActiveEndex":300}
-	]}`)
+	for _, tc := range []struct {
+		name string
+		bad  string // raw JSON for the malformed row's ActiveEndex field
+	}{
+		{"wrong_shaped_value", `{}`},
+		{"empty_string_sentinel", `""`},
+		{"dash_sentinel", `"-"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			from, to := istanbulDay(2026, 9, 1)
+			body := []byte(fmt.Sprintf(`{"ResultStatus":1,"ResultObject":[
+				{"ProfileDateTime":"2026-09-01T10:00:00+03:00","ActiveEndex":100},
+				{"ProfileDateTime":"2026-09-01T10:15:00+03:00","ActiveEndex":%s},
+				{"ProfileDateTime":"2026-09-01T10:30:00+03:00","ActiveEndex":300}
+			]}`, tc.bad))
 
-	srv := fake.NewTLSServer(t, append(gridboxBaseRoutes(t),
-		fake.Route{Method: http.MethodGet, Path: "/gridbox/last-endex", Respond: fake.JSON(200, fake.Fixture(t, "gridbox", "gridbox_last_endex.json"))},
-		fake.Route{Method: http.MethodGet, Path: "/gridbox/load-profiles", Respond: fake.JSON(200, body)},
-	)...)
-	pool, _ := gridboxTestPool(t, srv)
-	src := gridboxNewSource(pool, 0)
-	creds := gridboxTestCreds(srv, false)
+			srv := fake.NewTLSServer(t, append(gridboxBaseRoutes(t),
+				fake.Route{Method: http.MethodGet, Path: "/gridbox/last-endex", Respond: fake.JSON(200, fake.Fixture(t, "gridbox", "gridbox_last_endex.json"))},
+				fake.Route{Method: http.MethodGet, Path: "/gridbox/load-profiles", Respond: fake.JSON(200, body)},
+			)...)
+			pool, _ := gridboxTestPool(t, srv)
+			src := gridboxNewSource(pool, 0)
+			creds := gridboxTestCreds(srv, false)
 
-	res, err := src.FetchReadings(context.Background(), creds, gridboxTestRequest(model.ReadingKindLoadProfile, from, to))
-	require.NoError(t, err, "one bad row must not fail the whole page")
-	require.Len(t, res.Readings, 2, "the two structurally-valid rows must still be returned")
+			res, err := src.FetchReadings(context.Background(), creds, gridboxTestRequest(model.ReadingKindLoadProfile, from, to))
+			require.NoError(t, err, "one bad row must not fail the whole page")
+			require.Len(t, res.Readings, 2, "the two structurally-valid rows must still be returned")
+			for _, r := range res.Readings {
+				require.NotNil(t, r.ActiveImport)
+				require.False(t, r.ActiveImport.IsZero(), "the malformed row (never a genuine 0) must not surface as a zero-valued reading — it must be dropped entirely")
+			}
 
-	var found bool
-	for _, w := range res.Warnings {
-		if w.Code == integration.WarnUnparseableRow {
-			found = true
-		}
+			var found bool
+			for _, w := range res.Warnings {
+				if w.Code == integration.WarnUnparseableRow {
+					found = true
+				}
+			}
+			require.True(t, found, "the malformed row must still produce a warning, not be silently dropped")
+		})
 	}
-	require.True(t, found, "the malformed row must still produce a warning, not be silently dropped")
 }
 
 // TestGridBoxDuplicateTimestampConflictWarns is adapter review pattern 13:

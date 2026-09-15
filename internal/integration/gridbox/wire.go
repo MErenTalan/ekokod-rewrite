@@ -28,7 +28,10 @@ type envelope struct {
 // token is a plain OAuth2 exchange, not the {ResultStatus,ResultObject}
 // envelope — 06 §3's "every response is wrapped" describes the five
 // wiring-number endpoints that follow the Flow section's step 2, not the
-// authentication step that precedes it.
+// authentication step that precedes it. R37 (verify in F14): this reading
+// of "every response is wrapped" as excluding the token step has not been
+// confirmed against the real provider or legacy TS source; if 06 intends
+// the token response to also be envelope-wrapped, this needs a fix.
 type tokenResponse struct {
 	AccessToken string `json:"access_token"`
 }
@@ -39,6 +42,8 @@ type tokenResponse struct {
 // exact JSON key; this adapter and its own fixtures agree on
 // "LastSuccessDate", following the PascalCase convention every other
 // GridBox field in 06 §3 uses (ResultStatus, ResultObject, ActiveEndex, …).
+// R37 (verify in F14): the exact key name is unverified against the real
+// provider — fixture and adapter agree only with each other.
 type lastSuccessDateResponse struct {
 	LastSuccessDate *string `json:"LastSuccessDate"`
 }

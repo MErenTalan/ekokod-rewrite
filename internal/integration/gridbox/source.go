@@ -50,12 +50,15 @@ const (
 	defaultPageBudget = 10
 
 	// requestEvery/requestBurst/requestTimeout configure this adapter's own
-	// httpx.ClientConfig. 06-integrations.md publishes no GridBox-specific
-	// "Provider defaults" table (only prose, in §2's OSOS section, that
-	// "provider-level rate limits apply; requests to one provider are
-	// serialised per company"); these are a deliberately conservative
-	// choice pending such a table — see the task report's concerns.
-	requestEvery   = time.Second
+	// httpx.ClientConfig, per provider-defaults.md's `gridbox` row: "Rate /
+	// burst" 2 / 2, 30s request timeout. Fix round 1 (I2): the original
+	// round set requestEvery to a full second — one request per Every, so
+	// that was only 1 req/s, understating the table's 2/2 by half. Every
+	// must be 500ms (one request per 500ms = 2 req/s) to match; Burst was
+	// already correct. See task-7-report.md's "Fix round 1" section for the
+	// mutation proof (revert to time.Second and TestGridBoxDataClientRate
+	// fails).
+	requestEvery   = 500 * time.Millisecond
 	requestBurst   = 2
 	requestTimeout = 30 * time.Second
 )
@@ -153,15 +156,37 @@ func fetchConfigError(creds integration.Credentials, wiringNo string) error {
 	return nil
 }
 
-// dataClient builds the Client every non-token endpoint call uses.
-func (s *Source) dataClient(creds integration.Credentials) *httpx.Client {
-	return s.pool.Client(httpx.ClientConfig{
+// dataClientConfig builds the ClientConfig every non-token endpoint call
+// uses (dataClient wraps it; a plain function so an internal test can
+// assert its fields directly, with no Pool/Source needed — see
+// TestGridBoxDataClientRate in source_internal_test.go).
+//
+// Fix round 1 (I1): provider-defaults.md's `gridbox` row marks "Serialise
+// per company: yes" for the whole provider, not only the token exchange —
+// the original round gave tokenClient a SerializeKey but left dataClient
+// (every last_success_date/last_endex/load_profiles/endexes/energy_values
+// call) unserialised, so two concurrent jobs for the same company could
+// still race two data calls against each other. dataClient now carries its
+// own SerializeKey, scoped to the company like its LimiterKey — deliberately
+// the SAME key as LimiterKey's own "gridbox:<company>" string (distinct
+// only from tokenClient's own "gridbox:token:<company>", which token()
+// keeps as its own key — see tokenClient's doc below for why the two are
+// not merged into one lock).
+func dataClientConfig(creds integration.Credentials) httpx.ClientConfig {
+	key := "gridbox:" + creds.CompanyID.String()
+	return httpx.ClientConfig{
 		Provider:       integration.ProviderGridBox,
-		LimiterKey:     "gridbox:" + creds.CompanyID.String(),
+		LimiterKey:     key,
 		Every:          requestEvery,
 		Burst:          requestBurst,
 		RequestTimeout: requestTimeout,
-	})
+		SerializeKey:   key,
+	}
+}
+
+// dataClient builds the Client every non-token endpoint call uses.
+func (s *Source) dataClient(creds integration.Credentials) *httpx.Client {
+	return s.pool.Client(dataClientConfig(creds))
 }
 
 // tokenClient is deliberately its own Client, on its own limiter key and
@@ -172,6 +197,16 @@ func (s *Source) dataClient(creds integration.Credentials) *httpx.Client {
 // `httpx.Request.NoRetry` field is landing on Task 2's branch, not yet on
 // this base — see the R32 comment on token() below, the one call site every
 // login/refresh goes through.
+//
+// This key is kept DISTINCT from dataClientConfig's own per-company
+// SerializeKey (fix round 1, I1) rather than merged into one lock: a token
+// exchange and a data call are different operations with different retry
+// rules (token: MaxAttempts effectively 1 once R32 lands; data: the
+// Client's normal jittered retries), and merging their locks would have an
+// in-flight token refresh block every data call for the same company (and
+// vice versa) for no reason the brief asks for — 06 §3 only requires that
+// GridBox calls of the SAME kind for the SAME company never race each
+// other, not that token and data calls take turns.
 func (s *Source) tokenClient(creds integration.Credentials) *httpx.Client {
 	return s.pool.Client(httpx.ClientConfig{
 		Provider:       integration.ProviderGridBox,
@@ -253,7 +288,10 @@ func (s *Source) Verify(ctx context.Context, creds integration.Credentials) erro
 // directly by wiring number (installation_number), configured out of band,
 // unlike OSOS's analyzers_list. It still exchanges a token, so a bad
 // credential is reported the same way Verify reports it, but always
-// returns zero points.
+// returns zero points. R37 (verify in F14): this is a structural reading of
+// 06 §3's own endpoint table, not an invented gap — but it has not been
+// confirmed that GridBox metering points are never meant to be discoverable
+// by some other mechanism outside that table.
 func (s *Source) DiscoverMeteringPoints(ctx context.Context, creds integration.Credentials) ([]integration.MeteringPoint, error) {
 	if _, err := s.token(ctx, creds); err != nil {
 		return nil, err
@@ -411,6 +449,13 @@ func (s *Source) windowedResult(ctx context.Context, client *httpx.Client, token
 			return s.finishWindowed(req, wiringNo, lastEndex, pending, profiles, warnings, &next), nil
 		}
 
+		// R37 (verify in F14): {endDate} is assumed INCLUSIVE of the named
+		// day — chunk.To is this chunk's exclusive [from, to) upper bound
+		// (a local midnight), so chunk.To.Add(-time.Nanosecond) formats as
+		// the PRECEDING calendar day, the last day the chunk actually
+		// covers. 06 §3 does not state whether GridBox's own {endDate}
+		// query parameter is inclusive or exclusive; this has not been
+		// verified against the real provider.
 		params := map[string]httpx.Param{
 			"wiringNo":  {Value: wiringNo},
 			"startDate": {Value: formatIstanbulDate(chunk.From)},
