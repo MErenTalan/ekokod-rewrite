@@ -23,6 +23,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/httpx"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/normalize"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
+	lock "github.com/MErenTalan/ekokod-rewrite/internal/platform/lock"
 )
 
 // --- test harness -----------------------------------------------------
@@ -54,6 +55,52 @@ func arilTestPool(t *testing.T, srv *fake.Server) (*httpx.Pool, *recordingSleep)
 	t.Helper()
 	rs := &recordingSleep{}
 	pool, err := httpx.NewPool(httpx.PoolOptions{PinnedCerts: srv.Pins, Sleep: rs.fn})
+	require.NoError(t, err)
+	return pool, rs
+}
+
+// fakeLocker is a Locker that records Acquire/Release pairs in order, for
+// TestARILDataCallsSerializePerCompany (I1: fix round 1 finding). Mirrors
+// GridBox's own copy (gridbox/source_test.go), itself mirroring
+// httpx/client_test.go's unexported one.
+type fakeLocker struct {
+	mu     sync.Mutex
+	events []string
+}
+
+type fakeLease struct {
+	l   *fakeLocker
+	key string
+}
+
+func (l *fakeLocker) Acquire(_ context.Context, key string, _ time.Duration) (lock.Lease, error) {
+	l.mu.Lock()
+	l.events = append(l.events, "acquire:"+key)
+	l.mu.Unlock()
+	return &fakeLease{l: l, key: key}, nil
+}
+
+func (l *fakeLease) Release(_ context.Context) error {
+	l.l.mu.Lock()
+	l.l.events = append(l.l.events, "release:"+l.key)
+	l.l.mu.Unlock()
+	return nil
+}
+
+func (l *fakeLocker) recorded() []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	out := make([]string, len(l.events))
+	copy(out, l.events)
+	return out
+}
+
+// arilTestPoolWithLocker is arilTestPool plus a recording Locker — the only
+// harness variant that needs one (SerializeKey observation).
+func arilTestPoolWithLocker(t *testing.T, srv *fake.Server, locker httpx.Locker) (*httpx.Pool, *recordingSleep) {
+	t.Helper()
+	rs := &recordingSleep{}
+	pool, err := httpx.NewPool(httpx.PoolOptions{PinnedCerts: srv.Pins, Sleep: rs.fn, Locker: locker})
 	require.NoError(t, err)
 	return pool, rs
 }
@@ -254,6 +301,11 @@ func TestARILFixtureMatrix(t *testing.T) {
 			},
 		},
 		{
+			// M3: discovery's own PageNumber paging (analyzers_list) is
+			// ARIL's ONLY pagination mechanism -- FetchReadings never
+			// internally paginates (see this test's own doc comment and
+			// source.go's package doc), so this subtest drives
+			// DiscoverMeteringPoints, not FetchReadings.
 			name:        "pagination",
 			useDiscover: true,
 			routes: func(t *testing.T) []fake.Route {
@@ -312,6 +364,113 @@ func TestARILFixtureMatrix(t *testing.T) {
 			tc.check(t, res, nil, rs, srv)
 		})
 	}
+}
+
+// TestARILDataCallsSerializePerCompany is fix round 1 finding I1: a
+// recording Locker must see the per-company data key ("aril:<company>") on
+// EVERY data-endpoint call ARIL makes — analyzers_list, owner_consumptions,
+// current_endexes and end_of_month_endexes — not only on the authentication
+// exchange. provider-defaults.md's `aril` row marks "Serialise per company:
+// yes" for the whole provider. The authentication exchange acquires its
+// own, distinct key ("aril:auth:<company>" — authClient's doc in source.go
+// explains why the two are kept separate).
+//
+// Mutation proofs (fix round 1, recorded in task-8-report.md's "Fix round
+// 1" section):
+//   - removing dataClientConfig's SerializeKey line (source.go) makes every
+//     "data key" assertion below FAIL with 0 acquires of "aril:<company>".
+//   - dropping the company id from that key (a bare "aril" string) makes
+//     the same assertions FAIL because the recorded events no longer match
+//     "acquire:aril:<company>".
+func TestARILDataCallsSerializePerCompany(t *testing.T) {
+	from, to := istanbulDay(2026, 9, 1)
+
+	// requireDataKey asserts locker recorded exactly wantData acquires of
+	// the per-company DATA key and exactly one acquire of the per-company
+	// AUTH key (every subtest below authenticates exactly once).
+	requireDataKey := func(t *testing.T, locker *fakeLocker, creds integration.Credentials, wantData int) {
+		t.Helper()
+		dataKey := "aril:" + creds.CompanyID.String()
+		authKey := "aril:auth:" + creds.CompanyID.String()
+
+		var dataAcquires, authAcquires int
+		for _, e := range locker.recorded() {
+			switch e {
+			case "acquire:" + dataKey:
+				dataAcquires++
+			case "acquire:" + authKey:
+				authAcquires++
+			}
+		}
+		require.Equal(t, wantData, dataAcquires, "every data-endpoint call must acquire the per-company data serialise key")
+		require.Equal(t, 1, authAcquires, "the authentication exchange must acquire its own, distinct serialise key")
+	}
+
+	t.Run("analyzers_list", func(t *testing.T) {
+		srv := fake.NewTLSServer(t,
+			arilAuthRoute(t),
+			// aril_subscriptions_page2.json has 2 rows (< subscriptionPageSize),
+			// so discovery stops after exactly one analyzers_list call.
+			fake.Route{Method: http.MethodPost, Path: "/aril/analyzers-list", Respond: fake.JSON(200, fake.Fixture(t, "aril", "aril_subscriptions_page2.json"))},
+		)
+		locker := &fakeLocker{}
+		pool, _ := arilTestPoolWithLocker(t, srv, locker)
+		src := arilNewSource(pool, 0)
+		creds := arilTestCreds(srv)
+
+		_, err := src.DiscoverMeteringPoints(context.Background(), creds)
+		require.NoError(t, err)
+		requireDataKey(t, locker, creds, 1)
+	})
+
+	t.Run("owner_consumptions", func(t *testing.T) {
+		srv := fake.NewTLSServer(t,
+			arilAuthRoute(t),
+			fake.Route{Method: http.MethodPost, Path: "/aril/owner-consumptions", Respond: fake.JSON(200, fake.Fixture(t, "aril", "aril_success.json"))},
+		)
+		locker := &fakeLocker{}
+		pool, _ := arilTestPoolWithLocker(t, srv, locker)
+		src := arilNewSource(pool, 0)
+		creds := arilTestCreds(srv)
+
+		_, err := src.FetchReadings(context.Background(), creds, arilTestRequest(model.ReadingKindLoadProfile, from, to, decimal.NewFromInt(1)))
+		require.NoError(t, err)
+		requireDataKey(t, locker, creds, 1)
+	})
+
+	t.Run("current_endexes", func(t *testing.T) {
+		srv := fake.NewTLSServer(t,
+			arilAuthRoute(t),
+			fake.Route{Method: http.MethodPost, Path: "/aril/current-endexes", Respond: fake.JSON(200, fake.Fixture(t, "aril", "aril_current_endexes.json"))},
+		)
+		locker := &fakeLocker{}
+		pool, _ := arilTestPoolWithLocker(t, srv, locker)
+		src := arilNewSource(pool, 0)
+		creds := arilTestCreds(srv)
+
+		_, err := src.FetchReadings(context.Background(), creds, arilTestRequest(model.ReadingKindCurrentIndex, from, to, decimal.NewFromInt(1)))
+		require.NoError(t, err)
+		requireDataKey(t, locker, creds, 1)
+	})
+
+	t.Run("end_of_month_endexes", func(t *testing.T) {
+		srv := fake.NewTLSServer(t,
+			arilAuthRoute(t),
+			fake.Route{Method: http.MethodPost, Path: "/aril/end-of-month-endexes", Respond: fake.JSON(200, fake.Fixture(t, "aril", "aril_end_of_month.json"))},
+			fake.Route{Method: http.MethodPost, Path: "/aril/current-endexes", Respond: fake.JSON(200, fake.Fixture(t, "aril", "aril_current_endexes.json"))},
+		)
+		locker := &fakeLocker{}
+		pool, _ := arilTestPoolWithLocker(t, srv, locker)
+		src := arilNewSource(pool, 0)
+		creds := arilTestCreds(srv)
+
+		// fetchBilling makes TWO data calls — end_of_month_endexes and a
+		// second current_endexes call — both through the same serialised
+		// data client.
+		_, err := src.FetchReadings(context.Background(), creds, arilTestRequest(model.ReadingKindBilling, from, to, decimal.NewFromInt(1)))
+		require.NoError(t, err)
+		requireDataKey(t, locker, creds, 2)
+	})
 }
 
 // --- Named acceptance tests (task-8-brief.md) ---------------------------

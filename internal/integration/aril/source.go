@@ -192,15 +192,44 @@ func (s *Source) authClient(creds integration.Credentials) *httpx.Client {
 	})
 }
 
-// dataClient is the Client every non-authentication call is built from.
-func (s *Source) dataClient(creds integration.Credentials) *httpx.Client {
-	return s.pool.Client(httpx.ClientConfig{
+// dataClientConfig builds the ClientConfig every non-authentication call
+// uses (dataClient wraps it; a plain function so an internal test can
+// assert its fields directly, with no Pool/Source needed — mirrors
+// GridBox's own dataClientConfig, gridbox/source.go).
+//
+// Fix round 1 (I1): provider-defaults.md's `aril` row marks "Serialise per
+// company: yes" for the whole provider, not only the authentication
+// exchange — the original round gave authClient a SerializeKey but left
+// dataClient (every analyzers_list/owner_consumptions/current_endexes/
+// end_of_month_endexes call) unserialised, so two concurrent jobs for the
+// same company could still race two data calls against each other.
+// dataClient now carries its own SerializeKey, scoped to the company like
+// its LimiterKey — deliberately the SAME key as LimiterKey's own
+// "aril:<company>" string, distinct only from authClient's own
+// "aril:auth:<company>" key. authClient keeps its own, separate key rather
+// than sharing this one (mirrors GridBox's tokenClient/dataClientConfig
+// split, gridbox/source.go): a login exchange and a data call are different
+// operations with different retry rules (authenticate: R32 NoRetry, exactly
+// one attempt; data calls: the Client's normal jittered retries), and
+// merging their locks would have an in-flight login block every data call
+// for the same company (and vice versa) for no reason 06 §4 or 06 §6's
+// iSolar refresh-token precedent asks for — only calls of the SAME kind for
+// the SAME company must never race each other.
+func dataClientConfig(creds integration.Credentials) httpx.ClientConfig {
+	key := "aril:" + creds.CompanyID.String()
+	return httpx.ClientConfig{
 		Provider:       integration.ProviderARIL,
-		LimiterKey:     "aril:" + creds.CompanyID.String(),
+		LimiterKey:     key,
 		Every:          requestEvery,
 		Burst:          requestBurst,
 		RequestTimeout: requestTimeout,
-	})
+		SerializeKey:   key,
+	}
+}
+
+// dataClient is the Client every non-authentication call is built from.
+func (s *Source) dataClient(creds integration.Credentials) *httpx.Client {
+	return s.pool.Client(dataClientConfig(creds))
 }
 
 // authenticate exchanges creds for an aril-service-token (06 §4: "POST
