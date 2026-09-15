@@ -219,9 +219,17 @@ func TestAnalyticsRepositoryRejectsInvalidRange(t *testing.T) {
 //
 // Each case seeds a REAL reading for BOTH tenant A's own analyzer (must
 // appear) and tenant B's foreign analyzer (must never appear), then proves
-// two things in one pass:
-//   - explicitly naming both ids surfaces ONLY tenant A's row (isolation:
-//     an id outside the Scope contributes no rows even when named);
+// three things in one pass:
+//   - tenant B's row is non-vacuous: it reads back through tenant B's own
+//     Scope (F1 final review pass B, I3 — without this, "the company
+//     predicate is shadowed" cross-tenant assertion below would prove
+//     nothing if tenant B's row never existed in the first place);
+//   - the cross-tenant assertion is called with tenant A's ADMINSCOPE, not
+//     the narrow Scope this test used before I3: under a narrow Scope the
+//     building predicate alone already excludes tenant B's analyzer, so a
+//     tautologised company_id predicate would hide behind it and this test
+//     would still pass — naming both ids together must surface ONLY tenant
+//     A's row;
 //   - a nil AND an empty (non-nil) ids list return NOTHING — never "every
 //     analyzer visible to scope" — even though tenant A has a real, visible
 //     row in the window (Important finding 4's fail-closed ruling; this is
@@ -262,33 +270,46 @@ func TestAnalyticsConsumptionViewsIDsOutsideScopeContributeNoRowsAndEmptyIDsRetu
 
 	cases := []struct {
 		name string
-		call func(ids []uuid.UUID) ([]model.ConsumptionBucket, error)
+		call func(scope store.Scope, ids []uuid.UUID) ([]model.ConsumptionBucket, error)
 	}{
-		{"Hourly", func(ids []uuid.UUID) ([]model.ConsumptionBucket, error) {
-			return analyticsRepo.ConsumptionHourly(ctx, tenantA.Scope, ids, hourWindow)
+		{"Hourly", func(scope store.Scope, ids []uuid.UUID) ([]model.ConsumptionBucket, error) {
+			return analyticsRepo.ConsumptionHourly(ctx, scope, ids, hourWindow)
 		}},
-		{"Daily", func(ids []uuid.UUID) ([]model.ConsumptionBucket, error) {
-			return analyticsRepo.ConsumptionDaily(ctx, tenantA.Scope, ids, dayWindow)
+		{"Daily", func(scope store.Scope, ids []uuid.UUID) ([]model.ConsumptionBucket, error) {
+			return analyticsRepo.ConsumptionDaily(ctx, scope, ids, dayWindow)
 		}},
-		{"Monthly", func(ids []uuid.UUID) ([]model.ConsumptionBucket, error) {
-			return analyticsRepo.ConsumptionMonthly(ctx, tenantA.Scope, ids, monthWindow)
+		{"Monthly", func(scope store.Scope, ids []uuid.UUID) ([]model.ConsumptionBucket, error) {
+			return analyticsRepo.ConsumptionMonthly(ctx, scope, ids, monthWindow)
 		}},
-		{"Yearly", func(ids []uuid.UUID) ([]model.ConsumptionBucket, error) {
-			return analyticsRepo.ConsumptionYearly(ctx, tenantA.Scope, ids, yearWindow)
+		{"Yearly", func(scope store.Scope, ids []uuid.UUID) ([]model.ConsumptionBucket, error) {
+			return analyticsRepo.ConsumptionYearly(ctx, scope, ids, yearWindow)
 		}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			named, err := tc.call([]uuid.UUID{tenantA.Analyzers[0].ID, tenantB.Analyzers[0].ID})
+			// Self-evident non-vacuity: tenant B's row really exists in this
+			// view — tenant B can read it back through its own Scope.
+			selfB, err := tc.call(tenantB.Scope, []uuid.UUID{tenantB.Analyzers[0].ID})
+			require.NoError(t, err)
+			require.Len(t, selfB, 1, "tenant B must be able to read its own row through its own scope")
+
+			// Cross-tenant, called with tenant A's AdminScope, not the
+			// narrow Scope: under a narrow Scope the building predicate
+			// alone already excludes tenant B's analyzer (its building_id
+			// is never in A's building_ids), so a tautologised
+			// `a.company_id = sqlc.arg(company_id)` would hide behind the
+			// building predicate and this assertion would still pass.
+			// AdminScope removes that cover.
+			named, err := tc.call(tenantA.AdminScope, []uuid.UUID{tenantA.Analyzers[0].ID, tenantB.Analyzers[0].ID})
 			require.NoError(t, err)
 			require.Len(t, named, 1, "naming a foreign id alongside the caller's own must surface only the caller's own row")
 			require.Equal(t, tenantA.Analyzers[0].ID, named[0].AnalyzerID)
 
-			nilIDs, err := tc.call(nil)
+			nilIDs, err := tc.call(tenantA.Scope, nil)
 			require.NoError(t, err)
 			require.Empty(t, nilIDs, "nil ids must return NOTHING, not every analyzer visible to scope")
 
-			emptyIDs, err := tc.call([]uuid.UUID{})
+			emptyIDs, err := tc.call(tenantA.Scope, []uuid.UUID{})
 			require.NoError(t, err)
 			require.Empty(t, emptyIDs, "an empty (non-nil) ids slice must also return NOTHING")
 		})
@@ -388,6 +409,12 @@ func TestAnalyticsConsumptionDailyBucketsInIstanbulNotUTC(t *testing.T) {
 // --- isolation: the aggregates have no company_id; consumption_* join
 // through analyzers, plant_production_* through power_plants --------------
 
+// TestAnalyticsConsumptionHourlyIDsOutsideScopeContributeNoRows (F1 final
+// review pass B, I3) adds the positive control the review found missing —
+// without it, `require.Empty(t, got)` also passes on a window that matches
+// nothing at all — and calls the cross-tenant assertion with tenant A's
+// AdminScope rather than the narrow Scope, for the same shadowing reason as
+// TestAnalyticsConsumptionViewsIDsOutsideScopeContributeNoRowsAndEmptyIDsReturnNothing.
 func TestAnalyticsConsumptionHourlyIDsOutsideScopeContributeNoRows(t *testing.T) {
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
@@ -395,6 +422,7 @@ func TestAnalyticsConsumptionHourlyIDsOutsideScopeContributeNoRows(t *testing.T)
 	tenantB := testfixtures.NewTenant(t, ctx, pool, 2)
 	readingRepo := postgres.NewReadingRepository(pool)
 	analyticsRepo := postgres.NewAnalyticsRepository(pool)
+	window := store.TimeRange{From: analyticsEpoch, To: analyticsEpoch.Add(time.Hour)}
 
 	row := model.MeterReading{
 		AnalyzerID: tenantB.Analyzers[0].ID, Ts: analyticsEpoch, Kind: model.ReadingKindLoadProfile,
@@ -404,20 +432,32 @@ func TestAnalyticsConsumptionHourlyIDsOutsideScopeContributeNoRows(t *testing.T)
 	_, _, err := readingRepo.BulkInsert(ctx, tenantB.Scope, []model.MeterReading{row})
 	require.NoError(t, err)
 
-	// Cross-tenant: tenant A's scope, tenant B's analyzer id explicitly named.
-	got, err := analyticsRepo.ConsumptionHourly(ctx, tenantA.Scope, []uuid.UUID{tenantB.Analyzers[0].ID},
-		store.TimeRange{From: analyticsEpoch, To: analyticsEpoch.Add(time.Hour)})
+	// Self-evident non-vacuity: tenant B's row really exists in this view.
+	selfB, err := analyticsRepo.ConsumptionHourly(ctx, tenantB.Scope, []uuid.UUID{tenantB.Analyzers[0].ID}, window)
+	require.NoError(t, err)
+	require.Len(t, selfB, 1)
+
+	// Cross-tenant, called with tenant A's AdminScope, not the narrow Scope:
+	// under a narrow Scope the building predicate alone already excludes
+	// tenant B's analyzer, so a tautologised company_id predicate would hide
+	// behind it.
+	got, err := analyticsRepo.ConsumptionHourly(ctx, tenantA.AdminScope, []uuid.UUID{tenantB.Analyzers[0].ID}, window)
 	require.NoError(t, err)
 	require.Empty(t, got)
 
-	// Even tenant A's OWN scope with no ids filter must never surface
+	// Even tenant A's OWN AdminScope with no ids filter must never surface
 	// tenant B's rows.
-	all, err := analyticsRepo.ConsumptionHourly(ctx, tenantA.Scope, nil,
-		store.TimeRange{From: analyticsEpoch, To: analyticsEpoch.Add(time.Hour)})
+	all, err := analyticsRepo.ConsumptionHourly(ctx, tenantA.AdminScope, nil, window)
 	require.NoError(t, err)
 	require.Empty(t, all)
 }
 
+// TestAnalyticsProductionDailyIDsOutsideScopeContributeNoRows (I3) adds the
+// positive control the review found missing. It is NOT switched to
+// AdminScope: plant_production_daily joins power_plants, which has no
+// building_id at all (PlantRepository's doc), so tenant A's narrow Scope
+// already applies no building predicate here to shadow behind — only the
+// company_id check does the work either way.
 func TestAnalyticsProductionDailyIDsOutsideScopeContributeNoRows(t *testing.T) {
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
@@ -425,6 +465,13 @@ func TestAnalyticsProductionDailyIDsOutsideScopeContributeNoRows(t *testing.T) {
 	tenantB := testfixtures.NewTenant(t, ctx, pool, 2)
 	productionRepo := postgres.NewProductionRepository(pool)
 	analyticsRepo := postgres.NewAnalyticsRepository(pool)
+	// Widened by a day on each side, same as
+	// TestAnalyticsProductionDailyIsRealTimeAndMonthlyRequiresRefresh: the
+	// bucket for a UTC-midnight reading STARTS the previous UTC day
+	// (Europe/Istanbul is UTC+3), so a window that starts exactly at
+	// analyticsEpoch excludes it and the positive control below would fail
+	// for a reason that has nothing to do with scope.
+	window := store.TimeRange{From: analyticsEpoch.Add(-24 * time.Hour), To: analyticsEpoch.Add(48 * time.Hour)}
 
 	deviceID := productionSeedDevice(t, ctx, pool, tenantB.Plants[0].ID, "ISO-DEV")
 	_, _, err := productionRepo.BulkInsert(ctx, tenantB.Scope, []model.PlantProduction{
@@ -432,8 +479,12 @@ func TestAnalyticsProductionDailyIDsOutsideScopeContributeNoRows(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	got, err := analyticsRepo.ProductionDaily(ctx, tenantA.Scope, []uuid.UUID{tenantB.Plants[0].ID},
-		store.TimeRange{From: analyticsEpoch, To: analyticsEpoch.Add(24 * time.Hour)})
+	// Self-evident non-vacuity: tenant B's row really exists in this view.
+	selfB, err := analyticsRepo.ProductionDaily(ctx, tenantB.Scope, []uuid.UUID{tenantB.Plants[0].ID}, window)
+	require.NoError(t, err)
+	require.Len(t, selfB, 1)
+
+	got, err := analyticsRepo.ProductionDaily(ctx, tenantA.Scope, []uuid.UUID{tenantB.Plants[0].ID}, window)
 	require.NoError(t, err)
 	require.Empty(t, got)
 }

@@ -179,6 +179,13 @@ func TestCursorGetIsIsolatedToVisibleAnalyzers(t *testing.T) {
 	require.NotNil(t, got.LastTs)
 }
 
+// TestCursorListIDsOutsideScopeContributeNoRows is List's isolation proof
+// (F1 final review pass B, I3): a positive control (tenant B lists its own
+// cursor) and a cross-tenant assertion called with tenant A's AdminScope,
+// not the narrow Scope — under a narrow Scope the building predicate alone
+// already excludes tenant B's analyzer, so a tautologised company_id
+// predicate in CursorList would hide behind it and this test would still
+// pass.
 func TestCursorListIDsOutsideScopeContributeNoRows(t *testing.T) {
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
@@ -188,11 +195,26 @@ func TestCursorListIDsOutsideScopeContributeNoRows(t *testing.T) {
 
 	require.NoError(t, repo.RecordSuccess(ctx, tenantB.Scope, tenantB.Analyzers[0].ID, model.ReadingKindLoadProfile, cursorsEpoch, cursorsEpoch))
 
-	got, err := repo.List(ctx, tenantA.Scope, []uuid.UUID{tenantB.Analyzers[0].ID})
+	// Self-evident non-vacuity: tenant B can list its own cursor.
+	selfB, err := repo.List(ctx, tenantB.Scope, []uuid.UUID{tenantB.Analyzers[0].ID})
+	require.NoError(t, err)
+	require.Len(t, selfB, 1)
+
+	// Cross-tenant, called with tenant A's AdminScope.
+	got, err := repo.List(ctx, tenantA.AdminScope, []uuid.UUID{tenantB.Analyzers[0].ID})
 	require.NoError(t, err)
 	require.Empty(t, got)
 }
 
+// TestCursorRecordSuccessAndFailureRefuseInvisibleAnalyzer is the write
+// isolation proof for both cursor writes (I3). The cross-tenant assertion is
+// called with tenant A's AdminScope, not the narrow Scope: under a narrow
+// Scope the building predicate alone already excludes tenant B's analyzer,
+// so a tautologised company_id predicate in CursorRecordSuccess /
+// CursorRecordFailure would hide behind it and this test would still pass.
+// AdminScope removes that cover, leaving only the company_id check standing
+// between tenant A and tenant B's analyzer — and "nothing changed" is
+// proved directly, by reading the row back through tenant B's own Scope.
 func TestCursorRecordSuccessAndFailureRefuseInvisibleAnalyzer(t *testing.T) {
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
@@ -200,13 +222,25 @@ func TestCursorRecordSuccessAndFailureRefuseInvisibleAnalyzer(t *testing.T) {
 	tenantB := testfixtures.NewTenant(t, ctx, pool, 2)
 	repo := postgres.NewCursorRepository(pool)
 
-	err := repo.RecordSuccess(ctx, tenantA.Scope, tenantB.Analyzers[0].ID, model.ReadingKindLoadProfile, cursorsEpoch, cursorsEpoch)
+	err := repo.RecordSuccess(ctx, tenantA.AdminScope, tenantB.Analyzers[0].ID, model.ReadingKindLoadProfile, cursorsEpoch, cursorsEpoch)
 	require.ErrorIs(t, err, store.ErrNotFound)
 
-	err = repo.RecordFailure(ctx, tenantA.Scope, tenantB.Analyzers[0].ID, model.ReadingKindLoadProfile, "x", cursorsEpoch)
+	err = repo.RecordFailure(ctx, tenantA.AdminScope, tenantB.Analyzers[0].ID, model.ReadingKindLoadProfile, "x", cursorsEpoch)
 	require.ErrorIs(t, err, store.ErrNotFound)
 
 	// Nothing was created for tenant B either — the write touched no row.
 	_, err = repo.Get(ctx, tenantB.Scope, tenantB.Analyzers[0].ID, model.ReadingKindLoadProfile)
 	require.ErrorIs(t, err, store.ErrNotFound)
+
+	// Narrow scope: tenant A's own analyzer, outside Buildings[0], is also
+	// refused under the narrow Scope...
+	err = repo.RecordSuccess(ctx, tenantA.Scope, tenantA.Analyzers[2].ID, model.ReadingKindLoadProfile, cursorsEpoch, cursorsEpoch)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	// ...and reachable under AdminScope — confirming the ErrNotFound above is
+	// the Scope's doing, not a fixture mistake.
+	require.NoError(t, repo.RecordSuccess(ctx, tenantA.AdminScope, tenantA.Analyzers[2].ID, model.ReadingKindLoadProfile, cursorsEpoch, cursorsEpoch))
+	got, err := repo.Get(ctx, tenantA.AdminScope, tenantA.Analyzers[2].ID, model.ReadingKindLoadProfile)
+	require.NoError(t, err)
+	require.NotNil(t, got.LastTs)
 }

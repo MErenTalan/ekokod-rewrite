@@ -12,7 +12,7 @@ GOLANGCI_VERSION := v2.13.2
 GOVULNCHECK_VERSION := v1.8.0
 SQLC_VERSION := v1.30.0
 
-.PHONY: build test test-integration test-perf lint fmt tidy tools vuln ci
+.PHONY: build test test-integration test-perf lint fmt tidy tools vuln ci check-script-modes
 
 build: ## Build the ekokod binary
 	go build -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/ekokod
@@ -53,7 +53,29 @@ lint: ## Run gofmt check, go vet and golangci-lint
 vuln: ## Scan dependencies for known vulnerabilities
 	govulncheck ./...
 
-ci: lint check-generate test build web-lint web-test web-build web-audit ## Everything CI runs, except integration tests, govulncheck and shellcheck
+# F1 final review pass B, I6: scripts/gen-env-docker.sh and
+# scripts/offline-bundle.sh were committed as mode 100644 (not executable),
+# which broke `make env-docker`/`make up`/`make migrate`/`make seed`/
+# `make offline-bundle` — every one of them runs `./scripts/....sh` — on a
+# fresh Linux clone, while the main checkout's DrvFs mount hid the problem
+# by presenting every file as executable regardless of what git had
+# recorded. shellcheck (already in CI) parses script CONTENTS; it has never
+# looked at file MODES, and neither had anything else here.
+#
+# `git ls-files -s` prints the mode git has COMMITTED for each path (third
+# field), independent of what the current working tree's filesystem
+# reports, which is exactly why this check catches the bug DrvFs hides: a
+# `chmod +x` on a live checkout never touches the committed mode, only
+# `git update-index --chmod=+x <path>` does.
+check-script-modes: ## Fail if a committed scripts/*.sh file lacks the executable bit in the git index
+	@bad="$$(git ls-files -s scripts/*.sh | awk '$$1 != 100755 { print }')" || exit 1; \
+	if [ -n "$$bad" ]; then \
+		echo "scripts/*.sh committed without the executable bit (fix with: git update-index --chmod=+x <path>):"; \
+		echo "$$bad"; \
+		exit 1; \
+	fi
+
+ci: lint check-generate check-script-modes test build web-lint web-test web-build web-audit ## Everything CI runs, except integration tests, govulncheck and shellcheck
 
 .PHONY: up down dev logs ps migrate seed generate check-generate offline-bundle env-docker
 

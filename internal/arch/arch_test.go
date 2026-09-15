@@ -30,10 +30,58 @@ func underPackage(pkgPath, target string) bool {
 	return pkgPath == target || strings.HasPrefix(pkgPath, target+"/")
 }
 
-// forbiddenInDomain are packages that would give the domain layer I/O.
-var forbiddenInDomain = []string{
-	"net/http", "net", "database/sql", "os", "os/exec",
-	"log", "log/slog", "io/ioutil", "path/filepath",
+// domainAllowedImports is the ALLOW-list of non-project packages
+// internal/domain may import: a base of I/O-free stdlib packages that do
+// pure computation or hold data (never reach outside the process), plus the
+// two third-party libraries the domain layer is actually built on — decimal
+// money and uuid identifiers.
+//
+// This was a DENY-list (forbiddenInDomain, 9 stdlib paths matched by exact
+// equality) until F1's final review pass B, I2. A denylist only refuses the
+// imports someone thought to name in advance, and it is provably incomplete:
+// the review's mutation probe added an internal/domain/model import of
+// github.com/jackc/pgx/v5 — a real Postgres driver, the exact shape of I/O
+// this guard exists to keep out — and the denylist let it straight through,
+// because pgx was never on the list and never could be by construction; a
+// denylist has no way to refuse "any third-party package" up front, only
+// named ones. An allow-list inverts the default: nothing gets in unless it
+// is named here, so a future github.com/redis/go-redis import in a domain
+// service fails the moment it lands, not the moment someone remembers to
+// deny it.
+//
+// .golangci.yml's `domain-is-pure` depguard rule is switched to
+// `list-mode: strict` with a matching `allow:` list at the same time. CHANGE
+// BOTH OR NEITHER — the same rule this file's floatGuardPatterns comment
+// already states for the float guard, extended to this guard because the
+// review's second probe (a bare os/signal import) showed the two checks had
+// already drifted: depguard's prefix-matched deny caught os/signal, this
+// test's exact-equality deny did not, and neither caught pgx.
+var domainAllowedImports = map[string]bool{
+	// stdlib: computation and data-structure packages only. None of these
+	// reach a file, a socket, a process or a clock's wall time in a way that
+	// makes results depend on the outside world at declaration time — "time"
+	// itself is the borderline case, allowed because the domain layer holds
+	// and compares time.Time values throughout (TimeRange, EffectiveFrom, …)
+	// without itself calling time.Now() to decide anything.
+	"bytes":         true,
+	"cmp":           true,
+	"encoding/json": true,
+	"errors":        true,
+	"fmt":           true,
+	"maps":          true,
+	"math":          true,
+	"net/netip":     true,
+	"slices":        true,
+	"sort":          true,
+	"strconv":       true,
+	"strings":       true,
+	"time":          true,
+	"unicode":       true,
+	"unicode/utf8":  true,
+
+	// third-party: exactly what the domain layer is built on.
+	"github.com/google/uuid":        true,
+	"github.com/shopspring/decimal": true,
 }
 
 func loadPackages(t *testing.T, pattern string) []*packages.Package {
@@ -67,10 +115,18 @@ func TestDomainHasNoProjectImports(t *testing.T) {
 func TestDomainHasNoIOImports(t *testing.T) {
 	for _, pkg := range loadPackages(t, "./internal/domain/...") {
 		for imported := range pkg.Imports {
-			for _, forbidden := range forbiddenInDomain {
-				if imported == forbidden {
-					t.Errorf("%s imports %s: internal/domain must be free of I/O", pkg.PkgPath, imported)
-				}
+			if underPackage(imported, modulePath) {
+				// A project import's own purity is TestDomainHasNoProjectImports'
+				// job (it must be under internal/domain itself, or that test
+				// already fails it); domainAllowedImports covers only the
+				// non-project surface.
+				continue
+			}
+			if !domainAllowedImports[imported] {
+				t.Errorf("%s imports %s: not on internal/domain's import allow-list (domainAllowedImports in this file) — "+
+					"internal/domain must be free of I/O, so an import is refused by default and must be added to the "+
+					"allow-list, and to .golangci.yml's domain-is-pure allow list, ONLY after confirming it does no I/O",
+					pkg.PkgPath, imported)
 			}
 		}
 	}
@@ -340,6 +396,64 @@ func methodSetOf(named *types.Named) *types.MethodSet {
 // underPackage so that a future sibling such as "…/postgres/adminui" cannot
 // inherit it by prefix.
 //
+// storeScopeAllowlist names the exported package-level functions and
+// func-typed variables under internal/store/postgres (outside admin and
+// sqlcgen, which are already whole-package exemptions) that legitimately
+// take a context.Context with no store.Scope. Every one of them is
+// infrastructure — pool construction, migrations, health — not a
+// repository read or write, so binding rule "every exported method is
+// tenant-scoped" does not apply to them in the first place.
+//
+// This is an EXACT-NAME allowlist, deliberately: a prefix or pattern match
+// would widen itself the first time someone chose a name that happened to
+// match it, which is exactly the class of silent widening this whole file
+// exists to prevent. A name added here without actually being
+// infrastructure is a code-review-visible one-line addition, which is the
+// point — nothing here can be evaded merely by adding a new function.
+//
+// F1 final review pass B, I1, added this list together with the function/var
+// walk below. Before it, TestEveryStoreMethodIsScoped resolved
+// *types.TypeName entries and their method sets ONLY: it never looked at
+// *types.Func or *types.Var in a package's scope at all, so an exported
+// package-level function or a package-level variable of function type,
+// taking a context.Context and reading across tenants with no store.Scope,
+// passed with no error whatsoever — proven by the review's mutation probe,
+// which added exactly that shape (an unscoped free function AND an unscoped
+// func-typed var) and watched both sail through while a control method in
+// the same file was correctly flagged. A free function is the most natural
+// shape for a future worker or ingest helper ("load every analyzer for
+// polling"), which is precisely the surface F2 is about to add.
+var storeScopeAllowlist = map[string]bool{
+	"NewPool":           true, // internal/store/postgres/pool.go
+	"Ping":              true, // internal/store/postgres/pool.go
+	"MigrateUp":         true, // internal/store/postgres/migrate.go
+	"MigrateDownAll":    true, // internal/store/postgres/migrate.go
+	"MigrateStatus":     true, // internal/store/postgres/migrate.go
+	"PendingMigrations": true, // internal/store/postgres/migrate.go
+	"MigrationsCheck":   true, // internal/store/postgres/health.go (no ctx param today; listed so an added one stays exempt without a guard edit)
+}
+
+// inspectContextTakingSignature applies TestEveryStoreMethodIsScoped's rule
+// — a context.Context parameter implies a store.Scope parameter — to one
+// method, package-level function, or func-typed variable's signature. It
+// reports whether sig was INSPECTED (took a context.Context at all; a
+// signature with none says nothing about tenant scoping and is not counted,
+// same as before this function existed) so callers can accumulate the
+// anti-vacuity count across all three shapes uniformly.
+func inspectContextTakingSignature(t *testing.T, sig *types.Signature, pkgPath, label, adminPkg, sqlcgenPkg string) int {
+	t.Helper()
+	if !signatureTakes(sig, isContextType) {
+		return 0
+	}
+	if !signatureTakes(sig, isScopeType) {
+		t.Errorf("%s.%s takes a context.Context but no store.Scope: every exported repository surface must be tenant-scoped "+
+			"(only %s, the deliberate unscoped surface; %s, sqlc's generated primitives; and storeScopeAllowlist's named "+
+			"infrastructure functions, are exempt)",
+			pkgPath, label, adminPkg, sqlcgenPkg)
+	}
+	return 1
+}
+
 // internal/store/postgres/sqlcgen is skipped too, for a different reason.
 // It is sqlc's generated output: DBTX is the raw pgx driver interface
 // (Exec/Query/QueryRow), and Queries holds one method per .sql file entry.
@@ -400,39 +514,84 @@ func TestEveryStoreMethodIsScoped(t *testing.T) {
 		}
 		scope := pkg.Types.Scope()
 		for _, name := range scope.Names() {
-			typeName, ok := scope.Lookup(name).(*types.TypeName)
-			if !ok || typeName.IsAlias() {
-				continue
-			}
-			named, ok := types.Unalias(typeName.Type()).(*types.Named)
-			if !ok {
-				continue
-			}
-			methods := methodSetOf(named)
-			for i := range methods.Len() {
-				method, ok := methods.At(i).Obj().(*types.Func)
-				if !ok || !method.Exported() {
+			obj := scope.Lookup(name)
+
+			switch decl := obj.(type) {
+			case *types.TypeName:
+				// A declared or promoted method on a named type — the
+				// original shape this guard checked, unchanged.
+				if decl.IsAlias() {
 					continue
 				}
-				sig, ok := method.Type().(*types.Signature)
-				if !ok || !signatureTakes(sig, isContextType) {
+				named, ok := types.Unalias(decl.Type()).(*types.Named)
+				if !ok {
 					continue
 				}
-				inspected++
-				if signatureTakes(sig, isScopeType) {
+				methods := methodSetOf(named)
+				for i := range methods.Len() {
+					method, ok := methods.At(i).Obj().(*types.Func)
+					if !ok || !method.Exported() {
+						continue
+					}
+					sig, ok := method.Type().(*types.Signature)
+					if !ok {
+						continue
+					}
+					inspected += inspectContextTakingSignature(t, sig, pkg.PkgPath, decl.Name()+"."+method.Name(), adminPkg, sqlcgenPkg)
+				}
+
+			case *types.Func:
+				// An exported PACKAGE-LEVEL FUNCTION — the I1 gap. A free
+				// function such as `func LoadAnalyzersForPolling(ctx
+				// context.Context, pool *pgxpool.Pool) (...)` has no
+				// receiver, so it was invisible to the TypeName/method-set
+				// walk above no matter how that walk was extended; it has
+				// to be checked on its own terms.
+				if !decl.Exported() || storeScopeAllowlist[decl.Name()] {
 					continue
 				}
-				t.Errorf("%s.%s.%s takes a context.Context but no store.Scope: every exported repository method must be tenant-scoped (only %s, the deliberate unscoped surface, and %s, sqlc's generated primitives, are exempt)",
-					pkg.PkgPath, typeName.Name(), method.Name(), adminPkg, sqlcgenPkg)
+				sig, ok := decl.Type().(*types.Signature)
+				if !ok {
+					continue
+				}
+				inspected += inspectContextTakingSignature(t, sig, pkg.PkgPath, decl.Name(), adminPkg, sqlcgenPkg)
+
+			case *types.Var:
+				// An exported package-level VARIABLE OF FUNCTION TYPE — the
+				// other I1 gap: `var LoadAnalyzersForPolling = func(ctx
+				// context.Context, ...) (...) {...}` is a *types.Var whose
+				// Type() is a *types.Signature, not a *types.Func at all, so
+				// neither the TypeName branch above nor a naive
+				// *types.Func-only fix would have caught it. This is not a
+				// hypothetical: the review's mutation probe added exactly
+				// this shape and it passed silently before this branch
+				// existed.
+				if !decl.Exported() || storeScopeAllowlist[decl.Name()] {
+					continue
+				}
+				sig, ok := decl.Type().(*types.Signature)
+				if !ok {
+					continue
+				}
+				inspected += inspectContextTakingSignature(t, sig, pkg.PkgPath, decl.Name(), adminPkg, sqlcgenPkg)
 			}
 		}
 	}
 
-	t.Logf("inspected %d exported context-taking method(s) under internal/store/postgres", inspected)
-	require.Positive(t, inspected,
-		"the guard walked zero exported context-taking methods under internal/store/postgres: "+
-			"either every repository vanished or the walk itself is broken, and either way this "+
-			"guard is protecting nothing")
+	t.Logf("inspected %d exported context-taking method(s), package-level function(s) and func-typed variable(s) under internal/store/postgres", inspected)
+	// storeScopeGuardMinInspected is a DERIVED minimum, not a bare >0 check:
+	// measured at 187 (methods only, before this guard could see funcs or
+	// vars at all — I1's own before-state). require.Positive would pass
+	// identically whether this walk inspects 187 things or 1, so a future
+	// narrowing bug that dropped most of the walk down to a handful of
+	// trivial signatures would still show green. The floor leaves headroom
+	// for a repository shrinking (a method removed, a type merged) while
+	// still failing loudly if the walk itself breaks.
+	const storeScopeGuardMinInspected = 170
+	require.GreaterOrEqual(t, inspected, storeScopeGuardMinInspected,
+		"inspected implausibly few exported context-taking signatures (%d, floor %d) under internal/store/postgres: "+
+			"the guard walked far less than it did when the floor was measured and would pass whatever the code said",
+		inspected, storeScopeGuardMinInspected)
 }
 
 // TestTheJobPackageDoesNotImportTheStore pins the layering that
