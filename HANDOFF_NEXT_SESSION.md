@@ -1,443 +1,231 @@
-# Handoff — ekokod rewrite, phase F1 (Data model and migration framework)
+# Handoff — ekokod rewrite, phase F1 (Data model and migration framework) — session 2
 
-> **STATUS: F1 PAUSED MID-PHASE at the user's request.** Tasks 1-8 are done and merged;
-> Tasks 9-13 are not started. The session was stopped deliberately, not because anything
-> broke. Branch `phase/f1-data-model` is at `61a1fe5`, working tree clean, full integration
-> suite green (18 packages, exit 0), verified by the controller on the merged result.
-
-Branch `phase/f1-data-model`, branched from `main` at `6975b20` (F0 merged).
-**Nothing has been pushed.** `main` is still local-only ahead of `origin/main`, and the push
-decision is the user's — do not push.
-
+> **STATUS: F1 is in its last mile, paused at the user's request so the next session starts clean.**
+> Every repository in the project exists and has passed task review; every in-flight agent finished
+> and nothing is running. What remains: the Wave F integration commit (merging `f1/task-11b` and
+> `f1/task-11c`), Task 12b, Task 13b, and the F1 final review.
+> **The F2 plan is written but NOT reviewed.**
+> Nothing has been pushed; `main` has not been touched. **Push and merge-to-main are the user's call.**
 
 ---
 
 ## Paste this as the first message of the new session
 
-> Bu, bcem-energy'nin (yeni adıyla ekokod) Go ile yeniden yazım projesi. Spesifikasyon
-> `docs/rewrite/` içinde, faz planı `docs/rewrite/09-implementation-plan.md`. Toplam 16 faz var
-> (F0-F15).
+> Bu, bcem-energy'nin (yeni adıyla ekokod) Go ile yeniden yazım projesi. Spesifikasyon `docs/rewrite/`
+> içinde, faz planı `docs/rewrite/09-implementation-plan.md`. Toplam 16 faz var (F0-F15).
 >
-> **Durum: F1 (Data model and migration framework) yarıda duruyor — kasten, bir arıza yüzünden
-> değil.** Branch `phase/f1-data-model`, commit `f53915e`, çalışma ağacı temiz, tam entegrasyon
-> suite'i yeşil (18 paket, exit 0). Görev 1-8 bitti ve merge edildi; **görev 9-13 başlamadı.**
-> Hiçbir şey push EDİLMEDİ — `main` lokalde `origin/main`'in önünde; push kararı bana ait, sen
-> push etme.
+> **Durum: F1 son adımlarında.** Branch `phase/f1-data-model`. Tüm repository'ler yazıldı ve task
+> review'den geçti; çalışan agent yok. Kalan işler, sırasıyla:
+> 1. Wave F entegrasyon commit'i (`f1/task-11b` ve `f1/task-11c` merge'ü dahil),
+> 2. tam integration suite,
+> 3. Task 12b ve Task 13b (paralel),
+> 4. F1 final whole-branch review.
+>
+> **F2 planı yazıldı ama review edilmedi.** Hiçbir şey push edilmedi, `main`'e dokunulmadı. Push ve
+> `main`'e merge kararı bana ait, sen yapma.
 >
 > Şu sırayla ilerle:
 >
-> 1. **`HANDOFF_NEXT_SESSION.md`'i baştan sona oku.** Özellikle "START HERE", "The container
->    readiness trap has THREE layers", "Repository conventions Tasks 9-11 must follow",
->    "Rulings I made on the user's behalf" ve "Mistakes I made" bölümlerini. Sonra
->    `.superpowers/sdd/2026-09-10-f1-data-model/progress.md` (ledger) dosyasının SONUNU oku.
+> 1. **`HANDOFF_NEXT_SESSION.md`'i baştan sona oku.** Özellikle şu bölümleri: "START HERE", "Binding
+>    rulings from session 2", "Process rules that paid off" ve "Environment". Sonra
+>    `.superpowers/sdd/2026-09-10-f1-data-model/progress.md` (ledger) dosyasının son ~150 satırını oku.
+> 2. **İşleri `superpowers:subagent-driven-development` ile yürüt.** Her görev için taze implementer,
+>    ardından task review, gerekirse fix turu. **Bu yöntemi onaylıyorum, sorma, devam et.**
+> 3. **Aynı anda en fazla 5 agent çalıştır.** Hızlı ol ama review'leri atlama, gereksiz token harcama.
+>    - İmplementer'lar sonnet olsun.
+>    - İzolasyon veya güvenlik riski taşıyan task review'ler opus olsun.
+>    - Scoped re-review'ler sonnet olsun.
+>    - Büyük transcript'li bir agent'ı küçük bir fix için resume etme; taze ve ucuz bir agent ver.
+> 4. **Paralel iş için native-filesystem worktree kullan.** Agent tool'un `isolation: "worktree"`
+>    özelliği bu mount'ta ÇALIŞMIYOR. Environment bölümündeki tarifi kullan.
+> 5. **Subagent'lar arka plan komutu beklerken turlarını bitiriyor.** Bu oturumda 9 kez oldu.
+>    Raporsuz "bekliyorum" mesajı gelirse hemen SendMessage ile dürt: gate'leri ön planda koşsun,
+>    commit etsin, raporlasın.
+> 6. **Her guard'ın başarısız olabildiğini kanıtlat.** Bir guard'ı yalnızca geçerken görmek kanıt
+>    değil. Bu fazda 12 guard adından zayıf çıktı. Tenant'lar arası izolasyon kanıtları **AdminScope**
+>    ile yapılmalı.
+> 7. **F1 bitince durma, F2'ye geç.**
+>    - Önce F2 planını review ettir (`writing-plans` skill'inin plan-document-reviewer prompt'u).
+>    - `phase/f1-data-model`'in ucundan `phase/f2-integration-layer` branch'ini aç ve F2'yi yürüt.
+>    - **F2 bittiğinde dur**, handoff'u güncelle ve bana yapıştırılacak prompt ver.
 >
-> 2. **İlk iş: iki gözden geçirilmemiş görevi incelet.** Task 8b hiç task review görmedi
->    (domain model, decimal dönüşümü, float guard, repository arayüzleri, testfixtures —
->    görev 9-11'in tamamı bunun üstüne kuruluyor) ve Task 7'nin 2. fix round'u scoped
->    re-review'suz merge edildi. Diff: `git diff a7b0750..61a1fe5`. Repository yazmadan önce
->    bunları incelet.
->
-> 3. **Task 9'a HARD REQUIREMENT olarak taşı:** `TestEveryStoreMethodIsScoped` şu anda 0 metot
->    inceliyor ve geçiyor. Task 9 bu testteki `t.Log`'u `require.Positive`'e çevirmek ZORUNDA;
->    yoksa guard projenin geri kalanında boş küme üzerinde yeşil kalır.
->
-> 4. Kalan görevleri (9, 10, 11 paralel; sonra 12, 13, sonra final whole-branch review)
->    `superpowers:subagent-driven-development` ile yürüt: her görev için taze implementer
->    subagent, ardından task review, gerekirse fix turu. **Bu yöntemi onaylıyorum, sorma,
->    devam et.** Brief'ler zaten üretilmiş durumda
->    (`.superpowers/sdd/2026-09-10-f1-data-model/task-9-brief.md` … `task-13-brief.md`).
->
-> 5. **Paralel çalışma için worktree kullan** — Agent tool'un `isolation: "worktree"` özelliği
->    bu mount'ta ÇALIŞMIYOR ("dubious ownership"). Handoff'taki Environment bölümündeki
->    native-filesystem worktree tarifini kullan, yeniden tasarlama.
->
-> 6. **Her migration değişikliğinden sonra sqlc'yi yeniden üret.** Bu seansta iki Critical tam
->    olarak bu adımın atlanmasından çıktı. `make ci` artık `check-generate` içeriyor.
->
-> Ortam: toolchain `$HOME/.local`'de, her komuttan önce
-> `export PATH="$HOME/.local/go/bin:$HOME/.local/node/bin:$HOME/go/bin:$PATH"`. Docker seanslar
-> arası kapanıyor, önce `docker ps` ile doğrula. `/mnt/c` (DrvFs) stok `pnpm install`/`next build`
-> için bozuk — handoff'taki workaround'u yeniden tasarlama.
->
-> Bu fazda beş guard adından zayıf çıktı (handoff'ta liste var). Bir guard'ın yalnızca GEÇTİĞİNİ
-> görmek kanıt değil — her guard'ın başarısız olabildiğini kanıtlat.
+> Ortam:
+> - Her komuttan önce `export PATH="$HOME/.local/go/bin:$HOME/.local/node/bin:$HOME/go/bin:$PATH"`.
+> - Docker seanslar arası ve WSL yeniden başlayınca kapanıyor; önce `docker ps` ile doğrula. Kapalıysa
+>   benden başlatmamı iste.
 
 ---
 
-## Where the work stands
+## START HERE — exact state
+
+### Branches
+
+| Branch | Head | State |
+|---|---|---|
+| `phase/f1-data-model` | `dfae237` (+ this handoff commit) | 8a, 8b, 8c, 9, 10, 11a, 12a and 13a are merged. Gates verified at `dfae237`: check-generate, vet, lint 0 issues, make test, build — all green. The FULL integration suite has not run since the merges; it runs in the integration commit. |
+| `f1/task-11b` | `c306e84` | Carbon, ISO 50001, files, integrations, ops, admin catalogue/journal. **Complete and review-clean** (1 fix round). NOT merged on purpose: it add/add-conflicts with Task 10 on `admin/numeric_copy.go`, which the integration commit unifies. |
+| `f1/task-11c` | `469d059` | Calendar + SMTP repositories. **Complete and review-clean.** Branched from `b54ebfd` (11b's pre-fix head); its files do not overlap 11b's. |
+| other `f1/task-*` | — | Already merged; they can be deleted. |
+
+No worktrees remain besides the main checkout; `f1/task-11b` and `f1/task-11c` exist as branches only.
+
+### Task table
 
 | Task | State |
 |---|---|
-| — | pre-F1: known flake fixed (`e85a04c`) — **the F0 diagnosis was wrong**, see below |
-| 1 — tenancy + buildings migrations, reversibility harness | ✅ complete, review clean |
-| 2 — hypertables + continuous aggregates | ✅ complete (3 fix rounds, 2 scoped re-reviews) |
-| 3 — tariffs + icmal | ✅ complete, review clean |
-| 4 — carbon + ISO 50001 | ✅ complete, review clean |
-| 5 — files/integrations/calendar/operations | ✅ complete, review clean |
-| 6 — bills + reports + alarms | ✅ complete, review clean |
-| 7 — sqlc config, generated types, uuid override | ✅ done, 2 fix rounds — **round 2 UNREVIEWED** |
-| 8a — `store.Scope`, arch guard, scrub fixes | ✅ complete, re-review clean |
-| 8b — domain model, decimal conversion, float guard, fixtures | ✅ done — **UNREVIEWED, no task review ever ran** |
-| 9 — tenancy/building/analyzer/plant repositories | ⬜ not started |
-| 10 — time-series repositories | ⬜ not started |
-| 11 — remaining repositories + `admin` | ⬜ not started |
-| 12 — seed loader | ⬜ not started |
-| 13 — performance + acceptance suite | ⬜ not started |
-| — final whole-branch review | ⬜ not started |
+| 1–7 | ✅ complete (session 1) |
+| 8a | ✅ complete |
+| 8b | ✅ complete. The task review ran this session: 6 Important findings, 1 fix round, re-review clean. |
+| 8c (inserted) | ✅ complete. Shared plumbing: `pgerr.Translate`, `testfixtures.NewIsolatedDB` (template-clone DB per test, ~120 ms), SQL-scanner guard lexer. 2 fix rounds. |
+| 9 | ✅ complete. Tenancy/buildings/analyzers/plants + admin auth/audit. `require.Positive` hard requirement done. |
+| 10 | ✅ complete. Readings (COPY bulk insert), cursors, anomalies, production, prices, forecasts, analytics + admin market data. |
+| 11a (split) | ✅ complete. Tariffs, bills, reports, alarms. 2 fix rounds; one Critical fixed (cross-tenant FK storage). |
+| 11b (split) | ✅ complete, unmerged (merged by the integration commit) |
+| 11c (inserted) | ✅ complete, unmerged |
+| 12a (split) | ✅ complete. Embedded seed datasets: 182 emission factors, 3 iSolar integration definitions, an empty national tariff file. |
+| 12b | ⬜ not started. Loader via `store.AdminCatalogueRepository` + CLI. Notes: `wave-g-task-notes.md` §Task 12b. |
+| 13a (split) | ✅ complete and merged. The EXPLAIN runs over the SQL `repo.Range` actually sends (traced pool). 1M rows ≈ 85 s. |
+| 13b | ⬜ not started. `TestScopeIsolation` over every repository + the F1 acceptance block run. Notes: `wave-g-task-notes.md` §Task 13. |
+| Wave F integration commit | ⬜ not started. Brief ready: `.superpowers/sdd/2026-09-10-f1-data-model/wave-f-integration-brief.md` |
+| F1 final whole-branch review | ⬜ not started |
+| F2 plan | 📝 written (`docs/superpowers/plans/2026-09-15-f2-integration-layer.md`, 2503 lines, 17 tasks / 6 waves), **not reviewed** |
 
-**All eleven migrations exist and are green.** `migrate up → down → up` passes across the
-complete schema, verified by the controller personally on the merged result.
+### Remaining work, in order
 
-### START HERE — the two unreviewed tasks
+1. **Verify** `docker ps` and `git log --oneline -3` match this handoff.
+2. *(11b and 13a are closed — nothing to do.)*
+3. **Wave F integration commit** (one agent, sonnet; brief `wave-f-integration-brief.md`):
+   - merge `f1/task-11b`, then `f1/task-11c` (13a is already merged);
+   - move the numeric conversion pair into `internal/store/postgres/internal/pgnum`, delete the `admin/numeric_copy.go` copies (Tasks 10 and 11b each made one: an add/add conflict, and 11b's is partial);
+   - Task 9 residual minors;
+   - Task 10 residual (cross-tenant readings/forecast tests → AdminScope);
+   - the **FULL integration suite** once.
+4. **Task 12b and Task 13b in parallel** (notes in `wave-g-task-notes.md`).
+5. **F1 final whole-branch review** (opus, `requesting-code-review/code-reviewer.md`, package from `git merge-base main HEAD`). Point it at every `minor (deferred)` and `parked` line in the ledger (~27 deferred minors from session 2 alone). ONE fix dispatch, one scoped re-review, adjudicate residuals.
+6. **Rewrite this handoff for F2**, including the "Rulings I made" list.
+7. **F2:**
+   - review the plan;
+   - create `phase/f2-integration-layer` from F1's tip (do NOT merge to main);
+   - run the plan's pre-flight;
+   - execute. **Stop when F2 is finished** and give the user the handoff prompt.
 
-Every other completed task went through a task review and, where findings arose, scoped
-re-reviews. **Two did not, because the session stopped first:**
+---
 
-1. **Task 8b never had a task review at all.** It delivered `internal/domain/model`, the
-   `pgtype.Numeric` ↔ `decimal.Decimal` conversion pair, the field-level float guard,
-   `internal/store/repository.go`, and `internal/testfixtures`. Tasks 9-11 build directly on
-   all of it. Its own evidence is strong (both guards proven failing-first, `-count=3` green),
-   but strong self-evidence is exactly what this phase has repeatedly found insufficient.
-2. **Task 7's fix round 2 was merged without its scoped re-review.**
+## Binding rulings from session 2 (every later task depends on these)
 
-Review both before writing a repository. The full diff is
-`git diff a7b0750..61a1fe5` (or per-task: `git log --oneline --merges`).
+The full text, each with "cost if wrong", is in the ledger as `Ruling:` lines (from line 759 on). These rules bind all repository code and all later phases:
+
+1. **Only package `internal/store/postgres/admin` is unscoped** (spec 03 §2.5, overrides the plan's "exactly one admin method"). `repository.go` declares 5 `Admin*` interfaces: auth lookups (user by email, session by refresh-token hash, which returns session + user), platform audit append, market-data writes, catalogue writes, platform journal. Who may IMPORT `admin` is an F6 decision.
+2. **`Scope.AllowsBuilding` must never validate a stored foreign key.** Under `AllBuildings` it is true for ANY id, including another tenant's. Every stored FK id is validated **in SQL** (company, `deleted_at`, building branch), inside the write statement or the same transaction. This was a proven Critical in 11a: tenant A stored B's building id and then blocked B's own bills.
+3. **Tables without `company_id` carry the tenant predicate in their own SQL.** Never a tenant-blind query behind a Go check; never a pre-check outside the transaction. Go pre-checks that *additionally* shadow an in-SQL predicate are accepted as defence in depth. **A guard miss that reports success** (an `:exec` write filtered to zero rows) **is a defect**: use `:one … RETURNING true` or check rows affected.
+4. **Cross-tenant proofs use the other tenant's `AdminScope`.** With a narrow Scope the building predicate hides a broken `company_id` predicate (proven twice). Narrow-scope proofs use `Scope` against a same-company building outside the grant.
+5. **Id lists:** a REQUIRED positional id list that is empty or nil returns **no rows** (fail-closed, like `Scope.BuildingIDs`). An OPTIONAL filter-struct field that is empty means "no narrowing within the Scope".
+6. **Batches:** all-or-nothing. A batch with duplicate natural keys is **refused before the DB** with an `ErrConflict`-matching error naming the key (never a silent arbitrary winner).
+7. **NULL `building_id` rows** (company-wide tariff, company-level bill/report, unassigned analyzer, NULL-analyzer alarm events) are visible only to `AllBuildings`. Exception: `TariffRepository.Effective(building)` may resolve to a company-wide tariff once the building is visible. A narrow Scope may not create a building or an unassigned analyzer.
+8. **`TimeRange`** is half-open with `Valid()`. Every method taking one returns `ErrInvalidRange` before any DB call. `Latest` also takes a TimeRange (no unbounded hypertable read). `BoundaryReadings` takes `kind`.
+9. **Tariff `Effective`:** convert `on` to `Europe/Istanbul` before taking the date; tiebreak `effective_from desc, created_at desc, id desc`.
+10. **Secrets:** AES-256-GCM with associated data bound to the row owner; only `Open*` methods decrypt. An update with a nil secret/password **keeps** the stored one; a first insert with none is refused.
+11. **Upserts are single atomic statements**, never UPDATE-then-INSERT.
+12. **Naming:** sqlc query names and package-wide helpers carry the owning file's aggregate prefix (three parallel branches collided on `distinctUUIDs`).
+13. **Seed (Task 12):** only datasets with a table are seeded.
+    - 182 legacy emission factors, with `iso_category` validated against the legacy `GHG_ISO_MAPPING`.
+    - Integration definitions: iSolar only; the other providers' endpoints live in Mongo.
+    - National tariff schedule: the file ships **empty** because the data is Mongo-only. Never invent numbers.
+    - Seed writes go only through `admin`.
+14. **Task 13 hand value:** hour-0 `active_consumption` = **50** (the plan's "75" is a typo). Materialisation proofs must read materialised data only (`consumption_hourly` is `materialized_only = false`).
+
+## Process rules that paid off (keep them)
+
+- **Prove every guard can fail.** 12 guards in F1 were weaker than their names, including:
+  - an isolation test that exercised a Go check instead of the SQL;
+  - a no-leak test whose inputs never contained the secret;
+  - an aggregate proof that passed with the refresh deleted;
+  - scanner fixes that opened new evasions;
+  - cross-tenant tests shadowed by a narrow Scope.
+- **Reviewers must run their own mutations**, not re-run the implementer's.
+- **Trial-merge before merging parallel branches.** A throwaway detached worktree plus iterative `go vet` surfaced the only compile collision early.
+- **Carry a review's defect pattern to still-running siblings by message.** It saved whole fix rounds.
+- **Fresh cheap agent for small fixes.** Resuming 500k–700k-token transcripts is waste.
+- **Subagent stall:** 9 times this session a subagent ended its turn "waiting on a background run". Nudge immediately.
+- **Controller crash:** the controller process was killed once (exit 137) with 5 agents and many Docker containers running. Docker and WSL then restarted. If it recurs, keep concurrency at 4.
+
+## Spec defects found by execution (session 1 list continues)
+
+5. **`04-data-model.md` §13 lists five seed datasets, but only three have tables.** ISO 50001 clause texts/templates and a standalone GHG↔ISO 14064 table are not seeded. → product-owner question.
+6. **§13 says the factor catalogue is "thousands" of entries.** The legacy source has **182**.
+
+## Open questions for the product owner
+
+- Session 1's five (`02-domain-rules.md` §11): reactive penalty base, sub-9 kW exemption, tiered pricing groups, 2 % missing-hour tolerance, grid emission factor.
+- **Blocks F2 (the F2 plan routes around it):** does iSolarCloud report plant-level production without a device serial? `plant_production`'s PK has a NOT NULL `device_id`. The plan holds back and counts plant-level samples and reports them via an operational message.
+- **New:** where do ISO 50001 clause texts/templates live? Is a GHG↔ISO mapping table wanted? Where does the national tariff schedule data come from? Should analyzers get a commissioning date (F2 plan)?
+
+## F2 plan — what the reviewer should know
+
+`docs/superpowers/plans/2026-09-15-f2-integration-layer.md`:
+- **Structure:** 17 tasks in waves A:1 · B:2–5 · C:6–10 · D:11–15 · E:16 · F:17.
+- **Migrations 00012–00013** (PM5340 interval energy + anchor table; OSOS hourly cross-check), both owned by Task 5.
+- **Spec-silent rulings R1–R29** in the plan:
+  - 30 s request timeout, 3 attempts, 1–30 s jittered backoff, 5 task retries capped at 30 min;
+  - a reading more than 15 min in the future is rejected; a register jump >10× the median is rejected;
+  - 30-day first-run lookback; an empty window never advances the cursor;
+  - newly discovered analyzers are created inactive;
+  - `consumption.refresh` is declared but not enqueued (F3); HTTP routes → F6, metrics → F15.
+- **Acceptance mapping:** all 11 §F2 acceptance criteria map to named tests.
+- **Check at F14 against real responses:** ARIL `WithoutMultiplier` semantics, OSOS multiplier, iSolar error codes, EPİAŞ field names.
+- **Precondition:** F1 finished and merged into the F2 branch base.
+
+---
 
 ## Key paths
 
 ```
-docs/rewrite/                                          the specification
-docs/rewrite/04-data-model.md                          AUTHORITATIVE DDL for F1
-docs/superpowers/plans/2026-09-10-f1-data-model.md     the F1 task plan (13 tasks, 7 waves)
-.superpowers/sdd/2026-09-10-f1-data-model/             git-ignored workspace
-  progress.md                                          THE LEDGER — read the tail first
-  task-N-brief.md / task-N-report.md                   per-task briefs and reports
-  sqlc-spike-findings.md                               controller-run spike, see below
-  timescale-shims-PROVEN.sql                           proven sqlc shim
+docs/rewrite/                                   the specification (04-data-model.md authoritative for F1 DDL)
+docs/superpowers/plans/2026-09-10-f1-data-model.md          F1 plan
+docs/superpowers/plans/2026-09-15-f2-integration-layer.md   F2 plan (unreviewed)
+.superpowers/sdd/2026-09-10-f1-data-model/      git-ignored SDD workspace
+  progress.md                   THE LEDGER — read the tail first
+  global-constraints.md         constraints block handed to every reviewer
+  wave-f-context.md             binding repository rules (read by every repository task)
+  wave-f-task-notes.md          per-task notes for 9/10/11a/11b
+  wave-f-integration-brief.md   the integration commit brief (next task)
+  wave-g-task-notes.md          Task 12b + 13 notes
+  legacy-seed-sources.md        legacy data map for Task 12
+  task-N-brief.md / -report.md / -fixK-findings.md / review-*.diff
+internal/store/repository.go    the contract (34 *Repository interfaces, 5 Admin*)
+internal/store/postgres/        repositories; admin/ = only unscoped surface; internal/pgerr = error translation
+internal/testfixtures/          NewIsolatedDB, NewTenant, StartPostgres*, StartRedis
+internal/seed/                  12a datasets (loader = 12b)
 ```
 
----
+## Environment — read before running anything
 
-## THE FLAKE THE F0 HANDOFF DESCRIBED WAS MISDIAGNOSED
-
-F0 recorded it as `internal/scheduler` integration tests failing ~1 in 3 under parallel load,
-and told F1 to widen whichever `require.Eventually` bound was failing.
-
-**That was wrong.** Under `go test ./... -tags=integration -race -count=3` the scheduler
-package passes (134.9s for three runs, ~45s each, matching its healthy baseline). The package
-that failed was `internal/store/redis`, and the failure was not an `Eventually` bound at all:
-
-```
-wait until ready: external check: check target: retries: 93 address: localhost:32936:
-get state: Get ".../containers/<id>/json": context deadline exceeded
-```
-
-Redis had already logged "Ready to accept connections". What timed out was the **Docker API
-call** that testcontainers' port check issues on every poll. Root cause was an asymmetry:
-`modules/redis@v0.44.0/redis.go:72` hardcodes `WithStartupTimeout(10s)`, while
-`modules/postgres@v0.44.0/wait_strategies.go:24` leaves the library default of 60s. Fixed in
-`e85a04c` by restoring 60s for redis (REPLACING the strategy — appending leaves the 10s one
-in place and still fails).
-
-### …and the same class recurred on postgres during F1
-
-The controller's own full-suite run then failed with `TestEmissionFactorKeyUniqueness` at
-62.32s (5.34s in isolation). Reproduced deterministically by running the postgres package
-**twice concurrently**:
-
-```
-retries: 520 ... context deadline exceeded
---- FAIL: TestHypertablesAreConfigured (61.07s)
-```
-
-61.07s = the postgres module's 60s default, exhausted by 520 Docker API polls. Postgres never
-tripped it before because F1 grew that package from ~9 integration tests to ~23, each starting
-its own container. Assigned to Task 8b: raise to 180s in `testfixtures.StartPostgres`.
-
-**The property that makes this family so expensive: a container-startup failure surfaces as an
-arbitrary test failing, so it presents as a different flaky test every run.** That is exactly
-why F0 pinned it on the wrong package. If you see a new "flaky test", check whether the failure
-is actually a container readiness timeout before believing the test name.
-
-**Structural fix, recorded not done:** the cause is one container per test. A shared container
-per package with per-test isolation is the real answer, but several tests genuinely need a
-virgin database (the migrate round-trip, the reversibility guard). This is the lever if suite
-time or flake rate worsens.
-
-
-### What Task 8b delivered (Tasks 9-11 consume all of it)
-
-- **`internal/domain/model`** — one plain struct per aggregate, `decimal.Decimal` for money and
-  energy, `uuid.UUID`/`*uuid.UUID` for ids, named string types for every SQL enum.
-- **The `pgtype.Numeric` ↔ `decimal.Decimal` conversion pair** in `internal/store/postgres`.
-  **Use it; do not scatter conversions.** It converts via string/exponent, never via `float64` —
-  proven by writing a float64 implementation and watching the test fail: `numeric(18,6)` tariff
-  prices lost their sixth decimal (`123456789012.345678` → `…34567`), a 29-digit value lost
-  everything past digit 17, and `9007199254740993` became `…992`.
-- **`TestNoFloatFieldsInModelOrStore`** — the field-level float guard the project believed it
-  had since F0 but never did. Proven to fail on `float64`, `*float64`, `[]float32`,
-  `map[string]*[]float64`, an inline struct field, **and `type Money = float64`**, which
-  depguard and any text scan would miss. 1459 fields inspected.
-- **`internal/store/repository.go`** — the interfaces Tasks 9-11 implement. If a method you need
-  is missing, add it there first rather than inventing a name in the repository.
-- **`internal/testfixtures`** — `StartPostgres`, `StartRedis`, `NewPool`, `DiscardLogger`,
-  `NewTenant`. Consolidating these fixed a live bug: `internal/scheduler` held a **fourth** copy
-  of the redis helper still carrying the 10s budget.
-
-### The container-readiness trap has THREE layers, not one
-
-This cost three separate discoveries. If you touch the fixture helpers, know all three:
-
-1. testcontainers' **redis** module hardcodes `WithStartupTimeout(10s)`; postgres leaves the
-   library default of 60s.
-2. Under load, 60s is not enough either — measured 520 Docker-API polls exhausting it.
-3. **`WithWaitStrategy` hardcodes a 60-second deadline across all strategies**, so raising only
-   `WithStartupTimeout` looks like a fix and does nothing. Both helpers use
-   **`WithWaitStrategyAndDeadline`**. Do not "simplify" that back.
-
-And the strategy must **REPLACE**, never append — `WithAdditionalWaitStrategy` leaves the
-module's own short budget in place.
-
-**Watch item, not yet acted on.** One non-recurring failure at 180.49s under 2× load showed a
-*different* error: `dial tcp: lookup localhost: i/o timeout` — DNS, not the Docker API. It
-consumed the whole budget, so raising it again would not help. Candidate mitigation is
-`TESTCONTAINERS_HOST_OVERRIDE=127.0.0.1`, deliberately **not** adopted on a single observation
-because it changes the DSN host everywhere. If it recurs, adopt it; this entry is the evidence.
-
----
-
-## Remaining F1 work
-
-Plan: `docs/superpowers/plans/2026-09-10-f1-data-model.md`. Briefs for every remaining task are
-already generated in the SDD workspace (`task-9-brief.md` … `task-13-brief.md`).
-
-| Task | Scope |
-|---|---|
-| 9 | Repositories: tenancy/identity/access, buildings, analyzers, plants |
-| 10 | Repositories: readings (COPY-based bulk insert), cursors, anomalies, production, prices, forecasts |
-| 11 | Repositories: tariffs, bills, reports, alarms, carbon, ISO, files, integrations, ops + the `admin` package |
-| 12 | Seed loader (`ekokod seed`), idempotent, embedded datasets |
-| 13 | Performance + acceptance suite: 1M rows with `EXPLAIN` chunk exclusion, aggregate correctness against a hand-computed fixture, compression, `TestScopeIsolation` |
-| — | Final whole-branch review, then `superpowers:finishing-a-development-branch` |
-
-Tasks 9, 10 and 11 are independent of one another and were planned to run in parallel
-(Wave F). 12 and 13 follow.
-
----
-
-## Standing rulings that keep paying off (carried from F0, all reconfirmed in F1)
-
-- **Requirements and tests beat the plan's prose and sample code.** Held repeatedly again.
-- **Verify interfaces against the real tree BEFORE dispatching.** The F1 pre-flight scan caught
-  six real conflicts, including four parallel tasks that would have collided on one test file
-  and a proposed test that duplicated an existing one verbatim.
-- **Do not trust a report — re-run the gate yourself.** This caught: a "no sleeps" claim that
-  was false, a task's SQLSTATE claim that was true of the run but not of the committed
-  assertions, and a full-suite flake no subagent had seen.
-- **Prove a guard can fail.** Non-negotiable now — see the next section for why.
-- **Scale the reviewer to the risk.** Opus reviewers found every Critical in this phase.
-
-### NEW STANDING RULING — a guard that has only been seen to pass is not evidence
-
-**Five guards in this phase turned out to be weaker than their names.** This is the phase's
-dominant defect class, and it is worth carrying forward as a first-class suspicion:
-
-1. `no-float-money` (from F0) — depguard is an **import** linter and cannot see a struct field.
-   The "money is never float64" invariant was never mechanically enforced at field level.
-2. The reversibility guard — queried `pg_tables` only, so a forgotten `drop materialized view`
-   would pass silently. Widened to `pg_class` + `pg_type`.
-3. `TestEveryStoreMethodIsScoped` — matched only *exported* types named `*Repository`, so it
-   inspected **zero methods** and passed. The idiomatic unexported `buildingRepository`
-   satisfying an exported interface was invisible.
-4. The sqlc drift check — `git diff --exit-code` **ignores untracked files**, so a new
-   generated file that was never committed passes CI.
-5. `TestShimDeclaresEveryTimescaleFunctionTheMigrationsUse` — the guard added to close this very
-   class only examines functions the shim *already* declares, so a newly-used undeclared
-   function is never checked. (Fix in flight.)
-
----
+- **Toolchain in `$HOME/.local`**; shell state does not persist. Prefix every command with `export PATH="$HOME/.local/go/bin:$HOME/.local/node/bin:$HOME/go/bin:$PATH"`. Go 1.27.1, sqlc v1.30.0, golangci-lint v2.13.2.
+- **Docker stops between sessions and on WSL restart.** Verify with `docker ps`. If it is down, ask the user to run `! "/mnt/c/Program Files/Docker/Docker/Docker Desktop.exe" &`.
+- **Worktrees:** Agent-tool `isolation: "worktree"` fails on this DrvFs mount ("dubious ownership"). Use:
+  ```bash
+  git worktree add -b f1/task-N /home/personal/ekokod-wt-tN <base>
+  git config --global --add safe.directory /home/personal/ekokod-wt-tN
+  ```
+  Then dispatch a normal agent told to work there. Merge with `--no-ff`.
+- **After any migration or query change: `sqlc generate`.** `make check-generate` runs in `make ci` and catches untracked generated files.
+- **Integration tests:** `go test ./... -tags=integration -race -count=1`. Repository tests use `testfixtures.NewIsolatedDB(t)`, so one container per package. Perf tests need `EKOKOD_PERF=1` (`make test-perf`); the 1M-row test takes ~85 s.
+- **Container-readiness trap (three layers, session 1):**
+  - postgres budget is 180 s via `WithWaitStrategyAndDeadline`;
+  - wait strategies REPLACE, never append;
+  - a "flaky test" under load is usually a readiness timeout, so read the full failure text.
+- **`/mnt/c` breaks `pnpm install` / `next build`.** Use the native mirror at `/home/personal/ekokod-web-native`; do not re-engineer it.
+- **The legacy repo** is at `/mnt/c/Users/meren/Desktop/Work/bcem-apps/bcem-energy`, a slow mount. Never search `node_modules`/`.next`/`public`; `timeout` every grep.
+- **Commit trailers:** `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>` plus the session's own `Claude-Session:` URL. Briefs carry stale URLs, so always override them.
 
 ## Decisions already made — do not re-litigate
 
 | Decision | Value |
 |---|---|
-| Go module path | `github.com/MErenTalan/ekokod-rewrite` |
-| Binary name | `ekokod` (spec says `bcem`; only the name changed) |
-| Env var prefix | `EKOKOD_` |
-| Branch | `phase/f1-data-model` |
-| Execution method | `superpowers:subagent-driven-development`, user approved plan + parallel subagents |
-| Commit trailers | `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>` + the session's own `Claude-Session:` URL — **task briefs carry a STALE session URL, always override** |
-| Parallelism | isolated git worktrees on the **native** filesystem (see Environment) |
+| Go module | `github.com/MErenTalan/ekokod-rewrite` |
+| Binary / env prefix | `ekokod` / `EKOKOD_` |
+| Method | `superpowers:subagent-driven-development`, user-approved, parallel cap **5** |
+| Phase chaining | each phase branches from the previous phase's tip; no merge to main, no push (user's call) |
+| Stop point | stop after F2 is finished; give a handoff prompt |
 
----
-
-## Environment — read before running anything
-
-- **Toolchain in `$HOME/.local`; shell state does not persist between tool calls.** Prefix every
-  command: `export PATH="$HOME/.local/go/bin:$HOME/.local/node/bin:$HOME/go/bin:$PATH"`
-  Go 1.27.1, Node 24.20.0, pnpm 12.3.4, golangci-lint v2.13.2, govulncheck v1.8.0,
-  **sqlc v1.30.0** (added in F1, pinned in `Makefile` and CI).
-- **Docker stops between sessions — always verify with `docker ps`.** If down, ask the user to
-  run: `! "/mnt/c/Program Files/Docker/Docker/Docker Desktop.exe" &`
-- **Git worktree isolation fails on this DrvFs mount** with "dubious ownership", because a linked
-  worktree's gitdir lives on `/mnt/c`. The Agent tool's `isolation: "worktree"` therefore does
-  **not** work here. What does work, and is how F1 ran four implementers concurrently:
-  ```bash
-  git worktree add -b f1/task-N /home/personal/ekokod-wt-tN phase/f1-data-model
-  git config --global --add safe.directory /home/personal/ekokod-wt-tN
-  ```
-  Then dispatch a normal (non-isolated) agent told to `cd` there. Merge with `--no-ff`.
-- **`/mnt/c` (DrvFs) is BROKEN for stock `pnpm install` and `next build`.** Session 5's
-  native-filesystem mirror at `/home/personal/ekokod-web-native` plus a `web/node_modules`
-  symlink is on disk. **Do not re-engineer this.**
-- **`shellcheck` is NOT installed locally**; CI enforces it.
-
----
-
-## F1-specific technical facts a successor must know
-
-### sqlc
-
-- sqlc **parses the goose migrations directly** — `create_hypertable`, compression settings and
-  `create materialized view ... with (timescaledb.continuous)` all pass. There is deliberately
-  **no `schema.sql`**, no pg_dump step and no schema-drift check.
-- **`internal/store/postgres/timescale-shims.sql` is load-bearing and never applied to a real
-  database.** Without it, aggregate columns mistype — measured: `active_consumption`, an
-  **energy** value, generated as `int32`. Silent kWh truncation that no build, lint or migration
-  test would catch.
-- **The `::numeric` casts in `00005` are load-bearing and look redundant.** They are what keep
-  aggregate value columns numeric. Do not "tidy" them away.
-- UUIDs are `google/uuid.UUID` / `*uuid.UUID` via override. **A SQL NULL decodes as a nil
-  pointer, never `uuid.Nil`** — proven against a real container. No pgx codec registration was
-  needed; `pool.go` is untouched.
-- Generated code keeps `pgtype.Numeric`. `internal/domain/model` uses `decimal.Decimal`, and
-  Task 8b provides **one audited conversion pair** which must convert via string/exponent,
-  **never via float64**.
-- `postgres.DB` holds a **named unexported** `q *sqlcgen.Queries` — deliberately NOT embedded,
-  because embedding promoted unscoped query methods onto the store's exported surface.
-
-### Continuous aggregates
-
-- **All six are defined directly over the base hypertable; none is hierarchical.** Not a
-  platform limitation — a roll-up from `consumption_hourly` is *wrong by a whole hour* for the
-  seven registers with an index column, and loses every inter-hour step for the five without.
-- **Buckets of one day or wider carry `'Europe/Istanbul'`.** UTC bucketing violated
-  `02-domain-rules.md` §1 (day/month boundaries evaluated in Istanbul) — it attributed local
-  00:00–03:00 to the previous day. `consumption_hourly` is deliberately timezone-free.
-- **`materialized_only` is split:** `false` on `consumption_hourly`, `consumption_daily`,
-  `plant_production_daily` (open-bucket tail is bounded); `true` on the monthly/yearly views
-  (their tail would be months of raw readings — `consumption_yearly` would scan nine months per
-  analyzer in September).
-- **CONSTRAINT ON TASK 10:** month-to-date and year-to-date must be **composed explicitly**
-  (closed buckets + open period from `consumption_daily` or `meter_readings`). They are NOT
-  present in the monthly/yearly views. Do not "fix" a missing row by flipping `materialized_only`.
-- Timescale does **not** materialise a partially-covered bucket at any `end_offset`.
-- **`start_offset` permanently caps materialised history.** After a legacy backfill an operator
-  must run `call refresh_continuous_aggregate('<view>', NULL, now());` per aggregate, or old
-  data is silently absent — the query returns rows, just fewer than the truth. Runbook item for
-  the data migration; nothing enforces it.
-- Plant aggregate column names (the implementer's invention; the spec names none):
-  `production_kwh`, `max_active_power_kw`, `avg_efficiency_pct`.
-- `00005` requires `-- +goose NO TRANSACTION` (SQLSTATE 25001).
-
-### Spec defects found by execution
-
-1. **`04-data-model.md` §4.5 is not executable as written.** `add_compression_policy('plant_production', ...)`
-   errors "columnstore not enabled on hypertable" — the spec enables compression on
-   `meter_readings` but never on `plant_production`. The migration adds the missing
-   `alter table ... set (timescaledb.compress, ...)`.
-2. **`plant_production`'s primary key `(plant_id, ts, device_id)` includes a column the spec
-   declares nullable.** Postgres silently promotes it to NOT NULL, so **plant-level production
-   rows with no attributed device are unstorable**. Transcribed as written. **BLOCKS F2** — if
-   iSolar reports plant-level totals without a device serial, F2 needs a hypertable primary-key
-   change. Cheap while empty, expensive later. **Raise with the product owner.**
-3. §3's preamble ("every tenant-scoped table carries `company_id` directly") is contradicted by
-   the spec's own DDL for `building_contacts`, `power_plant_monthly_targets`,
-   `power_plant_devices`, `power_plant_alarm_recipients` and `plant_production`. Transcribed as
-   written. **Consequence for repositories:** `building_contacts` and `power_plant_devices` have
-   surrogate ids and so ARE addressable without a tenant reference — they must always be reached
-   through a parent-scoped query.
-4. §1 lists `btree_gin`; F0's `00001` omitted it. Added in F1.
-
-### Repository conventions Tasks 9–11 must follow
-
-- Every method takes `ctx` first, `store.Scope` second. Reject an invalid scope before touching
-  the database.
-- Use `Scope`'s authorisation branch. **Never write `if len(s.BuildingIDs) > 0 { ...ANY($1)... }`**
-  — that is fail-open, since an empty slice drops the predicate.
-- A nil/empty `BuildingIds` encodes to `NULL::uuid[]` and matches nothing, so a scope granting no
-  buildings returns **zero rows**. That is the designed fail-closed semantic; rely on it.
-- `audit_log` has no FKs (deliberate — an audit trail must survive its subject). Every join to
-  `companies`/`users` must be a **LEFT JOIN**, and the read model must render a missing subject
-  rather than dropping the row.
-- Errors route through the package's `scrubErr`. Scrubbed errors are traversable by `errors.Is`
-  via an unexported `scrubbed` type whose `Error()` is the redacted text; `secret.IsScrubbed` is
-  the positive fingerprint. **The "DSN did not parse" branch deliberately attaches NO cause** —
-  `*url.Error` embeds its whole input, i.e. the password. There is a test guarding this; do not
-  "fix" the inconsistency.
-
-### HARD REQUIREMENT FOR TASK 9
-
-`TestEveryStoreMethodIsScoped` currently inspects **0 methods** and passes — the correct
-pre-repository baseline (the exemption was measured to suppress exactly 5, all inside `sqlcgen`,
-none in package `postgres`). **Task 9 must flip its `t.Log` of the inspected count to
-`require.Positive`.** If it does not, the guard is green over an empty set for the rest of the
-project and a narrowing bug in it is indistinguishable from having nothing to check.
-
----
-
-## Open questions for the product owner (block F4, plus one that blocks F2)
-
-`docs/rewrite/02-domain-rules.md` §11, unchanged from F0:
-
-1. **Reactive penalty base** — entire reactive quantity charged (legacy) or only the excess?
-2. **Sub-9 kW exemption** — confirm installations under 9 kW are exempt.
-3. **Tiered pricing user groups** — should `residentialPlus`/`commercialPlus` be tiered, at what
-   daily kWh thresholds?
-4. **Missing-hour tolerance** — confirm 2 % as the withhold-for-review threshold.
-5. **Grid emission factor** — confirm the current official Türkiye value and source year, and
-   whether historical reports are recomputed or keep 0.45.
-
-**NEW, blocks F2:** does iSolarCloud report plant-level production without a device serial? If
-so, `plant_production`'s primary key must change before any real ingestion (see spec defect 2).
-
----
-
-## Rulings I made on the user's behalf this session
-
-Listed so they can be reviewed and undone. Each with what it costs if wrong.
-
-1. **Wave B tasks ran in parallel git worktrees on the native filesystem.** — Cost: none observed; it is how four implementers ran concurrently.
-2. **Each migration task owns its own test file**, rather than all editing one. — Cost: a trivial rename.
-3. **Shared test helpers are defined once** in `migrations_helpers_integration_test.go`. — Cost: trivial.
-4. **`EKOKOD_COMPRESSION_AFTER` / `EKOKOD_READING_RETENTION` stay unwired** — migrations are static SQL and cannot read config. — Cost: a later phase reconfigures policies at startup instead.
-5. **Task 7 took the "sqlc reads migrations directly" branch** (no `schema.sql`, no pg_dump, no schema-drift check), on the strength of a spike I ran. — Cost: a re-run spike.
-6. **Continuous aggregates carry explicit `::numeric` casts**, deviating from the spec's SQL. — Cost: cosmetic divergence; values unchanged. Without it, `active_consumption` generated as `int32`.
-7. **A sqlc-only Timescale shim file exists** and is never applied to a database. — Cost: aggregate columns mistype without it.
-8. **`plant_production.device_id` transcribed as written** despite being nullable-in-a-primary-key. — Cost: **F2 may need a hypertable PK change.** See spec defect 2.
-9. **`00005` uses `-- +goose NO TRANSACTION`** — tried transactional first, it genuinely fails. — Cost: partial-apply needs down-then-up.
-10. **The `plant_production` compression `alter table` was added**, which the spec omits. — Cost: the segmentby/orderby choice is a performance decision, changeable while empty.
-11. **UTC bucketing was treated as a constraint violation, not a judgement call** — I overrode the reviewer, which said the spec was silent. `02-domain-rules.md` §1 is not silent. — Cost: none; the fix is correct either way.
-12. **Real-time aggregation is split** — on for hourly/daily, off for monthly/yearly. — Cost: **MTD/YTD must be composed explicitly in Task 10.**
-13. **`start_offset` history capping is handled by documentation**, not tooling. — Cost: an operator who misses the runbook step gets silently truncated history.
-14. **`postgres.DB` uses a named unexported `q`, not embedding** — fixed structurally rather than exempted. — Cost: repositories write `db.q.X()`.
-15. **`google/uuid` override adopted**, conditional on proof — proven. — Cost: none; a clean revert was authorised and not needed.
-16. **Generated code keeps `pgtype.Numeric`**; no `shopspring/decimal` sqlc override (it needs a pgx adapter whose failure mode is silent). — Cost: conversion at the repository boundary, via one audited helper.
-17. **The scoped-method arch guard is exported-only** and currently inspects 0 methods. — Cost: **Task 9 must flip the `t.Log` to `require.Positive`**, or the guard is unverified for the rest of the project.
-18. **The "DSN did not parse" branch deliberately attaches no cause** — `*url.Error` embeds the whole DSN. — Cost: no `errors.Is` traversal on that branch, which nobody needs.
-19. **Postgres readiness budget raised to 180s**, from a measured 60s exhaustion at 520 polls. — Cost: a genuinely dead container takes 180s to fail.
-20. **`TESTCONTAINERS_HOST_OVERRIDE` not adopted** on a single non-recurring DNS failure. — Cost: it may recur; evidence is recorded.
-21. **Task 2's round 3 accepted without a fourth review seat** — test-only changes, controller-verified. — Cost: a test-only defect surfaces at the final review.
-22. **Wave B reviewed as one unit** rather than four separate seats. — Cost: a broader fix round if one migration had been wrong.
-23. **Task 6 and Task 8a dispatched early**, overlapping waves, once their real dependencies were merged. — Cost: rework if an earlier review had forced a schema change.
-
-## Mistakes I made, so they are not repeated
-
-- **Two Criticals came from my merge sequencing, not from any implementer.** Task 7 generated sqlc output against a schema Task 2 then changed; Task 8a widened an arch guard against a codebase Task 7 then added code to. Each merge was individually clean. **After merging any migration change, regenerate sqlc before calling the branch green** — `make ci` now includes `check-generate`, which makes this mechanical.
-- **I repeated the exact mistake the F0 handoff warned about**: grepped a failing suite for `ok|FAIL` and lost the assertion text. Capture full output on the first failure.
-- **I passed a subagent's self-assessment upward as verified fact** ("fixed without a sleep"); the re-review found a `time.Sleep`. A report's characterisation of its own fix is not evidence.
-- **I told Task 8b to raise `WithStartupTimeout`**, which would have been a placebo — `WithWaitStrategy` hardcodes a 60s deadline over all strategies. The agent caught it.
-- **I asserted a bidirectional numeric guard "would have caught C1".** It would not — `bucket` is not a numeric column. The agent found the guard that actually closes the class.
-- **I suggested a known-Timescale-function allowlist**; the agent rejected it for default-deny, correctly, because an allowlist only catches names someone remembered to enumerate.
-
-The pattern in the last three: **the implementers were right and I was wrong, and they said so.** Dispatches should keep inviting that.
+Session 1's rulings (sqlc reads migrations directly, Timescale shim file, `::numeric` casts, split `materialized_only`, Istanbul day buckets, UUID override, readiness budgets) still stand. See the ledger lines before 759 and git history.
