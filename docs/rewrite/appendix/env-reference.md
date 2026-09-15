@@ -90,8 +90,11 @@ configuration.** No secret has a default.
 | Variable | Required | Default | Purpose |
 |----------|:--------:|---------|---------|
 | `BCEM_WORKER_CONCURRENCY` | | `10` | |
-| `BCEM_JOB_MAX_RETRIES` | | `5` | |
+| `BCEM_JOB_MAX_RETRIES` | | `5` | Must be zero or greater |
 | `BCEM_JOB_TIMEOUT` | | `30m` | Per-task ceiling |
+| `BCEM_INGEST_SANITY_MULTIPLE` | | `10` | Register-jump rejection multiple (R13); must be > 1 |
+| `BCEM_INGEST_FUTURE_TOLERANCE` | | `15m` | How far into the future a reading's timestamp may sit |
+| `BCEM_INGEST_INITIAL_LOOKBACK` | | `720h` | First-ever fetch lookback (30 days, R18) |
 | `BCEM_SCHEDULER_ENABLED` | | `true` | Set false on secondary instances |
 | `BCEM_SCHEDULE_INGESTION` | | `0 3 * * *` | |
 | `BCEM_SCHEDULE_EPIAS` | | `0 14 * * *` | |

@@ -7,6 +7,8 @@ import (
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/job"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
+	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
+	"github.com/MErenTalan/ekokod-rewrite/internal/worker"
 	"github.com/spf13/cobra"
 )
 
@@ -20,6 +22,19 @@ func newWorkerCmd() *cobra.Command {
 				return err
 			}
 			log := newCommandLogger(cfg, os.Stderr)
+			ctx := cmd.Context()
+
+			pool, err := postgres.NewPool(ctx, cfg.DB, log)
+			if err != nil {
+				return err
+			}
+			defer pool.Close()
+
+			built, err := worker.Build(ctx, cfg, pool, log)
+			if err != nil {
+				return err
+			}
+			defer built.Close()
 
 			// asynq never dials its broker eagerly and, once Start
 			// succeeds, surfaces no error at all if the broker later goes
@@ -45,7 +60,7 @@ func newWorkerCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			job.Register(mux, &job.Handlers{Log: log})
+			job.Register(mux, built.Handlers)
 
 			// asynq.Server.Run(handler) is Start(handler) + waitForSignals()
 			// + Shutdown(): it installs asynq's own SIGINT/SIGTERM/SIGTSTP

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/robfig/cron/v3"
+	"github.com/shopspring/decimal"
 )
 
 type loader struct {
@@ -272,6 +273,27 @@ func parseDuration(v string) (time.Duration, error) {
 	return d, nil
 }
 
+// decimalVal reads a decimal.Decimal, defaulting to def when unset. An
+// unparsable value fails and falls back to def, matching every other
+// loader method's shape — money/multiplier values are decimal.Decimal
+// throughout F2 (Global Constraints: "never float64"), so this is the one
+// place config itself parses a decimal string rather than delegating to
+// strconv.
+func (l *loader) decimalVal(name string, def decimal.Decimal) decimal.Decimal {
+	v, fromEnv := l.raw(name)
+	if !fromEnv {
+		l.record(name, def.String(), false, false)
+		return def
+	}
+	d, err := decimal.NewFromString(v)
+	if err != nil {
+		l.fail(name, fmt.Errorf("must be a decimal number, got %q", v))
+		d = def
+	}
+	l.record(name, v, false, true)
+	return d
+}
+
 func (l *loader) enum(name, def string, allowed ...string) string {
 	v := l.str(name, def)
 	for _, a := range allowed {
@@ -384,15 +406,18 @@ func Load(lookup func(string) (string, bool)) (*Config, error) {
 		l.fail("EKOKOD_BCRYPT_COST", errors.New("must be at least 12"))
 	}
 
-	// EKOKOD_JOB_MAX_RETRIES and EKOKOD_READING_RETENTION are the two
-	// remaining unbounded knobs, left that way on purpose: nothing consumes
-	// either yet, and what a non-positive retry count or a negative retention
-	// window should mean is the consuming phase's decision, not this one's.
-	// Both need the same treatment as the fields around them when they are
-	// wired up.
+	// EKOKOD_READING_RETENTION is the one remaining unbounded knob, left
+	// that way on purpose: nothing consumes it yet, and what a negative
+	// retention window should mean is the consuming phase's decision, not
+	// this one's. EKOKOD_JOB_MAX_RETRIES got that same treatment in F1;
+	// F2 is the consuming phase (internal/ingest, internal/worker), so it
+	// now uses nonNegativeInt — asynq's MaxRetry is a count, and a negative
+	// one is not "unlimited" or "unset", it is a config mistake (see
+	// nonNegativeInt's own doc for the parallel EKOKOD_REDIS_*_DB rationale;
+	// zero stays legal, it is job.TaskOptions' own documented "no retries").
 	c.Worker = Worker{
 		Concurrency: l.positiveInt("EKOKOD_WORKER_CONCURRENCY", 10),
-		MaxRetries:  l.intVal("EKOKOD_JOB_MAX_RETRIES", 5),
+		MaxRetries:  l.nonNegativeInt("EKOKOD_JOB_MAX_RETRIES", 5),
 		Timeout:     l.positiveDuration("EKOKOD_JOB_TIMEOUT", 30*time.Minute),
 	}
 	c.Scheduler = Scheduler{Enabled: l.boolVal("EKOKOD_SCHEDULER_ENABLED", true)}
@@ -453,6 +478,15 @@ func Load(lookup func(string) (string, bool)) (*Config, error) {
 		SMSAlarms:        l.boolVal("EKOKOD_FEATURE_SMS_ALARMS", false),
 		Analytics:        l.boolVal("EKOKOD_FEATURE_ANALYTICS", false),
 		Tracing:          l.boolVal("EKOKOD_FEATURE_TRACING", false),
+	}
+
+	c.Ingest = Ingest{
+		SanityMultiple:  l.decimalVal("EKOKOD_INGEST_SANITY_MULTIPLE", decimal.NewFromInt(10)),
+		FutureTolerance: l.positiveDuration("EKOKOD_INGEST_FUTURE_TOLERANCE", 15*time.Minute),
+		InitialLookback: l.positiveDuration("EKOKOD_INGEST_INITIAL_LOOKBACK", 720*time.Hour),
+	}
+	if c.Ingest.SanityMultiple.LessThanOrEqual(decimal.NewFromInt(1)) {
+		l.fail("EKOKOD_INGEST_SANITY_MULTIPLE", errors.New("must be greater than 1"))
 	}
 
 	c.resolved = l.resolved

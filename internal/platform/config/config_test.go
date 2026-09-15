@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/stretchr/testify/require"
 )
@@ -240,4 +242,66 @@ func TestRedisDatabasesStayDistinctByDefault(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, cfg.Redis.CacheDB, cfg.Redis.QueueDB,
 		"a cache flush must never be able to drop queued work")
+}
+
+// TestIngestDefaults pins F2's ingest.Options defaults as read through
+// config: EKOKOD_INGEST_SANITY_MULTIPLE=10, EKOKOD_INGEST_FUTURE_TOLERANCE=15m,
+// EKOKOD_INGEST_INITIAL_LOOKBACK=720h (30 days).
+func TestIngestDefaults(t *testing.T) {
+	cfg, err := config.Load(lookupFrom(valid()))
+	require.NoError(t, err)
+	require.True(t, cfg.Ingest.SanityMultiple.Equal(decimal.NewFromInt(10)),
+		"want sanity multiple 10, got %s", cfg.Ingest.SanityMultiple)
+	require.Equal(t, 15*time.Minute, cfg.Ingest.FutureTolerance)
+	require.Equal(t, 720*time.Hour, cfg.Ingest.InitialLookback)
+}
+
+// TestIngestSanityMultipleMustExceedOne guards R13: a multiple at or below 1
+// would reject ordinary readings merely equal to (or moderately above) the
+// typical one, which is not a sanity violation.
+func TestIngestSanityMultipleMustExceedOne(t *testing.T) {
+	for _, v := range []string{"1", "0.5", "0", "-3"} {
+		t.Run(v, func(t *testing.T) {
+			env := valid()
+			env["EKOKOD_INGEST_SANITY_MULTIPLE"] = v
+			_, err := config.Load(lookupFrom(env))
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "EKOKOD_INGEST_SANITY_MULTIPLE")
+			require.Contains(t, err.Error(), "greater than 1")
+		})
+	}
+}
+
+// TestJobMaxRetriesRejectsNegative pins F2's tightened EKOKOD_JOB_MAX_RETRIES
+// rule (F1 left it unbounded; F2 is the consuming phase — see load.go): zero
+// stays legal ("no retries", job.TaskOptions' own documented meaning), but a
+// negative retry count is a config mistake, not a real asynq.MaxRetry value.
+func TestJobMaxRetriesRejectsNegative(t *testing.T) {
+	env := valid()
+	env["EKOKOD_JOB_MAX_RETRIES"] = "-1"
+	_, err := config.Load(lookupFrom(env))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "EKOKOD_JOB_MAX_RETRIES")
+	require.Contains(t, err.Error(), "zero or greater")
+}
+
+// TestConfigCheckListsIngestVariables guards `ekokod config:check`'s
+// coverage: every EKOKOD_INGEST_* knob must appear in Resolved() so an
+// operator can see it (and its masked/unmasked value) without reading
+// source, exactly like every other documented variable.
+func TestConfigCheckListsIngestVariables(t *testing.T) {
+	cfg, err := config.Load(lookupFrom(valid()))
+	require.NoError(t, err)
+
+	seen := map[string]bool{}
+	for _, r := range cfg.Resolved() {
+		seen[r.Name] = true
+	}
+	for _, name := range []string{
+		"EKOKOD_INGEST_SANITY_MULTIPLE",
+		"EKOKOD_INGEST_FUTURE_TOLERANCE",
+		"EKOKOD_INGEST_INITIAL_LOOKBACK",
+	} {
+		require.True(t, seen[name], "%s must be listed by config:check", name)
+	}
 }
