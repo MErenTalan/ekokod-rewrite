@@ -1,0 +1,24 @@
+{
+  "instalation_list": [
+    {
+      "instalationNumber": "FX0001",
+      "customerName": "Fixture Customer One",
+      "customerAdress": "Fixture Address One",
+      "il": "Fixture Il",
+      "ilce": "Fixture Ilce",
+      "koyMahallesi": "Fixture Koy Mahallesi",
+      "caddesiSokagi": "Fixture Cadde Sokagi",
+      "tarifeTipi": "Single-time",
+      "tarifeTuru": "Mesken",
+      "tesisatTurTanim": "Residential",
+      "kuruluGucu": "150,500",
+      "koordinatX": "39.925018",
+      "koordinatY": "32.836956",
+      "meterNumber": "FX0002",
+      "meterModel": "Fixture Meter Model",
+      "meterMultiplier": "1",
+      "muhatapNo": "FX0003",
+      "sayimNokTanim": "Fixture Metering Point Name"
+    }
+  ]
+}
