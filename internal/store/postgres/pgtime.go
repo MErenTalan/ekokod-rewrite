@@ -78,6 +78,29 @@ func tariffTimePtrToDate(t *time.Time) pgtype.Date {
 	return tariffTimeToDate(*t)
 }
 
+// tariffTimeToExclusiveEndDate takes the Istanbul `date` that ends a
+// half-open instant window [from, to) — F1 final review pass A, Important
+// Finding 2. A half-open window's `to` instant is itself NOT included, so if
+// `to` falls exactly on an Istanbul midnight, the Istanbul day it starts is
+// excluded and the exclusive-end date is that same calendar day (a `<
+// to_date` SQL predicate already excludes it). Otherwise `to` falls partway
+// through an Istanbul day, that day IS partially covered by the window, and
+// the exclusive-end date must be the NEXT Istanbul day so a `< to_date`
+// predicate still includes it.
+//
+// Used wherever a TimeRange (instants) is turned into a pair of `date`
+// column bounds for an overlap query — see CalendarRepository.Vacations,
+// which is what Important Finding 2 named: the pre-fix version took
+// timeRange.To.UTC() instead of the Istanbul day, wrong at every Istanbul
+// day boundary that does not also fall on a UTC day boundary.
+func tariffTimeToExclusiveEndDate(to time.Time) pgtype.Date {
+	ist := to.In(tariffIstanbulLocation)
+	if h, m, s := ist.Clock(); h != 0 || m != 0 || s != 0 || ist.Nanosecond() != 0 {
+		ist = ist.AddDate(0, 0, 1)
+	}
+	return tariffTimeToDate(ist)
+}
+
 // tariffNullTimestamptz reports a nullable timestamptz as *time.Time,
 // reused by every file in this package that needs the same nullable
 // conversion (DeletedAt, ProcessedAt, NotifiedAt, …).

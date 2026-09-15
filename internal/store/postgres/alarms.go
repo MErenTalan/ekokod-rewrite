@@ -387,12 +387,21 @@ func (r *AlarmRepository) ListEvents(ctx context.Context, s store.Scope, f store
 }
 
 // MarkNotified — Isolation: join alarm_events through alarms by eventID.
+//
+// F1 final review pass A, Important Finding 3 (fix round): this used to
+// check only alarms.company_id, ignoring both the alarm's soft delete and
+// the event's own building/analyzer visibility — a narrow Scope could mark
+// an event it could never list (ListEvents) as notified. AlarmMarkNotified
+// now applies ListEvents' exact visibility rule, so all_buildings and
+// building_ids are passed here too.
 func (r *AlarmRepository) MarkNotified(ctx context.Context, s store.Scope, eventID uuid.UUID, at time.Time, notificationError *string) error {
 	if !s.Valid() {
 		return store.ErrInvalidScope
 	}
+	buildingIDs, all := s.BuildingFilter()
 	n, err := r.q.AlarmMarkNotified(ctx, sqlcgen.AlarmMarkNotifiedParams{
 		NotifiedAt: tariffTimestamptz(at), NotificationError: notificationError, ID: eventID, CompanyID: s.CompanyID,
+		AllBuildings: all, BuildingIds: buildingIDs,
 	})
 	if err != nil {
 		return pgerr.Translate(r.pool, "mark alarm event notified", err)

@@ -263,6 +263,67 @@ func TestAlarmAnalyzersAndEventsHideBuildingOutsideNarrowScope(t *testing.T) {
 	require.Len(t, byVisible, 1)
 }
 
+// TestAlarmMarkNotifiedRespectsNarrowScopeAndSoftDelete is F1 final review
+// pass A, Important Finding 3's probe. Pre-fix, MarkNotified checked only
+// alarms.company_id: a narrow Scope could mark notified an event on an
+// analyzer outside its buildings, or a NULL-analyzer (company-level) event
+// it could never list, and a soft-deleted alarm's events stayed both
+// listable and markable under AdminScope. MarkNotified now applies
+// ListEvents' exact visibility rule and excludes a soft-deleted alarm's
+// children, so nothing reachable by one method is unreachable by the other.
+func TestAlarmMarkNotifiedRespectsNarrowScopeAndSoftDelete(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 461)
+	repo := postgres.NewAlarmRepository(pool)
+
+	alarm, err := repo.Create(ctx, tenant.AdminScope, alarmFixtureRow(tenant.Company.ID))
+	require.NoError(t, err)
+
+	visibleAnalyzer := tenant.Analyzers[0].ID // Buildings[0], in tenant.Scope
+	hiddenAnalyzer := tenant.Analyzers[2].ID  // Buildings[1], outside tenant.Scope
+	require.NoError(t, repo.ReplaceAnalyzers(ctx, tenant.AdminScope, alarm.ID, []uuid.UUID{visibleAnalyzer, hiddenAnalyzer}))
+
+	hiddenEvent, err := repo.CreateEvent(ctx, tenant.AdminScope, model.AlarmEvent{
+		AlarmID: alarm.ID, AnalyzerID: &hiddenAnalyzer, TriggeredAt: time.Now().UTC(), Message: "hidden",
+	})
+	require.NoError(t, err)
+	visibleEvent, err := repo.CreateEvent(ctx, tenant.AdminScope, model.AlarmEvent{
+		AlarmID: alarm.ID, AnalyzerID: &visibleAnalyzer, TriggeredAt: time.Now().UTC(), Message: "visible",
+	})
+	require.NoError(t, err)
+	companyEvent, err := repo.CreateEvent(ctx, tenant.AdminScope, model.AlarmEvent{
+		AlarmID: alarm.ID, TriggeredAt: time.Now().UTC(), Message: "company-wide",
+	})
+	require.NoError(t, err)
+
+	// A narrow Scope must not be able to mark notified an event it could
+	// never list: the hidden-building event and the NULL-analyzer
+	// company-level event both refuse.
+	err = repo.MarkNotified(ctx, tenant.Scope, hiddenEvent.ID, time.Now().UTC(), nil)
+	require.ErrorIs(t, err, store.ErrNotFound, "narrow Scope must not mark notified an event on a hidden-building analyzer")
+	err = repo.MarkNotified(ctx, tenant.Scope, companyEvent.ID, time.Now().UTC(), nil)
+	require.ErrorIs(t, err, store.ErrNotFound, "narrow Scope must not mark notified a NULL-analyzer (company-level) event")
+
+	// Positive controls: the narrow Scope CAN mark notified its own visible
+	// event, and AllBuildings can mark notified the company-level one.
+	require.NoError(t, repo.MarkNotified(ctx, tenant.Scope, visibleEvent.ID, time.Now().UTC(), nil),
+		"positive control: narrow Scope must be able to mark notified its own visible-analyzer event")
+	require.NoError(t, repo.MarkNotified(ctx, tenant.AdminScope, companyEvent.ID, time.Now().UTC(), nil),
+		"positive control: AllBuildings must be able to mark notified a NULL-analyzer event")
+
+	// Soft-deleting the alarm makes ALL its events unreachable, by BOTH
+	// ListEvents and MarkNotified, even under AdminScope.
+	require.NoError(t, repo.SoftDelete(ctx, tenant.AdminScope, alarm.ID, time.Now().UTC()))
+
+	afterDelete, err := repo.ListEvents(ctx, tenant.AdminScope, store.AlarmEventFilter{AlarmID: &alarm.ID})
+	require.NoError(t, err)
+	require.Empty(t, afterDelete, "a soft-deleted alarm's events must not be listed, even under AdminScope")
+
+	err = repo.MarkNotified(ctx, tenant.AdminScope, hiddenEvent.ID, time.Now().UTC(), nil)
+	require.ErrorIs(t, err, store.ErrNotFound, "a soft-deleted alarm's event must not be markable notified, even under AdminScope")
+}
+
 // TestAlarmReplaceAnalyzersLeavesInvisibleAttachmentsUntouched is Important
 // Finding 2's probe on the write side: ReplaceAnalyzers must replace ONLY
 // the attachments visible to the Scope, not silently detach one outside it.

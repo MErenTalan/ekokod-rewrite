@@ -242,6 +242,15 @@ func (r *CalendarRepository) ReplaceWeekendDays(ctx context.Context, s store.Sco
 // Vacations returns every vacation of s.CompanyID when r is nil, or those
 // overlapping r when set. ErrInvalidRange for a non-nil invalid r, before any
 // database call.
+//
+// F1 final review pass A, Important Finding 2 (fix round): the range's
+// instants are converted to `date` bounds in Europe/Istanbul, not UTC —
+// 02-domain-rules §1 fixes day boundaries to Istanbul, and this was the one
+// date path in the package that still took .UTC() directly instead of going
+// through the Istanbul helpers in pgtime.go. From uses the Istanbul day
+// tariffTimeToDate already computes; To is half-open, so it uses
+// tariffTimeToExclusiveEndDate, which rolls forward to the next Istanbul day
+// unless To itself is exactly an Istanbul midnight.
 func (r *CalendarRepository) Vacations(ctx context.Context, s store.Scope, timeRange *store.TimeRange) ([]model.CompanyVacation, error) {
 	if !s.Valid() {
 		return nil, store.ErrInvalidScope
@@ -251,8 +260,8 @@ func (r *CalendarRepository) Vacations(ctx context.Context, s store.Scope, timeR
 	}
 	var from, to pgtype.Date
 	if timeRange != nil {
-		from = pgtype.Date{Time: timeRange.From.UTC(), Valid: true}
-		to = pgtype.Date{Time: timeRange.To.UTC(), Valid: true}
+		from = tariffTimeToDate(timeRange.From)
+		to = tariffTimeToExclusiveEndDate(timeRange.To)
 	}
 	rows, err := r.q.CalendarListVacations(ctx, sqlcgen.CalendarListVacationsParams{
 		CompanyID: s.CompanyID, FromDate: from, ToDate: to,

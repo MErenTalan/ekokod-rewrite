@@ -84,6 +84,11 @@ where
     where t.id = $9 and t.company_id = $1 and t.deleted_at is null
       and ($57::boolean or t.building_id is null or t.building_id = any($58::uuid[]))
   ))
+  and ($3::uuid is null or exists (
+    select 1 from analyzers an
+    where an.id = $3 and an.company_id = $1 and an.deleted_at is null
+      and ($57::boolean or an.building_id = any($58::uuid[]))
+  ))
 returning id, company_id, building_id, analyzer_id, scope, period_key, period_start, period_end, days_in_period, tariff_id, tariff_effective_from, active_import, t1_kwh, t2_kwh, t3_kwh, inductive_kvarh, capacitive_kvarh, active_export, net_consumption, low_tier_kwh, high_tier_kwh, max_demand_kw, tiered_applied, index_start, index_end, effective_energy_price, low_tier_price, high_tier_price, energy_cost, distribution_cost, green_energy_cost, power_cost, demand_overrun_cost, reactive_penalty, other_taxes_cost, vat_base, vat_cost, generation_credit, total_cost, inductive_ratio, capacitive_ratio, inductive_threshold, capacitive_threshold, reactive_penalty_applied, reactive_power_price, generation_usage, generation_price_per_kwh, ptf_yekdem_used, ptf_hours_matched, ptf_hours_missing, ptf_average, yekdem_used, status, flag_reason, pdf_path, computed_at, created_at, updated_at
 `
 
@@ -156,6 +161,16 @@ type BillCreateParams struct {
 // way TariffVisible validates a tariff for this Scope, INCLUDING the
 // company-wide (building_id is null) case — a narrow Scope may reference the
 // company-wide tariff Effective can already resolve for it.
+//
+// F1 final review pass A, Important Finding 1 (fix round): bills.analyzer_id
+// is a stored foreign key too, and was previously validated ONLY by the
+// Go-side requireAnalyzersVisible pre-check, run on r.pool before
+// r.pool.Begin — unlocked, outside the transaction, and (per binding ruling
+// 2/3) not a sufficient guard on its own. The exists clause below re-checks
+// it here, atomically, exactly like building_id and tariff_id above: the
+// same company, not soft-deleted, and visible to the Scope's building
+// branch. requireAnalyzersVisible stays as a fast pre-check / friendly
+// error, now defence in depth rather than the only guard.
 func (q *Queries) BillCreate(ctx context.Context, arg BillCreateParams) (Bill, error) {
 	row := q.db.QueryRow(ctx, billCreate,
 		arg.CompanyID,
@@ -879,6 +894,11 @@ where exists (
   select 1 from bills bl where bl.id = $1 and bl.company_id = $3
     and ($4::boolean or bl.building_id = any($5::uuid[]))
 )
+and exists (
+  select 1 from analyzers an
+  where an.id = $2 and an.company_id = $3 and an.deleted_at is null
+    and ($4::boolean or an.building_id = any($5::uuid[]))
+)
 returning true
 `
 
@@ -894,6 +914,12 @@ type BillMemberInsertParams struct {
 // queries/alarms.sql -- an :exec insert whose WHERE EXISTS excludes every
 // row still reports "no error", which a caller checking only err would read
 // as success.
+//
+// F1 final review pass A, Important Finding 1 (fix round): the member's OWN
+// analyzer_id is a stored foreign key (bill_members.analyzer_id references
+// analyzers) and was previously validated only by the bill-level Go
+// pre-check; this exists clause re-checks it here, atomically, the same way
+// BillCreate's analyzer_id clause does.
 func (q *Queries) BillMemberInsert(ctx context.Context, arg BillMemberInsertParams) (bool, error) {
 	row := q.db.QueryRow(ctx, billMemberInsert,
 		arg.BillID,

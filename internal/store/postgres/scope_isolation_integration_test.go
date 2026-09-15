@@ -591,6 +591,15 @@ type scopeIsoFixtures struct {
 	companyWideTariffID  uuid.UUID
 	companyBillID        uuid.UUID
 	unassignedAnalyzerID uuid.UUID
+
+	// smtpPassword is the plaintext password seeded for THIS tenant's
+	// smtp_settings row — controller ruling (final review A fix round): it
+	// must be DISTINCT per tenant, or a SMTPGet tautology that returns the
+	// physically-first smtp_settings row (company_id is the table's own
+	// primary key, so a :one tautology just returns row 1) would be
+	// invisible whenever the first-seeded tenant happens to check its own
+	// Get/OpenPassword only — see the SMTPRepository subtest below.
+	smtpPassword []byte
 }
 
 // scopeIsoInsertIntegrationDefinition inserts one platform-wide
@@ -878,7 +887,13 @@ func seedScopeIsoFixtures(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	f.credentialID = cred.ID
 
 	smtpRepo := postgres.NewSMTPRepository(pool, cipher)
-	_, err = smtpRepo.Upsert(ctx, adminScope, smtpSettingsFixture(companyID), []byte("scope-iso-pw"))
+	// Controller ruling (final review A fix round): the password must be
+	// DISTINCT per tenant (never the shared literal "scope-iso-pw" both
+	// tenants used to write), or a SMTPGet tautology's first-row return is
+	// invisible to a proof that only checks each tenant's OWN Get/
+	// OpenPassword. See scopeIsoFixtures.smtpPassword.
+	f.smtpPassword = []byte("scope-iso-pw-" + tenant.Company.Name)
+	_, err = smtpRepo.Upsert(ctx, adminScope, smtpSettingsFixture(companyID), f.smtpPassword)
 	require.NoError(t, err)
 
 	// --- calendar (company-only) ----------------------------------------------
@@ -1884,20 +1899,47 @@ func TestScopeIsolation(t *testing.T) {
 	// rather than on ErrNotFound: both tenants have their own row, seeded
 	// with the identical fixture shape by seedScopeIsoFixtures, so a leak
 	// would be invisible unless the returned content is checked directly) --
+	//
+	// Controller ruling (final review A fix round, re-review of task-13b):
+	// smtp_settings is keyed BY company_id (its own primary key), so a
+	// tautologised SMTPGet `(company_id = $1 or true)` still returns exactly
+	// ONE row — Postgres' own row order for a `:one` with no ORDER BY, which
+	// in practice is the physically-first row (tenant A's, seeded first).
+	// The PRE-fix version of this subtest checked only tenant A's OWN
+	// Get/OpenPassword against a hardcoded expected value, so that
+	// tautology was invisible: tenant A's Get happened to return tenant A's
+	// own row anyway, by luck of insertion order, not because the predicate
+	// held. This is now symmetric — BOTH tenants call Get and OpenPassword
+	// under their own AdminScope, and each must see its OWN row/password,
+	// with per-tenant passwords required to be distinct — so a first-row
+	// tautology fails tenant B's assertions even though it would still pass
+	// tenant A's.
 	t.Run("SMTPRepository", func(t *testing.T) {
 		repo := postgres.NewSMTPRepository(pool, cipher)
 
-		got, err := repo.Get(ctx, tenantA.AdminScope)
+		require.NotEqual(t, af.smtpPassword, bf.smtpPassword,
+			"fixture setup bug: per-tenant SMTP passwords must differ, or a first-row tautology would be invisible below")
+
+		gotA, err := repo.Get(ctx, tenantA.AdminScope)
 		require.NoError(t, err)
-		require.Equal(t, tenantA.Company.ID, got.CompanyID, "tenant A's Get must never return tenant B's smtp_settings row")
+		require.Equal(t, tenantA.Company.ID, gotA.CompanyID, "tenant A's Get must never return tenant B's smtp_settings row")
+
+		gotB, err := repo.Get(ctx, tenantB.AdminScope)
+		require.NoError(t, err)
+		require.Equal(t, tenantB.Company.ID, gotB.CompanyID, "tenant B's Get must never return tenant A's smtp_settings row")
 
 		// Important Finding 3: OpenPassword has no id parameter at all (one
 		// row per company, keyed by the Scope's OWN company_id) — there is
 		// no way to hand it another tenant's id, so its isolation proof is
-		// that it decrypts to exactly what THIS company's own Upsert stored.
-		password, err := repo.OpenPassword(ctx, tenantA.AdminScope)
+		// that it decrypts to exactly what THIS company's own Upsert stored,
+		// for BOTH tenants (not just the one that happens to seed first).
+		passwordA, err := repo.OpenPassword(ctx, tenantA.AdminScope)
 		require.NoError(t, err)
-		require.Equal(t, []byte("scope-iso-pw"), password)
+		require.Equal(t, af.smtpPassword, passwordA)
+
+		passwordB, err := repo.OpenPassword(ctx, tenantB.AdminScope)
+		require.NoError(t, err)
+		require.Equal(t, bf.smtpPassword, passwordB)
 	})
 
 	// --- CalendarRepository (company-only) ------------------------------------------------

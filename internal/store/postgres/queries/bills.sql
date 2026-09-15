@@ -61,6 +61,16 @@ where company_id = sqlc.arg(company_id) and deleted_at is null
 -- way TariffVisible validates a tariff for this Scope, INCLUDING the
 -- company-wide (building_id is null) case — a narrow Scope may reference the
 -- company-wide tariff Effective can already resolve for it.
+--
+-- F1 final review pass A, Important Finding 1 (fix round): bills.analyzer_id
+-- is a stored foreign key too, and was previously validated ONLY by the
+-- Go-side requireAnalyzersVisible pre-check, run on r.pool before
+-- r.pool.Begin — unlocked, outside the transaction, and (per binding ruling
+-- 2/3) not a sufficient guard on its own. The exists clause below re-checks
+-- it here, atomically, exactly like building_id and tariff_id above: the
+-- same company, not soft-deleted, and visible to the Scope's building
+-- branch. requireAnalyzersVisible stays as a fast pre-check / friendly
+-- error, now defence in depth rather than the only guard.
 -- name: BillCreate :one
 insert into bills (
   id, company_id, building_id, analyzer_id, scope, period_key, period_start, period_end,
@@ -103,6 +113,11 @@ where
     where t.id = sqlc.narg(tariff_id) and t.company_id = sqlc.arg(company_id) and t.deleted_at is null
       and (sqlc.arg(all_buildings)::boolean or t.building_id is null or t.building_id = any(sqlc.arg(building_ids)::uuid[]))
   ))
+  and (sqlc.narg(analyzer_id)::uuid is null or exists (
+    select 1 from analyzers an
+    where an.id = sqlc.narg(analyzer_id) and an.company_id = sqlc.arg(company_id) and an.deleted_at is null
+      and (sqlc.arg(all_buildings)::boolean or an.building_id = any(sqlc.arg(building_ids)::uuid[]))
+  ))
 returning *;
 
 -- Important Finding 1: bill_lines has no company_id of its own — join
@@ -124,12 +139,23 @@ returning *;
 -- queries/alarms.sql -- an :exec insert whose WHERE EXISTS excludes every
 -- row still reports "no error", which a caller checking only err would read
 -- as success.
+--
+-- F1 final review pass A, Important Finding 1 (fix round): the member's OWN
+-- analyzer_id is a stored foreign key (bill_members.analyzer_id references
+-- analyzers) and was previously validated only by the bill-level Go
+-- pre-check; this exists clause re-checks it here, atomically, the same way
+-- BillCreate's analyzer_id clause does.
 -- name: BillMemberInsert :one
 insert into bill_members (bill_id, analyzer_id)
 select sqlc.arg(bill_id), sqlc.arg(analyzer_id)
 where exists (
   select 1 from bills bl where bl.id = sqlc.arg(bill_id) and bl.company_id = sqlc.arg(company_id)
     and (sqlc.arg(all_buildings)::boolean or bl.building_id = any(sqlc.arg(building_ids)::uuid[]))
+)
+and exists (
+  select 1 from analyzers an
+  where an.id = sqlc.arg(analyzer_id) and an.company_id = sqlc.arg(company_id) and an.deleted_at is null
+    and (sqlc.arg(all_buildings)::boolean or an.building_id = any(sqlc.arg(building_ids)::uuid[]))
 )
 returning true;
 
