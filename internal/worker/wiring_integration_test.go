@@ -5,9 +5,13 @@ package worker_test
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/hibiken/asynq"
+	goredis "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/job"
@@ -43,19 +47,10 @@ func workerTestConfig(t *testing.T, dsn string, redisCfg config.Redis) *config.C
 }
 
 // TestWorkerRegistersEveryF2Handler proves the wiring the acceptance suite
-// relies on.
-//
-// PART-A SCOPE (see wiring.go's package doc): Build only wires
-// Handlers.Prices (epias.sync_prices) in this task. Handlers.Ingestion and
-// Handlers.Backfill — and therefore the sync_dispatch/sync_analyzers/
-// fetch_readings/backfill task types — are wired by Part B once
-// internal/credentials (Task 14) merges, because ingest.Service and
-// backfill.Backfiller both REQUIRE a real ingest.CredentialOpener
-// (internal/credentials.Service) that does not exist in this worktree.
-// This test therefore asserts the mirror image of the brief's literal
-// acceptance test: exactly the one handler Part A wires is registered, and
-// every handler Part B still owns is (correctly, for now) absent — proving
-// Part A wires precisely what it claims to, nothing more.
+// relies on: worker.Build wires a real Handlers.Ingestion, Handlers.Backfill
+// and Handlers.Prices, so every F2 integration task type routes to a
+// handler, and R17's consumption.refresh (declared, never enqueued in F2)
+// has none.
 func TestWorkerRegistersEveryF2Handler(t *testing.T) {
 	dsn := testfixtures.StartPostgres(t)
 	pool := testfixtures.NewPool(t, dsn)
@@ -67,24 +62,25 @@ func TestWorkerRegistersEveryF2Handler(t *testing.T) {
 	defer built.Close()
 	require.NotNil(t, built.Handlers)
 	require.NotNil(t, built.Handlers.Log)
+	require.NotNil(t, built.Handlers.Ingestion)
+	require.NotNil(t, built.Handlers.Backfill)
+	require.NotNil(t, built.Handlers.Prices)
 
 	mux := asynq.NewServeMux()
 	job.Register(mux, built.Handlers)
-
-	_, pattern := mux.Handler(asynq.NewTask(job.TypeEPIASSyncPrices, nil))
-	require.Equal(t, job.TypeEPIASSyncPrices, pattern, "no handler for %s", job.TypeEPIASSyncPrices)
 
 	for _, typ := range []string{
 		job.TypeIntegrationSyncDispatch,
 		job.TypeIntegrationSyncAnalyzers,
 		job.TypeIntegrationFetchReadings,
 		job.TypeIntegrationBackfill,
+		job.TypeEPIASSyncPrices,
 	} {
 		_, pattern := mux.Handler(asynq.NewTask(typ, nil))
-		require.Empty(t, pattern, "%s must not be registered until part B wires Ingestion/Backfill", typ)
+		require.Equal(t, typ, pattern, "no handler for %s", typ)
 	}
 
-	_, pattern = mux.Handler(asynq.NewTask(job.TypeConsumptionRefresh, nil))
+	_, pattern := mux.Handler(asynq.NewTask(job.TypeConsumptionRefresh, nil))
 	require.Empty(t, pattern, "R17: consumption.refresh has no F2 handler")
 }
 
@@ -104,4 +100,80 @@ func TestWorkerBuildClosesCleanlyTwice(t *testing.T) {
 	built, err := worker.Build(context.Background(), cfg, pool, testfixtures.DiscardLogger())
 	require.NoError(t, err)
 	require.NotPanics(t, built.Close)
+}
+
+// connectedClients reads Redis's own INFO clients: connected_clients, the
+// server-side ground truth for how many client connections are open right
+// now — independent of, and unable to be fooled by, whichever
+// *goredis.Client object this process happens to hold a reference to.
+// Mirrors internal/scheduler's identical helper (duplicated here rather
+// than shared: each package's integration suite is independently buildable
+// under -tags=integration, and this is the only place internal/worker
+// needs it).
+func connectedClients(t *testing.T, c *goredis.Client) int {
+	t.Helper()
+	info, err := c.Info(context.Background(), "clients").Result()
+	require.NoError(t, err)
+	for _, line := range strings.Split(info, "\r\n") {
+		if n, ok := strings.CutPrefix(line, "connected_clients:"); ok {
+			v, err := strconv.Atoi(strings.TrimSpace(n))
+			require.NoError(t, err)
+			return v
+		}
+	}
+	t.Fatal("connected_clients not found in INFO clients output")
+	return 0
+}
+
+// TestWorkerBuildClosesEarlierResourcesOnLateFailure is the Task 16 part-A
+// review carryover: prove that when a LATE Build step fails, every
+// long-lived resource Build already opened FOR THIS CALL is closed on that
+// step's error path, not leaked until process exit.
+//
+// The failing step is crypto.NewCipher, a pure function of
+// cfg.Security.EncryptionKey — this test truncates that one field to 16
+// bytes (crypto.NewCipher requires exactly 32) AFTER config.Load has
+// already validated and returned a fully valid cfg, so every step BEFORE
+// the cipher (redis connect, the httpx pool, the EPİAŞ client, the job
+// client) still succeeds and opens its resource; only the cipher step
+// fails. This is "an invalid config value that fails only that step" per
+// the review note, not a contrived constructor seam.
+//
+// Why the assertion is the platform redis client specifically:
+// internal/store/redis.New pings before returning (it connects eagerly),
+// so its connection is independently, externally observable via
+// connected_clients. The job client (asynq.Client) and the httpx pool's
+// clients dial lazily, on first real use — internal/scheduler's own
+// TestSchedulerReleasesRedisClientOnRegisterFailure documents the same
+// fact for asynq/go-redis — so removing only their Close call would not
+// move connected_clients by itself; this test cannot independently prove
+// those two in isolation, which is why the mutation proof below targets
+// the one call this metric DOES discriminate (deleting worker.Build's
+// entire closeAll() call on the cipher error path, which also drops the
+// two lazy-dial closes, but is caught here by the redis client's leak
+// alone).
+func TestWorkerBuildClosesEarlierResourcesOnLateFailure(t *testing.T) {
+	dsn := testfixtures.StartPostgres(t)
+	pool := testfixtures.NewPool(t, dsn)
+	redisCfg := testfixtures.RedisConfig(t)
+	cfg := workerTestConfig(t, dsn, redisCfg)
+
+	monitorOpts, err := goredis.ParseURL(redisCfg.URL)
+	require.NoError(t, err)
+	monitor := goredis.NewClient(monitorOpts)
+	t.Cleanup(func() { _ = monitor.Close() })
+
+	baseline := connectedClients(t, monitor)
+
+	cfg.Security.EncryptionKey = cfg.Security.EncryptionKey[:16]
+
+	_, err = worker.Build(context.Background(), cfg, pool, testfixtures.DiscardLogger())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "cipher")
+
+	require.Eventually(t, func() bool {
+		return connectedClients(t, monitor) <= baseline
+	}, 5*time.Second, 50*time.Millisecond,
+		"Build must close every resource it already opened (the redis client behind the lock) "+
+			"when a later construction step fails, not leak it")
 }
