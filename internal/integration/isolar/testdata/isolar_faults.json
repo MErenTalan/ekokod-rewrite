@@ -1,0 +1,10 @@
+{
+  "result_code": "1",
+  "result_msg": "success",
+  "result_data": {
+    "rowCount": 1,
+    "pageList": [
+      {"alarm_id": "FX_ALARM_0001", "ps_id": "FX3001", "ps_key": "FX2001", "warning_code": "W-01", "warning_name": "Fixture Fault", "start_time": "2026-01-02 09:00:00"}
+    ]
+  }
+}

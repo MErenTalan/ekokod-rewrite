@@ -1,0 +1,10 @@
+{
+  "result_code": "1",
+  "result_msg": "success",
+  "result_data": {
+    "rowCount": 2,
+    "pageList": [
+      {"ps_key": "FX2002", "device_sn": "FX_0002", "device_type": 1, "device_name": "Fixture Inverter 2"}
+    ]
+  }
+}

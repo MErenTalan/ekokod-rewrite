@@ -1,0 +1,9 @@
+{
+  "result_code": "1",
+  "result_msg": "success",
+  "result_data": {
+    "FX3001": [
+      {"time_stamp": "2026-01-01 00:05:00", "point_id_1": "5000", "point_id_24": "8000", "point_id_2001": "310", "point_id_2009": "19.0", "point_id_2010": "23.0"}
+    ]
+  }
+}

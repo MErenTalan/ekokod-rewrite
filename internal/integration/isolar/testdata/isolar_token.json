@@ -1,0 +1,9 @@
+{
+  "result_code": "1",
+  "result_msg": "success",
+  "result_data": {
+    "access_token": "FIXTURE-ACCESS-9f21",
+    "refresh_token": "FIXTURE-REFRESH-4b77",
+    "expires_in": 3600
+  }
+}
