@@ -377,15 +377,13 @@ func methodSetOf(named *types.Named) *types.MethodSet {
 // test only covers the repositories someone remembered to enumerate, which is
 // exactly what this guard makes impossible to forget.
 //
-// TODO(task-9): flip the inspected-method count below into a hard assertion,
-// `require.Positive(t, inspected, …)`. It cannot be one yet: no repositories
-// exist, so the guard legitimately inspects zero methods and passes over an
-// empty set. That is also its weakness — every narrowing bug in the predicate
-// above looks identical to "there is nothing to check", so the count is
-// logged on every run to make the difference visible rather than silent.
-// Task 9 introduces the first repository and MUST convert the t.Log to a
-// require, otherwise this guard can stay vacuously green for the life of the
-// project.
+// The inspected-method count is asserted positive, not merely logged: Task 9
+// introduces the first repositories under internal/store/postgres, so an
+// empty walk is no longer legitimate. Before Task 9, the guard legitimately
+// inspected zero methods and a narrowing bug in the predicate above looked
+// identical to "there is nothing to check" — the same failure mode this
+// require now closes for good, since a future narrowing bug that walked zero
+// packages or zero methods would fail this line rather than pass silently.
 func TestEveryStoreMethodIsScoped(t *testing.T) {
 	const (
 		adminPkg   = modulePath + "/internal/store/postgres/admin"
@@ -430,10 +428,11 @@ func TestEveryStoreMethodIsScoped(t *testing.T) {
 		}
 	}
 
-	t.Logf("inspected %d exported context-taking method(s) under internal/store/postgres; "+
-		"TODO(task-9): this must become require.Positive once the first repository exists, "+
-		"otherwise a narrowing bug in this guard is indistinguishable from having nothing to check",
-		inspected)
+	t.Logf("inspected %d exported context-taking method(s) under internal/store/postgres", inspected)
+	require.Positive(t, inspected,
+		"the guard walked zero exported context-taking methods under internal/store/postgres: "+
+			"either every repository vanished or the walk itself is broken, and either way this "+
+			"guard is protecting nothing")
 }
 
 // TestTheJobPackageDoesNotImportTheStore pins the layering that

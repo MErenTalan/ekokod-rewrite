@@ -336,6 +336,12 @@ type BuildingFilter struct {
 type BuildingRepository interface {
 	Get(ctx context.Context, s Scope, id uuid.UUID) (model.Building, error)
 	List(ctx context.Context, s Scope, f BuildingFilter) ([]model.Building, error)
+
+	// Create requires an AllBuildings Scope: a narrow Scope names a fixed
+	// set of already-granted buildings and has no way to grant itself a new
+	// one, so it is refused with ErrNotFound rather than either naming an
+	// ungranted id or creating a building its own Scope could never see
+	// again.
 	Create(ctx context.Context, s Scope, b model.Building) (model.Building, error)
 	Update(ctx context.Context, s Scope, b model.Building) (model.Building, error)
 	SoftDelete(ctx context.Context, s Scope, id uuid.UUID, at time.Time) error
