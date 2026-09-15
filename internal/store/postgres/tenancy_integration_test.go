@@ -161,6 +161,62 @@ func TestUserRepositoryCreateGetUpdateSoftDelete(t *testing.T) {
 	}
 }
 
+// TestUserRepositoryUpdateRefusesAForeignCompany is the fix-round-1 proof for
+// Important 3: Update must refuse a model value whose CompanyID names
+// another company, exactly like Create does, and write nothing.
+//
+// The row named by u.ID belongs to mine's OWN company throughout — the
+// point is that UserUpdate's WHERE clause already scopes by s.CompanyID
+// regardless of this guard, so a victim row from ANOTHER tenant would make
+// this test pass whether or not the guard exists (the query's own
+// company_id predicate would refuse it either way, proven to be
+// insufficient as a test of this specific guard: see the task report's
+// "guard proven a no-op the first time" note). Only a model value that
+// lies about its OWN company's row's CompanyID exercises the guard.
+func TestUserRepositoryUpdateRefusesAForeignCompany(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	mine := testfixtures.NewTenant(t, ctx, pool, 1)
+	theirs := testfixtures.NewTenant(t, ctx, pool, 2)
+	repo := postgres.NewUserRepository(pool)
+
+	myUser := mine.Users[model.UserRoleCompanyAdmin]
+	tampered := myUser
+	tampered.CompanyID = theirs.Company.ID
+	tampered.Name = "Renamed By A Lying CompanyID"
+	tampered.UpdatedAt = time.Now().UTC()
+
+	_, err := repo.Update(ctx, mine.AdminScope, tampered)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	still, err := repo.Get(ctx, mine.AdminScope, myUser.ID)
+	require.NoError(t, err)
+	require.Equal(t, myUser.Name, still.Name, "nothing may be written by a refused Update")
+}
+
+// TestUserRepositoryPasswordHistoryExcludesASoftDeletedUsersHistory pins
+// wave-f-context rule 4 (a child of a soft-deleted parent is not readable)
+// for the UserVisible-gated PasswordHistory path.
+func TestUserRepositoryPasswordHistoryExcludesASoftDeletedUsersHistory(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
+	repo := postgres.NewUserRepository(pool)
+
+	victim := tenant.Users[model.UserRoleBuildingAdmin]
+	require.NoError(t, repo.SetPassword(ctx, tenant.AdminScope, victim.ID, "new-hash", time.Now().UTC()))
+
+	hist, err := repo.PasswordHistory(ctx, tenant.AdminScope, victim.ID, 10)
+	require.NoError(t, err)
+	require.Len(t, hist, 1, "sanity: the history row exists before the soft-delete")
+
+	require.NoError(t, repo.SoftDelete(ctx, tenant.AdminScope, victim.ID, time.Now().UTC()))
+
+	_, err = repo.PasswordHistory(ctx, tenant.AdminScope, victim.ID, 10)
+	require.ErrorIs(t, err, store.ErrNotFound,
+		"a soft-deleted user's password history must not stay reachable through the join")
+}
+
 func TestUserRepositoryCreateRefusesAnotherCompany(t *testing.T) {
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
@@ -305,6 +361,40 @@ func TestSessionRepositoryRevokeIsolatesByCompany(t *testing.T) {
 	got, err := repo.Get(ctx, theirs.AdminScope, theirSess2.ID)
 	require.NoError(t, err)
 	require.NotNil(t, got.RevokedAt)
+}
+
+// TestSessionRepositoryRevokeKeepsTheOriginalRevokedAt pins folded minor 3:
+// re-revoking an already-revoked session must not overwrite revoked_at,
+// because replay detection compares against the ORIGINAL instant.
+func TestSessionRepositoryRevokeKeepsTheOriginalRevokedAt(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
+	repo := postgres.NewSessionRepository(pool)
+
+	user := tenant.Users[model.UserRoleCompanyAdmin]
+	sess, err := repo.Create(ctx, tenant.AdminScope, model.Session{
+		UserID: user.ID, RefreshTokenHash: "hash-replay",
+		ExpiresAt: time.Now().Add(time.Hour).UTC(), CreatedAt: time.Now().UTC(),
+	})
+	require.NoError(t, err)
+
+	first := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	require.NoError(t, repo.Revoke(ctx, tenant.AdminScope, sess.ID, first))
+
+	got, err := repo.Get(ctx, tenant.AdminScope, sess.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got.RevokedAt)
+	require.True(t, got.RevokedAt.Equal(first))
+
+	later := first.Add(24 * time.Hour)
+	require.NoError(t, repo.Revoke(ctx, tenant.AdminScope, sess.ID, later))
+
+	got, err = repo.Get(ctx, tenant.AdminScope, sess.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got.RevokedAt)
+	require.True(t, got.RevokedAt.Equal(first),
+		"re-revoking must keep the ORIGINAL revoked_at, not overwrite it with the later call")
 }
 
 // TestSessionRepositoryDeleteExpiredOnlyTouchesTheCompanysUsers is the last

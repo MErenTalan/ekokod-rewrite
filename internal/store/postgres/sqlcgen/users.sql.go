@@ -13,10 +13,10 @@ import (
 )
 
 const userCreate = `-- name: UserCreate :one
-insert into users as "row"
+insert into users
     (id, company_id, name, email, phone, password_hash, role, is_active, created_at, updated_at)
 values ($1, $2, $3, $4, $5,
-        $6, $7, $8, $9, $9)
+        $6, $7, $8, coalesce($9::timestamptz, now()), coalesce($9::timestamptz, now()))
 returning id, company_id, name, email, phone, password_hash, password_changed_at, role, is_active, last_login_at, created_at, updated_at, deleted_at
 `
 
@@ -32,8 +32,8 @@ type UserCreateParams struct {
 	At           pgtype.Timestamptz
 }
 
-// The `as "row"` alias dodges TestEveryFunctionSQLcMustTypeIsDeclared's call
-// scanner — see queries/admin_audit.sql's comment on AdminAppendPlatformAudit.
+// coalesce(sqlc.narg(at)::timestamptz, now()): a caller that leaves CreatedAt at its zero
+// value gets the database's own now() rather than writing 0001-01-01.
 func (q *Queries) UserCreate(ctx context.Context, arg UserCreateParams) (User, error) {
 	row := q.db.QueryRow(ctx, userCreate,
 		arg.ID,
@@ -122,12 +122,15 @@ const userList = `-- name: UserList :many
 select id, company_id, name, email, phone, password_hash, password_changed_at, role, is_active, last_login_at, created_at, updated_at, deleted_at from users
 where company_id = $1
   and ($2::boolean or deleted_at is null)
-  -- Compared as text[], not user_role[]: pgx has no static codec for a
-  -- custom enum's array OID without a per-connection type registration this
-  -- package does not do, and an empty slice still needs an encode plan
-  -- before cardinality() can tell it is empty. Casting role to text sides
-  -- steps the whole problem.
-  and (cardinality($3::text[]) = 0 or role::text = any($3::text[]))
+  -- pgx has no static codec for a custom enum's array OID without a
+  -- per-connection type registration this package does not do, and an empty
+  -- slice still needs an encode plan before cardinality() can tell it is
+  -- empty — so the PARAMETER is bound as text[] (a plain []string) and cast
+  -- to user_role[] only inside SQL, once bound. The COLUMN itself is left
+  -- uncast, so an index on role (should one ever be added) stays usable; an
+  -- array element that is not a valid user_role raises a loud Postgres
+  -- error rather than silently matching nothing.
+  and (cardinality($3::text[]) = 0 or role = any($3::text[]::user_role[]))
   and ($4::boolean is null or is_active = $4)
   and ($5::text = '' or email ilike '%' || $5::text || '%')
 order by name
@@ -187,7 +190,7 @@ func (q *Queries) UserList(ctx context.Context, arg UserListParams) ([]User, err
 }
 
 const userPasswordHistoryInsert = `-- name: UserPasswordHistoryInsert :exec
-insert into user_password_history as "row" (id, user_id, password_hash, created_at)
+insert into user_password_history (id, user_id, password_hash, created_at)
 values ($1, $2, $3, $4)
 `
 
@@ -198,8 +201,6 @@ type UserPasswordHistoryInsertParams struct {
 	At           pgtype.Timestamptz
 }
 
-// The `as "row"` alias dodges TestEveryFunctionSQLcMustTypeIsDeclared's call
-// scanner — see queries/admin_audit.sql's comment on AdminAppendPlatformAudit.
 func (q *Queries) UserPasswordHistoryInsert(ctx context.Context, arg UserPasswordHistoryInsertParams) error {
 	_, err := q.db.Exec(ctx, userPasswordHistoryInsert,
 		arg.ID,
@@ -214,7 +215,7 @@ const userPasswordHistoryList = `-- name: UserPasswordHistoryList :many
 select h.id, h.user_id, h.password_hash, h.created_at
 from user_password_history h
 join users u on u.id = h.user_id
-where h.user_id = $1 and u.company_id = $2
+where h.user_id = $1 and u.company_id = $2 and u.deleted_at is null
 order by h.created_at desc
 limit $3
 `
@@ -226,6 +227,8 @@ type UserPasswordHistoryListParams struct {
 }
 
 // Isolation: user_password_history has no company_id — join through users.
+// u.deleted_at is null matters here specifically: without it, a soft-deleted
+// user's password history stays reachable through this join forever.
 func (q *Queries) UserPasswordHistoryList(ctx context.Context, arg UserPasswordHistoryListParams) ([]UserPasswordHistory, error) {
 	rows, err := q.db.Query(ctx, userPasswordHistoryList, arg.UserID, arg.CompanyID, arg.RowLimit)
 	if err != nil {
@@ -367,4 +370,28 @@ func (q *Queries) UserUpdate(ctx context.Context, arg UserUpdateParams) (User, e
 		&i.DeletedAt,
 	)
 	return i, err
+}
+
+const userVisible = `-- name: UserVisible :one
+select exists(
+    select 1 from users
+    where id = $1 and company_id = $2 and deleted_at is null
+)
+`
+
+type UserVisibleParams struct {
+	ID        uuid.UUID
+	CompanyID uuid.UUID
+}
+
+// The User-prefixed parent-visibility lookup UserRepository.PasswordHistory
+// uses. Session-prefixed SessionUserVisible (queries/sessions.sql) exists
+// for SessionRepository's own use and is a different query in the same
+// shape — ruling 5 in wave-f-context.md is that a parent-visibility lookup
+// lives under its OWN repository's prefix, not borrowed across one.
+func (q *Queries) UserVisible(ctx context.Context, arg UserVisibleParams) (bool, error) {
+	row := q.db.QueryRow(ctx, userVisible, arg.ID, arg.CompanyID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }

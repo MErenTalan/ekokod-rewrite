@@ -126,11 +126,22 @@ func (r *BuildingRepository) responsibleUserVisible(ctx context.Context, s store
 }
 
 // Create implements store.BuildingRepository.Create.
+//
+// CONTROLLER RULING (fix round 1): creating a building requires an
+// AllBuildings Scope. A narrow Scope names a fixed, pre-granted set of
+// existing buildings (Scope.BuildingIDs) — it has no way to grant itself a
+// NEW building id, so a narrow principal creating one would either name an
+// id nobody granted it, or create a building that its own Scope can never
+// then see (BuildingGetScoped requires id = any(building_ids), and building
+// creation can't retroactively add to that list).
 func (r *BuildingRepository) Create(ctx context.Context, s store.Scope, b model.Building) (model.Building, error) {
 	if !s.Valid() {
 		return model.Building{}, store.ErrInvalidScope
 	}
 	if b.CompanyID != s.CompanyID {
+		return model.Building{}, store.ErrNotFound
+	}
+	if _, all := s.BuildingFilter(); !all {
 		return model.Building{}, store.ErrNotFound
 	}
 	visible, err := r.responsibleUserVisible(ctx, s, b.ResponsibleUserID)
@@ -157,7 +168,7 @@ func (r *BuildingRepository) Create(ctx context.Context, s store.Scope, b model.
 		Sector:            b.Sector,
 		ResponsibleUserID: b.ResponsibleUserID,
 		BillCutoffDay:     b.BillCutoffDay,
-		At:                ts(b.CreatedAt),
+		At:                tsOrNow(b.CreatedAt),
 	})
 	if err != nil {
 		return model.Building{}, pgerr.Translate(r.pool, "create building", err)
@@ -169,6 +180,9 @@ func (r *BuildingRepository) Create(ctx context.Context, s store.Scope, b model.
 func (r *BuildingRepository) Update(ctx context.Context, s store.Scope, b model.Building) (model.Building, error) {
 	if !s.Valid() {
 		return model.Building{}, store.ErrInvalidScope
+	}
+	if b.CompanyID != s.CompanyID {
+		return model.Building{}, store.ErrNotFound
 	}
 	visible, err := r.responsibleUserVisible(ctx, s, b.ResponsibleUserID)
 	if err != nil {
@@ -219,15 +233,15 @@ func (r *BuildingRepository) SoftDelete(ctx context.Context, s store.Scope, id u
 	return nil
 }
 
-// Contacts — Isolation: building_contacts has no company_id — join through
-// buildings (company_id and the Scope's building branch). A building not
-// visible to the Scope returns ErrNotFound.
+// Contacts — Isolation: building_contacts has no company_id and is reached
+// ONLY by joining to buildings IN THE SAME QUERY: see BuildingContactsList in
+// queries/buildings.sql (a LEFT JOIN, not a Go-level pre-check run
+// separately on the pool before this). Another tenant's buildingID
+// contributes zero rows and is reported as ErrNotFound; a visible building
+// with no contacts yet returns an empty slice.
 func (r *BuildingRepository) Contacts(ctx context.Context, s store.Scope, buildingID uuid.UUID) ([]model.BuildingContact, error) {
 	if !s.Valid() {
 		return nil, store.ErrInvalidScope
-	}
-	if _, err := r.Get(ctx, s, buildingID); err != nil {
-		return nil, err
 	}
 	ids, all := s.BuildingFilter()
 	rows, err := r.q.BuildingContactsList(ctx, sqlcgen.BuildingContactsListParams{
@@ -236,26 +250,34 @@ func (r *BuildingRepository) Contacts(ctx context.Context, s store.Scope, buildi
 	if err != nil {
 		return nil, pgerr.Translate(r.pool, "list building contacts", err)
 	}
+	if len(rows) == 0 {
+		return nil, store.ErrNotFound
+	}
 	out := make([]model.BuildingContact, 0, len(rows))
 	for _, row := range rows {
+		if row.ID == nil {
+			continue // visible building, zero contacts: the LEFT JOIN sentinel row
+		}
 		out = append(out, model.BuildingContact{
-			ID: row.ID, BuildingID: row.BuildingID, Name: row.Name, Phone: row.Phone, SortOrder: row.SortOrder,
+			ID: *row.ID, BuildingID: *row.BuildingID, Name: row.Name, Phone: row.Phone, SortOrder: *row.SortOrder,
 		})
 	}
 	return out, nil
 }
 
 // ReplaceContacts swaps the whole contact list in one transaction. Isolation:
-// join building_contacts through buildings. A building not visible to the
-// Scope returns ErrNotFound and nothing is replaced; the contacts' own
+// BuildingGetScopedForShare locks and verifies the parent INSIDE this
+// transaction (zero rows -> ErrNotFound, nothing replaced);
+// BuildingContactsDelete and BuildingContactInsert are each independently
+// scoped via a join/exists to buildings in their own statement, so a
+// cross-tenant buildingID is refused even without the lock above (see the
+// fix-round-1 mutation proofs in the task report). The contacts' own
 // BuildingID fields are ignored in favour of buildingID.
 func (r *BuildingRepository) ReplaceContacts(ctx context.Context, s store.Scope, buildingID uuid.UUID, contacts []model.BuildingContact) ([]model.BuildingContact, error) {
 	if !s.Valid() {
 		return nil, store.ErrInvalidScope
 	}
-	if _, err := r.Get(ctx, s, buildingID); err != nil {
-		return nil, err
-	}
+	ids, all := s.BuildingFilter()
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, pgerr.Translate(r.pool, "begin replace building contacts", err)
@@ -263,13 +285,21 @@ func (r *BuildingRepository) ReplaceContacts(ctx context.Context, s store.Scope,
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	qtx := r.q.WithTx(tx)
-	if err := qtx.BuildingContactsDelete(ctx, buildingID); err != nil {
+	if _, err := qtx.BuildingGetScopedForShare(ctx, sqlcgen.BuildingGetScopedForShareParams{
+		ID: buildingID, CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: ids,
+	}); err != nil {
+		return nil, pgerr.Translate(r.pool, "lock building for replace contacts", err)
+	}
+	if err := qtx.BuildingContactsDelete(ctx, sqlcgen.BuildingContactsDeleteParams{
+		BuildingID: buildingID, CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: ids,
+	}); err != nil {
 		return nil, pgerr.Translate(r.pool, "delete building contacts", err)
 	}
 	out := make([]model.BuildingContact, 0, len(contacts))
 	for _, c := range contacts {
 		row, err := qtx.BuildingContactInsert(ctx, sqlcgen.BuildingContactInsertParams{
 			ID: uuid.New(), BuildingID: buildingID, Name: c.Name, Phone: c.Phone, SortOrder: c.SortOrder,
+			CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: ids,
 		})
 		if err != nil {
 			return nil, pgerr.Translate(r.pool, "insert building contact", err)

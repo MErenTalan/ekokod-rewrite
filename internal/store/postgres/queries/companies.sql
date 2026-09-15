@@ -20,14 +20,14 @@ order by name
 limit sqlc.arg(page_limit) offset sqlc.arg(page_offset);
 
 -- name: CompanyCreate :one
--- The `as "row"` alias dodges TestEveryFunctionSQLcMustTypeIsDeclared's call
--- scanner — see queries/admin_audit.sql's comment on AdminAppendPlatformAudit.
-insert into companies as "row"
+-- coalesce(sqlc.narg(at)::timestamptz, now()): a caller that leaves CreatedAt at its zero
+-- value gets the database's own now() rather than writing 0001-01-01.
+insert into companies
     (id, name, address, total_area_m2, personnel_count, contact_name,
      contact_phone, sector, created_at, updated_at)
 values (sqlc.arg(id), sqlc.arg(name), sqlc.arg(address), sqlc.arg(total_area_m2),
         sqlc.arg(personnel_count), sqlc.arg(contact_name), sqlc.arg(contact_phone),
-        sqlc.arg(sector), sqlc.arg(at), sqlc.arg(at))
+        sqlc.arg(sector), coalesce(sqlc.narg(at)::timestamptz, now()), coalesce(sqlc.narg(at)::timestamptz, now()))
 returning *;
 
 -- name: CompanyUpdate :one

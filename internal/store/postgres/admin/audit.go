@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
@@ -45,7 +44,7 @@ func (r *AuditRepository) AppendPlatform(ctx context.Context, e model.AuditEntry
 		Before:     e.Before,
 		After:      e.After,
 		Ip:         e.IP,
-		At:         pgtype.Timestamptz{Time: e.CreatedAt, Valid: true},
+		At:         adminTSOrNow(e.CreatedAt),
 	})
 	if err != nil {
 		return model.AuditEntry{}, pgerr.Translate(r.pool, "append platform audit entry", err)

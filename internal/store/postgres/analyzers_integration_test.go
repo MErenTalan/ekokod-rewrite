@@ -97,6 +97,90 @@ func TestAnalyzerRepositoryCreateGetUpdateSoftDelete(t *testing.T) {
 	}
 }
 
+// TestAnalyzerRepositoryUpdateRefusesAForeignCompany is the fix-round-1 proof
+// for Important 3: Update must refuse a model value whose CompanyID names
+// another company, exactly like Create does, and write nothing.
+//
+// The row named by a.ID, and its BuildingID, belong to mine's OWN company
+// throughout: a victim row from ANOTHER tenant would already be refused by
+// buildingVisible's own check (its BuildingID would not be visible to
+// mine's Scope either), which would make this test pass whether or not the
+// CompanyID guard exists. Only a model value that lies about its OWN row's
+// CompanyID — while keeping a BuildingID that IS visible to the Scope —
+// isolates the new guard.
+func TestAnalyzerRepositoryUpdateRefusesAForeignCompany(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	mine := testfixtures.NewTenant(t, ctx, pool, 1)
+	theirs := testfixtures.NewTenant(t, ctx, pool, 2)
+	repo := postgres.NewAnalyzerRepository(pool)
+
+	myAnalyzer := mine.Analyzers[0]
+	tampered := myAnalyzer
+	tampered.CompanyID = theirs.Company.ID
+	custom := "Renamed By A Lying CompanyID"
+	tampered.CustomerName = &custom
+	tampered.UpdatedAt = time.Now().UTC()
+
+	_, err := repo.Update(ctx, mine.AdminScope, tampered)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	still, err := repo.Get(ctx, mine.AdminScope, myAnalyzer.ID)
+	require.NoError(t, err)
+	if still.CustomerName != nil {
+		require.NotEqual(t, custom, *still.CustomerName, "nothing may be written by a refused Update")
+	}
+}
+
+// TestAnalyzerRepositoryNarrowScopeCannotCreateOrUpdateToNilBuilding pins the
+// fix-round-1 controller ruling on the folded minor: a non-AllBuildings
+// Scope may not create or update an analyzer to a nil BuildingID, because
+// that Scope's own BuildingFilter() can never match a NULL building_id and
+// the analyzer would move out of its own sight.
+func TestAnalyzerRepositoryNarrowScopeCannotCreateOrUpdateToNilBuilding(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
+	repo := postgres.NewAnalyzerRepository(pool)
+
+	now := time.Now().UTC()
+	_, err := repo.Create(ctx, tenant.Scope, model.Analyzer{
+		CompanyID: tenant.Company.ID, Provider: model.IntegrationProviderOSOS,
+		ProviderSubtype: "Baskent", InstallationNumber: "NARROW-NIL-1",
+		MeterMultiplier: decimal.RequireFromString("1"), IsActive: true,
+		CreatedAt: now, UpdatedAt: now,
+	})
+	require.ErrorIs(t, err, store.ErrNotFound, "a narrow scope may not create an unassigned analyzer")
+
+	// Unassigning an existing (assigned) analyzer under a narrow scope must
+	// be refused the same way.
+	existing := tenant.Analyzers[0]
+	tampered := existing
+	tampered.BuildingID = nil
+	tampered.UpdatedAt = time.Now().UTC()
+	_, err = repo.Update(ctx, tenant.Scope, tampered)
+	require.ErrorIs(t, err, store.ErrNotFound, "a narrow scope may not unassign an analyzer either")
+
+	// An AllBuildings scope may do both.
+	created, err := repo.Create(ctx, tenant.AdminScope, model.Analyzer{
+		CompanyID: tenant.Company.ID, Provider: model.IntegrationProviderOSOS,
+		ProviderSubtype: "Baskent", InstallationNumber: "NARROW-NIL-2",
+		MeterMultiplier: decimal.RequireFromString("1"), IsActive: true,
+		CreatedAt: now, UpdatedAt: now,
+	})
+	require.NoError(t, err)
+	require.Nil(t, created.BuildingID)
+}
+
+// TestAnalyzerRepositoryCreateRefusesAForeignBuilding is also the
+// controller's second-dispatch ruling proof: an AdminScope (AllBuildings)
+// write storing tenant B's building id as a foreign key must be refused
+// with ErrNotFound, and B's own data must be untouched. A Go-level check
+// using Scope.AllowsBuilding() (or an equivalent building-only check, with
+// no company_id test) returns true for ANY id under AllBuildings — the
+// exact bug a sibling task hit. AnalyzerCreate's WHERE clause embeds the
+// company_id check itself now (queries/analyzers.sql), so this is provably
+// not that bug.
 func TestAnalyzerRepositoryCreateRefusesAForeignBuilding(t *testing.T) {
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
@@ -104,15 +188,48 @@ func TestAnalyzerRepositoryCreateRefusesAForeignBuilding(t *testing.T) {
 	theirs := testfixtures.NewTenant(t, ctx, pool, 2)
 	repo := postgres.NewAnalyzerRepository(pool)
 
+	theirsBefore, err := repo.List(ctx, theirs.AdminScope, store.AnalyzerFilter{})
+	require.NoError(t, err)
+
 	foreignBuilding := theirs.Buildings[0].ID
 	now := time.Now().UTC()
-	_, err := repo.Create(ctx, mine.AdminScope, model.Analyzer{
+	_, err = repo.Create(ctx, mine.AdminScope, model.Analyzer{
 		CompanyID: mine.Company.ID, BuildingID: &foreignBuilding,
 		Provider: model.IntegrationProviderPM5340, ProviderSubtype: "Baskent",
 		InstallationNumber: "BAD-BUILDING", MeterMultiplier: decimal.RequireFromString("1"),
 		IsActive: true, CreatedAt: now, UpdatedAt: now,
 	})
 	require.ErrorIs(t, err, store.ErrNotFound)
+
+	theirsAfter, err := repo.List(ctx, theirs.AdminScope, store.AnalyzerFilter{})
+	require.NoError(t, err)
+	require.Equal(t, theirsBefore, theirsAfter, "theirs's own analyzers must be completely unaffected")
+}
+
+// TestAnalyzerRepositoryUpdateRefusesAForeignBuilding is Update's
+// counterpart to the Create proof above: the same tenant-B-id-as-FK
+// refusal, on the path that used to validate only the row's OWN, already
+// stored building_id in SQL — the NEW value being written was checked
+// solely by a Go-level pre-check with no SQL enforcement of its own.
+func TestAnalyzerRepositoryUpdateRefusesAForeignBuilding(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	mine := testfixtures.NewTenant(t, ctx, pool, 1)
+	theirs := testfixtures.NewTenant(t, ctx, pool, 2)
+	repo := postgres.NewAnalyzerRepository(pool)
+
+	foreignBuilding := theirs.Buildings[0].ID
+	myAnalyzer := mine.Analyzers[0]
+	tampered := myAnalyzer
+	tampered.BuildingID = &foreignBuilding
+	tampered.UpdatedAt = time.Now().UTC()
+
+	_, err := repo.Update(ctx, mine.AdminScope, tampered)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	still, err := repo.Get(ctx, mine.AdminScope, myAnalyzer.ID)
+	require.NoError(t, err)
+	require.Equal(t, myAnalyzer.BuildingID, still.BuildingID, "nothing may be written by a refused Update")
 }
 
 // TestAnalyzerRepositoryUnassignedIsVisibleOnlyUnderAllBuildings pins the

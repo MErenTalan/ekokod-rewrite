@@ -4,6 +4,7 @@ package postgres_test
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -73,6 +74,93 @@ func TestPlantRepositoryCreateGetUpdateSoftDelete(t *testing.T) {
 	for _, p := range list {
 		require.NotEqual(t, created.ID, p.ID, "a soft-deleted plant must disappear from List too")
 	}
+}
+
+// TestPlantRepositoryUpdateRefusesAForeignCompany is the fix-round-1 proof
+// for Important 3: Update must refuse a model value whose CompanyID names
+// another company, exactly like Create does, and write nothing.
+//
+// The row named by p.ID belongs to mine's OWN company throughout —
+// PlantUpdate's WHERE clause already scopes by s.CompanyID regardless of
+// this guard, so a victim row from ANOTHER tenant would make this test pass
+// whether or not the guard exists. Only a model value that lies about its
+// OWN row's CompanyID exercises the guard.
+func TestPlantRepositoryUpdateRefusesAForeignCompany(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	mine := testfixtures.NewTenant(t, ctx, pool, 1)
+	theirs := testfixtures.NewTenant(t, ctx, pool, 2)
+	repo := postgres.NewPlantRepository(pool)
+
+	myPlant := mine.Plants[0]
+	tampered := myPlant
+	tampered.CompanyID = theirs.Company.ID
+	tampered.Name = "Renamed By A Lying CompanyID"
+	tampered.UpdatedAt = time.Now().UTC()
+
+	_, err := repo.Update(ctx, mine.AdminScope, tampered)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	still, err := repo.Get(ctx, mine.AdminScope, myPlant.ID)
+	require.NoError(t, err)
+	require.Equal(t, myPlant.Name, still.Name, "nothing may be written by a refused Update")
+}
+
+// TestPlantRepositoryDevicesExcludeASoftDeletedParent pins wave-f-context
+// rule 4 for PlantDevicesList's LEFT JOIN shape: a child of a soft-deleted
+// parent must not be readable through the parent-scoped query either.
+func TestPlantRepositoryDevicesExcludeASoftDeletedParent(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
+	repo := postgres.NewPlantRepository(pool)
+
+	_, err := repo.UpsertDevice(ctx, tenant.AdminScope, model.PlantDevice{
+		PlantID: tenant.Plants[0].ID, DeviceSN: "SOFT-DELETE-PARENT",
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, repo.SoftDelete(ctx, tenant.AdminScope, tenant.Plants[0].ID, time.Now().UTC()))
+
+	_, err = repo.Devices(ctx, tenant.AdminScope, tenant.Plants[0].ID)
+	require.ErrorIs(t, err, store.ErrNotFound,
+		"a soft-deleted plant's devices must not stay reachable through the join")
+}
+
+// TestPlantRepositoryUpsertDeviceConvergesUnderConcurrency is the Important-1
+// proof: N goroutines racing to create the SAME new (plant_id, device_sn)
+// must all succeed and converge on exactly one row, now that UpsertDevice is
+// one atomic `insert … on conflict … do update` instead of the old
+// UPDATE-then-INSERT-if-absent shape. See the task report for the failing
+// run against that old shape, captured before this fix.
+func TestPlantRepositoryUpsertDeviceConvergesUnderConcurrency(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
+	repo := postgres.NewPlantRepository(pool)
+
+	const n = 8
+	var wg sync.WaitGroup
+	errs := make([]error, n)
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			_, err := repo.UpsertDevice(ctx, tenant.AdminScope, model.PlantDevice{
+				PlantID: tenant.Plants[0].ID, DeviceSN: "CONCURRENT-NEW-SN",
+			})
+			errs[i] = err
+		}(i)
+	}
+	wg.Wait()
+
+	for i, err := range errs {
+		require.NoError(t, err, "upsert goroutine %d must converge, not conflict", i)
+	}
+
+	got, err := repo.Devices(ctx, tenant.AdminScope, tenant.Plants[0].ID)
+	require.NoError(t, err)
+	require.Len(t, got, 1, "N concurrent upserts of the same new (plant_id, device_sn) must converge to exactly one row")
 }
 
 // TestPlantRepositoryMonthlyTargetsIsolateThroughTheParentPlant is the

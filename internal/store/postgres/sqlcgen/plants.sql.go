@@ -13,38 +13,60 @@ import (
 )
 
 const plantAlarmRecipientInsert = `-- name: PlantAlarmRecipientInsert :one
-insert into power_plant_alarm_recipients as "row" (plant_id, email)
-values ($1, $2)
+insert into power_plant_alarm_recipients (plant_id, email)
+select $1, $2
+where exists (
+    select 1 from power_plants p
+    where p.id = $1 and p.company_id = $3 and p.deleted_at is null
+)
 returning plant_id, email
 `
 
 type PlantAlarmRecipientInsertParams struct {
-	PlantID uuid.UUID
-	Email   string
+	PlantID   uuid.UUID
+	Email     string
+	CompanyID uuid.UUID
 }
 
-// The `as "row"` alias dodges TestEveryFunctionSQLcMustTypeIsDeclared's call
-// scanner — see queries/admin_audit.sql's comment on AdminAppendPlatformAudit.
+// Isolation: the insert only runs when plant_id's parent is visible to the
+// Scope, checked via exists(...) IN THIS SAME STATEMENT. An invisible plant
+// inserts zero rows; the :one scan then reports ErrNoRows, translated to
+// ErrNotFound.
 func (q *Queries) PlantAlarmRecipientInsert(ctx context.Context, arg PlantAlarmRecipientInsertParams) (PowerPlantAlarmRecipient, error) {
-	row := q.db.QueryRow(ctx, plantAlarmRecipientInsert, arg.PlantID, arg.Email)
+	row := q.db.QueryRow(ctx, plantAlarmRecipientInsert, arg.PlantID, arg.Email, arg.CompanyID)
 	var i PowerPlantAlarmRecipient
 	err := row.Scan(&i.PlantID, &i.Email)
 	return i, err
 }
 
 const plantAlarmRecipientsDelete = `-- name: PlantAlarmRecipientsDelete :exec
-delete from power_plant_alarm_recipients where plant_id = $1
+delete from power_plant_alarm_recipients r
+using power_plants p
+where r.plant_id = p.id
+  and r.plant_id = $1
+  and p.company_id = $2
+  and p.deleted_at is null
 `
 
-func (q *Queries) PlantAlarmRecipientsDelete(ctx context.Context, plantID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, plantAlarmRecipientsDelete, plantID)
+type PlantAlarmRecipientsDeleteParams struct {
+	PlantID   uuid.UUID
+	CompanyID uuid.UUID
+}
+
+// Isolation: scoped via a join to power_plants IN THIS SAME STATEMENT (a
+// DELETE … USING), replacing what used to be a Go-level pre-check run on
+// the pool before the write. A foreign or otherwise invisible plant_id
+// deletes zero rows rather than every recipient under a well-known id.
+func (q *Queries) PlantAlarmRecipientsDelete(ctx context.Context, arg PlantAlarmRecipientsDeleteParams) error {
+	_, err := q.db.Exec(ctx, plantAlarmRecipientsDelete, arg.PlantID, arg.CompanyID)
 	return err
 }
 
 const plantAlarmRecipientsList = `-- name: PlantAlarmRecipientsList :many
-select r.plant_id, r.email from power_plant_alarm_recipients r
-join power_plants p on p.id = r.plant_id
-where r.plant_id = $1 and p.company_id = $2 and p.deleted_at is null
+select r.plant_id, r.email
+from power_plants p
+left join power_plant_alarm_recipients r on r.plant_id = p.id
+where p.id = $1 and p.company_id = $2 and p.deleted_at is null
 order by r.email
 `
 
@@ -53,17 +75,30 @@ type PlantAlarmRecipientsListParams struct {
 	CompanyID uuid.UUID
 }
 
-// Isolation: power_plant_alarm_recipients has no company_id — join through
-// power_plants.
-func (q *Queries) PlantAlarmRecipientsList(ctx context.Context, arg PlantAlarmRecipientsListParams) ([]PowerPlantAlarmRecipient, error) {
+type PlantAlarmRecipientsListRow struct {
+	PlantID *uuid.UUID
+	Email   *string
+}
+
+// Isolation: power_plant_alarm_recipients has no company_id and is reached
+// ONLY by joining to power_plants IN THIS SAME QUERY — a LEFT JOIN, not a
+// pre-check run separately, so this predicate is what an isolation test
+// actually exercises.
+//
+// A plant not visible to the Scope contributes ZERO rows: the caller
+// reports ErrNotFound. A visible plant with no recipients yet contributes
+// EXACTLY ONE row with r.plant_id (and r.email) NULL — the sentinel the
+// caller checks; a visible plant with recipients contributes one row per
+// recipient, none of them NULL.
+func (q *Queries) PlantAlarmRecipientsList(ctx context.Context, arg PlantAlarmRecipientsListParams) ([]PlantAlarmRecipientsListRow, error) {
 	rows, err := q.db.Query(ctx, plantAlarmRecipientsList, arg.PlantID, arg.CompanyID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []PowerPlantAlarmRecipient
+	var items []PlantAlarmRecipientsListRow
 	for rows.Next() {
-		var i PowerPlantAlarmRecipient
+		var i PlantAlarmRecipientsListRow
 		if err := rows.Scan(&i.PlantID, &i.Email); err != nil {
 			return nil, err
 		}
@@ -76,7 +111,7 @@ func (q *Queries) PlantAlarmRecipientsList(ctx context.Context, arg PlantAlarmRe
 }
 
 const plantCreate = `-- name: PlantCreate :one
-insert into power_plants as "row"
+insert into power_plants
     (id, company_id, name, installation_number, plant_kind, pv_brand_model,
      panel_power_w, panel_efficiency_pct, panel_count, string_count, orientation,
      tilt_angle_deg, total_capacity_kw, yearly_target_kwh, installation_date,
@@ -89,7 +124,7 @@ values ($1, $2, $3, $4,
         $14, $15, $16,
         $17, $18, $19, $20,
         $21, $22, $23,
-        $24, $24)
+        coalesce($24::timestamptz, now()), coalesce($24::timestamptz, now()))
 returning id, company_id, name, installation_number, plant_kind, pv_brand_model, panel_power_w, panel_efficiency_pct, panel_count, string_count, orientation, tilt_angle_deg, total_capacity_kw, yearly_target_kwh, installation_date, address, latitude, longitude, isolar_ps_id, isolar_ps_key, isolar_ps_name, isolar_installed_kw, isolar_linked_at, created_at, updated_at, deleted_at
 `
 
@@ -120,8 +155,8 @@ type PlantCreateParams struct {
 	At                 pgtype.Timestamptz
 }
 
-// The `as "row"` alias dodges TestEveryFunctionSQLcMustTypeIsDeclared's call
-// scanner — see queries/admin_audit.sql's comment on AdminAppendPlatformAudit.
+// coalesce(sqlc.narg(at)::timestamptz, now()): a caller that leaves CreatedAt at its zero
+// value gets the database's own now() rather than writing 0001-01-01.
 func (q *Queries) PlantCreate(ctx context.Context, arg PlantCreateParams) (PowerPlant, error) {
 	row := q.db.QueryRow(ctx, plantCreate,
 		arg.ID,
@@ -181,19 +216,36 @@ func (q *Queries) PlantCreate(ctx context.Context, arg PlantCreateParams) (Power
 	return i, err
 }
 
-const plantDeviceInsert = `-- name: PlantDeviceInsert :one
-insert into power_plant_devices as "row"
+const plantDeviceUpsert = `-- name: PlantDeviceUpsert :one
+insert into power_plant_devices
     (id, plant_id, device_sn, device_name, device_type, device_type_name,
      provider_key, brand, model, rated_power_kw, status, efficiency_pct,
      last_seen_at, created_at, updated_at)
-values ($1, $2, $3, $4,
-        $5, $6, $7,
-        $8, $9, $10, $11,
-        $12, $13, $14, $14)
+select $1, $2, $3, $4,
+       $5, $6, $7,
+       $8, $9, $10, $11,
+       $12, $13,
+       coalesce($14::timestamptz, now()) as created_at, coalesce($14::timestamptz, now()) as updated_at
+where exists (
+    select 1 from power_plants p
+    where p.id = $2 and p.company_id = $15 and p.deleted_at is null
+)
+on conflict (plant_id, device_sn) do update
+set device_name = excluded.device_name,
+    device_type = excluded.device_type,
+    device_type_name = excluded.device_type_name,
+    provider_key = excluded.provider_key,
+    brand = excluded.brand,
+    model = excluded.model,
+    rated_power_kw = excluded.rated_power_kw,
+    status = excluded.status,
+    efficiency_pct = excluded.efficiency_pct,
+    last_seen_at = excluded.last_seen_at,
+    updated_at = excluded.updated_at
 returning id, plant_id, device_sn, device_name, device_type, device_type_name, provider_key, brand, model, rated_power_kw, status, efficiency_pct, last_seen_at, created_at, updated_at
 `
 
-type PlantDeviceInsertParams struct {
+type PlantDeviceUpsertParams struct {
 	ID             uuid.UUID
 	PlantID        uuid.UUID
 	DeviceSn       string
@@ -208,12 +260,28 @@ type PlantDeviceInsertParams struct {
 	EfficiencyPct  pgtype.Numeric
 	LastSeenAt     pgtype.Timestamptz
 	At             pgtype.Timestamptz
+	CompanyID      uuid.UUID
 }
 
-// The `as "row"` alias dodges TestEveryFunctionSQLcMustTypeIsDeclared's call
-// scanner — see queries/admin_audit.sql's comment on AdminAppendPlatformAudit.
-func (q *Queries) PlantDeviceInsert(ctx context.Context, arg PlantDeviceInsertParams) (PowerPlantDevice, error) {
-	row := q.db.QueryRow(ctx, plantDeviceInsert,
+// UpsertDevice, keyed on (plant_id, device_sn): ONE atomic
+// `insert … on conflict (plant_id, device_sn) do update`, now that the SQL
+// call scanner (Task 8c fix round 1, a4746e7) recognises an ON CONFLICT
+// target for what it is instead of reading it as a call to a function named
+// conflict(). Two concurrent UpsertDevice calls racing to create the SAME
+// new device now converge on one row, because the whole statement is a
+// single INSERT and Postgres itself serialises the two around the unique
+// index rather than this package checking-then-acting across two round
+// trips (the fix-round-1 finding this replaces).
+//
+// Isolation: the insert/update only runs when plant_id's parent is visible
+// to the Scope, checked via exists(...) IN THIS SAME STATEMENT — including
+// on the update path, since a SELECT that returns no candidate row also
+// proposes no conflict. An invisible plant upserts zero rows; the :one scan
+// then reports ErrNoRows, translated to ErrNotFound. The DO UPDATE branch
+// never assigns plant_id, so a device can be neither moved to nor taken
+// from another plant even by an update this exists() check let through.
+func (q *Queries) PlantDeviceUpsert(ctx context.Context, arg PlantDeviceUpsertParams) (PowerPlantDevice, error) {
+	row := q.db.QueryRow(ctx, plantDeviceUpsert,
 		arg.ID,
 		arg.PlantID,
 		arg.DeviceSn,
@@ -228,95 +296,7 @@ func (q *Queries) PlantDeviceInsert(ctx context.Context, arg PlantDeviceInsertPa
 		arg.EfficiencyPct,
 		arg.LastSeenAt,
 		arg.At,
-	)
-	var i PowerPlantDevice
-	err := row.Scan(
-		&i.ID,
-		&i.PlantID,
-		&i.DeviceSn,
-		&i.DeviceName,
-		&i.DeviceType,
-		&i.DeviceTypeName,
-		&i.ProviderKey,
-		&i.Brand,
-		&i.Model,
-		&i.RatedPowerKw,
-		&i.Status,
-		&i.EfficiencyPct,
-		&i.LastSeenAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const plantDeviceUpdateBySerial = `-- name: PlantDeviceUpdateBySerial :one
-
-update power_plant_devices
-set device_name = $1,
-    device_type = $2,
-    device_type_name = $3,
-    provider_key = $4,
-    brand = $5,
-    model = $6,
-    rated_power_kw = $7,
-    status = $8,
-    efficiency_pct = $9,
-    last_seen_at = $10,
-    updated_at = $11
-where plant_id = $12 and device_sn = $13
-returning id, plant_id, device_sn, device_name, device_type, device_type_name, provider_key, brand, model, rated_power_kw, status, efficiency_pct, last_seen_at, created_at, updated_at
-`
-
-type PlantDeviceUpdateBySerialParams struct {
-	DeviceName     *string
-	DeviceType     *int32
-	DeviceTypeName *string
-	ProviderKey    *string
-	Brand          *string
-	Model          *string
-	RatedPowerKw   pgtype.Numeric
-	Status         *string
-	EfficiencyPct  pgtype.Numeric
-	LastSeenAt     pgtype.Timestamptz
-	At             pgtype.Timestamptz
-	PlantID        uuid.UUID
-	DeviceSn       string
-}
-
-// PlantDeviceUpdateBySerial and PlantDeviceInsert together implement
-// UpsertDevice, keyed on (plant_id, device_sn). The update branch never
-// assigns plant_id, so a device can be neither moved to nor taken from
-// another plant.
-//
-// This is two statements rather than one `insert ... on conflict (plant_id,
-// device_sn) do update`, and that is a deliberate downgrade from atomic to
-// check-then-act, forced by a limitation in this repository's own tooling:
-// `on conflict (` has no alias escape — unlike a table name, which
-// `as "row"` moves out of the way (see admin_audit.sql's comment) — so it
-// reads as a call to a function named conflict() to
-// TestEveryFunctionSQLcMustTypeIsDeclared's call scanner, and that guard may
-// not be edited (wave-f-context.md). Two concurrent UpsertDevice calls
-// racing to insert the SAME new (plant_id, device_sn) can therefore both
-// attempt an insert; the loser gets store.ErrConflict off the unique index
-// rather than silently converging. Devices are re-fetched on a provider's own
-// schedule, never written concurrently by design, so this is judged
-// acceptable — flagged in the task report for the controller to weigh.
-func (q *Queries) PlantDeviceUpdateBySerial(ctx context.Context, arg PlantDeviceUpdateBySerialParams) (PowerPlantDevice, error) {
-	row := q.db.QueryRow(ctx, plantDeviceUpdateBySerial,
-		arg.DeviceName,
-		arg.DeviceType,
-		arg.DeviceTypeName,
-		arg.ProviderKey,
-		arg.Brand,
-		arg.Model,
-		arg.RatedPowerKw,
-		arg.Status,
-		arg.EfficiencyPct,
-		arg.LastSeenAt,
-		arg.At,
-		arg.PlantID,
-		arg.DeviceSn,
+		arg.CompanyID,
 	)
 	var i PowerPlantDevice
 	err := row.Scan(
@@ -340,9 +320,12 @@ func (q *Queries) PlantDeviceUpdateBySerial(ctx context.Context, arg PlantDevice
 }
 
 const plantDevicesList = `-- name: PlantDevicesList :many
-select d.id, d.plant_id, d.device_sn, d.device_name, d.device_type, d.device_type_name, d.provider_key, d.brand, d.model, d.rated_power_kw, d.status, d.efficiency_pct, d.last_seen_at, d.created_at, d.updated_at from power_plant_devices d
-join power_plants p on p.id = d.plant_id
-where d.plant_id = $1 and p.company_id = $2 and p.deleted_at is null
+select d.id, d.plant_id, d.device_sn, d.device_name, d.device_type, d.device_type_name,
+       d.provider_key, d.brand, d.model, d.rated_power_kw, d.status, d.efficiency_pct,
+       d.last_seen_at, d.created_at, d.updated_at
+from power_plants p
+left join power_plant_devices d on d.plant_id = p.id
+where p.id = $1 and p.company_id = $2 and p.deleted_at is null
 order by d.device_sn
 `
 
@@ -351,16 +334,43 @@ type PlantDevicesListParams struct {
 	CompanyID uuid.UUID
 }
 
-// Isolation: power_plant_devices has no company_id — join through power_plants.
-func (q *Queries) PlantDevicesList(ctx context.Context, arg PlantDevicesListParams) ([]PowerPlantDevice, error) {
+type PlantDevicesListRow struct {
+	ID             *uuid.UUID
+	PlantID        *uuid.UUID
+	DeviceSn       *string
+	DeviceName     *string
+	DeviceType     *int32
+	DeviceTypeName *string
+	ProviderKey    *string
+	Brand          *string
+	Model          *string
+	RatedPowerKw   pgtype.Numeric
+	Status         *string
+	EfficiencyPct  pgtype.Numeric
+	LastSeenAt     pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+// Isolation: power_plant_devices has no company_id and is reached ONLY by
+// joining to power_plants IN THIS SAME QUERY — a LEFT JOIN, not a pre-check
+// run separately, so this predicate is what an isolation test actually
+// exercises.
+//
+// A plant not visible to the Scope contributes ZERO rows: the caller
+// reports ErrNotFound. A visible plant with no devices yet contributes
+// EXACTLY ONE row with d.id (and every other d.* column) NULL — the
+// sentinel the caller checks; a visible plant with devices contributes one
+// row per device, none of them NULL.
+func (q *Queries) PlantDevicesList(ctx context.Context, arg PlantDevicesListParams) ([]PlantDevicesListRow, error) {
 	rows, err := q.db.Query(ctx, plantDevicesList, arg.PlantID, arg.CompanyID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []PowerPlantDevice
+	var items []PlantDevicesListRow
 	for rows.Next() {
-		var i PowerPlantDevice
+		var i PlantDevicesListRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.PlantID,
@@ -406,6 +416,59 @@ type PlantGetParams struct {
 // further (repository.go's PlantRepository doc comment).
 func (q *Queries) PlantGet(ctx context.Context, arg PlantGetParams) (PowerPlant, error) {
 	row := q.db.QueryRow(ctx, plantGet, arg.ID, arg.CompanyID)
+	var i PowerPlant
+	err := row.Scan(
+		&i.ID,
+		&i.CompanyID,
+		&i.Name,
+		&i.InstallationNumber,
+		&i.PlantKind,
+		&i.PvBrandModel,
+		&i.PanelPowerW,
+		&i.PanelEfficiencyPct,
+		&i.PanelCount,
+		&i.StringCount,
+		&i.Orientation,
+		&i.TiltAngleDeg,
+		&i.TotalCapacityKw,
+		&i.YearlyTargetKwh,
+		&i.InstallationDate,
+		&i.Address,
+		&i.Latitude,
+		&i.Longitude,
+		&i.IsolarPsID,
+		&i.IsolarPsKey,
+		&i.IsolarPsName,
+		&i.IsolarInstalledKw,
+		&i.IsolarLinkedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const plantGetForShare = `-- name: PlantGetForShare :one
+select id, company_id, name, installation_number, plant_kind, pv_brand_model, panel_power_w, panel_efficiency_pct, panel_count, string_count, orientation, tilt_angle_deg, total_capacity_kw, yearly_target_kwh, installation_date, address, latitude, longitude, isolar_ps_id, isolar_ps_key, isolar_ps_name, isolar_installed_kw, isolar_linked_at, created_at, updated_at, deleted_at from power_plants
+where id = $1 and company_id = $2 and deleted_at is null
+for share
+`
+
+type PlantGetForShareParams struct {
+	ID        uuid.UUID
+	CompanyID uuid.UUID
+}
+
+// Same predicate as PlantGet, but takes a FOR SHARE lock: used INSIDE each
+// Replace… method's transaction so a concurrent SoftDelete of the same plant
+// cannot race the delete+insert that follows it. This is not itself the
+// isolation boundary for the child tables below — each Delete/Insert query
+// is scoped on its own — it exists so an empty replacement list still has
+// something to return ErrNotFound from, since delete-then-insert-nothing
+// would otherwise run no query that could fail on a foreign or invisible
+// plant.
+func (q *Queries) PlantGetForShare(ctx context.Context, arg PlantGetForShareParams) (PowerPlant, error) {
+	row := q.db.QueryRow(ctx, plantGetForShare, arg.ID, arg.CompanyID)
 	var i PowerPlant
 	err := row.Scan(
 		&i.ID,
@@ -517,8 +580,12 @@ func (q *Queries) PlantList(ctx context.Context, arg PlantListParams) ([]PowerPl
 }
 
 const plantMonthlyTargetInsert = `-- name: PlantMonthlyTargetInsert :one
-insert into power_plant_monthly_targets as "row" (plant_id, month, target_kwh)
-values ($1, $2, $3)
+insert into power_plant_monthly_targets (plant_id, month, target_kwh)
+select $1, $2, $3
+where exists (
+    select 1 from power_plants p
+    where p.id = $1 and p.company_id = $4 and p.deleted_at is null
+)
 returning plant_id, month, target_kwh
 `
 
@@ -526,30 +593,53 @@ type PlantMonthlyTargetInsertParams struct {
 	PlantID   uuid.UUID
 	Month     int16
 	TargetKwh pgtype.Numeric
+	CompanyID uuid.UUID
 }
 
-// The `as "row"` alias dodges TestEveryFunctionSQLcMustTypeIsDeclared's call
-// scanner — see queries/admin_audit.sql's comment on AdminAppendPlatformAudit.
+// Isolation: the insert only runs when plant_id's parent is visible to the
+// Scope, checked via exists(...) IN THIS SAME STATEMENT. An invisible plant
+// inserts zero rows; the :one scan then reports ErrNoRows, translated to
+// ErrNotFound.
 func (q *Queries) PlantMonthlyTargetInsert(ctx context.Context, arg PlantMonthlyTargetInsertParams) (PowerPlantMonthlyTarget, error) {
-	row := q.db.QueryRow(ctx, plantMonthlyTargetInsert, arg.PlantID, arg.Month, arg.TargetKwh)
+	row := q.db.QueryRow(ctx, plantMonthlyTargetInsert,
+		arg.PlantID,
+		arg.Month,
+		arg.TargetKwh,
+		arg.CompanyID,
+	)
 	var i PowerPlantMonthlyTarget
 	err := row.Scan(&i.PlantID, &i.Month, &i.TargetKwh)
 	return i, err
 }
 
 const plantMonthlyTargetsDelete = `-- name: PlantMonthlyTargetsDelete :exec
-delete from power_plant_monthly_targets where plant_id = $1
+delete from power_plant_monthly_targets t
+using power_plants p
+where t.plant_id = p.id
+  and t.plant_id = $1
+  and p.company_id = $2
+  and p.deleted_at is null
 `
 
-func (q *Queries) PlantMonthlyTargetsDelete(ctx context.Context, plantID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, plantMonthlyTargetsDelete, plantID)
+type PlantMonthlyTargetsDeleteParams struct {
+	PlantID   uuid.UUID
+	CompanyID uuid.UUID
+}
+
+// Isolation: scoped via a join to power_plants IN THIS SAME STATEMENT (a
+// DELETE … USING), replacing what used to be a Go-level pre-check run on
+// the pool before the write. A foreign or otherwise invisible plant_id
+// deletes zero rows rather than every target under a well-known id.
+func (q *Queries) PlantMonthlyTargetsDelete(ctx context.Context, arg PlantMonthlyTargetsDeleteParams) error {
+	_, err := q.db.Exec(ctx, plantMonthlyTargetsDelete, arg.PlantID, arg.CompanyID)
 	return err
 }
 
 const plantMonthlyTargetsList = `-- name: PlantMonthlyTargetsList :many
-select t.plant_id, t.month, t.target_kwh from power_plant_monthly_targets t
-join power_plants p on p.id = t.plant_id
-where t.plant_id = $1 and p.company_id = $2 and p.deleted_at is null
+select t.plant_id, t.month, t.target_kwh
+from power_plants p
+left join power_plant_monthly_targets t on t.plant_id = p.id
+where p.id = $1 and p.company_id = $2 and p.deleted_at is null
 order by t.month
 `
 
@@ -558,17 +648,31 @@ type PlantMonthlyTargetsListParams struct {
 	CompanyID uuid.UUID
 }
 
-// Isolation: power_plant_monthly_targets has no company_id — join through
-// power_plants.
-func (q *Queries) PlantMonthlyTargetsList(ctx context.Context, arg PlantMonthlyTargetsListParams) ([]PowerPlantMonthlyTarget, error) {
+type PlantMonthlyTargetsListRow struct {
+	PlantID   *uuid.UUID
+	Month     *int16
+	TargetKwh pgtype.Numeric
+}
+
+// Isolation: power_plant_monthly_targets has no company_id and is reached
+// ONLY by joining to power_plants IN THIS SAME QUERY — a LEFT JOIN, not a
+// pre-check run separately, so this predicate is what an isolation test
+// actually exercises.
+//
+// A plant not visible to the Scope contributes ZERO rows: the caller
+// reports ErrNotFound. A visible plant with no targets yet contributes
+// EXACTLY ONE row with t.plant_id (and every other t.* column) NULL — the
+// sentinel the caller checks; a visible plant with targets contributes one
+// row per target, none of them NULL.
+func (q *Queries) PlantMonthlyTargetsList(ctx context.Context, arg PlantMonthlyTargetsListParams) ([]PlantMonthlyTargetsListRow, error) {
 	rows, err := q.db.Query(ctx, plantMonthlyTargetsList, arg.PlantID, arg.CompanyID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []PowerPlantMonthlyTarget
+	var items []PlantMonthlyTargetsListRow
 	for rows.Next() {
-		var i PowerPlantMonthlyTarget
+		var i PlantMonthlyTargetsListRow
 		if err := rows.Scan(&i.PlantID, &i.Month, &i.TargetKwh); err != nil {
 			return nil, err
 		}
@@ -712,23 +816,4 @@ func (q *Queries) PlantUpdate(ctx context.Context, arg PlantUpdateParams) (Power
 		&i.DeletedAt,
 	)
 	return i, err
-}
-
-const plantVisible = `-- name: PlantVisible :one
-select exists(
-    select 1 from power_plants
-    where id = $1 and company_id = $2 and deleted_at is null
-)
-`
-
-type PlantVisibleParams struct {
-	ID        uuid.UUID
-	CompanyID uuid.UUID
-}
-
-func (q *Queries) PlantVisible(ctx context.Context, arg PlantVisibleParams) (bool, error) {
-	row := q.db.QueryRow(ctx, plantVisible, arg.ID, arg.CompanyID)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
 }

@@ -108,3 +108,17 @@ func adminTSPtr(v pgtype.Timestamptz) *time.Time {
 	t := v.Time
 	return &t
 }
+
+// adminTSOrNow is adminTSPtr's write-side counterpart for a NOT NULL
+// created_at column written from a plain time.Time: a caller that leaves
+// CreatedAt at its zero value gets SQL NULL, which AdminAppendPlatformAudit
+// pairs with `coalesce(sqlc.narg(at)::timestamptz, now())` so the row gets
+// the database's own now() instead of literally storing 0001-01-01. See
+// package postgres's tsOrNow (internal/store/postgres/convert.go) for the
+// scoped-surface twin of this same conversion.
+func adminTSOrNow(t time.Time) pgtype.Timestamptz {
+	if t.IsZero() {
+		return pgtype.Timestamptz{}
+	}
+	return pgtype.Timestamptz{Time: t, Valid: true}
+}

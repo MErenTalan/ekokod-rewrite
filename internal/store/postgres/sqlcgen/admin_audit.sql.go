@@ -15,9 +15,9 @@ import (
 
 const adminAppendPlatformAudit = `-- name: AdminAppendPlatformAudit :one
 
-insert into audit_log as "row" (company_id, user_id, action, entity_type, entity_id, before, after, ip, created_at)
+insert into audit_log (company_id, user_id, action, entity_type, entity_id, before, after, ip, created_at)
 values (null, $1, $2, $3, $4,
-        $5, $6, $7, $8)
+        $5, $6, $7, coalesce($8::timestamptz, now()))
 returning id, company_id, user_id, action, entity_type, entity_id, before, after, ip, created_at
 `
 
@@ -37,14 +37,8 @@ type AdminAppendPlatformAuditParams struct {
 // no tenant. The caller (internal/store/postgres/admin) refuses any entry
 // whose CompanyID is non-nil before this query ever runs.
 //
-// The `as t` alias is load-bearing, not decorative: without it,
-// "audit_log (" — the table name immediately followed by its column list —
-// reads to TestEveryFunctionSQLcMustTypeIsDeclared's call scanner as a call
-// to a function named audit_log(), which no shim declares. The scanner has
-// no notion of an INSERT's own column list, and this package may not edit
-// that guard (see wave-f-context.md). Aliasing moves the table name away
-// from the "(" that follows it; every other Create/Insert query this task
-// adds carries the same alias for the same reason.
+// coalesce(sqlc.narg(at)::timestamptz, now()): a caller that leaves CreatedAt at its zero
+// value gets the database's own now() rather than writing 0001-01-01.
 func (q *Queries) AdminAppendPlatformAudit(ctx context.Context, arg AdminAppendPlatformAuditParams) (AuditLog, error) {
 	row := q.db.QueryRow(ctx, adminAppendPlatformAudit,
 		arg.UserID,

@@ -121,7 +121,7 @@ func (r *CompanyRepository) Create(ctx context.Context, s store.Scope, c model.C
 		ContactName:    c.ContactName,
 		ContactPhone:   c.ContactPhone,
 		Sector:         c.Sector,
-		At:             ts(c.CreatedAt),
+		At:             tsOrNow(c.CreatedAt),
 	})
 	if err != nil {
 		return model.Company{}, pgerr.Translate(r.pool, "create company", err)
@@ -273,7 +273,7 @@ func (r *UserRepository) Create(ctx context.Context, s store.Scope, u model.User
 		PasswordHash: u.PasswordHash,
 		Role:         sqlcgen.UserRole(u.Role),
 		IsActive:     u.IsActive,
-		At:           ts(u.CreatedAt),
+		At:           tsOrNow(u.CreatedAt),
 	})
 	if err != nil {
 		return model.User{}, pgerr.Translate(r.pool, "create user", err)
@@ -285,6 +285,9 @@ func (r *UserRepository) Create(ctx context.Context, s store.Scope, u model.User
 func (r *UserRepository) Update(ctx context.Context, s store.Scope, u model.User) (model.User, error) {
 	if !s.Valid() {
 		return model.User{}, store.ErrInvalidScope
+	}
+	if u.CompanyID != s.CompanyID {
+		return model.User{}, store.ErrNotFound
 	}
 	row, err := r.q.UserUpdate(ctx, sqlcgen.UserUpdateParams{
 		ID:        u.ID,
@@ -506,7 +509,7 @@ func (r *SessionRepository) Create(ctx context.Context, s store.Scope, sess mode
 		Ip:                sess.IP,
 		ExpiresAt:         ts(sess.ExpiresAt),
 		RevokedAt:         revokedAt,
-		At:                ts(sess.CreatedAt),
+		At:                tsOrNow(sess.CreatedAt),
 		CompanyID:         s.CompanyID,
 	})
 	if err != nil {
@@ -622,7 +625,7 @@ func (r *AuditRepository) Append(ctx context.Context, s store.Scope, e model.Aud
 		Before:     e.Before,
 		After:      e.After,
 		Ip:         e.IP,
-		At:         ts(e.CreatedAt),
+		At:         tsOrNow(e.CreatedAt),
 	})
 	if err != nil {
 		return model.AuditEntry{}, pgerr.Translate(r.pool, "append audit entry", err)
@@ -661,55 +664,4 @@ func (r *AuditRepository) List(ctx context.Context, s store.Scope, f store.Audit
 		out = append(out, auditFromRow(row))
 	}
 	return out, nil
-}
-
-// ---------------------------------------------------------------------------
-// Shared helpers. Unexported, used across this task's repository files.
-// ---------------------------------------------------------------------------
-
-// ts converts a NOT NULL timestamp to the pgtype the generated code writes.
-func ts(t time.Time) pgtype.Timestamptz { return pgtype.Timestamptz{Time: t, Valid: true} }
-
-// tsPtr converts a NULLABLE pgtype.Timestamptz read back from the database
-// into a *time.Time, nil for SQL NULL.
-func tsPtr(v pgtype.Timestamptz) *time.Time {
-	if !v.Valid {
-		return nil
-	}
-	t := v.Time
-	return &t
-}
-
-// pageLimit resolves store.Page.Limit against a repository's own default and
-// cap: zero or negative means "the repository's default", never "no limit",
-// and anything above the cap is clamped rather than passed through — see the
-// doc on store.Page.
-func pageLimit(p store.Page, def, max int32) int32 {
-	switch {
-	case p.Limit <= 0:
-		return def
-	case p.Limit > max:
-		return max
-	default:
-		return p.Limit
-	}
-}
-
-// uuidsOrEmpty normalises a nil []uuid.UUID to a non-nil, empty one.
-//
-// This is not cosmetic. pgx encodes a nil slice as SQL NULL, and every
-// optional "narrow by these ids" filter in this task's queries reads as
-// `cardinality(sqlc.arg(x)::uuid[]) = 0 or id = any(sqlc.arg(x)::uuid[])`.
-// Postgres's cardinality(NULL) is NULL, not 0, so a nil filter makes the
-// whole OR — and everything AND-ed with it — evaluate to NULL, which
-// excludes every row: a caller that left an ids filter unset would see an
-// empty list instead of an unfiltered one. An empty, non-nil slice encodes
-// as '{}', whose cardinality is a real 0, which is what "not filtering by
-// this" is supposed to mean. Every FilterIds-shaped parameter in this
-// package's List methods must be passed through this first.
-func uuidsOrEmpty(ids []uuid.UUID) []uuid.UUID {
-	if ids == nil {
-		return []uuid.UUID{}
-	}
-	return ids
 }

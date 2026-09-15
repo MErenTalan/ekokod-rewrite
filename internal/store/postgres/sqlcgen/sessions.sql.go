@@ -14,9 +14,10 @@ import (
 )
 
 const sessionCreate = `-- name: SessionCreate :one
-insert into sessions as "row" (id, user_id, refresh_token_hash, device_fingerprint, user_agent, ip, expires_at, revoked_at, created_at)
+insert into sessions (id, user_id, refresh_token_hash, device_fingerprint, user_agent, ip, expires_at, revoked_at, created_at)
 select $1, $2, $3, $4,
-       $5, $6, $7, $8, $9
+       $5, $6, $7, $8,
+       coalesce($9::timestamptz, now()) as created_at
 where exists (
     select 1 from users
     where id = $2 and company_id = $10 and deleted_at is null
@@ -41,8 +42,8 @@ type SessionCreateParams struct {
 // only when that user is visible; if not, zero rows are inserted and the
 // :one scan reports ErrNoRows, translated to ErrNotFound.
 //
-// The `as "row"` alias dodges TestEveryFunctionSQLcMustTypeIsDeclared's call
-// scanner — see queries/admin_audit.sql's comment on AdminAppendPlatformAudit.
+// coalesce(sqlc.narg(at)::timestamptz, now()): a caller that leaves CreatedAt at its zero
+// value gets the database's own now() rather than writing 0001-01-01.
 func (q *Queries) SessionCreate(ctx context.Context, arg SessionCreateParams) (Session, error) {
 	row := q.db.QueryRow(ctx, sessionCreate,
 		arg.ID,
@@ -178,7 +179,7 @@ func (q *Queries) SessionList(ctx context.Context, arg SessionListParams) ([]Ses
 
 const sessionRevoke = `-- name: SessionRevoke :execrows
 update sessions
-set revoked_at = $1
+set revoked_at = coalesce(sessions.revoked_at, $1)
 where sessions.id = $2
   and sessions.user_id in (select users.id from users where users.company_id = $3 and users.deleted_at is null)
 `
@@ -189,6 +190,10 @@ type SessionRevokeParams struct {
 	CompanyID uuid.UUID
 }
 
+// revoked_at = coalesce(revoked_at, $at): re-revoking an already-revoked
+// session must keep the ORIGINAL instant, because replay detection compares
+// against it — overwriting it with a later "re-revoke" time would make a
+// genuine replay look like it happened before the session was revoked.
 func (q *Queries) SessionRevoke(ctx context.Context, arg SessionRevokeParams) (int64, error) {
 	result, err := q.db.Exec(ctx, sessionRevoke, arg.At, arg.ID, arg.CompanyID)
 	if err != nil {

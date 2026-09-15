@@ -15,9 +15,9 @@ import (
 
 const auditAppend = `-- name: AuditAppend :one
 
-insert into audit_log as "row" (company_id, user_id, action, entity_type, entity_id, before, after, ip, created_at)
+insert into audit_log (company_id, user_id, action, entity_type, entity_id, before, after, ip, created_at)
 values ($1, $2, $3, $4,
-        $5, $6, $7, $8, $9)
+        $5, $6, $7, $8, coalesce($9::timestamptz, now()))
 returning id, company_id, user_id, action, entity_type, entity_id, before, after, ip, created_at
 `
 
@@ -36,8 +36,8 @@ type AuditAppendParams struct {
 // AuditRepository queries. audit_log.company_id is nullable, for platform
 // rows written through AdminAuditRepository; every query here stores and
 // sees only company_id = the Scope's own, never a NULL row.
-// The `as "row"` alias dodges TestEveryFunctionSQLcMustTypeIsDeclared's call
-// scanner — see queries/admin_audit.sql's comment on AdminAppendPlatformAudit.
+// coalesce(sqlc.narg(at)::timestamptz, now()): a caller that leaves CreatedAt at its zero
+// value gets the database's own now() rather than writing 0001-01-01.
 func (q *Queries) AuditAppend(ctx context.Context, arg AuditAppendParams) (AuditLog, error) {
 	row := q.db.QueryRow(ctx, auditAppend,
 		arg.CompanyID,

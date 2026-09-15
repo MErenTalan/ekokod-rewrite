@@ -13,12 +13,12 @@ import (
 )
 
 const companyCreate = `-- name: CompanyCreate :one
-insert into companies as "row"
+insert into companies
     (id, name, address, total_area_m2, personnel_count, contact_name,
      contact_phone, sector, created_at, updated_at)
 values ($1, $2, $3, $4,
         $5, $6, $7,
-        $8, $9, $9)
+        $8, coalesce($9::timestamptz, now()), coalesce($9::timestamptz, now()))
 returning id, name, address, total_area_m2, personnel_count, contact_name, contact_phone, sector, created_at, updated_at, deleted_at
 `
 
@@ -34,8 +34,8 @@ type CompanyCreateParams struct {
 	At             pgtype.Timestamptz
 }
 
-// The `as "row"` alias dodges TestEveryFunctionSQLcMustTypeIsDeclared's call
-// scanner — see queries/admin_audit.sql's comment on AdminAppendPlatformAudit.
+// coalesce(sqlc.narg(at)::timestamptz, now()): a caller that leaves CreatedAt at its zero
+// value gets the database's own now() rather than writing 0001-01-01.
 func (q *Queries) CompanyCreate(ctx context.Context, arg CompanyCreateParams) (Company, error) {
 	row := q.db.QueryRow(ctx, companyCreate,
 		arg.ID,

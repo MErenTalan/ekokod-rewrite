@@ -42,20 +42,33 @@ func (q *Queries) AnalyzerBuildingVisible(ctx context.Context, arg AnalyzerBuild
 }
 
 const analyzerCreate = `-- name: AnalyzerCreate :one
-insert into analyzers as "row"
+insert into analyzers
     (id, company_id, building_id, provider, provider_subtype, installation_number,
      customer_name, address, province, district, neighbourhood, street,
      tariff_type, tariff_kind, installation_kind, installed_power_kw, meter_number,
      meter_model, meter_multiplier, counterparty_no, metering_point_name,
      latitude, longitude, etso_code, definition_type, is_active, created_at, updated_at)
-values ($1, $2, $3, $4,
-        $5, $6, $7,
-        $8, $9, $10, $11,
-        $12, $13, $14, $15,
-        $16, $17, $18,
-        $19, $20, $21,
-        $22, $23, $24, $25,
-        $26, $27, $27)
+select $1, $2, $3, $4,
+       $5, $6, $7,
+       $8, $9, $10, $11,
+       $12, $13, $14, $15,
+       $16, $17, $18,
+       $19, $20, $21,
+       $22, $23, $24, $25,
+       $26, coalesce($27::timestamptz, now()), coalesce($27::timestamptz, now())
+where (
+    ($3::uuid is null and $28::boolean)
+    or (
+        $3::uuid is not null
+        and exists (
+            select 1 from buildings b
+            where b.id = $3
+              and b.company_id = $2
+              and ($28::boolean or b.id = any($29::uuid[]))
+              and b.deleted_at is null
+        )
+    )
+)
 returning id, company_id, building_id, provider, provider_subtype, installation_number, customer_name, address, province, district, neighbourhood, street, tariff_type, tariff_kind, installation_kind, installed_power_kw, meter_number, meter_model, meter_multiplier, counterparty_no, metering_point_name, latitude, longitude, etso_code, definition_type, last_reading_at, is_active, created_at, updated_at, deleted_at
 `
 
@@ -87,11 +100,23 @@ type AnalyzerCreateParams struct {
 	DefinitionType     *int16
 	IsActive           bool
 	At                 pgtype.Timestamptz
+	AllBuildings       bool
+	BuildingIds        []uuid.UUID
 }
 
-// The `as "row"` alias dodges TestEveryFunctionSQLcMustTypeIsDeclared's call
-// scanner, which otherwise reads "analyzers (" as a call to a function named
-// analyzers() — see queries/admin_audit.sql's comment on AdminAppendPlatformAudit.
+// coalesce(sqlc.narg(at)::timestamptz, now()): a caller that leaves CreatedAt at its zero
+// value gets the database's own now() rather than writing 0001-01-01.
+//
+// CONTROLLER RULING (fix round 1, second dispatch): a stored foreign key
+// must be validated IN SQL, inside the write statement — never by a
+// Go-level check alone. A sibling task's AdminScope write stored another
+// tenant's building id because its Go-level check used
+// Scope.AllowsBuilding(), which returns true for ANY id under AllBuildings
+// with no company_id check at all. The WHERE clause below embeds BOTH the
+// building_id FK check (company_id, the Scope's building branch, and
+// deleted_at) AND the folded-minor rule that a nil building_id may only be
+// written under an AllBuildings Scope, so this insert cannot write a
+// building_id this exact Scope could not itself see.
 func (q *Queries) AnalyzerCreate(ctx context.Context, arg AnalyzerCreateParams) (Analyzer, error) {
 	row := q.db.QueryRow(ctx, analyzerCreate,
 		arg.ID,
@@ -121,6 +146,8 @@ func (q *Queries) AnalyzerCreate(ctx context.Context, arg AnalyzerCreateParams) 
 		arg.DefinitionType,
 		arg.IsActive,
 		arg.At,
+		arg.AllBuildings,
+		arg.BuildingIds,
 	)
 	var i Analyzer
 	err := row.Scan(
@@ -300,10 +327,13 @@ where company_id = $1
   and (cardinality($4::uuid[]) = 0 or id = any($4::uuid[]))
   and ($5::uuid is null or building_id = $5)
   and (not $6::boolean or building_id is null)
-  -- Compared as text[], not integration_provider[] — see UserList's
-  -- comment on the roles filter in queries/users.sql for why.
+  -- The PARAMETER is cast text[] -> integration_provider[]; the COLUMN is
+  -- left uncast. See UserList's comment on the roles filter in
+  -- queries/users.sql for why this order matters: providers leads
+  -- ` + "`" + `analyzers (provider, provider_subtype, installation_number)` + "`" + `, and
+  -- casting the column itself would defeat that index on every list call.
   and (cardinality($7::text[]) = 0
-       or provider::text = any($7::text[]))
+       or provider = any($7::text[]::integration_provider[]))
   and ($8::boolean is null or is_active = $8)
   and ($9::boolean or deleted_at is null)
 order by installation_number
@@ -475,11 +505,24 @@ set building_id = $1,
     definition_type = $20,
     is_active = $21,
     updated_at = $22
-where id = $23
-  and company_id = $24
+where analyzers.id = $23
+  and analyzers.company_id = $24
   and ($25::boolean
-       or (building_id is not null and building_id = any($26::uuid[])))
-  and deleted_at is null
+       or (analyzers.building_id is not null and analyzers.building_id = any($26::uuid[])))
+  and analyzers.deleted_at is null
+  and (
+      ($1::uuid is null and $25::boolean)
+      or (
+          $1::uuid is not null
+          and exists (
+              select 1 from buildings b
+              where b.id = $1
+                and b.company_id = $24
+                and ($25::boolean or b.id = any($26::uuid[]))
+                and b.deleted_at is null
+          )
+      )
+  )
 returning id, company_id, building_id, provider, provider_subtype, installation_number, customer_name, address, province, district, neighbourhood, street, tariff_type, tariff_kind, installation_kind, installed_power_kw, meter_number, meter_model, meter_multiplier, counterparty_no, metering_point_name, latitude, longitude, etso_code, definition_type, last_reading_at, is_active, created_at, updated_at, deleted_at
 `
 
@@ -512,6 +555,15 @@ type AnalyzerUpdateParams struct {
 	BuildingIds       []uuid.UUID
 }
 
+// Isolation, two DIFFERENT building_id checks in one statement: the WHERE
+// clause's bare `building_id` (no alias — it names THIS table, the row's
+// CURRENT, already-stored value) gates whether the row itself is visible to
+// the Scope, exactly like every other scoped method; the embedded exists(...)
+// clause below additionally validates sqlc.arg(building_id), the NEW value
+// this statement is about to WRITE, the same way AnalyzerCreate does — see
+// its comment. Before this fix round, only the row's current value was
+// checked in SQL, and the new value was validated solely by a Go-level
+// pre-check the SQL itself did not enforce.
 func (q *Queries) AnalyzerUpdate(ctx context.Context, arg AnalyzerUpdateParams) (Analyzer, error) {
 	row := q.db.QueryRow(ctx, analyzerUpdate,
 		arg.BuildingID,

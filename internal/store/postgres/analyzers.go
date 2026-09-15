@@ -157,13 +157,23 @@ func (r *AnalyzerRepository) List(ctx context.Context, s store.Scope, f store.An
 	return out, nil
 }
 
-// buildingVisible reports whether buildingID is nil (an unassigned analyzer,
-// always permitted to name) or a building visible to s.
+// buildingVisible reports whether buildingID may be named by s: a concrete
+// id must be a building visible to s, and nil (an unassigned analyzer) is
+// permitted ONLY under an AllBuildings Scope.
+//
+// CONTROLLER RULING (fix round 1): a narrow (non-AllBuildings) Scope may not
+// create or update an analyzer to a nil BuildingID. The Scope's own
+// BuildingFilter() can never match a NULL building_id — that is the whole
+// point of the AnalyzerFilter.Unassigned design documented in
+// queries/analyzers.sql's header — so a narrow Scope that WAS allowed to
+// write a nil BuildingID would create (or unassign into) a row it could
+// never see again through Get or List: it would move the analyzer out of
+// its own sight rather than merely leaving it unassigned.
 func (r *AnalyzerRepository) buildingVisible(ctx context.Context, s store.Scope, buildingID *uuid.UUID) (bool, error) {
-	if buildingID == nil {
-		return true, nil
-	}
 	ids, all := s.BuildingFilter()
+	if buildingID == nil {
+		return all, nil
+	}
 	return r.q.AnalyzerBuildingVisible(ctx, sqlcgen.AnalyzerBuildingVisibleParams{
 		BuildingID: *buildingID, CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: ids,
 	})
@@ -188,10 +198,13 @@ func (r *AnalyzerRepository) Create(ctx context.Context, s store.Scope, a model.
 	if id == uuid.Nil {
 		id = uuid.New()
 	}
+	buildingIDs, allBuildings := s.BuildingFilter()
 	row, err := r.q.AnalyzerCreate(ctx, sqlcgen.AnalyzerCreateParams{
 		ID:                 id,
 		CompanyID:          s.CompanyID,
 		BuildingID:         a.BuildingID,
+		AllBuildings:       allBuildings,
+		BuildingIds:        buildingIDs,
 		Provider:           sqlcgen.IntegrationProvider(a.Provider),
 		ProviderSubtype:    a.ProviderSubtype,
 		InstallationNumber: a.InstallationNumber,
@@ -215,7 +228,7 @@ func (r *AnalyzerRepository) Create(ctx context.Context, s store.Scope, a model.
 		EtsoCode:           a.EtsoCode,
 		DefinitionType:     a.DefinitionType,
 		IsActive:           a.IsActive,
-		At:                 ts(a.CreatedAt),
+		At:                 tsOrNow(a.CreatedAt),
 	})
 	if err != nil {
 		return model.Analyzer{}, pgerr.Translate(r.pool, "create analyzer", err)
@@ -227,6 +240,9 @@ func (r *AnalyzerRepository) Create(ctx context.Context, s store.Scope, a model.
 func (r *AnalyzerRepository) Update(ctx context.Context, s store.Scope, a model.Analyzer) (model.Analyzer, error) {
 	if !s.Valid() {
 		return model.Analyzer{}, store.ErrInvalidScope
+	}
+	if a.CompanyID != s.CompanyID {
+		return model.Analyzer{}, store.ErrNotFound
 	}
 	visible, err := r.buildingVisible(ctx, s, a.BuildingID)
 	if err != nil {

@@ -13,21 +13,33 @@ import (
 )
 
 const buildingContactInsert = `-- name: BuildingContactInsert :one
-insert into building_contacts as "row" (id, building_id, name, phone, sort_order)
-values ($1, $2, $3, $4, $5)
+insert into building_contacts (id, building_id, name, phone, sort_order)
+select $1, $2, $3, $4, $5
+where exists (
+    select 1 from buildings b
+    where b.id = $2
+      and b.company_id = $6
+      and ($7::boolean or b.id = any($8::uuid[]))
+      and b.deleted_at is null
+)
 returning id, building_id, name, phone, sort_order
 `
 
 type BuildingContactInsertParams struct {
-	ID         uuid.UUID
-	BuildingID uuid.UUID
-	Name       *string
-	Phone      *string
-	SortOrder  int16
+	ID           uuid.UUID
+	BuildingID   uuid.UUID
+	Name         *string
+	Phone        *string
+	SortOrder    int16
+	CompanyID    uuid.UUID
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
 }
 
-// The `as "row"` alias dodges TestEveryFunctionSQLcMustTypeIsDeclared's call
-// scanner — see queries/admin_audit.sql's comment on AdminAppendPlatformAudit.
+// Isolation: the insert only runs when building_id's parent is visible to
+// the Scope, checked via exists(...) IN THIS SAME STATEMENT. An invisible
+// building inserts zero rows; the :one scan then reports ErrNoRows,
+// translated to ErrNotFound.
 func (q *Queries) BuildingContactInsert(ctx context.Context, arg BuildingContactInsertParams) (BuildingContact, error) {
 	row := q.db.QueryRow(ctx, buildingContactInsert,
 		arg.ID,
@@ -35,6 +47,9 @@ func (q *Queries) BuildingContactInsert(ctx context.Context, arg BuildingContact
 		arg.Name,
 		arg.Phone,
 		arg.SortOrder,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
 	)
 	var i BuildingContact
 	err := row.Scan(
@@ -48,18 +63,41 @@ func (q *Queries) BuildingContactInsert(ctx context.Context, arg BuildingContact
 }
 
 const buildingContactsDelete = `-- name: BuildingContactsDelete :exec
-delete from building_contacts where building_id = $1
+delete from building_contacts c
+using buildings b
+where c.building_id = b.id
+  and c.building_id = $1
+  and b.company_id = $2
+  and ($3::boolean or b.id = any($4::uuid[]))
+  and b.deleted_at is null
 `
 
-func (q *Queries) BuildingContactsDelete(ctx context.Context, buildingID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, buildingContactsDelete, buildingID)
+type BuildingContactsDeleteParams struct {
+	BuildingID   uuid.UUID
+	CompanyID    uuid.UUID
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
+}
+
+// Isolation: scoped via a join to buildings IN THIS SAME STATEMENT (a
+// DELETE … USING), replacing what used to be a Go-level pre-check run on
+// the pool before the write. A foreign or otherwise invisible building_id
+// deletes zero rows rather than every contact under a well-known id.
+func (q *Queries) BuildingContactsDelete(ctx context.Context, arg BuildingContactsDeleteParams) error {
+	_, err := q.db.Exec(ctx, buildingContactsDelete,
+		arg.BuildingID,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
+	)
 	return err
 }
 
 const buildingContactsList = `-- name: BuildingContactsList :many
-select c.id, c.building_id, c.name, c.phone, c.sort_order from building_contacts c
-join buildings b on b.id = c.building_id
-where c.building_id = $1
+select c.id, c.building_id, c.name, c.phone, c.sort_order
+from buildings b
+left join building_contacts c on c.building_id = b.id
+where b.id = $1
   and b.company_id = $2
   and ($3::boolean or b.id = any($4::uuid[]))
   and b.deleted_at is null
@@ -73,8 +111,27 @@ type BuildingContactsListParams struct {
 	BuildingIds  []uuid.UUID
 }
 
-// Isolation: building_contacts has no company_id — join through buildings.
-func (q *Queries) BuildingContactsList(ctx context.Context, arg BuildingContactsListParams) ([]BuildingContact, error) {
+type BuildingContactsListRow struct {
+	ID         *uuid.UUID
+	BuildingID *uuid.UUID
+	Name       *string
+	Phone      *string
+	SortOrder  *int16
+}
+
+// Isolation: building_contacts has no company_id and is reached ONLY by
+// joining to buildings IN THIS SAME QUERY — a LEFT JOIN, not a pre-check run
+// separately, so this predicate (company_id and the Scope's building
+// branch) is what an isolation test actually exercises, not a Go-level
+// lookup that would otherwise shadow it.
+//
+// A building not visible to the Scope contributes ZERO rows (nothing here
+// to distinguish it from "no such building"): the caller reports
+// ErrNotFound. A visible building with no contacts yet contributes EXACTLY
+// ONE row with every c.* column NULL (c.id IS NULL is the sentinel the
+// caller checks); a visible building with contacts contributes one row per
+// contact, none of them NULL.
+func (q *Queries) BuildingContactsList(ctx context.Context, arg BuildingContactsListParams) ([]BuildingContactsListRow, error) {
 	rows, err := q.db.Query(ctx, buildingContactsList,
 		arg.BuildingID,
 		arg.CompanyID,
@@ -85,9 +142,9 @@ func (q *Queries) BuildingContactsList(ctx context.Context, arg BuildingContacts
 		return nil, err
 	}
 	defer rows.Close()
-	var items []BuildingContact
+	var items []BuildingContactsListRow
 	for rows.Next() {
-		var i BuildingContact
+		var i BuildingContactsListRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.BuildingID,
@@ -106,13 +163,22 @@ func (q *Queries) BuildingContactsList(ctx context.Context, arg BuildingContacts
 }
 
 const buildingCreate = `-- name: BuildingCreate :one
-insert into buildings as "row"
+insert into buildings
     (id, company_id, name, address, latitude, longitude, floors, personnel_count,
      total_area_m2, sector, responsible_user_id, bill_cutoff_day, created_at, updated_at)
-values ($1, $2, $3, $4,
-        $5, $6, $7, $8,
-        $9, $10, $11,
-        $12, $13, $13)
+select $1, $2, $3, $4,
+       $5, $6, $7, $8,
+       $9, $10, $11,
+       $12, coalesce($13::timestamptz, now()), coalesce($13::timestamptz, now())
+where (
+    $11::uuid is null
+    or exists (
+        select 1 from users u
+        where u.id = $11
+          and u.company_id = $2
+          and u.deleted_at is null
+    )
+)
 returning id, company_id, name, address, latitude, longitude, floors, personnel_count, total_area_m2, sector, responsible_user_id, bill_cutoff_day, created_at, updated_at, deleted_at
 `
 
@@ -132,8 +198,17 @@ type BuildingCreateParams struct {
 	At                pgtype.Timestamptz
 }
 
-// The `as "row"` alias dodges TestEveryFunctionSQLcMustTypeIsDeclared's call
-// scanner — see queries/admin_audit.sql's comment on AdminAppendPlatformAudit.
+// coalesce(sqlc.narg(at)::timestamptz, now()): a caller that leaves CreatedAt at its zero
+// value gets the database's own now() rather than writing 0001-01-01.
+//
+// CONTROLLER RULING (fix round 1, second dispatch): every stored foreign key
+// must be validated IN SQL, inside the write statement — never by a
+// Go-level check alone (a sibling task's AdminScope write stored another
+// tenant's building id because its Go-level check used
+// Scope.AllowsBuilding(), which returns true for ANY id under AllBuildings
+// with no company_id check at all). responsible_user_id is embedded here as
+// an exists(...) gate on the insert itself, so the check cannot be skipped
+// by a call site that forgets it, and is provably tied to company_id.
 func (q *Queries) BuildingCreate(ctx context.Context, arg BuildingCreateParams) (Building, error) {
 	row := q.db.QueryRow(ctx, buildingCreate,
 		arg.ID,
@@ -226,6 +301,58 @@ type BuildingGetScopedParams struct {
 // own company.
 func (q *Queries) BuildingGetScoped(ctx context.Context, arg BuildingGetScopedParams) (Building, error) {
 	row := q.db.QueryRow(ctx, buildingGetScoped,
+		arg.ID,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
+	)
+	var i Building
+	err := row.Scan(
+		&i.ID,
+		&i.CompanyID,
+		&i.Name,
+		&i.Address,
+		&i.Latitude,
+		&i.Longitude,
+		&i.Floors,
+		&i.PersonnelCount,
+		&i.TotalAreaM2,
+		&i.Sector,
+		&i.ResponsibleUserID,
+		&i.BillCutoffDay,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const buildingGetScopedForShare = `-- name: BuildingGetScopedForShare :one
+select id, company_id, name, address, latitude, longitude, floors, personnel_count, total_area_m2, sector, responsible_user_id, bill_cutoff_day, created_at, updated_at, deleted_at from buildings
+where id = $1
+  and company_id = $2
+  and ($3::boolean or id = any($4::uuid[]))
+  and deleted_at is null
+for share
+`
+
+type BuildingGetScopedForShareParams struct {
+	ID           uuid.UUID
+	CompanyID    uuid.UUID
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
+}
+
+// Same predicate as BuildingGetScoped, but takes a FOR SHARE lock: used
+// INSIDE ReplaceContacts's transaction so a concurrent SoftDelete of the
+// same building cannot race the delete+insert that follows it. This is not
+// itself the isolation boundary for building_contacts — BuildingContactsDelete
+// and BuildingContactInsert below are each scoped on their own — it exists
+// so an empty replacement list still has something to return ErrNotFound
+// from, since delete-then-insert-nothing would otherwise run no query that
+// could fail on a foreign or invisible building.
+func (q *Queries) BuildingGetScopedForShare(ctx context.Context, arg BuildingGetScopedForShareParams) (Building, error) {
+	row := q.db.QueryRow(ctx, buildingGetScopedForShare,
 		arg.ID,
 		arg.CompanyID,
 		arg.AllBuildings,
@@ -438,10 +565,19 @@ set name = $1,
     responsible_user_id = $9,
     bill_cutoff_day = $10,
     updated_at = $11
-where id = $12
-  and company_id = $13
-  and ($14::boolean or id = any($15::uuid[]))
-  and deleted_at is null
+where buildings.id = $12
+  and buildings.company_id = $13
+  and ($14::boolean or buildings.id = any($15::uuid[]))
+  and buildings.deleted_at is null
+  and (
+      $9::uuid is null
+      or exists (
+          select 1 from users u
+          where u.id = $9
+            and u.company_id = $13
+            and u.deleted_at is null
+      )
+  )
 returning id, company_id, name, address, latitude, longitude, floors, personnel_count, total_area_m2, sector, responsible_user_id, bill_cutoff_day, created_at, updated_at, deleted_at
 `
 
@@ -463,6 +599,9 @@ type BuildingUpdateParams struct {
 	BuildingIds       []uuid.UUID
 }
 
+// Isolation: the responsible_user_id FK is validated IN THIS SAME STATEMENT
+// (see BuildingCreate's comment) rather than relying solely on a separate
+// Go-level pre-check.
 func (q *Queries) BuildingUpdate(ctx context.Context, arg BuildingUpdateParams) (Building, error) {
 	row := q.db.QueryRow(ctx, buildingUpdate,
 		arg.Name,

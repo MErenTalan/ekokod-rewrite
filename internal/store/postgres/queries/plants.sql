@@ -8,12 +8,6 @@
 select * from power_plants
 where id = sqlc.arg(id) and company_id = sqlc.arg(company_id) and deleted_at is null;
 
--- name: PlantVisible :one
-select exists(
-    select 1 from power_plants
-    where id = sqlc.arg(id) and company_id = sqlc.arg(company_id) and deleted_at is null
-);
-
 -- name: PlantList :many
 select * from power_plants
 where company_id = sqlc.arg(company_id)
@@ -27,9 +21,9 @@ order by name
 limit sqlc.arg(page_limit) offset sqlc.arg(page_offset);
 
 -- name: PlantCreate :one
--- The `as "row"` alias dodges TestEveryFunctionSQLcMustTypeIsDeclared's call
--- scanner — see queries/admin_audit.sql's comment on AdminAppendPlatformAudit.
-insert into power_plants as "row"
+-- coalesce(sqlc.narg(at)::timestamptz, now()): a caller that leaves CreatedAt at its zero
+-- value gets the database's own now() rather than writing 0001-01-01.
+insert into power_plants
     (id, company_id, name, installation_number, plant_kind, pv_brand_model,
      panel_power_w, panel_efficiency_pct, panel_count, string_count, orientation,
      tilt_angle_deg, total_capacity_kw, yearly_target_kwh, installation_date,
@@ -42,7 +36,7 @@ values (sqlc.arg(id), sqlc.arg(company_id), sqlc.arg(name), sqlc.arg(installatio
         sqlc.arg(yearly_target_kwh), sqlc.arg(installation_date), sqlc.arg(address),
         sqlc.arg(latitude), sqlc.arg(longitude), sqlc.arg(isolar_ps_id), sqlc.arg(isolar_ps_key),
         sqlc.arg(isolar_ps_name), sqlc.arg(isolar_installed_kw), sqlc.arg(isolar_linked_at),
-        sqlc.arg(at), sqlc.arg(at))
+        coalesce(sqlc.narg(at)::timestamptz, now()), coalesce(sqlc.narg(at)::timestamptz, now()))
 returning *;
 
 -- name: PlantUpdate :one
@@ -77,93 +71,163 @@ update power_plants
 set deleted_at = sqlc.arg(deleted_at)
 where id = sqlc.arg(id) and company_id = sqlc.arg(company_id) and deleted_at is null;
 
+-- name: PlantGetForShare :one
+-- Same predicate as PlantGet, but takes a FOR SHARE lock: used INSIDE each
+-- Replace… method's transaction so a concurrent SoftDelete of the same plant
+-- cannot race the delete+insert that follows it. This is not itself the
+-- isolation boundary for the child tables below — each Delete/Insert query
+-- is scoped on its own — it exists so an empty replacement list still has
+-- something to return ErrNotFound from, since delete-then-insert-nothing
+-- would otherwise run no query that could fail on a foreign or invisible
+-- plant.
+select * from power_plants
+where id = sqlc.arg(id) and company_id = sqlc.arg(company_id) and deleted_at is null
+for share;
+
 -- name: PlantMonthlyTargetsList :many
--- Isolation: power_plant_monthly_targets has no company_id — join through
--- power_plants.
-select t.* from power_plant_monthly_targets t
-join power_plants p on p.id = t.plant_id
-where t.plant_id = sqlc.arg(plant_id) and p.company_id = sqlc.arg(company_id) and p.deleted_at is null
+-- Isolation: power_plant_monthly_targets has no company_id and is reached
+-- ONLY by joining to power_plants IN THIS SAME QUERY — a LEFT JOIN, not a
+-- pre-check run separately, so this predicate is what an isolation test
+-- actually exercises.
+--
+-- A plant not visible to the Scope contributes ZERO rows: the caller
+-- reports ErrNotFound. A visible plant with no targets yet contributes
+-- EXACTLY ONE row with t.plant_id (and every other t.* column) NULL — the
+-- sentinel the caller checks; a visible plant with targets contributes one
+-- row per target, none of them NULL.
+select t.plant_id, t.month, t.target_kwh
+from power_plants p
+left join power_plant_monthly_targets t on t.plant_id = p.id
+where p.id = sqlc.arg(plant_id) and p.company_id = sqlc.arg(company_id) and p.deleted_at is null
 order by t.month;
 
 -- name: PlantMonthlyTargetsDelete :exec
-delete from power_plant_monthly_targets where plant_id = sqlc.arg(plant_id);
+-- Isolation: scoped via a join to power_plants IN THIS SAME STATEMENT (a
+-- DELETE … USING), replacing what used to be a Go-level pre-check run on
+-- the pool before the write. A foreign or otherwise invisible plant_id
+-- deletes zero rows rather than every target under a well-known id.
+delete from power_plant_monthly_targets t
+using power_plants p
+where t.plant_id = p.id
+  and t.plant_id = sqlc.arg(plant_id)
+  and p.company_id = sqlc.arg(company_id)
+  and p.deleted_at is null;
 
 -- name: PlantMonthlyTargetInsert :one
--- The `as "row"` alias dodges TestEveryFunctionSQLcMustTypeIsDeclared's call
--- scanner — see queries/admin_audit.sql's comment on AdminAppendPlatformAudit.
-insert into power_plant_monthly_targets as "row" (plant_id, month, target_kwh)
-values (sqlc.arg(plant_id), sqlc.arg(month), sqlc.arg(target_kwh))
+-- Isolation: the insert only runs when plant_id's parent is visible to the
+-- Scope, checked via exists(...) IN THIS SAME STATEMENT. An invisible plant
+-- inserts zero rows; the :one scan then reports ErrNoRows, translated to
+-- ErrNotFound.
+insert into power_plant_monthly_targets (plant_id, month, target_kwh)
+select sqlc.arg(plant_id), sqlc.arg(month), sqlc.arg(target_kwh)
+where exists (
+    select 1 from power_plants p
+    where p.id = sqlc.arg(plant_id) and p.company_id = sqlc.arg(company_id) and p.deleted_at is null
+)
 returning *;
 
 -- name: PlantDevicesList :many
--- Isolation: power_plant_devices has no company_id — join through power_plants.
-select d.* from power_plant_devices d
-join power_plants p on p.id = d.plant_id
-where d.plant_id = sqlc.arg(plant_id) and p.company_id = sqlc.arg(company_id) and p.deleted_at is null
+-- Isolation: power_plant_devices has no company_id and is reached ONLY by
+-- joining to power_plants IN THIS SAME QUERY — a LEFT JOIN, not a pre-check
+-- run separately, so this predicate is what an isolation test actually
+-- exercises.
+--
+-- A plant not visible to the Scope contributes ZERO rows: the caller
+-- reports ErrNotFound. A visible plant with no devices yet contributes
+-- EXACTLY ONE row with d.id (and every other d.* column) NULL — the
+-- sentinel the caller checks; a visible plant with devices contributes one
+-- row per device, none of them NULL.
+select d.id, d.plant_id, d.device_sn, d.device_name, d.device_type, d.device_type_name,
+       d.provider_key, d.brand, d.model, d.rated_power_kw, d.status, d.efficiency_pct,
+       d.last_seen_at, d.created_at, d.updated_at
+from power_plants p
+left join power_plant_devices d on d.plant_id = p.id
+where p.id = sqlc.arg(plant_id) and p.company_id = sqlc.arg(company_id) and p.deleted_at is null
 order by d.device_sn;
 
--- PlantDeviceUpdateBySerial and PlantDeviceInsert together implement
--- UpsertDevice, keyed on (plant_id, device_sn). The update branch never
--- assigns plant_id, so a device can be neither moved to nor taken from
--- another plant.
+-- name: PlantDeviceUpsert :one
+-- UpsertDevice, keyed on (plant_id, device_sn): ONE atomic
+-- `insert … on conflict (plant_id, device_sn) do update`, now that the SQL
+-- call scanner (Task 8c fix round 1, a4746e7) recognises an ON CONFLICT
+-- target for what it is instead of reading it as a call to a function named
+-- conflict(). Two concurrent UpsertDevice calls racing to create the SAME
+-- new device now converge on one row, because the whole statement is a
+-- single INSERT and Postgres itself serialises the two around the unique
+-- index rather than this package checking-then-acting across two round
+-- trips (the fix-round-1 finding this replaces).
 --
--- This is two statements rather than one `insert ... on conflict (plant_id,
--- device_sn) do update`, and that is a deliberate downgrade from atomic to
--- check-then-act, forced by a limitation in this repository's own tooling:
--- `on conflict (` has no alias escape — unlike a table name, which
--- `as "row"` moves out of the way (see admin_audit.sql's comment) — so it
--- reads as a call to a function named conflict() to
--- TestEveryFunctionSQLcMustTypeIsDeclared's call scanner, and that guard may
--- not be edited (wave-f-context.md). Two concurrent UpsertDevice calls
--- racing to insert the SAME new (plant_id, device_sn) can therefore both
--- attempt an insert; the loser gets store.ErrConflict off the unique index
--- rather than silently converging. Devices are re-fetched on a provider's own
--- schedule, never written concurrently by design, so this is judged
--- acceptable — flagged in the task report for the controller to weigh.
-
--- name: PlantDeviceUpdateBySerial :one
-update power_plant_devices
-set device_name = sqlc.arg(device_name),
-    device_type = sqlc.arg(device_type),
-    device_type_name = sqlc.arg(device_type_name),
-    provider_key = sqlc.arg(provider_key),
-    brand = sqlc.arg(brand),
-    model = sqlc.arg(model),
-    rated_power_kw = sqlc.arg(rated_power_kw),
-    status = sqlc.arg(status),
-    efficiency_pct = sqlc.arg(efficiency_pct),
-    last_seen_at = sqlc.arg(last_seen_at),
-    updated_at = sqlc.arg(at)
-where plant_id = sqlc.arg(plant_id) and device_sn = sqlc.arg(device_sn)
-returning *;
-
--- name: PlantDeviceInsert :one
--- The `as "row"` alias dodges TestEveryFunctionSQLcMustTypeIsDeclared's call
--- scanner — see queries/admin_audit.sql's comment on AdminAppendPlatformAudit.
-insert into power_plant_devices as "row"
+-- Isolation: the insert/update only runs when plant_id's parent is visible
+-- to the Scope, checked via exists(...) IN THIS SAME STATEMENT — including
+-- on the update path, since a SELECT that returns no candidate row also
+-- proposes no conflict. An invisible plant upserts zero rows; the :one scan
+-- then reports ErrNoRows, translated to ErrNotFound. The DO UPDATE branch
+-- never assigns plant_id, so a device can be neither moved to nor taken
+-- from another plant even by an update this exists() check let through.
+insert into power_plant_devices
     (id, plant_id, device_sn, device_name, device_type, device_type_name,
      provider_key, brand, model, rated_power_kw, status, efficiency_pct,
      last_seen_at, created_at, updated_at)
-values (sqlc.arg(id), sqlc.arg(plant_id), sqlc.arg(device_sn), sqlc.arg(device_name),
-        sqlc.arg(device_type), sqlc.arg(device_type_name), sqlc.arg(provider_key),
-        sqlc.arg(brand), sqlc.arg(model), sqlc.arg(rated_power_kw), sqlc.arg(status),
-        sqlc.arg(efficiency_pct), sqlc.arg(last_seen_at), sqlc.arg(at), sqlc.arg(at))
+select sqlc.arg(id), sqlc.arg(plant_id), sqlc.arg(device_sn), sqlc.arg(device_name),
+       sqlc.arg(device_type), sqlc.arg(device_type_name), sqlc.arg(provider_key),
+       sqlc.arg(brand), sqlc.arg(model), sqlc.arg(rated_power_kw), sqlc.arg(status),
+       sqlc.arg(efficiency_pct), sqlc.arg(last_seen_at),
+       coalesce(sqlc.narg(at)::timestamptz, now()) as created_at, coalesce(sqlc.narg(at)::timestamptz, now()) as updated_at
+where exists (
+    select 1 from power_plants p
+    where p.id = sqlc.arg(plant_id) and p.company_id = sqlc.arg(company_id) and p.deleted_at is null
+)
+on conflict (plant_id, device_sn) do update
+set device_name = excluded.device_name,
+    device_type = excluded.device_type,
+    device_type_name = excluded.device_type_name,
+    provider_key = excluded.provider_key,
+    brand = excluded.brand,
+    model = excluded.model,
+    rated_power_kw = excluded.rated_power_kw,
+    status = excluded.status,
+    efficiency_pct = excluded.efficiency_pct,
+    last_seen_at = excluded.last_seen_at,
+    updated_at = excluded.updated_at
 returning *;
 
 -- name: PlantAlarmRecipientsList :many
--- Isolation: power_plant_alarm_recipients has no company_id — join through
--- power_plants.
-select r.* from power_plant_alarm_recipients r
-join power_plants p on p.id = r.plant_id
-where r.plant_id = sqlc.arg(plant_id) and p.company_id = sqlc.arg(company_id) and p.deleted_at is null
+-- Isolation: power_plant_alarm_recipients has no company_id and is reached
+-- ONLY by joining to power_plants IN THIS SAME QUERY — a LEFT JOIN, not a
+-- pre-check run separately, so this predicate is what an isolation test
+-- actually exercises.
+--
+-- A plant not visible to the Scope contributes ZERO rows: the caller
+-- reports ErrNotFound. A visible plant with no recipients yet contributes
+-- EXACTLY ONE row with r.plant_id (and r.email) NULL — the sentinel the
+-- caller checks; a visible plant with recipients contributes one row per
+-- recipient, none of them NULL.
+select r.plant_id, r.email
+from power_plants p
+left join power_plant_alarm_recipients r on r.plant_id = p.id
+where p.id = sqlc.arg(plant_id) and p.company_id = sqlc.arg(company_id) and p.deleted_at is null
 order by r.email;
 
 -- name: PlantAlarmRecipientsDelete :exec
-delete from power_plant_alarm_recipients where plant_id = sqlc.arg(plant_id);
+-- Isolation: scoped via a join to power_plants IN THIS SAME STATEMENT (a
+-- DELETE … USING), replacing what used to be a Go-level pre-check run on
+-- the pool before the write. A foreign or otherwise invisible plant_id
+-- deletes zero rows rather than every recipient under a well-known id.
+delete from power_plant_alarm_recipients r
+using power_plants p
+where r.plant_id = p.id
+  and r.plant_id = sqlc.arg(plant_id)
+  and p.company_id = sqlc.arg(company_id)
+  and p.deleted_at is null;
 
 -- name: PlantAlarmRecipientInsert :one
--- The `as "row"` alias dodges TestEveryFunctionSQLcMustTypeIsDeclared's call
--- scanner — see queries/admin_audit.sql's comment on AdminAppendPlatformAudit.
-insert into power_plant_alarm_recipients as "row" (plant_id, email)
-values (sqlc.arg(plant_id), sqlc.arg(email))
+-- Isolation: the insert only runs when plant_id's parent is visible to the
+-- Scope, checked via exists(...) IN THIS SAME STATEMENT. An invisible plant
+-- inserts zero rows; the :one scan then reports ErrNoRows, translated to
+-- ErrNotFound.
+insert into power_plant_alarm_recipients (plant_id, email)
+select sqlc.arg(plant_id), sqlc.arg(email)
+where exists (
+    select 1 from power_plants p
+    where p.id = sqlc.arg(plant_id) and p.company_id = sqlc.arg(company_id) and p.deleted_at is null
+)
 returning *;

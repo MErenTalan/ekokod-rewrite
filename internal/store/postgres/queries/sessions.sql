@@ -27,11 +27,12 @@ select exists(
 -- only when that user is visible; if not, zero rows are inserted and the
 -- :one scan reports ErrNoRows, translated to ErrNotFound.
 --
--- The `as "row"` alias dodges TestEveryFunctionSQLcMustTypeIsDeclared's call
--- scanner — see queries/admin_audit.sql's comment on AdminAppendPlatformAudit.
-insert into sessions as "row" (id, user_id, refresh_token_hash, device_fingerprint, user_agent, ip, expires_at, revoked_at, created_at)
+-- coalesce(sqlc.narg(at)::timestamptz, now()): a caller that leaves CreatedAt at its zero
+-- value gets the database's own now() rather than writing 0001-01-01.
+insert into sessions (id, user_id, refresh_token_hash, device_fingerprint, user_agent, ip, expires_at, revoked_at, created_at)
 select sqlc.arg(id), sqlc.arg(user_id), sqlc.arg(refresh_token_hash), sqlc.arg(device_fingerprint),
-       sqlc.arg(user_agent), sqlc.arg(ip), sqlc.arg(expires_at), sqlc.arg(revoked_at), sqlc.arg(at)
+       sqlc.arg(user_agent), sqlc.arg(ip), sqlc.arg(expires_at), sqlc.arg(revoked_at),
+       coalesce(sqlc.narg(at)::timestamptz, now()) as created_at
 where exists (
     select 1 from users
     where id = sqlc.arg(user_id) and company_id = sqlc.arg(company_id) and deleted_at is null
@@ -39,8 +40,12 @@ where exists (
 returning *;
 
 -- name: SessionRevoke :execrows
+-- revoked_at = coalesce(revoked_at, $at): re-revoking an already-revoked
+-- session must keep the ORIGINAL instant, because replay detection compares
+-- against it — overwriting it with a later "re-revoke" time would make a
+-- genuine replay look like it happened before the session was revoked.
 update sessions
-set revoked_at = sqlc.arg(at)
+set revoked_at = coalesce(sessions.revoked_at, sqlc.arg(at))
 where sessions.id = sqlc.arg(id)
   and sessions.user_id in (select users.id from users where users.company_id = sqlc.arg(company_id) and users.deleted_at is null);
 
