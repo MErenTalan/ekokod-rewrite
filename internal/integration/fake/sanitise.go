@@ -163,9 +163,24 @@ var (
 )
 
 // tokeniseKey splits key into lowercase, Turkish-folded WORDS (fix-round-3
-// controller ruling) on:
+// controller ruling, extended by fix-round-4's acronym rule) on:
 //   - camelCase/PascalCase boundaries (a lowercase letter immediately
 //     followed by an uppercase letter);
+//   - acronym boundaries (fix-round-4): an uppercase letter that is
+//     immediately followed by a lowercase letter, when the letter BEFORE
+//     it is also uppercase — the standard rule for splitting a leading
+//     acronym run off the word that follows it. Without this rule the
+//     lower→upper rule above never fires inside an all-uppercase run, so
+//     an acronym fuses with the next word instead of tokenising
+//     separately: "XMLCustomerID" → ["xmlcustomer", "id"] (one fused word
+//     that never matches the "customer" PII word) instead of the correct
+//     ["xml", "customer", "id"]. With the rule, "XMLCustomer" splits into
+//     "XML" + "Customer" (boundary before the "C": the "L" before it is
+//     upper, the "C" is upper, the "u" after it is lower) and "IDNo"
+//     splits into "ID" + "No" (same shape, boundary before the "N").
+//     "XMLVersion", "HTTPStatus", "IDNo" itself and "URLPath" still pass
+//     as non-PII, since none of "xml"/"version"/"http"/"status"/"id"/
+//     "no"/"url"/"path" is a PII word;
 //   - digit boundaries (a letter immediately followed by a digit, or a
 //     digit immediately followed by a letter);
 //   - any run of one or more non-alphanumeric separators (`_`, `-`, `.`,
@@ -173,11 +188,11 @@ var (
 //
 // Boundary detection runs on the ORIGINAL runes, before folding: folding
 // lower-cases Turkish letters (İ→i, ı→i, ...), and doing that first would
-// erase the very upper/lower distinction camelCase splitting depends on.
-// Each extracted word is folded (see foldWord) only after its boundaries
-// are decided, so "İlçe" (one Titlecase word, no internal boundary) still
-// becomes the single folded word "ilce", while "sayimNoktaTanimi" becomes
-// three words ("sayim", "nokta", "tanimi").
+// erase the very upper/lower distinction camelCase and acronym splitting
+// depend on. Each extracted word is folded (see foldWord) only after its
+// boundaries are decided, so "İlçe" (one Titlecase word, no internal
+// boundary) still becomes the single folded word "ilce", while
+// "sayimNoktaTanimi" becomes three words ("sayim", "nokta", "tanimi").
 func tokeniseKey(key string) []string {
 	runes := []rune(key)
 	var words []string
@@ -200,6 +215,10 @@ func tokeniseKey(key string) []string {
 		prev := runes[i-1]
 		boundary := unicode.IsDigit(r) != unicode.IsDigit(prev) ||
 			(unicode.IsLower(prev) && unicode.IsUpper(r))
+		if !boundary && unicode.IsUpper(prev) && unicode.IsUpper(r) &&
+			i+1 < len(runes) && unicode.IsLower(runes[i+1]) {
+			boundary = true
+		}
 		if boundary {
 			flush(i)
 			start = i

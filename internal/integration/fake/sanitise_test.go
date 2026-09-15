@@ -149,6 +149,41 @@ func TestSanitiserWordTokenisedKeyMatching(t *testing.T) {
 	}
 }
 
+// TestSanitiserAcronymBoundaryTokenisation is fix-round-4's controller
+// ruling: tokeniseKey's lower→upper boundary rule alone never fires
+// inside a run of consecutive uppercase letters, so a leading acronym
+// fuses with the word that follows it instead of tokenising separately —
+// "XMLCustomerID" tokenised to the single fused word "xmlcustomer" plus
+// "id", which never matches the "customer" PII word (false negative).
+// The added acronym rule splits an uppercase letter off as the start of a
+// new word when the letter immediately after it is lowercase and the
+// letter immediately before it is also uppercase, so "XML" + "Customer"
+// (and "ID" + "No") tokenise as separate words. Must-reject cases prove
+// the acronym-prefixed PII words are now caught; must-pass cases prove
+// acronym-prefixed non-PII words (and a bare acronym-only word, "IDNo")
+// still pass.
+func TestSanitiserAcronymBoundaryTokenisation(t *testing.T) {
+	mustReject := map[string]string{
+		"XMLCustomerID":   `{"XMLCustomerID":"Acme Fabrika"}`,
+		"APICustomerName": `{"APICustomerName":"Acme Fabrika"}`,
+		"HTTPAdres":       `{"HTTPAdres":"Gerçek Adres 123"}`, //nolint:misspell // OSOS field spelling, not a typo
+		"IDMusteri":       `{"IDMusteri":"Acme Fabrika"}`,
+	}
+	for name, body := range mustReject {
+		require.NotEmpty(t, fake.Violations("probe.json", []byte(body)), name)
+	}
+
+	mustPass := map[string]string{
+		"XMLVersion": `{"XMLVersion":"1.0"}`,
+		"HTTPStatus": `{"HTTPStatus":"200"}`,
+		"IDNo":       `{"IDNo":"FX0000001"}`,
+		"URLPath":    `{"URLPath":"/x"}`,
+	}
+	for name, body := range mustPass {
+		require.Empty(t, fake.Violations("ok.json", []byte(body)), name)
+	}
+}
+
 // TestSanitiserAllowsNonPIIProtocolKeys is R1's second check: no OTHER
 // nameKeyPattern stem should reject a plausible non-PII protocol key from
 // 06-integrations.md's field tables. The one real hit found was "tanim":
