@@ -488,6 +488,15 @@ type ReadingRepository interface {
 	// Isolation: the staging-to-table insert joins through analyzers. If ANY
 	// row's analyzer is not visible to the Scope the whole batch is refused
 	// with ErrNotFound and nothing is written.
+	//
+	// A duplicate (analyzer_id, ts, kind) WITHIN rows itself is refused
+	// loudly: it is detected before any database round trip and returns an
+	// error for which errors.Is(err, ErrConflict) is true, naming the first
+	// duplicate key (analyzer id, ts, kind — never a register value); nothing
+	// is written. Silently letting `on conflict … do update` arbitrate
+	// between two batched rows with different register values is not
+	// acceptable for a billing-grade register. Upstream ingestion (F2) is
+	// expected to deduplicate before calling this.
 	BulkInsert(ctx context.Context, s Scope, rows []model.MeterReading) (inserted, updated int, err error)
 
 	// Range returns readings for one analyzer over the half-open window.
@@ -504,6 +513,11 @@ type ReadingRepository interface {
 	// and end — the exact operation 02-domain-rules.md §3.1 specifies for
 	// billing.
 	//
+	// It takes a kind because the primary key (analyzer_id, ts, kind) allows
+	// two kinds to carry different register values at the very same instant
+	// (02-domain-rules.md §2.3, §3.4); which kind billing reads is an F4
+	// decision this signature leaves open rather than guesses at.
+	//
 	// Either return may be nil, and nil is NOT a zero reading. §3.1: "If
 	// either reading is missing, or if reading_start and reading_end are the
 	// same reading, the period yields no row — it is not emitted as zero." A
@@ -517,7 +531,7 @@ type ReadingRepository interface {
 	// Isolation: join through analyzers. An analyzer not visible to the
 	// Scope returns ErrNotFound — never two nils, which would read as "no
 	// data" for a meter that is simply someone else's.
-	BoundaryReadings(ctx context.Context, s Scope, analyzerID uuid.UUID, start, end time.Time) (startReading, endReading *model.MeterReading, err error)
+	BoundaryReadings(ctx context.Context, s Scope, analyzerID uuid.UUID, kind model.ReadingKind, start, end time.Time) (startReading, endReading *model.MeterReading, err error)
 
 	// Latest returns the most recent reading of a kind WITHIN r, or nil if
 	// there is none in r. Nil rather than ErrNotFound: an analyzer with no
@@ -544,13 +558,19 @@ type CursorRepository interface {
 	// Scope, or one with no cursor yet, returns ErrNotFound.
 	Get(ctx context.Context, s Scope, analyzerID uuid.UUID, kind model.ReadingKind) (model.IngestionCursor, error)
 
-	// List — Isolation: join through analyzers; ids not visible to the Scope
-	// contribute no rows.
+	// List — analyzerIDs is a REQUIRED POSITIONAL parameter: EMPTY or nil
+	// means NO ROWS, fail-closed, identical to Scope.BuildingIDs — there is
+	// no "every analyzer visible to scope" form. A non-empty list narrows
+	// further; ids not visible to the Scope contribute no rows.
 	List(ctx context.Context, s Scope, analyzerIDs []uuid.UUID) ([]model.IngestionCursor, error)
 
 	// RecordSuccess advances last_ts and last_success_at and RESETS
 	// consecutive_failures. Clearing the counter is part of recording a
 	// success, not a separate call a caller can forget.
+	//
+	// last_ts is a HIGH-WATER MARK: an out-of-order call (lastTs behind what
+	// is already stored) never moves it backwards — the stored value is
+	// greatest(current, lastTs), never a plain overwrite.
 	//
 	// Isolation: join through analyzers. An analyzer not visible to the
 	// Scope returns ErrNotFound and no cursor is created or changed.
@@ -614,6 +634,12 @@ type ProductionRepository interface {
 	// visible to the Scope, or ANY row's device_id is not a device of that
 	// same row's plant, the whole batch is refused with ErrNotFound and
 	// nothing is written.
+	//
+	// A duplicate (plant_id, ts, device_id) WITHIN rows itself is refused
+	// loudly, the same way and for the same reason as
+	// ReadingRepository.BulkInsert's duplicate-key doc: an ErrConflict naming
+	// the first duplicate key, before any database round trip, nothing
+	// written.
 	BulkInsert(ctx context.Context, s Scope, rows []model.PlantProduction) (inserted, updated int, err error)
 
 	// Range reads the hypertable directly, over a bounded window. An invalid
@@ -641,8 +667,17 @@ type ProductionRepository interface {
 //
 // Isolation, for EVERY method: the aggregates have no company_id — the
 // consumption_* aggregates join through analyzers and the production_*
-// aggregates through power_plants. Ids not visible to the Scope contribute no
+// aggregates through power_plants. analyzerIDs/plantIDs are REQUIRED
+// POSITIONAL parameters: EMPTY or nil means NO ROWS, fail-closed, identical
+// to Scope.BuildingIDs — there is no "every id visible to scope" form. A
+// non-empty list narrows further; ids not visible to the Scope contribute no
 // rows. Every method returns ErrInvalidRange for an invalid r.
+//
+// Bucket boundaries for every view coarser than hourly (Daily, Monthly,
+// Yearly) are Europe/Istanbul-LOCAL instants, not UTC: a caller building a
+// TimeRange from UTC calendar-day boundaries will see the window's own edges
+// land mid-bucket. consumption_hourly is timezone-free (an hour is an hour
+// everywhere).
 type AnalyticsRepository interface {
 	ConsumptionHourly(ctx context.Context, s Scope, analyzerIDs []uuid.UUID, r TimeRange) ([]model.ConsumptionBucket, error)
 	ConsumptionDaily(ctx context.Context, s Scope, analyzerIDs []uuid.UUID, r TimeRange) ([]model.ConsumptionBucket, error)
@@ -680,6 +715,12 @@ type ForecastRepository interface {
 	// Isolation: join through analyzers. If ANY row's analyzer is not
 	// visible to the Scope the whole batch is refused with ErrNotFound and
 	// nothing is written.
+	//
+	// A duplicate (analyzer_id, ts, generated_at) WITHIN rows itself is
+	// refused loudly, the same way and for the same reason as
+	// ReadingRepository.BulkInsert's duplicate-key doc: an ErrConflict naming
+	// the first duplicate key, before any database round trip, nothing
+	// written.
 	BulkInsert(ctx context.Context, s Scope, rows []model.Forecast) (inserted, updated int, err error)
 
 	// Range — Isolation: join through analyzers. An analyzer not visible to
@@ -1428,10 +1469,19 @@ type AdminMarketDataRepository interface {
 	// UpsertHourlyPrices writes market_prices_hourly, keyed on its ts primary
 	// key, and returns the number of rows written. Re-importing a day
 	// converges rather than duplicating.
+	//
+	// Refused, before any database round trip, with an error for which
+	// errors.Is(err, ErrConflict) is true: prices containing a zero Ts, or
+	// two entries sharing the same Ts. A malformed import must not silently
+	// pick a winner between two conflicting prices for the same hour.
 	UpsertHourlyPrices(ctx context.Context, prices []model.MarketPrice) (int64, error)
 
 	// UpsertYekdem writes yekdem_monthly, keyed on its (year, month) primary
 	// key, and returns the number of rows written.
+	//
+	// Refused, before any database round trip, with an error for which
+	// errors.Is(err, ErrConflict) is true: values containing a Month outside
+	// 1..12, or two entries sharing the same (Year, Month).
 	UpsertYekdem(ctx context.Context, values []model.YekdemMonthly) (int64, error)
 }
 
