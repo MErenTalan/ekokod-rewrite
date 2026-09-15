@@ -94,6 +94,34 @@ func MigrateDownAll(ctx context.Context, dsn string, log *slog.Logger) error {
 	return nil
 }
 
+// MigrateDownN rolls back exactly n applied migrations, most recent first —
+// `goose down` run n times, in one call. It exists for
+// TestF2IntervalColumnSurvivesCompressedChunk (task-5-brief.md step 1),
+// which must roll back 00013 then 00012 ONLY, proving the pair's own
+// add-column/drop-column round-trips, without also tearing down every
+// earlier migration's tables the way MigrateDownAll would (which would lose
+// the very row the test is trying to re-read). n <= 0 is a no-op.
+func MigrateDownN(ctx context.Context, dsn string, log *slog.Logger, n int) error {
+	db, err := provider(dsn)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = db.Close() }()
+
+	before, _ := goose.GetDBVersionContext(ctx, db)
+	for range n {
+		if err := goose.DownContext(ctx, db, migrationsDir); err != nil {
+			return scrubErr(dsn, "roll back one migration", err)
+		}
+	}
+	after, err := goose.GetDBVersionContext(ctx, db)
+	if err != nil {
+		return scrubErr(dsn, "read schema version", err)
+	}
+	log.Info("migrations rolled back", slog.Int64("from", before), slog.Int64("to", after), slog.Int("steps", n))
+	return nil
+}
+
 // MigrateStatus writes the migration status table to out.
 func MigrateStatus(ctx context.Context, dsn string, out io.Writer) error {
 	db, err := provider(dsn)

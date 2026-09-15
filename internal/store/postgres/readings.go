@@ -39,6 +39,10 @@ var _ store.ReadingRepository = (*ReadingRepository)(nil)
 // meterReadingsStagingColumns is both the staging table's column list (in
 // declaration order) and the CopyFrom column list: the two must agree, and
 // naming them once here is what keeps them from drifting apart.
+//
+// interval_generation_kwh (migration 00012, F2 Task 5) is appended rather
+// than inserted among the other registers, so every existing offset above it
+// stays untouched.
 var meterReadingsStagingColumns = []string{
 	"analyzer_id", "ts", "kind",
 	"active_import", "reactive_inductive_import", "reactive_capacitive_import",
@@ -46,6 +50,7 @@ var meterReadingsStagingColumns = []string{
 	"active_export", "reactive_inductive_export", "reactive_capacitive_export",
 	"t1_export", "t2_export", "t3_export",
 	"max_demand_kw", "meter_serial", "multiplier_applied", "source_provider", "raw",
+	"interval_generation_kwh",
 }
 
 // createMeterReadingsStaging mirrors meter_readings' writable columns (every
@@ -74,7 +79,8 @@ const createMeterReadingsStaging = `create temporary table meter_readings_stagin
 	meter_serial               text,
 	multiplier_applied         numeric(12,6) not null default 1,
 	source_provider            integration_provider not null,
-	raw                        jsonb
+	raw                        jsonb,
+	interval_generation_kwh    numeric(18,4)
 ) on commit drop`
 
 // upsertMeterReadingsFromStaging is the one idempotent write 04-data-model.md
@@ -97,7 +103,8 @@ const upsertMeterReadingsFromStaging = `insert into meter_readings (
 	t1_import, t2_import, t3_import,
 	active_export, reactive_inductive_export, reactive_capacitive_export,
 	t1_export, t2_export, t3_export,
-	max_demand_kw, meter_serial, multiplier_applied, source_provider, raw
+	max_demand_kw, meter_serial, multiplier_applied, source_provider, raw,
+	interval_generation_kwh
 )
 select
 	analyzer_id, ts, kind,
@@ -105,7 +112,8 @@ select
 	t1_import, t2_import, t3_import,
 	active_export, reactive_inductive_export, reactive_capacitive_export,
 	t1_export, t2_export, t3_export,
-	max_demand_kw, meter_serial, multiplier_applied, source_provider, raw
+	max_demand_kw, meter_serial, multiplier_applied, source_provider, raw,
+	interval_generation_kwh
 from meter_readings_staging
 on conflict (analyzer_id, ts, kind) do update set
 	active_import              = excluded.active_import,
@@ -125,7 +133,8 @@ on conflict (analyzer_id, ts, kind) do update set
 	multiplier_applied         = excluded.multiplier_applied,
 	source_provider            = excluded.source_provider,
 	ingested_at                = now(),
-	raw                        = excluded.raw
+	raw                        = excluded.raw,
+	interval_generation_kwh    = excluded.interval_generation_kwh
 returning (xmax = 0) as inserted`
 
 // BulkInsert implements store.ReadingRepository.BulkInsert.
@@ -221,6 +230,7 @@ func (r *ReadingRepository) BulkInsert(ctx context.Context, s store.Scope, rows 
 				decimalToNumeric(row.MultiplierApplied),
 				string(row.SourceProvider),
 				readingRawJSONOrNil(row.Raw),
+				decimalPtrToNumeric(row.IntervalGenerationKwh),
 			}, nil
 		}))
 	if err != nil {
@@ -460,6 +470,10 @@ func readingFromRow(row sqlcgen.MeterReading) (model.MeterReading, error) {
 	if err != nil {
 		return model.MeterReading{}, err
 	}
+	intervalGenerationKwh, err := numericToDecimalPtr(row.IntervalGenerationKwh)
+	if err != nil {
+		return model.MeterReading{}, err
+	}
 
 	return model.MeterReading{
 		AnalyzerID:               row.AnalyzerID,
@@ -478,6 +492,7 @@ func readingFromRow(row sqlcgen.MeterReading) (model.MeterReading, error) {
 		T2Export:                 t2Export,
 		T3Export:                 t3Export,
 		MaxDemandKw:              maxDemandKw,
+		IntervalGenerationKwh:    intervalGenerationKwh,
 		MeterSerial:              row.MeterSerial,
 		MultiplierApplied:        multiplierApplied,
 		SourceProvider:           model.IntegrationProvider(row.SourceProvider),

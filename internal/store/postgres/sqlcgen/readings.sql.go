@@ -48,7 +48,7 @@ func (q *Queries) ReadingAnalyzerVisible(ctx context.Context, arg ReadingAnalyze
 }
 
 const readingBoundaryAtOrBefore = `-- name: ReadingBoundaryAtOrBefore :one
-select mr.analyzer_id, mr.ts, mr.kind, mr.active_import, mr.reactive_inductive_import, mr.reactive_capacitive_import, mr.t1_import, mr.t2_import, mr.t3_import, mr.active_export, mr.reactive_inductive_export, mr.reactive_capacitive_export, mr.t1_export, mr.t2_export, mr.t3_export, mr.max_demand_kw, mr.meter_serial, mr.multiplier_applied, mr.source_provider, mr.ingested_at, mr.raw from meter_readings mr
+select mr.analyzer_id, mr.ts, mr.kind, mr.active_import, mr.reactive_inductive_import, mr.reactive_capacitive_import, mr.t1_import, mr.t2_import, mr.t3_import, mr.active_export, mr.reactive_inductive_export, mr.reactive_capacitive_export, mr.t1_export, mr.t2_export, mr.t3_export, mr.max_demand_kw, mr.meter_serial, mr.multiplier_applied, mr.source_provider, mr.ingested_at, mr.raw, mr.interval_generation_kwh from meter_readings mr
 join analyzers a on a.id = mr.analyzer_id
 where mr.analyzer_id = $1
   and mr.kind = $2::reading_kind
@@ -104,12 +104,13 @@ func (q *Queries) ReadingBoundaryAtOrBefore(ctx context.Context, arg ReadingBoun
 		&i.SourceProvider,
 		&i.IngestedAt,
 		&i.Raw,
+		&i.IntervalGenerationKwh,
 	)
 	return i, err
 }
 
 const readingLatest = `-- name: ReadingLatest :one
-select mr.analyzer_id, mr.ts, mr.kind, mr.active_import, mr.reactive_inductive_import, mr.reactive_capacitive_import, mr.t1_import, mr.t2_import, mr.t3_import, mr.active_export, mr.reactive_inductive_export, mr.reactive_capacitive_export, mr.t1_export, mr.t2_export, mr.t3_export, mr.max_demand_kw, mr.meter_serial, mr.multiplier_applied, mr.source_provider, mr.ingested_at, mr.raw from meter_readings mr
+select mr.analyzer_id, mr.ts, mr.kind, mr.active_import, mr.reactive_inductive_import, mr.reactive_capacitive_import, mr.t1_import, mr.t2_import, mr.t3_import, mr.active_export, mr.reactive_inductive_export, mr.reactive_capacitive_export, mr.t1_export, mr.t2_export, mr.t3_export, mr.max_demand_kw, mr.meter_serial, mr.multiplier_applied, mr.source_provider, mr.ingested_at, mr.raw, mr.interval_generation_kwh from meter_readings mr
 join analyzers a on a.id = mr.analyzer_id
 where mr.analyzer_id = $1
   and mr.kind = $2::reading_kind
@@ -165,12 +166,13 @@ func (q *Queries) ReadingLatest(ctx context.Context, arg ReadingLatestParams) (M
 		&i.SourceProvider,
 		&i.IngestedAt,
 		&i.Raw,
+		&i.IntervalGenerationKwh,
 	)
 	return i, err
 }
 
 const readingRange = `-- name: ReadingRange :many
-select mr.analyzer_id, mr.ts, mr.kind, mr.active_import, mr.reactive_inductive_import, mr.reactive_capacitive_import, mr.t1_import, mr.t2_import, mr.t3_import, mr.active_export, mr.reactive_inductive_export, mr.reactive_capacitive_export, mr.t1_export, mr.t2_export, mr.t3_export, mr.max_demand_kw, mr.meter_serial, mr.multiplier_applied, mr.source_provider, mr.ingested_at, mr.raw from meter_readings mr
+select mr.analyzer_id, mr.ts, mr.kind, mr.active_import, mr.reactive_inductive_import, mr.reactive_capacitive_import, mr.t1_import, mr.t2_import, mr.t3_import, mr.active_export, mr.reactive_inductive_export, mr.reactive_capacitive_export, mr.t1_export, mr.t2_export, mr.t3_export, mr.max_demand_kw, mr.meter_serial, mr.multiplier_applied, mr.source_provider, mr.ingested_at, mr.raw, mr.interval_generation_kwh from meter_readings mr
 join analyzers a on a.id = mr.analyzer_id
 where mr.analyzer_id = $1
   and mr.kind = $2::reading_kind
@@ -235,6 +237,7 @@ func (q *Queries) ReadingRange(ctx context.Context, arg ReadingRangeParams) ([]M
 			&i.SourceProvider,
 			&i.IngestedAt,
 			&i.Raw,
+			&i.IntervalGenerationKwh,
 		); err != nil {
 			return nil, err
 		}
@@ -275,6 +278,12 @@ type ReadingVisibleAnalyzerIDsParams struct {
 // for it is ReadingVisibleAnalyzerIDs, the `for share` row lock that closes
 // the gap a plain, unlocked pre-check would leave open for a concurrent
 // reassignment of one of the batch's analyzers.
+//
+// interval_generation_kwh (migration 00012, F2 Task 5) needs no change
+// below: every query here selects `mr.*`, which already picks up the new
+// column once sqlc regenerates against the migration. The BulkInsert
+// staging-and-upsert path that DOES need to carry it explicitly lives in
+// readings.go, for the reason above.
 // Returns the subset of analyzer_ids visible to the scope, AND LOCKS them
 // (`for share`) for the rest of the caller's transaction: BulkInsert compares
 // the result against the DISTINCT analyzer ids in the batch, and the lock

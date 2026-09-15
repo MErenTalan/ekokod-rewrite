@@ -50,6 +50,13 @@ type MeterReading struct {
 	// MaxDemandKw is an interval value, not cumulative.
 	MaxDemandKw *decimal.Decimal
 
+	// IntervalGenerationKwh is PM5340's interval energy (06 §5, R1): the
+	// energy generated DURING this interval, not a cumulative register like
+	// every other field above. Migration 00012. It is nil for every other
+	// provider — PM5340 is the only source that reports interval-shaped
+	// generation directly instead of a cumulative export register.
+	IntervalGenerationKwh *decimal.Decimal
+
 	MeterSerial *string
 	// MultiplierApplied records the multiplier used on this row, so a later
 	// change to Analyzer.MeterMultiplier cannot retroactively change what a
@@ -77,6 +84,40 @@ type IngestionCursor struct {
 	// ConsecutiveFailures is reset to zero on success; it is what backs off
 	// an analyzer that keeps failing.
 	ConsecutiveFailures int32
+}
+
+// GenerationAnchor is the last known cumulative export register value for one
+// analyzer, at one instant — the reference point PM5340's interval energy
+// (MeterReading.IntervalGenerationKwh) is reconciled against, so that a gap
+// in interval reporting can still be checked against the meter's own
+// cumulative register. Mirrors table `generation_anchors` (migration 00012),
+// whose primary key is analyzer_id: one anchor per analyzer.
+type GenerationAnchor struct {
+	AnalyzerID uuid.UUID
+	AnchorTs   time.Time
+	// ActiveExport is the cumulative export register value AT AnchorTs, never
+	// negative (migration 00012's check constraint).
+	ActiveExport decimal.Decimal
+	// Source is 'initial', 'operator' or 'migration' — a plain text column
+	// with a check constraint, not a SQL enum.
+	Source    string
+	UpdatedAt time.Time
+}
+
+// ProviderHourlyValue is one hour of OSOS's own labelled cross-check series
+// for one analyzer. Mirrors the `provider_hourly_values` hypertable
+// (migration 00013), whose primary key is (analyzer_id, ts).
+//
+// This series is NEVER read by consumption or billing (06 §2,
+// removed-behaviour 23): it exists only so an operator can compare it
+// against meter_readings' own hourly figures.
+type ProviderHourlyValue struct {
+	AnalyzerID        uuid.UUID
+	Ts                time.Time
+	ActiveConsumption *decimal.Decimal
+	ActiveGeneration  *decimal.Decimal
+	SourceProvider    IntegrationProvider
+	IngestedAt        time.Time
 }
 
 // ConsumptionAnomaly marks a period whose readings cannot be trusted — a meter

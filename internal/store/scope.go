@@ -29,6 +29,20 @@ type Scope struct {
 // the database.
 func (s Scope) Valid() bool { return s.CompanyID != uuid.Nil }
 
+// SystemScope is the scope a background job uses when it acts for a whole
+// company — ingestion, backfill, an OAuth callback after state verification —
+// rather than for one authenticated principal's grant. It is explicit
+// widening, spelled out at the one call site that needs it, so that no F2
+// code builds a Scope{AllBuildings: true} by hand: this is the only scope
+// constructor F2 adds.
+//
+// A zero companyID yields an invalid scope (Valid() is false, since
+// CompanyID is uuid.Nil), which every repository rejects with
+// ErrInvalidScope before any I/O — SystemScope has no way to fail open.
+func SystemScope(companyID uuid.UUID) Scope {
+	return Scope{CompanyID: companyID, AllBuildings: true}
+}
+
 // AllowsBuilding reports whether the principal may see building id.
 //
 // This is the authorisation branch in one place, so that no repository has to
