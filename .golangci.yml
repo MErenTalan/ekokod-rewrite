@@ -27,22 +27,53 @@ linters:
   settings:
     depguard:
       rules:
+        # ALLOW-list, not deny: list-mode strict means every import of a
+        # file under internal/domain is refused UNLESS it matches an entry
+        # below. This mirrors internal/arch/arch_test.go's
+        # domainAllowedImports exactly (F1 final review pass B, I2) — CHANGE
+        # BOTH OR NEITHER. Before this, `deny` named 6 exact packages; the
+        # review's mutation probe added an internal/domain/model import of
+        # github.com/jackc/pgx/v5 and it passed both checks, because a
+        # denylist has no way to refuse a package nobody thought to name.
+        # depguard's list-mode=strict is what makes this rule stronger than
+        # the arch test alone: it catches an offending import at
+        # `golangci-lint run` speed, before a test binary even builds.
         domain-is-pure:
           files:
             - "**/internal/domain/**"
+          list-mode: strict
+          allow:
+            # the domain layer's own tree — subpackages import each other.
+            - github.com/MErenTalan/ekokod-rewrite/internal/domain
+            # stdlib: computation and data-structure packages only, exact
+            # match (trailing $) so this can never widen into a whole
+            # stdlib subtree such as encoding/* or net/*.
+            - bytes$
+            - cmp$
+            - encoding/json$
+            - errors$
+            - fmt$
+            - maps$
+            - math$
+            - net/netip$
+            - slices$
+            - sort$
+            - strconv$
+            - strings$
+            - time$
+            - unicode$
+            - unicode/utf8$
+            # third-party: exactly what the domain layer is built on.
+            - github.com/google/uuid
+            - github.com/shopspring/decimal
           deny:
-            - pkg: "net/http"
-              desc: "internal/domain performs no I/O"
-            - pkg: "database/sql"
-              desc: "internal/domain performs no I/O"
-            - pkg: "os"
-              desc: "internal/domain performs no I/O"
-            - pkg: "log/slog"
-              desc: "internal/domain does not log"
+            # Kept for the friendlier message on the two paths someone is
+            # likeliest to reach for by habit; list-mode strict already
+            # refuses these (and everything else not in allow) on its own.
             - pkg: "github.com/MErenTalan/ekokod-rewrite/internal/store"
-              desc: "internal/domain imports nothing from the project"
+              desc: "internal/domain imports nothing from the project outside internal/domain"
             - pkg: "github.com/MErenTalan/ekokod-rewrite/internal/api"
-              desc: "internal/domain imports nothing from the project"
+              desc: "internal/domain imports nothing from the project outside internal/domain"
         # Money and energy are numeric/decimal end to end, never float64.
         # This rule was written in F0 against internal/domain/billing and
         # internal/domain/tariff before either existed. It now covers the two

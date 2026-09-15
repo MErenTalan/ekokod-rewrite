@@ -4,6 +4,22 @@ on:
   push:
     branches: [main]
   pull_request:
+  # F1 final review pass B, I5: the Makefile's test-perf comment and the F1
+  # plan both claimed "CI runs this on a schedule, not per push" while no
+  # schedule trigger existed anywhere in this file — the 1M-row chunk-layout
+  # and EXPLAIN acceptance test (internal/store/postgres,
+  # TestOneMillionReadingsChunkLayout, gated by EKOKOD_PERF=1) was exercised
+  # only when someone remembered to run `make test-perf` locally. These two
+  # triggers make the claim true: schedule for the unattended nightly run,
+  # workflow_dispatch so it can also be run on demand from a specific commit
+  # (e.g. to bisect a regression) without waiting for the next scheduled
+  # tick. The push/pull_request jobs below are UNCHANGED: they still run on
+  # every push and pull_request exactly as before, and (harmlessly) also on
+  # a scheduled/manual run — only the new perf job below is restricted, via
+  # its own `if:`, to the schedule/workflow_dispatch triggers.
+  schedule:
+    - cron: "17 3 * * *" # daily, 03:17 UTC — an off-peak, non-round minute
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -22,6 +38,13 @@ jobs:
 
       - name: shellcheck
         run: shellcheck scripts/*.sh
+
+      # I6: shellcheck above parses script CONTENTS; it has never looked at
+      # file MODES, which is how scripts/gen-env-docker.sh and
+      # scripts/offline-bundle.sh were committed non-executable (100644)
+      # without CI noticing.
+      - name: Script file modes
+        run: make check-script-modes
 
       - uses: actions/setup-go@v5
         with:
@@ -88,6 +111,28 @@ jobs:
 
       - name: Integration tests (testcontainers)
         run: go test ./... -tags=integration -race -count=1 -timeout 20m
+
+  perf:
+    name: Performance / acceptance suite (scheduled)
+    runs-on: ubuntu-latest
+    # Only the schedule and manual triggers run this job: it is the slow
+    # (~85s) 1,000,000-row acceptance test, deliberately kept off the
+    # per-push and per-PR critical path (I5's own point is that it still
+    # runs SOMEWHERE, unattended, not that it should gate every push).
+    if: github.event_name != 'push' && github.event_name != 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      # make test-perf sets EKOKOD_PERF=1 itself (see the Makefile); this
+      # step's only job is to invoke exactly the same target a developer
+      # runs locally, so CI and `make test-perf` are provably the same
+      # check, same as `make check-generate` and `golangci-lint run` above.
+      - name: Performance / acceptance suite
+        run: make test-perf
 
   web:
     name: Frontend

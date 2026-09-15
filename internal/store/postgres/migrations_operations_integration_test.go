@@ -4,6 +4,7 @@ package postgres_test
 
 import (
 	"context"
+	"regexp"
 	"testing"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
@@ -15,11 +16,13 @@ import (
 // that provider secrets are stored as AES-256-GCM ciphertext. A text column
 // here would invite storing a plaintext password, and the API must never
 // return these at all.
+//
+// This is the two-named-table half; TestNoPlaintextSecretColumns below is
+// the schema-wide half that replaced this function's old blocklist tail
+// check (F1 final review pass B, I4).
 func TestIntegrationCredentialSecretsAreBytea(t *testing.T) {
-	dsn := testfixtures.StartPostgresUnmigrated(t)
 	ctx := context.Background()
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
-	pool := testfixtures.NewPool(t, dsn)
+	pool := testfixtures.NewIsolatedDB(t)
 
 	for table, columns := range map[string][]string{
 		"integration_credentials": {"secret_enc", "extra_enc"},
@@ -34,13 +37,113 @@ func TestIntegrationCredentialSecretsAreBytea(t *testing.T) {
 			require.Equal(t, "bytea", dataType, "%s.%s must hold ciphertext", table, column)
 		}
 	}
+}
 
-	var plaintext int
-	require.NoError(t, pool.QueryRow(ctx,
-		`select count(*) from information_schema.columns
-		 where table_name in ('integration_credentials','smtp_settings')
-		   and column_name in ('password','secret','api_key','token')`).Scan(&plaintext))
-	require.Zero(t, plaintext, "no plaintext secret column may exist")
+// plaintextSecretColumnPattern matches a column name that LOOKS like it
+// holds a live credential: password, secret, token (and its compounds
+// client_secret/access_token/refresh_token), api_key/apikey, passwd, tgt
+// (EPİAŞ's ticket-granting-ticket, coming in F2), private_key.
+//
+// F1 final review pass B, I4 (ledger Task 5's deferred minor, re-rated
+// Important): the guard this replaces was
+// `table_name in ('integration_credentials','smtp_settings') and column_name
+// in ('password','secret','api_key','token')` — two named tables and four
+// exact names. It could not see a plaintext credential column on any OTHER
+// table, and could not see `client_secret`, `access_token`,
+// `refresh_token`, or `password_plain` on the two tables it DID look at,
+// because none of those strings is an exact match for 'password', 'secret',
+// 'api_key' or 'token'. F2 adds OAuth token exchange/refresh for iSolar and
+// an EPİAŞ TGT cache within weeks (F2 plan, migrations 00012-00013) — this
+// widens to catch a plaintext column in either one before it merges, not
+// after a reviewer happens to notice.
+var plaintextSecretColumnPattern = regexp.MustCompile(`(?i)secret|token|password|passwd|api_?key|tgt|private_key`)
+
+// secretColumnKey identifies one column by (table, column) for
+// plaintextSecretColumnAllowlist.
+type secretColumnKey struct {
+	table, column string
+}
+
+// plaintextSecretColumnAllowlist names every column in the CURRENT schema
+// that matches plaintextSecretColumnPattern by name but is not a live,
+// recoverable credential, together with the reason it is safe as plain
+// text. Every entry here is either a ONE-WAY HASH (bcrypt/sha-256: nothing
+// can turn it back into the credential it was derived from, so binding
+// rule 10's "stored as AES-256-GCM ciphertext" does not apply — that rule
+// governs credentials the system must later DECRYPT, and a hash is never
+// decrypted) or a plain timestamp whose name happens to contain the
+// substring "password" or "token".
+//
+// This is an EXPLICIT, PER-COLUMN allow-list, not a suffix rule such as
+// "anything ending in _hash is fine": a table/column pair is one line to
+// add, reviewable in a diff, and cannot silently widen to cover a future
+// column that merely happens to share a naming convention.
+var plaintextSecretColumnAllowlist = map[secretColumnKey]string{
+	{"users", "password_hash"}: "bcrypt hash (one-way); the plaintext password is never stored",
+	{"users", "password_changed_at"}: "a timestamp of WHEN the password last changed, not the password " +
+		"itself; matches the pattern only because its name contains \"password\"",
+	{"user_password_history", "password_hash"}: "bcrypt hash (one-way); the plaintext password is never stored",
+	{"sessions", "refresh_token_hash"}: "sha-256 hash of the refresh token (one-way); the raw token itself " +
+		"is never stored, only ever compared by re-hashing an incoming one",
+	{"integration_credentials", "token_expires_at"}: "a timestamp of when the OAuth token expires, not the " +
+		"token itself; matches the pattern only because its name contains \"token\"",
+}
+
+// TestNoPlaintextSecretColumns is the schema-wide guard described on
+// plaintextSecretColumnPattern above. It runs against a freshly migrated
+// database from the SHARED template
+// (testfixtures.NewIsolatedDB — the old TestIntegrationCredentialSecretsAreBytea
+// booted its own container for this, which this migration also stops
+// doing), scans every column in the public schema, and requires that any
+// column whose name matches the pattern is either bytea (this schema's
+// AES-256-GCM ciphertext convention) or named in
+// plaintextSecretColumnAllowlist with a stated reason. Anything else —
+// including a brand-new table this test has never heard of — fails by
+// default.
+func TestNoPlaintextSecretColumns(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+
+	rows, err := pool.Query(ctx, `
+		select table_name, column_name, data_type
+		from information_schema.columns
+		where table_schema = 'public'
+		order by table_name, column_name`)
+	require.NoError(t, err)
+	defer rows.Close()
+
+	inspected := 0
+	for rows.Next() {
+		var table, column, dataType string
+		require.NoError(t, rows.Scan(&table, &column, &dataType))
+		inspected++
+
+		if !plaintextSecretColumnPattern.MatchString(column) {
+			continue
+		}
+		if dataType == "bytea" {
+			continue // this schema's AES-256-GCM ciphertext convention
+		}
+		if reason, ok := plaintextSecretColumnAllowlist[secretColumnKey{table, column}]; ok {
+			require.NotEmpty(t, reason, "%s.%s: an allow-list entry must carry a reason", table, column)
+			continue
+		}
+		t.Errorf("%s.%s (%s) looks like a credential column by name (matches %q) but is neither bytea nor on "+
+			"plaintextSecretColumnAllowlist: a secret/token/password-shaped column must be AES-256-GCM ciphertext "+
+			"(bytea), or a one-way hash added to the allow-list with a stated reason — never plaintext",
+			table, column, dataType, plaintextSecretColumnPattern.String())
+	}
+	require.NoError(t, rows.Err())
+
+	// Anti-vacuity floor, same shape as the float and scope guards: a walk
+	// that silently stopped querying information_schema, or queried the
+	// wrong schema, would find nothing to flag and pass for the wrong
+	// reason. Measured well above 100 columns across 00001-00011's tables;
+	// the floor leaves headroom for a column being dropped while still
+	// catching a broken query.
+	require.GreaterOrEqual(t, inspected, 100,
+		"inspected implausibly few columns (%d): the guard walked far less of the public schema than it did "+
+			"when this floor was measured and would pass whatever the schema said", inspected)
 }
 
 // TestOperationalMessagesUsesBigserial pins operational_messages.id to a
