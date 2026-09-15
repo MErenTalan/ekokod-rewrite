@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -90,9 +91,39 @@ type Built struct {
 	// client and the lock's redis client (R2: the same *lock.Redis is
 	// also the httpx Pool's and the EPİAŞ client's Locker, so there is
 	// only ever one redis client to close here, not one per consumer).
-	// Idempotent: safe to call more than once (see
-	// TestWorkerBuildClosesCleanlyTwice).
+	// Idempotent — guarded by sync.Once, not merely by the underlying
+	// clients' own tolerance for a second Close call — so it is always
+	// safe to call more than once (TestWorkerBuildClosesCleanlyTwice
+	// calls it twice and requires no panic).
 	Close func()
+}
+
+// namedCloser is one long-lived resource build() opened, tagged with a name
+// so a test can assert exactly which resources a graph holds closers for
+// (fix round 1, I4), rather than only observing their combined effect via a
+// side channel like a connection count.
+type namedCloser struct {
+	name  string
+	close func()
+}
+
+// graph is the full dependency graph build() assembles before Build wraps
+// it into Built's public two-field shape. Splitting construction out of
+// Build into build() gives the same-package tests in this file access to
+// pieces Built alone cannot prove: which key source feeds
+// credentials.Deps.StateKey and the integration repository's cipher (C1,
+// C2), which hook is registered for PM5340 (I1), how verifierResolver
+// routes providers (I2), and which resources are closed on every return
+// path (I4). Build's exported signature and Built are unchanged — this is
+// purely an internal seam, no behaviour change.
+type graph struct {
+	cipher          *crypto.Cipher
+	integrationRepo *postgres.IntegrationRepository
+	verifiers       verifierResolver
+	credentialsDeps credentials.Deps
+	ingestDeps      ingest.Deps
+	handlers        *job.Handlers
+	closers         []namedCloser
 }
 
 // verifierResolver adapts *integration.Registry and the iSolarCloud client
@@ -119,32 +150,56 @@ func (v verifierResolver) Verifier(p integration.Provider) (credentials.Verifier
 
 // Build constructs every F2 dependency from configuration: it is the
 // single wiring point; internal/cli/worker.go calls it and Task 17's
-// acceptance test calls it. Every resource opened before a later
-// construction step fails is closed on that step's own error path via
-// closeAll, in reverse-open order — see the closers slice below.
+// acceptance test calls it. It is a thin wrapper over build() (below),
+// which does the actual assembly — Build's only job is to turn a graph
+// into Built's public two-field shape and guard Close with sync.Once so it
+// is safe to call more than once.
 func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slog.Logger) (Built, error) {
+	g, err := build(ctx, cfg, pool, log)
+	if err != nil {
+		return Built{}, err
+	}
+	var once sync.Once
+	closeAll := func() {
+		once.Do(func() {
+			for i := len(g.closers) - 1; i >= 0; i-- {
+				g.closers[i].close()
+			}
+		})
+	}
+	return Built{Handlers: g.handlers, Close: closeAll}, nil
+}
+
+// build assembles the full F2 dependency graph. Every resource opened
+// before a later construction step fails is closed on that step's own
+// error path via closeAll, in reverse-open order — see the closers slice
+// below. build is unexported: Build (above) is the only production caller;
+// this package's own same-package tests call build directly to inspect
+// pieces (credentials.Deps, ingest.Deps, the cipher, verifierResolver, the
+// named closers) that Built's public shape does not expose.
+func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slog.Logger) (graph, error) {
 	adminMarketDataRepo := admin.NewMarketDataRepository(pool)
 	adminJournalRepo := admin.NewJournalRepository(pool)
 
-	// closers accumulates a Close for every long-lived resource Build
-	// opens, in open order; closeAll runs them in reverse-open order (the
-	// same order Built.Close's doc has always promised: job client, then
-	// the lock's redis client). Every error path below calls closeAll()
-	// before returning, so a late construction failure never leaks an
-	// earlier resource — proven by
+	// closers accumulates a namedCloser for every long-lived resource
+	// build opens, in open order; closeAll runs them in reverse-open order
+	// (the same order Built.Close's doc has always promised: job client,
+	// then the lock's redis client). Every error path below calls
+	// closeAll() before returning, so a late construction failure never
+	// leaks an earlier resource — proven by
 	// TestWorkerBuildClosesEarlierResourcesOnLateFailure.
-	var closers []func()
+	var closers []namedCloser
 	closeAll := func() {
 		for i := len(closers) - 1; i >= 0; i-- {
-			closers[i]()
+			closers[i].close()
 		}
 	}
 
 	redisClient, err := platformredis.New(ctx, cfg.Redis, log)
 	if err != nil {
-		return Built{}, fmt.Errorf("worker: connect redis: %w", err)
+		return graph{}, fmt.Errorf("worker: connect redis: %w", err)
 	}
-	closers = append(closers, func() { _ = redisClient.Close() })
+	closers = append(closers, namedCloser{"redis", func() { _ = redisClient.Close() }})
 	// R2: this value is passed directly wherever a Locker (or Consumer) is
 	// wanted — httpx.Locker is a type alias for lock.Locker (Task 2), so
 	// *lock.Redis already satisfies it. There is no worker.httpxLocker
@@ -157,7 +212,7 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 	})
 	if err != nil {
 		closeAll()
-		return Built{}, fmt.Errorf("worker: build httpx pool: %w", err)
+		return graph{}, fmt.Errorf("worker: build httpx pool: %w", err)
 	}
 
 	epiasClient, err := epias.New(httpxPool, epias.Options{
@@ -167,22 +222,27 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 	})
 	if err != nil {
 		closeAll()
-		return Built{}, fmt.Errorf("worker: build epias client: %w", err)
+		return graph{}, fmt.Errorf("worker: build epias client: %w", err)
 	}
 
 	jobClient, err := job.NewClient(cfg.Redis)
 	if err != nil {
 		closeAll()
-		return Built{}, fmt.Errorf("worker: build job client: %w", err)
+		return graph{}, fmt.Errorf("worker: build job client: %w", err)
 	}
-	closers = append(closers, func() { _ = jobClient.Close() })
+	closers = append(closers, namedCloser{"job-client", func() { _ = jobClient.Close() }})
 
 	syncer := marketdata.New(epiasClient, adminMarketDataRepo, adminJournalRepo, clock.System(), log)
 
+	// C2: cipher is built from cfg.Security.EncryptionKey, never from
+	// cfg.Security.JWTSigningKey — the integration repository below shares
+	// this single instance, so a same-package test can seal through it and
+	// open with a cipher independently built from EncryptionKey to pin the
+	// key source (see wiring_internal_test.go).
 	cipher, err := crypto.NewCipher(cfg.Security.EncryptionKey)
 	if err != nil {
 		closeAll()
-		return Built{}, fmt.Errorf("worker: build encryption cipher: %w", err)
+		return graph{}, fmt.Errorf("worker: build encryption cipher: %w", err)
 	}
 
 	readingRepo := postgres.NewReadingRepository(pool)
@@ -203,15 +263,20 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 	)
 	if err != nil {
 		closeAll()
-		return Built{}, fmt.Errorf("worker: build meter-adapter registry: %w", err)
+		return graph{}, fmt.Errorf("worker: build meter-adapter registry: %w", err)
 	}
 
 	isolarClient := isolar.New(httpxPool, isolar.Options{})
+	verifiers := verifierResolver{registry: registry, isolar: isolarClient}
 
-	credService, err := credentials.New(credentials.Deps{
+	// C1: StateKey is derived from cfg.Security.JWTSigningKey, never from
+	// cfg.Security.EncryptionKey — credDeps is the exact literal passed to
+	// credentials.New, so a same-package test can read StateKey back off
+	// it directly (see wiring_internal_test.go).
+	credDeps := credentials.Deps{
 		Integrations: integrationRepo,
 		Analyzers:    analyzerRepo,
-		Verifiers:    verifierResolver{registry: registry, isolar: isolarClient},
+		Verifiers:    verifiers,
 		ISolar:       isolarClient,
 		Enqueuer:     jobClient,
 		Locker:       redisLock,
@@ -220,13 +285,17 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		StateKey:     StateKey(cfg.Security.JWTSigningKey),
 		RedirectURI:  RedirectURI(cfg),
 		MaxRetry:     cfg.Worker.MaxRetries,
-	})
+	}
+	credService, err := credentials.New(credDeps)
 	if err != nil {
 		closeAll()
-		return Built{}, fmt.Errorf("worker: build credential service: %w", err)
+		return graph{}, fmt.Errorf("worker: build credential service: %w", err)
 	}
 
-	ingestSvc, err := ingest.New(ingest.Deps{
+	// I1: the PM5340 hook list is built once here as ingestDeps, the exact
+	// literal passed to ingest.New — a same-package test asserts it holds
+	// exactly one *generation.Accumulator (see wiring_internal_test.go).
+	ingestDeps := ingest.Deps{
 		Analyzers:      analyzerRepo,
 		Readings:       readingRepo,
 		Cursors:        cursorRepo,
@@ -244,7 +313,8 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		ConsumptionRefresh: nil, // R17: consumption.refresh is declared, never enqueued, in F2
 		Clock:              clock.System(),
 		Log:                log,
-	}, ingest.Options{
+	}
+	ingestSvc, err := ingest.New(ingestDeps, ingest.Options{
 		FutureTolerance: cfg.Ingest.FutureTolerance,
 		SanityMultiple:  cfg.Ingest.SanityMultiple,
 		InitialLookback: cfg.Ingest.InitialLookback,
@@ -252,7 +322,7 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 	})
 	if err != nil {
 		closeAll()
-		return Built{}, fmt.Errorf("worker: build ingest service: %w", err)
+		return graph{}, fmt.Errorf("worker: build ingest service: %w", err)
 	}
 
 	backfiller := backfill.New(backfill.Deps{
@@ -265,8 +335,13 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		MaxRetry:    cfg.Worker.MaxRetries,
 	})
 
-	return Built{
-		Handlers: &job.Handlers{Log: log, Ingestion: ingestSvc, Backfill: backfiller, Prices: syncer},
-		Close:    closeAll,
+	return graph{
+		cipher:          cipher,
+		integrationRepo: integrationRepo,
+		verifiers:       verifiers,
+		credentialsDeps: credDeps,
+		ingestDeps:      ingestDeps,
+		handlers:        &job.Handlers{Log: log, Ingestion: ingestSvc, Backfill: backfiller, Prices: syncer},
+		closers:         closers,
 	}, nil
 }

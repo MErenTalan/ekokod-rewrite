@@ -84,13 +84,11 @@ func TestWorkerRegistersEveryF2Handler(t *testing.T) {
 	require.Empty(t, pattern, "R17: consumption.refresh has no F2 handler")
 }
 
-// TestWorkerBuildClosesCleanlyTwice guards Built.Close's contract loosely:
-// callers (cli/worker.go via defer, and this suite's own defer above) must
-// be able to call it without the process taking down a live server on a
-// double-close panic. asynq's *Client.Close and goredis's *Client.Close
-// both already tolerate being called once; this test only pins that
-// Built.Close itself never panics on ordinary use, not idempotency beyond
-// what the underlying clients already provide.
+// TestWorkerBuildClosesCleanlyTwice is the fix-round-1 M1 test: Built.Close
+// is guarded by sync.Once (worker.Build wraps graph.closers in one), so it
+// is safe to call twice, not merely "safe once, and probably fine again
+// because the underlying clients happen to tolerate it" — this actually
+// calls Close() twice and requires neither call to panic.
 func TestWorkerBuildClosesCleanlyTwice(t *testing.T) {
 	dsn := testfixtures.StartPostgres(t)
 	pool := testfixtures.NewPool(t, dsn)
@@ -100,6 +98,40 @@ func TestWorkerBuildClosesCleanlyTwice(t *testing.T) {
 	built, err := worker.Build(context.Background(), cfg, pool, testfixtures.DiscardLogger())
 	require.NoError(t, err)
 	require.NotPanics(t, built.Close)
+	require.NotPanics(t, built.Close, "Built.Close must be idempotent: a second call must not panic")
+}
+
+// TestWorkerBuildCloseReleasesRedisOnSuccessPath is the fix-round-1 I3
+// test: TestWorkerBuildClosesCleanlyTwice only proved Close() doesn't
+// panic, not that it actually releases anything — a no-op Close would pass
+// it too. This asserts the platform redis client's connection is gone
+// (connected_clients back at baseline) after built.Close() on the ordinary
+// success path, the same connected_clients technique
+// TestWorkerBuildClosesEarlierResourcesOnLateFailure below uses for the
+// error path.
+func TestWorkerBuildCloseReleasesRedisOnSuccessPath(t *testing.T) {
+	dsn := testfixtures.StartPostgres(t)
+	pool := testfixtures.NewPool(t, dsn)
+	redisCfg := testfixtures.RedisConfig(t)
+	cfg := workerTestConfig(t, dsn, redisCfg)
+
+	monitorOpts, err := goredis.ParseURL(redisCfg.URL)
+	require.NoError(t, err)
+	monitor := goredis.NewClient(monitorOpts)
+	t.Cleanup(func() { _ = monitor.Close() })
+
+	baseline := connectedClients(t, monitor)
+
+	built, err := worker.Build(context.Background(), cfg, pool, testfixtures.DiscardLogger())
+	require.NoError(t, err)
+	require.Greater(t, connectedClients(t, monitor), baseline, "Build must have opened its own redis client")
+
+	built.Close()
+
+	require.Eventually(t, func() bool {
+		return connectedClients(t, monitor) <= baseline
+	}, 5*time.Second, 50*time.Millisecond,
+		"Built.Close must release the redis client it opened on the success path, not no-op")
 }
 
 // connectedClients reads Redis's own INFO clients: connected_clients, the
@@ -126,32 +158,23 @@ func connectedClients(t *testing.T, c *goredis.Client) int {
 }
 
 // TestWorkerBuildClosesEarlierResourcesOnLateFailure is the Task 16 part-A
-// review carryover: prove that when a LATE Build step fails, every
-// long-lived resource Build already opened FOR THIS CALL is closed on that
-// step's error path, not leaked until process exit.
+// review carryover: when a LATE Build step fails, every long-lived resource
+// already opened FOR THIS CALL must be closed on that step's error path,
+// not leaked until process exit.
 //
-// The failing step is crypto.NewCipher, a pure function of
-// cfg.Security.EncryptionKey — this test truncates that one field to 16
-// bytes (crypto.NewCipher requires exactly 32) AFTER config.Load has
-// already validated and returned a fully valid cfg, so every step BEFORE
-// the cipher (redis connect, the httpx pool, the EPİAŞ client, the job
-// client) still succeeds and opens its resource; only the cipher step
-// fails. This is "an invalid config value that fails only that step" per
-// the review note, not a contrived constructor seam.
+// The failing step is crypto.NewCipher: this test truncates the already
+// config.Load-validated cfg.Security.EncryptionKey to 16 bytes (32
+// required) so every earlier step (redis, httpx pool, EPİAŞ client, job
+// client) still opens its resource and only the cipher step fails.
 //
-// Why the assertion is the platform redis client specifically:
-// internal/store/redis.New pings before returning (it connects eagerly),
-// so its connection is independently, externally observable via
-// connected_clients. The job client (asynq.Client) and the httpx pool's
-// clients dial lazily, on first real use — internal/scheduler's own
-// TestSchedulerReleasesRedisClientOnRegisterFailure documents the same
-// fact for asynq/go-redis — so removing only their Close call would not
-// move connected_clients by itself; this test cannot independently prove
-// those two in isolation, which is why the mutation proof below targets
-// the one call this metric DOES discriminate (deleting worker.Build's
-// entire closeAll() call on the cipher error path, which also drops the
-// two lazy-dial closes, but is caught here by the redis client's leak
-// alone).
+// The assertion targets the platform redis client specifically because
+// internal/store/redis.New dials eagerly (pings before returning), so its
+// connection is externally observable via connected_clients; the job
+// client and httpx pool's clients dial lazily on first use (same fact
+// internal/scheduler's TestSchedulerReleasesRedisClientOnRegisterFailure
+// documents), so this metric can't independently discriminate their Close
+// calls — it does discriminate closeAll()'s presence as a whole, which is
+// what "every resource closed on every error path" requires.
 func TestWorkerBuildClosesEarlierResourcesOnLateFailure(t *testing.T) {
 	dsn := testfixtures.StartPostgres(t)
 	pool := testfixtures.NewPool(t, dsn)
