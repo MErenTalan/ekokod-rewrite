@@ -371,13 +371,17 @@ func (r *BillRepository) ReplaceHourlyDetail(ctx context.Context, s store.Scope,
 	}
 	var n int64
 	for _, d := range rows {
-		if err := q.BillHourlyDetailInsert(ctx, sqlcgen.BillHourlyDetailInsertParams{
+		ok, err := q.BillHourlyDetailInsert(ctx, sqlcgen.BillHourlyDetailInsertParams{
 			BillID: billID, Ts: tariffTimestamptz(d.Ts), Consumption: decimalToNumeric(d.Consumption),
 			Ptf: decimalToNumeric(d.PTF), Yekdem: decimalToNumeric(d.Yekdem), Kbk: decimalToNumeric(d.Kbk),
 			UnitPrice: decimalToNumeric(d.UnitPrice), Cost: decimalToNumeric(d.Cost),
 			CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: ids,
-		}); err != nil {
+		})
+		if err != nil {
 			return 0, pgerr.Translate(r.pool, "insert bill hourly detail", err)
+		}
+		if !ok {
+			return 0, store.ErrNotFound
 		}
 		n++
 	}

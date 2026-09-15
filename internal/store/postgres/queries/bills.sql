@@ -194,11 +194,20 @@ where bill_id = sqlc.arg(bill_id)
       and (sqlc.arg(all_buildings)::boolean or b.building_id = any(sqlc.arg(building_ids)::uuid[]))
   );
 
--- name: BillHourlyDetailInsert :exec
+-- :one RETURNING true, not :exec: see AlarmAnalyzerInsert's comment in
+-- queries/alarms.sql -- an :exec insert whose WHERE EXISTS excludes every
+-- row still reports "no error", which a caller checking only err would read
+-- as success. Task 11a fix round 2: this was the one sibling
+-- (AlarmAnalyzerInsert/AlarmChannelInsert/BillMemberInsert were already
+-- converted in fix round 1) left as :exec, so a bill belonging to another
+-- tenant's company still looked like a successful insert while storing zero
+-- rows.
+-- name: BillHourlyDetailInsert :one
 insert into bill_hourly_detail (bill_id, ts, consumption, ptf, yekdem, kbk, unit_price, cost)
 select sqlc.arg(bill_id), sqlc.arg(ts), sqlc.arg(consumption), sqlc.arg(ptf), sqlc.arg(yekdem),
        sqlc.arg(kbk), sqlc.arg(unit_price), sqlc.arg(cost)
 where exists (
   select 1 from bills b where b.id = sqlc.arg(bill_id) and b.company_id = sqlc.arg(company_id)
     and (sqlc.arg(all_buildings)::boolean or b.building_id = any(sqlc.arg(building_ids)::uuid[]))
-);
+)
+returning true;

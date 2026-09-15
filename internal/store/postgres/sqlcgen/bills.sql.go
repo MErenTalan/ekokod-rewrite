@@ -490,7 +490,7 @@ func (q *Queries) BillHourlyDetailDeleteForBill(ctx context.Context, arg BillHou
 	return err
 }
 
-const billHourlyDetailInsert = `-- name: BillHourlyDetailInsert :exec
+const billHourlyDetailInsert = `-- name: BillHourlyDetailInsert :one
 insert into bill_hourly_detail (bill_id, ts, consumption, ptf, yekdem, kbk, unit_price, cost)
 select $1, $2, $3, $4, $5,
        $6, $7, $8
@@ -498,6 +498,7 @@ where exists (
   select 1 from bills b where b.id = $1 and b.company_id = $9
     and ($10::boolean or b.building_id = any($11::uuid[]))
 )
+returning true
 `
 
 type BillHourlyDetailInsertParams struct {
@@ -514,8 +515,16 @@ type BillHourlyDetailInsertParams struct {
 	BuildingIds  []uuid.UUID
 }
 
-func (q *Queries) BillHourlyDetailInsert(ctx context.Context, arg BillHourlyDetailInsertParams) error {
-	_, err := q.db.Exec(ctx, billHourlyDetailInsert,
+// :one RETURNING true, not :exec: see AlarmAnalyzerInsert's comment in
+// queries/alarms.sql -- an :exec insert whose WHERE EXISTS excludes every
+// row still reports "no error", which a caller checking only err would read
+// as success. Task 11a fix round 2: this was the one sibling
+// (AlarmAnalyzerInsert/AlarmChannelInsert/BillMemberInsert were already
+// converted in fix round 1) left as :exec, so a bill belonging to another
+// tenant's company still looked like a successful insert while storing zero
+// rows.
+func (q *Queries) BillHourlyDetailInsert(ctx context.Context, arg BillHourlyDetailInsertParams) (bool, error) {
+	row := q.db.QueryRow(ctx, billHourlyDetailInsert,
 		arg.BillID,
 		arg.Ts,
 		arg.Consumption,
@@ -528,7 +537,9 @@ func (q *Queries) BillHourlyDetailInsert(ctx context.Context, arg BillHourlyDeta
 		arg.AllBuildings,
 		arg.BuildingIds,
 	)
-	return err
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const billHourlyDetailList = `-- name: BillHourlyDetailList :many
