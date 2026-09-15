@@ -19,6 +19,7 @@ import (
 func iso50001DatePtr(t time.Time) *time.Time { return &t }
 
 func TestISO50001EnsureProjectIsIdempotentAndScoped(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenant := testfixtures.NewTenant(t, ctx, pool, 5001)
@@ -52,6 +53,7 @@ func TestISO50001EnsureProjectIsIdempotentAndScoped(t *testing.T) {
 // iso50001_clause_dates has no company_id, so a project not visible to the
 // Scope must return ErrNotFound for both the read and ReplaceClauseDates.
 func TestISO50001ClauseDatesIsolation(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 5010)
@@ -102,6 +104,7 @@ func TestISO50001ClauseDatesIsolation(t *testing.T) {
 // TestISO50001NotesIsolation is the mandatory isolation test for
 // iso50001_notes.
 func TestISO50001NotesIsolation(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 5020)
@@ -177,6 +180,7 @@ func TestISO50001NotesIsolation(t *testing.T) {
 func iso50001PtrString(s string) *string { return &s }
 
 func TestISO50001RepositoryRejectsInvalidScope(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	repo := postgres.NewISO50001Repository(pool)
@@ -195,6 +199,7 @@ func TestISO50001RepositoryRejectsInvalidScope(t *testing.T) {
 // building or user id: Scope.AllowsBuilding returns true for any id at all
 // under AllBuildings, so the real check lives in each write's own SQL.
 func TestISO50001AdminScopeCannotStoreAnotherTenantsForeignKeys(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 5030)
@@ -223,6 +228,7 @@ func TestISO50001AdminScopeCannotStoreAnotherTenantsForeignKeys(t *testing.T) {
 // tenant's building, even under the caller's own AdminScope (fix round 1,
 // Important 4).
 func TestISO50001ProjectCrossTenantAdminScopeIsolation(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 5040)

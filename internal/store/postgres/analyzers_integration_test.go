@@ -17,6 +17,7 @@ import (
 )
 
 func TestAnalyzerRepositoryNeverReturnsAnotherCompanysRows(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	mine := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -35,6 +36,7 @@ func TestAnalyzerRepositoryNeverReturnsAnotherCompanysRows(t *testing.T) {
 }
 
 func TestAnalyzerRepositoryHonoursANarrowScope(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -53,12 +55,14 @@ func TestAnalyzerRepositoryHonoursANarrowScope(t *testing.T) {
 }
 
 func TestAnalyzerRepositoryRejectsAnInvalidScope(t *testing.T) {
+	t.Parallel()
 	repo := postgres.NewAnalyzerRepository(testfixtures.NewIsolatedDB(t))
 	_, err := repo.List(context.Background(), store.Scope{}, store.AnalyzerFilter{})
 	require.ErrorIs(t, err, store.ErrInvalidScope)
 }
 
 func TestAnalyzerRepositoryCreateGetUpdateSoftDelete(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -109,6 +113,7 @@ func TestAnalyzerRepositoryCreateGetUpdateSoftDelete(t *testing.T) {
 // OWN row's CompanyID — while keeping a BuildingID that IS visible to the
 // Scope — isolates the new guard.
 func TestAnalyzerRepositoryUpdateRefusesAForeignCompany(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	mine := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -138,6 +143,7 @@ func TestAnalyzerRepositoryUpdateRefusesAForeignCompany(t *testing.T) {
 // that Scope's own BuildingFilter() can never match a NULL building_id and
 // the analyzer would move out of its own sight.
 func TestAnalyzerRepositoryNarrowScopeCannotCreateOrUpdateToNilBuilding(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -182,6 +188,7 @@ func TestAnalyzerRepositoryNarrowScopeCannotCreateOrUpdateToNilBuilding(t *testi
 // company_id check itself now (queries/analyzers.sql), so this is provably
 // not that bug.
 func TestAnalyzerRepositoryCreateRefusesAForeignBuilding(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	mine := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -212,6 +219,7 @@ func TestAnalyzerRepositoryCreateRefusesAForeignBuilding(t *testing.T) {
 // stored building_id in SQL — the NEW value being written was checked
 // solely by a Go-level pre-check with no SQL enforcement of its own.
 func TestAnalyzerRepositoryUpdateRefusesAForeignBuilding(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	mine := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -245,6 +253,7 @@ func TestAnalyzerRepositoryUpdateRefusesAForeignBuilding(t *testing.T) {
 // TestAnalyzerRepositoryCreateRefusesAForeignBuilding still passed (that
 // test's victim building already fails on company_id alone).
 func TestAnalyzerRepositoryCreateRefusesABuildingOutsideItsNarrowGrant(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -273,6 +282,7 @@ func TestAnalyzerRepositoryCreateRefusesABuildingOutsideItsNarrowGrant(t *testin
 // an analyzer it can already see into a building the same Scope does not
 // grant, even inside the caller's own company.
 func TestAnalyzerRepositoryUpdateRefusesMovingToABuildingOutsideItsNarrowGrant(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -299,6 +309,7 @@ func TestAnalyzerRepositoryUpdateRefusesMovingToABuildingOutsideItsNarrowGrant(t
 // company, so only the deleted_at check stands between this write and a
 // building that no longer exists in any meaningful sense.
 func TestAnalyzerRepositoryCreateRefusesASoftDeletedBuilding(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -328,6 +339,7 @@ func TestAnalyzerRepositoryCreateRefusesASoftDeletedBuilding(t *testing.T) {
 // TestAnalyzerRepositoryUpdateRefusesMovingToASoftDeletedBuilding is
 // Update's counterpart to the soft-delete Create proof above.
 func TestAnalyzerRepositoryUpdateRefusesMovingToASoftDeletedBuilding(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -354,6 +366,7 @@ func TestAnalyzerRepositoryUpdateRefusesMovingToASoftDeletedBuilding(t *testing.
 // NULL building_id ruling: an analyzer with no building is reachable ONLY
 // by a Scope with AllBuildings.
 func TestAnalyzerRepositoryUnassignedIsVisibleOnlyUnderAllBuildings(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -387,6 +400,7 @@ func TestAnalyzerRepositoryUnassignedIsVisibleOnlyUnderAllBuildings(t *testing.T
 }
 
 func TestAnalyzerRepositoryTouchLastReadingNeverRetreats(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -409,6 +423,7 @@ func TestAnalyzerRepositoryTouchLastReadingNeverRetreats(t *testing.T) {
 }
 
 func TestAnalyzerRepositoryGetByInstallationIsolatesByCompany(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	mine := testfixtures.NewTenant(t, ctx, pool, 1)

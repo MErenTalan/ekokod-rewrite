@@ -20,6 +20,7 @@ import (
 var pricesEpoch = time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
 
 func TestPriceHourlyRangeReadsWhatAdminWrote(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -41,6 +42,7 @@ func TestPriceHourlyRangeReadsWhatAdminWrote(t *testing.T) {
 }
 
 func TestPriceYekdemReadsWhatAdminWrote(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -57,6 +59,7 @@ func TestPriceYekdemReadsWhatAdminWrote(t *testing.T) {
 }
 
 func TestPriceYekdemNotFoundForUnknownPeriod(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -71,6 +74,7 @@ func TestPriceYekdemNotFoundForUnknownPeriod(t *testing.T) {
 // still validated (repository.go's PriceRepository doc). ------------------
 
 func TestPriceRepositoryRejectsInvalidScope(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	repo := postgres.NewPriceRepository(pool)
@@ -84,6 +88,7 @@ func TestPriceRepositoryRejectsInvalidScope(t *testing.T) {
 }
 
 func TestPriceHourlyRangeRejectsInvalidRange(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -96,6 +101,7 @@ func TestPriceHourlyRangeRejectsInvalidRange(t *testing.T) {
 // A narrow Scope and AllBuildings both see the SAME platform rows: the Scope
 // genuinely narrows nothing here.
 func TestPriceHourlyRangeIsTheSameUnderAnyValidScope(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)

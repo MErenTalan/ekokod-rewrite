@@ -16,6 +16,7 @@ import (
 )
 
 func TestBuildingRepositoryNeverReturnsAnotherCompanysRows(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	mine := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -35,6 +36,7 @@ func TestBuildingRepositoryNeverReturnsAnotherCompanysRows(t *testing.T) {
 }
 
 func TestBuildingRepositoryHonoursANarrowScope(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -51,12 +53,14 @@ func TestBuildingRepositoryHonoursANarrowScope(t *testing.T) {
 }
 
 func TestBuildingRepositoryRejectsAnInvalidScope(t *testing.T) {
+	t.Parallel()
 	repo := postgres.NewBuildingRepository(testfixtures.NewIsolatedDB(t))
 	_, err := repo.List(context.Background(), store.Scope{}, store.BuildingFilter{})
 	require.ErrorIs(t, err, store.ErrInvalidScope)
 }
 
 func TestBuildingRepositoryCreateGetUpdateSoftDelete(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -101,6 +105,7 @@ func TestBuildingRepositoryCreateGetUpdateSoftDelete(t *testing.T) {
 // whether or not the guard exists. Only a model value that lies about its
 // OWN row's CompanyID exercises the guard.
 func TestBuildingRepositoryUpdateRefusesAForeignCompany(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	mine := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -126,6 +131,7 @@ func TestBuildingRepositoryUpdateRefusesAForeignCompany(t *testing.T) {
 // create a building outside its own grant, because it has no way to grant
 // itself a new building id.
 func TestBuildingRepositoryCreateRequiresAnAllBuildingsScope(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -150,6 +156,7 @@ func TestBuildingRepositoryCreateRequiresAnAllBuildingsScope(t *testing.T) {
 // of a soft-deleted parent must not be readable through the parent-scoped
 // query either.
 func TestBuildingRepositoryContactsExcludeASoftDeletedParent(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -171,6 +178,7 @@ func TestBuildingRepositoryContactsExcludeASoftDeletedParent(t *testing.T) {
 // pins the folded minor: a narrow Scope (Buildings[0] only) may not replace
 // the contacts of Buildings[1], even inside its own company.
 func TestBuildingRepositoryReplaceContactsRefusesANarrowScopeOutsideItsGrant(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -198,6 +206,7 @@ func TestBuildingRepositoryReplaceContactsRefusesANarrowScopeOutsideItsGrant(t *
 // tenant's. BuildingCreate's WHERE clause embeds the company_id check
 // itself now (queries/buildings.sql), so this is provably not that bug.
 func TestBuildingRepositoryCreateRefusesAForeignResponsibleUser(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	mine := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -225,6 +234,7 @@ func TestBuildingRepositoryCreateRefusesAForeignResponsibleUser(t *testing.T) {
 // on the path that used to rely SOLELY on a Go-level pre-check with no SQL
 // enforcement of its own.
 func TestBuildingRepositoryUpdateRefusesAForeignResponsibleUser(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	mine := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -249,6 +259,7 @@ func TestBuildingRepositoryUpdateRefusesAForeignResponsibleUser(t *testing.T) {
 // mandatory isolation test for "BuildingRepository.Contacts,
 // ReplaceContacts — building_contacts -> buildings".
 func TestBuildingRepositoryContactsIsolateThroughTheParentBuilding(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	mine := testfixtures.NewTenant(t, ctx, pool, 1)

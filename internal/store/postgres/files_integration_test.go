@@ -25,6 +25,7 @@ func fileFixture(companyID uuid.UUID, ownerType string, ownerID *uuid.UUID) mode
 }
 
 func TestFileCreateGetListSoftDelete(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 6001)
@@ -73,6 +74,7 @@ func TestFileCreateGetListSoftDelete(t *testing.T) {
 }
 
 func TestFileCreateRefusesMismatchedCompanyID(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 6010)
@@ -89,6 +91,7 @@ func TestFileCreateRefusesMismatchedCompanyID(t *testing.T) {
 // everything look permitted) must never be what authorises a stored foreign
 // key.
 func TestFileCreateRefusesAnotherTenantsUploadedBy(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 6020)
@@ -114,6 +117,7 @@ func TestFileCreateRefusesAnotherTenantsUploadedBy(t *testing.T) {
 }
 
 func TestFileRepositoryRejectsInvalidScope(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	repo := postgres.NewFileRepository(pool)

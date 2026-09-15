@@ -29,6 +29,7 @@ import (
 // requireNumericEquals from migrations_timeseries_integration_test.go
 // (same package, same build tag).
 func TestContinuousAggregatesMatchAHandComputedFixture(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 
@@ -141,6 +142,7 @@ func TestContinuousAggregatesMatchAHandComputedFixture(t *testing.T) {
 // Timescale background worker is a timing dependency, and this phase has
 // already paid for one of those.
 func TestCompressedChunksStillReturnCorrectRows(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 

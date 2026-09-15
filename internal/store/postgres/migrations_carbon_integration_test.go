@@ -6,7 +6,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -17,10 +16,9 @@ import (
 // not define the same key twice, and two companies may each hold their own
 // copy of one key.
 func TestEmissionFactorKeyUniqueness(t *testing.T) {
-	dsn := testfixtures.StartPostgresUnmigrated(t)
+	t.Parallel()
 	ctx := context.Background()
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
-	pool := testfixtures.NewPool(t, dsn)
+	pool := testfixtures.NewIsolatedDB(t)
 
 	insert := func(company *uuid.UUID, key string) error {
 		_, err := pool.Exec(ctx, `insert into emission_factors
@@ -43,10 +41,9 @@ func TestEmissionFactorKeyUniqueness(t *testing.T) {
 // "one automated record per building, activity type and day". Manual records
 // are deliberately exempt.
 func TestAutomatedCarbonActivitiesAreUniquePerDay(t *testing.T) {
-	dsn := testfixtures.StartPostgresUnmigrated(t)
+	t.Parallel()
 	ctx := context.Background()
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
-	pool := testfixtures.NewPool(t, dsn)
+	pool := testfixtures.NewIsolatedDB(t)
 
 	companyID, buildingID := seedCompanyAndBuilding(t, ctx, pool)
 	insert := func(automated bool) error {

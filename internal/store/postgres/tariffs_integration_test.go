@@ -47,6 +47,7 @@ func tariffDecPtr(s string) *decimal.Decimal {
 }
 
 func TestTariffGetIsScopedToCompany(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -73,6 +74,7 @@ func TestTariffGetIsScopedToCompany(t *testing.T) {
 // Scope with AllBuildings, never to a narrow one, even within List's own
 // company.
 func TestTariffListExcludesCompanyWideForNarrowScope(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 10)
@@ -103,6 +105,7 @@ func TestTariffListExcludesCompanyWideForNarrowScope(t *testing.T) {
 // TestEffectiveTariffPicksTheLatestNotAfterTheDate pins tariff resolution by
 // effective_from — the wrong row here misprices every invoice.
 func TestEffectiveTariffPicksTheLatestNotAfterTheDate(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 20)
@@ -151,6 +154,7 @@ func TestEffectiveTariffPicksTheLatestNotAfterTheDate(t *testing.T) {
 // none of its own, even though the narrow Scope could never List or Get
 // that company-wide row directly.
 func TestTariffEffectiveFallsBackToCompanyWideTariff(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 30)
@@ -178,6 +182,7 @@ func TestTariffEffectiveFallsBackToCompanyWideTariff(t *testing.T) {
 // Effective made this test fail with "expected: not found, actual: <nil>"
 // — see the task report.
 func TestTariffEffectiveRequiresVisibleBuilding(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 40)
@@ -198,6 +203,7 @@ func TestTariffEffectiveRequiresVisibleBuilding(t *testing.T) {
 // `return nil` in tariffs.go made this test's cross-tenant assertions fail
 // with "expected: not found, actual: <nil>" for both Taxes and ReplaceTaxes.
 func TestTariffTaxesJoinThroughTariffIsolation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 50)
@@ -235,6 +241,7 @@ func TestTariffTaxesJoinThroughTariffIsolation(t *testing.T) {
 // TestTariffManualYekdemJoinThroughTariffIsolation covers both mandatory
 // methods on tariff_manual_yekdem.
 func TestTariffManualYekdemJoinThroughTariffIsolation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 60)
@@ -265,6 +272,7 @@ func TestTariffManualYekdemJoinThroughTariffIsolation(t *testing.T) {
 // building visibility: a narrow Scope cannot create a tariff for a building
 // it does not cover, and cannot create a company-wide tariff at all.
 func TestTariffCreateRejectsBuildingOutsideScope(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 70)
@@ -287,6 +295,7 @@ func TestTariffCreateRejectsBuildingOutsideScope(t *testing.T) {
 // carries (no building_id): solar_tariffs, which prices a plant, is visible
 // to the whole company Scope, and cross-tenant access is refused.
 func TestSolarTariffScopedToCompanyNotBuilding(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 80)
@@ -322,6 +331,7 @@ func TestSolarTariffScopedToCompanyNotBuilding(t *testing.T) {
 // rule: an invalid Scope is refused, but a valid Scope from either tenant
 // sees the SAME published rows, because the table has no company_id at all.
 func TestNationalTariffScopeValidatedButNotNarrowed(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 90)
@@ -357,6 +367,7 @@ func TestNationalTariffScopeValidatedButNotNarrowed(t *testing.T) {
 // from InsertRows made a call with tenant B's own import id succeed against
 // tenant A's Scope, instead of failing with ErrNotFound.
 func TestIcmalRowsJoinThroughImportIsolation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 100)
@@ -386,6 +397,7 @@ func TestIcmalRowsJoinThroughImportIsolation(t *testing.T) {
 // batch-refusal rule: if ANY row names a building not visible to the Scope,
 // nothing in the batch is written.
 func TestIcmalInsertRowsRefusesWholeBatchForInvisibleBuilding(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 110)
@@ -414,6 +426,7 @@ func TestIcmalInsertRowsRefusesWholeBatchForInvisibleBuilding(t *testing.T) {
 // store tenant B's building id as a tariff's building_id. The guard must be
 // in SQL, not the Go-side tariffBuildingWritable pre-check alone.
 func TestTariffCreateRejectsCrossTenantBuildingEvenWithAdminScope(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 500)
@@ -437,6 +450,7 @@ func TestTariffCreateRejectsCrossTenantBuildingEvenWithAdminScope(t *testing.T) 
 // probe applied to Update: moving an EXISTING tariff to another tenant's
 // building is the same stored-foreign-key bug as creating one there.
 func TestTariffUpdateRejectsMovingToCrossTenantBuilding(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 502)
@@ -463,6 +477,7 @@ func TestTariffUpdateRejectsMovingToCrossTenantBuilding(t *testing.T) {
 // probe: created_by is a stored foreign key too and must name a user of the
 // same company, never taken as given.
 func TestTariffCreateRejectsCreatedByOutsideCompany(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 504)
@@ -487,6 +502,7 @@ func TestTariffCreateRejectsCreatedByOutsideCompany(t *testing.T) {
 // Update must reject a model.Tariff naming another company exactly as
 // Create does, instead of silently ignoring the field.
 func TestTariffUpdateRejectsForeignCompanyID(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 506)
@@ -506,6 +522,7 @@ func TestTariffUpdateRejectsForeignCompanyID(t *testing.T) {
 // TestTariffCrossTenantUpdateAndSoftDelete is Important Finding 7's missing
 // test: cross-tenant Update and SoftDelete for tariffs.
 func TestTariffCrossTenantUpdateAndSoftDelete(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 508)
@@ -537,6 +554,7 @@ func ptrTariffTestString(s string) *string { return &s }
 // 2026-02-28T21:30Z, must resolve to the IDENTICAL tariff — the day boundary
 // is Europe/Istanbul, never the caller's incidental time.Time Location.
 func TestTariffEffectiveIstanbulDayBoundary(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 520)
@@ -577,6 +595,7 @@ func TestTariffEffectiveIstanbulDayBoundary(t *testing.T) {
 // pick the SAME one — the most recently created — not whichever a query
 // planner happens to return first.
 func TestTariffEffectiveTieBreaksDeterministically(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 521)
@@ -603,6 +622,7 @@ func TestTariffEffectiveTieBreaksDeterministically(t *testing.T) {
 // bills/tariffs of a soft-deleted building must not stay readable through
 // their own row.
 func TestTariffOfSoftDeletedBuildingIsNotReadable(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 550)
@@ -625,6 +645,7 @@ func TestTariffOfSoftDeletedBuildingIsNotReadable(t *testing.T) {
 // TestIcmalImportCrossTenantGetListUpdate is Important Finding 7's missing
 // test: GetImport/ListImports/UpdateImportResult cross-tenant.
 func TestIcmalImportCrossTenantGetListUpdate(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 540)
@@ -659,6 +680,7 @@ func TestIcmalImportCrossTenantGetListUpdate(t *testing.T) {
 // TestNationalTariffEffectiveRejectsInvalidScope is Important Finding 7's
 // missing test: NationalTariff.Effective with an invalid Scope.
 func TestNationalTariffEffectiveRejectsInvalidScope(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	repo := postgres.NewNationalTariffRepository(pool)
@@ -671,6 +693,7 @@ func TestNationalTariffEffectiveRejectsInvalidScope(t *testing.T) {
 // must not be negative, so a caller-supplied negative one is clamped to 0
 // rather than passed through to Postgres (which rejects it outright).
 func TestTariffPageLimitsClampNegativeOffset(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 522)
@@ -683,6 +706,7 @@ func TestTariffPageLimitsClampNegativeOffset(t *testing.T) {
 // TestTariffTemplateRepositoryCRUDAndIsolation is Important Finding 7's
 // missing test: TariffTemplateRepository had NO tests at all.
 func TestTariffTemplateRepositoryCRUDAndIsolation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 530)

@@ -25,6 +25,7 @@ func carbonDec(s string) decimal.Decimal { return decimal.RequireFromString(s) }
 // --- emission_factors: nullable company_id -------------------------------
 
 func TestCarbonFactorPlatformReadableCompanyWritable(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenant := testfixtures.NewTenant(t, ctx, pool, 4001)
@@ -84,6 +85,7 @@ func TestCarbonFactorPlatformReadableCompanyWritable(t *testing.T) {
 // guard: an id already naming another company's factor is refused with
 // ErrNotFound and nothing is written, even though the key differs.
 func TestCarbonUpsertFactorRefusesAnotherCompanysID(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 4002)
@@ -131,6 +133,7 @@ func TestCarbonUpsertFactorRefusesAnotherCompanysID(t *testing.T) {
 // another company's — "distinct from" the caller's own company_id — so it
 // can never be silently annexed into a company's catalogue via UpsertFactor.
 func TestCarbonUpsertFactorRefusesPlatformFactorID(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenant := testfixtures.NewTenant(t, ctx, pool, 4004)
@@ -162,6 +165,7 @@ func TestCarbonUpsertFactorRefusesPlatformFactorID(t *testing.T) {
 // caller's own; another company's factorID returns ErrNotFound both for the
 // read and for ReplaceConversions.
 func TestCarbonConversionsIsolation(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 4010)
@@ -243,6 +247,7 @@ func TestCarbonConversionsIsolation(t *testing.T) {
 // because both statements carry the company_id predicate themselves, joined
 // through emission_factors.
 func TestCarbonReplaceConversionsSQLScopingSurvivesGoCheckBypass(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 4012)
@@ -295,6 +300,7 @@ func TestCarbonReplaceConversionsSQLScopingSurvivesGoCheckBypass(t *testing.T) {
 // --- carbon_selected_activities --------------------------------------------
 
 func TestCarbonSelectedActivitiesReplace(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenant := testfixtures.NewTenant(t, ctx, pool, 4020)
@@ -341,6 +347,7 @@ func carbonActivityFixture(companyID, buildingID uuid.UUID) model.CarbonActivity
 }
 
 func TestCarbonActivityCRUDAndScopeNarrowing(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenant := testfixtures.NewTenant(t, ctx, pool, 4030)
@@ -385,6 +392,7 @@ func TestCarbonActivityCRUDAndScopeNarrowing(t *testing.T) {
 }
 
 func TestCarbonCreateActivityRefusesInvisibleBuildingAndWrongCompany(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 4040)
@@ -411,6 +419,7 @@ func TestCarbonCreateActivityRefusesInvisibleBuildingAndWrongCompany(t *testing.
 }
 
 func TestCarbonUpsertAutomatedActivityConvergesOnOneRow(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenant := testfixtures.NewTenant(t, ctx, pool, 4050)
@@ -437,6 +446,7 @@ func boolPtrCarbon(b bool) *bool { return &b }
 // --- carbon_reports ----------------------------------------------------------
 
 func TestCarbonReportsCreateAndList(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenant := testfixtures.NewTenant(t, ctx, pool, 4060)
@@ -465,6 +475,7 @@ func TestCarbonReportsCreateAndList(t *testing.T) {
 // --- invalid scope, before any database call --------------------------------
 
 func TestCarbonRepositoryRejectsInvalidScope(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	repo := postgres.NewCarbonRepository(pool)
@@ -488,6 +499,7 @@ func TestCarbonRepositoryRejectsInvalidScope(t *testing.T) {
 // (company_id = the caller's own) directly in its SQL rather than trusting
 // that Go-level helper.
 func TestCarbonAdminScopeCannotStoreAnotherTenantsForeignKeys(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 4070)
@@ -541,6 +553,7 @@ func TestCarbonAdminScopeCannotStoreAnotherTenantsForeignKeys(t *testing.T) {
 // must all validate atomically with the write — a platform factor or the
 // caller's own is allowed, another company's factor id is refused.
 func TestCarbonActivityFactorIDMustBeOwnedOrPlatform(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 4080)
@@ -614,6 +627,7 @@ func TestCarbonActivityFactorIDMustBeOwnedOrPlatform(t *testing.T) {
 // the widest legitimate scope a single tenant can hold, with no
 // building-id-list branch to (wrongly) mask a broken company_id check.
 func TestCarbonCrossTenantAdminScopeReadAndMutationIsolation(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 4090)

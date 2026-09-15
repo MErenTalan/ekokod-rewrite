@@ -21,6 +21,7 @@ import (
 // method must store and see only company_id = s.CompanyID, never a platform
 // (NULL) row.
 func TestOpsJobRunNullableCompanyIDIsolation(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenant := testfixtures.NewTenant(t, ctx, pool, 8001)
@@ -70,6 +71,7 @@ func TestOpsJobRunNullableCompanyIDIsolation(t *testing.T) {
 // TestOpsOperationalMessageNullableCompanyIDIsolation is the mandatory
 // isolation test for operational_messages.
 func TestOpsOperationalMessageNullableCompanyIDIsolation(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenant := testfixtures.NewTenant(t, ctx, pool, 8010)
@@ -107,6 +109,7 @@ func TestOpsOperationalMessageNullableCompanyIDIsolation(t *testing.T) {
 }
 
 func TestOpsListRunsRejectsInvalidRange(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenant := testfixtures.NewTenant(t, ctx, pool, 8020)
@@ -121,6 +124,7 @@ func TestOpsListRunsRejectsInvalidRange(t *testing.T) {
 }
 
 func TestOpsRepositoryRejectsInvalidScope(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	repo := postgres.NewOpsRepository(pool)
@@ -145,6 +149,7 @@ func TestOpsRepositoryRejectsInvalidScope(t *testing.T) {
 // refuse tenant A's rows under tenant B's OWN AdminScope — the company_id
 // predicate itself, not a coincidence of "no other tenant existed yet".
 func TestOpsCrossTenantIsolation(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 8030)
@@ -196,6 +201,7 @@ func TestOpsCrossTenantIsolation(t *testing.T) {
 // round 1): a job run is INSERTED in state 'running' per the contract,
 // regardless of what the caller puts in run.Status.
 func TestOpsStartRunIgnoresCallerSuppliedStatus(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenant := testfixtures.NewTenant(t, ctx, pool, 8040)

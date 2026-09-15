@@ -35,8 +35,9 @@ import (
 // seeded rows put the foreign keys between companies, buildings and everything
 // hanging off them under real load while the drops run in reverse order.
 func TestMigrationsLeaveNoTablesBehind(t *testing.T) {
-	dsn := testfixtures.StartPostgresUnmigrated(t)
+	t.Parallel()
 	ctx := context.Background()
+	dsn := testfixtures.NewEmptyDB(t)
 	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
 
 	pool := testfixtures.NewPool(t, dsn)
