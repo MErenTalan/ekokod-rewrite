@@ -55,16 +55,36 @@ func (r *limiterRegistry) get(key string, every time.Duration, burst int) *rate.
 // reservation is computed against the INJECTED now, not time.Now — that is
 // what lets TestLimiterSpacesRequestsPerKey observe deterministic spacing
 // without a rate-limit test ever waiting in real time.
+//
+// M11: if the wait is abandoned (sleep returns an error — ctx was
+// cancelled before the delay elapsed), the reservation is cancelled rather
+// than left consumed. lim.ReserveN already committed the token as of now();
+// Cancel gives it back (best-effort, per rate.Reservation's own docs) so a
+// request that never actually happened does not permanently steal a slot
+// from whichever request retries next.
 func waitForToken(ctx context.Context, lim *rate.Limiter, now func() time.Time, sleep sleepFunc) error {
 	t := now()
 	res := lim.ReserveN(t, 1)
 	if !res.OK() {
-		return fmt.Errorf("httpx: rate limiter burst exceeded")
+		return errRateLimiterBurstExceeded
 	}
 
 	delay := res.DelayFrom(t)
 	if delay <= 0 {
 		return nil
 	}
-	return sleep(ctx, delay)
+	if err := sleep(ctx, delay); err != nil {
+		res.CancelAt(now())
+		return err
+	}
+	return nil
 }
+
+// errRateLimiterBurstExceeded is waitForToken's internal signal that
+// ReserveN refused the reservation outright (Burst < 1, or a negative
+// delay reservation was requested — not a real-world path with this
+// package's own ClientConfig defaults, which always coerce Burst >= 1, but
+// kept as a distinct sentinel rather than the removed fmt.Errorf so the
+// caller in client.go can build a *integration.Error without ever
+// formatting or echoing raw limiter-internal text, per M7.
+var errRateLimiterBurstExceeded = fmt.Errorf("httpx: rate limiter refused the reservation")

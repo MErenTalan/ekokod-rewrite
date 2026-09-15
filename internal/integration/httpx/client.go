@@ -82,6 +82,15 @@ type Request struct {
 	Header      http.Header // values may be secret: never rendered in errors
 	Body        []byte
 	ContentType string
+
+	// NoRetry forces exactly one attempt regardless of ClientConfig's
+	// MaxAttempts (R32): for a non-idempotent call whose retry would be
+	// actively harmful rather than merely wasteful — e.g. an
+	// auth/token-refresh POST that invalidates the previous token on the
+	// provider's side, so a second attempt after a network blip logs the
+	// caller out of the token it just obtained instead of retrying the
+	// same login.
+	NoRetry bool
 }
 
 // Response is a successful (2xx) call's result.
@@ -127,8 +136,14 @@ func (p *Pool) Client(c ClientConfig) *Client {
 	return &Client{pool: p, cfg: c, limiter: lim}
 }
 
-// Do sends req through c: rate limiter, then (if configured) the serialise
-// lock, then — per attempt — a timeout and jittered retry. Returns a
+// Do sends req through c. For each attempt, in order: a per-LimiterKey
+// rate-limit wait (I4: every attempt draws its own token, so a retry never
+// bypasses the provider rate by skipping the wait the first attempt
+// already paid), then — if ClientConfig.SerializeKey is set — acquiring
+// Pool's Locker for that ONE attempt only (I3/R6: "per request, not per
+// task" — the lease is held across exactly one round trip, never across a
+// whole call's retries and backoff sleeps, and is released before any
+// backoff delay), then a per-attempt timeout and classify. Returns a
 // *integration.Error for every non-2xx outcome after retries are
 // exhausted; a 2xx response is returned as-is.
 func (c *Client) Do(ctx context.Context, req Request) (Response, error) {
@@ -136,42 +151,46 @@ func (c *Client) Do(ctx context.Context, req Request) (Response, error) {
 	if err != nil {
 		return Response{}, err
 	}
-
-	if err := waitForToken(ctx, c.limiter, c.pool.now, c.pool.sleep); err != nil {
-		return Response{}, err
-	}
-
-	if c.pool.locker != nil && c.cfg.SerializeKey != "" {
-		lease, err := c.pool.locker.Acquire(ctx, c.cfg.SerializeKey, serializeLeaseTTL)
-		if err != nil {
-			return Response{}, fmt.Errorf("httpx: acquire serialize lock for %q: %w", c.cfg.SerializeKey, err)
-		}
-		defer func() { _ = lease.Release(ctx) }()
-	}
-
 	return c.doWithRetry(ctx, req, u)
 }
 
-// doWithRetry runs the per-attempt timeout+classify+retry loop. lastErr is
-// always an *integration.Error (or an Expand-shaped config error, which
-// never reaches here) — see attempt.
+// doWithRetry runs the per-attempt limiter-wait + optional-lock + timeout +
+// classify + retry loop. lastErr is always an *integration.Error, a
+// cancellation-identity error (see ctxCancelledError), or an Expand-shaped
+// config error (which never reaches here) — see attempt.
 func (c *Client) doWithRetry(ctx context.Context, req Request, u *url.URL) (Response, error) {
+	maxAttempts := c.cfg.MaxAttempts
+	if req.NoRetry {
+		maxAttempts = 1 // R32: exactly one attempt, no matter what MaxAttempts says.
+	}
+
 	var lastErr error
-	for attempt := 1; attempt <= c.cfg.MaxAttempts; attempt++ {
-		if attempt > 1 && ctx.Err() != nil {
-			// Context cancellation stops retries promptly: do not even
-			// start another attempt once the caller has given up.
-			return Response{}, lastErr
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if waitErr := waitForToken(ctx, c.limiter, c.pool.now, c.pool.sleep); waitErr != nil {
+			// M6: a limiter wait abandoned to context cancellation keeps
+			// that identity; a genuine limiter failure (not ctx-caused)
+			// is M7's *integration.Error, never the raw internal text.
+			if ctx.Err() != nil {
+				return Response{}, ctxCancelledError(ctx)
+			}
+			return Response{}, &integration.Error{Kind: integration.ErrRateLimited, Provider: c.cfg.Provider, Op: req.Op}
 		}
 
-		result := c.attempt(ctx, req, u)
+		result := c.attemptWithLock(ctx, req, u)
 		if result.err == nil {
 			return result.resp, nil
 		}
 		lastErr = result.err
 
-		if !result.retry || attempt == c.cfg.MaxAttempts {
+		if !result.retry || attempt == maxAttempts {
 			return Response{}, lastErr
+		}
+
+		if ctx.Err() != nil {
+			// M6 / I5-iii: do not even start a backoff sleep once the
+			// caller has already given up — stop now, with an error that
+			// keeps errors.Is(err, ctx.Err()) true.
+			return Response{}, ctxCancelledError(ctx)
 		}
 
 		wait := result.wait
@@ -182,10 +201,61 @@ func (c *Client) doWithRetry(ctx context.Context, req Request, u *url.URL) (Resp
 			// ctx was done before the delay elapsed — stop retrying now
 			// rather than issue one more attempt the caller no longer
 			// wants.
-			return Response{}, lastErr
+			return Response{}, ctxCancelledError(ctx)
 		}
 	}
 	return Response{}, lastErr
+}
+
+// attemptWithLock wraps attempt with the optional SerializeKey lease,
+// scoped to exactly this one attempt (I3/R6). The lease is acquired after
+// the limiter wait above and released immediately after the round trip
+// returns — before doWithRetry's caller ever reaches a backoff sleep — so
+// nothing is ever held across a sleep, and a slow or hung attempt cannot
+// starve the lease past its own single round trip.
+func (c *Client) attemptWithLock(ctx context.Context, req Request, u *url.URL) attemptResult {
+	if c.pool.locker == nil || c.cfg.SerializeKey == "" {
+		return c.attempt(ctx, req, u)
+	}
+
+	lease, lockErr := c.pool.locker.Acquire(ctx, c.cfg.SerializeKey, serializeLeaseTTL)
+	if lockErr != nil {
+		// M6/M7: same split as the limiter above — a lock-acquire failure
+		// caused by ctx cancellation keeps that identity; any other
+		// failure (lock backend unreachable, etc.) becomes a bare
+		// *integration.Error with no SerializeKey name, lock-backend
+		// text, or wrapped error text in it.
+		if ctx.Err() != nil {
+			return attemptResult{err: ctxCancelledError(ctx)}
+		}
+		return attemptResult{err: &integration.Error{Kind: integration.ErrUpstreamUnavailable, Provider: c.cfg.Provider, Op: req.Op}}
+	}
+
+	result := c.attempt(ctx, req, u)
+
+	// Release with a context that has already been detached from ctx's
+	// own cancellation (I3): the caller's ctx may itself be the reason
+	// this attempt failed (e.g. RequestTimeout, or the caller giving up
+	// entirely) — releasing must still succeed so the lease is not held
+	// for its full TTL just because the request that held it briefly
+	// timed out or was cancelled. Bounded to 5s so a truly wedged lock
+	// backend cannot hang Do forever on the way out.
+	releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	_ = lease.Release(releaseCtx)
+	cancel()
+
+	return result
+}
+
+// ctxCancelledError reports ctx's own cancellation as the reason Do
+// stopped, preserving errors.Is(err, ctx.Err()) (M6). It never wraps any
+// other error text (so no attempt-classified failure's status, and no
+// limiter/lock internal text, ever piggybacks on this path), and — since
+// it does not wrap either integration sentinel — integration.Retryable
+// reports false for it, satisfying M6's "and is NOT Retryable" without any
+// extra bookkeeping.
+func ctxCancelledError(ctx context.Context) error {
+	return fmt.Errorf("httpx: request stopped: %w", ctx.Err())
 }
 
 // attemptResult is one HTTP attempt's outcome.
@@ -320,13 +390,26 @@ func (c *Client) buildRequest(ctx context.Context, req Request, u *url.URL) *htt
 	return httpReq.WithContext(ctx)
 }
 
-// readCappedBody reads at most max+1 bytes of body, ALWAYS draining and
-// closing it before returning (no connection leak, even on an oversized or
-// erroring read) via the deferred drain-then-close below, which runs
-// whether ReadAll succeeds, errors, or stopped early at the cap.
+// drainCap bounds the deferred best-effort drain below (M10): a body that
+// is still not fully consumed after the primary capped read is drained by
+// AT MOST this many further bytes before Close, never unbounded — an
+// unbounded io.Copy(io.Discard, body) here would let a provider (or an
+// attacker on a compromised provider connection) force this client to read
+// an arbitrarily large response indefinitely just to be allowed to close
+// the connection. A body larger than max+1+drainCap simply does not get
+// its underlying TCP connection returned to the pool for reuse (Close on a
+// not-fully-drained body forces the transport to discard rather than
+// recycle it) — safe, just not reused; never a leak.
+const drainCap = 64 * 1024
+
+// readCappedBody reads at most max+1 bytes of body, ALWAYS draining
+// (bounded, see drainCap) and closing it before returning (no connection
+// leak, even on an oversized or erroring read) via the deferred
+// drain-then-close below, which runs whether ReadAll succeeds, errors, or
+// stopped early at the cap.
 func readCappedBody(body io.ReadCloser, max int64) (data []byte, oversized bool, err error) {
 	defer func() {
-		_, _ = io.Copy(io.Discard, body)
+		_, _ = io.CopyN(io.Discard, body, drainCap)
 		_ = body.Close()
 	}()
 

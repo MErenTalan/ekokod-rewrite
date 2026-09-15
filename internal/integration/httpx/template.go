@@ -16,11 +16,18 @@ var placeholderPattern = regexp.MustCompile(`\{([^{}]*)\}`)
 
 // Expand substitutes every "{name}" placeholder in template with the
 // matching Params entry: a value is url.PathEscape'd if its placeholder
-// occurs before the template's first '?', and url.QueryEscape'd if it
-// occurs at or after it — never raw-concatenated. A placeholder naming a
-// param not in params, a params entry never referenced by the template, or
-// any '{'/'}' surviving substitution (an unmatched or malformed brace) is
-// an error and Expand returns before any request would be built.
+// occurs before the template's first '?' OR the template has no '?' at
+// all, and url.QueryEscape'd only when the placeholder occurs at or after
+// an actual '?' — never raw-concatenated. A template with no query string
+// is entirely a path, so every one of its placeholders must use path
+// escaping (fix for I2: a naive "qIdx >= 0 && start < qIdx" test is false
+// for every placeholder whenever qIdx is -1, silently query-escaping path
+// segments — e.g. turning "A B" into "A+B" instead of "A%20B" in a
+// template like "/{a}/x" that never has a '?' at all). A placeholder
+// naming a param not in params, a params entry never referenced by the
+// template, or any '{'/'}' surviving substitution (an unmatched or
+// malformed brace) is an error and Expand returns before any request would
+// be built.
 //
 // Errors here never include a param's VALUE (only its NAME, a fixed
 // endpoint-template identifier, never secret material) and never include
@@ -45,7 +52,7 @@ func Expand(template string, params map[string]Param) (*url.URL, error) {
 		used[name] = true
 
 		b.WriteString(template[last:start])
-		if qIdx >= 0 && start < qIdx {
+		if qIdx < 0 || start < qIdx {
 			b.WriteString(url.PathEscape(p.Value))
 		} else {
 			b.WriteString(url.QueryEscape(p.Value))
@@ -73,5 +80,15 @@ func Expand(template string, params map[string]Param) (*url.URL, error) {
 	if err != nil {
 		return nil, fmt.Errorf("httpx: expanded template is not a valid URL")
 	}
+
+	// M8: Expand requires an absolute http/https URL with a host. A
+	// relative or non-HTTP(S) template (e.g. a typo'd scheme, or a
+	// template with no scheme at all) is a configuration error, caught
+	// here rather than surfacing later as an obscure transport failure —
+	// and, per this package's rule, without ever echoing the URL itself.
+	if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return nil, fmt.Errorf("httpx: template must expand to an absolute http/https URL with a host")
+	}
+
 	return u, nil
 }

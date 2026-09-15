@@ -49,6 +49,17 @@ type PoolOptions struct {
 	// Now is the clock the rate limiter reserves tokens against. nil:
 	// time.Now.
 	Now func() time.Time
+
+	// dialContext overrides every transport's dialer this Pool builds.
+	// Unexported: only this package's own _test.go files (I5-ii's
+	// pin-only-trust subprocess test, and any test that needs a minted
+	// hostname to resolve to a loopback listener without real DNS) ever
+	// set it, by constructing a PoolOptions literal from within package
+	// httpx. Production code, and every external caller (httpx_test and
+	// every adapter package), can never reach this field — it is simply
+	// absent from the package's public API surface (R2-style: an
+	// unexported field, not a new exported knob).
+	dialContext dialContextFunc
 }
 
 // Pool owns one pinned-aware *http.Client plus the shared rate-limiter
@@ -66,7 +77,7 @@ type Pool struct {
 // certificate bytes or the underlying parse error's own text, which in a
 // misconfiguration could echo operator-supplied input back into a log line.
 func NewPool(o PoolOptions) (*Pool, error) {
-	transport, err := newPinnedRoundTripper(o.PinnedCerts)
+	transport, err := newPinnedRoundTripper(o.PinnedCerts, o.dialContext)
 	if err != nil {
 		return nil, err
 	}
@@ -81,10 +92,26 @@ func NewPool(o PoolOptions) (*Pool, error) {
 	}
 
 	return &Pool{
-		httpClient: &http.Client{Transport: transport},
-		locker:     o.Locker,
-		now:        now,
-		sleep:      sleep,
-		limiters:   newLimiterRegistry(),
+		httpClient: &http.Client{
+			Transport: transport,
+			// I1: never follow a redirect automatically. The default
+			// policy forwards every header that Go does not specifically
+			// treat as sensitive (Authorization, Cookie, Www-Authenticate
+			// — NOT a provider's own custom auth header, e.g.
+			// X-Access-Key) to whatever host and scheme the 3xx response
+			// names, including a plain http:// target on a different
+			// host entirely. http.ErrUseLastResponse makes Do return the
+			// 3xx response itself instead — classify.go's classifyStatus
+			// then turns it into a non-retryable ErrMalformedPayload
+			// (HTTPStatus recorded), and the redirect target never
+			// receives the request at all.
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
+		locker:   o.Locker,
+		now:      now,
+		sleep:    sleep,
+		limiters: newLimiterRegistry(),
 	}, nil
 }

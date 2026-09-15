@@ -4,8 +4,10 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"math"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration"
@@ -50,7 +52,11 @@ func classifyStatus(status int) error {
 // retried in-client: retrying a handshake against a certificate that will
 // never verify only burns the retry budget on a deterministic outcome.
 func classifyTransportError(provider integration.Provider, op string, err error) (result error, retry bool) {
-	if isTLSVerificationFailure(err) {
+	// Refusing to dial a pinned host over plain HTTP (M13) is a
+	// deterministic configuration error, exactly like a certificate that
+	// will never verify: retrying burns the retry budget on an outcome
+	// that cannot change.
+	if isTLSVerificationFailure(err) || errors.Is(err, errPlainHTTPToPinnedHost) {
 		return &integration.Error{Kind: integration.ErrUpstreamUnavailable, Provider: provider, Op: op}, false
 	}
 	return &integration.Error{Kind: integration.ErrUpstreamUnavailable, Provider: provider, Op: op}, true
@@ -81,19 +87,46 @@ func isTLSVerificationFailure(err error) bool {
 	return errors.As(err, &constraintErr)
 }
 
+// maxRetryAfterSeconds bounds a parsed Retry-After value BEFORE it is
+// multiplied into a time.Duration (M9): a duration is int64 nanoseconds, so
+// a provider-supplied seconds count anywhere near math.MaxInt64/1e9 would
+// overflow that multiplication and silently wrap into an unrelated
+// (possibly negative) duration. math.MaxInt32 seconds is about 68 years —
+// already far beyond any value ClientConfig.MaxRetryAfter's cap would ever
+// let through unretried — so clamping here loses no legitimate value while
+// making the multiplication below always safe.
+const maxRetryAfterSeconds = math.MaxInt32
+
 // parseRetryAfter parses a Retry-After header value per RFC 7231 §7.1.3:
 // either an integer number of seconds, or an HTTP-date. now anchors an
 // HTTP-date's conversion to a duration. ok is false for an empty or
-// unparseable value.
+// unparseable value. A negative value clamps to zero; a value too large to
+// be a realistic wait (whether merely huge or literally unparseable as an
+// int64) clamps to maxRetryAfterSeconds rather than overflowing.
 func parseRetryAfter(v string, now time.Time) (time.Duration, bool) {
 	if v == "" {
 		return 0, false
 	}
-	if secs, err := strconv.Atoi(v); err == nil {
+	if secs, err := strconv.ParseInt(v, 10, 64); err == nil {
 		if secs < 0 {
 			secs = 0
 		}
+		if secs > maxRetryAfterSeconds {
+			secs = maxRetryAfterSeconds
+		}
 		return time.Duration(secs) * time.Second, true
+	} else if isRange, matched := asRangeError(err); matched && isRange {
+		// The header names an integer too large in magnitude for int64
+		// itself (e.g. a provider bug or a hostile response) — still a
+		// seconds count, not garbage, so it clamps rather than falling
+		// through to the "unparseable" case below. A value this large and
+		// negative clamps to zero, same as any other negative value;
+		// anything this large and positive clamps to the same cap an
+		// in-range huge value would.
+		if strings.HasPrefix(strings.TrimSpace(v), "-") {
+			return 0, true
+		}
+		return maxRetryAfterSeconds * time.Second, true
 	}
 	if t, err := http.ParseTime(v); err == nil {
 		d := t.Sub(now)
@@ -103,4 +136,15 @@ func parseRetryAfter(v string, now time.Time) (time.Duration, bool) {
 		return d, true
 	}
 	return 0, false
+}
+
+// asRangeError reports whether err is a *strconv.NumError signalling
+// out-of-range (as opposed to a genuine syntax error, which should fall
+// through to the HTTP-date parse attempt below it).
+func asRangeError(err error) (isRange bool, matched bool) {
+	var numErr *strconv.NumError
+	if !errors.As(err, &numErr) {
+		return false, false
+	}
+	return errors.Is(numErr.Err, strconv.ErrRange), true
 }
