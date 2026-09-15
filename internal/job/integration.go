@@ -41,6 +41,15 @@ type FetchReadingsPayload struct {
 	CompanyID, CredentialID, AnalyzerID uuid.UUID
 	Kind                                model.ReadingKind
 	Window                              *Window // nil: cursor-driven
+
+	// ForceRunID, when non-nil, is folded into the deterministic windowed
+	// task ID (R53): it lets a Force backfill re-mint a fresh, never
+	// -before-seen id for a window that would otherwise collide with one
+	// already queued or still retained from an earlier run of the same
+	// backfill, guaranteeing the window is enqueued again instead of
+	// silently skipped as already_enqueued. The zero value (nil) is the
+	// default, resumable id shape every non-Force caller keeps using.
+	ForceRunID *uuid.UUID
 }
 
 // BackfillPayload asks the ingestion job to backfill a range for a
@@ -55,6 +64,15 @@ type BackfillPayload struct {
 	AnalyzerIDs             []uuid.UUID
 	Kinds                   []model.ReadingKind
 	From, To                time.Time
+	// Force, when true, re-mints every window's fetch_readings task id with
+	// THIS backfill run's own id (R53): a re-run after fixing whatever
+	// caused an earlier attempt to fail (a bad credential, a config error)
+	// re-fetches every window instead of every window silently colliding
+	// with the earlier run's still-retained (30 day) task ids and being
+	// skipped as already_enqueued. False (the default) keeps the
+	// deterministic, resumable id shape — a retry of the SAME request
+	// stays cheap and idempotent.
+	Force bool
 }
 
 // SyncPricesPayload asks for an EPİAŞ price sync. A nil Window means "the
@@ -163,8 +181,19 @@ func DecodeSyncAnalyzers(t *asynq.Task) (SyncAnalyzersPayload, error) {
 // range for the same analyzer and kind — the shape a backfill chunk or a
 // retried API request takes — collides with the original instead of
 // silently duplicating it. p.Window must be non-nil.
+//
+// R53: when p.ForceRunID is set, it is folded into the id, which changes
+// the id on every Force backfill run (a fresh run id every time) while
+// still being fully deterministic WITHIN one run — two Force windows
+// enqueued twice inside the SAME run (a retry of the backfill task itself,
+// not a brand new operator request) still collide with each other, only a
+// NEW run (a new ForceRunID) mints fresh ids.
 func integFetchReadingsTaskID(p FetchReadingsPayload) string {
-	return fmt.Sprintf("backfill:%s:%s:%d:%d", p.AnalyzerID, p.Kind, p.Window.From.Unix(), p.Window.To.Unix())
+	base := fmt.Sprintf("backfill:%s:%s:%d:%d", p.AnalyzerID, p.Kind, p.Window.From.Unix(), p.Window.To.Unix())
+	if p.ForceRunID != nil {
+		return base + ":force:" + p.ForceRunID.String()
+	}
+	return base
 }
 
 // NewFetchReadingsTask builds an integration.fetch_readings task. A nil

@@ -253,6 +253,40 @@ func TestFetchTaskWithWindowHasDeterministicTaskID(t *testing.T) {
 		differentAnalyzer.AnalyzerID = otherAnalyzer
 		require.NotEqual(t, integFetchReadingsTaskID(base), integFetchReadingsTaskID(differentAnalyzer))
 	})
+
+	// R53: Force folds a run id into the deterministic id, so both the
+	// Force and non-Force shapes are pinned here — a Force run must never
+	// collide with the plain (resumable) id, and two DIFFERENT Force runs
+	// must never collide with each other, while the SAME Force run id
+	// stays fully deterministic (a retry of the backfill task itself, not
+	// a new operator request, must still dedupe within that one run).
+	runA := uuid.New()
+	runB := uuid.New()
+
+	t.Run("ForceRunID set -> different ID from the non-Force id", func(t *testing.T) {
+		forced := base
+		forced.ForceRunID = &runA
+		require.NotEqual(t, integFetchReadingsTaskID(base), integFetchReadingsTaskID(forced))
+	})
+
+	t.Run("same ForceRunID, everything else identical -> identical ID", func(t *testing.T) {
+		forced1 := base
+		forced1.ForceRunID = &runA
+		r := runA // a SEPARATE pointer to the same uuid.UUID value
+		forced2 := base
+		forced2.ForceRunID = &r
+		require.Equal(t, integFetchReadingsTaskID(forced1), integFetchReadingsTaskID(forced2),
+			"the pointer identity of ForceRunID must not matter, only its value")
+	})
+
+	t.Run("different ForceRunID -> different ID", func(t *testing.T) {
+		forcedA := base
+		forcedA.ForceRunID = &runA
+		forcedB := base
+		forcedB.ForceRunID = &runB
+		require.NotEqual(t, integFetchReadingsTaskID(forcedA), integFetchReadingsTaskID(forcedB),
+			"two different backfill runs must mint different ids for the same window")
+	})
 }
 
 // TestRegisterSkipsNilIntegrationHandlers proves a Handlers with no

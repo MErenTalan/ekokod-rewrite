@@ -15,6 +15,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/ingest/generation"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
+	"github.com/MErenTalan/ekokod-rewrite/internal/platform/lock"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
@@ -153,7 +154,7 @@ func TestGenerationAccumulatesAcrossAGap(t *testing.T) {
 		ActiveExport: decimal.RequireFromString("1000"), Source: "operator",
 	}))
 
-	acc := generation.New(repos.readings, repos.anchors, clock.NewFake(genTestNow))
+	acc := generation.New(repos.readings, repos.anchors, clock.NewFake(genTestNow), lock.NewMemory(nil), 0)
 
 	// Batch 1: 10:00=1.0kWh, 10:15=1.0kWh.
 	batch1 := []model.MeterReading{
@@ -207,7 +208,7 @@ func TestGenerationOutOfOrderBatchRecomputesLaterRows(t *testing.T) {
 		ActiveExport: decimal.Zero, Source: "operator",
 	}))
 
-	acc := generation.New(repos.readings, repos.anchors, clock.NewFake(genTestNow))
+	acc := generation.New(repos.readings, repos.anchors, clock.NewFake(genTestNow), lock.NewMemory(nil), 0)
 
 	// Batch 1 (later): 11:00=2, 11:15=2.
 	later := []model.MeterReading{
@@ -256,7 +257,7 @@ func TestGenerationDuplicateFetchIsStable(t *testing.T) {
 		ActiveExport: decimal.Zero, Source: "operator",
 	}))
 
-	acc := generation.New(repos.readings, repos.anchors, clock.NewFake(genTestNow))
+	acc := generation.New(repos.readings, repos.anchors, clock.NewFake(genTestNow), lock.NewMemory(nil), 0)
 
 	batch := []model.MeterReading{
 		genTestReading(analyzer.ID, "2026-09-01T10:00:00Z", "1"),
@@ -350,7 +351,7 @@ func TestGenerationRecomputeAfterHistoryCorrection(t *testing.T) {
 		ActiveExport: decimal.Zero, Source: "operator",
 	}))
 
-	acc := generation.New(repos.readings, repos.anchors, clock.NewFake(genTestNow))
+	acc := generation.New(repos.readings, repos.anchors, clock.NewFake(genTestNow), lock.NewMemory(nil), 0)
 
 	batch := []model.MeterReading{
 		genTestReading(analyzer.ID, "2026-09-01T10:00:00Z", "1"),
@@ -396,7 +397,7 @@ func TestGenerationNullIntervalStaysNull(t *testing.T) {
 		ActiveExport: decimal.RequireFromString("50"), Source: "operator",
 	}))
 
-	acc := generation.New(repos.readings, repos.anchors, clock.NewFake(genTestNow))
+	acc := generation.New(repos.readings, repos.anchors, clock.NewFake(genTestNow), lock.NewMemory(nil), 0)
 
 	batch := []model.MeterReading{
 		genTestReading(analyzer.ID, "2026-09-01T10:00:00Z", "1"),
@@ -429,7 +430,7 @@ func TestGenerationCreatesInitialAnchorOnce(t *testing.T) {
 	analyzer := genTestNewPM5340Analyzer(t, ctx, repos.analyzers, tn.Scope, tn.Company.ID, tn.Buildings[0].ID, "INIT-1")
 
 	countingAnchors := &genTestCountingAnchors{GenerationRepository: repos.anchors}
-	acc := generation.New(repos.readings, countingAnchors, clock.NewFake(genTestNow))
+	acc := generation.New(repos.readings, countingAnchors, clock.NewFake(genTestNow), lock.NewMemory(nil), 0)
 
 	batch1 := []model.MeterReading{
 		genTestReading(analyzer.ID, "2026-09-01T10:00:00Z", "1"),
@@ -485,7 +486,7 @@ func TestGenerationIsScoped(t *testing.T) {
 	_, _, err := repos.readings.BulkInsert(ctx, mine.Scope, batch)
 	require.NoError(t, err)
 
-	acc := generation.New(repos.readings, repos.anchors, clock.NewFake(genTestNow))
+	acc := generation.New(repos.readings, repos.anchors, clock.NewFake(genTestNow), lock.NewMemory(nil), 0)
 
 	// Negative: the OTHER tenant's own AdminScope cannot reach it.
 	err = acc.AfterPersist(ctx, theirs.AdminScope, analyzer, model.ReadingKindLoadProfile,
@@ -506,4 +507,141 @@ func TestGenerationIsScoped(t *testing.T) {
 	rows = genTestAllReadings(t, ctx, repos.readings, mine.Scope, analyzer.ID)
 	genTestRequireActiveExport(t, rows, "2026-09-01T10:00:00Z", "1")
 	genTestRequireActiveExport(t, rows, "2026-09-01T10:15:00Z", "2")
+}
+
+// TestGenerationBackfillBeforeOperatorAnchorDerivesBackward is R52's
+// operator/meter-set half, against a real store (the reviewer's I3 probe,
+// TestProbeBackfillBeforeInitialAnchor, showed rows before the anchor were
+// silently left NULL; this proves the fix for a REAL meter-set anchor,
+// which must never be moved).
+//
+// Setup: an operator anchor of 100 at 10:00 (a real device reading, not the
+// synthetic initial-anchor zero) plus one already-derived forward row at
+// 10:15 (interval 5) — AfterPersist already ran for it once, so its
+// active_export is 105 BEFORE the backfill below ever runs.
+//
+// Then a backfill discovers three OLDER rows the anchor never accounted
+// for: 09:00 (1 kWh), 09:15 (2 kWh), 09:30 (1.5 kWh) — identical to
+// TestAccumulateBackwardOperatorAnchor's pure-function fixture, hand-derived
+// there and reproduced here end to end through the real repositories:
+//   - 09:30: Σ(09:30,10:00] = 0                         -> 100 − 0   = 100
+//   - 09:15: Σ(09:15,10:00] = 1.5                        -> 100 − 1.5 = 98.5
+//   - 09:00: Σ(09:00,10:00] = 2 + 1.5 = 3.5               -> 100 − 3.5 = 96.5
+//
+// The anchor itself, and the untouched forward row's 105, must both survive
+// exactly as they were — proving the operator/migration source is never
+// moved and the backward derivation never disturbs the forward side.
+func TestGenerationBackfillBeforeOperatorAnchorDerivesBackward(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tn := testfixtures.NewTenant(t, ctx, pool, 11009)
+	repos := genTestNewRepos(pool)
+	analyzer := genTestNewPM5340Analyzer(t, ctx, repos.analyzers, tn.Scope, tn.Company.ID, tn.Buildings[0].ID, "BACK-OP-1")
+
+	require.NoError(t, repos.anchors.SetAnchor(ctx, tn.Scope, model.GenerationAnchor{
+		AnalyzerID: analyzer.ID, AnchorTs: genTS("2026-09-01T10:00:00Z"),
+		ActiveExport: decimal.RequireFromString("100"), Source: "operator",
+	}))
+
+	acc := generation.New(repos.readings, repos.anchors, clock.NewFake(genTestNow), lock.NewMemory(nil), 0)
+
+	forward := []model.MeterReading{genTestReading(analyzer.ID, "2026-09-01T10:15:00Z", "5")}
+	_, _, err := repos.readings.BulkInsert(ctx, tn.Scope, forward)
+	require.NoError(t, err)
+	require.NoError(t, acc.AfterPersist(ctx, tn.Scope, analyzer, model.ReadingKindLoadProfile,
+		genTS("2026-09-01T10:15:00Z"), genTS("2026-09-01T10:15:00Z")))
+	before := genTestAllReadings(t, ctx, repos.readings, tn.Scope, analyzer.ID)
+	genTestRequireActiveExport(t, before, "2026-09-01T10:15:00Z", "105")
+
+	older := []model.MeterReading{
+		genTestReading(analyzer.ID, "2026-09-01T09:00:00Z", "1"),
+		genTestReading(analyzer.ID, "2026-09-01T09:15:00Z", "2"),
+		genTestReading(analyzer.ID, "2026-09-01T09:30:00Z", "1.5"),
+	}
+	_, _, err = repos.readings.BulkInsert(ctx, tn.Scope, older)
+	require.NoError(t, err)
+	require.NoError(t, acc.AfterPersist(ctx, tn.Scope, analyzer, model.ReadingKindLoadProfile,
+		genTS("2026-09-01T09:00:00Z"), genTS("2026-09-01T09:30:00Z")))
+
+	after := genTestAllReadings(t, ctx, repos.readings, tn.Scope, analyzer.ID)
+	require.Len(t, after, 4)
+	genTestRequireActiveExport(t, after, "2026-09-01T09:00:00Z", "96.5")
+	genTestRequireActiveExport(t, after, "2026-09-01T09:15:00Z", "98.5")
+	genTestRequireActiveExport(t, after, "2026-09-01T09:30:00Z", "100")
+	genTestRequireActiveExport(t, after, "2026-09-01T10:15:00Z", "105") // untouched
+
+	anchor, err := repos.anchors.Anchor(ctx, tn.Scope, analyzer.ID)
+	require.NoError(t, err)
+	require.Equal(t, "operator", anchor.Source, "an operator anchor must never move")
+	require.True(t, anchor.AnchorTs.Equal(genTS("2026-09-01T10:00:00Z")))
+	require.True(t, decimal.RequireFromString("100").Equal(anchor.ActiveExport))
+}
+
+// TestGenerationBackfillBeforeInitialAnchorMovesAnchorBack is R52's
+// "initial" half against a real store: the synthetic value-0 anchor
+// createInitialAnchor stamps on first contact is safe to move, unlike an
+// operator/migration one.
+//
+// Setup: two rows (10:00=1kWh, 10:15=1kWh) create the initial anchor at
+// 09:45/0 (TestGenerationCreatesInitialAnchorOnce's own fixture) and are
+// forward-derived to 1 and 2.
+//
+// A backfill then discovers two rows BEFORE 09:45 — 09:00 (0.5 kWh) and
+// 09:30 (0.75 kWh) — reaching past the initial anchor the way the
+// reviewer's I3 probe did. By hand: the anchor moves to
+// 09:00 − 15m = 08:45, value 0; a full forward recompute from there gives
+//
+//	09:00: 0 + 0.5  = 0.5
+//	09:30: 0.5 + 0.75 = 1.25
+//	10:00: 1.25 + 1 = 2.25   (was 1 before the backfill: +1.25 shift)
+//	10:15: 2.25 + 1 = 3.25   (was 2 before the backfill: +1.25 shift)
+//
+// — a uniform +1.25 shift (0.5+0.75, the two newly-included rows' own
+// interval sum) on every row that already existed, exactly as R52
+// documents.
+func TestGenerationBackfillBeforeInitialAnchorMovesAnchorBack(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tn := testfixtures.NewTenant(t, ctx, pool, 11010)
+	repos := genTestNewRepos(pool)
+	analyzer := genTestNewPM5340Analyzer(t, ctx, repos.analyzers, tn.Scope, tn.Company.ID, tn.Buildings[0].ID, "BACK-INIT-1")
+
+	acc := generation.New(repos.readings, repos.anchors, clock.NewFake(genTestNow), lock.NewMemory(nil), 0)
+
+	initial := []model.MeterReading{
+		genTestReading(analyzer.ID, "2026-09-01T10:00:00Z", "1"),
+		genTestReading(analyzer.ID, "2026-09-01T10:15:00Z", "1"),
+	}
+	_, _, err := repos.readings.BulkInsert(ctx, tn.Scope, initial)
+	require.NoError(t, err)
+	require.NoError(t, acc.AfterPersist(ctx, tn.Scope, analyzer, model.ReadingKindLoadProfile,
+		genTS("2026-09-01T10:00:00Z"), genTS("2026-09-01T10:15:00Z")))
+	before := genTestAllReadings(t, ctx, repos.readings, tn.Scope, analyzer.ID)
+	genTestRequireActiveExport(t, before, "2026-09-01T10:00:00Z", "1")
+	genTestRequireActiveExport(t, before, "2026-09-01T10:15:00Z", "2")
+
+	older := []model.MeterReading{
+		genTestReading(analyzer.ID, "2026-09-01T09:00:00Z", "0.5"),
+		genTestReading(analyzer.ID, "2026-09-01T09:30:00Z", "0.75"),
+	}
+	_, _, err = repos.readings.BulkInsert(ctx, tn.Scope, older)
+	require.NoError(t, err)
+	require.NoError(t, acc.AfterPersist(ctx, tn.Scope, analyzer, model.ReadingKindLoadProfile,
+		genTS("2026-09-01T09:00:00Z"), genTS("2026-09-01T09:30:00Z")))
+
+	after := genTestAllReadings(t, ctx, repos.readings, tn.Scope, analyzer.ID)
+	require.Len(t, after, 4)
+	genTestRequireActiveExport(t, after, "2026-09-01T09:00:00Z", "0.5")
+	genTestRequireActiveExport(t, after, "2026-09-01T09:30:00Z", "1.25")
+	genTestRequireActiveExport(t, after, "2026-09-01T10:00:00Z", "2.25")
+	genTestRequireActiveExport(t, after, "2026-09-01T10:15:00Z", "3.25")
+
+	anchor, err := repos.anchors.Anchor(ctx, tn.Scope, analyzer.ID)
+	require.NoError(t, err)
+	require.Equal(t, "initial", anchor.Source)
+	require.True(t, anchor.AnchorTs.Equal(genTS("2026-09-01T08:45:00Z")),
+		"anchor must move to 15m before the new earliest row: got %s", anchor.AnchorTs)
+	require.True(t, decimal.Zero.Equal(anchor.ActiveExport))
 }

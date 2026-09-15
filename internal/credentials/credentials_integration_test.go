@@ -455,6 +455,27 @@ func TestPM5340ConfigureCreatesItsAnalyzer(t *testing.T) {
 		})
 		require.ErrorIs(t, err, credentials.ErrInvalidSettings)
 	})
+
+	// M5 (final-review-A): a URL carrying userinfo must be refused outright
+	// — pm5340_url is stored in plaintext, never sealed, and the write-only
+	// View returns it verbatim, so a credential embedded in the URL itself
+	// would leak straight back out through View.PM5340URL.
+	t.Run("rejects a URL with userinfo", func(t *testing.T) {
+		bad := "http://user:pass@10.0.0.5:502"
+		view, err := h.svc.Configure(ctx, tenant.AdminScope, credentials.Input{
+			Provider: model.IntegrationProviderPM5340, Subtype: "creds-in-url",
+			PM5340URL: &bad, InstallationNumber: ptr("PM-INSTALL-USERINFO"),
+		})
+		require.ErrorIs(t, err, credentials.ErrInvalidSettings)
+		require.Empty(t, view.ID, "a rejected Configure must not return a usable credential")
+
+		// Never stored: no credential for this subtype exists to open or view.
+		list, lerr := h.svc.List(ctx, tenant.AdminScope)
+		require.NoError(t, lerr)
+		for _, c := range list {
+			require.NotEqual(t, "creds-in-url", c.Subtype, "the rejected credential must never have been stored")
+		}
+	})
 }
 
 func TestDiscoverEnqueuesSyncAnalyzers(t *testing.T) {
@@ -514,6 +535,40 @@ func TestBackfillEnqueuesBackfillTask(t *testing.T) {
 	require.Equal(t, view.ID, p.CredentialID)
 	require.True(t, p.From.Equal(from))
 	require.True(t, p.To.Equal(to))
+	require.False(t, p.Force, "Force defaults to false when the caller does not ask for it")
+}
+
+// TestBackfillForceInputReachesThePayload is R53's write-model plumbing
+// proof: BackfillInput.Force must reach job.BackfillPayload.Force verbatim
+// — without this, Backfiller.Backfill's Force re-mint logic would be
+// unreachable from the one real production path that enqueues a backfill
+// (credentials.Service.Backfill), since nothing else in F2 builds a
+// job.BackfillPayload by hand.
+func TestBackfillForceInputReachesThePayload(t *testing.T) {
+	t.Parallel()
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenant := testfixtures.NewTenant(t, ctx, pool, 140009)
+	credInsertDefinition(t, ctx, pool, "gridbox", "default", nil)
+	h := newCredHarness(t, pool, credNow)
+
+	secret := integration.NewSecret([]byte("FIXTURE-PW"))
+	view, err := h.svc.Configure(ctx, tenant.AdminScope, credentials.Input{
+		Provider: model.IntegrationProviderGridbox, Subtype: "default", Secret: &secret,
+	})
+	require.NoError(t, err)
+
+	from, to := credNow.Add(-48*time.Hour), credNow
+	_, err = h.svc.Backfill(ctx, tenant.AdminScope, view.ID, credentials.BackfillInput{
+		Kinds: []model.ReadingKind{model.ReadingKindLoadProfile}, From: from, To: to, Force: true,
+	})
+	require.NoError(t, err)
+
+	tasks := h.enqueuer.Tasks()
+	require.Len(t, tasks, 1)
+	p, err := job.DecodeBackfill(tasks[0])
+	require.NoError(t, err)
+	require.True(t, p.Force, "BackfillInput.Force must reach job.BackfillPayload.Force")
 }
 
 func TestVerifyRedactsAuthFailureAndRecordsSuccess(t *testing.T) {

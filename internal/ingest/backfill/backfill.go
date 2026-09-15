@@ -137,7 +137,17 @@ func (b *Backfiller) Backfill(ctx context.Context, p job.BackfillPayload) error 
 
 	kinds := resolveKinds(p.Kinds, src.Kinds(creds))
 
-	var processed, skipped, failed int32
+	// R53: p.Force re-mints every window's task id with THIS run's own id
+	// (run.ID, already generated above by StartRun), so a re-run after
+	// fixing whatever failed earlier re-enqueues every window instead of
+	// every one colliding with an earlier run's still-retained id. nil
+	// (the default) keeps the plain, resumable-across-retries id shape.
+	var forceRunID *uuid.UUID
+	if p.Force {
+		forceRunID = &run.ID
+	}
+
+	var processed, skipped, failed, alreadyEnqueued int32
 	var failures []backfillFailure
 
 	for _, id := range missing {
@@ -154,7 +164,7 @@ func (b *Backfiller) Backfill(ctx context.Context, p job.BackfillPayload) error 
 				task, terr := job.NewFetchReadingsTask(
 					job.FetchReadingsPayload{
 						CompanyID: p.CompanyID, CredentialID: p.CredentialID,
-						AnalyzerID: aid, Kind: kind, Window: &win,
+						AnalyzerID: aid, Kind: kind, Window: &win, ForceRunID: forceRunID,
 					},
 					job.TaskOptions{MaxRetry: b.deps.MaxRetry},
 				)
@@ -165,12 +175,19 @@ func (b *Backfiller) Backfill(ctx context.Context, p job.BackfillPayload) error 
 				}
 				if _, eerr := b.deps.Enqueuer.Enqueue(ctx, task); eerr != nil {
 					if errors.Is(eerr, asynq.ErrTaskIDConflict) {
-						// Resumability: a window already queued or still
-						// retained (job.NewFetchReadingsTask's 30-day
+						// R53: without Force, a window already queued or
+						// still retained (job.NewFetchReadingsTask's 30-day
 						// Retention) from an earlier run of this same
 						// backfill collides on its deterministic TaskID.
-						// This is expected, not a failure.
+						// This is expected, not a failure — but it is also
+						// NOT a silent success: it is counted separately as
+						// already_enqueued (surfaced in job_runs.detail
+						// below) and forces the run's status to at most
+						// "partial" (see countsStatus), never "success",
+						// so a caller can tell "nothing new happened" apart
+						// from "everything really ran".
 						skipped++
+						alreadyEnqueued++
 						continue
 					}
 					failed++
@@ -191,7 +208,8 @@ func (b *Backfiller) Backfill(ctx context.Context, p job.BackfillPayload) error 
 	}
 
 	status := countsStatus(processed, skipped, failed)
-	b.finishRun(ctx, sc, run.ID, status, processed, skipped, failed, nil, mustJSON(backfillRunDetail{Failures: failures}), now)
+	b.finishRun(ctx, sc, run.ID, status, processed, skipped, failed, nil,
+		mustJSON(backfillRunDetail{Failures: failures, AlreadyEnqueued: alreadyEnqueued}), now)
 	return nil
 }
 
@@ -304,6 +322,10 @@ type backfillFailure struct {
 
 type backfillRunDetail struct {
 	Failures []backfillFailure `json:"failures,omitempty"`
+	// AlreadyEnqueued is R53's count of windows skipped because their
+	// deterministic task id already existed (queued or still retained from
+	// an earlier run) — distinct from Failures, which are real errors.
+	AlreadyEnqueued int32 `json:"already_enqueued,omitempty"`
 }
 
 // redacted is the same discipline ingest.Service.report.go's redacted
@@ -316,17 +338,23 @@ func redacted(creds integration.Credentials, err error) string {
 	return secret.Redact(err.Error(), creds.Fragments())
 }
 
-// countsStatus mirrors ingest.Service's own countsStatus: success when
-// nothing failed, partial when something both succeeded/skipped AND failed,
-// failed when everything failed.
+// countsStatus mirrors ingest.Service's own countsStatus, with one R53
+// addition: success requires nothing failed AND nothing was skipped
+// (already_enqueued) — a run where every window collided with an earlier
+// run's still-retained id did not itself fetch anything new, so it must
+// never report "success" and read as "this backfill request did nothing,
+// and that's fine" (final-review-A I4). failed is reserved for a run where
+// EVERYTHING failed and NOTHING even reached already-enqueued; every other
+// mix (some skipped, some failed, or a mix of processed/skipped/failed) is
+// partial.
 func countsStatus(processed, skipped, failed int32) string {
 	switch {
-	case failed == 0:
+	case failed == 0 && skipped == 0:
 		return "success"
-	case processed > 0 || skipped > 0:
-		return "partial"
-	default:
+	case failed > 0 && processed == 0 && skipped == 0:
 		return "failed"
+	default:
+		return "partial"
 	}
 }
 
