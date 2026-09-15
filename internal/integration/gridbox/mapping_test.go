@@ -256,8 +256,9 @@ func TestGridBoxResolveMultiplierPureCases(t *testing.T) {
 		profiles := []LoadProfileRow{
 			{register: register{ActiveEndex: jn("12.5"), ActiveEndexWithMultiplier: jn("500")}},
 		}
-		res := ResolveMultiplier(nil, profiles)
+		res := ResolveMultiplier(nil, profiles, decimal.Zero)
 		require.Equal(t, integration.MultiplierFromLoadProfile, res.Source)
+		require.True(t, res.ProviderResolved)
 		require.True(t, decimal.RequireFromString("40").Equal(res.Value), "got %s", res.Value)
 	})
 
@@ -266,8 +267,9 @@ func TestGridBoxResolveMultiplierPureCases(t *testing.T) {
 			{register: register{ActiveEndex: jn("0"), ActiveEndexWithMultiplier: jn("999")}},
 			{register: register{ActiveEndex: jn("10"), ActiveEndexWithMultiplier: jn("100")}},
 		}
-		res := ResolveMultiplier(nil, profiles)
+		res := ResolveMultiplier(nil, profiles, decimal.Zero)
 		require.Equal(t, integration.MultiplierFromLoadProfile, res.Source)
+		require.True(t, res.ProviderResolved)
 		require.True(t, decimal.RequireFromString("10").Equal(res.Value), "got %s", res.Value)
 	})
 
@@ -276,15 +278,41 @@ func TestGridBoxResolveMultiplierPureCases(t *testing.T) {
 		profiles := []LoadProfileRow{
 			{register: register{ActiveEndex: jn("12.5"), ActiveEndexWithMultiplier: jn("500")}},
 		}
-		res := ResolveMultiplier(le, profiles)
+		res := ResolveMultiplier(le, profiles, decimal.Zero)
 		require.Equal(t, integration.MultiplierFromLastEndex, res.Source)
+		require.True(t, res.ProviderResolved)
 		require.True(t, decimal.RequireFromString("80").Equal(res.Value))
 	})
 
 	t.Run("fallback_to_one", func(t *testing.T) {
-		res := ResolveMultiplier(nil, nil)
+		res := ResolveMultiplier(nil, nil, decimal.Zero)
 		require.Equal(t, integration.MultiplierFallbackOne, res.Source)
+		require.False(t, res.ProviderResolved)
 		require.True(t, decimal.NewFromInt(1).Equal(res.Value))
+	})
+
+	// fallback_to_stored_multiplier is R51/I2's core regression: when
+	// neither last_endex nor load_profiles supply a multiplier
+	// (daily/reset/current_index/billing carry no multiplier source of
+	// their own), the analyzer's own STORED multiplier
+	// (FetchRequest.Multiplier) must be used in place of 1, and the result
+	// must be reported as NOT provider-resolved — the pipeline (fetch.go)
+	// must never persist this value back to analyzers.meter_multiplier as
+	// if the provider had confirmed it.
+	t.Run("fallback_to_stored_multiplier", func(t *testing.T) {
+		res := ResolveMultiplier(nil, nil, decimal.RequireFromString("40"))
+		require.Equal(t, integration.MultiplierFromRequest, res.Source)
+		require.False(t, res.ProviderResolved, "a stored-multiplier fallback must not be provider-resolved")
+		require.True(t, decimal.RequireFromString("40").Equal(res.Value), "got %s", res.Value)
+	})
+
+	// A zero/absent stored multiplier still falls all the way back to 1 —
+	// stored is not itself trusted blindly, the same "zero is unusable"
+	// rule priority 1 applies to last_endex.Multiplier.
+	t.Run("zero_stored_multiplier_falls_back_to_one", func(t *testing.T) {
+		res := ResolveMultiplier(nil, nil, decimal.Zero)
+		require.Equal(t, integration.MultiplierFallbackOne, res.Source)
+		require.False(t, res.ProviderResolved)
 	})
 
 	// Adapter review pattern 12: a zero (or negative) last_endex.Multiplier
@@ -296,17 +324,17 @@ func TestGridBoxResolveMultiplierPureCases(t *testing.T) {
 		profiles := []LoadProfileRow{
 			{register: register{ActiveEndex: jn("12.5"), ActiveEndexWithMultiplier: jn("500")}},
 		}
-		res := ResolveMultiplier(le, profiles)
+		res := ResolveMultiplier(le, profiles, decimal.Zero)
 		require.Equal(t, integration.MultiplierFromLoadProfile, res.Source, "a zero Multiplier must fall through, not be used")
 		require.True(t, decimal.RequireFromString("40").Equal(res.Value))
 
-		res = ResolveMultiplier(le, nil)
+		res = ResolveMultiplier(le, nil, decimal.Zero)
 		require.Equal(t, integration.MultiplierFallbackOne, res.Source, "a zero Multiplier with nothing else available falls all the way back to 1")
 	})
 
 	t.Run("negative_last_endex_multiplier_is_rejected", func(t *testing.T) {
 		le := &LastEndex{Multiplier: jn("-5")}
-		res := ResolveMultiplier(le, nil)
+		res := ResolveMultiplier(le, nil, decimal.Zero)
 		require.Equal(t, integration.MultiplierFallbackOne, res.Source)
 	})
 }

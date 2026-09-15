@@ -20,6 +20,7 @@ func TestErrorUnwrapsToItsKind(t *testing.T) {
 		integration.ErrUpstreamUnavailable,
 		integration.ErrMalformedPayload,
 		integration.ErrNotFound,
+		integration.ErrConfig,
 	}
 	for _, kind := range kinds {
 		err := &integration.Error{Kind: kind, Provider: integration.ProviderGridBox, Op: "load_profiles"}
@@ -47,6 +48,7 @@ func TestRetryableClassification(t *testing.T) {
 		{"auth", &integration.Error{Kind: integration.ErrAuth}, false},
 		{"malformed payload", &integration.Error{Kind: integration.ErrMalformedPayload}, false},
 		{"not found", &integration.Error{Kind: integration.ErrNotFound}, false},
+		{"config", &integration.Error{Kind: integration.ErrConfig}, false},
 		{"plain error", errors.New("boom"), false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -76,6 +78,11 @@ func TestErrorRendersOnlyKnownKindText(t *testing.T) {
 
 	sentinel := &integration.Error{Kind: integration.ErrRateLimited, Provider: integration.ProviderGridBox, Op: "load_profiles", HTTPStatus: 429}
 	require.Equal(t, "gridbox load_profiles: integration: rate limited (HTTP 429)", sentinel.Error())
+
+	// R48/I5: ErrConfig renders its own sentinel text too, never as
+	// "unknown" and never as ErrAuth's "authentication failed".
+	config := &integration.Error{Kind: integration.ErrConfig, Provider: integration.ProviderGridBox, Op: "config:token"}
+	require.Equal(t, "gridbox config:token: integration: configuration incomplete or invalid (HTTP 0)", config.Error())
 }
 
 // TestRetryAfterOnlyFromRateLimited proves RetryAfter reports ok=true only

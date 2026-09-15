@@ -783,11 +783,12 @@ func TestOSOSIdenticalDuplicateTimestampsDoNotWarn(t *testing.T) {
 	require.Empty(t, res.Warnings)
 }
 
-// TestOSOSMissingEndpointKeyIsErrAuth: task-6-fix1-findings.md folded minor
-// — a missing endpoint template key is *integration.Error{Kind: ErrAuth}
-// (see missingEndpointErr's doc comment in source.go for why ErrAuth, not
-// ErrMalformedPayload), for every one of OSOS's four endpoints.
-func TestOSOSMissingEndpointKeyIsErrAuth(t *testing.T) {
+// TestOSOSMissingEndpointKeyIsErrConfig: task-6-fix1-findings.md folded
+// minor, reclassified by R48/I5 — a missing endpoint template key is
+// *integration.Error{Kind: ErrConfig} (see missingEndpointErr's doc
+// comment in source.go), never ErrMalformedPayload and never ErrAuth, for
+// every one of OSOS's four endpoints.
+func TestOSOSMissingEndpointKeyIsErrConfig(t *testing.T) {
 	for _, key := range []string{"authentication", "analyzers_list", "energy_values", "hourly_values"} {
 		t.Run(key, func(t *testing.T) {
 			srv := fake.NewTLSServer(t,
@@ -813,7 +814,8 @@ func TestOSOSMissingEndpointKeyIsErrAuth(t *testing.T) {
 					time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC))
 				_, err = src.FetchReadings(context.Background(), creds, req)
 			}
-			require.ErrorIs(t, err, integration.ErrAuth)
+			require.ErrorIs(t, err, integration.ErrConfig)
+			require.NotErrorIs(t, err, integration.ErrAuth)
 		})
 	}
 }

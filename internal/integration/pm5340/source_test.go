@@ -607,11 +607,13 @@ func TestPM5340RefusesEmptyBaseURL(t *testing.T) {
 
 	_, err := src.FetchReadings(context.Background(), creds, pm5340TestRequest())
 	require.Error(t, err)
-	require.ErrorIs(t, err, integration.ErrAuth)
+	require.ErrorIs(t, err, integration.ErrConfig) // R48/I5
+	require.NotErrorIs(t, err, integration.ErrAuth)
 	require.Empty(t, srv.Requests(), "a config error must be caught before any network call")
 
 	err = src.Verify(context.Background(), creds)
-	require.ErrorIs(t, err, integration.ErrAuth)
+	require.ErrorIs(t, err, integration.ErrConfig)
+	require.NotErrorIs(t, err, integration.ErrAuth)
 }
 
 func TestPM5340RefusesZeroMultiplier(t *testing.T) {
@@ -624,6 +626,7 @@ func TestPM5340RefusesZeroMultiplier(t *testing.T) {
 
 	_, err := src.FetchReadings(context.Background(), pm5340TestCreds(srv), req)
 	require.Error(t, err)
-	require.ErrorIs(t, err, integration.ErrAuth)
+	require.ErrorIs(t, err, integration.ErrConfig) // R48/I5
+	require.NotErrorIs(t, err, integration.ErrAuth)
 	require.Empty(t, srv.Requests())
 }

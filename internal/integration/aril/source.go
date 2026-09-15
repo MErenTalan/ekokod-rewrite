@@ -128,14 +128,13 @@ func (s *Source) MaxWindow(model.ReadingKind) time.Duration { return maxWindow }
 // missing/blank endpoint template, a blank OwnerSerno, a missing
 // DefinitionType or a zero meter multiplier. None of these is a payload
 // ARIL ever sent — ErrMalformedPayload would be the wrong Kind (adapter
-// review pattern 9) — and task-8-brief.md/06 §4 define no dedicated
-// configuration sentinel, so — per the review's own sanctioned fallback
-// ("or ErrAuth if credentials incomplete") — this is reported as ErrAuth:
-// an incomplete credential/request configuration is, like a rejected
-// password, a "this call cannot proceed until fixed" state that must not
-// be retried.
+// review pattern 9). R48/I5: this used to report ErrAuth (round 1's
+// documented stop-gap, before integration.ErrConfig existed) — an
+// incomplete credential/request configuration is non-retryable like a
+// rejected password, but it is NOT an authentication failure, and F3's
+// credential-health logic must never treat it as one. Use ErrConfig.
 func configError(op string) error {
-	return &integration.Error{Kind: integration.ErrAuth, Provider: integration.ProviderARIL, Op: op}
+	return &integration.Error{Kind: integration.ErrConfig, Provider: integration.ProviderARIL, Op: op}
 }
 
 func authConfigError(creds integration.Credentials) error {
@@ -351,7 +350,14 @@ func (s *Source) DiscoverMeteringPoints(ctx context.Context, creds integration.C
 			return points, nil
 		}
 	}
-	return points, nil
+	// M8: the loop exhausted Options.PageBudget while the LAST page fetched
+	// was still full (subscriptionPageSize rows) — the provider-shape
+	// signal that more pages likely exist. Round 1 silently returned the
+	// partial `points` here; align with iSolar's R44 (isolar/client.go's
+	// pageBudgetExceeded doc): budget exhaustion is a deliberately-
+	// classified, non-retryable error, never a quiet truncation an operator
+	// has no way to notice.
+	return nil, &integration.Error{Kind: integration.ErrMalformedPayload, Provider: integration.ProviderARIL, Op: "analyzers_list"}
 }
 
 // FetchReadings dispatches to the endpoint task-8-brief.md's items 3-5 name
@@ -573,12 +579,54 @@ type monthKey struct {
 	month time.Month
 }
 
-// fetchBilling is task-8-brief.md item 5: POST end_of_month_endexes for the
-// window, then — a second call within this same FetchReadings — POST
-// current_endexes for the same window and set max_demand_kw on each
-// end_of_month_endexes reading to the maximum MaxDemand among
-// current_endexes rows in the reading's own Istanbul-local calendar month
-// (06 §4 "Max demand").
+// istanbulMonthBounds returns the half-open [start, end) Europe/Istanbul
+// local calendar month t falls in, both instants built from time.Date on
+// t's Istanbul-local Y/M — never by adding a fixed duration — the same
+// drift-free construction normalize.Chunk uses for its own boundaries.
+func istanbulMonthBounds(t time.Time) (start, end time.Time) {
+	local := t.In(normalize.Istanbul)
+	y, m, _ := local.Date()
+	start = time.Date(y, m, 1, 0, 0, 0, 0, normalize.Istanbul)
+	return start, start.AddDate(0, 1, 0)
+}
+
+// maxDemandDate resolves the timestamp current_endexes' own MaxDemand value
+// is keyed to a month by: MaxDemandDate when present, falling back to
+// ProfileDate. Legacy arilService.ts:143 keys its own monthly aggregation
+// by "endex.MaxDemandDate || endex.EndexDate" (bcem-energy's ARIL row has
+// no separate EndexDate here — ProfileDate is this wire shape's equivalent
+// per-row date) — R49.
+func maxDemandDate(row endexRow) (time.Time, error) {
+	if row.MaxDemandDate != nil {
+		if ts, err := parseProfileDate(*row.MaxDemandDate); err == nil {
+			return ts, nil
+		}
+	}
+	return parseProfileDate(row.ProfileDate)
+}
+
+// fetchBilling is task-8-brief.md item 5, fixed per R49 (C1): POST
+// end_of_month_endexes for the request window, then — a second call within
+// this same FetchReadings — POST current_endexes for the WHOLE
+// Istanbul-local calendar month(s) the in-window end_of_month_endexes
+// readings fall in, independent of req.From/req.To, and set max_demand_kw
+// on each to the maximum MaxDemand among current_endexes rows in that same
+// month (06 §4 "Max demand").
+//
+// R49: a cursor-driven resume fetch's window starts AT (inclusive) the
+// stored end_of_month_endexes reading's own Ts — the SAME reading is
+// requested again every run until the next one exists. Bounding the second
+// call by req.From/req.To (round 1's bug) then excludes every
+// current_endexes row EARLIER in that reading's month, so the computed max
+// silently drops (to a partial-month value, or to no value at all), and
+// store/postgres's upsert (`max_demand_kw = excluded.max_demand_kw`)
+// replaces the previously-stored maximum with that smaller/NULL value on
+// every single resumed run. Widening the second call to the WHOLE month
+// makes it see the SAME current_endexes rows every time, regardless of
+// where req.From happens to fall — the fix generalises to the first-ever
+// 30-day-lookback fetch and to backfill windows (normalize.Chunk, not
+// month-aligned) the same way, since both are also bounded by an arbitrary
+// req.From that need not align with a calendar month start.
 func (s *Source) fetchBilling(ctx context.Context, creds integration.Credentials, req integration.FetchRequest) (integration.FetchResult, error) {
 	if err := fetchConfigError(creds, req, []string{"authentication", "end_of_month_endexes", "current_endexes"}); err != nil {
 		return integration.FetchResult{}, err
@@ -593,20 +641,53 @@ func (s *Source) fetchBilling(ctx context.Context, creds integration.Credentials
 		return integration.FetchResult{}, err
 	}
 
-	mdRows, mdWarnings, err := s.callEndexes(ctx, token, creds, req, "current_endexes")
-	if err != nil {
-		return integration.FetchResult{}, err
+	// Determine the Istanbul month(s) covered by the IN-WINDOW
+	// end_of_month_endexes readings only — a row outside [req.From, req.To)
+	// is dropped below anyway and must not widen the current_endexes call
+	// for a month nothing in this result will ever report.
+	var monthFrom, monthTo time.Time
+	haveMonth := false
+	for _, row := range eomRows {
+		ts, tsErr := parseProfileDate(row.wire.ProfileDate)
+		if tsErr != nil || ts.Before(req.From) || !ts.Before(req.To) {
+			continue
+		}
+		start, end := istanbulMonthBounds(ts)
+		if !haveMonth {
+			monthFrom, monthTo, haveMonth = start, end, true
+			continue
+		}
+		if start.Before(monthFrom) {
+			monthFrom = start
+		}
+		if end.After(monthTo) {
+			monthTo = end
+		}
 	}
-	warnings = append(warnings, mdWarnings...)
+
+	var (
+		mdRows  []endexRowWithRaw
+		mdWarns []integration.Warning
+	)
+	if haveMonth {
+		mdReq := req
+		mdReq.From, mdReq.To = monthFrom, monthTo
+		var callErr error
+		mdRows, mdWarns, callErr = s.callEndexes(ctx, token, creds, mdReq, "current_endexes")
+		if callErr != nil {
+			return integration.FetchResult{}, callErr
+		}
+		warnings = append(warnings, mdWarns...)
+	}
 
 	maxByMonth := map[monthKey]decimal.Decimal{}
 	for i, row := range mdRows {
-		ts, tsErr := parseProfileDate(row.wire.ProfileDate)
+		ts, tsErr := maxDemandDate(row.wire)
 		if tsErr != nil {
-			warnings = append(warnings, integration.Warning{Code: integration.WarnUnparseableRow, Detail: fmt.Sprintf("ProfileDate at current_endexes row %d", i)})
+			warnings = append(warnings, integration.Warning{Code: integration.WarnUnparseableRow, Detail: fmt.Sprintf("MaxDemandDate/ProfileDate at current_endexes row %d", i)})
 			continue
 		}
-		if ts.Before(req.From) || !ts.Before(req.To) {
+		if ts.Before(monthFrom) || !ts.Before(monthTo) {
 			continue
 		}
 		md, mdErr := mapMaxDemand(row.wire.MaxDemand, req.Multiplier)
@@ -640,10 +721,17 @@ func (s *Source) fetchBilling(ctx context.Context, creds integration.Credentials
 			continue
 		}
 		local := ts.In(normalize.Istanbul)
-		if md, ok := maxByMonth[monthKey{local.Year(), local.Month()}]; ok {
-			mdCopy := md
-			reading.MaxDemandKw = &mdCopy
+		md, ok := maxByMonth[monthKey{local.Year(), local.Month()}]
+		if !ok {
+			// R49: never emit MaxDemandKw=nil over what may be a stored
+			// value — store/postgres's upsert has no way to tell "no new
+			// information" from "the max demand is now unknown". Skip the
+			// whole reading rather than let the pipeline persist a NULL.
+			warnings = append(warnings, integration.Warning{Code: integration.WarnUnparseableRow, Detail: fmt.Sprintf("no current_endexes max demand for %04d-%02d at end_of_month_endexes row %d — reading skipped", local.Year(), local.Month(), i)})
+			continue
 		}
+		mdCopy := md
+		reading.MaxDemandKw = &mdCopy
 		readings = append(readings, s.stamp(reading, req, ts, row.raw))
 	}
 

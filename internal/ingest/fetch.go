@@ -85,7 +85,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 	if err != nil {
 		errText := err.Error()
 		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 1, &errText, nil, now)
-		return err
+		return classifyStoreErr(err) // M14
 	}
 
 	if !analyzer.IsActive || analyzer.DeletedAt != nil {
@@ -98,7 +98,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 	if err != nil {
 		errText := err.Error()
 		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 1, &errText, nil, now)
-		return err
+		return classifyStoreErr(err) // M14
 	}
 
 	src, err := s.deps.Sources.Source(creds.Provider)
@@ -111,6 +111,19 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 	modelProvider, ok := creds.Provider.ModelProvider()
 	if !ok || analyzer.Provider != modelProvider {
 		mismatch := &integration.Error{Kind: integration.ErrMalformedPayload, Provider: creds.Provider, Op: "fetch_readings.provider_mismatch"}
+		errText := redacted(creds, mismatch)
+		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 1, &errText, nil, now)
+		return wrapRedacted(errText, mismatch)
+	}
+
+	// M3: the analyzer's own stored ProviderSubtype must match the
+	// credential actually being opened — same provider, but a different
+	// subtype means a different distributor/meter family's endpoints
+	// (06 §1's per-subtype Endpoints), which could otherwise silently
+	// answer for the wrong meter. ErrConfig (non-retryable, SkipRetry via
+	// job.ClassifyForRetry) — never a network call is attempted.
+	if analyzer.ProviderSubtype != creds.Subtype {
+		mismatch := &integration.Error{Kind: integration.ErrConfig, Provider: creds.Provider, Op: "fetch_readings.subtype_mismatch"}
 		errText := redacted(creds, mismatch)
 		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 1, &errText, nil, now)
 		return wrapRedacted(errText, mismatch)
@@ -238,8 +251,16 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 					kindMinTs, kindMaxTs := readingTsBounds(kindRows)
 
 					resets := readingsOfKind(valid, model.ReadingKindReset)
+					// M1: time.Microsecond, not time.Nanosecond — pgx/
+					// Postgres timestamptz columns are microsecond
+					// precision, so a 1-nanosecond upper bound round-trips
+					// back down to exactly kindMaxTs on the wire and
+					// excludes a reset stored exactly there (proven by
+					// TestResetSuppressionRangeSurvivesMicrosecondTruncation
+					// in ingest_integration_test.go). The generation code
+					// documents this same pgx trap.
 					rangeResets, rerr := s.deps.Readings.Range(ctx, sc, analyzer.ID,
-						store.TimeRange{From: kindMinTs, To: kindMaxTs.Add(time.Nanosecond)}, model.ReadingKindReset)
+						store.TimeRange{From: kindMinTs, To: kindMaxTs.Add(time.Microsecond)}, model.ReadingKindReset)
 					if rerr != nil {
 						return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, rerr, acc, now)
 					}
@@ -290,7 +311,20 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 					}
 				}
 
-				if res.ResolvedMultiplier != nil && !res.ResolvedMultiplier.Value.Equal(analyzer.MeterMultiplier) {
+				// R51/I2: a multiplier update is persisted ONLY when the
+				// adapter reports ProviderResolved — the value actually
+				// came from the provider THIS call (e.g. GridBox's
+				// last_endex.Multiplier or its load_profile ratio). A
+				// not-provider-resolved value (GridBox's fallback to the
+				// stored multiplier itself, or its last-resort fallback to
+				// 1) carries no new information and must never overwrite
+				// analyzers.meter_multiplier — persisting it anyway is
+				// exactly what caused GridBox's daily/reset/current_index/
+				// billing kinds (none of which carries its own multiplier
+				// source) to ping-pong the stored value back and forth
+				// against whatever the concurrently-run load_profile kind
+				// last derived.
+				if res.ResolvedMultiplier != nil && res.ResolvedMultiplier.ProviderResolved && !res.ResolvedMultiplier.Value.Equal(analyzer.MeterMultiplier) {
 					// M1: re-load the analyzer immediately before the
 					// update, so a concurrent operator edit to any OTHER
 					// field (Update takes the whole row) made since this
@@ -371,17 +405,25 @@ func (s *Service) failFetchRun(ctx context.Context, sc store.Scope, runID, analy
 // one before any success) — falls back to R18's 30-day lookback. To is
 // always now for the cursor-driven form.
 //
-// allowCursorAdvance is I1: an explicit p.Window may move the LIVE cursor
-// forward only when doing so does not skip data the cursor has not covered
-// yet — i.e. the window is contiguous with (starts at or before) what the
-// cursor already reflects, or there is no stored cursor at all yet. A
-// window that starts AFTER the stored cursor (a gap between what the
-// cursor covers and what this explicit fetch is about to persist) must
-// leave the cursor exactly where it was: advancing it would make the next
-// cursor-driven run skip straight past the gap instead of requesting it.
-// The cursor-driven form (p.Window == nil) always resumes exactly from the
-// cursor, so it can never itself create a gap — allowCursorAdvance is
-// always true there.
+// allowCursorAdvance is I1/M2: an explicit p.Window may move the LIVE
+// cursor forward only when doing so does not skip data the cursor has not
+// covered yet — i.e. the window is contiguous with (starts at or before)
+// what the cursor already reflects. A window that starts AFTER the stored
+// cursor (a gap between what the cursor covers and what this explicit
+// fetch is about to persist) must leave the cursor exactly where it was:
+// advancing it would make the next cursor-driven run skip straight past
+// the gap instead of requesting it.
+//
+// M2: when there is NO stored cursor at all yet (ErrNotFound, or a row
+// with no LastTs), an explicit window must ALSO leave the cursor untouched
+// — round 1 returned allowCursorAdvance=true here, which let an explicit
+// window (e.g. a backfill) CREATE the live cursor from nothing. A backfill
+// controller has no ordering guarantee: a RECENT window processed before
+// an OLDER one would set the cursor to the recent window's own bound, and
+// the first CURSOR-DRIVEN run would then resume from there instead of
+// using its full InitialLookback — silently shortening the very lookback
+// R18 exists to guarantee. Only a cursor-driven fetch (p.Window == nil,
+// below) may ever create the cursor from nothing.
 func (s *Service) resolveFetchWindow(ctx context.Context, sc store.Scope, p job.FetchReadingsPayload, now time.Time) (from, to time.Time, allowCursorAdvance bool, err error) {
 	cur, cerr := s.deps.Cursors.Get(ctx, sc, p.AnalyzerID, p.Kind)
 
@@ -390,7 +432,7 @@ func (s *Service) resolveFetchWindow(ctx context.Context, sc store.Scope, p job.
 		case cerr == nil && cur.LastTs != nil:
 			return p.Window.From, p.Window.To, !cur.LastTs.Before(p.Window.From), nil
 		case cerr == nil, errors.Is(cerr, store.ErrNotFound):
-			return p.Window.From, p.Window.To, true, nil
+			return p.Window.From, p.Window.To, false, nil
 		default:
 			return time.Time{}, time.Time{}, false, cerr
 		}

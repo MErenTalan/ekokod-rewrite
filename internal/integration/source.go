@@ -123,18 +123,35 @@ type FetchRequest struct {
 // multiplier" from "we had to guess".
 type MultiplierSource string
 
-// The MultiplierSource values.
+// The MultiplierSource values. MultiplierFromRequest (R51) is FetchRequest's
+// own Multiplier field — the analyzer's stored meter_multiplier, reused
+// when neither of the two provider-side sources is available. It is
+// deliberately distinct from MultiplierFallbackOne: reusing a value the
+// pipeline itself supplied is not "assuming 1", but it is still not
+// provider-resolved (see ResolvedMultiplier.ProviderResolved).
 const (
 	MultiplierFromLastEndex   MultiplierSource = "last_endex"
 	MultiplierFromLoadProfile MultiplierSource = "load_profile_ratio"
+	MultiplierFromRequest     MultiplierSource = "request_stored"
 	MultiplierFallbackOne     MultiplierSource = "fallback_one"
 )
 
 // ResolvedMultiplier records which multiplier an adapter actually applied
-// and how it was decided.
+// and how it was decided. ProviderResolved (R51/I2) is true only when the
+// VALUE came from the provider itself this call (MultiplierFromLastEndex,
+// MultiplierFromLoadProfile) — never for MultiplierFromRequest (an echo of
+// what the pipeline already had) or MultiplierFallbackOne (a guess). The
+// pipeline (internal/ingest/fetch.go) persists a multiplier change to
+// analyzers.meter_multiplier ONLY when ProviderResolved is true: a
+// not-provider-resolved value must never overwrite the analyzer's own
+// stored multiplier, or two kinds that disagree on whether the provider
+// currently supplies one (e.g. GridBox's load_profile vs. daily/reset/
+// current_index/billing) would ping-pong the stored value back and forth
+// on every dispatch (I2).
 type ResolvedMultiplier struct {
-	Value  decimal.Decimal
-	Source MultiplierSource
+	Value            decimal.Decimal
+	Source           MultiplierSource
+	ProviderResolved bool
 }
 
 // Warning is an operator-facing note attached to a FetchResult. Detail is

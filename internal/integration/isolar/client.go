@@ -240,25 +240,20 @@ func (c *Client) call(ctx context.Context, creds integration.Credentials, o call
 // configError is returned for every configuration/credential-incompleteness
 // failure this package detects before ever sending a request: a missing
 // gateway/endpoint template, a missing app_key/secret_key/access_token/
-// cloud_id, an empty required identifier (psID/psKeys — adapter-patterns.md
-// item 12), or a window larger than MaxWindowMinute (R42). CHOSEN KIND:
-// ErrAuth. No dedicated config Kind exists in internal/integration today (a
-// planned follow-up per the task brief); ErrMalformedPayload is documented
-// as the wrong choice for a config error (adapter-patterns.md item 9), and
-// ErrAuth is the closest existing sentinel to "this call cannot be
-// addressed or authenticated without configuration/arguments that are
-// missing or invalid" — every case this function covers is exactly that,
-// and every one is non-retryable (integration.Retryable never matches
-// ErrAuth). Revisit this choice once a dedicated Kind exists.
+// cloud_id, or an empty required identifier (psID/psKeys — adapter-
+// patterns.md item 12). R48/I5: this used to report ErrAuth (round 1's
+// documented stop-gap, before integration.ErrConfig existed) — non-
+// retryable like a rejected password, but NOT an authentication failure;
+// F3's credential-health logic must never treat it as one. Use ErrConfig.
 func (c *Client) configError(op string) error {
-	return &integration.Error{Kind: integration.ErrAuth, Provider: integration.ProviderISolar, Op: op}
+	return &integration.Error{Kind: integration.ErrConfig, Provider: integration.ProviderISolar, Op: op}
 }
 
 // pageBudgetExceeded is returned when a non-cursor list (plants, devices,
 // faults) reports, via rowCount, more rows than maxPageBudget pages can
 // cover (R44) — a provider-shape anomaly distinct from configError's
 // caller-input/config problems, so it gets ErrMalformedPayload rather than
-// reusing configError's ErrAuth. Both are non-retryable.
+// reusing configError's ErrConfig. Both are non-retryable.
 func (c *Client) pageBudgetExceeded(op string) error {
 	return &integration.Error{Kind: integration.ErrMalformedPayload, Provider: integration.ProviderISolar, Op: op}
 }
