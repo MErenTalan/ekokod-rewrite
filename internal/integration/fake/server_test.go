@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -48,24 +49,67 @@ func getCtx(t *testing.T, client *http.Client, url string) (*http.Response, erro
 	return client.Do(req)
 }
 
+// TestFakeServerIsTLSAndRecordsRequests is fix-round-2's M4: beyond just
+// counting requests, it asserts each RecordedRequest's Method, Path,
+// RawQuery, a header and the Body it captured, and separately proves that a
+// Route.Match predicate reading the body does not starve the Responder of it
+// afterward (the handler restores r.Body after Match runs — server.go's
+// handle()).
 func TestFakeServerIsTLSAndRecordsRequests(t *testing.T) {
-	s := fake.NewTLSServer(t, fake.Route{
-		Method:  http.MethodGet,
-		Path:    "/status",
-		Respond: fake.JSON(http.StatusOK, []byte(`{"ok":true}`)),
-	})
+	s := fake.NewTLSServer(t,
+		fake.Route{
+			Method:  http.MethodGet,
+			Path:    "/status",
+			Respond: fake.JSON(http.StatusOK, []byte(`{"ok":true}`)),
+		},
+		fake.Route{
+			Method: http.MethodPost,
+			Path:   "/echo",
+			// Match reads the body itself: proves the predicate gets a
+			// working, readable body, not an already-drained one.
+			Match: func(r *http.Request) bool {
+				body, err := io.ReadAll(r.Body)
+				return err == nil && string(body) == `{"n":1}`
+			},
+			// Respond reads the body again: proves it was restored after
+			// Match consumed it, not left empty/EOF.
+			Respond: func(w http.ResponseWriter, r *http.Request) {
+				body, err := io.ReadAll(r.Body)
+				require.NoError(t, err)
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write(body)
+			},
+		},
+	)
 
 	require.True(t, len(s.URL) > 8 && s.URL[:8] == "https://", "URL must be https, got %s", s.URL)
 
-	// A client that trusts only the server's pinned certificate succeeds.
 	client := pinnedClient(t, s.Pins)
-	resp, err := getCtx(t, client, s.URL+"/status?x=1")
+
+	// GET /status?x=1 with a custom header: exercises Method, Path,
+	// RawQuery and Header recording.
+	statusReq, err := http.NewRequestWithContext(context.Background(), http.MethodGet, s.URL+"/status?x=1", nil)
+	require.NoError(t, err)
+	statusReq.Header.Set("X-Fake-Test", "probe-value")
+	resp, err := client.Do(statusReq)
 	require.NoError(t, err)
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, resp.Body.Close())
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.Equal(t, `{"ok":true}`, string(body))
+
+	// POST /echo with a body: exercises the Match predicate reading the
+	// body and the Responder still seeing the full body afterward.
+	echoReq, err := http.NewRequestWithContext(context.Background(), http.MethodPost, s.URL+"/echo", bytes.NewReader([]byte(`{"n":1}`)))
+	require.NoError(t, err)
+	echoResp, err := client.Do(echoReq)
+	require.NoError(t, err)
+	echoBody, err := io.ReadAll(echoResp.Body)
+	require.NoError(t, echoResp.Body.Close())
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, echoResp.StatusCode)
+	require.Equal(t, `{"n":1}`, string(echoBody), "the responder must still see the full body after Match already read it")
 
 	// A plain client with no pin fails with an x509 error: tests cannot
 	// pass here without pinning.
@@ -79,7 +123,16 @@ func TestFakeServerIsTLSAndRecordsRequests(t *testing.T) {
 	require.ErrorAs(t, err, &unknownAuth, "expected an x509 unknown-authority error, got %v", err)
 
 	requests := s.Requests()
-	require.Len(t, requests, 1, "the unpinned client aborts during the TLS handshake, before any HTTP request reaches the handler, so only the pinned request should have landed")
+	require.Len(t, requests, 2, "the unpinned client aborts during the TLS handshake, before any HTTP request reaches the handler, so only the two pinned requests should have landed")
+
+	require.Equal(t, http.MethodGet, requests[0].Method)
+	require.Equal(t, "/status", requests[0].Path)
+	require.Equal(t, "x=1", requests[0].RawQuery)
+	require.Equal(t, "probe-value", requests[0].Header.Get("X-Fake-Test"), "the recorded header must match what the client sent")
+
+	require.Equal(t, http.MethodPost, requests[1].Method)
+	require.Equal(t, "/echo", requests[1].Path)
+	require.Equal(t, `{"n":1}`, string(requests[1].Body), "the recorded body must be the full request body, unaffected by the Route's Match predicate having already read it")
 }
 
 // TestTwoFakeServersHaveDistinctCertificates proves R4: two NewTLSServer
@@ -143,6 +196,12 @@ const unmatchedHelperEnv = "FAKE_UNMATCHED_HELPER"
 // run of the unmatched-route scenario; its exit code and t.Errorf output
 // are ordinary process exit status and stdout, fully isolated from this
 // (parent) test's own pass/fail.
+// unmatchedHelperTimeout bounds the re-exec'd child process (M3): it should
+// finish in well under a second in practice, but a hung child (e.g. a
+// regression that makes the fake server block instead of answering 404)
+// must not hang this test forever.
+const unmatchedHelperTimeout = 60 * time.Second
+
 func TestUnmatchedRouteFailsTheTest(t *testing.T) {
 	if os.Getenv(unmatchedHelperEnv) == "1" {
 		s := fake.NewTLSServer(t) // no routes: every request is unmatched
@@ -152,14 +211,30 @@ func TestUnmatchedRouteFailsTheTest(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GET: %v", err)
 		}
-		_ = resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
+		// Logged (not just asserted): M3 requires the child's own -v output
+		// to contain "the unmatched/404 text" the parent inspects below.
+		t.Logf("fake: unmatched request answered with status %d", resp.StatusCode)
+		require.Equal(t, http.StatusNotFound, resp.StatusCode)
 		return
 	}
 
-	cmd := exec.CommandContext(context.Background(), os.Args[0], "-test.run=^TestUnmatchedRouteFailsTheTest$", "-test.v")
+	ctx, cancel := context.WithTimeout(context.Background(), unmatchedHelperTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestUnmatchedRouteFailsTheTest$", "-test.v")
 	cmd.Env = append(os.Environ(), unmatchedHelperEnv+"=1")
 	out, err := cmd.CombinedOutput()
 
-	require.Error(t, err, "the child process must exit non-zero: an unmatched route must fail its test\noutput:\n%s", out)
+	// M3: assert the specific failure shape, not merely "some error" — a
+	// child killed by the context deadline, or one that exits non-zero for
+	// an unrelated reason (e.g. a panic before the server even starts),
+	// would satisfy a bare require.Error but would NOT prove "an unmatched
+	// route fails the test". *exec.ExitError means the child ran to
+	// completion and `go test` itself reported failure via its exit code.
+	var exitErr *exec.ExitError
+	require.ErrorAs(t, err, &exitErr, "the child process must exit non-zero via *exec.ExitError (a completed, failing `go test` run) — got %v\noutput:\n%s", err, out)
+	require.Contains(t, string(out), "--- FAIL: TestUnmatchedRouteFailsTheTest", "expected the go test failure banner in child output:\n%s", out)
 	require.Contains(t, string(out), "fake: unmatched request", "expected the unmatched-request failure message in child output:\n%s", out)
+	require.Contains(t, string(out), "status 404", "expected the child to have observed a 404 response in child output:\n%s", out)
 }

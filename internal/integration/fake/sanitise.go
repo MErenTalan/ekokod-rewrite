@@ -7,8 +7,9 @@ import (
 	"net/url"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
+
+	"github.com/shopspring/decimal"
 )
 
 // Rule patterns are derived from the F2 Task 4 brief's sanitisation table
@@ -66,12 +67,44 @@ var (
 	// (Title, Address) field tables, plus the Turkish-spelling stems I2
 	// found evading the original English-only pattern.
 	//
-	// Known trade-off: the "il$" stem (the OSOS `il` field) also matches
-	// any key ending "il" such as "mail"/"email" — accepted as directed by
-	// I2's literal stem list; a value under such a key still gets the
-	// independent e-mail shape check via shapeViolations regardless of
-	// which branch fires.
-	nameKeyPattern = regexp.MustCompile(`(?i)adres|adress|address|company|customer|musteri|müşteri|firma|unvan|mahalle|sokak|cadde|il$|ilce|ilçe|neighbo|muhatap|tanim|tanım|name|title|street|district`) //nolint:misspell // "adres" is the OSOS provider's own (Turkish) key spelling, not an English typo
+	// fix-round-2 R1 controller ruling: the OSOS province key is matched as
+	// a WHOLE key, `^il$` (case-insensitive), not the old unanchored `il$`
+	// suffix — that suffix matched ANY key ending in "il", so a compliant
+	// `{"email":"someone@example.com"}` fixture was rejected as if "email"
+	// were the Turkish province field. `^il$` still catches `{"il":"Ankara"}`
+	// and no longer touches "email"/"mail"/"contactEmail" (those still get
+	// the independent e-mail-domain shape check via shapeViolations
+	// regardless of which switch branch fires — see TestSanitiserRejects's
+	// "email" case, which requires an @example.com address, not this rule).
+	//
+	// R1 also asked whether any OTHER stem has the same collision for a
+	// plausible non-PII protocol key. Checked every 06-integrations.md field
+	// table (OSOS, GridBox, ARIL, PM5340, iSolarCloud, EPİAŞ): the one real
+	// hit is "tanim"/"tanım" — OSOS's mapping table lists BOTH
+	// `sayimNokTanim` (→ counterparty_no/metering_point_name, a name-shaped
+	// field, correctly PII) and `tesisatTurTanim` (→ installation_kind, a
+	// tariff/installation-CATEGORY field in the same table row as
+	// tarifeTipi/tarifeTuru, which nameKeyPattern never flags) — both keys
+	// END in "Tanim", so anchoring the stem (the `^il$` fix) cannot tell
+	// them apart: it would either flag both or neither. Resolved the same
+	// way installationKeys resolves ps_id/ps_key/device_sn — an exact
+	// (case-insensitive) whole-key entry, `^sayimnoktanim$`, for the one
+	// field documented as PII-shaped, instead of a generic "tanim" stem, so
+	// `tesisatTurTanim` (and tarifeTipi/tarifeTuru) pass through unflagged.
+	// See TestSanitiserAllowsNonPIIProtocolKeys.
+	//
+	// The other hypothetical collision this ruling named — "name" vs.
+	// "username"/"deviceName"/"unitName" — was checked against every field
+	// table too: none of those exact spellings appear as a Provider-field
+	// column entry anywhere in 06-integrations.md (ARIL's auth body uses
+	// `UserCode`, not "username"; PM5340 uses `deviceId`/`deviceIp`, never
+	// `deviceName`; no provider table has a `unitName` field), so "name" is
+	// left unanchored — the only field table hit it has today is the
+	// genuinely-PII `customerName` (OSOS). No anchor needed for "name" per
+	// the field tables as they stand today; a later adapter task that
+	// introduces a real non-PII "...name..." key should anchor it the same
+	// way, with its own must-pass case.
+	nameKeyPattern = regexp.MustCompile(`(?i)adres|adress|address|company|customer|musteri|müşteri|firma|unvan|mahalle|sokak|cadde|^il$|ilce|ilçe|neighbo|muhatap|^sayimnoktanim$|name|title|street|district`) //nolint:misspell // "adres" is the OSOS provider's own (Turkish) key spelling, not an English typo
 
 	// installationKeys are exact (case-insensitive) identifier keys whose
 	// values must be in FX placeholder form: installation/wiring/
@@ -99,6 +132,14 @@ var (
 	// range-checked (I2) against the allowed fixture bounds.
 	coordXKeyPattern = regexp.MustCompile(`(?i)^koordinatx$|^latitude$|^lat$`)
 	coordYKeyPattern = regexp.MustCompile(`(?i)^koordinaty$|^longitude$|^lon$|^lng$`)
+
+	// coordLatMin/Max and coordLonMin/Max are the allowed fixture bounds
+	// (I2), as exact decimals — no float64 anywhere in this package (see
+	// coordinateViolations).
+	coordLatMin = decimal.RequireFromString("39.0")
+	coordLatMax = decimal.RequireFromString("39.999999")
+	coordLonMin = decimal.RequireFromString("32.0")
+	coordLonMax = decimal.RequireFromString("32.999999")
 
 	// allowedHosts are the only hostnames a fixture's URL (scheme-bearing
 	// or bare) may reference.
@@ -209,23 +250,31 @@ func isSecretKey(key string) bool {
 // coordinateViolations range-checks OSOS's koordinatX/koordinatY (and their
 // canonical latitude/longitude names) against the allowed fixture bounds
 // (I2: "koordinatX/Y out of the allowed range ... reject out-of-range").
+//
+// fix-round-2 (controller, merge-with-Task-1 finding): uses
+// github.com/shopspring/decimal, never strconv.ParseFloat/float64 — Task 1's
+// merged arch guard (TestIntegrationTreesDoNotParseFloats / depguard's
+// no-float-money rule) forbids float parsing anywhere under
+// internal/integration/..., non-test files included, so this exact-decimal
+// comparison replaces the prior float64 bounds check with the same accepted/
+// rejected cases.
 func coordinateViolations(key, lowerKey, value string) []string {
-	var lo, hi float64
+	var lo, hi decimal.Decimal
 	switch {
 	case coordXKeyPattern.MatchString(lowerKey):
-		lo, hi = 39.0, 39.999999
+		lo, hi = coordLatMin, coordLatMax
 	case coordYKeyPattern.MatchString(lowerKey):
-		lo, hi = 32.0, 32.999999
+		lo, hi = coordLonMin, coordLonMax
 	default:
 		return nil
 	}
 
-	f, err := strconv.ParseFloat(value, 64)
+	d, err := decimal.NewFromString(value)
 	if err != nil {
 		return []string{fmt.Sprintf("key %q: coordinate value %q is not numeric", key, value)}
 	}
-	if f < lo || f > hi {
-		return []string{fmt.Sprintf("key %q: coordinate value %v is outside the allowed fixture range [%v, %v]", key, f, lo, hi)}
+	if d.LessThan(lo) || d.GreaterThan(hi) {
+		return []string{fmt.Sprintf("key %q: coordinate value %s is outside the allowed fixture range [%s, %s]", key, d.String(), lo.String(), hi.String())}
 	}
 	return nil
 }

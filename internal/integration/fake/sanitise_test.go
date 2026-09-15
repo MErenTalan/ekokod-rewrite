@@ -75,6 +75,40 @@ func TestSanitiserRejects(t *testing.T) {
 		`{"customerName":"Fixture Customer 1","instalationNumber":"FX0000001","access_token":"FIXTURE-TOKEN-1","url":"https://127.0.0.1/x"}`)))
 }
 
+// TestSanitiserWholeKeyProvinceMatch is fix-round-2's R1 controller ruling:
+// the OSOS province key `il` must be matched as a WHOLE key (`^il$`,
+// case-insensitive), never a suffix — the old unanchored `il$` stem matched
+// any key ENDING in "il", so a compliant `{"email":"..."}` fixture was
+// rejected as if "email" were the Turkish province field. Must-pass cases
+// prove the fix; the must-reject case proves the real `il` field is still
+// caught.
+func TestSanitiserWholeKeyProvinceMatch(t *testing.T) {
+	for name, body := range map[string]string{
+		"email key, valid @example.com address":        `{"email":"someone@example.com"}`,
+		"mail key, valid @example.com address":         `{"mail":"another@example.com"}`,
+		"contactEmail key, valid @example.com address": `{"contactEmail":"x@example.com"}`,
+	} {
+		require.Empty(t, fake.Violations("ok.json", []byte(body)), name)
+	}
+
+	require.NotEmpty(t, fake.Violations("probe.json", []byte(`{"il":"Ankara"}`)), "il")
+}
+
+// TestSanitiserAllowsNonPIIProtocolKeys is R1's second check: no OTHER
+// nameKeyPattern stem should reject a plausible non-PII protocol key from
+// 06-integrations.md's field tables. The one real hit found was "tanim":
+// OSOS's mapping table lists BOTH `sayimNokTanim` (a name-shaped,
+// genuinely-PII field — still must-reject, see TestSanitiserRejects) and
+// `tesisatTurTanim` (an installation/tariff-KIND classification field, in
+// the same table row as tarifeTipi/tarifeTuru — never PII), and both keys
+// end in "Tanim", so the generic "tanim" stem could not tell them apart.
+// Resolved with an exact `^sayimnoktanim$` entry instead of the generic
+// stem, so these classification fields now pass unflagged.
+func TestSanitiserAllowsNonPIIProtocolKeys(t *testing.T) {
+	require.Empty(t, fake.Violations("ok.json", []byte(
+		`{"tesisatTurTanim":"Sanayi","tarifeTipi":"TT","tarifeTuru":"Tek Terimli"}`)))
+}
+
 // TestSanitiserRejectsPhoneNumber proves the phone rule from the brief's
 // table, which TestSanitiserRejects above (copied verbatim from the brief)
 // does not itself exercise.
