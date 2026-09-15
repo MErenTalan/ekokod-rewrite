@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/shopspring/decimal"
 )
@@ -60,57 +61,69 @@ var (
 	authKeyPattern   = regexp.MustCompile(`(?i)auth`)
 	authorKeyPattern = regexp.MustCompile(`(?i)author`)
 
-	// nameKeyPattern matches keys whose values must start "Fixture ":
-	// customer/company/plant/title/address/street/district/neighbourhood
-	// names. Built from 06-integrations.md's OSOS (customerAdress, il,
-	// ilce, koyMahallesi, caddesiSokagi, sayimNokTanim) and ARIL
-	// (Title, Address) field tables, plus the Turkish-spelling stems I2
-	// found evading the original English-only pattern.
+	// piiWords is the PII key WORD set (fix-round-3 controller ruling): a
+	// key is name/address-shaped PII if tokeniseKey(key) produces a word
+	// that is a member of this set — never by substring match. Built from
+	// 06-integrations.md's OSOS (customerAdress, il, ilce, koyMahallesi,
+	// caddesiSokagi → province/district/neighbourhood/street; muhatapNo,
+	// sayimNokTanim) and ARIL (Title, Address) field tables, plus the
+	// round-1/round-2 Turkish-spelling stems (I2, R1).
 	//
-	// fix-round-2 R1 controller ruling: the OSOS province key is matched as
-	// a WHOLE key, `^il$` (case-insensitive), not the old unanchored `il$`
-	// suffix — that suffix matched ANY key ending in "il", so a compliant
-	// `{"email":"someone@example.com"}` fixture was rejected as if "email"
-	// were the Turkish province field. `^il$` still catches `{"il":"Ankara"}`
-	// and no longer touches "email"/"mail"/"contactEmail" (those still get
-	// the independent e-mail-domain shape check via shapeViolations
-	// regardless of which switch branch fires — see TestSanitiserRejects's
-	// "email" case, which requires an @example.com address, not this rule).
+	// fix-round-2 R1 found that substring/suffix stems (`il$`) and later a
+	// single exact-whole-key anchor (`^sayimnoktanim$`) both fail: a suffix
+	// stem catches unrelated keys that happen to END in the stem
+	// ("email"/"mail" end in "il"; the pre-fix-round-2 bug), while an exact
+	// whole-key anchor stops matching the instant the key is spelled with
+	// ANY extra separator or suffix — `SAYIM_NOK_TANIM` (underscores) and
+	// `sayimNoktaTanimi` (the "-ta"/"-i" suffix forms) both lower to a
+	// string that is not byte-identical to "sayimnoktanim", so the anchor
+	// wrongly let them through (fix-round-3's regression). Word
+	// tokenisation (tokeniseKey below) fixes both failure modes at once:
+	// "email"/"mail" never produce an "il" WORD (there is no camelCase/
+	// separator boundary before "il" in either), so they are not caught by
+	// the "il" entry below, while `SAYIM_NOK_TANIM`/`sayimNoktaTanimi`/
+	// `sayim-nokta-tanimi` all tokenise to a "sayim"(-ish) word plus a
+	// "tanim"/"tanimi" word regardless of case/separator spelling, so
+	// hasSayimTanimCombo (below) still catches every spelling. "tanim" is
+	// NOT in this set on its own, so a word-for-word `tesisatTurTanim` (→
+	// installation_kind, a tariff/installation-CATEGORY field in the same
+	// OSOS table row as tarifeTipi/tarifeTuru, never PII) does not trip the
+	// sayim/tanim combo and is not otherwise a member of piiWords.
 	//
-	// R1 also asked whether any OTHER stem has the same collision for a
-	// plausible non-PII protocol key. Checked every 06-integrations.md field
-	// table (OSOS, GridBox, ARIL, PM5340, iSolarCloud, EPİAŞ): the one real
-	// hit is "tanim"/"tanım" — OSOS's mapping table lists BOTH
-	// `sayimNokTanim` (→ counterparty_no/metering_point_name, a name-shaped
-	// field, correctly PII) and `tesisatTurTanim` (→ installation_kind, a
-	// tariff/installation-CATEGORY field in the same table row as
-	// tarifeTipi/tarifeTuru, which nameKeyPattern never flags) — both keys
-	// END in "Tanim", so anchoring the stem (the `^il$` fix) cannot tell
-	// them apart: it would either flag both or neither. Resolved the same
-	// way installationKeys resolves ps_id/ps_key/device_sn — an exact
-	// (case-insensitive) whole-key entry, `^sayimnoktanim$`, for the one
-	// field documented as PII-shaped, instead of a generic "tanim" stem, so
-	// `tesisatTurTanim` (and tarifeTipi/tarifeTuru) pass through unflagged.
-	// See TestSanitiserAllowsNonPIIProtocolKeys.
-	//
-	// The other hypothetical collision this ruling named — "name" vs.
-	// "username"/"deviceName"/"unitName" — was checked against every field
-	// table too: none of those exact spellings appear as a Provider-field
-	// column entry anywhere in 06-integrations.md (ARIL's auth body uses
-	// `UserCode`, not "username"; PM5340 uses `deviceId`/`deviceIp`, never
-	// `deviceName`; no provider table has a `unitName` field), so "name" is
-	// left unanchored — the only field table hit it has today is the
-	// genuinely-PII `customerName` (OSOS). No anchor needed for "name" per
-	// the field tables as they stand today; a later adapter task that
-	// introduces a real non-PII "...name..." key should anchor it the same
-	// way, with its own must-pass case.
-	nameKeyPattern = regexp.MustCompile(`(?i)adres|adress|address|company|customer|musteri|müşteri|firma|unvan|mahalle|sokak|cadde|^il$|ilce|ilçe|neighbo|muhatap|^sayimnoktanim$|name|title|street|district`) //nolint:misspell // "adres" is the OSOS provider's own (Turkish) key spelling, not an English typo
+	// "name" is deliberately NOT a member: 06-integrations.md's only
+	// Provider-field hit for it is the genuinely-PII `customerName`, and
+	// that key is still caught via its "customer" word. A bare "name" word
+	// alone (`deviceName`, `unitName` — neither is a Provider-field column
+	// entry anywhere in the doc) must pass; see TestSanitiserWordTokenisedKeyMatching.
+	piiWords = map[string]bool{
+		"il":           true,
+		"ilce":         true,
+		"mahalle":      true,
+		"koy":          true,
+		"cadde":        true,
+		"caddesi":      true,
+		"sokak":        true,
+		"sokagi":       true,
+		"adres":        true, //nolint:misspell // OSOS's own (Turkish) key spelling, not an English typo
+		"adress":       true, //nolint:misspell // OSOS's own (Turkish/misspelled) key spelling, not an English typo
+		"address":      true,
+		"company":      true,
+		"customer":     true,
+		"musteri":      true, // covers müşteri too: foldWord maps ü→u, ş→s
+		"firma":        true,
+		"unvan":        true,
+		"neighborhood": true,
+		"muhatap":      true,
+		"title":        true,
+		"street":       true,
+		"district":     true,
+	}
 
 	// installationKeys are exact (case-insensitive) identifier keys whose
 	// values must be in FX placeholder form: installation/wiring/
 	// subscription numbers, meter serials, ps_id/ps_key/device_sn — plus
-	// muhatapNo, which I2 carves out of nameKeyPattern above (its stem
-	// "muhatap" would otherwise classify it as a name) because its
+	// muhatapNo, which I2 carves out of piiWords above (its word "muhatap"
+	// would otherwise classify it as a name) because its
 	// canonical field is counterparty_no, a numeric identifier, not a name.
 	installationKeys = map[string]bool{
 		"instalationnumber":  true,
@@ -148,6 +161,124 @@ var (
 		"example.invalid": true,
 	}
 )
+
+// tokeniseKey splits key into lowercase, Turkish-folded WORDS (fix-round-3
+// controller ruling) on:
+//   - camelCase/PascalCase boundaries (a lowercase letter immediately
+//     followed by an uppercase letter);
+//   - digit boundaries (a letter immediately followed by a digit, or a
+//     digit immediately followed by a letter);
+//   - any run of one or more non-alphanumeric separators (`_`, `-`, `.`,
+//     whitespace, or anything else that is not a letter or digit).
+//
+// Boundary detection runs on the ORIGINAL runes, before folding: folding
+// lower-cases Turkish letters (İ→i, ı→i, ...), and doing that first would
+// erase the very upper/lower distinction camelCase splitting depends on.
+// Each extracted word is folded (see foldWord) only after its boundaries
+// are decided, so "İlçe" (one Titlecase word, no internal boundary) still
+// becomes the single folded word "ilce", while "sayimNoktaTanimi" becomes
+// three words ("sayim", "nokta", "tanimi").
+func tokeniseKey(key string) []string {
+	runes := []rune(key)
+	var words []string
+	start := -1
+	flush := func(end int) {
+		if start >= 0 && end > start {
+			words = append(words, foldWord(string(runes[start:end])))
+		}
+		start = -1
+	}
+	for i, r := range runes {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+			flush(i)
+			continue
+		}
+		if start < 0 {
+			start = i
+			continue
+		}
+		prev := runes[i-1]
+		boundary := unicode.IsDigit(r) != unicode.IsDigit(prev) ||
+			(unicode.IsLower(prev) && unicode.IsUpper(r))
+		if boundary {
+			flush(i)
+			start = i
+		}
+	}
+	flush(len(runes))
+	return words
+}
+
+// foldWord lower-cases a single extracted word, mapping Turkish letters to
+// their closest ASCII equivalent (ı/İ→i, ş/Ş→s, ç/Ç→c, ğ/Ğ→g, ö/Ö→o,
+// ü/Ü→u) so a key spelled with or without Turkish diacritics tokenises to
+// the same word (e.g. "müşteri" and "musteri" both fold to "musteri").
+func foldWord(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch r {
+		case 'ı', 'İ':
+			b.WriteRune('i')
+		case 'ş', 'Ş':
+			b.WriteRune('s')
+		case 'ç', 'Ç':
+			b.WriteRune('c')
+		case 'ğ', 'Ğ':
+			b.WriteRune('g')
+		case 'ö', 'Ö':
+			b.WriteRune('o')
+		case 'ü', 'Ü':
+			b.WriteRune('u')
+		default:
+			b.WriteRune(unicode.ToLower(r))
+		}
+	}
+	return b.String()
+}
+
+// hasSayimTanimCombo reports whether words (already tokenised/folded)
+// contain the "sayim nokta tanim(i)" counting-point-description
+// combination (fix-round-3 controller ruling): a "sayim"/"sayimnok" word
+// together with a "tanim"/"tanimi" word — however many words separate
+// them, and regardless of case/separator spelling — OR a single fused
+// word that itself starts with "sayimnok" and contains "tanim" (the
+// no-separator-at-all spelling, e.g. "sayimnoktanim" as one token). A
+// bare "tanim" word with no accompanying "sayim" word is NOT PII on its
+// own (see piiWords' doc comment: "tesisatTurTanim").
+func hasSayimTanimCombo(words []string) bool {
+	hasSayim, hasTanim := false, false
+	for _, w := range words {
+		if w == "sayim" || w == "sayimnok" {
+			hasSayim = true
+		}
+		if w == "tanim" || w == "tanimi" {
+			hasTanim = true
+		}
+		if strings.HasPrefix(w, "sayimnok") && strings.Contains(w, "tanim") {
+			return true
+		}
+	}
+	return hasSayim && hasTanim
+}
+
+// isNameLikePII reports whether key is name/company/address-shaped PII
+// per the fix-round-3 word-tokenised ruling: true if tokeniseKey(key)
+// yields any word in piiWords, or the sayim/tanim combination
+// (hasSayimTanimCombo) — decided on whole words, never substrings, so a
+// word ENDING in a PII stem (e.g. "il" inside "email"/"mail") never
+// matches, and only a genuine PII WORD does.
+func isNameLikePII(key string) bool {
+	words := tokeniseKey(key)
+	if hasSayimTanimCombo(words) {
+		return true
+	}
+	for _, w := range words {
+		if piiWords[w] {
+			return true
+		}
+	}
+	return false
+}
 
 // Violations reports every sanitisation rule broken by the fixture at path
 // with the given body.
@@ -226,7 +357,7 @@ func checkStringValue(key, value string) []string {
 		if !strings.HasPrefix(value, "FIXTURE-") && !strings.HasPrefix(value, "TGT-FIXTURE-") {
 			violations = append(violations, fmt.Sprintf("key %q: value %q is not in FIXTURE- placeholder form", key, value))
 		}
-	case nameKeyPattern.MatchString(key):
+	case isNameLikePII(key):
 		if !strings.HasPrefix(value, "Fixture ") {
 			violations = append(violations, fmt.Sprintf("key %q: value %q does not start with \"Fixture \"", key, value))
 		}

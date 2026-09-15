@@ -94,6 +94,61 @@ func TestSanitiserWholeKeyProvinceMatch(t *testing.T) {
 	require.NotEmpty(t, fake.Violations("probe.json", []byte(`{"il":"Ankara"}`)), "il")
 }
 
+// TestSanitiserWordTokenisedKeyMatching is fix-round-3's controller ruling
+// test table in full: PII key matching decides on whole WORDS
+// (tokeniseKey/isNameLikePII/piiWords in sanitise.go), never substrings and
+// never a single exact whole-key anchor — both of which earlier rounds
+// tried, and each had a false result in the opposite direction:
+//
+//   - fix-round-1's unanchored `il$` SUBSTRING stem rejected any key ending
+//     in "il", including the compliant "email"/"mail"/"contactEmail".
+//   - fix-round-2's `^il$`/`^sayimnoktanim$` EXACT WHOLE-KEY anchors fixed
+//     that, but an exact whole-key anchor stops matching the instant the
+//     key is spelled with an extra separator/case/suffix: `ilAdi`,
+//     `il_adi`, `musteriIl`, `adresIl` (never equal "il"), and
+//     `sayimNoktaTanimi`/`SAYIM_NOK_TANIM`/`sayim-nokta-tanimi` (never
+//     byte-equal to "sayimnoktanim" after lower-casing) all wrongly passed.
+//
+// Word tokenisation catches every spelling of the must-reject cases while
+// still passing "tesisatTurTanim" (a bare "tanim" word, no "sayim" word —
+// not PII on its own) and the other non-PII protocol/English keys.
+func TestSanitiserWordTokenisedKeyMatching(t *testing.T) {
+	mustReject := map[string]string{
+		"il":                 `{"il":"Ankara"}`,
+		"ilAdi":              `{"ilAdi":"Ankara"}`,
+		"il_adi":             `{"il_adi":"Ankara"}`,
+		"musteriIl":          `{"musteriIl":"Ankara"}`,
+		"adresIl":            `{"adresIl":"Ankara"}`,
+		"sayimNokTanim":      `{"sayimNokTanim":"Acme Fabrika"}`,
+		"sayimNoktaTanimi":   `{"sayimNoktaTanimi":"Acme Fabrika"}`,
+		"SAYIM_NOK_TANIM":    `{"SAYIM_NOK_TANIM":"Acme Fabrika"}`,
+		"sayim-nokta-tanimi": `{"sayim-nokta-tanimi":"Acme Fabrika"}`,
+		"customerAdress":     `{"customerAdress":"Gerçek Adres 123"}`, //nolint:misspell // OSOS field spelling, not a typo
+		"koyMahallesi":       `{"koyMahallesi":"Gerçek Mahalle"}`,
+		"caddesiSokagi":      `{"caddesiSokagi":"Gerçek Cadde"}`,
+		"İlçe":               `{"İlçe":"Çankaya"}`,
+	}
+	for name, body := range mustReject {
+		require.NotEmpty(t, fake.Violations("probe.json", []byte(body)), name)
+	}
+
+	mustPass := map[string]string{
+		"email":           `{"email":"someone@example.com"}`,
+		"mail":            `{"mail":"another@example.com"}`,
+		"contactEmail":    `{"contactEmail":"x@example.com"}`,
+		"tesisatTurTanim": `{"tesisatTurTanim":"Sanayi"}`,
+		"deviceName":      `{"deviceName":"Inverter-1"}`,
+		"unitName":        `{"unitName":"Unit-7"}`,
+		"result_code":     `{"result_code":"0"}`,
+		"currencyCode":    `{"currencyCode":"TRY"}`,
+		"detail":          `{"detail":"ok"}`,
+		"utilization":     `{"utilization":"72.3"}`,
+	}
+	for name, body := range mustPass {
+		require.Empty(t, fake.Violations("ok.json", []byte(body)), name)
+	}
+}
+
 // TestSanitiserAllowsNonPIIProtocolKeys is R1's second check: no OTHER
 // nameKeyPattern stem should reject a plausible non-PII protocol key from
 // 06-integrations.md's field tables. The one real hit found was "tanim":
