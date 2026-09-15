@@ -152,6 +152,72 @@ func TestSMTPPasswordSealingBindsToItsOwnRow(t *testing.T) {
 	require.Error(t, err, "a ciphertext copied onto another company's row must not decrypt")
 }
 
+// TestSMTPUpsertNilPasswordKeepsStoredPassword proves the fix round 1
+// controller ruling: Upsert-ing an existing row with a nil password leaves
+// password_enc untouched (host/other fields still update). Before the fix,
+// Upsert sealed the nil password unconditionally, so OpenPassword returned
+// "" afterwards with no error and no signal.
+func TestSMTPUpsertNilPasswordKeepsStoredPassword(t *testing.T) {
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 8140)
+	repo := postgres.NewSMTPRepository(pool, integrationCipher(t))
+
+	_, err := repo.Upsert(ctx, tenantA.Scope, smtpSettingsFixture(tenantA.Company.ID), []byte("original-pw"))
+	require.NoError(t, err)
+
+	changed := smtpSettingsFixture(tenantA.Company.ID)
+	changed.Host = "smtp-changed.example.invalid"
+	updated, err := repo.Upsert(ctx, tenantA.Scope, changed, nil)
+	require.NoError(t, err)
+	require.Equal(t, "smtp-changed.example.invalid", updated.Host, "every other field still updates")
+
+	password, err := repo.OpenPassword(ctx, tenantA.Scope)
+	require.NoError(t, err)
+	require.Equal(t, "original-pw", string(password), "a nil password on update must not replace the stored one")
+}
+
+// TestSMTPUpsertEmptyPasswordKeepsStoredPassword is
+// TestSMTPUpsertNilPasswordKeepsStoredPassword with an explicit empty slice
+// rather than nil: both must be treated as "no new password supplied".
+func TestSMTPUpsertEmptyPasswordKeepsStoredPassword(t *testing.T) {
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 8141)
+	repo := postgres.NewSMTPRepository(pool, integrationCipher(t))
+
+	_, err := repo.Upsert(ctx, tenantA.Scope, smtpSettingsFixture(tenantA.Company.ID), []byte("original-pw"))
+	require.NoError(t, err)
+
+	changed := smtpSettingsFixture(tenantA.Company.ID)
+	changed.Host = "smtp-changed.example.invalid"
+	updated, err := repo.Upsert(ctx, tenantA.Scope, changed, []byte{})
+	require.NoError(t, err)
+	require.Equal(t, "smtp-changed.example.invalid", updated.Host, "every other field still updates")
+
+	password, err := repo.OpenPassword(ctx, tenantA.Scope)
+	require.NoError(t, err)
+	require.Equal(t, "original-pw", string(password), "an empty password on update must not replace the stored one")
+}
+
+// TestSMTPUpsertRefusesFirstInsertWithNilPassword proves the other half of
+// the ruling: a company's FIRST Upsert (no existing row) with a nil or empty
+// password is refused, and writes no row -- smtp_settings.password_enc is
+// NOT NULL, so an SMTP configuration without a password is not storable.
+func TestSMTPUpsertRefusesFirstInsertWithNilPassword(t *testing.T) {
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 8142)
+	repo := postgres.NewSMTPRepository(pool, integrationCipher(t))
+
+	_, err := repo.Upsert(ctx, tenantA.Scope, smtpSettingsFixture(tenantA.Company.ID), nil)
+	require.Error(t, err)
+	require.NotErrorIs(t, err, store.ErrNotFound, "the error must signal the refusal, not be confused with a lookup miss")
+
+	_, err = repo.Get(ctx, tenantA.Scope)
+	require.ErrorIs(t, err, store.ErrNotFound, "the refused first insert must not have written a row")
+}
+
 func TestSMTPRepositoryRejectsInvalidScope(t *testing.T) {
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()

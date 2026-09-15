@@ -77,6 +77,22 @@ func (r *SMTPRepository) Get(ctx context.Context, s store.Scope) (model.SMTPSett
 // IntegrationRepository.UpsertCredential's secret/extra: it cannot be
 // accidentally retained, logged or returned.
 //
+// As with IntegrationRepository.UpsertCredential, a nil or empty password on
+// an UPDATE of an existing row (guarded here by the same `len(password) > 0`
+// check) leaves the stored password_enc unchanged -- every other field still
+// updates. Unlike that method, smtp_settings.password_enc is NOT NULL, so a
+// nil/empty password on the FIRST Upsert for a company (no existing row to
+// fall back to) is refused: SMTPUpsert's query falls back to the existing
+// row's password_enc for both the INSERT target list and the ON CONFLICT
+// UPDATE, entirely inside the one statement (see queries/smtp.sql), so a
+// first insert with no fallback to fall back to leaves the candidate row's
+// password_enc NULL and Postgres itself rejects it with a not-null-violation
+// (SQLSTATE 23502) before any conflict is considered. That violation is not
+// mapped to a store sentinel -- like 23503/23514 in pgerr, it is the caller
+// passing data that violates a constraint it should have enforced first, not
+// a conflict worth retrying -- so it comes back as a plain, scrubbed,
+// non-sentinel error from pgerr.Translate. No row is written.
+//
 // settings.CompanyID must equal s.CompanyID: another company's id is refused
 // with ErrNotFound before any database call.
 func (r *SMTPRepository) Upsert(ctx context.Context, s store.Scope, settings model.SMTPSettings, password []byte) (model.SMTPSettings, error) {
@@ -86,13 +102,17 @@ func (r *SMTPRepository) Upsert(ctx context.Context, s store.Scope, settings mod
 	if settings.CompanyID != s.CompanyID {
 		return model.SMTPSettings{}, store.ErrNotFound
 	}
-	token, err := r.cipher.Seal(password, smtpPasswordAAD(s.CompanyID))
-	if err != nil {
-		return model.SMTPSettings{}, fmt.Errorf("seal smtp password: %w", err)
+	var passwordEnc []byte
+	if len(password) > 0 {
+		token, err := r.cipher.Seal(password, smtpPasswordAAD(s.CompanyID))
+		if err != nil {
+			return model.SMTPSettings{}, fmt.Errorf("seal smtp password: %w", err)
+		}
+		passwordEnc = []byte(token)
 	}
 	row, err := r.q.SMTPUpsert(ctx, sqlcgen.SMTPUpsertParams{
 		CompanyID: s.CompanyID, Host: settings.Host, Port: settings.Port, Secure: settings.Secure,
-		Username: settings.Username, PasswordEnc: []byte(token), FromAddress: settings.FromAddress,
+		Username: settings.Username, PasswordEnc: passwordEnc, FromAddress: settings.FromAddress,
 	})
 	if err != nil {
 		return model.SMTPSettings{}, pgerr.Translate(r.pool, "upsert smtp settings", err)

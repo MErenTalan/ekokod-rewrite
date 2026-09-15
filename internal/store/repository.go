@@ -1237,6 +1237,12 @@ type SMTPRepository interface {
 	// Upsert seals the supplied plaintext password. As with
 	// IntegrationRepository.UpsertCredential, the plaintext is a parameter
 	// rather than a field of the struct.
+	//
+	// A nil or empty password on an UPDATE of an existing row leaves the
+	// stored password unchanged -- every other field still updates. A nil or
+	// empty password on the FIRST Upsert for a company (no existing row) is
+	// refused with an error and writes no row: smtp_settings.password_enc is
+	// NOT NULL, so an SMTP configuration without a password is not storable.
 	Upsert(ctx context.Context, s Scope, settings model.SMTPSettings, password []byte) (model.SMTPSettings, error)
 
 	// OpenPassword decrypts the stored password. The only method that returns
