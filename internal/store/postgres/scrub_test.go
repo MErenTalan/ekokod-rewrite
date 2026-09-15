@@ -25,6 +25,7 @@ import (
 // unreachable, so NewPool is guaranteed to fail, and every code path that
 // can return an error (parse, dial, ping) routes through scrubErr.
 func TestErrorsNeverContainTheDSNPassword(t *testing.T) {
+	t.Parallel()
 	const password = "my@pass"
 	dsn := "postgres://ekokod_user:my@pass@127.0.0.1:59999/ekokod?sslmode=disable"
 

@@ -25,6 +25,7 @@ func alarmFixtureRow(companyID uuid.UUID) model.Alarm {
 }
 
 func TestAlarmGetIsScopedToCompanyOnly(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 400)
@@ -56,6 +57,7 @@ func TestAlarmGetIsScopedToCompanyOnly(t *testing.T) {
 // check from ReplaceAnalyzers let a narrow Scope attach an analyzer from
 // Buildings[1] (outside it) without error, instead of ErrNotFound.
 func TestAlarmAnalyzersJoinThroughAlarmIsolation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 410)
@@ -86,6 +88,7 @@ func TestAlarmAnalyzersJoinThroughAlarmIsolation(t *testing.T) {
 // TestAlarmChannelsJoinThroughAlarmIsolation covers the two mandatory
 // methods on alarm_channels.
 func TestAlarmChannelsJoinThroughAlarmIsolation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 420)
@@ -117,6 +120,7 @@ func TestAlarmChannelsJoinThroughAlarmIsolation(t *testing.T) {
 // `return nil` in alarms.go let CreateEvent, ListEvents and MarkNotified all
 // succeed against tenant B's alarm from tenant A's Scope.
 func TestAlarmEventsJoinThroughAlarmIsolation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 430)
@@ -166,6 +170,7 @@ func TestAlarmEventsJoinThroughAlarmIsolation(t *testing.T) {
 // tenant-B-bill) pair, when it should be refused because the bill is not
 // tenant A's.
 func TestAlarmMarkBillFiredJoinsThroughAlarmsAndBills(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 440)
@@ -202,6 +207,7 @@ func TestAlarmMarkBillFiredJoinsThroughAlarmsAndBills(t *testing.T) {
 // never learn — through Analyzers, ListEvents, or a AnalyzerID List filter —
 // that the SAME alarm also watches an analyzer under Buildings[1].
 func TestAlarmAnalyzersAndEventsHideBuildingOutsideNarrowScope(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 460)
@@ -272,6 +278,7 @@ func TestAlarmAnalyzersAndEventsHideBuildingOutsideNarrowScope(t *testing.T) {
 // ListEvents' exact visibility rule and excludes a soft-deleted alarm's
 // children, so nothing reachable by one method is unreachable by the other.
 func TestAlarmMarkNotifiedRespectsNarrowScopeAndSoftDelete(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 461)
@@ -328,6 +335,7 @@ func TestAlarmMarkNotifiedRespectsNarrowScopeAndSoftDelete(t *testing.T) {
 // Finding 2's probe on the write side: ReplaceAnalyzers must replace ONLY
 // the attachments visible to the Scope, not silently detach one outside it.
 func TestAlarmReplaceAnalyzersLeavesInvisibleAttachmentsUntouched(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 461)
@@ -356,6 +364,7 @@ func TestAlarmReplaceAnalyzersLeavesInvisibleAttachmentsUntouched(t *testing.T) 
 
 // TestAlarmUpdateRejectsForeignCompanyID is Important Finding 3's probe.
 func TestAlarmUpdateRejectsForeignCompanyID(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 462)
@@ -374,6 +383,7 @@ func TestAlarmUpdateRejectsForeignCompanyID(t *testing.T) {
 // TestAlarmCrossTenantUpdateAndSoftDelete is Important Finding 7's missing
 // test: cross-tenant Update and SoftDelete for alarms.
 func TestAlarmCrossTenantUpdateAndSoftDelete(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 464)
@@ -400,6 +410,7 @@ func TestAlarmCrossTenantUpdateAndSoftDelete(t *testing.T) {
 // missing test: MarkBillFired with an invisible ALARM (as opposed to the
 // existing invisible-BILL case).
 func TestAlarmMarkBillFiredRejectsInvisibleAlarm(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 466)
@@ -420,6 +431,7 @@ func TestAlarmMarkBillFiredRejectsInvisibleAlarm(t *testing.T) {
 // TestAlarmPageLimitsClampNegativeOffset is the folded-minor probe: OFFSET
 // must not be negative.
 func TestAlarmPageLimitsClampNegativeOffset(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 468)
@@ -432,6 +444,7 @@ func TestAlarmPageLimitsClampNegativeOffset(t *testing.T) {
 // TestAlarmMarkIsolarForwardedJoinsThroughPlant covers the mandatory method
 // on isolar_forwarded_alarms.
 func TestAlarmMarkIsolarForwardedJoinsThroughPlant(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 450)

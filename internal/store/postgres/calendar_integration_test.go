@@ -30,6 +30,7 @@ func calendarVacationFixture(companyID uuid.UUID, start, end time.Time) model.Co
 // --- calendar_events ---------------------------------------------------------
 
 func TestCalendarEventCreateGetListUpdateDelete(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 8001)
@@ -87,6 +88,7 @@ func TestCalendarEventCreateGetListUpdateDelete(t *testing.T) {
 }
 
 func TestCalendarEventCreateRefusesMismatchedCompanyID(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 8010)
@@ -107,6 +109,7 @@ func TestCalendarEventCreateRefusesMismatchedCompanyID(t *testing.T) {
 // company's id returns ErrNotFound before any database call, and the
 // original row is untouched.
 func TestCalendarEventUpdateRefusesMismatchedCompanyID(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 8020)
@@ -134,6 +137,7 @@ func TestCalendarEventUpdateRefusesMismatchedCompanyID(t *testing.T) {
 // makes everything look permitted) is never what authorises a stored foreign
 // key (R1).
 func TestCalendarEventCreateAndUpdateRefuseAnotherTenantsCreatedBy(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 8030)
@@ -171,6 +175,7 @@ func TestCalendarEventCreateAndUpdateRefuseAnotherTenantsCreatedBy(t *testing.T)
 // TestCalendarListEventsFiltersByRange proves ListEvents narrows by
 // starts_at and rejects an invalid Range before any database call.
 func TestCalendarListEventsFiltersByRange(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 8040)
@@ -200,6 +205,7 @@ func TestCalendarListEventsFiltersByRange(t *testing.T) {
 // --- company_weekend_days -----------------------------------------------------
 
 func TestCalendarReplaceWeekendDaysAndIsolation(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 8050)
@@ -236,6 +242,7 @@ func TestCalendarReplaceWeekendDaysAndIsolation(t *testing.T) {
 // --- company_vacations ---------------------------------------------------------
 
 func TestCalendarVacationCreateListDeleteAndIsolation(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 8060)
@@ -275,6 +282,7 @@ func TestCalendarVacationCreateListDeleteAndIsolation(t *testing.T) {
 // by overlap with the given range and rejects an invalid one before any
 // database call.
 func TestCalendarVacationsRangeOverlapAndInvalidRange(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 8070)
@@ -316,6 +324,7 @@ func TestCalendarVacationsRangeOverlapAndInvalidRange(t *testing.T) {
 // Pre-fix this test fails: got contains feb28's id (wrongly included) and
 // is missing mar1's id (wrongly excluded) — exactly the report's proof.
 func TestCalendarVacationsIstanbulDayBoundary(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 8072)
@@ -350,6 +359,7 @@ func TestCalendarVacationsIstanbulDayBoundary(t *testing.T) {
 }
 
 func TestCalendarRepositoryRejectsInvalidScope(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	repo := postgres.NewCalendarRepository(pool)

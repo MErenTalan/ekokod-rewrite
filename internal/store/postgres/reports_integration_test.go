@@ -27,6 +27,7 @@ func reportFixtureRow(companyID, buildingID uuid.UUID, period string) model.Repo
 }
 
 func TestReportGetAndListAreScopedToVisibleBuildings(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 300)
@@ -58,6 +59,7 @@ func TestReportGetAndListAreScopedToVisibleBuildings(t *testing.T) {
 // TestReportUpsertReplacesRatherThanAccumulates pins the (building_id, type,
 // period) key: regenerating a period replaces its report.
 func TestReportUpsertReplacesRatherThanAccumulates(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 310)
@@ -83,6 +85,7 @@ func TestReportUpsertReplacesRatherThanAccumulates(t *testing.T) {
 // check: reports.building_id is NOT NULL, so a narrow Scope may only upsert
 // into a building it can see.
 func TestReportUpsertRejectsBuildingOutsideScope(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 320)
@@ -98,6 +101,7 @@ func TestReportUpsertRejectsBuildingOutsideScope(t *testing.T) {
 // know which company owns a building — so tenant A's AdminScope must not be
 // able to store tenant B's building id as a report's building_id.
 func TestReportUpsertRejectsCrossTenantBuildingEvenWithAdminScope(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 340)
@@ -117,6 +121,7 @@ func TestReportUpsertRejectsCrossTenantBuildingEvenWithAdminScope(t *testing.T) 
 // TestReportPageLimitsClampNegativeOffset is the folded-minor probe: OFFSET
 // must not be negative.
 func TestReportPageLimitsClampNegativeOffset(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 342)
@@ -127,6 +132,7 @@ func TestReportPageLimitsClampNegativeOffset(t *testing.T) {
 }
 
 func TestReportUpdateStatusIsScoped(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 330)

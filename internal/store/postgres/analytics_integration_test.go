@@ -32,6 +32,7 @@ func analyticsRefresh(t *testing.T, ctx context.Context, pool *pgxpool.Pool, vie
 }
 
 func TestAnalyticsConsumptionHourlyAndDailyAreRealTime(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -72,6 +73,7 @@ func TestAnalyticsConsumptionHourlyAndDailyAreRealTime(t *testing.T) {
 }
 
 func TestAnalyticsConsumptionMonthlyAndYearlyRequireRefresh(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -134,6 +136,7 @@ func TestAnalyticsConsumptionMonthlyAndYearlyRequireRefresh(t *testing.T) {
 }
 
 func TestAnalyticsProductionDailyIsRealTimeAndMonthlyRequiresRefresh(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -168,6 +171,7 @@ func TestAnalyticsProductionDailyIsRealTimeAndMonthlyRequiresRefresh(t *testing.
 // --- scope / range validation ----------------------------------------------
 
 func TestAnalyticsRepositoryRejectsInvalidScope(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	repo := postgres.NewAnalyticsRepository(pool)
@@ -189,6 +193,7 @@ func TestAnalyticsRepositoryRejectsInvalidScope(t *testing.T) {
 }
 
 func TestAnalyticsRepositoryRejectsInvalidRange(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -235,6 +240,7 @@ func TestAnalyticsRepositoryRejectsInvalidRange(t *testing.T) {
 //     row in the window (Important finding 4's fail-closed ruling; this is
 //     the case that would have differed under the old widen-on-empty SQL).
 func TestAnalyticsConsumptionViewsIDsOutsideScopeContributeNoRowsAndEmptyIDsReturnNothing(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -320,6 +326,7 @@ func TestAnalyticsConsumptionViewsIDsOutsideScopeContributeNoRowsAndEmptyIDsRetu
 // is the production-side twin of the consumption test above (Important
 // finding 3 + 4), covering ProductionDaily AND ProductionMonthly.
 func TestAnalyticsProductionViewsIDsOutsideScopeContributeNoRowsAndEmptyIDsReturnNothing(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -381,6 +388,7 @@ func TestAnalyticsProductionViewsIDsOutsideScopeContributeNoRowsAndEmptyIDsRetur
 // c.bucket < 2025-12-31T21:00:00Z (this window's own From) would exclude it
 // — this test would see zero rows instead of one.
 func TestAnalyticsConsumptionDailyBucketsInIstanbulNotUTC(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -416,6 +424,7 @@ func TestAnalyticsConsumptionDailyBucketsInIstanbulNotUTC(t *testing.T) {
 // AdminScope rather than the narrow Scope, for the same shadowing reason as
 // TestAnalyticsConsumptionViewsIDsOutsideScopeContributeNoRowsAndEmptyIDsReturnNothing.
 func TestAnalyticsConsumptionHourlyIDsOutsideScopeContributeNoRows(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -459,6 +468,7 @@ func TestAnalyticsConsumptionHourlyIDsOutsideScopeContributeNoRows(t *testing.T)
 // already applies no building predicate here to shadow behind — only the
 // company_id check does the work either way.
 func TestAnalyticsProductionDailyIDsOutsideScopeContributeNoRows(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)

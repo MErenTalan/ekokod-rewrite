@@ -19,6 +19,7 @@ import (
 var cursorsEpoch = time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
 
 func TestCursorRecordSuccessThenGet(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -37,6 +38,7 @@ func TestCursorRecordSuccessThenGet(t *testing.T) {
 }
 
 func TestCursorRecordFailureIncrementsConsecutiveFailures(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -61,6 +63,7 @@ func TestCursorRecordFailureIncrementsConsecutiveFailures(t *testing.T) {
 }
 
 func TestCursorGetWithNoCursorYetReturnsNotFound(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -78,6 +81,7 @@ func TestCursorGetWithNoCursorYetReturnsNotFound(t *testing.T) {
 // outside the Scope still contribute no rows (covered separately by
 // TestCursorListIDsOutsideScopeContributeNoRows).
 func TestCursorListEmptyIDsReturnsNothingAndNonEmptyNarrows(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -110,6 +114,7 @@ func TestCursorListEmptyIDsReturnsNothingAndNonEmptyNarrows(t *testing.T) {
 // excluded.last_ts)`): an out-of-order success call, whose lastTs is BEHIND
 // what is already stored, must not regress the high-water mark.
 func TestCursorRecordSuccessLastTsNeverMovesBackwards(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -135,6 +140,7 @@ func TestCursorRecordSuccessLastTsNeverMovesBackwards(t *testing.T) {
 // --- scope validation -------------------------------------------------------
 
 func TestCursorRepositoryRejectsInvalidScope(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	repo := postgres.NewCursorRepository(pool)
@@ -157,6 +163,7 @@ func TestCursorRepositoryRejectsInvalidScope(t *testing.T) {
 // --- isolation: ingestion_cursors has no company_id, joins through analyzers
 
 func TestCursorGetIsIsolatedToVisibleAnalyzers(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -187,6 +194,7 @@ func TestCursorGetIsIsolatedToVisibleAnalyzers(t *testing.T) {
 // predicate in CursorList would hide behind it and this test would still
 // pass.
 func TestCursorListIDsOutsideScopeContributeNoRows(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -216,6 +224,7 @@ func TestCursorListIDsOutsideScopeContributeNoRows(t *testing.T) {
 // between tenant A and tenant B's analyzer — and "nothing changed" is
 // proved directly, by reading the row back through tenant B's own Scope.
 func TestCursorRecordSuccessAndFailureRefuseInvisibleAnalyzer(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)

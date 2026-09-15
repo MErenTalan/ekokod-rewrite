@@ -28,6 +28,7 @@ func anomaliesFixture(analyzerID uuid.UUID) model.ConsumptionAnomaly {
 }
 
 func TestAnomalyCreateGetAndResolve(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -56,6 +57,7 @@ func TestAnomalyCreateGetAndResolve(t *testing.T) {
 }
 
 func TestAnomalyListNarrowsByAnalyzerIDsAndUnresolved(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -87,6 +89,7 @@ func TestAnomalyListNarrowsByAnalyzerIDsAndUnresolved(t *testing.T) {
 // --- scope / range validation ----------------------------------------------
 
 func TestAnomalyRepositoryRejectsInvalidScope(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	repo := postgres.NewAnomalyRepository(pool)
@@ -106,6 +109,7 @@ func TestAnomalyRepositoryRejectsInvalidScope(t *testing.T) {
 }
 
 func TestAnomalyListRejectsInvalidRange(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -132,6 +136,7 @@ func TestAnomalyListRejectsInvalidRange(t *testing.T) {
 // leaving only the company_id check standing between tenant A and tenant
 // B's analyzer.
 func TestAnomalyCreateRefusesInvisibleAnalyzer(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -165,6 +170,7 @@ func TestAnomalyCreateRefusesInvisibleAnalyzer(t *testing.T) {
 // same reason as TestAnomalyCreateRefusesInvisibleAnalyzer — a narrow Scope
 // would let the building predicate shadow a tautologised company_id check.
 func TestAnomalyGetIsIsolatedToVisibleAnalyzers(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -202,6 +208,7 @@ func TestAnomalyGetIsIsolatedToVisibleAnalyzers(t *testing.T) {
 // assertion under tenant A's AdminScope, for the same reason as the two
 // tests above.
 func TestAnomalyListIDsOutsideScopeContributeNoRows(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -223,6 +230,7 @@ func TestAnomalyListIDsOutsideScopeContributeNoRows(t *testing.T) {
 }
 
 func TestAnomalyResolveRequiresResolverFromTheSameCompany(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)

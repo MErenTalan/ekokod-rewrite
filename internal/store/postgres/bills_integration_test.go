@@ -32,6 +32,7 @@ func billFixtureRow(companyID uuid.UUID, buildingID *uuid.UUID, analyzerID *uuid
 }
 
 func TestBillGetAndListRespectNullBuildingIDRuling(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 200)
@@ -71,6 +72,7 @@ func TestBillGetAndListRespectNullBuildingIDRuling(t *testing.T) {
 // narrow Scope attach tenant A's OWN Buildings[1] analyzer (outside the
 // Scope) as a member without error — see the task report.
 func TestBillCreateRejectsInvisibleBuildingAnalyzerOrMember(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 210)
@@ -102,6 +104,7 @@ func TestBillCreateRejectsInvisibleBuildingAnalyzerOrMember(t *testing.T) {
 // recomputation marks the previous bill superseded rather than deleting it,
 // and both remain readable afterwards.
 func TestSupersedeReplacesRatherThanDeletes(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 220)
@@ -157,6 +160,7 @@ func TestSupersedeReplacesRatherThanDeletes(t *testing.T) {
 // succeed instead of returning ErrNotFound, for every one of the four
 // methods below.
 func TestBillChildTablesJoinThroughBillIsolation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 230)
@@ -194,6 +198,7 @@ func TestBillChildTablesJoinThroughBillIsolation(t *testing.T) {
 // TestBillUpdateStatusCannotSetSuperseded pins the doc comment: superseded
 // is a transition owned by Supersede alone.
 func TestBillUpdateStatusCannotSetSuperseded(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 240)
@@ -218,6 +223,7 @@ func TestBillUpdateStatusCannotSetSuperseded(t *testing.T) {
 // know which company owns a building — so tenant A's AdminScope must not be
 // able to store tenant B's building id as a bill's building_id.
 func TestBillCreateRejectsCrossTenantBuildingEvenWithAdminScope(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 250)
@@ -240,6 +246,7 @@ func TestBillCreateRejectsCrossTenantBuildingEvenWithAdminScope(t *testing.T) {
 // bills.tariff_id is a stored foreign key too and must name a tariff of the
 // same company, never taken as given.
 func TestBillCreateRejectsCrossTenantTariffID(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 252)
@@ -273,6 +280,7 @@ func TestBillCreateRejectsCrossTenantTariffID(t *testing.T) {
 // tautologising either new clause with the pre-check still disabled lets the
 // corresponding write through.
 func TestBillCreateAndMemberInsertRejectCrossTenantAnalyzerID(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenantA := testfixtures.NewTenant(t, ctx, pool, 258)
@@ -308,6 +316,7 @@ func TestBillCreateAndMemberInsertRejectCrossTenantAnalyzerID(t *testing.T) {
 // subject, period) — Supersede is a recomputation of ONE bill's history, not
 // a way to attach an unrelated bill's row where another one used to be.
 func TestSupersedeRejectsReplacementNamingADifferentScopeSubjectOrPeriod(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 254)
@@ -348,6 +357,7 @@ func TestSupersedeRejectsReplacementNamingADifferentScopeSubjectOrPeriod(t *test
 // Finding 7's missing test: the Supersede child-visibility rule — the
 // replacement's building and members follow Create's rule exactly.
 func TestSupersedeReplacementBuildingAndMembersMustBeVisible(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 255)
@@ -373,6 +383,7 @@ func TestSupersedeReplacementBuildingAndMembersMustBeVisible(t *testing.T) {
 // TestBillPageLimitsClampNegativeOffset is the folded-minor probe: OFFSET
 // must not be negative.
 func TestBillPageLimitsClampNegativeOffset(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 256)
@@ -384,6 +395,7 @@ func TestBillPageLimitsClampNegativeOffset(t *testing.T) {
 
 // TestBillOfSoftDeletedBuildingIsNotReadable is the folded-minor probe.
 func TestBillOfSoftDeletedBuildingIsNotReadable(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 257)
@@ -404,6 +416,59 @@ func TestBillOfSoftDeletedBuildingIsNotReadable(t *testing.T) {
 	for _, r := range list {
 		require.NotEqual(t, b.ID, r.ID, "a bill of a soft-deleted building must not stay readable")
 	}
+}
+
+// TestBillCreateRefusesOwnAnalyzerIDOutsideNarrowScope is the parked F1
+// finding (F2 Task 0P2 ADDITIONAL scope): a narrow Scope must not be able to
+// create an analyzer-scope bill naming ITS OWN AnalyzerID when that
+// analyzer, though in the same company, sits in a building outside the
+// Scope's grant.
+//
+// Binding ruling 4 (HANDOFF_NEXT_SESSION.md, "Binding rulings from session
+// 2"): narrow-scope proofs use Scope against a same-company building
+// outside the grant, not the other tenant's AdminScope on both sides — with
+// a narrow Scope the building predicate would hide a broken company_id
+// predicate. TestBillCreateAndMemberInsertRejectCrossTenantAnalyzerID above
+// already covers the cross-tenant/AdminScope half; this covers the
+// narrow-Scope half for the bill's own analyzer_id specifically (as opposed
+// to a member analyzer_id, which TestBillCreateRejectsInvisibleBuildingAnalyzerOrMember
+// already covers).
+//
+// Failing-first evidence (reverted before commit, task-0p2-report.md):
+// tautologising BillCreate's analyzer exists() building branch in
+// queries/bills.sql (appending "or true" to the
+// all_buildings/building_ids check) AND temporarily short-circuiting
+// BillRepository.requireAnalyzersVisible to return nil unconditionally,
+// together made this test's first assertion fail — repo.Create returned a
+// bill with no error instead of store.ErrNotFound. Both changes were
+// reverted and `sqlc generate` rerun before committing.
+func TestBillCreateRefusesOwnAnalyzerIDOutsideNarrowScope(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 260)
+	repo := postgres.NewBillRepository(pool)
+
+	// buildingID is tenant.Scope's OWN visible building, so billBuildingWritable
+	// passes and the write is refused by the analyzer guard specifically —
+	// not incidentally by the building one (a nil/foreign building_id would
+	// refuse the write on its own and prove nothing about the analyzer
+	// guard). outOfGrantAnalyzer is the same company, but under Buildings[1]
+	// — outside tenant.Scope's grant.
+	ownBuilding := tenant.Buildings[0].ID
+	outOfGrantAnalyzer := tenant.Analyzers[2].ID
+	row := billFixtureRow(tenant.Company.ID, &ownBuilding, &outOfGrantAnalyzer, model.BillScopeAnalyzer, "2026-01")
+
+	_, err := repo.Create(ctx, tenant.Scope, row, nil, nil)
+	require.ErrorIs(t, err, store.ErrNotFound,
+		"own AnalyzerID in a same-company building outside the narrow Scope's grant")
+
+	// Nothing must have been written — checked under AdminScope, per binding
+	// ruling 4, so a broken company_id predicate could not hide behind the
+	// building filter.
+	list, err := repo.List(ctx, tenant.AdminScope, store.BillFilter{})
+	require.NoError(t, err)
+	require.Empty(t, list, "the refused Create must not have written anything")
 }
 
 // billDec parses a fixture literal into a decimal.Decimal, panicking on a
