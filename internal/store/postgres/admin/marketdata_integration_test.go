@@ -19,6 +19,7 @@ import (
 var marketDataEpoch = time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
 
 func TestUpsertHourlyPricesIsIdempotent(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	repo := admin.NewMarketDataRepository(pool)
@@ -49,6 +50,7 @@ func TestUpsertHourlyPricesIsIdempotent(t *testing.T) {
 }
 
 func TestUpsertYekdemIsIdempotent(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	repo := admin.NewMarketDataRepository(pool)
@@ -78,6 +80,7 @@ func TestUpsertYekdemIsIdempotent(t *testing.T) {
 // --- input validation: refused loudly, before any database round trip -----
 
 func TestUpsertHourlyPricesRefusesZeroTs(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	repo := admin.NewMarketDataRepository(pool)
@@ -93,6 +96,7 @@ func TestUpsertHourlyPricesRefusesZeroTs(t *testing.T) {
 }
 
 func TestUpsertHourlyPricesRefusesDuplicateTsWithinOneCall(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	repo := admin.NewMarketDataRepository(pool)
@@ -110,6 +114,7 @@ func TestUpsertHourlyPricesRefusesDuplicateTsWithinOneCall(t *testing.T) {
 }
 
 func TestUpsertYekdemRefusesMonthOutsideValidRange(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	repo := admin.NewMarketDataRepository(pool)
@@ -125,6 +130,7 @@ func TestUpsertYekdemRefusesMonthOutsideValidRange(t *testing.T) {
 }
 
 func TestUpsertYekdemRefusesDuplicateYearMonthWithinOneCall(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	repo := admin.NewMarketDataRepository(pool)
@@ -142,6 +148,7 @@ func TestUpsertYekdemRefusesDuplicateYearMonthWithinOneCall(t *testing.T) {
 }
 
 func TestUpsertHourlyPricesAndYekdemHandleEmptyInput(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	repo := admin.NewMarketDataRepository(pool)

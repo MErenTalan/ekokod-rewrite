@@ -18,6 +18,7 @@ import (
 // SAME container must not see each other's rows, exactly as two calls to
 // NewMigratedPool (each its own container) never could.
 func TestNewIsolatedDBGivesEachCallItsOwnDatabase(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	first := testfixtures.NewIsolatedDB(t)
@@ -43,6 +44,7 @@ func TestNewIsolatedDBGivesEachCallItsOwnDatabase(t *testing.T) {
 // each is a genuinely fresh, independent, fully migrated database rather
 // than the same one reused.
 func TestNewIsolatedDBSupportsTheSameSeedTwice(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	a := testfixtures.NewTenant(t, ctx, testfixtures.NewIsolatedDB(t), 1)
@@ -84,6 +86,7 @@ func TestNewIsolatedDBSupportsTheSameSeedTwice(t *testing.T) {
 // with the refresh removed, materialized_only means the row for base+4h
 // does not exist at all, and the query below returns sql.ErrNoRows.
 func TestIsolatedDBCloneSupportsTimescaleOperations(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -153,7 +156,7 @@ func TestIsolatedDBCloneSupportsTimescaleOperations(t *testing.T) {
 // under -race that catches a shared name or a shared connection actually
 // racing, not merely a design that was SUPPOSED to avoid one.
 func TestNewIsolatedDBIsSafeUnderConcurrentCalls(t *testing.T) {
-	for i := range 6 {
+	for i := range 40 {
 		t.Run(fmt.Sprintf("parallel-%d", i), func(t *testing.T) {
 			t.Parallel()
 			ctx := context.Background()

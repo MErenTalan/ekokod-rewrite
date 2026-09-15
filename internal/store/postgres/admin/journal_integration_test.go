@@ -18,6 +18,7 @@ import (
 )
 
 func TestAdminStartAndFinishPlatformRun(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	repo := admin.NewJournalRepository(pool)
@@ -42,6 +43,7 @@ func TestAdminStartAndFinishPlatformRun(t *testing.T) {
 // interface promises: a tenant's job run id returns ErrNotFound from the
 // admin surface, and nothing is written.
 func TestAdminFinishPlatformRunNeverTouchesATenantRun(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	tenant := testfixtures.NewTenant(t, ctx, pool, 9010)
@@ -61,6 +63,7 @@ func TestAdminFinishPlatformRunNeverTouchesATenantRun(t *testing.T) {
 }
 
 func TestAdminAppendPlatformMessage(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	repo := admin.NewJournalRepository(pool)
@@ -83,6 +86,7 @@ func TestAdminAppendPlatformMessage(t *testing.T) {
 // test (fix round 1): a platform job run is INSERTED in state 'running' per
 // the contract, regardless of what the caller puts in run.Status.
 func TestAdminStartPlatformRunIgnoresCallerSuppliedStatus(t *testing.T) {
+	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
 	ctx := context.Background()
 	repo := admin.NewJournalRepository(pool)
