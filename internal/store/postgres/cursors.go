@@ -49,9 +49,12 @@ func (r *CursorRepository) Get(ctx context.Context, s store.Scope, analyzerID uu
 	return cursorFromRow(row), nil
 }
 
-// List implements store.CursorRepository.List. An empty analyzerIDs means
-// "every analyzer visible to the Scope" — it narrows the scope's own join
-// predicate, it never widens past it (the BuildingFilter.IDs convention).
+// List implements store.CursorRepository.List. analyzerIDs is a REQUIRED
+// POSITIONAL parameter: an empty or nil slice means NO ROWS, fail-closed,
+// identical to Scope.BuildingIDs — there is no "every analyzer visible to
+// the Scope" form (controller ruling, task-10 fix round 1). CursorList's own
+// `= any(...)` gets this for free: a nil slice encodes to NULL::uuid[], and
+// Postgres reads `x = any(NULL)` as NULL, which is false in a WHERE clause.
 func (r *CursorRepository) List(ctx context.Context, s store.Scope, analyzerIDs []uuid.UUID) ([]model.IngestionCursor, error) {
 	if !s.Valid() {
 		return nil, store.ErrInvalidScope
@@ -75,6 +78,8 @@ func (r *CursorRepository) List(ctx context.Context, s store.Scope, analyzerIDs 
 }
 
 // RecordSuccess implements store.CursorRepository.RecordSuccess.
+// CursorRecordSuccess's own SQL stores `greatest(current last_ts, lastTs)`,
+// so an out-of-order call can never move the high-water mark backwards.
 func (r *CursorRepository) RecordSuccess(ctx context.Context, s store.Scope, analyzerID uuid.UUID, kind model.ReadingKind, lastTs, at time.Time) error {
 	if !s.Valid() {
 		return store.ErrInvalidScope
@@ -84,8 +89,8 @@ func (r *CursorRepository) RecordSuccess(ctx context.Context, s store.Scope, ana
 	affected, err := r.q.CursorRecordSuccess(ctx, sqlcgen.CursorRecordSuccessParams{
 		AnalyzerID:   analyzerID,
 		Kind:         sqlcgen.ReadingKind(kind),
-		LastTs:       toTimestamptz(lastTs),
-		At:           toTimestamptz(at),
+		LastTs:       timeseriesToTimestamptz(lastTs),
+		At:           timeseriesToTimestamptz(at),
 		CompanyID:    s.CompanyID,
 		AllBuildings: allBuildings,
 		BuildingIds:  buildingIDs,
@@ -110,7 +115,7 @@ func (r *CursorRepository) RecordFailure(ctx context.Context, s store.Scope, ana
 		AnalyzerID:   analyzerID,
 		Kind:         sqlcgen.ReadingKind(kind),
 		Message:      message,
-		At:           toTimestamptz(at),
+		At:           timeseriesToTimestamptz(at),
 		CompanyID:    s.CompanyID,
 		AllBuildings: allBuildings,
 		BuildingIds:  buildingIDs,

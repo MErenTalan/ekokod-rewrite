@@ -2,6 +2,8 @@ package postgres
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -58,17 +60,22 @@ const createPlantProductionStaging = `create temporary table plant_production_st
 	source          text not null default 'isolar'
 ) on commit drop`
 
+// upsertPlantProductionFromStaging is a PLAIN select, not `distinct on`: like
+// ReadingRepository's upsert, BulkInsert refuses the whole batch with
+// store.ErrConflict — before the staging table exists — the moment two rows
+// in the caller's slice share a (plant_id, ts, device_id) key (see
+// productionDuplicateKey), so the staging table itself never holds a
+// repeated key for `on conflict` to arbitrate between.
 const upsertPlantProductionFromStaging = `insert into plant_production (
 	plant_id, ts, device_id,
 	production_kwh, active_power_kw, efficiency_pct,
 	irradiance_wm2, module_temp_c, ambient_temp_c, source
 )
-select distinct on (plant_id, ts, device_id)
+select
 	plant_id, ts, device_id,
 	production_kwh, active_power_kw, efficiency_pct,
 	irradiance_wm2, module_temp_c, ambient_temp_c, source
 from plant_production_staging
-order by plant_id, ts, device_id
 on conflict (plant_id, ts, device_id) do update set
 	production_kwh  = excluded.production_kwh,
 	active_power_kw = excluded.active_power_kw,
@@ -93,6 +100,15 @@ func (r *ProductionRepository) BulkInsert(ctx context.Context, s store.Scope, ro
 	}
 	const op = "production bulk insert"
 
+	// A duplicate (plant_id, ts, device_id) inside the caller's own batch is
+	// refused loudly, before any database round trip — see
+	// ReadingRepository.BulkInsert's identical comment and the controller
+	// ruling it cites.
+	if dup, ok := productionDuplicateKey(rows); ok {
+		return 0, 0, fmt.Errorf("%w: duplicate production key plant_id=%s ts=%s device_id=%s",
+			store.ErrConflict, dup.PlantID, dup.Ts.Format(time.RFC3339Nano), dup.DeviceID)
+	}
+
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return 0, 0, pgerr.Translate(r.pool, op, err)
@@ -103,7 +119,7 @@ func (r *ProductionRepository) BulkInsert(ctx context.Context, s store.Scope, ro
 	for i, row := range rows {
 		plantIDs[i] = row.PlantID
 	}
-	distinctPlantIDs := distinctUUIDs(plantIDs)
+	distinctPlantIDs := readingDistinctUUIDs(plantIDs)
 
 	// `for share` locks every visible plant row for the rest of this
 	// transaction — see ReadingRepository.BulkInsert's identical comment.
@@ -160,7 +176,7 @@ func (r *ProductionRepository) BulkInsert(ctx context.Context, s store.Scope, ro
 	if err != nil {
 		return 0, 0, pgerr.Translate(r.pool, op, err)
 	}
-	inserted, updated, err = scanUpsertCounts(upsertRows)
+	inserted, updated, err = timeseriesScanUpsertCounts(upsertRows)
 	if err != nil {
 		return 0, 0, pgerr.Translate(r.pool, op, err)
 	}
@@ -186,8 +202,8 @@ func (r *ProductionRepository) Range(ctx context.Context, s store.Scope, plantID
 
 	rows, err := r.q.ProductionRange(ctx, sqlcgen.ProductionRangeParams{
 		PlantID:   plantID,
-		FromTs:    toTimestamptz(tr.From),
-		ToTs:      toTimestamptz(tr.To),
+		FromTs:    timeseriesToTimestamptz(tr.From),
+		ToTs:      timeseriesToTimestamptz(tr.To),
 		CompanyID: s.CompanyID,
 	})
 	if err != nil {
@@ -222,13 +238,13 @@ func (r *ProductionRepository) Latest(ctx context.Context, s store.Scope, plantI
 
 	row, err := r.q.ProductionLatest(ctx, sqlcgen.ProductionLatestParams{
 		PlantID:   plantID,
-		FromTs:    toTimestamptz(tr.From),
-		ToTs:      toTimestamptz(tr.To),
+		FromTs:    timeseriesToTimestamptz(tr.From),
+		ToTs:      timeseriesToTimestamptz(tr.To),
 		CompanyID: s.CompanyID,
 	})
 	if err != nil {
 		translated := pgerr.Translate(r.pool, op, err)
-		if !isNotFound(translated) {
+		if !timeseriesIsNotFound(translated) {
 			return nil, translated
 		}
 		if err := r.requirePlantVisible(ctx, s, plantID, op); err != nil {
@@ -258,6 +274,27 @@ func (r *ProductionRepository) requirePlantVisible(ctx context.Context, s store.
 		return store.ErrNotFound
 	}
 	return nil
+}
+
+// productionDuplicateKey reports the first row in rows whose
+// (plant_id, ts, device_id) key repeats an earlier row's, and true — or a
+// zero PlantProduction and false when every key is unique. See
+// readingDuplicateKey's identical comment.
+func productionDuplicateKey(rows []model.PlantProduction) (model.PlantProduction, bool) {
+	type key struct {
+		plantID  uuid.UUID
+		ts       int64
+		deviceID uuid.UUID
+	}
+	seen := make(map[key]struct{}, len(rows))
+	for _, row := range rows {
+		k := key{row.PlantID, row.Ts.UnixNano(), row.DeviceID}
+		if _, ok := seen[k]; ok {
+			return row, true
+		}
+		seen[k] = struct{}{}
+	}
+	return model.PlantProduction{}, false
 }
 
 // distinctPlantDevicePairs returns the batch's distinct (plant_id, device_id)

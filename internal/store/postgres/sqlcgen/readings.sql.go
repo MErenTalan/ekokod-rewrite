@@ -253,6 +253,7 @@ where id = any($1::uuid[])
   and company_id = $2
   and ($3::boolean or building_id = any($4::uuid[]))
   and deleted_at is null
+order by id
 for share
 `
 

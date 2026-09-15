@@ -70,7 +70,14 @@ func TestCursorGetWithNoCursorYetReturnsNotFound(t *testing.T) {
 	require.ErrorIs(t, err, store.ErrNotFound)
 }
 
-func TestCursorListNarrowsByAnalyzerIDsAndDefaultsToEveryVisibleAnalyzer(t *testing.T) {
+// TestCursorListEmptyIDsReturnsNothingAndNonEmptyNarrows proves
+// CursorRepository.List's analyzerIDs is a REQUIRED POSITIONAL parameter
+// (controller ruling, task-10 fix round 1): nil or an empty slice means NO
+// ROWS, fail-closed, identical to Scope.BuildingIDs — never "every analyzer
+// visible to the Scope". A non-empty list still narrows further, and ids
+// outside the Scope still contribute no rows (covered separately by
+// TestCursorListIDsOutsideScopeContributeNoRows).
+func TestCursorListEmptyIDsReturnsNothingAndNonEmptyNarrows(t *testing.T) {
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
@@ -80,14 +87,49 @@ func TestCursorListNarrowsByAnalyzerIDsAndDefaultsToEveryVisibleAnalyzer(t *test
 		require.NoError(t, repo.RecordSuccess(ctx, tenant.Scope, a.ID, model.ReadingKindLoadProfile, cursorsEpoch, cursorsEpoch))
 	}
 
-	all, err := repo.List(ctx, tenant.Scope, nil)
+	nilIDs, err := repo.List(ctx, tenant.Scope, nil)
 	require.NoError(t, err)
-	require.Len(t, all, 2)
+	require.Empty(t, nilIDs, "nil analyzerIDs must return NO rows, not every visible one")
+
+	emptyIDs, err := repo.List(ctx, tenant.Scope, []uuid.UUID{})
+	require.NoError(t, err)
+	require.Empty(t, emptyIDs, "an empty (non-nil) analyzerIDs must also return NO rows")
 
 	narrowed, err := repo.List(ctx, tenant.Scope, []uuid.UUID{tenant.Analyzers[0].ID})
 	require.NoError(t, err)
 	require.Len(t, narrowed, 1)
 	require.Equal(t, tenant.Analyzers[0].ID, narrowed[0].AnalyzerID)
+
+	both, err := repo.List(ctx, tenant.Scope, []uuid.UUID{tenant.Analyzers[0].ID, tenant.Analyzers[1].ID})
+	require.NoError(t, err)
+	require.Len(t, both, 2)
+}
+
+// TestCursorRecordSuccessLastTsNeverMovesBackwards proves the folded-minor
+// fix to CursorRecordSuccess (`greatest(ingestion_cursors.last_ts,
+// excluded.last_ts)`): an out-of-order success call, whose lastTs is BEHIND
+// what is already stored, must not regress the high-water mark.
+func TestCursorRecordSuccessLastTsNeverMovesBackwards(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
+	repo := postgres.NewCursorRepository(pool)
+	analyzerID := tenant.Analyzers[0].ID
+
+	later := cursorsEpoch.Add(24 * time.Hour)
+	require.NoError(t, repo.RecordSuccess(ctx, tenant.Scope, analyzerID, model.ReadingKindLoadProfile, later, cursorsEpoch))
+
+	got, err := repo.Get(ctx, tenant.Scope, analyzerID, model.ReadingKindLoadProfile)
+	require.NoError(t, err)
+	require.True(t, got.LastTs.Equal(later))
+
+	// An out-of-order call reports an EARLIER lastTs (e.g. a delayed retry of
+	// an older ingestion window landing after a newer one already succeeded).
+	require.NoError(t, repo.RecordSuccess(ctx, tenant.Scope, analyzerID, model.ReadingKindLoadProfile, cursorsEpoch, cursorsEpoch.Add(time.Minute)))
+
+	got, err = repo.Get(ctx, tenant.Scope, analyzerID, model.ReadingKindLoadProfile)
+	require.NoError(t, err)
+	require.True(t, got.LastTs.Equal(later), "last_ts must stay at the later instant, never regress")
 }
 
 // --- scope validation -------------------------------------------------------

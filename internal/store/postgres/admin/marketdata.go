@@ -2,38 +2,17 @@ package admin
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/shopspring/decimal"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/internal/pgerr"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/sqlcgen"
 )
-
-// decimalToNumeric is a SECOND copy of the coefficient/exponent relabelling
-// internal/store/postgres/numeric.go documents as "the ONE audited pair" —
-// deliberately, not out of oversight. That pair is unexported, private to
-// package postgres, and package admin (this package) is a SEPARATE package
-// from postgres, one level below both alongside pgerr — it cannot call an
-// unexported function in another package. Unlike pgerr.Translate, which was
-// carved into its own importable package precisely so admin and postgres
-// could share it, numeric.go's functions were not, and this task must not
-// unilaterally relocate shared infrastructure two other parallel tasks
-// (9 and 11) are already calling by its current unqualified name inside
-// package postgres — that move belongs to a controller decision, flagged in
-// this task's report, not to a silent refactor here.
-//
-// This copy is exact and minimal: Coefficient()/Exponent() is the same
-// no-op relabelling numeric.go's own does, never a float64 round-trip.
-// Every value this file converts (MarketPrice.PTF, YekdemMonthly.Value) is a
-// NOT NULL decimal.Decimal, so there is no NULL/pointer branch to duplicate.
-func decimalToNumeric(d decimal.Decimal) pgtype.Numeric {
-	return pgtype.Numeric{Int: d.Coefficient(), Exp: d.Exponent(), Valid: true}
-}
 
 // fetchedAtOrNow defaults a zero FetchedAt to the current instant, so a
 // caller that only fills in Ts/PTF (or Year/Month/Value) does not have to
@@ -65,9 +44,18 @@ var _ store.AdminMarketDataRepository = (*MarketDataRepository)(nil)
 
 // UpsertHourlyPrices implements
 // store.AdminMarketDataRepository.UpsertHourlyPrices.
+//
+// Refuses the whole call, before any database round trip, on a zero Ts (an
+// unset/forgotten field, never a legitimate hour — market_prices_hourly's
+// primary key is ts, and a zero Time is never a real market hour) or on two
+// entries sharing the same Ts (an ambiguous import must not silently let
+// `on conflict` pick a winner between them).
 func (r *MarketDataRepository) UpsertHourlyPrices(ctx context.Context, prices []model.MarketPrice) (int64, error) {
 	if len(prices) == 0 {
 		return 0, nil
+	}
+	if err := validateHourlyPrices(prices); err != nil {
+		return 0, err
 	}
 
 	ts := make([]pgtype.Timestamptz, len(prices))
@@ -91,9 +79,17 @@ func (r *MarketDataRepository) UpsertHourlyPrices(ctx context.Context, prices []
 }
 
 // UpsertYekdem implements store.AdminMarketDataRepository.UpsertYekdem.
+//
+// Refuses the whole call, before any database round trip, on a Month outside
+// 1..12 or on two entries sharing the same (Year, Month) — yekdem_monthly's
+// primary key — for the same reason UpsertHourlyPrices refuses a duplicate
+// Ts.
 func (r *MarketDataRepository) UpsertYekdem(ctx context.Context, values []model.YekdemMonthly) (int64, error) {
 	if len(values) == 0 {
 		return 0, nil
+	}
+	if err := validateYekdemValues(values); err != nil {
+		return 0, err
 	}
 
 	years := make([]int16, len(values))
@@ -117,4 +113,42 @@ func (r *MarketDataRepository) UpsertYekdem(ctx context.Context, values []model.
 		return 0, pgerr.Translate(r.pool, "admin market data upsert yekdem", err)
 	}
 	return n, nil
+}
+
+// validateHourlyPrices refuses the whole UpsertHourlyPrices call, before any
+// database round trip, for a zero Ts or a Ts repeated within prices itself.
+func validateHourlyPrices(prices []model.MarketPrice) error {
+	seen := make(map[time.Time]struct{}, len(prices))
+	for _, p := range prices {
+		if p.Ts.IsZero() {
+			return fmt.Errorf("%w: market price has a zero Ts", store.ErrConflict)
+		}
+		key := p.Ts.UTC()
+		if _, ok := seen[key]; ok {
+			return fmt.Errorf("%w: duplicate market price ts=%s", store.ErrConflict, p.Ts.Format(time.RFC3339))
+		}
+		seen[key] = struct{}{}
+	}
+	return nil
+}
+
+// validateYekdemValues refuses the whole UpsertYekdem call, before any
+// database round trip, for a Month outside 1..12 or a (Year, Month) repeated
+// within values itself.
+func validateYekdemValues(values []model.YekdemMonthly) error {
+	type key struct {
+		year, month int16
+	}
+	seen := make(map[key]struct{}, len(values))
+	for _, v := range values {
+		if v.Month < 1 || v.Month > 12 {
+			return fmt.Errorf("%w: yekdem month %d out of range 1..12 (year=%d)", store.ErrConflict, v.Month, v.Year)
+		}
+		k := key{v.Year, v.Month}
+		if _, ok := seen[k]; ok {
+			return fmt.Errorf("%w: duplicate yekdem year=%d month=%d", store.ErrConflict, v.Year, v.Month)
+		}
+		seen[k] = struct{}{}
+	}
+	return nil
 }

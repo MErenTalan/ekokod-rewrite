@@ -63,11 +63,6 @@ type AnomalyCreateParams struct {
 	BuildingIds  []uuid.UUID
 }
 
-// NOTE: TestEveryFunctionSQLcMustTypeIsDeclared currently flags the
-// "consumption_anomalies (" below as a call to an undeclared function — a
-// known false positive (the guard has no notion of an INSERT's target
-// column list) being fixed in parallel on f1/task-8c. Left as ordinary SQL
-// rather than restructured around it; see the task report.
 func (q *Queries) AnomalyCreate(ctx context.Context, arg AnomalyCreateParams) (ConsumptionAnomaly, error) {
 	row := q.db.QueryRow(ctx, anomalyCreate,
 		arg.PeriodStart,

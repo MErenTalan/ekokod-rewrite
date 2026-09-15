@@ -38,11 +38,6 @@ select exists (
 );
 
 -- name: AnomalyCreate :one
--- NOTE: TestEveryFunctionSQLcMustTypeIsDeclared currently flags the
--- "consumption_anomalies (" below as a call to an undeclared function — a
--- known false positive (the guard has no notion of an INSERT's target
--- column list) being fixed in parallel on f1/task-8c. Left as ordinary SQL
--- rather than restructured around it; see the task report.
 insert into consumption_anomalies (analyzer_id, period_start, period_end, reason, detail)
 select a.id, sqlc.arg(period_start)::timestamptz, sqlc.arg(period_end)::timestamptz, sqlc.arg(reason)::text, sqlc.arg(detail)
 from analyzers a

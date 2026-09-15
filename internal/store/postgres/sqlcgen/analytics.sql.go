@@ -18,7 +18,7 @@ join analyzers a on a.id = c.analyzer_id
 where a.company_id = $1
   and ($2::boolean or a.building_id = any($3::uuid[]))
   and a.deleted_at is null
-  and (cardinality(coalesce($4::uuid[], '{}')) = 0 or c.analyzer_id = any(coalesce($4::uuid[], '{}')))
+  and c.analyzer_id = any($4::uuid[])
   and c.bucket >= $5::timestamptz
   and c.bucket < $6::timestamptz
 order by c.analyzer_id, c.bucket
@@ -33,6 +33,10 @@ type AnalyticsConsumptionDailyParams struct {
 	ToTs         pgtype.Timestamptz
 }
 
+// Buckets are Europe/Istanbul-local instants (migration 00005): a day
+// boundary here is midnight IN ISTANBUL, not UTC. A caller that constructs
+// TimeRange bounds from UTC calendar days will see this window's edges land
+// mid-bucket; see AnalyticsRepository's ConsumptionDaily doc comment.
 func (q *Queries) AnalyticsConsumptionDaily(ctx context.Context, arg AnalyticsConsumptionDailyParams) ([]ConsumptionDaily, error) {
 	rows, err := q.db.Query(ctx, analyticsConsumptionDaily,
 		arg.CompanyID,
@@ -93,7 +97,7 @@ join analyzers a on a.id = c.analyzer_id
 where a.company_id = $1
   and ($2::boolean or a.building_id = any($3::uuid[]))
   and a.deleted_at is null
-  and (cardinality(coalesce($4::uuid[], '{}')) = 0 or c.analyzer_id = any(coalesce($4::uuid[], '{}')))
+  and c.analyzer_id = any($4::uuid[])
   and c.bucket >= $5::timestamptz
   and c.bucket < $6::timestamptz
 order by c.analyzer_id, c.bucket
@@ -115,8 +119,13 @@ type AnalyticsConsumptionHourlyParams struct {
 // None of the six aggregates carry a company_id: the consumption_* ones join
 // through analyzers, the plant_production_* ones through power_plants (which
 // has no building_id at all, per PlantRepository's doc). analyzer_ids /
-// plant_ids EMPTY means "every id visible to the scope" — the same
-// never-widens-past-scope convention as CursorList.
+// plant_ids are REQUIRED POSITIONAL parameters (repository.go's
+// AnalyticsRepository doc): EMPTY or nil means NO ROWS, fail-closed,
+// identical to Scope.BuildingIDs — there is no "every id visible to scope"
+// form. `c.analyzer_id = any(sqlc.arg(analyzer_ids)::uuid[])` gets this for
+// free: a nil slice encodes to NULL::uuid[], and `x = any(NULL)` is NULL,
+// which the WHERE clause reads as false, matching zero rows; an empty (but
+// non-nil) slice encodes to '{}', and `x = any('{}')` is false outright.
 func (q *Queries) AnalyticsConsumptionHourly(ctx context.Context, arg AnalyticsConsumptionHourlyParams) ([]ConsumptionHourly, error) {
 	rows, err := q.db.Query(ctx, analyticsConsumptionHourly,
 		arg.CompanyID,
@@ -176,7 +185,7 @@ join analyzers a on a.id = c.analyzer_id
 where a.company_id = $1
   and ($2::boolean or a.building_id = any($3::uuid[]))
   and a.deleted_at is null
-  and (cardinality(coalesce($4::uuid[], '{}')) = 0 or c.analyzer_id = any(coalesce($4::uuid[], '{}')))
+  and c.analyzer_id = any($4::uuid[])
   and c.bucket >= $5::timestamptz
   and c.bucket < $6::timestamptz
 order by c.analyzer_id, c.bucket
@@ -195,7 +204,8 @@ type AnalyticsConsumptionMonthlyParams struct {
 // this view, not stale. A caller wanting month-to-date must compose this with
 // the open period from consumption_daily or meter_readings; this repository
 // does not do that composition, and must not be "fixed" by flipping
-// materialized_only (see migration 00005's own header).
+// materialized_only (see migration 00005's own header). Buckets are
+// Europe/Istanbul-local instants, same as ConsumptionDaily above.
 func (q *Queries) AnalyticsConsumptionMonthly(ctx context.Context, arg AnalyticsConsumptionMonthlyParams) ([]ConsumptionMonthly, error) {
 	rows, err := q.db.Query(ctx, analyticsConsumptionMonthly,
 		arg.CompanyID,
@@ -255,7 +265,7 @@ join analyzers a on a.id = c.analyzer_id
 where a.company_id = $1
   and ($2::boolean or a.building_id = any($3::uuid[]))
   and a.deleted_at is null
-  and (cardinality(coalesce($4::uuid[], '{}')) = 0 or c.analyzer_id = any(coalesce($4::uuid[], '{}')))
+  and c.analyzer_id = any($4::uuid[])
   and c.bucket >= $5::timestamptz
   and c.bucket < $6::timestamptz
 order by c.analyzer_id, c.bucket
@@ -271,7 +281,8 @@ type AnalyticsConsumptionYearlyParams struct {
 }
 
 // materialized_only = true: the open year is ABSENT, same as
-// AnalyticsConsumptionMonthly above.
+// AnalyticsConsumptionMonthly above. Buckets are Europe/Istanbul-local
+// instants, same as ConsumptionDaily above.
 func (q *Queries) AnalyticsConsumptionYearly(ctx context.Context, arg AnalyticsConsumptionYearlyParams) ([]ConsumptionYearly, error) {
 	rows, err := q.db.Query(ctx, analyticsConsumptionYearly,
 		arg.CompanyID,
@@ -330,7 +341,7 @@ select p.plant_id, p.bucket, p.production_kwh, p.max_active_power_kw, p.avg_effi
 join power_plants pp on pp.id = p.plant_id
 where pp.company_id = $1
   and pp.deleted_at is null
-  and (cardinality(coalesce($2::uuid[], '{}')) = 0 or p.plant_id = any(coalesce($2::uuid[], '{}')))
+  and p.plant_id = any($2::uuid[])
   and p.bucket >= $3::timestamptz
   and p.bucket < $4::timestamptz
 order by p.plant_id, p.bucket
@@ -343,6 +354,8 @@ type AnalyticsProductionDailyParams struct {
 	ToTs      pgtype.Timestamptz
 }
 
+// Buckets are Europe/Istanbul-local instants, same reasoning as the
+// consumption side.
 func (q *Queries) AnalyticsProductionDaily(ctx context.Context, arg AnalyticsProductionDailyParams) ([]PlantProductionDaily, error) {
 	rows, err := q.db.Query(ctx, analyticsProductionDaily,
 		arg.CompanyID,
@@ -379,7 +392,7 @@ select p.plant_id, p.bucket, p.production_kwh, p.max_active_power_kw, p.avg_effi
 join power_plants pp on pp.id = p.plant_id
 where pp.company_id = $1
   and pp.deleted_at is null
-  and (cardinality(coalesce($2::uuid[], '{}')) = 0 or p.plant_id = any(coalesce($2::uuid[], '{}')))
+  and p.plant_id = any($2::uuid[])
   and p.bucket >= $3::timestamptz
   and p.bucket < $4::timestamptz
 order by p.plant_id, p.bucket
@@ -393,7 +406,7 @@ type AnalyticsProductionMonthlyParams struct {
 }
 
 // materialized_only = true: the open month is ABSENT, same reasoning as the
-// consumption side.
+// consumption side. Buckets are Europe/Istanbul-local instants.
 func (q *Queries) AnalyticsProductionMonthly(ctx context.Context, arg AnalyticsProductionMonthlyParams) ([]PlantProductionMonthly, error) {
 	rows, err := q.db.Query(ctx, analyticsProductionMonthly,
 		arg.CompanyID,

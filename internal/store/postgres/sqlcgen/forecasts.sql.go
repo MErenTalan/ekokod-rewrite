@@ -114,9 +114,6 @@ type ForecastInsertGapsParams struct {
 	MissingHours []int32
 }
 
-// NOTE: TestEveryFunctionSQLcMustTypeIsDeclared currently flags the
-// "forecast_gaps (" below as a call to an undeclared function — a known
-// false positive being fixed in parallel on f1/task-8c; see the task report.
 // The batch-visibility check is ForecastVisibleAnalyzerIDs, run with `for
 // share` inside the SAME transaction as this insert (forecasts.go) — this
 // statement itself carries no further scope predicate because every
@@ -276,6 +273,7 @@ where id = any($1::uuid[])
   and company_id = $2
   and ($3::boolean or building_id = any($4::uuid[]))
   and deleted_at is null
+order by id
 for share
 `
 

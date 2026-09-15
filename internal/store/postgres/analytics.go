@@ -32,6 +32,20 @@ import (
 // open period read from consumption_daily/meter_readings — this repository
 // does not do that composition, and callers must not "fix" a missing
 // current-period row by asking migration 00005 to flip materialized_only.
+//
+// Bucket boundaries for every view coarser than hourly (Daily, Monthly,
+// Yearly, on both the consumption and production sides) are
+// Europe/Istanbul-LOCAL instants, not UTC — see each method's own doc
+// comment and TestAnalyticsConsumptionDailyBucketsInIstanbulNotUTC.
+// consumption_hourly/plant_production_daily's hourly granularity has no
+// timezone dependence (an hour is an hour everywhere).
+//
+// analyzerIDs/plantIDs on every method here are REQUIRED POSITIONAL
+// parameters: an empty or nil slice means NO ROWS, fail-closed, identical to
+// Scope.BuildingIDs — there is no "every id visible to scope" form (this
+// differs from AnomalyFilter.AnalyzerIDs, which is an optional FILTER-STRUCT
+// field where empty means "no narrowing"; the two conventions are
+// deliberately different and repository.go documents which is which).
 type AnalyticsRepository struct {
 	q    *sqlcgen.Queries
 	pool *pgxpool.Pool
@@ -59,8 +73,8 @@ func (r *AnalyticsRepository) ConsumptionHourly(ctx context.Context, s store.Sco
 		AllBuildings: allBuildings,
 		BuildingIds:  buildingIDs,
 		AnalyzerIds:  analyzerIDs,
-		FromTs:       toTimestamptz(tr.From),
-		ToTs:         toTimestamptz(tr.To),
+		FromTs:       timeseriesToTimestamptz(tr.From),
+		ToTs:         timeseriesToTimestamptz(tr.To),
 	})
 	if err != nil {
 		return nil, pgerr.Translate(r.pool, "analytics consumption hourly", err)
@@ -77,6 +91,13 @@ func (r *AnalyticsRepository) ConsumptionHourly(ctx context.Context, s store.Sco
 }
 
 // ConsumptionDaily implements store.AnalyticsRepository.ConsumptionDaily.
+//
+// Buckets are Europe/Istanbul-LOCAL instants (migration 00005), not UTC: a
+// day here runs midnight-to-midnight Istanbul time. tr.From/tr.To are
+// compared directly against that bucket instant, so a caller that builds
+// them from UTC calendar-day boundaries sees this window's own edges land
+// mid-bucket rather than aligned to it — see
+// TestAnalyticsConsumptionDailyBucketsInIstanbulNotUTC.
 func (r *AnalyticsRepository) ConsumptionDaily(ctx context.Context, s store.Scope, analyzerIDs []uuid.UUID, tr store.TimeRange) ([]model.ConsumptionBucket, error) {
 	if !s.Valid() {
 		return nil, store.ErrInvalidScope
@@ -91,8 +112,8 @@ func (r *AnalyticsRepository) ConsumptionDaily(ctx context.Context, s store.Scop
 		AllBuildings: allBuildings,
 		BuildingIds:  buildingIDs,
 		AnalyzerIds:  analyzerIDs,
-		FromTs:       toTimestamptz(tr.From),
-		ToTs:         toTimestamptz(tr.To),
+		FromTs:       timeseriesToTimestamptz(tr.From),
+		ToTs:         timeseriesToTimestamptz(tr.To),
 	})
 	if err != nil {
 		return nil, pgerr.Translate(r.pool, "analytics consumption daily", err)
@@ -125,8 +146,8 @@ func (r *AnalyticsRepository) ConsumptionMonthly(ctx context.Context, s store.Sc
 		AllBuildings: allBuildings,
 		BuildingIds:  buildingIDs,
 		AnalyzerIds:  analyzerIDs,
-		FromTs:       toTimestamptz(tr.From),
-		ToTs:         toTimestamptz(tr.To),
+		FromTs:       timeseriesToTimestamptz(tr.From),
+		ToTs:         timeseriesToTimestamptz(tr.To),
 	})
 	if err != nil {
 		return nil, pgerr.Translate(r.pool, "analytics consumption monthly", err)
@@ -159,8 +180,8 @@ func (r *AnalyticsRepository) ConsumptionYearly(ctx context.Context, s store.Sco
 		AllBuildings: allBuildings,
 		BuildingIds:  buildingIDs,
 		AnalyzerIds:  analyzerIDs,
-		FromTs:       toTimestamptz(tr.From),
-		ToTs:         toTimestamptz(tr.To),
+		FromTs:       timeseriesToTimestamptz(tr.From),
+		ToTs:         timeseriesToTimestamptz(tr.To),
 	})
 	if err != nil {
 		return nil, pgerr.Translate(r.pool, "analytics consumption yearly", err)
@@ -188,8 +209,8 @@ func (r *AnalyticsRepository) ProductionDaily(ctx context.Context, s store.Scope
 	rows, err := r.q.AnalyticsProductionDaily(ctx, sqlcgen.AnalyticsProductionDailyParams{
 		CompanyID: s.CompanyID,
 		PlantIds:  plantIDs,
-		FromTs:    toTimestamptz(tr.From),
-		ToTs:      toTimestamptz(tr.To),
+		FromTs:    timeseriesToTimestamptz(tr.From),
+		ToTs:      timeseriesToTimestamptz(tr.To),
 	})
 	if err != nil {
 		return nil, pgerr.Translate(r.pool, "analytics production daily", err)
@@ -219,8 +240,8 @@ func (r *AnalyticsRepository) ProductionMonthly(ctx context.Context, s store.Sco
 	rows, err := r.q.AnalyticsProductionMonthly(ctx, sqlcgen.AnalyticsProductionMonthlyParams{
 		CompanyID: s.CompanyID,
 		PlantIds:  plantIDs,
-		FromTs:    toTimestamptz(tr.From),
-		ToTs:      toTimestamptz(tr.To),
+		FromTs:    timeseriesToTimestamptz(tr.From),
+		ToTs:      timeseriesToTimestamptz(tr.To),
 	})
 	if err != nil {
 		return nil, pgerr.Translate(r.pool, "analytics production monthly", err)

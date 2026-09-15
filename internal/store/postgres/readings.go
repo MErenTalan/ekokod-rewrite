@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -78,12 +79,18 @@ const createMeterReadingsStaging = `create temporary table meter_readings_stagin
 
 // upsertMeterReadingsFromStaging is the one idempotent write 04-data-model.md
 // §14 requires: `insert … on conflict (analyzer_id, ts, kind) do update`.
-// `distinct on` guards against the batch itself naming the same key twice —
-// without it, PostgreSQL rejects a conflict target being hit twice in one
-// statement ("ON CONFLICT DO UPDATE command cannot affect row a second
-// time"). `returning (xmax = 0) as inserted` is the standard, reliable way to
-// tell which outcome each row took: a freshly inserted row's xmax is still 0,
-// an updated row's is the current transaction's id.
+//
+// This is a PLAIN select, not `distinct on`: BulkInsert refuses the whole
+// batch with store.ErrConflict, before the staging table even exists, the
+// moment two rows in the CALLER'S SLICE share an (analyzer_id, ts, kind) key
+// (see readingDuplicateKey). A `distinct on` here would silently pick an
+// arbitrary winner between two batched rows with different register values —
+// unacceptable for a billing-grade register — so once the Go-side check
+// guarantees the staging table itself never holds two rows with the same key,
+// keeping `distinct on` would be dead weight hiding that guarantee, not
+// reinforcing it. `returning (xmax = 0) as inserted` is the standard,
+// reliable way to tell which outcome each row took: a freshly inserted row's
+// xmax is still 0, an updated row's is the current transaction's id.
 const upsertMeterReadingsFromStaging = `insert into meter_readings (
 	analyzer_id, ts, kind,
 	active_import, reactive_inductive_import, reactive_capacitive_import,
@@ -92,7 +99,7 @@ const upsertMeterReadingsFromStaging = `insert into meter_readings (
 	t1_export, t2_export, t3_export,
 	max_demand_kw, meter_serial, multiplier_applied, source_provider, raw
 )
-select distinct on (analyzer_id, ts, kind)
+select
 	analyzer_id, ts, kind,
 	active_import, reactive_inductive_import, reactive_capacitive_import,
 	t1_import, t2_import, t3_import,
@@ -100,7 +107,6 @@ select distinct on (analyzer_id, ts, kind)
 	t1_export, t2_export, t3_export,
 	max_demand_kw, meter_serial, multiplier_applied, source_provider, raw
 from meter_readings_staging
-order by analyzer_id, ts, kind
 on conflict (analyzer_id, ts, kind) do update set
 	active_import              = excluded.active_import,
 	reactive_inductive_import  = excluded.reactive_inductive_import,
@@ -128,7 +134,7 @@ returning (xmax = 0) as inserted`
 // temporary table cannot appear in sqlc's schema catalogue (see
 // createMeterReadingsStaging), so the whole COPY-then-upsert runs as plain
 // SQL against a *pgxpool.Tx. The visibility check that guards it, however, IS
-// a generated query (ReadingVisibleAnalyzerCount) — there is nothing dynamic
+// a generated query (ReadingVisibleAnalyzerIDs) — there is nothing dynamic
 // about it.
 func (r *ReadingRepository) BulkInsert(ctx context.Context, s store.Scope, rows []model.MeterReading) (inserted, updated int, err error) {
 	if !s.Valid() {
@@ -141,6 +147,18 @@ func (r *ReadingRepository) BulkInsert(ctx context.Context, s store.Scope, rows 
 	const op = "reading bulk insert"
 	buildingIDs, allBuildings := s.BuildingFilter()
 
+	// A duplicate (analyzer_id, ts, kind) inside the CALLER'S OWN batch is
+	// refused loudly, before any database round trip: two rows with the same
+	// key but different register values would otherwise reach
+	// `on conflict … do update` with no way to know which one Postgres would
+	// pick last (see the controller ruling recorded on
+	// store.ReadingRepository.BulkInsert). F2's ingestion deduplicates
+	// upstream; this is the last line of defence.
+	if dup, ok := readingDuplicateKey(rows); ok {
+		return 0, 0, fmt.Errorf("%w: duplicate reading key analyzer_id=%s ts=%s kind=%s",
+			store.ErrConflict, dup.AnalyzerID, dup.Ts.Format(time.RFC3339Nano), dup.Kind)
+	}
+
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return 0, 0, pgerr.Translate(r.pool, op, err)
@@ -151,7 +169,7 @@ func (r *ReadingRepository) BulkInsert(ctx context.Context, s store.Scope, rows 
 	for i, row := range rows {
 		analyzerIDs[i] = row.AnalyzerID
 	}
-	distinctAnalyzerIDs := distinctUUIDs(analyzerIDs)
+	distinctAnalyzerIDs := readingDistinctUUIDs(analyzerIDs)
 
 	// `for share` locks every visible analyzer row for the rest of this
 	// transaction, so a concurrent reassignment or soft-delete cannot open a
@@ -202,7 +220,7 @@ func (r *ReadingRepository) BulkInsert(ctx context.Context, s store.Scope, rows 
 				row.MeterSerial,
 				decimalToNumeric(row.MultiplierApplied),
 				string(row.SourceProvider),
-				rawJSONOrNil(row.Raw),
+				readingRawJSONOrNil(row.Raw),
 			}, nil
 		}))
 	if err != nil {
@@ -213,7 +231,7 @@ func (r *ReadingRepository) BulkInsert(ctx context.Context, s store.Scope, rows 
 	if err != nil {
 		return 0, 0, pgerr.Translate(r.pool, op, err)
 	}
-	inserted, updated, err = scanUpsertCounts(upsertRows)
+	inserted, updated, err = timeseriesScanUpsertCounts(upsertRows)
 	if err != nil {
 		return 0, 0, pgerr.Translate(r.pool, op, err)
 	}
@@ -244,8 +262,8 @@ func (r *ReadingRepository) Range(ctx context.Context, s store.Scope, analyzerID
 	rows, err := r.q.ReadingRange(ctx, sqlcgen.ReadingRangeParams{
 		AnalyzerID:   analyzerID,
 		Kind:         sqlcgen.ReadingKind(kind),
-		FromTs:       toTimestamptz(tr.From),
-		ToTs:         toTimestamptz(tr.To),
+		FromTs:       timeseriesToTimestamptz(tr.From),
+		ToTs:         timeseriesToTimestamptz(tr.To),
 		CompanyID:    s.CompanyID,
 		AllBuildings: allBuildings,
 		BuildingIds:  buildingIDs,
@@ -298,14 +316,14 @@ func (r *ReadingRepository) boundaryAtOrBefore(ctx context.Context, s store.Scop
 	row, err := r.q.ReadingBoundaryAtOrBefore(ctx, sqlcgen.ReadingBoundaryAtOrBeforeParams{
 		AnalyzerID:   analyzerID,
 		Kind:         sqlcgen.ReadingKind(kind),
-		At:           toTimestamptz(at),
+		At:           timeseriesToTimestamptz(at),
 		CompanyID:    s.CompanyID,
 		AllBuildings: allBuildings,
 		BuildingIds:  buildingIDs,
 	})
 	if err != nil {
 		translated := pgerr.Translate(r.pool, op, err)
-		if !isNotFound(translated) {
+		if !timeseriesIsNotFound(translated) {
 			return nil, translated
 		}
 		// Zero rows: disambiguate "not visible" (ErrNotFound) from "visible,
@@ -337,15 +355,15 @@ func (r *ReadingRepository) Latest(ctx context.Context, s store.Scope, analyzerI
 	row, err := r.q.ReadingLatest(ctx, sqlcgen.ReadingLatestParams{
 		AnalyzerID:   analyzerID,
 		Kind:         sqlcgen.ReadingKind(kind),
-		FromTs:       toTimestamptz(tr.From),
-		ToTs:         toTimestamptz(tr.To),
+		FromTs:       timeseriesToTimestamptz(tr.From),
+		ToTs:         timeseriesToTimestamptz(tr.To),
 		CompanyID:    s.CompanyID,
 		AllBuildings: allBuildings,
 		BuildingIds:  buildingIDs,
 	})
 	if err != nil {
 		translated := pgerr.Translate(r.pool, op, err)
-		if !isNotFound(translated) {
+		if !timeseriesIsNotFound(translated) {
 			return nil, translated
 		}
 		if err := r.requireAnalyzerVisible(ctx, s, analyzerID, op); err != nil {
@@ -470,12 +488,12 @@ func readingFromRow(row sqlcgen.MeterReading) (model.MeterReading, error) {
 
 // --- small helpers shared by every BulkInsert in this package ------------
 
-// distinctUUIDs returns ids with duplicates removed, order-preserving on
+// readingDistinctUUIDs returns ids with duplicates removed, order-preserving on
 // first occurrence. Every batch-scope visibility check in this file counts
 // against the DISTINCT set, so that a batch repeating one analyzer many times
 // still requires exactly one visible row, never a coincidentally-matching
 // count.
-func distinctUUIDs(ids []uuid.UUID) []uuid.UUID {
+func readingDistinctUUIDs(ids []uuid.UUID) []uuid.UUID {
 	seen := make(map[uuid.UUID]struct{}, len(ids))
 	out := make([]uuid.UUID, 0, len(ids))
 	for _, id := range ids {
@@ -488,11 +506,11 @@ func distinctUUIDs(ids []uuid.UUID) []uuid.UUID {
 	return out
 }
 
-// scanUpsertCounts consumes the `returning (xmax = 0) as inserted` rows every
+// timeseriesScanUpsertCounts consumes the `returning (xmax = 0) as inserted` rows every
 // staging-table upsert in this package produces and splits them into
 // inserted/updated counts — the REAL counts BulkInsert promises, never
 // estimated.
-func scanUpsertCounts(rows pgx.Rows) (inserted, updated int, err error) {
+func timeseriesScanUpsertCounts(rows pgx.Rows) (inserted, updated int, err error) {
 	defer rows.Close()
 	for rows.Next() {
 		var isInsert bool
@@ -511,24 +529,48 @@ func scanUpsertCounts(rows pgx.Rows) (inserted, updated int, err error) {
 	return inserted, updated, nil
 }
 
-// toTimestamptz converts a time.Time known to be non-zero (every TimeRange
+// timeseriesToTimestamptz converts a time.Time known to be non-zero (every TimeRange
 // bound is, once Valid() has passed) to the generated parameter type.
-func toTimestamptz(t time.Time) pgtype.Timestamptz {
+func timeseriesToTimestamptz(t time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{Time: t, Valid: true}
 }
 
-// rawJSONOrNil turns an empty/nil json.RawMessage into an untyped nil, so
+// readingRawJSONOrNil turns an empty/nil json.RawMessage into an untyped nil, so
 // pgx's CopyFrom encodes it as SQL NULL rather than an empty jsonb value.
-func rawJSONOrNil(raw []byte) any {
+func readingRawJSONOrNil(raw []byte) any {
 	if len(raw) == 0 {
 		return nil
 	}
 	return raw
 }
 
-// isNotFound reports whether err — already through pgerr.Translate — is
+// timeseriesIsNotFound reports whether err — already through pgerr.Translate — is
 // store.ErrNotFound. Every BoundaryReadings/Latest-shaped method in this
 // package uses it to tell "no row in this window" (nil, no error) from
 // "the id itself is not visible" (which its own explicit visibility check
 // already turned into ErrNotFound before the query ran).
-func isNotFound(err error) bool { return errors.Is(err, store.ErrNotFound) }
+func timeseriesIsNotFound(err error) bool { return errors.Is(err, store.ErrNotFound) }
+
+// readingDuplicateKey reports the first row in rows whose
+// (analyzer_id, ts, kind) key repeats an earlier row's, and true — or a zero
+// MeterReading and false when every key in the batch is unique. BulkInsert
+// uses it to refuse the whole batch loudly, before the staging table exists,
+// rather than let `on conflict … do update` silently pick whichever of the
+// two rows Postgres processes last as the stored value for a billing-grade
+// register (controller ruling, task-10 fix round 1).
+func readingDuplicateKey(rows []model.MeterReading) (model.MeterReading, bool) {
+	type key struct {
+		analyzerID uuid.UUID
+		ts         int64
+		kind       model.ReadingKind
+	}
+	seen := make(map[key]struct{}, len(rows))
+	for _, row := range rows {
+		k := key{row.AnalyzerID, row.Ts.UnixNano(), row.Kind}
+		if _, ok := seen[k]; ok {
+			return row, true
+		}
+		seen[k] = struct{}{}
+	}
+	return model.MeterReading{}, false
+}

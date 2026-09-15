@@ -4,10 +4,6 @@
 -- there is no Scope to check here — see repository.go's admin section header.
 
 -- name: AdminMarketDataUpsertHourlyPrices :execrows
--- NOTE: TestEveryFunctionSQLcMustTypeIsDeclared currently flags
--- "market_prices_hourly (" and "conflict (" below as calls to undeclared
--- functions — a known false positive being fixed in parallel on
--- f1/task-8c; see the task report.
 insert into market_prices_hourly (ts, ptf, fetched_at)
 select unnest(sqlc.arg(ts)::timestamptz[]),
        unnest(sqlc.arg(ptf)::numeric[]),

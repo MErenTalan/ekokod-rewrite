@@ -308,6 +308,31 @@ func TestReadingLatestAnalyzerNotVisibleReturnsNotFound(t *testing.T) {
 	require.ErrorIs(t, err, store.ErrNotFound)
 }
 
+func TestReadingBulkInsertRefusesDuplicateKeyWithinBatch(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
+	repo := postgres.NewReadingRepository(pool)
+	analyzerID := tenant.Analyzers[0].ID
+
+	// Same (analyzer_id, ts, kind) key, twice, with DIFFERENT register
+	// values: nothing may be written, and no arbitrary winner may be chosen.
+	rows := []model.MeterReading{
+		readingsRow(analyzerID, readingsEpoch, model.ReadingKindLoadProfile, "111.0000", "1"),
+		readingsRow(analyzerID, readingsEpoch, model.ReadingKindLoadProfile, "222.0000", "1"),
+	}
+	inserted, updated, err := repo.BulkInsert(ctx, tenant.Scope, rows)
+	require.ErrorIs(t, err, store.ErrConflict)
+	require.Zero(t, inserted)
+	require.Zero(t, updated)
+
+	got, err := repo.Range(ctx, tenant.Scope, analyzerID,
+		store.TimeRange{From: readingsEpoch, To: readingsEpoch.Add(time.Hour)},
+		model.ReadingKindLoadProfile)
+	require.NoError(t, err)
+	require.Empty(t, got, "nothing may be written when the batch itself contains a duplicate key")
+}
+
 // TestReadingRangeNeverReturnsForeignDataEvenWhenForeignAnalyzerHasReadings
 // is the guard-failure-provable form of the isolation test above: tenant B's
 // analyzer here actually HAS readings, so a query whose own scope predicate
@@ -332,4 +357,86 @@ func TestReadingRangeNeverReturnsForeignDataEvenWhenForeignAnalyzerHasReadings(t
 	got, err := repo.Range(ctx, tenantA.Scope, tenantB.Analyzers[0].ID, validRange, model.ReadingKindLoadProfile)
 	require.ErrorIs(t, err, store.ErrNotFound)
 	require.Empty(t, got)
+}
+
+// TestReadingBoundaryReadingsNeverReturnsForeignDataEvenWhenForeignAnalyzerHasReadings
+// is BoundaryReadings' guard-failure-provable isolation test (Important
+// finding 1, task-10 fix round 1): TestReadingBoundaryReadingsAnalyzerNotVisibleReturnsNotFound
+// never seeds real data for the foreign analyzer, so tautologising
+// ReadingBoundaryAtOrBefore's own predicate would STILL return zero rows and
+// that test would still pass. Here tenant B's analyzer actually HAS a
+// reading at the exact instant queried, and tenant A's OWN analyzer outside
+// Buildings[0] also has one, so a tautologised predicate on either query
+// shape would surface real data instead of merely failing to disambiguate.
+func TestReadingBoundaryReadingsNeverReturnsForeignDataEvenWhenForeignAnalyzerHasReadings(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)
+	tenantB := testfixtures.NewTenant(t, ctx, pool, 2)
+	repo := postgres.NewReadingRepository(pool)
+
+	// Cross-tenant: tenant B's analyzer really has a reading at readingsEpoch.
+	foreign := readingsRow(tenantB.Analyzers[0].ID, readingsEpoch, model.ReadingKindLoadProfile, "999.0000", "1")
+	_, _, err := repo.BulkInsert(ctx, tenantB.Scope, []model.MeterReading{foreign})
+	require.NoError(t, err)
+
+	start, end, err := repo.BoundaryReadings(ctx, tenantA.Scope, tenantB.Analyzers[0].ID,
+		model.ReadingKindLoadProfile, readingsEpoch, readingsEpoch)
+	require.ErrorIs(t, err, store.ErrNotFound)
+	require.Nil(t, start)
+	require.Nil(t, end)
+
+	// Narrow scope: tenant A's OWN analyzer, outside Buildings[0], with a
+	// real reading at readingsEpoch too.
+	narrow := readingsRow(tenantA.Analyzers[2].ID, readingsEpoch, model.ReadingKindLoadProfile, "777.0000", "1")
+	_, _, err = repo.BulkInsert(ctx, tenantA.AdminScope, []model.MeterReading{narrow})
+	require.NoError(t, err)
+
+	start, end, err = repo.BoundaryReadings(ctx, tenantA.Scope, tenantA.Analyzers[2].ID,
+		model.ReadingKindLoadProfile, readingsEpoch, readingsEpoch)
+	require.ErrorIs(t, err, store.ErrNotFound)
+	require.Nil(t, start)
+	require.Nil(t, end)
+
+	// The same narrow-scope analyzer IS reachable under AdminScope, and its
+	// real reading comes back — confirming the ErrNotFound above is the
+	// Scope's doing, not a fixture mistake.
+	_, endWide, err := repo.BoundaryReadings(ctx, tenantA.AdminScope, tenantA.Analyzers[2].ID,
+		model.ReadingKindLoadProfile, readingsEpoch, readingsEpoch)
+	require.NoError(t, err)
+	require.NotNil(t, endWide)
+}
+
+// TestReadingLatestNeverReturnsForeignDataEvenWhenForeignAnalyzerHasReadings
+// is Latest's guard-failure-provable isolation test, for the same reason as
+// the BoundaryReadings test above.
+func TestReadingLatestNeverReturnsForeignDataEvenWhenForeignAnalyzerHasReadings(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)
+	tenantB := testfixtures.NewTenant(t, ctx, pool, 2)
+	repo := postgres.NewReadingRepository(pool)
+	validRange := store.TimeRange{From: readingsEpoch, To: readingsEpoch.Add(time.Hour)}
+
+	foreign := readingsRow(tenantB.Analyzers[0].ID, readingsEpoch, model.ReadingKindLoadProfile, "999.0000", "1")
+	_, _, err := repo.BulkInsert(ctx, tenantB.Scope, []model.MeterReading{foreign})
+	require.NoError(t, err)
+
+	got, err := repo.Latest(ctx, tenantA.Scope, tenantB.Analyzers[0].ID, validRange, model.ReadingKindLoadProfile)
+	require.ErrorIs(t, err, store.ErrNotFound)
+	require.Nil(t, got)
+
+	// Narrow scope: tenant A's own analyzer, outside Buildings[0], with real
+	// data.
+	narrow := readingsRow(tenantA.Analyzers[2].ID, readingsEpoch, model.ReadingKindLoadProfile, "777.0000", "1")
+	_, _, err = repo.BulkInsert(ctx, tenantA.AdminScope, []model.MeterReading{narrow})
+	require.NoError(t, err)
+
+	got, err = repo.Latest(ctx, tenantA.Scope, tenantA.Analyzers[2].ID, validRange, model.ReadingKindLoadProfile)
+	require.ErrorIs(t, err, store.ErrNotFound)
+	require.Nil(t, got)
+
+	gotWide, err := repo.Latest(ctx, tenantA.AdminScope, tenantA.Analyzers[2].ID, validRange, model.ReadingKindLoadProfile)
+	require.NoError(t, err)
+	require.NotNil(t, gotWide)
 }

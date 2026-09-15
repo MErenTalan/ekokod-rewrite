@@ -221,3 +221,111 @@ func TestForecastGapsAnalyzerNotVisibleReturnsNotFound(t *testing.T) {
 	_, err := repo.Gaps(ctx, tenantA.Scope, tenantB.Analyzers[0].ID, forecastsEpoch)
 	require.ErrorIs(t, err, store.ErrNotFound)
 }
+
+// TestForecastRangeAndLatestRunNeverReturnForeignDataEvenWhenForeignAnalyzerHasForecasts
+// is the guard-failure-provable form of
+// TestForecastRangeAndLatestRunAnalyzerNotVisibleReturnsNotFound (Important
+// finding 1, task-10 fix round 1): that test never seeds a real forecast for
+// the foreign/narrow-scope analyzer, so tautologising ForecastRange/
+// ForecastLatestRun's own scope predicate would STILL return zero rows and
+// that test would still pass. Here both analyzers actually HAVE a forecast
+// in the queried window.
+func TestForecastRangeAndLatestRunNeverReturnForeignDataEvenWhenForeignAnalyzerHasForecasts(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)
+	tenantB := testfixtures.NewTenant(t, ctx, pool, 2)
+	repo := postgres.NewForecastRepository(pool)
+	validRange := store.TimeRange{From: forecastsEpoch, To: forecastsEpoch.Add(time.Hour)}
+
+	// Cross-tenant: tenant B's analyzer really has a forecast.
+	foreign := forecastsRow(tenantB.Analyzers[0].ID, forecastsEpoch, forecastsEpoch, "999")
+	_, _, err := repo.BulkInsert(ctx, tenantB.Scope, []model.Forecast{foreign})
+	require.NoError(t, err)
+
+	got, err := repo.Range(ctx, tenantA.Scope, tenantB.Analyzers[0].ID, validRange)
+	require.ErrorIs(t, err, store.ErrNotFound)
+	require.Empty(t, got)
+
+	latestGot, err := repo.LatestRun(ctx, tenantA.Scope, tenantB.Analyzers[0].ID, validRange)
+	require.ErrorIs(t, err, store.ErrNotFound)
+	require.Empty(t, latestGot)
+
+	// Narrow scope: tenant A's own analyzer, outside Buildings[0], with a
+	// real forecast too.
+	narrow := forecastsRow(tenantA.Analyzers[2].ID, forecastsEpoch, forecastsEpoch, "777")
+	_, _, err = repo.BulkInsert(ctx, tenantA.AdminScope, []model.Forecast{narrow})
+	require.NoError(t, err)
+
+	got, err = repo.Range(ctx, tenantA.Scope, tenantA.Analyzers[2].ID, validRange)
+	require.ErrorIs(t, err, store.ErrNotFound)
+	require.Empty(t, got)
+
+	latestGot, err = repo.LatestRun(ctx, tenantA.Scope, tenantA.Analyzers[2].ID, validRange)
+	require.ErrorIs(t, err, store.ErrNotFound)
+	require.Empty(t, latestGot)
+
+	// Reachable under AdminScope: confirms the ErrNotFound above is the
+	// Scope's doing, not a fixture mistake.
+	wide, err := repo.Range(ctx, tenantA.AdminScope, tenantA.Analyzers[2].ID, validRange)
+	require.NoError(t, err)
+	require.Len(t, wide, 1)
+}
+
+// TestForecastGapsNeverReturnsForeignDataEvenWhenForeignAnalyzerHasGaps is
+// Gaps' guard-failure-provable isolation test, for the same reason as the
+// Range/LatestRun test above.
+func TestForecastGapsNeverReturnsForeignDataEvenWhenForeignAnalyzerHasGaps(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)
+	tenantB := testfixtures.NewTenant(t, ctx, pool, 2)
+	repo := postgres.NewForecastRepository(pool)
+
+	foreignGap := model.ForecastGap{
+		AnalyzerID: tenantB.Analyzers[0].ID, GeneratedAt: forecastsEpoch,
+		GapStart: forecastsEpoch, GapEnd: forecastsEpoch.Add(time.Hour), MissingHours: 1,
+	}
+	require.NoError(t, repo.RecordGaps(ctx, tenantB.Scope, []model.ForecastGap{foreignGap}))
+
+	got, err := repo.Gaps(ctx, tenantA.Scope, tenantB.Analyzers[0].ID, forecastsEpoch)
+	require.ErrorIs(t, err, store.ErrNotFound)
+	require.Empty(t, got)
+
+	// Narrow scope: tenant A's own analyzer, outside Buildings[0], with a
+	// real gap too.
+	narrowGap := model.ForecastGap{
+		AnalyzerID: tenantA.Analyzers[2].ID, GeneratedAt: forecastsEpoch,
+		GapStart: forecastsEpoch, GapEnd: forecastsEpoch.Add(time.Hour), MissingHours: 2,
+	}
+	require.NoError(t, repo.RecordGaps(ctx, tenantA.AdminScope, []model.ForecastGap{narrowGap}))
+
+	got, err = repo.Gaps(ctx, tenantA.Scope, tenantA.Analyzers[2].ID, forecastsEpoch)
+	require.ErrorIs(t, err, store.ErrNotFound)
+	require.Empty(t, got)
+
+	wide, err := repo.Gaps(ctx, tenantA.AdminScope, tenantA.Analyzers[2].ID, forecastsEpoch)
+	require.NoError(t, err)
+	require.Len(t, wide, 1)
+}
+
+func TestForecastBulkInsertRefusesDuplicateKeyWithinBatch(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
+	repo := postgres.NewForecastRepository(pool)
+	analyzerID := tenant.Analyzers[0].ID
+
+	rows := []model.Forecast{
+		forecastsRow(analyzerID, forecastsEpoch, forecastsEpoch, "10.0000"),
+		forecastsRow(analyzerID, forecastsEpoch, forecastsEpoch, "20.0000"),
+	}
+	inserted, updated, err := repo.BulkInsert(ctx, tenant.Scope, rows)
+	require.ErrorIs(t, err, store.ErrConflict)
+	require.Zero(t, inserted)
+	require.Zero(t, updated)
+
+	got, err := repo.Range(ctx, tenant.Scope, analyzerID, store.TimeRange{From: forecastsEpoch, To: forecastsEpoch.Add(time.Hour)})
+	require.NoError(t, err)
+	require.Empty(t, got, "nothing may be written when the batch itself contains a duplicate key")
+}

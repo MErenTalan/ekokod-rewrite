@@ -39,8 +39,8 @@ func (r *PriceRepository) HourlyRange(ctx context.Context, s store.Scope, tr sto
 	}
 
 	rows, err := r.q.PriceHourlyRange(ctx, sqlcgen.PriceHourlyRangeParams{
-		FromTs: toTimestamptz(tr.From),
-		ToTs:   toTimestamptz(tr.To),
+		FromTs: timeseriesToTimestamptz(tr.From),
+		ToTs:   timeseriesToTimestamptz(tr.To),
 	})
 	if err != nil {
 		return nil, pgerr.Translate(r.pool, "price hourly range", err)

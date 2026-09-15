@@ -203,3 +203,55 @@ func TestProductionRangeAndLatestPlantNotVisibleReturnsNotFound(t *testing.T) {
 	_, err = repo.Latest(ctx, tenantA.Scope, tenantB.Plants[0].ID, validRange)
 	require.ErrorIs(t, err, store.ErrNotFound)
 }
+
+// TestProductionRangeAndLatestNeverReturnForeignDataEvenWhenForeignPlantHasProduction
+// is the guard-failure-provable form of the test above (Important finding 1,
+// task-10 fix round 1): the test above never seeds real production for
+// tenant B's plant, so tautologising ProductionRange/ProductionLatest's own
+// scope predicate would STILL return zero rows and that test would still
+// pass. Here tenant B's plant actually HAS production in the queried window.
+func TestProductionRangeAndLatestNeverReturnForeignDataEvenWhenForeignPlantHasProduction(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 1)
+	tenantB := testfixtures.NewTenant(t, ctx, pool, 2)
+	repo := postgres.NewProductionRepository(pool)
+	validRange := store.TimeRange{From: productionEpoch, To: productionEpoch.Add(time.Hour)}
+
+	foreignDevice := productionSeedDevice(t, ctx, pool, tenantB.Plants[0].ID, "FOREIGN-DEV")
+	_, _, err := repo.BulkInsert(ctx, tenantB.AdminScope,
+		[]model.PlantProduction{productionRow(tenantB.Plants[0].ID, foreignDevice, productionEpoch, "999.0000")})
+	require.NoError(t, err)
+
+	got, err := repo.Range(ctx, tenantA.Scope, tenantB.Plants[0].ID, validRange)
+	require.ErrorIs(t, err, store.ErrNotFound)
+	require.Empty(t, got)
+
+	latest, err := repo.Latest(ctx, tenantA.Scope, tenantB.Plants[0].ID, validRange)
+	require.ErrorIs(t, err, store.ErrNotFound)
+	require.Nil(t, latest)
+}
+
+func TestProductionBulkInsertRefusesDuplicateKeyWithinBatch(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
+	repo := postgres.NewProductionRepository(pool)
+
+	plantID := tenant.Plants[0].ID
+	deviceID := productionSeedDevice(t, ctx, pool, plantID, "DUP-DEV")
+
+	rows := []model.PlantProduction{
+		productionRow(plantID, deviceID, productionEpoch, "1.0000"),
+		productionRow(plantID, deviceID, productionEpoch, "2.0000"),
+	}
+	inserted, updated, err := repo.BulkInsert(ctx, tenant.AdminScope, rows)
+	require.ErrorIs(t, err, store.ErrConflict)
+	require.Zero(t, inserted)
+	require.Zero(t, updated)
+
+	got, err := repo.Range(ctx, tenant.AdminScope, plantID,
+		store.TimeRange{From: productionEpoch, To: productionEpoch.Add(time.Hour)})
+	require.NoError(t, err)
+	require.Empty(t, got, "nothing may be written when the batch itself contains a duplicate key")
+}

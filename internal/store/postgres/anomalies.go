@@ -71,7 +71,7 @@ func (r *AnomalyRepository) List(ctx context.Context, s store.Scope, f store.Ano
 
 	var fromTs, toTs pgtype.Timestamptz
 	if f.Range != nil {
-		fromTs, toTs = toTimestamptz(f.Range.From), toTimestamptz(f.Range.To)
+		fromTs, toTs = timeseriesToTimestamptz(f.Range.From), timeseriesToTimestamptz(f.Range.To)
 	}
 
 	limit := f.Page.Limit
@@ -113,8 +113,8 @@ func (r *AnomalyRepository) Create(ctx context.Context, s store.Scope, a model.C
 
 	row, err := r.q.AnomalyCreate(ctx, sqlcgen.AnomalyCreateParams{
 		AnalyzerID:   a.AnalyzerID,
-		PeriodStart:  toTimestamptz(a.PeriodStart),
-		PeriodEnd:    toTimestamptz(a.PeriodEnd),
+		PeriodStart:  timeseriesToTimestamptz(a.PeriodStart),
+		PeriodEnd:    timeseriesToTimestamptz(a.PeriodEnd),
 		Reason:       a.Reason,
 		Detail:       a.Detail,
 		CompanyID:    s.CompanyID,
@@ -146,7 +146,7 @@ func (r *AnomalyRepository) Resolve(ctx context.Context, s store.Scope, id uuid.
 
 	row, err := r.q.AnomalyResolve(ctx, sqlcgen.AnomalyResolveParams{
 		ID:             id,
-		At:             toTimestamptz(at),
+		At:             timeseriesToTimestamptz(at),
 		ResolvedBy:     &resolvedBy,
 		Resolution:     resolution,
 		OverrideValues: overrides,

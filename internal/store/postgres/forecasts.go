@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -47,13 +48,17 @@ const createForecastsStaging = `create temporary table forecasts_staging (
 	model_version text
 ) on commit drop`
 
+// upsertForecastsFromStaging is a PLAIN select, not `distinct on`: like
+// ReadingRepository's upsert, BulkInsert refuses the whole batch with
+// store.ErrConflict — before the staging table exists — the moment two rows
+// in the caller's slice share an (analyzer_id, ts, generated_at) key (see
+// forecastDuplicateKey).
 const upsertForecastsFromStaging = `insert into forecasts (
 	analyzer_id, ts, generated_at, horizon_hours, median, p10, p90, model_id, model_version
 )
-select distinct on (analyzer_id, ts, generated_at)
+select
 	analyzer_id, ts, generated_at, horizon_hours, median, p10, p90, model_id, model_version
 from forecasts_staging
-order by analyzer_id, ts, generated_at
 on conflict (analyzer_id, ts, generated_at) do update set
 	horizon_hours = excluded.horizon_hours,
 	median        = excluded.median,
@@ -76,6 +81,14 @@ func (r *ForecastRepository) BulkInsert(ctx context.Context, s store.Scope, rows
 	const op = "forecast bulk insert"
 	buildingIDs, allBuildings := s.BuildingFilter()
 
+	// A duplicate (analyzer_id, ts, generated_at) inside the caller's own
+	// batch is refused loudly, before any database round trip — see
+	// ReadingRepository.BulkInsert's identical comment.
+	if dup, ok := forecastDuplicateKey(rows); ok {
+		return 0, 0, fmt.Errorf("%w: duplicate forecast key analyzer_id=%s ts=%s generated_at=%s",
+			store.ErrConflict, dup.AnalyzerID, dup.Ts.Format(time.RFC3339Nano), dup.GeneratedAt.Format(time.RFC3339Nano))
+	}
+
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return 0, 0, pgerr.Translate(r.pool, op, err)
@@ -86,7 +99,7 @@ func (r *ForecastRepository) BulkInsert(ctx context.Context, s store.Scope, rows
 	for i, row := range rows {
 		analyzerIDs[i] = row.AnalyzerID
 	}
-	distinctAnalyzerIDs := distinctUUIDs(analyzerIDs)
+	distinctAnalyzerIDs := readingDistinctUUIDs(analyzerIDs)
 
 	// `for share` locks every visible analyzer row for the rest of this
 	// transaction — see ReadingRepository.BulkInsert's identical comment.
@@ -130,7 +143,7 @@ func (r *ForecastRepository) BulkInsert(ctx context.Context, s store.Scope, rows
 	if err != nil {
 		return 0, 0, pgerr.Translate(r.pool, op, err)
 	}
-	inserted, updated, err = scanUpsertCounts(upsertRows)
+	inserted, updated, err = timeseriesScanUpsertCounts(upsertRows)
 	if err != nil {
 		return 0, 0, pgerr.Translate(r.pool, op, err)
 	}
@@ -157,8 +170,8 @@ func (r *ForecastRepository) Range(ctx context.Context, s store.Scope, analyzerI
 
 	rows, err := r.q.ForecastRange(ctx, sqlcgen.ForecastRangeParams{
 		AnalyzerID:   analyzerID,
-		FromTs:       toTimestamptz(tr.From),
-		ToTs:         toTimestamptz(tr.To),
+		FromTs:       timeseriesToTimestamptz(tr.From),
+		ToTs:         timeseriesToTimestamptz(tr.To),
 		CompanyID:    s.CompanyID,
 		AllBuildings: allBuildings,
 		BuildingIds:  buildingIDs,
@@ -172,7 +185,11 @@ func (r *ForecastRepository) Range(ctx context.Context, s store.Scope, analyzerI
 		}
 		return []model.Forecast{}, nil
 	}
-	return forecastsFromRows(rows)
+	out, err := forecastsFromRows(rows)
+	if err != nil {
+		return nil, pgerr.Translate(r.pool, op, err)
+	}
+	return out, nil
 }
 
 // LatestRun implements store.ForecastRepository.LatestRun.
@@ -188,8 +205,8 @@ func (r *ForecastRepository) LatestRun(ctx context.Context, s store.Scope, analy
 
 	rows, err := r.q.ForecastLatestRun(ctx, sqlcgen.ForecastLatestRunParams{
 		AnalyzerID:   analyzerID,
-		FromTs:       toTimestamptz(tr.From),
-		ToTs:         toTimestamptz(tr.To),
+		FromTs:       timeseriesToTimestamptz(tr.From),
+		ToTs:         timeseriesToTimestamptz(tr.To),
 		CompanyID:    s.CompanyID,
 		AllBuildings: allBuildings,
 		BuildingIds:  buildingIDs,
@@ -203,7 +220,11 @@ func (r *ForecastRepository) LatestRun(ctx context.Context, s store.Scope, analy
 		}
 		return []model.Forecast{}, nil
 	}
-	return forecastsFromRows(rows)
+	out, err := forecastsFromRows(rows)
+	if err != nil {
+		return nil, pgerr.Translate(r.pool, op, err)
+	}
+	return out, nil
 }
 
 // RecordGaps implements store.ForecastRepository.RecordGaps.
@@ -234,7 +255,7 @@ func (r *ForecastRepository) RecordGaps(ctx context.Context, s store.Scope, gaps
 	for i, g := range gaps {
 		analyzerIDs[i] = g.AnalyzerID
 	}
-	distinctAnalyzerIDs := distinctUUIDs(analyzerIDs)
+	distinctAnalyzerIDs := readingDistinctUUIDs(analyzerIDs)
 
 	visibleIDs, err := r.q.WithTx(tx).ForecastVisibleAnalyzerIDs(ctx, sqlcgen.ForecastVisibleAnalyzerIDsParams{
 		AnalyzerIds:  distinctAnalyzerIDs,
@@ -260,9 +281,9 @@ func (r *ForecastRepository) RecordGaps(ctx context.Context, s store.Scope, gaps
 			id = uuid.New()
 		}
 		ids[i] = id
-		generatedAts[i] = toTimestamptz(g.GeneratedAt)
-		gapStarts[i] = toTimestamptz(g.GapStart)
-		gapEnds[i] = toTimestamptz(g.GapEnd)
+		generatedAts[i] = timeseriesToTimestamptz(g.GeneratedAt)
+		gapStarts[i] = timeseriesToTimestamptz(g.GapStart)
+		gapEnds[i] = timeseriesToTimestamptz(g.GapEnd)
 		missingHours[i] = g.MissingHours
 	}
 
@@ -293,7 +314,7 @@ func (r *ForecastRepository) Gaps(ctx context.Context, s store.Scope, analyzerID
 
 	rows, err := r.q.ForecastGapsByRun(ctx, sqlcgen.ForecastGapsByRunParams{
 		AnalyzerID:   analyzerID,
-		GeneratedAt:  toTimestamptz(generatedAt),
+		GeneratedAt:  timeseriesToTimestamptz(generatedAt),
 		CompanyID:    s.CompanyID,
 		AllBuildings: allBuildings,
 		BuildingIds:  buildingIDs,
@@ -339,6 +360,27 @@ func (r *ForecastRepository) requireAnalyzerVisible(ctx context.Context, s store
 		return store.ErrNotFound
 	}
 	return nil
+}
+
+// forecastDuplicateKey reports the first row in rows whose
+// (analyzer_id, ts, generated_at) key repeats an earlier row's, and true —
+// or a zero Forecast and false when every key is unique. See
+// readingDuplicateKey's identical comment.
+func forecastDuplicateKey(rows []model.Forecast) (model.Forecast, bool) {
+	type key struct {
+		analyzerID  uuid.UUID
+		ts          int64
+		generatedAt int64
+	}
+	seen := make(map[key]struct{}, len(rows))
+	for _, row := range rows {
+		k := key{row.AnalyzerID, row.Ts.UnixNano(), row.GeneratedAt.UnixNano()}
+		if _, ok := seen[k]; ok {
+			return row, true
+		}
+		seen[k] = struct{}{}
+	}
+	return model.Forecast{}, false
 }
 
 func forecastsFromRows(rows []sqlcgen.Forecast) ([]model.Forecast, error) {

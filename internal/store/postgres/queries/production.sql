@@ -15,6 +15,7 @@ select id from power_plants
 where id = any(sqlc.arg(plant_ids)::uuid[])
   and company_id = sqlc.arg(company_id)
   and deleted_at is null
+order by id
 for share;
 
 -- name: ProductionValidDevicePairCount :one

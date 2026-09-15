@@ -162,6 +162,7 @@ select id from power_plants
 where id = any($1::uuid[])
   and company_id = $2
   and deleted_at is null
+order by id
 for share
 `
 

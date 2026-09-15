@@ -32,10 +32,6 @@ type AdminMarketDataUpsertHourlyPricesParams struct {
 // implemented in internal/store/postgres/admin/marketdata.go). Neither table
 // carries a company_id: these writes are platform-wide by construction, so
 // there is no Scope to check here — see repository.go's admin section header.
-// NOTE: TestEveryFunctionSQLcMustTypeIsDeclared currently flags
-// "market_prices_hourly (" and "conflict (" below as calls to undeclared
-// functions — a known false positive being fixed in parallel on
-// f1/task-8c; see the task report.
 func (q *Queries) AdminMarketDataUpsertHourlyPrices(ctx context.Context, arg AdminMarketDataUpsertHourlyPricesParams) (int64, error) {
 	result, err := q.db.Exec(ctx, adminMarketDataUpsertHourlyPrices, arg.Ts, arg.Ptf, arg.FetchedAt)
 	if err != nil {

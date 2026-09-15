@@ -24,6 +24,7 @@ where id = any(sqlc.arg(analyzer_ids)::uuid[])
   and company_id = sqlc.arg(company_id)
   and (sqlc.arg(all_buildings)::boolean or building_id = any(sqlc.arg(building_ids)::uuid[]))
   and deleted_at is null
+order by id
 for share;
 
 -- name: ReadingAnalyzerVisible :one

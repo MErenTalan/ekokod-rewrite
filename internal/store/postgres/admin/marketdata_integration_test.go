@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
+	"github.com/MErenTalan/ekokod-rewrite/internal/store"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/admin"
 	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
 )
@@ -65,6 +66,79 @@ func TestUpsertYekdemIsIdempotent(t *testing.T) {
 	var count int
 	require.NoError(t, pool.QueryRow(ctx, `select count(*) from yekdem_monthly`).Scan(&count))
 	require.Equal(t, 1, count)
+
+	// The second call must have actually CHANGED the stored value, not just
+	// reported a row written: an upsert that silently no-ops on conflict
+	// would pass the assertions above without ever updating anything.
+	var value string
+	require.NoError(t, pool.QueryRow(ctx, `select value::text from yekdem_monthly where year = 2026 and month = 1`).Scan(&value))
+	require.Equal(t, "20.0000", value)
+}
+
+// --- input validation: refused loudly, before any database round trip -----
+
+func TestUpsertHourlyPricesRefusesZeroTs(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	repo := admin.NewMarketDataRepository(pool)
+
+	_, err := repo.UpsertHourlyPrices(ctx, []model.MarketPrice{
+		{PTF: decimal.RequireFromString("1.0000")}, // Ts left zero
+	})
+	require.ErrorIs(t, err, store.ErrConflict)
+
+	var count int
+	require.NoError(t, pool.QueryRow(ctx, `select count(*) from market_prices_hourly`).Scan(&count))
+	require.Zero(t, count, "nothing may be written when the call is refused")
+}
+
+func TestUpsertHourlyPricesRefusesDuplicateTsWithinOneCall(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	repo := admin.NewMarketDataRepository(pool)
+
+	prices := []model.MarketPrice{
+		{Ts: marketDataEpoch, PTF: decimal.RequireFromString("1.0000")},
+		{Ts: marketDataEpoch, PTF: decimal.RequireFromString("2.0000")}, // same Ts, different value
+	}
+	_, err := repo.UpsertHourlyPrices(ctx, prices)
+	require.ErrorIs(t, err, store.ErrConflict)
+
+	var count int
+	require.NoError(t, pool.QueryRow(ctx, `select count(*) from market_prices_hourly`).Scan(&count))
+	require.Zero(t, count, "nothing may be written when the batch itself contains a duplicate ts")
+}
+
+func TestUpsertYekdemRefusesMonthOutsideValidRange(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	repo := admin.NewMarketDataRepository(pool)
+
+	for _, month := range []int16{0, 13, -1} {
+		_, err := repo.UpsertYekdem(ctx, []model.YekdemMonthly{{Year: 2026, Month: month, Value: decimal.RequireFromString("1.0000")}})
+		require.ErrorIsf(t, err, store.ErrConflict, "month %d must be refused", month)
+	}
+
+	var count int
+	require.NoError(t, pool.QueryRow(ctx, `select count(*) from yekdem_monthly`).Scan(&count))
+	require.Zero(t, count, "nothing may be written when the call is refused")
+}
+
+func TestUpsertYekdemRefusesDuplicateYearMonthWithinOneCall(t *testing.T) {
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	repo := admin.NewMarketDataRepository(pool)
+
+	values := []model.YekdemMonthly{
+		{Year: 2026, Month: 1, Value: decimal.RequireFromString("1.0000")},
+		{Year: 2026, Month: 1, Value: decimal.RequireFromString("2.0000")}, // same (year, month), different value
+	}
+	_, err := repo.UpsertYekdem(ctx, values)
+	require.ErrorIs(t, err, store.ErrConflict)
+
+	var count int
+	require.NoError(t, pool.QueryRow(ctx, `select count(*) from yekdem_monthly`).Scan(&count))
+	require.Zero(t, count, "nothing may be written when the batch itself contains a duplicate (year, month)")
 }
 
 func TestUpsertHourlyPricesAndYekdemHandleEmptyInput(t *testing.T) {
