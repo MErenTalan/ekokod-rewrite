@@ -137,6 +137,7 @@ Each row is referenced by id from the task that implements it. **"Cost if wrong"
 | R27 | 06 §9 discovery: new analyzers' state | Spec silent. Ruling: a newly discovered point is created with `IsActive=false` and `BuildingID=nil`; only active analyzers are fetched. A multiplier change on an existing analyzer is applied **and** written as a `warning` message (it changes bills). | One default |
 | R28 | 06 §5 PM5340 base URL scheme | Customer-local service. Ruling: `http` and `https` are both accepted; `https` is always verified (pinnable). Recorded in the credential view so an operator sees the transport. | Validator |
 | R29 | Status semantics of `job_runs` | Ruling: `success` when no page failed, even with rejections (rejections are `skipped`). `partial` when a page failed after ≥ 1 page persisted, or when some analyzers failed in a sync. `failed` when nothing persisted and an error occurred. | Enum mapping |
+| R30 | 06 §4 ARIL `AccordPower`; `MeteringPoint.ContractedPowerKw` (plan) has no destination — `model.Analyzer` (`internal/domain/model/buildings.go`) has no `ContractedPowerKw` field, and F2 adds no migration beyond `00012`/`00013`. The only `ContractedPowerKw` in F1 belongs to the unrelated `tariffs` table. | Found during F2 planning (preflight S1/S8), not a spec gap the spec itself flags. Ruling: the adapter still parses the field into `MeteringPoint.ContractedPowerKw *decimal.Decimal` (Task 8 rule 2) — it is real provider data, and refusing to parse it would also drop it from `Raw`. The **pipeline never persists it**: Task 10's `SyncAnalyzers` Create/Update step copies every other descriptive `MeteringPoint` field to `model.Analyzer` but explicitly skips `ContractedPowerKw`, with a code comment citing this ruling. No invented migration or fabricated `analyzers` column. | One migration (`analyzers` gains a column) + one mapping line, once the product owner confirms it is wanted and distinct from `tariffs.ContractedPowerKw` |
 
 ### Open questions (non-blocking; F2 proceeds on the ruling)
 
@@ -144,6 +145,7 @@ Each row is referenced by id from the task that implements it. **"Cost if wrong"
 - **Q2 (R9):** Does ARIL `owner_consumptions` with `WithoutMultiplier:false` already apply the multiplier? Verify with one real response in F14.
 - **Q3 (R11):** Should `analyzers` gain a commissioning date so 06 §9's rule can be enforced?
 - **Q4 (R8, R21):** OSOS multiplier semantics and iSolar non-success result codes; verify against real responses in F14's live checklist.
+- **Q5 (R30):** Should `analyzers` gain a `contracted_power_kw` column so ARIL's (and any other provider's) contracted-power figure can be stored, or does it belong solely on `tariffs`?
 
 ---
 
@@ -178,14 +180,19 @@ Common to all: 3 attempts in-client; `Retry-After` cap 120 s; EPİAŞ 429 withou
 
 At most 5 concurrent agents. A wave starts only after every task it depends on is **merged** into `phase/f2-integration-layer` and the merged tip passes the gate. After merging Task 5, run `make generate && make check-generate` on the phase tip before starting Wave C.
 
+**Wave placement (S11 speed ruling, applied):** Tasks 3, 4 and 5 each state zero dependency on any other F2 task (Task 3: `shopspring/decimal` only; Task 4: "nothing from Tasks 1–3"; Task 5: F1 only, and Task 1's own text independently confirms "Task 1 has no dependency on Task 5"). They move into Wave A alongside Task 1 — four tasks, within the 5-concurrent-agent budget, with no shared files (File ownership table below). Task 12 (EPİAŞ) consumes only Tasks 1–4, never Task 5 or Task 10, so once Wave A and B are merged it is exactly as ready as Tasks 6–9; it moves to Wave C. That makes Wave C six ready tasks against a 5-concurrent budget: the controller dispatches Tasks 6, 7, 8, 9, 10 first (they fill the budget and are the longer poles — 10 is consumed by three later tasks, 6/7/8/9 gate the adapter fixture matrix), and starts Task 12 the moment any one of those five merges and frees a slot. This is a scheduling detail, not a dependency change — Task 12 does not depend on 6, 7, 8, 9 or 10, and nothing in Wave D waits on Task 12 any later than it already did. Task 13 (iSolar) keeps its stated Task 5 dependency and stays in Wave D; moving it was considered (S11) and rejected because, unlike Task 12, F14's isolar client genuinely exercises the F1 production/plant seams Task 5 does not touch, so the lower-confidence preflight suggestion is not taken up.
+
+**Task 14 gets its own wave (S3, applied).** The only same-wave dependency the preflight scan found was Task 14 (Wave D) needing Task 13's (also Wave D) `internal/integration/isolar/token.go` before it could even compile, which the original plan patched with a controller sub-merge rule ("merge Task 13's first commit before dispatching Task 14"). Removing Task 14 from Wave D and giving it a solo wave (E) removes the special case entirely: by the time Wave E starts, all of Wave D — including the whole of Task 13, not just its first commit — is already merged, via the ordinary "a wave starts only after every task it depends on is merged" rule that governs every other wave. Task 16 then moves to Wave F and Task 17 to Wave G. Task 14 also gains a real (previously undeclared) dependency on Task 10's `ingest.Enqueuer` (S6); since Task 10 is in Wave C, well before Task 14's new Wave E, this is not a new ordering problem.
+
 | Wave | Tasks (parallel) | Depends on |
 |---|---|---|
-| A | 1 | Pre-flight |
-| B | 2, 3, 4, 5 | 1 |
-| C | 6, 7, 8, 9, 10 | 2, 3, 4, 5 |
-| D | 11, 12, 13, 14, 15 | 10 (for 11, 15); 2–5 for all; Task 13's `token.go` commit merged before 14 |
-| E | 16 | all of A–D |
-| F | 17 | 16 |
+| A | 1, 3, 4, 5 | Pre-flight |
+| B | 2 | A (Task 1 for sentinels/`Provider`; Task 4 for the canonical `lock.Locker`/`lock.Lease`, which `httpx` now aliases — R2) |
+| C | 6, 7, 8, 9, 10, 12 | A, B (2–5 for the meter adapters and the pipeline; 1–4 for EPİAŞ — never 5 or 10). **6 ready tasks, 5-concurrent budget:** dispatch 6, 7, 8, 9, 10 first; start 12 as soon as a slot frees. |
+| D | 11, 13, 15 | C (10, for 11 and 15); A (1, 5) for all three |
+| E | 14 | D fully merged (all of Task 13, not just `token.go` — no sub-merge rule); C (10, for `ingest.Enqueuer`); A (1, 4, 5) |
+| F | 16 | A–E |
+| G | 17 | F |
 
 ## File ownership (parallel tasks never edit the same file)
 
@@ -195,16 +202,16 @@ At most 5 concurrent agents. A wave starts only after every task it depends on i
 | 2 | `internal/integration/httpx/**` |
 | 3 | `internal/integration/normalize/**` |
 | 4 | `internal/integration/fake/**`; `internal/platform/lock/**` |
-| 5 | migrations `00012`, `00013`; `internal/store/postgres/queries/{generation.sql,provider_series.sql,admin_ingestion.sql}`; `internal/store/postgres/{generation.go,provider_series.go}` + tests; `internal/store/postgres/admin/ingestion.go` + test; `internal/store/postgres/sqlcgen/**` (generated); **modifies** `internal/store/repository.go`, `internal/store/scope.go`, `internal/store/scope_test.go`, `internal/domain/model/timeseries.go`, `internal/domain/model/operations.go`, `internal/store/postgres/readings.go`, `internal/store/postgres/queries/readings.sql`, `internal/store/postgres/readings_integration_test.go` |
+| 5 | migrations `00012`, `00013`; `internal/store/postgres/queries/{generation.sql,provider_series.sql,admin_ingestion.sql}`; `internal/store/postgres/{generation.go,provider_series.go}` + tests; `internal/store/postgres/admin/ingestion.go` + test; `internal/store/postgres/sqlcgen/**` (generated); **modifies** `internal/store/repository.go`, `internal/store/scope.go`, `internal/store/scope_test.go`, `internal/domain/model/timeseries.go`, `internal/domain/model/operations.go`, `internal/store/postgres/readings.go`, `internal/store/postgres/queries/readings.sql`, `internal/store/postgres/readings_integration_test.go`, `internal/store/postgres/admin/doc.go` (records the sixth Admin interface, see Task 5's Files list) |
 | 6 | `internal/integration/osos/**` |
 | 7 | `internal/integration/gridbox/**` |
 | 8 | `internal/integration/aril/**` |
 | 9 | `internal/integration/pm5340/**` |
-| 10 | `internal/ingest/*.go` (package `ingest` only, not subdirectories) |
+| 10 | `internal/ingest/*.go` (package `ingest` only, not subdirectories; **excludes** `internal/ingest/doc.go`, created by Task 1 in Wave A and left unchanged here — no overlap with Task 1's row above) |
 | 11 | `internal/ingest/generation/**` |
-| 12 | `internal/integration/epias/**`; `internal/marketdata/**` |
+| 12 | `internal/integration/epias/**`; `internal/marketdata/**` (**excludes** `internal/marketdata/doc.go`, created by Task 1 and left unchanged) |
 | 13 | `internal/integration/isolar/**`; `internal/ingest/production/**` |
-| 14 | `internal/credentials/**` |
+| 14 | `internal/credentials/**` (**excludes** `internal/credentials/doc.go`, created by Task 1 and left unchanged) |
 | 15 | `internal/ingest/backfill/**` |
 | 16 | `internal/worker/**`; **modifies** `internal/cli/worker.go`, `internal/scheduler/scheduler.go`, `internal/scheduler/elector.go`, `internal/scheduler/*_test.go`, `internal/platform/config/{config.go,load.go,config_test.go}`, `docs/rewrite/appendix/env-reference.md`, `.env.example` |
 | 17 | `internal/job/ingestion_integration_test.go`, `internal/arch/adapter_matrix_test.go`, `HANDOFF_NEXT_SESSION.md` |
@@ -231,7 +238,7 @@ Packages owned by one task need no prefix. Test fixture files are named `<provid
 internal/integration/
   doc.go source.go credentials.go errors.go registry.go     # Task 1: the contract
   httpx/  client.go pool.go retry.go ratelimit.go pin.go template.go classify.go   # Task 2
-  normalize/  decimal.go time.go units.go                    # Task 3
+  normalize/  decimal.go time.go units.go window.go           # Task 3 (window.go: the shared range-chunking helper, S7)
   fake/  server.go fixtures.go responders.go sanitise.go sanitise_test.go   # Task 4
   osos/ gridbox/ aril/ pm5340/  source.go mapping.go wire.go testdata/   # Tasks 6-9
   epias/  client.go ticket.go parse.go testdata/             # Task 12
@@ -613,15 +620,18 @@ git commit -m "feat(f2): integration contract, job seam and float/TLS/purity gua
 - Test: `internal/integration/httpx/{client_test.go,pin_test.go,template_test.go,retry_test.go}`
 
 **Interfaces:**
-- Consumes: `integration.Provider`, `integration.Error` and the sentinels (Task 1); `lock.Locker` **by structural interface declared here** (Task 4 implements it; no import):
+- Consumes: `integration.Provider`, `integration.Error` and the sentinels (Task 1); `lock.Locker`/`lock.Lease` **by direct type alias, not a structural redeclaration** (Task 4; R2). The original draft declared `httpx.Locker`/`httpx.Lease` as their own named interfaces "structurally identical" to `lock.Locker`/`lock.Lease` — Go does not treat two differently-named interfaces as the same type for method-set satisfaction when a method's *return* type is one of those named interfaces, so `*lock.Memory`/`*lock.Redis` did not actually implement `httpx.Locker` (preflight review). The fix: `lock` (Task 4, Wave A — merged before this task starts) is the canonical owner of `Locker`/`Lease`; `httpx` imports it and aliases:
 
 ```go
 package httpx
 
-type Locker interface {
-	Acquire(ctx context.Context, key string, ttl time.Duration) (Lease, error)
-}
-type Lease interface{ Release(ctx context.Context) error }
+import lock "github.com/MErenTalan/ekokod-rewrite/internal/platform/lock"
+
+// Locker and Lease are aliases (`type X = lock.X`), not new types: lock's
+// own Memory and Redis implementations satisfy httpx.Locker without an
+// adapter anywhere in the plan (R2).
+type Locker = lock.Locker
+type Lease = lock.Lease
 
 type PoolOptions struct {
 	PinnedCerts map[string]string // config.External.PinnedCerts: host -> base64(DER)
@@ -724,12 +734,11 @@ Also:
 - `TestSerializeKeyHoldsTheLockPerRequest`: a fake Locker records Acquire/Release pairs around each request, in order, and Release happens even on error.
 - `TestBodyLargerThanCapIsMalformed`.
 
-`pin_test.go`:
+`pin_test.go` (uses `fake.NewTLSServer`, Task 4 — merged in Wave A before this task starts. Every call mints a **fresh** self-signed certificate, R4: Go's own `httptest.NewTLSServer` reuses one built-in localhost cert across every server in the process, which makes a naive "pin the other server's cert" test pass for the wrong reason — both servers would present the identical certificate):
 
 ```go
 func TestUnpinnedSelfSignedServerIsRefused(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(200) }))
-	defer srv.Close()
+	srv := fake.NewTLSServer(t)
 	pool, err := httpx.NewPool(httpx.PoolOptions{}) // system roots only
 	require.NoError(t, err)
 	_, err = pool.Client(httpx.ClientConfig{Provider: "aril", LimiterKey: "k", Every: time.Millisecond, Burst: 1, MaxAttempts: 3}).
@@ -737,11 +746,43 @@ func TestUnpinnedSelfSignedServerIsRefused(t *testing.T) {
 	require.ErrorIs(t, err, integration.ErrUpstreamUnavailable)
 }
 
-func TestPinnedHostAcceptsItsCertificate(t *testing.T)       { /* pin srv cert → 200 */ }
-func TestPinnedHostRejectsADifferentCertificate(t *testing.T) { /* pin srvB's cert for srvA's host → refused; one request attempt only */ }
-func TestPoolTransportsNeverDisableVerification(t *testing.T) {
-	// white-box (package httpx): every transport the pool built has
-	// TLSClientConfig.InsecureSkipVerify == false and MinVersion >= tls.VersionTLS12.
+func TestPinnedHostAcceptsItsCertificate(t *testing.T) { /* pin srv.Cert (fake.Server's own field) → 200 */ }
+
+// TestPinnedHostRejectsADifferentCertificate is the R4 fix: srvA and srvB are
+// two SEPARATE fake.NewTLSServer calls, so — unlike two httptest.NewTLSServer
+// calls — their certificates are provably distinct (require.NotEqual on the
+// DER bytes is the test's own precondition check). Pinning srvB's cert under
+// srvA's host is therefore observably wrong, and the mutation in Step 5(b)
+// below can actually be caught.
+func TestPinnedHostRejectsADifferentCertificate(t *testing.T) {
+	srvA := fake.NewTLSServer(t, route200)
+	srvB := fake.NewTLSServer(t, route200)
+	require.NotEqual(t, srvA.Cert.Raw, srvB.Cert.Raw, "precondition: two fake servers must have distinct certs")
+	pool, err := httpx.NewPool(httpx.PoolOptions{PinnedCerts: map[string]string{hostOf(srvA.URL): base64.StdEncoding.EncodeToString(srvB.Cert.Raw)}})
+	require.NoError(t, err)
+	_, err = pool.Client(httpx.ClientConfig{Provider: "aril", LimiterKey: "k", Every: time.Millisecond, Burst: 1, MaxAttempts: 1}).
+		Do(context.Background(), httpx.Request{Op: "analyzers_list", Method: "GET", Template: srvA.URL})
+	require.ErrorIs(t, err, integration.ErrUpstreamUnavailable)
+	require.Empty(t, srvA.Requests(), "the TLS handshake must fail before any HTTP request reaches the handler")
+}
+
+// TestPoolNeverAcceptsAnUnverifiedCertificate replaces a white-box struct
+// inspection (R5): asserting `TLSClientConfig.InsecureSkipVerify == false`
+// requires writing the literal InsecureSkipVerify into this test file, which
+// trips the existing substring guard TestNoTLSVerificationBypass
+// (internal/arch/arch_test.go) — it scans every .go file under internal/,
+// test files included, exempting only arch_test.go itself — and Task 17's
+// filtered grep. This version proves the same property BEHAVIOURALLY instead:
+// a request to a server that is neither pinned nor system-trusted must fail,
+// no matter what else is pinned.
+func TestPoolNeverAcceptsAnUnverifiedCertificate(t *testing.T) {
+	pinned := fake.NewTLSServer(t, route200)
+	unrelated := fake.NewTLSServer(t, route200)
+	pool, err := httpx.NewPool(httpx.PoolOptions{PinnedCerts: map[string]string{hostOf(pinned.URL): base64.StdEncoding.EncodeToString(pinned.Cert.Raw)}})
+	require.NoError(t, err)
+	_, err = pool.Client(httpx.ClientConfig{Provider: "aril", LimiterKey: "k", Every: time.Millisecond, Burst: 1, MaxAttempts: 1}).
+		Do(context.Background(), httpx.Request{Op: "analyzers_list", Method: "GET", Template: unrelated.URL})
+	require.ErrorIs(t, err, integration.ErrUpstreamUnavailable)
 }
 ```
 
@@ -762,7 +803,7 @@ Expected: FAIL — package not found / undefined `httpx.NewPool`.
 - [ ] **Step 5: Prove the secret and pinning guards fail.** Apply each mutation, confirm FAIL, restore:
   (a) wrap the transport error with `%w` in `classify.go`: `TestHTTPErrorsNeverContainSubstitutedSecrets` FAILS on the network-failure path;
   (b) make the pinned transport trust **any** certificate in the pins map instead of only the host's own (build one shared pool from every pin): `TestPinnedHostRejectsADifferentCertificate` FAILS;
-  (c) set `MinVersion` to zero in `pin.go`: `TestPoolTransportsNeverDisableVerification` FAILS.
+  (c) set `MinVersion` to zero **and** make the shared (unpinned-host) transport accept any certificate in `pin.go`: `TestPoolNeverAcceptsAnUnverifiedCertificate` FAILS.
   Record the observed outputs.
 
 - [ ] **Step 6: Gate and commit**
@@ -775,11 +816,11 @@ git commit -m "feat(f2): httpx client with retries, jitter, rate limits, pinning
 
 ---
 
-## Task 3: `normalize` — decimals, provider dates and units
+## Task 3: `normalize` — decimals, provider dates, units and the one range-chunking helper
 
 **Files:**
-- Create: `internal/integration/normalize/{decimal.go,time.go,units.go}`
-- Test: `internal/integration/normalize/{decimal_test.go,time_test.go,units_test.go}`
+- Create: `internal/integration/normalize/{decimal.go,time.go,units.go,window.go}`
+- Test: `internal/integration/normalize/{decimal_test.go,time_test.go,units_test.go,window_test.go}`
 
 **Interfaces:**
 - Consumes: `shopspring/decimal` only. No project imports beyond `internal/domain/model` (for nothing but documentation; import it only if needed).
@@ -820,6 +861,32 @@ func Multiply(v *decimal.Decimal, m decimal.Decimal) *decimal.Decimal
 func WhToKWh(v *decimal.Decimal) *decimal.Decimal // ÷ 1000, exact
 func WToKW(v *decimal.Decimal) *decimal.Decimal   // ÷ 1000, exact
 func KWFor15MinToKWh(v *decimal.Decimal) *decimal.Decimal // × 0.25 (R15)
+
+// Window is a half-open time range [From, To). It is deliberately a plain
+// struct, not job.Window (Task 1): normalize has no F2-task dependency
+// (Consumes: shopspring/decimal only, above), and it must stay that way
+// regardless of wave order. Callers that need job.Window (backfill, Task 15)
+// convert with one field-for-field copy.
+type Window struct{ From, To time.Time }
+
+// Chunk splits [from, to) into consecutive half-open windows of at most max,
+// each aligned to Europe/Istanbul local midnight so a window never splits a
+// local day (06 §2 "requests to one provider are serialised per company";
+// windows are also the pagination unit for OSOS, GridBox and EPİAŞ, R20).
+//
+// S7 (preflight): the plan originally implemented range chunking three
+// times — inline in Task 10's pipeline, inline in Task 12's EPİAŞ client,
+// and as backfill.Windows in Task 15, only the last of which was tested for
+// gap/overlap/DST correctness. Chunk is now the ONE implementation. It lives
+// here, not in internal/ingest or internal/ingest/backfill, because Task 3 is
+// the earliest task that can own it without creating a same-wave dependency:
+// after the S11 wave move, Task 3 is Wave A; Tasks 10 and 12 (Wave C) and
+// Task 15 (Wave D) all consume it from a strictly earlier wave. Putting it in
+// Task 1 or Task 5 (also Wave A) instead would have worked too, but Task 3
+// already owns Istanbul-local-day arithmetic (Istanbul, ISO8601), so a second
+// implementation of "local midnight" next to it would itself have been the
+// kind of duplication this fix removes.
+func Chunk(from, to time.Time, max time.Duration) []Window
 ```
 
 - [ ] **Step 1: Write the failing tests**
@@ -853,6 +920,7 @@ Also:
 - `TestJSONNumberIsExact`: `json.Number("9007199254740993.0001")` has its string form preserved.
 - `TestMultiplyPreservesNil`.
 - `TestUnitConversionsAreExact`: `1500 Wh → 1.5 kWh`; `2.4 kW × 15 min → 0.6 kWh`.
+- `window_test.go`, `TestChunkCoversRangeWithoutGapOrOverlap` (property, 200 random `[from, to)` ranges and `max` values: windows contiguous, union equals the input range, each window ≤ `max`); `TestChunkAlignsToIstanbulMidnight` (a range starting mid-day and a `max` of 24h still produce boundaries at Istanbul-local midnight, not `from + max`); `TestChunkEmptyRangeIsEmpty` (`from == to` → no windows).
 
 - [ ] **Step 2: Run and watch them fail**
 
@@ -861,18 +929,18 @@ go test ./internal/integration/normalize/ -race -v
 ```
 Expected: FAIL — package missing.
 
-- [ ] **Step 3: Implement.** `ProviderNumber` normalises the string and calls `decimal.NewFromString`; it never touches `strconv.ParseFloat`, which Task 1's guard would catch. `ISO8601` tries `time.RFC3339Nano`, then the offset-less layouts `2006-01-02T15:04:05.999999999` and `2006-01-02 15:04:05` via `time.ParseInLocation(…, Istanbul)`, and returns `.UTC()`.
+- [ ] **Step 3: Implement.** `ProviderNumber` normalises the string and calls `decimal.NewFromString`; it never touches `strconv.ParseFloat`, which Task 1's guard would catch. `ISO8601` tries `time.RFC3339Nano`, then the offset-less layouts `2006-01-02T15:04:05.999999999` and `2006-01-02 15:04:05` via `time.ParseInLocation(…, Istanbul)`, and returns `.UTC()`. `Chunk` walks `from` forward one Istanbul-local-midnight-aligned step at a time (`time.Date(y,m,d+1,0,0,0,0,Istanbul)` for the first boundary, then `+24h` wall-clock steps thereafter, each capped at `max` and at `to`) — never `from.Add(max)` blindly, which would drift across a DST change and stop landing on local midnight.
 
 - [ ] **Step 4: Run and watch them pass.**
 
-- [ ] **Step 5: Prove the timezone test fails.** Replace `ParseInLocation(…, Istanbul)` with `time.Parse`. `TestOffsetlessTimestampIsIstanbulLocal` must FAIL on the first row. Then replace `Istanbul` with `time.FixedZone("TR", 3*3600)`: it must FAIL on the 2015-01-10 row. Restore.
+- [ ] **Step 5: Prove the timezone test fails.** Replace `ParseInLocation(…, Istanbul)` with `time.Parse`. `TestOffsetlessTimestampIsIstanbulLocal` must FAIL on the first row. Then replace `Istanbul` with `time.FixedZone("TR", 3*3600)`: it must FAIL on the 2015-01-10 row. Restore. Separately for `Chunk`: replace the Istanbul-midnight boundary with `from.Add(24 * time.Hour)`: `TestChunkAlignsToIstanbulMidnight` FAILS. Restore.
 
 - [ ] **Step 6: Gate and commit**
 
 ```bash
 make lint && make test && make build
 git add internal/integration/normalize
-git commit -m "feat(f2): exact provider number and Istanbul-aware timestamp normalisation" <TRAILERS>
+git commit -m "feat(f2): exact provider number, Istanbul-aware timestamp normalisation and the shared range-chunking helper" <TRAILERS>
 ```
 
 ---
@@ -895,10 +963,21 @@ package fake
 type RecordedRequest struct { Method, Path, RawQuery string; Header http.Header; Body []byte }
 
 type Server struct {
-	URL  string            // https://127.0.0.1:port
-	Pins map[string]string // {"127.0.0.1": base64(DER)} — pass to httpx.PoolOptions.PinnedCerts
+	URL  string             // https://127.0.0.1:port
+	Pins map[string]string  // {"127.0.0.1": base64(DER)} — pass to httpx.PoolOptions.PinnedCerts
+	Cert *x509.Certificate  // this server's own certificate; R4, see below
 }
-// NewTLSServer starts an httptest TLS server routed by method+path; unmatched → 404 and t.Errorf.
+// NewTLSServer starts an httptest TLS server routed by method+path; unmatched
+// → 404 and t.Errorf. EVERY CALL mints a fresh ECDSA self-signed certificate
+// (IP SAN 127.0.0.1) via crypto/ecdsa + x509.CreateCertificate, set on
+// httptest.NewUnstartedServer(...).TLS before StartTLS (R4): Go's own
+// httptest.NewTLSServer reuses ONE built-in certificate across every server
+// in the process, so two httptest.NewTLSServer calls are byte-identical
+// certificates — a "pin server B's cert under server A's host, expect
+// rejection" test cannot observe anything with them, because it would
+// actually be pinning server A's own certificate. Two NewTLSServer calls
+// here are provably distinct (Task 2's TestPinnedHostRejectsADifferentCertificate
+// depends on this).
 func NewTLSServer(t *testing.T, routes ...Route) *Server
 func (s *Server) Requests() []RecordedRequest
 
@@ -923,6 +1002,18 @@ var RequiredCases = []string{"success", "empty", "partial", "auth_failure", "mal
 ```go
 package lock
 
+// lock is the CANONICAL owner of the Locker/Lease contract (R2). httpx
+// (Task 2, which starts only after this task's Wave A merges) imports this
+// package and aliases httpx.Locker = lock.Locker, httpx.Lease = lock.Lease —
+// a type alias, not a structurally-identical redeclaration, which is what
+// makes *Memory and *Redis satisfy httpx.Locker with no adapter anywhere in
+// the plan (the original draft had two separately-named interfaces with
+// identical method sets, which Go does NOT treat as satisfying each other
+// when a method's return type is one of those named interfaces — preflight
+// review). Ownership sits here, not in httpx, because after the S11 wave
+// move this package has zero F2-task dependencies and is Wave A; if httpx
+// (Wave B) owned the canonical type, Task 4 would need to import a
+// not-yet-merged Task 2 package to implement it.
 var ErrNotAcquired = errors.New("lock: not acquired")
 type Locker interface { Acquire(ctx context.Context, key string, ttl time.Duration) (Lease, error) }
 type Lease interface { Release(ctx context.Context) error }
@@ -932,9 +1023,27 @@ func NewMemory(now func() time.Time) *Memory
 // Redis: SET key token NX PX ttl; waits by polling 50ms→1s (doubling) until ctx is done;
 // Release deletes only if the stored token matches (Lua compare-and-delete). Keys are prefixed "ekokod:lock:".
 func NewRedis(client goredis.UniversalClient) *Redis
-```
 
-`lock.Locker`/`lock.Lease` are method-set-identical to `httpx.Locker`/`httpx.Lease`. Task 16 passes a `*lock.Redis` where an `httpx.Locker` is wanted; the Lease return type differs nominally, so Task 16 wraps it in a two-line adapter `worker.httpxLocker`.
+// Consumer is a one-shot, NON-BLOCKING atomic consume (R3). Unlike Locker,
+// which waits by polling until ctx is done, Consume never waits: there is
+// nothing to wait FOR once a key is already gone. It exists for single-use
+// tokens (the OAuth state nonce, Task 14) where a replay must fail fast, not
+// queue behind the request that already consumed it — using Locker.Acquire
+// with no Release for this (the original draft) made a replayed OAuth
+// callback block for the lock's TTL, or forever under context.Background(),
+// instead of returning an error.
+type Consumer interface {
+	// Consume marks key as used for ttl and reports whether THIS call is the
+	// one that marked it. found=true: first use — proceed. found=false: the
+	// key was already consumed (or, for Memory, is still within a previous
+	// consume's ttl) — the caller rejects immediately, no waiting.
+	Consume(ctx context.Context, key string, ttl time.Duration) (found bool, err error)
+}
+// *Memory and *Redis both implement Consumer:
+// Memory.Consume: mutex-guarded map[string]expiry, one lookup-and-set, no loop.
+// Redis.Consume: SET key 1 NX PX ttl — the NX failure IS the "already used"
+// signal; there is no separate poll/wait path to accidentally introduce.
+```
 
 **Fixture provenance and sanitisation rules** (`sanitise.go`, enforced by `TestFixturesAreSanitised` over `internal/integration/*/testdata/**`):
 - Fixtures are **hand-authored** from `06-integrations.md` field tables and the legacy response interfaces in `bcem-energy/src/utils/isolar/isolarTypes.ts`, `src/utils/arilService.ts`, `src/app/api/integration/{osos,gridbox,aril,pm5340}/refresh/route.ts` and `src/utils/epias/epiasService.ts`. **Never captured from a live endpoint.** A future captured response must pass this guard before commit.
@@ -990,12 +1099,13 @@ func TestSanitiserRejects(t *testing.T) {
 
 `server_test.go`:
 - `TestFakeServerIsTLSAndRecordsRequests`: `NewTLSServer` URL is `https`; a request via a client whose `RootCAs` holds only the decoded pin succeeds; a plain `http.Client{}` fails with an x509 error, proving tests cannot pass without pinning.
+- `TestTwoFakeServersHaveDistinctCertificates` (R4): two `NewTLSServer` calls give `!bytes.Equal(a.Cert.Raw, b.Cert.Raw)`; each server's own `Pins` value decodes back to its own `Cert.Raw`.
 - `TestSequenceRepeatsLastResponder`.
 - `TestUnmatchedRouteFailsTheTest`: run in a sub-`testing.T` via `testing.RunTests` or a recorded `t`; assert failure.
 
-`memory_test.go`: `TestMemoryLockIsExclusiveUntilReleased`, `TestMemoryLockExpiresAfterTTL` (inject `now`), `TestAcquireRespectsContext`.
+`memory_test.go`: `TestMemoryLockIsExclusiveUntilReleased`, `TestMemoryLockExpiresAfterTTL` (inject `now`), `TestAcquireRespectsContext`; `TestMemoryConsumeIsSingleUse` (first `Consume` → `found=true`; a second `Consume` on the same key before ttl → `found=false`; after `now` advances past ttl → `found=true` again); `TestMemoryConsumeNeverBlocks` (a second `Consume` on an unexpired key returns within a few milliseconds under `-race`, never waiting for ctx or ttl — unlike `Acquire`, there is no polling loop to time).
 
-`redis_integration_test.go` (`//go:build integration`, `testfixtures.StartRedis`): `TestRedisLockExclusiveAcrossClients` (two `goredis.Client`s; the second `Acquire` with a 200ms ctx returns `ErrNotAcquired`/ctx error; after Release it succeeds); `TestRedisReleaseDoesNotDeleteAnotherHoldersLock` (the TTL expires, B acquires, A's stale Release leaves B's key present).
+`redis_integration_test.go` (`//go:build integration`, `testfixtures.StartRedis`): `TestRedisLockExclusiveAcrossClients` (two `goredis.Client`s; the second `Acquire` with a 200ms ctx returns `ErrNotAcquired`/ctx error; after Release it succeeds); `TestRedisReleaseDoesNotDeleteAnotherHoldersLock` (the TTL expires, B acquires, A's stale Release leaves B's key present); `TestRedisConsumeIsSingleUseAndNonBlocking` (first `Consume` → `found=true`; a second `Consume` on the same key, called with `context.Background()` (no deadline at all), still returns `found=false` in well under 1s — proving `SET NX` is used, not a poll loop).
 
 - [ ] **Step 2: Run and watch them fail**
 
@@ -1005,11 +1115,11 @@ go test ./internal/platform/lock/ -tags=integration -race -count=1 -run TestRedi
 ```
 Expected: FAIL — packages missing.
 
-- [ ] **Step 3: Implement** per the Interfaces block. `Fixture` locates the module root by walking up to `go.mod`.
+- [ ] **Step 3: Implement** per the Interfaces block. `Fixture` locates the module root by walking up to `go.mod`. `NewTLSServer` generates its ECDSA key and self-signed cert with a fresh `crypto/rand` read per call; `httptest.NewUnstartedServer(...).TLS = &tls.Config{Certificates: []tls.Certificate{{Certificate: [][]byte{der}, PrivateKey: key}}}` before `StartTLS()`.
 
 - [ ] **Step 4: Run and watch them pass.**
 
-- [ ] **Step 5: Prove the guards fail.** (a) Temporarily drop the installation-key rule; `TestSanitiserRejects/installation` must FAIL. (b) Add `internal/integration/fake/testdata/leak.json` with `{"access_token":"abc123"}`, change `FixtureFiles`' glob to include `fake/testdata`, and confirm `TestFixturesAreSanitised` FAILS naming the file. (c) Change Redis Release to an unconditional `DEL`; `TestRedisReleaseDoesNotDeleteAnotherHoldersLock` must FAIL. Restore all three.
+- [ ] **Step 5: Prove the guards fail.** (a) Temporarily drop the installation-key rule; `TestSanitiserRejects/installation` must FAIL. (b) Add `internal/integration/fake/testdata/leak.json` with `{"access_token":"abc123"}`, change `FixtureFiles`' glob to include `fake/testdata`, and confirm `TestFixturesAreSanitised` FAILS naming the file. (c) Change Redis Release to an unconditional `DEL`; `TestRedisReleaseDoesNotDeleteAnotherHoldersLock` must FAIL. (d) Cache `NewTLSServer`'s certificate in a package-level variable instead of generating fresh per call; `TestTwoFakeServersHaveDistinctCertificates` must FAIL. (e) Make `Memory.Consume` re-check after a short sleep instead of a single atomic lookup-and-set (i.e. give it the same poll shape as `Acquire`); `TestMemoryConsumeNeverBlocks` must FAIL (or at least take orders of magnitude longer). Restore all five.
 
 - [ ] **Step 6: Gate and commit**
 
@@ -1017,7 +1127,7 @@ Expected: FAIL — packages missing.
 make lint && make test && make build
 go test ./internal/platform/lock/ -tags=integration -race -count=1 -v
 git add internal/integration/fake internal/platform/lock
-git commit -m "feat(f2): pinned TLS fake-provider harness, fixture sanitiser and distributed lock" <TRAILERS>
+git commit -m "feat(f2): pinned TLS fake-provider harness with per-server certs, fixture sanitiser, and a distributed lock with a non-blocking single-use consume" <TRAILERS>
 ```
 
 ---
@@ -1032,6 +1142,7 @@ git commit -m "feat(f2): pinned TLS fake-provider harness, fixture sanitiser and
 - Modify: `internal/store/repository.go` (append an **F2** section before the ADMIN banner, and one Admin interface at the end), `internal/store/scope.go`, `internal/store/scope_test.go`
 - Modify: `internal/domain/model/timeseries.go`, `internal/domain/model/operations.go`
 - Modify: `internal/store/postgres/readings.go`, `queries/readings.sql`, `readings_integration_test.go` (carry `interval_generation_kwh`)
+- Modify: `internal/store/postgres/admin/doc.go` — F1's comment names "the five interfaces" and says "THE LIST OF METHODS IS CLOSED". `AdminIngestionRepository` below is a genuine sixth: it exists for exactly the reason the other five do (its caller — the scheduled dispatcher — has no tenant to offer a Scope), so it belongs in the same closed list, not as an exception to it. Add its paragraph (same shape as the other five: what it does, why it cannot take a Scope) and change "five" to "six" everywhere in the comment.
 - Generated: `internal/store/postgres/sqlcgen/**`
 
 **Interfaces:**
@@ -1110,20 +1221,20 @@ Constructors: `postgres.NewGenerationRepository(pool)`, `postgres.NewProviderSer
 
 - [ ] **Step 1: Write the failing migration tests**
 
-`migrations_f2_integration_test.go`:
+`migrations_f2_integration_test.go` (R8: the original draft cited `TestMigrationsRoundTrip`, which does not exist on `phase/f1-data-model`, and a shim-declaration guard, `TestShimDeclaresEveryTimescaleFunctionTheMigrationsUse`, that was planned in F1's handoff notes but never actually landed as code — S9/S10. Neither is relied on below):
 - `TestF2MeterReadingsHasIntervalGenerationColumn`: `information_schema.columns` shows `interval_generation_kwh` `numeric` with precision 18, scale 4, nullable.
 - `TestF2GenerationAnchorsTable`: columns, PK `analyzer_id`, check `active_export >= 0`.
 - `TestF2ProviderHourlyValuesIsAHypertable`: `timescaledb_information.dimensions` gives a 30-day time interval.
-- `TestF2IntervalColumnSurvivesCompressedChunk`: insert an old reading with `interval_generation_kwh = 0.6250`, `compress_chunk` on its chunk, read back exactly `0.6250`; then run `alter table … add column` idempotency via `migrate down 1; migrate up`.
+- `TestF2IntervalColumnSurvivesCompressedChunk`: insert an old reading with `interval_generation_kwh = 0.6250`, `compress_chunk` on its chunk, read back exactly `0.6250`; then prove the `add column`/`drop column` pair round-trips by running `migrate down 2` (rolls back `00013` then `00012` — a single `down 1` only reverts `00013`, R8) followed by `migrate up` (replays both), and re-reading the same row.
 
-The existing `TestMigrationsRoundTrip` and the reversibility guard cover up/down/up automatically; run them.
+The real F1 reversibility guards are `TestMigrateUpDownUp` (`internal/store/postgres/postgres_integration_test.go`, full up/down/up) and `TestMigrationsLeaveNoTablesBehind` (`internal/store/postgres/migrations_roundtrip_integration_test.go`, a full down leaves no tables); run both alongside the tests above — they are what actually proves `00012`/`00013` reversibility, not a `TestMigrationsRoundTrip` that was never written.
 
 - [ ] **Step 2: Run and watch them fail**
 
 ```bash
-go test ./internal/store/postgres/ -tags=integration -race -count=1 -run 'TestF2|TestMigrations' -v
+go test ./internal/store/postgres/ -tags=integration -race -count=1 -run 'TestF2|TestMigrat|TestHypertablesAreConfigured' -v
 ```
-Expected: FAIL — column/table missing.
+Expected: FAIL — column/table missing. (The filter now actually matches `TestMigrateUpDownUp` and `TestMigrationsLeaveNoTablesBehind`, which `-run 'TestF2|TestMigrations'` did not.)
 
 - [ ] **Step 3: Write the migrations**
 
@@ -1169,9 +1280,9 @@ drop table if exists provider_hourly_values;
 
 ```bash
 make generate
-go test ./internal/store/postgres/ -tags=integration -race -count=1 -run 'TestF2|TestMigrations' -v
+go test ./internal/store/postgres/ -tags=integration -race -count=1 -run 'TestF2|TestMigrat|TestHypertablesAreConfigured' -v
 ```
-Expected: PASS. If `timescale-shims.sql` is needed for any new call, the F1 guard `TestShimDeclaresEveryTimescaleFunctionTheMigrationsUse` says so; `create_hypertable` is already declared.
+Expected: PASS. `create_hypertable` runs as plain SQL inside the migration itself, never through sqlc, so it needs no `timescale-shims.sql` entry — sqlc's catalogue simply does not see it, the same way it never sees the migration files' DDL directly. There is no F1 guard that cross-checks shim declarations against migration usage (`TestShimDeclaresEveryTimescaleFunctionTheMigrationsUse` was planned in F1's handoff notes but never implemented — S10); `00012`/`00013`'s correctness rests on `TestMigrateUpDownUp` and `TestMigrationsLeaveNoTablesBehind` against the real TimescaleDB test container, both run above.
 
 - [ ] **Step 5: Write the failing repository tests**
 
@@ -1197,7 +1308,14 @@ func TestActiveCredentialsSpansTenantsAndCarriesNoSecret(t *testing.T) {
 
 `scope_test.go`: `TestSystemScopeGrantsWholeCompany` (`AllowsBuilding(any non-nil)` true; `Valid`); `TestSystemScopeOfNilCompanyIsInvalid`.
 
-- [ ] **Step 6: Run and watch them fail; implement.** Queries are named `GenerationAnchorGet`, `GenerationAnchorUpsert`, `ProviderHourlyStageCopy`, `ProviderHourlyUpsertFromStage`, `ProviderHourlyRange`, `AdminIngestionActiveCredentials`, and `ReadingsF2…` for any readings query that changes. The anchor and series writes embed the tenant predicate in the write statement itself (F1 `ba2fb97` pattern): `insert … select … from analyzers a where a.id = $1 and a.company_id = $2 and a.deleted_at is null and (all_buildings or a.building_id = any(building_ids))`, with `RowsAffected == 0 → ErrNotFound`. **Do not** pre-check visibility with `Scope.AllowsBuilding(storedBuildingID)`, which would be using AllowsBuilding to validate a stored FK. Duplicate detection in a batch happens in Go before the transaction and names only the key. `UpsertHourly` uses COPY into a temp staging table then one upsert, same as `ReadingRepository.BulkInsert`.
+- [ ] **Step 6: Run and watch them fail; implement.** Queries are named `GenerationAnchorGet`, `GenerationAnchorUpsert`, `ProviderHourlyVisibleAnalyzerIDs`, `ProviderHourlyRange`, `AdminIngestionActiveCredentials`, and `ReadingsF2…` for any readings query that changes. The anchor write embeds the tenant predicate in the write statement itself (F1 `ba2fb97` pattern): `insert … select … from analyzers a where a.id = $1 and a.company_id = $2 and a.deleted_at is null and (all_buildings or a.building_id = any(building_ids))`, with `RowsAffected == 0 → ErrNotFound`. **Do not** pre-check visibility with `Scope.AllowsBuilding(storedBuildingID)`, which would be using AllowsBuilding to validate a stored FK. Duplicate detection in a batch happens in Go before the transaction and names only the key.
+
+  **`UpsertHourly` (R7):** the original draft named sqlc queries `ProviderHourlyStageCopy`/`ProviderHourlyUpsertFromStage`, but a per-call temporary table cannot appear in sqlc's schema catalogue — `sqlc.yaml` builds its catalogue from `timescale-shims.sql` + `migrations/` only, exactly the reason F1's `ReadingRepository.BulkInsert` (`internal/store/postgres/readings.go`) bypasses sqlc for its own staging table. `UpsertHourly` follows that file's pattern exactly, in `provider_series.go`, prefix `f2series…`:
+  1. `ProviderHourlyVisibleAnalyzerIDs` (a real sqlc query, mirroring `ReadingVisibleAnalyzerIDs`) locks the batch's distinct analyzer ids `FOR SHARE` under the caller's `Scope` (company + building predicate) inside one transaction. Fewer visible ids than distinct input ids → the whole batch is refused with `ErrNotFound`, nothing written — **this is the tenant predicate for this write**, evaluated once per batch, not embedded in the upsert SQL.
+  2. `f2seriesCreateProviderHourlyStaging` — a plain SQL constant (not sqlc, not a migration; `on commit drop`, unseen by sqlc's catalogue) creating a temp table with `provider_hourly_values`' writable columns.
+  3. `tx.CopyFrom` into that staging table.
+  4. `f2seriesUpsertProviderHourlyFromStaging` — a plain SQL constant: `insert … select … from provider_hourly_values_staging on conflict (analyzer_id, ts) do update … returning (xmax = 0) as inserted`, counted into `inserted`/`updated`.
+  Duplicate `(analyzer_id, ts)` keys inside the caller's own batch are still refused in Go before any of this, per the Global Constraints "batches are all-or-nothing" rule — the same defence `BulkInsert` uses.
 
 - [ ] **Step 7: Run everything, including the F1 guards**
 
@@ -1208,7 +1326,7 @@ go test ./internal/arch/ -race -run 'TestEveryStoreMethodIsScoped|TestNoFloatFie
 ```
 Expected: PASS. `TestEveryStoreMethodIsScoped` inspects more methods than before (record both counts). `admin.IngestionRepository` is exempt by package.
 
-- [ ] **Step 8: Prove the new isolation fails when broken.** Remove the `company_id` predicate from `GenerationAnchorUpsert`, regenerate, and confirm `TestGenerationAnchorIsScoped` FAILS. Then remove the building predicate only, and confirm `TestGenerationAnchorRefusesNarrowScopeOnOtherBuilding` FAILS. Restore and regenerate.
+- [ ] **Step 8: Prove the new isolation fails when broken.** Remove the `company_id` predicate from `GenerationAnchorUpsert`, regenerate, and confirm `TestGenerationAnchorIsScoped` FAILS. Then remove the building predicate only, and confirm `TestGenerationAnchorRefusesNarrowScopeOnOtherBuilding` FAILS. **(S4)** `UpsertHourly` makes the same isolation claim ("any analyzer not visible → `ErrNotFound`, nothing written") and needs its own failing-first proof: remove the `company_id` predicate from `ProviderHourlyVisibleAnalyzerIDs` (make it a tautology, e.g. `company_id = company_id`), regenerate, and confirm `TestProviderHourlyAllOrNothingOnInvisibleAnalyzer` FAILS (another tenant's analyzer is now "visible" and the batch wrongly succeeds). Restore and regenerate after each.
 
 - [ ] **Step 9: Gate and commit**
 
@@ -1385,7 +1503,7 @@ func TestGridBoxReactiveRegistersAreNotCrossed(t *testing.T) {
 
 **Behaviour (06 §4, R9, R26):**
 1. Auth: `POST {UserCode, Password}`. The token comes back as a bare JSON string **or** `{access_token}`; both are accepted. A 401 or an empty token is `ErrAuth`. The header is `aril-service-token: <token>`.
-2. Discover: `POST analyzers_list {PageNumber, PageSize: 1000}` → `ResultList[]`. Pages advance until a page has fewer than 1000 rows or the page budget is hit, which is the pagination case. Map the 06 §4 subscription table. `LastEndexDate`/`LastProfileDate` → `ProviderHighWater`; `AccordPower` → `ContractedPowerKw`; `DefinitionType` → `DefinitionType`.
+2. Discover: `POST analyzers_list {PageNumber, PageSize: 1000}` → `ResultList[]`. Pages advance until a page has fewer than 1000 rows or the page budget is hit, which is the pagination case. Map the 06 §4 subscription table. `LastEndexDate`/`LastProfileDate` → `ProviderHighWater`; `AccordPower` → `ContractedPowerKw` (R30: captured on `MeteringPoint` and left in `Raw`; Task 10's `SyncAnalyzers` does **not** persist it — `model.Analyzer` has no matching column); `DefinitionType` → `DefinitionType`.
 3. `load_profile`: `POST owner_consumptions {OwnerSerno, StartDate, EndDate ("YYYY-MM-DD HH:mm:ss" Istanbul), IncludeLoadProfiles: true, OwnerType: DefinitionType, WithoutMultiplier: true (R9), MergeResult: false}`. `LoadProfiles[]`: `ProfileDate` via `normalize.ARILProfileDate`. `TSum→active_import`, `ReactiveInductive→reactive_inductive_import`, `ReactiveCapasitive→reactive_capacitive_import`, `TSumOut→active_export`, `ReactiveInductiveOut→reactive_inductive_export`, `ReactiveCapasitiveOut→reactive_capacitive_export`, each × `req.Multiplier`. **T1/T2/T3 import and export stay nil.**
 4. `current_index`: `POST current_endexes {OwnerSerno, StartDate, EndDate, DefinitionType, EndexDirection: 0}` → per R26.
 5. `billing`: `POST end_of_month_endexes` for the window; `max_demand_kw` = max `MaxDemand` of the same local month's current endexes (a second call within the same `FetchReadings`).
@@ -1419,10 +1537,10 @@ func TestARILTimeOfUseRegistersAreNull(t *testing.T) {
 
 **Interfaces:**
 - Consumes: Tasks 1–5 (`model.MeterReading.IntervalGenerationKwh`). `creds.BaseURL`; no endpoint templates (06 §5 fixes the path).
-- Produces: `pm5340.New(pool, pm5340.Options) *pm5340.Source`. `Kinds` → `[load_profile]`. `MaxWindow` 7 days. `Verify` = one `GET …/api/v1/readings?limit=1`. PM5340 has no discovery API: **spec silent — ruling:** `DiscoverMeteringPoints` returns `nil, nil`, and the credential service creates the single analyzer from the configured installation number (Task 14).
+- Produces: `pm5340.New(pool, pm5340.Options) *pm5340.Source`. `Kinds` → `[load_profile]`. `MaxWindow` 7 days. PM5340 has no discovery API: **spec silent — ruling:** `DiscoverMeteringPoints` returns `nil, nil`, and the credential service creates the single analyzer from the configured installation number (Task 14).
 
 **Behaviour (06 §5, R15, R28):**
-1. `GET {base_url}/api/v1/readings?limit=500&sort=asc&start=<RFC3339 UTC>&end=<RFC3339 UTC>[&cursor=…]`. The template is built as `strings.TrimSuffix(creds.BaseURL, "/") + "/api/v1/readings?limit={limit}&sort=asc&start={start}&end={end}"`, plus `&cursor={cursor}` when paging, through `httpx.Expand`. Follow `cursorNext` while `hasMore`, up to the page budget; if the budget is hit with `hasMore` still true, `NextCursor` = last reading's ts (R4).
+1. **Two separate URL templates (S5), not one.** `httpx.Expand` refuses a template with an unbound placeholder or an unused param (Task 2), so the four-parameter fetch template and a `Verify` call cannot share one string — `Verify`'s only need is "does this base URL and secret work", not a real page of data. `fetchTemplate = strings.TrimSuffix(creds.BaseURL, "/") + "/api/v1/readings?limit={limit}&sort=asc&start={start}&end={end}"`, plus `&cursor={cursor}` when paging, all through `httpx.Expand`, params `{limit, sort, start, end[, cursor]}` (a real fetch: `GET …/api/v1/readings?limit=500&sort=asc&start=<RFC3339 UTC>&end=<RFC3339 UTC>[&cursor=…]`). `verifyTemplate = strings.TrimSuffix(creds.BaseURL, "/") + "/api/v1/readings?limit={limit}"`, the ONLY param `{limit}` (value `"1"`); `Verify` calls this one, never `fetchTemplate`. Follow `cursorNext` while `hasMore`, up to the page budget; if the budget is hit with `hasMore` still true, `NextCursor` = last reading's ts (R4).
 2. Map: `meterDate` via `normalize.PM5340Date`; `activeImport_kWh→active_import`, `inductive_kvarh→reactive_inductive_import`, `capacitive_kvarh→reactive_capacitive_import`, `dmdKwPeak_kW→max_demand_kw`, each × `req.Multiplier`. `currentGeneration` (kW) → `IntervalGenerationKwh = normalize.KWFor15MinToKWh` (nil stays nil, plus `WarnGenerationIntervalNil`). **`ActiveExport` is left nil**: the cumulative register is derived by Task 11, never in the adapter (removed-behaviour 22). `deviceId`/`deviceIp` go to `Raw` only.
 3. `null` register values stay nil.
 
@@ -1432,6 +1550,7 @@ func TestARILTimeOfUseRegistersAreNull(t *testing.T) {
 - `TestPM5340FollowsCursorPages`: the pagination case; the second request carries `cursor=<cursorNext>`.
 - `TestPM5340AcceptsBothDateFormats`.
 - `TestPM5340PlainHTTPBaseURLIsAllowedAndHTTPSIsVerified`: an http fake succeeds; an https fake without a pin fails.
+- `TestPM5340VerifyUsesItsOwnMinimalTemplate` (S5): the recorded `Verify` request's path is `/api/v1/readings?limit=1` with no `sort`/`start`/`end`/`cursor` params; a `FetchReadings` call against the same fake, by contrast, always carries all of `sort`/`start`/`end`.
 
 **Mutation to prove:** accumulate `currentGeneration` into `ActiveExport` in the adapter; `TestPM5340NeverDerivesCumulativeExport` FAILS.
 
@@ -1444,7 +1563,7 @@ func TestARILTimeOfUseRegistersAreNull(t *testing.T) {
 - Test: `internal/ingest/{dedupe_test.go,validate_test.go,anomaly_test.go}` (unit), `internal/ingest/ingest_integration_test.go`, `internal/ingest/fakesource_test.go` (an in-memory `integration.Adapter` for tests)
 
 **Interfaces:**
-- Consumes: Task 1 (`integration.*`, `job.*Payload`, `job.New*Task`), Task 5 (`store.SystemScope`, `ProviderSeriesRepository`, `AdminIngestionRepository`, `model.ProviderHourlyValue`), F1 repositories (`Analyzer`, `Reading`, `Cursor`, `Anomaly`, `Ops`, `AdminJournal`).
+- Consumes: Task 1 (`integration.*`, `job.*Payload`, `job.New*Task`), Task 3 (`normalize.Chunk`, `normalize.Window` — the shared range-chunking helper, S7), Task 5 (`store.SystemScope`, `ProviderSeriesRepository`, `AdminIngestionRepository`, `model.ProviderHourlyValue`), F1 repositories (`Analyzer`, `Reading`, `Cursor`, `Anomaly`, `Ops`, `AdminJournal`).
 - Produces (`var _ job.Ingestion = (*ingest.Service)(nil)`):
 
 ```go
@@ -1536,14 +1655,14 @@ func DetectNegativeDeltas(prev *model.MeterReading, rows []model.MeterReading, r
   1. `sc := store.SystemScope(p.CompanyID)`; `analyzer := Analyzers.Get`; an inactive or soft-deleted analyzer → run `success`, processed 0, skipped 1, message `info` "analyzer inactive".
   2. `creds := Credentials.Open(sc, p.CredentialID)`; `src := Sources.Source(creds.Provider)`; `analyzer.Provider` must match, else `ErrMalformedPayload` (misconfiguration, no retry).
   3. `StartRun(job_type=TypeIntegrationFetchReadings, scope={"analyzer_id","kind","window"})`.
-  4. Window: `p.Window` if set; else `From = cursor.LastTs` or `now − InitialLookback` when the cursor is `ErrNotFound`; `To = now`. Then split into `src.MaxWindow(kind)` chunks.
+  4. Window: `p.Window` if set; else `From = cursor.LastTs` or `now − InitialLookback` when the cursor is `ErrNotFound`; `To = now`. Then split with `normalize.Chunk(From, To, src.MaxWindow(kind))` (S7 — the one range-chunking implementation, Task 3; Task 12's EPİAŞ pagination and Task 15's backfill windows use the same function).
   5. For each chunk, page loop: `res := src.FetchReadings`. On error: `Cursors.RecordFailure(sc, id, kind, redacted(err), now)`, `FinishRun` (`partial` if any page persisted, else `failed`) with `errText = redacted(err)`, message `error`, and **return err** (the job layer classifies retry).
   6. Per page: `Dedupe` → load `prev` (`Readings.Latest(sc, id, TimeRange{chunkFrom − 35 days, firstTs}, kind)`) and `history` (`Readings.Range` 7 days) once per chunk → `Validate` → `Readings.BulkInsert(valid)` → hooks for `analyzer.Provider` → `DetectNegativeDeltas` (resets from the page plus `Readings.Range(sc, id, [minTs, maxTs], reset)`) → anomalies → `ProviderSeries.UpsertHourly(convert(res.HourlyValues))` → `if res.ResolvedMultiplier != nil && !equal(analyzer.MeterMultiplier)`: `Analyzers.Update` plus `warning` message "meter multiplier changed" (R27) → `Cursors.RecordSuccess(sc, id, kind, maxPersistedTs, now)` **only if** ≥ 1 row persisted (R19) → `Analyzers.TouchLastReading(maxPersistedTs)`.
   7. `NextCursor`: nil → next chunk; else it must be after `req.From` (R4), else `ErrMalformedPayload`.
   8. `FinishRun(success|partial|failed per R29, processed = inserted+updated, skipped = len(rejected), failed = failed pages, detail = {"rejections_by_reason", "warnings_by_code", "affected_from", "affected_to", "anomalies_created"})`. If `skipped > 0`: one `warning` message, kind `job`, category `analyzer-refresh`, message `"<n> readings rejected"`, metadata = counts by reason. Warning codes from adapters are counted, and each **distinct** code yields one `warning` message (e.g. `multiplier_fallback`).
 - **SyncAnalyzers:**
   - Open creds; `src.Verify`; on error: run `failed`, message `error`, return `ClassifyForRetry`-able err.
-  - `DiscoverMeteringPoints`; for each point: `GetByInstallation(sc, provider, subtype, no)` → `ErrNotFound` ⇒ `Create` (R27 defaults) else `Update` descriptive fields; per-point failure counts `failed` with the reason in detail and **does not abort**.
+  - `DiscoverMeteringPoints`; for each point: `GetByInstallation(sc, provider, subtype, no)` → `ErrNotFound` ⇒ `Create` (R27 defaults) else `Update` descriptive fields — every field of `MeteringPoint` **except `ContractedPowerKw`** (R30: `model.Analyzer` has no matching column; the value stays visible only in the adapter's own `Raw`/fixture data, never silently dropped from the point struct itself); per-point failure counts `failed` with the reason in detail and **does not abort**.
   - Then `Analyzers.List(sc, AnalyzerFilter{Providers: []…{provider}, IsActive: ptr(true)})` filtered in Go by `ProviderSubtype == creds.Subtype`; enqueue `job.NewFetchReadingsTask` per analyzer × `src.Kinds(creds)`. `asynq.ErrDuplicateTask` counts `skipped`.
   - `FinishRun(processed = enqueued analyzers, skipped, failed)`.
   - PM5340 (Discover returns nil): the enqueue step still runs over existing analyzers.
@@ -1800,7 +1919,7 @@ git commit -m "feat(f2): anchored, recomputable PM5340 cumulative generation" <T
 - Test: `internal/marketdata/completeness_test.go`, `internal/marketdata/sync_integration_test.go`
 
 **Interfaces:**
-- Consumes: Tasks 1–4; F1 `store.AdminMarketDataRepository` (`UpsertHourlyPrices`, `UpsertYekdem`, which refuse duplicate keys and a zero ts), `store.AdminJournalRepository`.
+- Consumes: Tasks 1–4 (including `normalize.Chunk`, S7 — the one range-chunking implementation, shared with Task 10's pipeline and Task 15's backfill), never Task 5 or Task 10; F1 `store.AdminMarketDataRepository` (`UpsertHourlyPrices`, `UpsertYekdem`, which refuse duplicate keys and a zero ts), `store.AdminJournalRepository`.
 - Produces:
 
 ```go
@@ -1818,7 +1937,9 @@ type Options struct {
 func New(pool *httpx.Pool, o Options) (*Client, error) // empty Username/Password → error naming the env var, not the value
 
 // HourlyPTF returns one MarketPrice per published hour in [from, to), UTC, TL/MWh.
-// Requests are chunked to 30 days (R20 pagination). Missing hours are NOT filled.
+// Requests are chunked to 30 days via normalize.Chunk (R20 pagination; S7 — the
+// shared range-chunking helper, not a second local implementation). Missing
+// hours are NOT filled.
 func (c *Client) HourlyPTF(ctx context.Context, from, to time.Time) ([]model.MarketPrice, []integration.Warning, error)
 // YekdemUnitCost returns one YekdemMonthly per published (year, month) intersecting [from, to).
 func (c *Client) YekdemUnitCost(ctx context.Context, from, to time.Time) ([]model.YekdemMonthly, error)
@@ -1848,7 +1969,7 @@ func MissingHours(prices []model.MarketPrice, from, to time.Time) map[string][]t
 - **Sync job:**
   - Window = `p.Window` or `[Istanbul today − 7 days 00:00, Istanbul tomorrow + 1 day 00:00)`; YEKDEM window = the first day of (month − 3) → the first day of next month.
   - A platform run through `AdminJournal.StartPlatformRun(job_type = "epias.sync_prices")`.
-  - `UpsertHourlyPrices` per 30-day chunk (processed += rows); `UpsertYekdem`.
+  - `UpsertHourlyPrices` per `normalize.Chunk(window, 30*24h)` chunk (S7; processed += rows); `UpsertYekdem`.
   - `MissingHours` over the window, **excluding hours after the last published day** (day-ahead for tomorrow may legitimately be unpublished before 14:00). Missing hours inside published days → one `AppendPlatformMessage{Kind: "job", Category: "market-prices", Status: "warning", Message: "<n> PTF hours missing", Metadata: {"days": {...}}}`, and the run is `partial`. **No value is fabricated; billing flags the invoice** (F4).
   - Error → `FinishPlatformRun(failed, errText = secret.Redact(err.Error(), []string{password, ticket}))`, and return the error.
   - **Billing never calls this client:** the guard is Task 17's `TestBillingPathDoesNotImportEPIAS`, which exists vacuously until F4 creates `internal/domain/billing`/`internal/service/billing`. It walks `./internal/...` packages whose path contains `billing` and passes when none exist. It is proven by a temporary `internal/service/billing/probe.go` importing `epias`.
@@ -1860,7 +1981,7 @@ func MissingHours(prices []model.MarketPrice, from, to time.Time) map[string][]t
 - `TestEPIASTicketIsCachedAndRefreshedOnce`: two data calls cause one CAS call; a data 401 causes exactly one more CAS call, then success.
 - `TestEPIASErrorsCarryNoPasswordOrTicket`.
 - `TestEPIASPricesAreExactDecimals`: `"2345.6789"` is preserved.
-- `completeness_test.go`: `TestMissingHoursUsesIstanbulDays` (a UTC-bucketed day would be wrong: `2026-09-14` local starts at `2026-09-13T21:00Z`); `TestMissingHoursPre2016DSTDays` (`2015-03-29` expects 23 hours, `2015-10-25` expects 25).
+- `completeness_test.go`: `TestMissingHoursUsesIstanbulDays` (a UTC-bucketed day would be wrong: `2026-09-14` local starts at `2026-09-13T21:00Z`); `TestMissingHoursPre2016DSTDays` (R6 — corrected against Go's tzdata, `go run` verified: `2015-03-29` expects 23 hours [spring-forward]; `2015-10-25` expects 24 hours [an ordinary day — Turkey postponed its scheduled 2015 fall-back]; `2015-11-08` expects 25 hours [the actual, delayed fall-back]. The original draft claimed `2015-10-25` was the 25-hour day; Turkey's government moved that year's clock change to 2015-11-08 by decree, so `2015-10-25` is 24 hours like any other day, and asserting 25 there would fail against a correct implementation that actually consults the tz database. All three dates are asserted so the test also documents the anomaly rather than silently landing on a lucky pair).
 - `sync_integration_test.go` (`//go:build integration`, `NewIsolatedDB`, `admin.NewMarketDataRepository`, `admin.NewJournalRepository`, a fake `PriceSource`):
   - `TestSyncPricesIsIdempotent`: run twice → `market_prices_hourly` count unchanged; platform run rows have `company_id` NULL.
   - `TestSyncPricesReportsMissingHoursWithoutFilling`: 23 of 24 hours → 23 rows, one `warning` platform message, run `partial`; no row for the missing hour.
@@ -1891,7 +2012,7 @@ git commit -m "feat(f2): EPİAŞ client and idempotent price sync that reports, 
 ## Task 13: iSolarCloud adapter and the blocker-aware production store
 
 **Files:**
-- Create: `internal/integration/isolar/token.go` (**first commit, merged before Task 14 starts**), `internal/integration/isolar/{client.go,auth.go,plants.go,series.go,alarms.go,wire.go}`, `internal/integration/isolar/testdata/isolar_<case>.json` (all `fake.RequiredCases` + `isolar_token.json`, `isolar_refresh.json`, `isolar_devices_page{1,2}.json`, `isolar_device_minute.json`, `isolar_plant_minute.json`, `isolar_faults.json`)
+- Create: `internal/integration/isolar/{token.go,client.go,auth.go,plants.go,series.go,alarms.go,wire.go}`, `internal/integration/isolar/testdata/isolar_<case>.json` (all `fake.RequiredCases` + `isolar_token.json`, `isolar_refresh.json`, `isolar_devices_page{1,2}.json`, `isolar_device_minute.json`, `isolar_plant_minute.json`, `isolar_faults.json`). `token.go` no longer needs a special early sub-merge (S3): Task 14 now runs in its own wave (E) after the whole of Wave D, including all of Task 13, is merged — see the Execution waves note.
 - Test: `internal/integration/isolar/{client_test.go,auth_test.go,series_test.go}`
 - Create: `internal/ingest/production/store.go`
 - Test: `internal/ingest/production/store_integration_test.go`
@@ -2013,7 +2134,7 @@ git commit -m "feat(f2): iSolarCloud adapter and production store that quarantin
 - Test: `internal/credentials/{view_test.go,state_test.go,settings_test.go}`, `internal/credentials/credentials_integration_test.go`
 
 **Interfaces:**
-- Consumes: Task 1, Task 4 (`lock.Locker` via `httpx.Locker` shape), Task 5 (`SystemScope`), F1 `IntegrationRepository` (`Definition`, `ListCredentials`, `UpsertCredential`, `OpenSecret`, `DeleteCredential`, `RecordVerification`), `AnalyzerRepository`. Task 13's client is reached **through the structural interface below**, with no import of `isolar`, so Tasks 13 and 14 run in parallel.
+- Consumes: Task 1, Task 4 (`lock.Locker` and `lock.Consumer`, imported directly from `internal/platform/lock` — R2/R3; not through `httpx`, which credentials has no other reason to depend on), Task 5 (`SystemScope`), Task 10 (`ingest.Enqueuer` — S6: the original draft's Consumes line omitted this despite `Deps.Enqueuer` being typed `ingest.Enqueuer`, an undeclared dependency the preflight scan flagged), Task 13 (`isolar.Token`, fully merged — Task 14 is now Wave E, strictly after Wave D), F1 `IntegrationRepository` (`Definition`, `ListCredentials`, `UpsertCredential`, `OpenSecret`, `DeleteCredential`, `RecordVerification`), `AnalyzerRepository`. Task 13's live client calls are still reached **through the structural interface below**, with no import of `isolar` beyond its `Token` type.
 - Produces (`Service` satisfies `ingest.CredentialOpener` structurally):
 
 ```go
@@ -2062,7 +2183,7 @@ type ISolarTokens interface { // *isolar.Client
 }
 ```
 
-`credentials` imports `internal/integration/isolar` for `isolar.Token` only (allowed: `credentials` is not an adapter). **Ordering inside Wave D:** Task 13's first commit is `internal/integration/isolar/token.go`, containing only the `Token` type, and the controller merges it to the phase branch before dispatching Task 14.
+`credentials` imports `internal/integration/isolar` for `isolar.Token` only (allowed: `credentials` is not an adapter). **Wave placement (S3):** Task 14 is Wave E, dispatched only once Wave D — all of Task 13, not just a `token.go` first commit — is fully merged. The original draft kept Task 14 inside Wave D alongside Task 13 and patched the resulting same-wave dependency with a controller sub-merge rule ("merge Task 13's first commit before dispatching Task 14"); giving Task 14 its own later wave removes the special case rather than working around it — the ordinary "a wave starts only after every task it depends on is merged" rule now suffices.
 
 ```go
 type Deps struct {
@@ -2071,7 +2192,15 @@ type Deps struct {
 	Verifiers    VerifierResolver
 	ISolar       ISolarTokens
 	Enqueuer     ingest.Enqueuer // *job.Client
-	Locker       httpx.Locker
+	Locker       lock.Locker     // R2: the canonical type (Task 4), not httpx.Locker — credentials
+	                              // has no other reason to import httpx. Used only for the
+	                              // ISolarAccessToken refresh critical section below, which IS a
+	                              // genuine mutual-exclusion lock (bounded, released on every path).
+	Nonces       lock.Consumer   // R3: the OAuth state nonce's single-use consume — NEVER Locker.
+	                              // Acquiring-and-never-releasing a Locker lease (the original draft)
+	                              // makes a replayed callback block for the lease TTL, or forever
+	                              // under context.Background(); Consume is non-blocking by
+	                              // construction, so a replay fails immediately.
 	Clock        clock.Clock
 	StateKey     []byte // HMAC(JWTSigningKey, "isolar-oauth-state/v1"), derived in Task 16
 	RedirectURI  string // EKOKOD_ISOLAR_REDIRECT_URL or PublicURL+"/integrations/isolar/callback"
@@ -2108,28 +2237,37 @@ var ErrInvalidSettings = errors.New("credentials: invalid settings")
 - `PM5340URL` must parse with scheme `http`/`https` and a host (R28).
 - `Open` builds `integration.Credentials`: endpoints from `Definition`, secrets from `OpenSecret`, and it verifies the credential belongs to `sc` (`ErrNotFound` otherwise). For isolar it also fills `Extra["access_token"]` via `ISolarAccessToken`.
 - `Verify` → `RecordVerification` on success; on `ErrAuth` it returns an error whose text is redacted.
-- State token: `base64url(companyID || credentialID || expiry unix || nonce) + "." + base64url(HMAC-SHA256)`, compared with `hmac.Equal`, 10-minute expiry. Single use: the nonce is stored with `SET NX` under `isolar:state:<nonce>` via Locker `Acquire(ttl=10m)` and never released.
+- State token: `base64url(companyID || credentialID || expiry unix || nonce) + "." + base64url(HMAC-SHA256)`, compared with `hmac.Equal`, 10-minute expiry.
+- **Single use (R3).** The original draft made the nonce single-use by `Locker.Acquire(ttl=10m)` and never releasing it — but `Locker.Acquire` **waits by polling until ctx is done** (Task 4), so a replayed state would block for up to 10 minutes, or forever under `context.Background()`, instead of failing. Single-use is not a locking problem at all: it is an atomic, non-blocking CONSUME. `ISolarCallback` calls `s.deps.Nonces.Consume(ctx, "isolar:state:<nonce>", ttl=10m)` (`lock.Consumer`, R2/Task 4). `found==false` — the nonce was already consumed (or `Consume` itself failed) — maps immediately to `ErrInvalidState`, fail-closed on any error too. `ISolarCallback` wraps this call in its own short internal timeout (2s, independent of the caller's ctx) precisely so that even a broken `Consumer` backend cannot turn a replay into a hang — `TestStateIsSingleUse` runs under a short deadline for the same reason and asserts the call returns in well under that deadline, not merely before it times out.
 
 - [ ] **Step 1: Write the failing tests**
 
 ```go
 // TestViewCarriesNoSecretMaterial pins 05 §15 "Never returns secrets" at the
-// type level: no future field can quietly carry one.
+// type level: no future field can quietly carry one. R1: an earlier draft's
+// `(?i)…secret$…` name regex rejected the plan's OWN HasSecret bool field —
+// a bool cannot itself carry secret material, so the check below inspects
+// field TYPES and VALUES, never a name pattern, and names the one allowed
+// bool explicitly instead of trying to describe it with a regex.
 func TestViewCarriesNoSecretMaterial(t *testing.T) {
 	typ := reflect.TypeOf(credentials.View{})
 	for i := 0; i < typ.NumField(); i++ {
 		f := typ.Field(i)
-		require.NotRegexp(t, `(?i)enc$|secret$|password|token$|^key$`, f.Name, "field %s", f.Name)
-		require.NotEqual(t, reflect.TypeOf(integration.Secret{}), f.Type)
+		if f.Type.Kind() == reflect.Bool {
+			require.Equal(t, "HasSecret", f.Name,
+				"a bool cannot carry secret material, but name every one here so a reviewer sees it")
+			continue
+		}
+		require.NotEqual(t, reflect.TypeOf(integration.Secret{}), f.Type, "field %s", f.Name)
 		require.NotEqual(t, reflect.TypeOf([]byte{}), f.Type, "no raw bytes: %s", f.Name)
 	}
 }
 ```
 
 - `view_test.go`: also `TestHasSecretIsTheOnlySecretSignal`.
-- `state_test.go`: `TestStateRoundTrip`, `TestStateRejectsTamperExpiryAndWrongKey`, `TestStateIsSingleUse`.
+- `state_test.go`: `TestStateRoundTrip`, `TestStateRejectsTamperExpiryAndWrongKey`; `TestStateIsSingleUse` (R3 — first `ISolarCallback` for a state succeeds; calling it again with the SAME state, under a `context.WithTimeout(ctx, 2*time.Second)`, returns `ErrInvalidState` and `require.Less(t, elapsed, 500*time.Millisecond)`: a hang would fail the deadline, not silently pass by timing out).
 - `settings_test.go`: `TestSettingsRejectSecretsAndUnknownKeys`.
-- `credentials_integration_test.go` (`NewIsolatedDB`, `NewTenant`, `crypto.NewCipher(32 bytes)`, fake verifier, fake `ISolarTokens`, `lock.NewMemory`, `recordingEnqueuer`):
+- `credentials_integration_test.go` (`NewIsolatedDB`, `NewTenant`, `crypto.NewCipher(32 bytes)`, fake verifier, fake `ISolarTokens`, `lock.NewMemory()` for both `Deps.Locker` and `Deps.Nonces` — `*lock.Memory` implements both `lock.Locker` and `lock.Consumer`, R2/R3, `recordingEnqueuer`):
   - `TestConfiguredSecretNeverAppearsInListOrJSON`: configure with password `FIXTURE-PW-…`; `json.Marshal(List())` and `fmt.Sprintf("%+v", view)` contain no fragment; the DB `secret_enc` is not the plaintext.
   - `TestUpdateWithoutSecretKeepsIt`: `Open` still returns the original.
   - `TestUpdateMergesExtraKeys`.
@@ -2149,7 +2287,7 @@ go test ./internal/credentials/ -tags=integration -race -count=1 -v
 
 - [ ] **Step 3: Implement; Step 4: watch them pass.**
 
-- [ ] **Step 5: Prove it.** (a) Add `Secret []byte` to `View`: `TestViewCarriesNoSecretMaterial` FAILS. (b) Remove the post-lock re-read in `ISolarAccessToken`: `TestISolarAccessTokenRefreshesOnceUnderConcurrency` FAILS with >1 refresh (run `-count=5`). (c) Compare the HMAC with `==` on strings **and** skip the expiry check: `TestStateRejectsTamperExpiryAndWrongKey` FAILS on the expiry case. Restore.
+- [ ] **Step 5: Prove it.** (a) Add `Secret []byte` to `View`: `TestViewCarriesNoSecretMaterial` FAILS. (b) Remove the post-lock re-read in `ISolarAccessToken`: `TestISolarAccessTokenRefreshesOnceUnderConcurrency` FAILS with >1 refresh (run `-count=5`). (c) Compare the HMAC with `==` on strings **and** skip the expiry check: `TestStateRejectsTamperExpiryAndWrongKey` FAILS on the expiry case. (d) Revert `ISolarCallback`'s single-use check to `Locker.Acquire(ttl=10m)` with no release (the original draft's approach): `TestStateIsSingleUse` FAILS by exceeding its 500ms bound (it blocks instead of returning `ErrInvalidState`) — this is the R3 regression this plan exists to prevent. Restore all four.
 
 - [ ] **Step 6: Gate and commit**
 
@@ -2169,15 +2307,28 @@ git commit -m "feat(f2): write-only credential service and iSolarCloud OAuth wit
 - Test: `internal/ingest/backfill/backfill_test.go`, `internal/ingest/backfill/backfill_integration_test.go`
 
 **Interfaces:**
-- Consumes: Task 1 (`job.BackfillPayload`, `job.NewFetchReadingsTask`, `integration.Planner`), Task 5 (`SystemScope`), Task 10 (`ingest.Enqueuer`, `ingest.SourceResolver`, `ingest.CredentialOpener`), F1 `AnalyzerRepository`, `OpsRepository`.
+- Consumes: Task 1 (`job.BackfillPayload`, `job.NewFetchReadingsTask`, `integration.Planner`), Task 3 (`normalize.Chunk` — S7), Task 5 (`SystemScope`), Task 10 (`ingest.Enqueuer`, `ingest.SourceResolver`, `ingest.CredentialOpener`), F1 `AnalyzerRepository`, `OpsRepository`.
 - Produces:
 
 ```go
 package backfill
 
-// Windows splits [from, to) into consecutive half-open windows of at most max,
-// aligned to Istanbul-local midnight so a window never splits a local day.
-func Windows(from, to time.Time, max time.Duration) []job.Window
+// Windows splits [from, to) into consecutive half-open windows of at most
+// max, aligned to Istanbul-local midnight so a window never splits a local
+// day. It is a thin wrapper over normalize.Chunk (S7 — the ONE range-chunking
+// implementation in F2, shared with Task 10's pipeline and Task 12's EPİAŞ
+// pagination): Windows exists at all only because callers here want
+// job.Window, not normalize.Window, and the two are structurally identical
+// but distinct types (normalize has zero F2-task dependencies and must stay
+// that way, so it cannot import internal/job to return job.Window directly).
+func Windows(from, to time.Time, max time.Duration) []job.Window {
+	chunks := normalize.Chunk(from, to, max)
+	windows := make([]job.Window, len(chunks))
+	for i, c := range chunks {
+		windows[i] = job.Window{From: c.From, To: c.To}
+	}
+	return windows
+}
 
 type Deps struct {
 	Analyzers   store.AnalyzerRepository
@@ -2201,7 +2352,7 @@ func (b *Backfiller) Backfill(ctx context.Context, p job.BackfillPayload) error
 - Run record: `processed = windows enqueued`, `skipped = conflicts`. If `From < now − 30 days`, one `info` message: "Backfilled range before <now−30d> is not in the consumption aggregates until consumption.refresh runs for it (F3)" (R17; the F1 `start_offset` fact).
 
 - [ ] **Step 1: Write the failing tests**
-  - `backfill_test.go`: `TestWindowsCoverRangeWithoutGapOrOverlap` (property over 200 random ranges: windows contiguous, union = range, each ≤ max); `TestWindowsAlignToIstanbulMidnight`.
+  - `backfill_test.go`: `TestWindowsWrapsNormalizeChunk` (the gap/overlap/DST-alignment property test itself lives in Task 3's `TestChunkCoversRangeWithoutGapOrOverlap`/`TestChunkAlignsToIstanbulMidnight`, S7 — this test only proves the `job.Window` conversion is faithful: same boundaries, same count, as `normalize.Chunk` for a handful of representative ranges).
   - `backfill_integration_test.go`:
     - `TestBackfillEnqueuesEveryWindowOnce`: 45 days × 2 analyzers × 1 kind at 30-day max gives 4 tasks with distinct deterministic TaskIDs.
     - `TestBackfillRerunIsResumable`: the enqueuer returns `ErrTaskIDConflict` for the first 2 → run `processed 2, skipped 2`.
@@ -2216,7 +2367,7 @@ go test ./internal/ingest/backfill/ -race -v
 go test ./internal/ingest/backfill/ -tags=integration -race -count=1 -v
 ```
 
-- [ ] **Step 5: Prove it.** (a) Use `time.Truncate(24h)` (UTC) instead of Istanbul midnight: `TestWindowsAlignToIstanbulMidnight` FAILS. (b) Pass `AnalyzerFilter{IDs: p.AnalyzerIDs}` straight through when empty, so every analyzer including inactive ones is listed: `TestBackfillEmptyAnalyzerListMeansActiveAnalyzersNotAll` FAILS. Restore.
+- [ ] **Step 5: Prove it.** (a) Drop the `To`/`From` field copy in `Windows` (return zero-value `job.Window`s): `TestWindowsWrapsNormalizeChunk` FAILS — the Istanbul-alignment property itself is proven in Task 3 (S7), so it is not re-proven here. (b) Pass `AnalyzerFilter{IDs: p.AnalyzerIDs}` straight through when empty, so every analyzer including inactive ones is listed: `TestBackfillEmptyAnalyzerListMeansActiveAnalyzersNotAll` FAILS. Restore.
 
 - [ ] **Step 6: Gate and commit**
 
@@ -2266,12 +2417,12 @@ type Ingest struct {
 **`Build` wires:**
 - `crypto.NewCipher(cfg.Security.EncryptionKey)`.
 - `postgres.New<Name>Repository(pool)` for Reading, Cursor, Anomaly, Analyzer, Plant, Production and Ops (names confirmed in Pre-flight P2), plus Task 5's `postgres.NewGenerationRepository(pool)`, `postgres.NewProviderSeriesRepository(pool)` and `NewIntegrationRepository(pool, cipher)`; `admin.NewIngestionRepository`, `NewMarketDataRepository`, `NewJournalRepository`.
-- `redis.New(ctx, cfg.Redis, log)` → `lock.NewRedis`, wrapped as `httpxLocker` (a Lease-type adapter).
-- `httpx.NewPool(PoolOptions{PinnedCerts: cfg.External.PinnedCerts, Locker: …})`.
+- `redis.New(ctx, cfg.Redis, log)` → `lock.NewRedis(client)`. R2: this value is passed **directly** wherever a `Locker` (or `Consumer`) is wanted — `httpx.Locker` is a type alias for `lock.Locker` (Task 2), so `*lock.Redis` already satisfies it; there is no `worker.httpxLocker` adapter anywhere in F2.
+- `httpx.NewPool(PoolOptions{PinnedCerts: cfg.External.PinnedCerts, Locker: redisLock})`.
 - `integration.NewRegistry(osos.New(pool…), gridbox.New(…), aril.New(…), pm5340.New(…))`.
-- `isolar.New`, `epias.New(Options{Username: cfg.External.EPIASUsername, Password: integration.NewSecret([]byte(cfg.External.EPIASPassword)), Locker: …})`.
+- `isolar.New`, `epias.New(Options{Username: cfg.External.EPIASUsername, Password: integration.NewSecret([]byte(cfg.External.EPIASPassword)), Locker: redisLock})`.
 - `job.NewClient(cfg.Redis)`.
-- `credentials.New(Deps{…, StateKey: hmacSHA256(cfg.Security.JWTSigningKey, "isolar-oauth-state/v1"), RedirectURI: cfg.External.ISolarRedirect or strings.TrimSuffix(cfg.HTTP.PublicURL, "/") + "/integrations/isolar/callback"})`.
+- `credentials.New(Deps{…, Locker: redisLock, Nonces: redisLock /* *lock.Redis implements lock.Consumer too, R3 */, Enqueuer: jobClient, StateKey: hmacSHA256(cfg.Security.JWTSigningKey, "isolar-oauth-state/v1"), RedirectURI: cfg.External.ISolarRedirect or strings.TrimSuffix(cfg.HTTP.PublicURL, "/") + "/integrations/isolar/callback"})`.
 - `ingest.New(Deps{…, Hooks: {pm5340: {generation.New(…)}}, ConsumptionRefresh: nil /* R17 */}, Options{from cfg.Ingest, MaxRetry: cfg.Worker.MaxRetries})`.
 - `backfill.New`, `marketdata.New`.
 - Returns `job.Handlers{Log, Ingestion: ingestSvc, Backfill: backfiller, Prices: syncer}`.
@@ -2473,7 +2624,7 @@ git commit -m "test(f2): end-to-end ingestion acceptance suite and F2 handoff" <
 | 8 | ARIL T1/T2/T3 NULL not 0 | T8 `TestARILTimeOfUseRegistersAreNull`; T17 `TestIngestionARILTimeOfUseRegistersStoredAsNull` |
 | 9 | PM5340 accumulation across gap, out-of-order batch, duplicate fetch | T11 `TestGenerationAccumulatesAcrossAGap`, `TestGenerationOutOfOrderBatchRecomputesLaterRows`, `TestGenerationDuplicateFetchIsStable`; T9 `TestPM5340NeverDerivesCumulativeExport`; T17 `TestIngestionPM5340CumulativeGenerationThroughTheWorker` |
 | 10 | Negative index delta → unresolved `consumption_anomalies` row | T10 `TestDetectNegativeDeltas`, `TestIngestionNegativeIndexDeltaCreatesUnresolvedAnomaly`; T17 `TestIngestionNegativeDeltaThroughTheWorkerCreatesAnomaly` |
-| 11 | No test passes with TLS verification disabled | existing `TestNoTLSVerificationBypass`; T1 `TestNoTLSConfigDisablesVerification`; T2 `TestUnpinnedSelfSignedServerIsRefused`, `TestPinnedHostRejectsADifferentCertificate`, `TestPoolTransportsNeverDisableVerification`; T4 `TestFakeServerIsTLSAndRecordsRequests`; T17 Step 6 grep |
+| 11 | No test passes with TLS verification disabled | existing `TestNoTLSVerificationBypass`; T1 `TestNoTLSConfigDisablesVerification`; T2 `TestUnpinnedSelfSignedServerIsRefused`, `TestPinnedHostRejectsADifferentCertificate`, `TestPoolNeverAcceptsAnUnverifiedCertificate` (R5 — behavioural, not a white-box `InsecureSkipVerify` field check); T4 `TestFakeServerIsTLSAndRecordsRequests`, `TestTwoFakeServersHaveDistinctCertificates` (R4); T17 Step 6 grep |
 
 ### Scope coverage (09 §F2 bullets)
 
@@ -2489,15 +2640,15 @@ git commit -m "test(f2): end-to-end ingestion acceptance suite and F2 handoff" <
 
 ### Guards added or widened, each with its proving mutation
 
-`TestAdaptersDoNotImportTheStore`, `TestStoreAndIntegrationDoNotImportAPIOrService` (widened), `TestIntegrationTreesDoNotParseFloats`, `TestNoTLSConfigDisablesVerification`, float field guard + depguard reach (T1); `TestHTTPErrorsNeverContainSubstitutedSecrets` and the pinning trio (T2); `TestFixturesAreSanitised`/`TestSanitiserRejects` (T4); new isolation predicates (T5); `TestViewCarriesNoSecretMaterial` (T14); `TestWorkerRegistersEveryF2Handler` (T16); `TestAllSixAdaptersHaveTheFixtureMatrix`, `TestBillingPathDoesNotImportEPIAS` (T17).
+`TestAdaptersDoNotImportTheStore`, `TestStoreAndIntegrationDoNotImportAPIOrService` (widened), `TestIntegrationTreesDoNotParseFloats`, `TestNoTLSConfigDisablesVerification`, float field guard + depguard reach (T1); `TestHTTPErrorsNeverContainSubstitutedSecrets` and the pinning trio (T2); `TestFixturesAreSanitised`/`TestSanitiserRejects`, `TestTwoFakeServersHaveDistinctCertificates`, `TestMemoryConsumeNeverBlocks`/`TestRedisConsumeIsSingleUseAndNonBlocking` (T4); new isolation predicates for `GenerationAnchorUpsert` **and** `ProviderHourlyVisibleAnalyzerIDs` (T5, S4); `TestViewCarriesNoSecretMaterial` (T14, R1 — type/value-based, not a name regex), `TestStateIsSingleUse` (T14, R3 — bounded by a short ctx deadline, so a hang fails rather than passing slowly); `TestWorkerRegistersEveryF2Handler` (T16); `TestAllSixAdaptersHaveTheFixtureMatrix`, `TestBillingPathDoesNotImportEPIAS` (T17).
 
 ### Type consistency (checked by name across tasks)
 
-`integration.Adapter`/`Planner`/`Credentials`/`Secret`/`HourlyValue`/`Warning`/`ResolvedMultiplier` (T1 → T6–T15). `httpx.Pool`/`ClientConfig`/`Request`/`Param`/`Locker` (T2 → adapters, T14, T16). `store.SystemScope`, `store.GenerationRepository`, `store.ProviderSeriesRepository`, `store.AdminIngestionRepository`, `model.CredentialRef`, `model.GenerationAnchor`, `model.ProviderHourlyValue`, `MeterReading.IntervalGenerationKwh` (T5 → T9, T10, T11, T16). `ingest.PostPersistHook`/`CredentialOpener`/`SourceResolver`/`Enqueuer` (T10 → T11, T14, T15). `job.*Payload`, `job.New*Task`, `job.TaskOptions`, `job.ClassifyForRetry`, `job.RetryDelay`, `job.Ingestion`/`Backfiller`/`PriceSyncer` (T1 → T10, T12, T15, T16, T17). `isolar.Token` (T13 → T14). `worker.Build` (T16 → T17).
+`integration.Adapter`/`Planner`/`Credentials`/`Secret`/`HourlyValue`/`Warning`/`ResolvedMultiplier` (T1 → T6–T15). `httpx.Pool`/`ClientConfig`/`Request`/`Param` (T2 → adapters, T16). `lock.Locker`/`lock.Lease`/`lock.Consumer` (T4 → T2 as a type alias — R2 — and directly into T12, T14, T16 — R3). `normalize.Chunk`/`normalize.Window` (T3 → T10, T12, T15 — S7, the one range-chunking implementation). `store.SystemScope`, `store.GenerationRepository`, `store.ProviderSeriesRepository`, `store.AdminIngestionRepository`, `model.CredentialRef`, `model.GenerationAnchor`, `model.ProviderHourlyValue`, `MeterReading.IntervalGenerationKwh` (T5 → T9, T10, T11, T16). `ingest.PostPersistHook`/`CredentialOpener`/`SourceResolver`/`Enqueuer` (T10 → T11, T14, T15). `job.*Payload`, `job.New*Task`, `job.TaskOptions`, `job.ClassifyForRetry`, `job.RetryDelay`, `job.Ingestion`/`Backfiller`/`PriceSyncer` (T1 → T10, T12, T15, T16, T17). `isolar.Token` (T13 → T14, fully merged — Wave E starts only after Wave D). `worker.Build` (T16 → T17).
 
 ### Known risks, stated rather than hidden
 
 1. **Timescale `add/drop column` on a columnstore-enabled hypertable** (T5 Step 3) is the one schema operation F1 never exercised; T5 stops and reports rather than reshaping R1.
 2. **Provider response shapes for OSOS, iSolar result codes and EPİAŞ field names** come from legacy code, not from recorded live traffic (none can be captured without real credentials). Fixtures encode the rulings; F14's live checklist verifies them (Q4).
-3. **Wave C is the widest merge** (four adapters plus the pipeline). The adapters share no files, but all four add fixtures that `TestFixturesAreSanitised` reads; merge them one at a time and run the sanitiser after each.
+3. **Wave C is the widest merge** (five adapters — 6, 7, 8, 9, 12 — plus the pipeline, T10; S11 moved T12 here). That is six tasks against the 5-concurrent-agent budget: dispatch 6/7/8/9/10 first, start 12 as its sixth slot frees. The adapters share no files, but all six add fixtures that `TestFixturesAreSanitised` reads; merge them one at a time and run the sanitiser after each.
 4. **The end-to-end suite (T17) starts Redis and uses one Postgres clone per test.** If readiness timeouts appear under `-count=3`, apply the F1 watch item (`TESTCONTAINERS_HOST_OVERRIDE=127.0.0.1`) only on a second observation, and record it.
