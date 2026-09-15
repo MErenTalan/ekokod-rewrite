@@ -125,12 +125,31 @@ type EmissionFactor struct {
 	FuelType      *string
 	VehicleType   *string
 	Scope         *model.CarbonScope
-	IsoCategory   *string
-	Status        *string
-	Source        *string
-	SourceYear    *int16
-	SourceURL     *string
-	Conversions   []EmissionFactorConversion
+	// IsoCategory is filled from the legacy per-entry `category` field
+	// (EmissionCategory, constants.ts:550-557) on every entry. Provenance
+	// correction (task 12b): an earlier version of this package's
+	// documentation (see the task-12a report) said no legacy structure maps
+	// a GHG sub-clause to an ISO 14064 category, based only on reading the
+	// i18n display text in tr.json. That was incomplete — the legacy
+	// codebase DOES carry a structured mapping,
+	// `GHG_ISO_MAPPING: Record<SubCategory, {scope, category}>`
+	// (bcem-energy/src/utils/types.ts:104-220) — and cross-checking it
+	// confirms every (scope, category) pair used across the 182 shipped
+	// entries agrees with what GHG_ISO_MAPPING assigns to that entry's
+	// SubCategory (e.g. BUSINESS_TRAVEL/EMPLOYEE_COMMUTING and both freight
+	// directions all map to scope_3/category_3, matching the 105
+	// scope_3/category_3 entries; PURCHASED_GOODS/CAPITAL_GOODS to
+	// scope_3/category_4, matching 16; END_OF_LIFE_SOLD to
+	// scope_3/category_5, matching 11; WASTE_DISPOSAL to scope_3/category_6,
+	// matching 5). So the per-entry `category` field used to fill this
+	// column is independently validated by GHG_ISO_MAPPING, not merely "the
+	// only value available" — the two legacy sources agree.
+	IsoCategory *string
+	Status      *string
+	Source      *string
+	SourceYear  *int16
+	SourceURL   *string
+	Conversions []EmissionFactorConversion
 }
 
 type jsonEmissionFactorConversion struct {
