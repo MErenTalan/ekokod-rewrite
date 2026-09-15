@@ -37,7 +37,19 @@ func (s *Service) SyncAnalyzers(ctx context.Context, p job.SyncAnalyzersPayload)
 	if err != nil {
 		errText := err.Error()
 		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil, now)
-		return err
+		return classifyStoreErr(err) // M14
+	}
+
+	// X-M3, final review B: see fetch.go's identical gate — an
+	// operator-deactivated credential must stop ingestion here, before any
+	// network call, non-retryably (ErrConfig -> job.ClassifyForRetry ->
+	// asynq.SkipRetry) and with a clear operational message.
+	if !creds.IsActive {
+		cerr := &integration.Error{Kind: integration.ErrConfig, Provider: creds.Provider, Op: "sync_analyzers.credential_inactive"}
+		errText := redacted(creds, cerr)
+		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil, now)
+		s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "error", errText, nil)
+		return wrapRedacted(errText, cerr)
 	}
 
 	src, err := s.deps.Sources.Source(creds.Provider)
@@ -193,35 +205,52 @@ func newAnalyzerFromMeteringPoint(companyID uuid.UUID, provider model.Integratio
 	}
 }
 
+// preserveIfNil is M6's rule applied generically: a nil incoming pointer
+// means "the provider did not report this field THIS TIME", never "clear
+// it" — the stored value (possibly edited by an operator since the last
+// sync) is kept. A non-nil incoming value always wins, even when it equals
+// existing.
+func preserveIfNil[T any](existing, incoming *T) *T {
+	if incoming == nil {
+		return existing
+	}
+	return incoming
+}
+
 // applyMeteringPointFields updates every descriptive field of existing from
 // pt EXCEPT ContractedPowerKw — model.Analyzer has no matching column (R30):
 // the value stays visible only in the adapter's own Raw/fixture data, never
 // silently dropped from a field this struct actually has. IsActive is left
 // untouched: R27 sets it only at creation, and a sync must never silently
-// flip an operator's own activation decision. MeterMultiplier is updated
-// only when the point reports one; a nil MeterMultiplier means "the
-// provider did not report one this time", not "reset to 1".
+// flip an operator's own activation decision.
+//
+// M6: EVERY pointer field below is preserveIfNil'd, not unconditionally
+// overwritten (round 1's bug) — a provider whose discovery response omits
+// a field this cycle (a nil pt.<Field>) must never erase a stored value an
+// operator screen may since have edited. MeterMultiplier (the one
+// non-pointer field pt reports as a pointer) follows the identical rule:
+// updated only when the point reports one.
 func applyMeteringPointFields(existing model.Analyzer, pt integration.MeteringPoint) model.Analyzer {
-	existing.CustomerName = pt.CustomerName
-	existing.Address = pt.Address
-	existing.Province = pt.Province
-	existing.District = pt.District
-	existing.Neighbourhood = pt.Neighbourhood
-	existing.Street = pt.Street
-	existing.TariffType = pt.TariffType
-	existing.TariffKind = pt.TariffKind
-	existing.InstallationKind = pt.InstallationKind
-	existing.InstalledPowerKw = pt.InstalledPowerKw
-	existing.MeterNumber = pt.MeterNumber
-	existing.MeterModel = pt.MeterModel
+	existing.CustomerName = preserveIfNil(existing.CustomerName, pt.CustomerName)
+	existing.Address = preserveIfNil(existing.Address, pt.Address)
+	existing.Province = preserveIfNil(existing.Province, pt.Province)
+	existing.District = preserveIfNil(existing.District, pt.District)
+	existing.Neighbourhood = preserveIfNil(existing.Neighbourhood, pt.Neighbourhood)
+	existing.Street = preserveIfNil(existing.Street, pt.Street)
+	existing.TariffType = preserveIfNil(existing.TariffType, pt.TariffType)
+	existing.TariffKind = preserveIfNil(existing.TariffKind, pt.TariffKind)
+	existing.InstallationKind = preserveIfNil(existing.InstallationKind, pt.InstallationKind)
+	existing.InstalledPowerKw = preserveIfNil(existing.InstalledPowerKw, pt.InstalledPowerKw)
+	existing.MeterNumber = preserveIfNil(existing.MeterNumber, pt.MeterNumber)
+	existing.MeterModel = preserveIfNil(existing.MeterModel, pt.MeterModel)
 	if pt.MeterMultiplier != nil {
 		existing.MeterMultiplier = *pt.MeterMultiplier
 	}
-	existing.CounterpartyNo = pt.CounterpartyNo
-	existing.MeteringPointName = pt.MeteringPointName
-	existing.Latitude = pt.Latitude
-	existing.Longitude = pt.Longitude
-	existing.EtsoCode = pt.EtsoCode
-	existing.DefinitionType = pt.DefinitionType
+	existing.CounterpartyNo = preserveIfNil(existing.CounterpartyNo, pt.CounterpartyNo)
+	existing.MeteringPointName = preserveIfNil(existing.MeteringPointName, pt.MeteringPointName)
+	existing.Latitude = preserveIfNil(existing.Latitude, pt.Latitude)
+	existing.Longitude = preserveIfNil(existing.Longitude, pt.Longitude)
+	existing.EtsoCode = preserveIfNil(existing.EtsoCode, pt.EtsoCode)
+	existing.DefinitionType = preserveIfNil(existing.DefinitionType, pt.DefinitionType)
 	return existing
 }

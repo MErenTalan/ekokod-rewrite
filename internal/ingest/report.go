@@ -3,6 +3,7 @@ package ingest
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sort"
 	"time"
 
@@ -218,3 +219,25 @@ func partitionSanityFlags(rejected []Rejection) (real, flags []Rejection) {
 func ptrTime(t time.Time) *time.Time { return &t }
 
 func ptrBool(b bool) *bool { return &b }
+
+// classifyStoreErr is M14: internal/job cannot import internal/store (the
+// architecture guard TestTheJobPackageDoesNotImportTheStore), so
+// job.ClassifyForRetry has no way to recognise store.ErrNotFound (a
+// deleted analyzer or credential) or store.ErrInvalidScope as non-
+// retryable — round 1 let both propagate as a plain store error, which
+// asynq's ordinary retry/backoff policy then retried 5x over ~30 minutes
+// of backoff for a task that can never succeed (the row is gone; a retry
+// changes nothing). ingest DOES import store, so it is this package's own
+// handler entry points (FetchReadings, SyncAnalyzers) that must wrap these
+// two sentinels with job.SkipRetry themselves before returning — every
+// other error is returned unchanged, so job.ClassifyForRetry's own
+// classification of an *integration.Error still applies exactly as before.
+func classifyStoreErr(err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, store.ErrNotFound) || errors.Is(err, store.ErrInvalidScope) {
+		return job.SkipRetry(err)
+	}
+	return err
+}

@@ -2,6 +2,7 @@ package arch_test
 
 import (
 	"go/ast"
+	"go/token"
 	"go/types"
 	"io/fs"
 	"os"
@@ -1115,6 +1116,32 @@ func f2guardCheckJSONTarget(t *testing.T, pkg *packages.Package, arg ast.Expr) {
 	}
 }
 
+// f2guardCheckFmtScanFloatArgs (M2) flags any fmt.Sscan/Sscanf/Sscanln
+// argument whose static type is a pointer to float32/float64 — the same
+// hazard TestNoFloatFieldsInModelOrStore forbids in a struct field, reached
+// here through a scan target instead.
+func f2guardCheckFmtScanFloatArgs(t *testing.T, pkg *packages.Package, args []ast.Expr) {
+	t.Helper()
+	for _, arg := range args {
+		typ := pkg.TypesInfo.TypeOf(arg)
+		if typ == nil {
+			continue
+		}
+		ptr, ok := typ.Underlying().(*types.Pointer)
+		if !ok {
+			continue
+		}
+		basic, ok := ptr.Elem().Underlying().(*types.Basic)
+		if !ok {
+			continue
+		}
+		if basic.Kind() == types.Float32 || basic.Kind() == types.Float64 {
+			t.Errorf("%s: fmt.Sscan/Sscanf/Sscanln into a %s: money and energy are decimal.Decimal end to end, never parsed as a float",
+				pkg.Fset.Position(arg.Pos()), typ)
+		}
+	}
+}
+
 // TestIntegrationTreesDoNotParseFloats extends the money/energy purity rule
 // from struct fields (TestNoFloatFieldsInModelOrStore) to the two routes
 // that let a float enter this codebase WITHOUT ever being named in a struct
@@ -1146,43 +1173,61 @@ func TestIntegrationTreesDoNotParseFloats(t *testing.T) {
 				filesInspected++
 
 				ast.Inspect(file, func(n ast.Node) bool {
-					call, ok := n.(*ast.CallExpr)
-					if !ok {
-						return true
-					}
-					sel, ok := call.Fun.(*ast.SelectorExpr)
-					if !ok {
-						return true
-					}
-					fn, ok := pkg.TypesInfo.Uses[sel.Sel].(*types.Func)
-					if !ok || fn.Pkg() == nil {
-						return true
-					}
-					switch {
-					case fn.Pkg().Path() == "strconv" && fn.Name() == "ParseFloat":
-						t.Errorf("%s: calls strconv.ParseFloat: money and energy are decimal.Decimal end to end, never parsed as a float",
-							pkg.Fset.Position(call.Pos()))
-					case fn.Pkg().Path() == "encoding/json" && fn.Name() == "Unmarshal" && len(call.Args) == 2:
-						f2guardCheckJSONTarget(t, pkg, call.Args[1])
-					case fn.Pkg().Path() == "encoding/json" && fn.Name() == "Decode" && len(call.Args) == 1 && f2guardIsJSONDecoderRecv(fn):
-						f2guardCheckJSONTarget(t, pkg, call.Args[0])
-					// M3: two more routes a float can enter without ever
-					// being named in a struct field or an Unmarshal/Decode
-					// target. Method-VALUE resolution (a bound method,
-					// e.g. `f := n.Float64; f()`, or a method used as a
-					// func value passed elsewhere) is deliberately not
-					// attempted here — Uses[sel.Sel] only resolves a
-					// direct call's selector, and reaching the same
-					// *types.Func through a value requires tracking data
-					// flow this AST walk does not do. Flagged as a known
-					// gap in the task report rather than silently claimed
-					// as covered.
-					case fn.Pkg().Path() == "encoding/json" && fn.Name() == "Float64" && f2guardIsJSONNumberRecv(fn):
-						t.Errorf("%s: calls json.Number.Float64: decode provider numbers as decimal.Decimal or keep them as json.Number/string, never parse them as a float",
-							pkg.Fset.Position(call.Pos()))
-					case fn.Pkg().Path() == "encoding/json" && fn.Name() == "Token" && f2guardIsJSONDecoderRecv(fn):
-						t.Errorf("%s: calls (*json.Decoder).Token: token-by-token JSON numbers decode as float64 with no static type to catch — parse provider numbers through a typed struct with decimal.Decimal/json.Number fields instead",
-							pkg.Fset.Position(call.Pos()))
+					switch node := n.(type) {
+					case *ast.SelectorExpr:
+						// M2: matching on the *types.Func a bare
+						// SelectorExpr resolves to — not only when it is
+						// immediately called — catches strconv.ParseFloat
+						// and json.Number.Float64 used as a METHOD VALUE,
+						// e.g. `pf := strconv.ParseFloat; pf(s, 64)`: at
+						// the call site `pf(s, 64)`, call.Fun is a bare
+						// *ast.Ident with no static link back to
+						// strconv.ParseFloat, but the assignment
+						// `strconv.ParseFloat` itself is a SelectorExpr
+						// whose Uses[Sel] already resolves to the same
+						// *types.Func regardless of whether it is being
+						// called or merely referenced — closing the
+						// method-value gap the previous CallExpr-only walk
+						// left open (carried from Task 1, closed here).
+						fn, ok := pkg.TypesInfo.Uses[node.Sel].(*types.Func)
+						if !ok || fn.Pkg() == nil {
+							return true
+						}
+						switch {
+						case fn.Pkg().Path() == "strconv" && fn.Name() == "ParseFloat":
+							t.Errorf("%s: references strconv.ParseFloat: money and energy are decimal.Decimal end to end, never parsed as a float",
+								pkg.Fset.Position(node.Pos()))
+						case fn.Pkg().Path() == "encoding/json" && fn.Name() == "Float64" && f2guardIsJSONNumberRecv(fn):
+							t.Errorf("%s: references json.Number.Float64: decode provider numbers as decimal.Decimal or keep them as json.Number/string, never parse them as a float",
+								pkg.Fset.Position(node.Pos()))
+						}
+					case *ast.CallExpr:
+						sel, ok := node.Fun.(*ast.SelectorExpr)
+						if !ok {
+							return true
+						}
+						fn, ok := pkg.TypesInfo.Uses[sel.Sel].(*types.Func)
+						if !ok || fn.Pkg() == nil {
+							return true
+						}
+						switch {
+						case fn.Pkg().Path() == "encoding/json" && fn.Name() == "Unmarshal" && len(node.Args) == 2:
+							f2guardCheckJSONTarget(t, pkg, node.Args[1])
+						case fn.Pkg().Path() == "encoding/json" && fn.Name() == "Decode" && len(node.Args) == 1 && f2guardIsJSONDecoderRecv(fn):
+							f2guardCheckJSONTarget(t, pkg, node.Args[0])
+						case fn.Pkg().Path() == "encoding/json" && fn.Name() == "Token" && f2guardIsJSONDecoderRecv(fn):
+							t.Errorf("%s: calls (*json.Decoder).Token: token-by-token JSON numbers decode as float64 with no static type to catch — parse provider numbers through a typed struct with decimal.Decimal/json.Number fields instead",
+								pkg.Fset.Position(node.Pos()))
+						// M2: fmt.Sscan/Sscanf/Sscanln decode straight into
+						// whatever pointer type the caller passes — a
+						// *float32/*float64 argument is exactly as
+						// float-typed as the struct fields
+						// TestNoFloatFieldsInModelOrStore already forbids,
+						// and plausible for Turkish "1,5"-style provider
+						// numbers.
+						case fn.Pkg().Path() == "fmt" && (fn.Name() == "Sscan" || fn.Name() == "Sscanf" || fn.Name() == "Sscanln"):
+							f2guardCheckFmtScanFloatArgs(t, pkg, node.Args)
+						}
 					}
 					return true
 				})
@@ -1203,6 +1248,26 @@ var f2guardTLSDangerousFields = map[string]bool{
 	"InsecureSkipVerify":    true,
 	"VerifyPeerCertificate": true,
 	"VerifyConnection":      true,
+}
+
+// f2guardTLSDangerousSelection reports whether selection resolves to one of
+// crypto/tls.Config's dangerous fields, checked through the SELECTED
+// FIELD's own declaring package and name (selection.Obj()) rather than
+// selection.Recv() (the receiver expression's type). This is what also
+// catches the field reached through an embedded wrapper struct — `type w
+// struct{ tls.Config }; var p w; p.VerifyConnection = f` has Recv() == w
+// (the wrapper), never tls.Config, but Obj() is still the *types.Var for
+// tls.Config's own VerifyConnection field, promoted through the embedding
+// (M1).
+func f2guardTLSDangerousSelection(selection *types.Selection) bool {
+	if selection.Kind() != types.FieldVal {
+		return false
+	}
+	v, ok := selection.Obj().(*types.Var)
+	if !ok || v.Pkg() == nil || v.Pkg().Path() != "crypto/tls" {
+		return false
+	}
+	return f2guardTLSDangerousFields[v.Name()]
 }
 
 // f2guardLoadTypedPackagesWithTests is loadTypedPackages' counterpart that
@@ -1285,26 +1350,47 @@ func TestNoTLSConfigDisablesVerification(t *testing.T) {
 					// writes — by type, not by the string "tls" appearing
 					// anywhere — so this also catches the field being set
 					// through a renamed import or a value reached via
-					// another pointer to the same struct.
+					// another pointer to the same struct. M1:
+					// f2guardTLSDangerousSelection checks the FIELD's own
+					// declaring package (selection.Obj()), not
+					// selection.Recv(), which is what additionally catches
+					// the field through an embedded wrapper struct (Recv()
+					// would report the wrapper type, never tls.Config).
 					for _, lhs := range node.Lhs {
 						sel, ok := lhs.(*ast.SelectorExpr)
 						if !ok {
 							continue
 						}
 						selection, ok := pkg.TypesInfo.Selections[sel]
-						// Selection.Recv() for a FieldVal already reports
-						// the struct type itself (T), not *T, even when
-						// the expression's own type is a pointer — see
-						// go/types' Selection doc: "p.x FieldVal T x int".
-						if !ok || selection.Kind() != types.FieldVal ||
-							!isNamed(selection.Recv(), "crypto/tls", "Config") {
+						if !ok || !f2guardTLSDangerousSelection(selection) {
 							continue
 						}
-						if f2guardTLSDangerousFields[sel.Sel.Name] {
-							t.Errorf("%s: tls.Config field %s assigned after construction: TLS verification is never disabled (06 §1 rule 7, removed-behaviour 16)",
-								pkg.Fset.Position(node.Pos()), sel.Sel.Name)
-						}
+						t.Errorf("%s: tls.Config field %s assigned after construction: TLS verification is never disabled (06 §1 rule 7, removed-behaviour 16)",
+							pkg.Fset.Position(node.Pos()), sel.Sel.Name)
 					}
+				case *ast.UnaryExpr:
+					// M1: `fp := &c.VerifyPeerCertificate; *fp = ...` never
+					// appears as an AssignStmt whose LHS is a
+					// SelectorExpr — the LHS is `*fp`, a dereferenced local
+					// variable with no static link back to tls.Config — so
+					// catching the eventual write would need data-flow
+					// analysis this syntax-driven guard does not do.
+					// Flagging the ADDRESS-OF expression itself is
+					// sufficient: no legitimate, non-bypassing caller has a
+					// reason to take the address of one of these fields.
+					if node.Op != token.AND {
+						return true
+					}
+					sel, ok := node.X.(*ast.SelectorExpr)
+					if !ok {
+						return true
+					}
+					selection, ok := pkg.TypesInfo.Selections[sel]
+					if !ok || !f2guardTLSDangerousSelection(selection) {
+						return true
+					}
+					t.Errorf("%s: takes the address of tls.Config field %s: TLS verification is never disabled (06 §1 rule 7, removed-behaviour 16)",
+						pkg.Fset.Position(node.Pos()), sel.Sel.Name)
 				}
 				return true
 			})

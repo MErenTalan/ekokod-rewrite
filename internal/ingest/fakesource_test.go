@@ -269,8 +269,14 @@ func (f credentialOpenerFunc) Open(ctx context.Context, s store.Scope, credentia
 }
 
 // fixedCredentialOpener always returns creds, regardless of the requested
-// credentialID, for tests that only ever exercise one credential.
+// credentialID, for tests that only ever exercise one credential. IsActive
+// is forced true (X-M3, final review B introduced the field; every existing
+// caller here builds creds without ever meaning to exercise the new
+// inactive-credential gate, so this keeps them all passing) — a test that
+// specifically wants an INACTIVE credential builds its own CredentialOpener
+// inline instead of using this helper.
 func fixedCredentialOpener(creds integration.Credentials) credentialOpenerFunc {
+	creds.IsActive = true
 	return func(context.Context, store.Scope, uuid.UUID) (integration.Credentials, error) { return creds, nil }
 }
 

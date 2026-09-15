@@ -134,8 +134,17 @@ type Storage struct {
 
 // External configures the third-party integrations the platform calls out to.
 type External struct {
-	EPIASUsername   string
-	EPIASPassword   string
+	EPIASUsername string
+	EPIASPassword string
+	// EPIASCASURL and EPIASBaseURL (M3, final review B) are the EPİAŞ CAS
+	// ticket endpoint and electricity-service base URL internal/worker
+	// passes to epias.New. Both default to the real production URLs
+	// (epias.New's own defaultCASURL/defaultBaseURL) and must be https —
+	// this is the only seam through which a test can point a REAL
+	// worker.Build-constructed EPİAŞ client at a fake.NewTLSServer instead
+	// of substituting Handlers.Prices at the test layer.
+	EPIASCASURL     string
+	EPIASBaseURL    string
 	MLURL           string
 	MLAPIKey        string
 	MLTimeout       time.Duration

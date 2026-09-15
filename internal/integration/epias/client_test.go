@@ -201,8 +201,13 @@ func TestEPIASFixtureMatrix(t *testing.T) {
 		{
 			name: "auth_failure",
 			routes: func(t *testing.T) []fake.Route {
+				// I1: the fixture-matrix guard requires the "auth_failure"
+				// case to actually read epias_auth_failure.json, not merely
+				// have it exist on disk — CAS answers 401 with this
+				// recorded error body, matching the shape it fails in
+				// (before any data fixture is ever served).
 				return []fake.Route{
-					casRoute(fake.Raw(http.StatusUnauthorized, "", nil)),
+					casRoute(fake.Raw(http.StatusUnauthorized, "application/json", fake.Fixture(t, "epias", "epias_auth_failure.json"))),
 				}
 			},
 			wantErr: integration.ErrAuth,
@@ -585,11 +590,13 @@ func TestEPIASConfigErrorsNameTheEnvVarNotTheValue(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = epias.New(pool, epias.Options{Password: integration.NewSecret([]byte(testPass))})
-	require.ErrorIs(t, err, integration.ErrAuth)
+	require.ErrorIs(t, err, integration.ErrConfig) // R48/I5
+	require.NotErrorIs(t, err, integration.ErrAuth)
 	require.Contains(t, err.Error(), "EKOKOD_EPIAS_USERNAME")
 
 	_, err = epias.New(pool, epias.Options{Username: testUser})
-	require.ErrorIs(t, err, integration.ErrAuth)
+	require.ErrorIs(t, err, integration.ErrConfig)
+	require.NotErrorIs(t, err, integration.ErrAuth)
 	require.Contains(t, err.Error(), "EKOKOD_EPIAS_PASSWORD")
 }
 

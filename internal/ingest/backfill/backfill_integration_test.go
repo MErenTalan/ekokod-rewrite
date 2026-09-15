@@ -68,7 +68,14 @@ func (f credentialOpenerFunc) Open(ctx context.Context, s store.Scope, credentia
 	return f(ctx, s, credentialID)
 }
 
+// fixedCredentialOpener always returns creds, regardless of the requested
+// credentialID. IsActive is forced true (X-M3, final review B introduced
+// the field; every existing caller here builds creds without ever meaning
+// to exercise the new inactive-credential gate) — the one test that
+// specifically wants an INACTIVE credential builds its own CredentialOpener
+// inline instead of using this helper.
 func fixedCredentialOpener(creds integration.Credentials) credentialOpenerFunc {
+	creds.IsActive = true
 	return func(context.Context, store.Scope, uuid.UUID) (integration.Credentials, error) { return creds, nil }
 }
 
@@ -96,51 +103,47 @@ func (m sourceMap) Source(p integration.Provider) (integration.Adapter, error) {
 
 var _ ingest.SourceResolver = (sourceMap)(nil)
 
-// recordingEnqueuer is an ingest.Enqueuer that records every task it
-// accepts and returns asynq.ErrTaskIDConflict for one it has already seen.
-//
-// It keys "already seen" on task.Type()+payload rather than trying to read
-// the asynq.TaskID option the production Enqueuer would dedup on: the
-// *asynq.Task the client library builds carries its Option values in an
-// UNEXPORTED field (asynq.Task.opts — see NewTask/EnqueueContext in
-// github.com/hibiken/asynq/asynq.go and client.go), so a fake enqueuer
-// outside that package cannot read the real TaskID back off task at all.
-// job.FetchReadingsPayload's JSON encoding happens to carry AnalyzerID,
-// Kind and Window.From/To — the same fields integFetchReadingsTaskID's
-// deterministic ID is a function of — so "same type+payload" and "same
-// TaskID" collide on the same pairs of calls for this payload shape, which
-// is what makes this key a faithful stand-in for exercising Backfill's own
-// enqueue loop and its asynq.ErrTaskIDConflict -> skipped handling.
-//
-// It does NOT verify the real integFetchReadingsTaskID formula itself
-// (a different formula producing "same key iff same real TaskID" would
-// pass every test in this file unchanged) — that formula is proved
-// directly, as a pure function in package job, by
-// TestFetchTaskWithWindowHasDeterministicTaskID in
-// internal/job/integration_test.go (fix round 1 / I1).
-type recordingEnqueuer struct {
+// backfillRealEnqueuer wraps a real *job.Client over a real (isolated)
+// Redis (M5, final review B): every Enqueue call this file's tests make
+// goes through asynq's own deterministic-TaskID uniqueness in Redis, not a
+// payload-keyed proxy. The payload-keyed fake this replaced could not
+// catch a regression that drops ForceRunID from the real TaskID derivation
+// (job's own integFetchReadingsTaskID) while leaving the JSON payload
+// itself unchanged — the payload is ALL a payload-keyed fake can see, so
+// such a mutation is invisible to it; asynq's own Redis-backed uniqueness
+// depends on the real TaskID (which DOES fold in ForceRunID), so it is not.
+type backfillRealEnqueuer struct {
+	client *job.Client
+
 	mu    sync.Mutex
-	tasks []*asynq.Task
-	seen  map[string]bool
+	tasks []*asynq.Task // one per call that actually succeeded, in order
 }
 
-func newRecordingEnqueuer() *recordingEnqueuer { return &recordingEnqueuer{seen: map[string]bool{}} }
+// newBackfillRealEnqueuer starts an isolated Redis (testfixtures.StartRedis,
+// via RedisConfig) and opens a real job.Client against it.
+func newBackfillRealEnqueuer(t *testing.T) *backfillRealEnqueuer {
+	t.Helper()
+	cfg := testfixtures.RedisConfig(t)
+	client, err := job.NewClient(cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client.Close() })
+	return &backfillRealEnqueuer{client: client}
+}
 
-func recordingEnqueuerKey(task *asynq.Task) string { return task.Type() + ":" + string(task.Payload()) }
-
-func (e *recordingEnqueuer) Enqueue(_ context.Context, task *asynq.Task, _ ...asynq.Option) (*asynq.TaskInfo, error) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	key := recordingEnqueuerKey(task)
-	if e.seen[key] {
-		return nil, asynq.ErrTaskIDConflict
+func (e *backfillRealEnqueuer) Enqueue(ctx context.Context, task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error) {
+	info, err := e.client.Enqueue(ctx, task, opts...)
+	if err != nil {
+		return info, err
 	}
-	e.seen[key] = true
+	e.mu.Lock()
 	e.tasks = append(e.tasks, task)
-	return &asynq.TaskInfo{ID: uuid.NewString(), Type: task.Type(), Queue: "low"}, nil
+	e.mu.Unlock()
+	return info, nil
 }
 
-func (e *recordingEnqueuer) enqueued() []*asynq.Task {
+// enqueued returns every task that has ACTUALLY been accepted (not
+// conflicted) so far, oldest first.
+func (e *backfillRealEnqueuer) enqueued() []*asynq.Task {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	out := make([]*asynq.Task, len(e.tasks))
@@ -148,25 +151,31 @@ func (e *recordingEnqueuer) enqueued() []*asynq.Task {
 	return out
 }
 
-// markSeen pre-seeds a set of (payload-derived) keys as already enqueued —
-// the resumability fixture: a previous, partial backfill run already
-// queued (or still retains, per job.NewFetchReadingsTask's 30-day
-// Retention) these exact analyzer/kind/window tasks.
-func (e *recordingEnqueuer) markSeen(keys ...string) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	for _, k := range keys {
-		e.seen[k] = true
-	}
+var _ ingest.Enqueuer = (*backfillRealEnqueuer)(nil)
+
+// panicEnqueuer fails the test the instant Enqueue is called — used to
+// prove a malformed backfill range is rejected before any window is ever
+// enqueued (mirrors panicCredentialOpener's own "must not be called" shape
+// above).
+type panicEnqueuer struct{ t *testing.T }
+
+func (e panicEnqueuer) Enqueue(context.Context, *asynq.Task, ...asynq.Option) (*asynq.TaskInfo, error) {
+	e.t.Fatal("backfill_test: Enqueue must not be called for a malformed range")
+	return nil, nil
 }
 
-var _ ingest.Enqueuer = (*recordingEnqueuer)(nil)
+var _ ingest.Enqueuer = panicEnqueuer{}
 
-// backfillTestTaskKey builds the exact key recordingEnqueuer would compute
-// for one analyzer/kind/window fetch_readings task, via the real
+// backfillTaskKey identifies an actual task by its payload shape, for
+// same/different comparisons in this file's assertions — it plays no part
+// in dedup itself, which now happens for real, in Redis, via job.Client.
+func backfillTaskKey(task *asynq.Task) string { return task.Type() + ":" + string(task.Payload()) }
+
+// backfillWantTaskKey builds the key backfillTaskKey would compute for one
+// analyzer/kind/window fetch_readings task, via the real
 // job.NewFetchReadingsTask — never a hand-rolled formula that could drift
-// from production.
-func backfillTestTaskKey(t *testing.T, companyID, credentialID, analyzerID uuid.UUID, kind model.ReadingKind, w job.Window) string {
+// from production — for comparison against an actually-enqueued task.
+func backfillWantTaskKey(t *testing.T, companyID, credentialID, analyzerID uuid.UUID, kind model.ReadingKind, w job.Window) string {
 	t.Helper()
 	win := w
 	task, err := job.NewFetchReadingsTask(
@@ -174,7 +183,24 @@ func backfillTestTaskKey(t *testing.T, companyID, credentialID, analyzerID uuid.
 		job.TaskOptions{MaxRetry: 0},
 	)
 	require.NoError(t, err)
-	return recordingEnqueuerKey(task)
+	return backfillTaskKey(task)
+}
+
+// backfillPreEnqueue enqueues one fetch_readings task for REAL, through the
+// SAME enqueuer Backfill itself will use, simulating a previous, partial
+// backfill run that already queued this exact analyzer/kind/window — so a
+// re-run's own Enqueue call collides against a REAL asynq.ErrTaskIDConflict
+// from Redis, never a hand-rolled key match.
+func backfillPreEnqueue(t *testing.T, ctx context.Context, enq *backfillRealEnqueuer, companyID, credentialID, analyzerID uuid.UUID, kind model.ReadingKind, w job.Window) {
+	t.Helper()
+	win := w
+	task, err := job.NewFetchReadingsTask(
+		job.FetchReadingsPayload{CompanyID: companyID, CredentialID: credentialID, AnalyzerID: analyzerID, Kind: kind, Window: &win},
+		job.TaskOptions{MaxRetry: 0},
+	)
+	require.NoError(t, err)
+	_, err = enq.Enqueue(ctx, task)
+	require.NoError(t, err)
 }
 
 // --- test scaffolding ----------------------------------------------------
@@ -231,7 +257,7 @@ func TestBackfillEnqueuesEveryWindowOnce(t *testing.T) {
 
 	creds := integration.Credentials{CredentialID: uuid.New(), CompanyID: tn.Company.ID, Provider: integration.ProviderOSOS, Subtype: analyzerX.ProviderSubtype}
 	src := &fakePlanner{provider: integration.ProviderOSOS, kinds: []model.ReadingKind{model.ReadingKindLoadProfile}, maxWindow: 30 * 24 * time.Hour}
-	enq := newRecordingEnqueuer()
+	enq := newBackfillRealEnqueuer(t)
 	clk := clock.NewFake(backfillTestNow)
 	b := backfill.New(backfillTestDeps(pool, creds, src, enq, clk))
 
@@ -249,7 +275,7 @@ func TestBackfillEnqueuesEveryWindowOnce(t *testing.T) {
 	require.Len(t, tasks, 4, "45 days x 2 analyzers x 1 kind at a 30-day max = 4 windows")
 	seen := make(map[string]bool, len(tasks))
 	for _, task := range tasks {
-		key := recordingEnqueuerKey(task)
+		key := backfillTaskKey(task)
 		require.False(t, seen[key], "every enqueued task must have a distinct key (proxy for a distinct deterministic TaskID)")
 		seen[key] = true
 	}
@@ -286,14 +312,16 @@ func TestBackfillRerunIsResumable(t *testing.T) {
 	from := backfillTestNow.Add(-60 * 24 * time.Hour)
 	to := from.Add(45 * 24 * time.Hour)
 
-	// analyzerX's two windows are already "enqueued" from an earlier,
-	// partial run of this exact backfill request.
+	// analyzerX's two windows are already REALLY enqueued (M5: through the
+	// same job.Client/Redis Backfill itself will use), simulating an
+	// earlier, partial run of this exact backfill request.
 	windows := backfill.Windows(from, to, maxWindow)
 	require.Len(t, windows, 2, "45 days at a 30-day max is 2 windows")
-	enq := newRecordingEnqueuer()
+	enq := newBackfillRealEnqueuer(t)
 	for _, w := range windows {
-		enq.markSeen(backfillTestTaskKey(t, tn.Company.ID, creds.CredentialID, analyzerX.ID, model.ReadingKindLoadProfile, w))
+		backfillPreEnqueue(t, ctx, enq, tn.Company.ID, creds.CredentialID, analyzerX.ID, model.ReadingKindLoadProfile, w)
 	}
+	preEnqueued := len(enq.enqueued())
 
 	b := backfill.New(backfillTestDeps(pool, creds, src, enq, clk))
 	payload := job.BackfillPayload{
@@ -304,7 +332,7 @@ func TestBackfillRerunIsResumable(t *testing.T) {
 
 	require.NoError(t, b.Backfill(ctx, payload))
 
-	require.Len(t, enq.enqueued(), 2, "only analyzerY's 2 new windows are actually enqueued")
+	require.Len(t, enq.enqueued(), preEnqueued+2, "only analyzerY's 2 new windows are actually enqueued")
 
 	runs := backfillTestRuns(t, ctx, postgres.NewOpsRepository(pool), tn.Scope)
 	require.Len(t, runs, 1)
@@ -344,15 +372,17 @@ func TestBackfillForceReEnqueuesAlreadySeenWindows(t *testing.T) {
 	from := backfillTestNow.Add(-60 * 24 * time.Hour)
 	to := from.Add(45 * 24 * time.Hour)
 
-	// analyzerX's two windows are already "enqueued" from an earlier run —
-	// this time under a PLAIN (non-Force) id, exactly the id a Force run
-	// must NOT collide with.
+	// analyzerX's two windows are already REALLY enqueued from an earlier
+	// run — this time under a PLAIN (non-Force) id, exactly the id a Force
+	// run must NOT collide with (M5: through the same job.Client/Redis
+	// Backfill itself will use).
 	windows := backfill.Windows(from, to, maxWindow)
 	require.Len(t, windows, 2, "45 days at a 30-day max is 2 windows")
-	enq := newRecordingEnqueuer()
+	enq := newBackfillRealEnqueuer(t)
 	for _, w := range windows {
-		enq.markSeen(backfillTestTaskKey(t, tn.Company.ID, creds.CredentialID, analyzerX.ID, model.ReadingKindLoadProfile, w))
+		backfillPreEnqueue(t, ctx, enq, tn.Company.ID, creds.CredentialID, analyzerX.ID, model.ReadingKindLoadProfile, w)
 	}
+	preEnqueued := len(enq.enqueued())
 
 	b := backfill.New(backfillTestDeps(pool, creds, src, enq, clk))
 	payload := job.BackfillPayload{
@@ -364,7 +394,7 @@ func TestBackfillForceReEnqueuesAlreadySeenWindows(t *testing.T) {
 
 	require.NoError(t, b.Backfill(ctx, payload))
 
-	require.Len(t, enq.enqueued(), 4, "Force re-mints every window's id, so nothing collides with the earlier plain-id run")
+	require.Len(t, enq.enqueued(), preEnqueued+4, "Force re-mints every window's id, so nothing collides with the earlier plain-id run")
 
 	runs := backfillTestRuns(t, ctx, postgres.NewOpsRepository(pool), tn.Scope)
 	require.Len(t, runs, 1)
@@ -402,7 +432,7 @@ func TestBackfillEmptyAnalyzerListMeansActiveAnalyzersNotAll(t *testing.T) {
 
 	creds := integration.Credentials{CredentialID: uuid.New(), CompanyID: tn.Company.ID, Provider: integration.ProviderOSOS, Subtype: active.ProviderSubtype}
 	src := &fakePlanner{provider: integration.ProviderOSOS, kinds: []model.ReadingKind{model.ReadingKindLoadProfile}, maxWindow: 30 * 24 * time.Hour}
-	enq := newRecordingEnqueuer()
+	enq := newBackfillRealEnqueuer(t)
 	clk := clock.NewFake(backfillTestNow)
 	b := backfill.New(backfillTestDeps(pool, creds, src, enq, clk))
 
@@ -415,8 +445,8 @@ func TestBackfillEmptyAnalyzerListMeansActiveAnalyzersNotAll(t *testing.T) {
 	tasks := enq.enqueued()
 	require.Len(t, tasks, 1, "only the active analyzer's single window is enqueued")
 
-	wantKey := backfillTestTaskKey(t, tn.Company.ID, creds.CredentialID, active.ID, model.ReadingKindLoadProfile, job.Window{From: from, To: to})
-	require.Equal(t, wantKey, recordingEnqueuerKey(tasks[0]), "the enqueued task must be for the ACTIVE analyzer")
+	wantKey := backfillWantTaskKey(t, tn.Company.ID, creds.CredentialID, active.ID, model.ReadingKindLoadProfile, job.Window{From: from, To: to})
+	require.Equal(t, wantKey, backfillTaskKey(tasks[0]), "the enqueued task must be for the ACTIVE analyzer")
 
 	runs := backfillTestRuns(t, ctx, postgres.NewOpsRepository(pool), tn.Scope)
 	require.Len(t, runs, 1)
@@ -446,7 +476,7 @@ func TestBackfillMissingAnalyzerIDsRunPartialAndOnlyEnqueueVisible(t *testing.T)
 
 	creds := integration.Credentials{CredentialID: uuid.New(), CompanyID: tn.Company.ID, Provider: integration.ProviderOSOS, Subtype: own.ProviderSubtype}
 	src := &fakePlanner{provider: integration.ProviderOSOS, kinds: []model.ReadingKind{model.ReadingKindLoadProfile}, maxWindow: 30 * 24 * time.Hour}
-	enq := newRecordingEnqueuer()
+	enq := newBackfillRealEnqueuer(t)
 	clk := clock.NewFake(backfillTestNow)
 	b := backfill.New(backfillTestDeps(pool, creds, src, enq, clk))
 
@@ -462,8 +492,8 @@ func TestBackfillMissingAnalyzerIDsRunPartialAndOnlyEnqueueVisible(t *testing.T)
 
 	tasks := enq.enqueued()
 	require.Len(t, tasks, 1, "only the own, visible analyzer's single window is enqueued")
-	wantKey := backfillTestTaskKey(t, tn.Company.ID, creds.CredentialID, own.ID, model.ReadingKindLoadProfile, job.Window{From: from, To: to})
-	require.Equal(t, wantKey, recordingEnqueuerKey(tasks[0]))
+	wantKey := backfillWantTaskKey(t, tn.Company.ID, creds.CredentialID, own.ID, model.ReadingKindLoadProfile, job.Window{From: from, To: to})
+	require.Equal(t, wantKey, backfillTaskKey(tasks[0]))
 
 	runs := backfillTestRuns(t, ctx, postgres.NewOpsRepository(pool), tn.Scope)
 	require.Len(t, runs, 1)
@@ -517,7 +547,7 @@ func TestBackfillRejectsInvertedAndFutureRanges(t *testing.T) {
 				Ops:         postgres.NewOpsRepository(pool),
 				Credentials: panicCredentialOpener(t),
 				Sources:     sourceMap{},
-				Enqueuer:    newRecordingEnqueuer(),
+				Enqueuer:    panicEnqueuer{t: t},
 				Clock:       clk,
 				MaxRetry:    3,
 			}
@@ -546,7 +576,7 @@ func TestBackfillWarnsAboutAggregateHorizon(t *testing.T) {
 		analyzer := tn.Analyzers[0]
 		creds := integration.Credentials{CredentialID: uuid.New(), CompanyID: tn.Company.ID, Provider: integration.ProviderOSOS, Subtype: analyzer.ProviderSubtype}
 		src := &fakePlanner{provider: integration.ProviderOSOS, kinds: []model.ReadingKind{model.ReadingKindLoadProfile}, maxWindow: 30 * 24 * time.Hour}
-		enq := newRecordingEnqueuer()
+		enq := newBackfillRealEnqueuer(t)
 		clk := clock.NewFake(backfillTestNow)
 		b := backfill.New(backfillTestDeps(pool, creds, src, enq, clk))
 
@@ -578,4 +608,50 @@ func TestBackfillWarnsAboutAggregateHorizon(t *testing.T) {
 
 		require.Empty(t, messages, "a range entirely within the 30-day horizon gets no warning")
 	})
+}
+
+// TestBackfillRefusesInactiveCredential is X-M3's Backfill half (final
+// review B): see internal/ingest's TestFetchReadingsRefusesInactiveCredential
+// for the full rationale. An inactive credential must stop before any
+// window is planned or enqueued — the fakePlanner here would panic if
+// FetchReadings were ever reached, and panicEnqueuer proves Enqueue is not.
+func TestBackfillRefusesInactiveCredential(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tn := testfixtures.NewTenant(t, ctx, pool, 15010)
+
+	creds := integration.Credentials{
+		CredentialID: uuid.New(), CompanyID: tn.Company.ID, Provider: integration.ProviderOSOS,
+		Subtype: "BackfillInactiveSub", IsActive: false,
+	}
+	src := &fakePlanner{provider: integration.ProviderOSOS, kinds: []model.ReadingKind{model.ReadingKindLoadProfile}, maxWindow: 30 * 24 * time.Hour}
+	clk := clock.NewFake(backfillTestNow)
+
+	deps := backfill.Deps{
+		Analyzers: postgres.NewAnalyzerRepository(pool),
+		Ops:       postgres.NewOpsRepository(pool),
+		Credentials: credentialOpenerFunc(func(context.Context, store.Scope, uuid.UUID) (integration.Credentials, error) {
+			return creds, nil
+		}),
+		Sources:  sourceMap{creds.Provider: src},
+		Enqueuer: panicEnqueuer{t: t},
+		Clock:    clk,
+		MaxRetry: 3,
+	}
+	b := backfill.New(deps)
+
+	from := backfillTestNow.Add(-10 * 24 * time.Hour)
+	to := backfillTestNow.Add(-5 * 24 * time.Hour)
+	err := b.Backfill(ctx, job.BackfillPayload{CompanyID: tn.Company.ID, CredentialID: creds.CredentialID, From: from, To: to})
+	require.Error(t, err)
+	require.ErrorIs(t, err, integration.ErrConfig, "an inactive credential must be ErrConfig, non-retryable via job.ClassifyForRetry")
+
+	runs := backfillTestRuns(t, ctx, postgres.NewOpsRepository(pool), tn.Scope)
+	require.Len(t, runs, 1)
+	require.Equal(t, "failed", runs[0].Status)
+
+	messages, merr := postgres.NewOpsRepository(pool).ListMessages(ctx, tn.Scope, store.MessageFilter{})
+	require.NoError(t, merr)
+	require.NotEmpty(t, messages, "the inactive-credential refusal must leave an operational message")
 }

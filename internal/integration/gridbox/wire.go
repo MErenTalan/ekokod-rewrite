@@ -36,17 +36,19 @@ type tokenResponse struct {
 	AccessToken string `json:"access_token"`
 }
 
-// lastSuccessDateResponse is last_success_date's ResultObject: the
-// provider's own high-water mark for a wiring number, used to bound the
-// fetch window from below (06 §3 Flow step 2). 06 does not spell out the
-// exact JSON key; this adapter and its own fixtures agree on
-// "LastSuccessDate", following the PascalCase convention every other
-// GridBox field in 06 §3 uses (ResultStatus, ResultObject, ActiveEndex, …).
-// R37 (verify in F14): the exact key name is unverified against the real
-// provider — fixture and adapter agree only with each other.
-type lastSuccessDateResponse struct {
-	LastSuccessDate *string `json:"LastSuccessDate"`
-}
+// last_success_date's ResultObject is a BARE STRING, not an object (R50,
+// re-ruling round-1's lastSuccessDateResponse object type): legacy
+// gridbox/refresh/route.ts:138 types the whole response
+// `GridResponse<string>` and assigns `a.lastLoadProfileDate =
+// res.data.ResultObject` directly — ResultObject IS the ISO-ish date
+// string, never a wrapper object. setup/route.ts:318 (also read for R50)
+// agrees. Round-1's object shape made decodeLastSuccessDate error against
+// the real provider's actual envelope, which turned every GridBox
+// FetchReadings into an unconditional ErrMalformedPayload/SkipRetry.
+// decodeLastSuccessDate below therefore decodes ResultObject straight into
+// a string — no object fallback: legacy shows only the bare-string shape,
+// never both, so there is nothing to be tolerant of (R50's own instruction
+// is to keep an object fallback only when legacy shows both shapes).
 
 // register carries every field 06 §3's field-mapping table lists, exactly
 // as GridBox names them. last_endex, load_profiles, endexes and

@@ -121,6 +121,19 @@ func (b *Backfiller) Backfill(ctx context.Context, p job.BackfillPayload) error 
 		return err
 	}
 
+	// X-M3, final review B: see internal/ingest/fetch.go's identical gate —
+	// an operator-deactivated credential must stop the backfill here,
+	// before any window is even planned, non-retryably (ErrConfig ->
+	// job.ClassifyForRetry -> asynq.SkipRetry, applied by the job handler
+	// around this call) and with a clear operational message.
+	if !creds.IsActive {
+		cerr := &integration.Error{Kind: integration.ErrConfig, Provider: creds.Provider, Op: "backfill.credential_inactive"}
+		errText := redacted(creds, cerr)
+		b.finishRun(ctx, sc, run.ID, "failed", 0, 0, 1, &errText, nil, now)
+		b.appendMessage(ctx, sc, p.CompanyID, "job", "backfill", "error", errText, nil)
+		return cerr
+	}
+
 	src, err := b.deps.Sources.Source(creds.Provider)
 	if err != nil {
 		errText := redacted(creds, err)

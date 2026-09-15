@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
@@ -379,9 +380,16 @@ func TestIngestionOneAnalyzerFailureDoesNotAbortTheRun(t *testing.T) {
 		src.setStepsFor(c.ID, fetchStep{result: integration.FetchResult{Readings: rowsC}})
 		src.setStepsFor(b.ID, fetchStep{err: &integration.Error{Kind: integration.ErrUpstreamUnavailable, Provider: integration.ProviderOSOS, Op: "load_profiles"}})
 
-		require.NoError(t, svc.FetchReadings(ctx, job.FetchReadingsPayload{CompanyID: tn.Company.ID, CredentialID: creds.CredentialID, AnalyzerID: a.ID, Kind: model.ReadingKindLoadProfile, Window: window}))
+		// M2: A and C use CURSOR-DRIVEN fetches (Window nil) — an explicit
+		// window with no prior cursor no longer sets the live cursor, and
+		// this test's own assertions below (curA/curC.LastTs) need it set.
+		// B keeps its explicit window: it fails inside the adapter call,
+		// before allowCursorAdvance would ever matter, and
+		// RecordFailure — B's own path — always creates a cursor row
+		// regardless.
+		require.NoError(t, svc.FetchReadings(ctx, job.FetchReadingsPayload{CompanyID: tn.Company.ID, CredentialID: creds.CredentialID, AnalyzerID: a.ID, Kind: model.ReadingKindLoadProfile}))
 		require.Error(t, svc.FetchReadings(ctx, job.FetchReadingsPayload{CompanyID: tn.Company.ID, CredentialID: creds.CredentialID, AnalyzerID: b.ID, Kind: model.ReadingKindLoadProfile, Window: window}))
-		require.NoError(t, svc.FetchReadings(ctx, job.FetchReadingsPayload{CompanyID: tn.Company.ID, CredentialID: creds.CredentialID, AnalyzerID: c.ID, Kind: model.ReadingKindLoadProfile, Window: window}))
+		require.NoError(t, svc.FetchReadings(ctx, job.FetchReadingsPayload{CompanyID: tn.Company.ID, CredentialID: creds.CredentialID, AnalyzerID: c.ID, Kind: model.ReadingKindLoadProfile}))
 
 		require.Len(t, ingestTestAllReadings(t, ctx, repos.readings, tn.Scope, a.ID, model.ReadingKindLoadProfile), 4)
 		require.Len(t, ingestTestAllReadings(t, ctx, repos.readings, tn.Scope, c.ID, model.ReadingKindLoadProfile), 4)
@@ -650,10 +658,51 @@ func TestIngestionUsesSystemScopeAndCannotTouchAnotherTenant(t *testing.T) {
 		Kind: model.ReadingKindLoadProfile, Window: window,
 	})
 	require.ErrorIs(t, err, store.ErrNotFound)
+	// M14: store.ErrNotFound (a deleted/out-of-scope analyzer) must be
+	// SkipRetry — asynq must not burn 5 retries over ~30 minutes on a task
+	// that can never succeed.
+	require.ErrorIs(t, err, asynq.SkipRetry)
 
 	require.Empty(t, ingestTestAllReadings(t, ctx, repos.readings, tnB.AdminScope, targetAnalyzer.ID, model.ReadingKindLoadProfile),
 		"tenant B's analyzer must be untouched by a company-A-scoped job")
 	require.Empty(t, src.requestLog(), "the adapter must never even be called for an analyzer outside the scope")
+}
+
+// TestIngestionCredentialNotFoundIsSkipRetry is M14's other half: a deleted
+// (or out-of-scope) credential — store.ErrNotFound from Credentials.Open —
+// must also be SkipRetry, for both FetchReadings and SyncAnalyzers.
+func TestIngestionCredentialNotFoundIsSkipRetry(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tn := testfixtures.NewTenant(t, ctx, pool, 9124)
+	repos := ingestTestNewRepos(pool)
+
+	analyzer := tn.Analyzers[0]
+	src := newFakeAdapter(integration.ProviderOSOS, 24*time.Hour, model.ReadingKindLoadProfile)
+	clk := clock.NewFake(ingestTestNow)
+	enq := newRecordingEnqueuer()
+
+	deletedCredOpener := credentialOpenerFunc(func(context.Context, store.Scope, uuid.UUID) (integration.Credentials, error) {
+		return integration.Credentials{}, store.ErrNotFound
+	})
+	deps := ingest.Deps{
+		Analyzers: repos.analyzers, Readings: repos.readings, Cursors: repos.cursors,
+		Anomalies: repos.anomalies, Ops: repos.ops, ProviderSeries: repos.series,
+		AdminIngestion: repos.adminIngestion, AdminJournal: repos.adminJournal,
+		Credentials: deletedCredOpener, Sources: sourceMap{integration.ProviderOSOS: src},
+		Enqueuer: enq, Clock: clk, Log: testfixtures.DiscardLogger(),
+	}
+	svc, err := ingest.New(deps, ingest.Options{})
+	require.NoError(t, err)
+
+	ferr := svc.FetchReadings(ctx, job.FetchReadingsPayload{CompanyID: tn.Company.ID, CredentialID: uuid.New(), AnalyzerID: analyzer.ID, Kind: model.ReadingKindLoadProfile})
+	require.ErrorIs(t, ferr, store.ErrNotFound)
+	require.ErrorIs(t, ferr, asynq.SkipRetry, "M14: a deleted credential must be SkipRetry, not retried 5x")
+
+	serr := svc.SyncAnalyzers(ctx, job.SyncAnalyzersPayload{CompanyID: tn.Company.ID, CredentialID: uuid.New()})
+	require.ErrorIs(t, serr, store.ErrNotFound)
+	require.ErrorIs(t, serr, asynq.SkipRetry, "M14: a deleted credential must be SkipRetry for SyncAnalyzers too")
 }
 
 // TestIngestionMultiplierChangeIsAppliedAndReported.
@@ -678,7 +727,7 @@ func TestIngestionMultiplierChangeIsAppliedAndReported(t *testing.T) {
 	window := ingestTestWindow(ingestTestIstanbulMidnight, 2*time.Hour)
 	src.setSteps(fetchStep{result: integration.FetchResult{
 		Readings:           rows,
-		ResolvedMultiplier: &integration.ResolvedMultiplier{Value: newMultiplier, Source: integration.MultiplierFromLastEndex},
+		ResolvedMultiplier: &integration.ResolvedMultiplier{Value: newMultiplier, Source: integration.MultiplierFromLastEndex, ProviderResolved: true},
 	}})
 
 	require.NoError(t, svc.FetchReadings(ctx, job.FetchReadingsPayload{CompanyID: tn.Company.ID, CredentialID: creds.CredentialID, AnalyzerID: analyzer.ID, Kind: model.ReadingKindLoadProfile, Window: window}))
@@ -697,6 +746,128 @@ func TestIngestionMultiplierChangeIsAppliedAndReported(t *testing.T) {
 		}
 	}
 	require.True(t, found)
+}
+
+// TestIngestionNotProviderResolvedMultiplierNeverPersists is R51/I2's core
+// pipeline-side regression: an adapter's ResolvedMultiplier with
+// ProviderResolved=false (GridBox's fallback-to-1, or its new
+// fallback-to-the-analyzer's-own-stored-value — MultiplierFallbackOne and
+// MultiplierFromRequest both set it false) must never overwrite
+// analyzers.meter_multiplier or emit "meter multiplier changed". Before the
+// fix, fetch.go only checked "does the resolved value differ from the
+// stored one" — this asserts a resolved 1 (Source: MultiplierFallbackOne,
+// ProviderResolved: false) against a stored 40.000000 leaves the analyzer
+// at 40 and reports no message, which is exactly the "×40 fallback keeps
+// ×40" acceptance criterion (I2's fix bullet).
+func TestIngestionNotProviderResolvedMultiplierNeverPersists(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tn := testfixtures.NewTenant(t, ctx, pool, 9118)
+	repos := ingestTestNewRepos(pool)
+
+	analyzer := tn.Analyzers[0] // MeterMultiplier fixture value: 40.000000
+	creds := integration.Credentials{CredentialID: uuid.New(), CompanyID: tn.Company.ID, Provider: integration.ProviderOSOS, Subtype: analyzer.ProviderSubtype}
+	src := newFakeAdapter(integration.ProviderOSOS, 24*time.Hour, model.ReadingKindDaily)
+	clk := clock.NewFake(ingestTestNow)
+	enq := newRecordingEnqueuer()
+	svc := ingestTestNewService(t, repos, creds, src, enq, clk, ingest.Options{})
+
+	rows := []model.MeterReading{
+		readingFor(analyzer.ID, ingestTestIstanbulMidnight.Format(time.RFC3339), model.ReadingKindDaily, map[string]string{"active_import": "10.0000"}),
+	}
+	window := ingestTestWindow(ingestTestIstanbulMidnight, 2*time.Hour)
+	src.setSteps(fetchStep{result: integration.FetchResult{
+		Readings: rows,
+		ResolvedMultiplier: &integration.ResolvedMultiplier{
+			Value: decimal.NewFromInt(1), Source: integration.MultiplierFallbackOne, ProviderResolved: false,
+		},
+	}})
+
+	require.NoError(t, svc.FetchReadings(ctx, job.FetchReadingsPayload{CompanyID: tn.Company.ID, CredentialID: creds.CredentialID, AnalyzerID: analyzer.ID, Kind: model.ReadingKindDaily, Window: window}))
+
+	updated, err := repos.analyzers.Get(ctx, tn.Scope, analyzer.ID)
+	require.NoError(t, err)
+	require.True(t, updated.MeterMultiplier.Equal(decimal.RequireFromString("40.000000")),
+		"a not-provider-resolved fallback must never overwrite the stored multiplier, got %s", updated.MeterMultiplier)
+
+	messages, err := repos.ops.ListMessages(ctx, tn.Scope, store.MessageFilter{})
+	require.NoError(t, err)
+	for _, m := range messages {
+		require.NotEqual(t, "meter multiplier changed", m.Message, "no 'meter multiplier changed' message for a not-provider-resolved value")
+	}
+}
+
+// TestResetSuppressionRangeSurvivesMicrosecondTruncation is M1's
+// regression: fetch.go:242's reset-suppression range query uses
+// `kindMaxTs.Add(...)` as its half-open upper bound, to INCLUDE a reset
+// reading stored exactly at kindMaxTs. Postgres `timestamptz` columns (and
+// pgx's own encoding) are microsecond precision, so a bound built with
+// `time.Nanosecond` round-trips back down to exactly kindMaxTs on the wire
+// — the upper bound becomes EQUAL to kindMaxTs, and the half-open range
+// excludes the very row it was widened to include. `time.Microsecond`
+// survives the round trip. A previously stored reset at exactly kindMaxTs
+// being excluded from this query is exactly the failure mode the comment
+// at fetch.go:242 documents: "a spurious negative_delta anomaly can
+// follow" (the generation code already documents this same pgx trap).
+func TestResetSuppressionRangeSurvivesMicrosecondTruncation(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tn := testfixtures.NewTenant(t, ctx, pool, 9120)
+	repos := ingestTestNewRepos(pool)
+	analyzer := tn.Analyzers[0]
+
+	kindMaxTs := ingestTestIstanbulMidnight
+	resetReading := readingFor(analyzer.ID, kindMaxTs.Format(time.RFC3339), model.ReadingKindReset, map[string]string{"active_import": "0"})
+	_, _, err := repos.readings.BulkInsert(ctx, tn.Scope, []model.MeterReading{resetReading})
+	require.NoError(t, err)
+
+	foundWithNanosecond, err := repos.readings.Range(ctx, tn.Scope, analyzer.ID,
+		store.TimeRange{From: kindMaxTs.Add(-time.Hour), To: kindMaxTs.Add(time.Nanosecond)}, model.ReadingKindReset)
+	require.NoError(t, err)
+	require.Empty(t, foundWithNanosecond, "1 nanosecond does not survive Postgres's microsecond truncation — this is the bug fetch.go:242 had")
+
+	foundWithMicrosecond, err := repos.readings.Range(ctx, tn.Scope, analyzer.ID,
+		store.TimeRange{From: kindMaxTs.Add(-time.Hour), To: kindMaxTs.Add(time.Microsecond)}, model.ReadingKindReset)
+	require.NoError(t, err)
+	require.Len(t, foundWithMicrosecond, 1, "1 microsecond survives truncation and includes the reset row stored exactly at kindMaxTs")
+}
+
+// TestIngestionFetchReadingsRefusesSubtypeMismatch is M3's regression: an
+// explicit BackfillPayload.AnalyzerIDs entry or a scheduled dispatch can
+// name an analyzer of the same provider but a DIFFERENT subtype than the
+// credential FetchReadings is actually opening — same company, but a wrong
+// distributor's endpoints could answer for a meter that is not theirs.
+// FetchReadings must refuse this before any network call, with a
+// deliberately-classified, non-retryable *integration.Error (ErrConfig —
+// SkipRetry via job.ClassifyForRetry), never silently fetch with the wrong
+// credential.
+func TestIngestionFetchReadingsRefusesSubtypeMismatch(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tn := testfixtures.NewTenant(t, ctx, pool, 9122)
+	repos := ingestTestNewRepos(pool)
+
+	now := ingestTestNow
+	analyzer := ingestTestNewActiveAnalyzer(t, ctx, repos.analyzers, tn.Scope, tn.Company.ID, tn.Buildings[0].ID, model.IntegrationProviderOSOS, "RightSubtype", "SUBTYPE-MISMATCH", decimal.NewFromInt(1), now)
+
+	creds := integration.Credentials{CredentialID: uuid.New(), CompanyID: tn.Company.ID, Provider: integration.ProviderOSOS, Subtype: "WrongSubtype"}
+	src := newFakeAdapter(integration.ProviderOSOS, 24*time.Hour, model.ReadingKindLoadProfile)
+	clk := clock.NewFake(now)
+	enq := newRecordingEnqueuer()
+	svc := ingestTestNewService(t, repos, creds, src, enq, clk, ingest.Options{})
+
+	err := svc.FetchReadings(ctx, job.FetchReadingsPayload{CompanyID: tn.Company.ID, CredentialID: creds.CredentialID, AnalyzerID: analyzer.ID, Kind: model.ReadingKindLoadProfile})
+	require.Error(t, err)
+	require.ErrorIs(t, err, integration.ErrConfig)
+	require.ErrorIs(t, job.ClassifyForRetry(err), asynq.SkipRetry)
+	require.Empty(t, src.requestLog(), "no network call must be attempted for a subtype mismatch")
+
+	runs := ingestTestRunsForAnalyzer(t, ctx, repos.ops, tn.Scope, job.TypeIntegrationFetchReadings, analyzer.ID)
+	require.Len(t, runs, 1)
+	require.Equal(t, "failed", runs[0].Status)
 }
 
 // TestDispatchEnqueuesOneSyncPerActiveMeterCredential (isolar credential
@@ -806,25 +977,35 @@ func TestIngestionExplicitWindowNeverAdvancesCursorPastAGap(t *testing.T) {
 	analyzer := tn.Analyzers[0]
 	creds := integration.Credentials{CredentialID: uuid.New(), CompanyID: tn.Company.ID, Provider: integration.ProviderOSOS, Subtype: analyzer.ProviderSubtype}
 	src := newFakeAdapter(integration.ProviderOSOS, 24*time.Hour, model.ReadingKindLoadProfile)
-	// The clock must sit comfortably AFTER day 6 (below), or day 6's own
-	// readings would trip RejectFuture (R12) instead of exercising I1.
-	clk := clock.NewFake(ingestTestIstanbulMidnight.Add(7 * 24 * time.Hour))
-	enq := newRecordingEnqueuer()
-	svc := ingestTestNewService(t, repos, creds, src, enq, clk, ingest.Options{})
-
-	// Day 1: an explicit window with no stored cursor yet — always allowed
-	// to advance (resolveFetchWindow's "no stored cursor" case).
 	day1 := ingestTestIstanbulMidnight
+	// The seed fetch's clock sits 2h after day1 local midnight — inside the
+	// same Istanbul calendar day as day1 (no local-midnight chunk split) —
+	// with a 1h InitialLookback, so this first, CURSOR-DRIVEN fetch (M2:
+	// only a cursor-driven fetch may establish the live cursor from
+	// nothing; an explicit window with no stored cursor must not — see
+	// TestIngestionExplicitWindowWithNoCursorNeverSetsLiveCursor below)
+	// requests a small, single-chunk window.
+	seedClk := clock.NewFake(day1.Add(2 * time.Hour))
+	enq := newRecordingEnqueuer()
+	svc := ingestTestNewService(t, repos, creds, src, enq, seedClk, ingest.Options{InitialLookback: time.Hour})
+
+	// Seed: a CURSOR-DRIVEN fetch (Window nil) establishes the initial
+	// cursor at day1's own last row — the only way to have a stored cursor
+	// at all, now that M2 forbids an explicit window from creating one.
 	day1Rows := ingestTestQuarterHourly(analyzer.ID, day1, 4) // 00:00..00:45
 	src.setSteps(fetchStep{result: integration.FetchResult{Readings: day1Rows}})
 	require.NoError(t, svc.FetchReadings(ctx, job.FetchReadingsPayload{
-		CompanyID: tn.Company.ID, CredentialID: creds.CredentialID, AnalyzerID: analyzer.ID,
-		Kind: model.ReadingKindLoadProfile, Window: ingestTestWindow(day1, time.Hour),
+		CompanyID: tn.Company.ID, CredentialID: creds.CredentialID, AnalyzerID: analyzer.ID, Kind: model.ReadingKindLoadProfile,
 	}))
 	cur1, err := repos.cursors.Get(ctx, tn.Scope, analyzer.ID, model.ReadingKindLoadProfile)
 	require.NoError(t, err)
 	require.NotNil(t, cur1.LastTs)
 	day1LastTs := *cur1.LastTs
+
+	// The clock must sit comfortably AFTER day 6 (below), or day 6's own
+	// readings would trip RejectFuture (R12) instead of exercising I1.
+	clk := seedClk
+	clk.Set(ingestTestIstanbulMidnight.Add(7 * 24 * time.Hour))
 
 	// Day 6: an explicit window that STARTS AFTER the cursor (days 2-5 were
 	// never fetched — a gap). I1: the rows are still persisted, but the
@@ -858,6 +1039,65 @@ func TestIngestionExplicitWindowNeverAdvancesCursorPastAGap(t *testing.T) {
 	require.True(t, reqs[startIdx].From.Equal(day1LastTs), "the next cursor-driven run must still request the gap, not resume past it")
 }
 
+// TestIngestionExplicitWindowWithNoCursorNeverSetsLiveCursor is M2: an
+// explicit p.Window fetch (e.g. a backfill window) that runs before any
+// cursor exists for this analyzer/kind must persist its rows but leave the
+// live cursor untouched — round 1 let it set the cursor
+// (resolveFetchWindow's "no stored cursor" case returned
+// allowCursorAdvance=true), so a RECENT backfill window processed before an
+// OLDER one would shorten the first cursor-driven run's InitialLookback
+// lookback instead of that run seeing its full 30 days. The first
+// cursor-driven run (Window nil) must still resolve to
+// now-InitialLookback, exactly as if the explicit window had never run.
+func TestIngestionExplicitWindowWithNoCursorNeverSetsLiveCursor(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tn := testfixtures.NewTenant(t, ctx, pool, 9121)
+	repos := ingestTestNewRepos(pool)
+
+	analyzer := tn.Analyzers[0]
+	creds := integration.Credentials{CredentialID: uuid.New(), CompanyID: tn.Company.ID, Provider: integration.ProviderOSOS, Subtype: analyzer.ProviderSubtype}
+	src := newFakeAdapter(integration.ProviderOSOS, 24*time.Hour, model.ReadingKindLoadProfile)
+	clk := clock.NewFake(ingestTestIstanbulMidnight.Add(10 * 24 * time.Hour))
+	enq := newRecordingEnqueuer()
+	svc := ingestTestNewService(t, repos, creds, src, enq, clk, ingest.Options{InitialLookback: 48 * time.Hour})
+
+	// A RECENT explicit backfill window (day 9, one day before "now") runs
+	// FIRST — the ordering a controller dispatching several backfill
+	// windows out of order would produce — with no cursor yet.
+	recentWindowStart := ingestTestIstanbulMidnight.Add(9 * 24 * time.Hour)
+	recentRows := ingestTestQuarterHourly(analyzer.ID, recentWindowStart, 4)
+	src.setSteps(fetchStep{result: integration.FetchResult{Readings: recentRows}})
+	require.NoError(t, svc.FetchReadings(ctx, job.FetchReadingsPayload{
+		CompanyID: tn.Company.ID, CredentialID: creds.CredentialID, AnalyzerID: analyzer.ID,
+		Kind: model.ReadingKindLoadProfile, Window: ingestTestWindow(recentWindowStart, time.Hour),
+	}))
+
+	// The rows ARE persisted...
+	rows := ingestTestAllReadings(t, ctx, repos.readings, tn.Scope, analyzer.ID, model.ReadingKindLoadProfile)
+	require.Len(t, rows, 4)
+
+	// ...but M2: no live cursor was created by that explicit window.
+	_, cerr := repos.cursors.Get(ctx, tn.Scope, analyzer.ID, model.ReadingKindLoadProfile)
+	require.ErrorIs(t, cerr, store.ErrNotFound, "an explicit window with no prior cursor must never create the live cursor")
+
+	// The FIRST cursor-driven run (Window nil) must still resolve to
+	// now-InitialLookback — NOT to recentWindowStart's own bound, which the
+	// backfill window happened to reach.
+	startIdx := len(src.requestLog())
+	clk.Advance(time.Minute)
+	wantFrom := clk.Now().Add(-48 * time.Hour)
+	src.setSteps(fetchStep{result: integration.FetchResult{}})
+	require.NoError(t, svc.FetchReadings(ctx, job.FetchReadingsPayload{
+		CompanyID: tn.Company.ID, CredentialID: creds.CredentialID, AnalyzerID: analyzer.ID, Kind: model.ReadingKindLoadProfile,
+	}))
+	reqs := src.requestLog()
+	require.True(t, len(reqs) > startIdx)
+	require.True(t, reqs[startIdx].From.Equal(wantFrom),
+		"the first cursor-driven run must use its full InitialLookback (%s), not resume from the earlier explicit window (got %s)", wantFrom, reqs[startIdx].From)
+}
+
 // TestIngestionRowsStampedWithAnotherAnalyzerAreRejected is I2: a page an
 // adapter returns for one analyzer's request is trusted to carry that
 // analyzer's own rows only after an attribution check — a row stamped with
@@ -887,13 +1127,19 @@ func TestIngestionRowsStampedWithAnotherAnalyzerAreRejected(t *testing.T) {
 	// target's cursor past what target itself actually received.
 	wrongRows := ingestTestQuarterHourly(impostor.ID, ingestTestIstanbulMidnight.Add(2*time.Hour), 2) // 02:00, 02:15
 
-	window := ingestTestWindow(ingestTestIstanbulMidnight, 4*time.Hour)
 	mixed := append(append([]model.MeterReading{}, correctRows...), wrongRows...)
 	src.setSteps(fetchStep{result: integration.FetchResult{Readings: mixed}})
 
+	// M2: a CURSOR-DRIVEN fetch (Window nil), not an explicit window — an
+	// explicit window with no prior cursor no longer sets the live cursor
+	// at all (see TestIngestionExplicitWindowWithNoCursorNeverSetsLiveCursor),
+	// and this test's own assertion below is specifically about what the
+	// cursor ends up AT, which needs the cursor to be set in the first
+	// place; the attribution behaviour under test (I2) is identical either
+	// way.
 	require.NoError(t, svc.FetchReadings(ctx, job.FetchReadingsPayload{
 		CompanyID: tn.Company.ID, CredentialID: creds.CredentialID, AnalyzerID: target.ID,
-		Kind: model.ReadingKindLoadProfile, Window: window,
+		Kind: model.ReadingKindLoadProfile,
 	}))
 
 	require.Len(t, ingestTestAllReadings(t, ctx, repos.readings, tn.Scope, target.ID, model.ReadingKindLoadProfile), 2,
@@ -1050,6 +1296,61 @@ func TestSyncMultiplierChangeIsAppliedAndReported(t *testing.T) {
 	require.True(t, found, "I5/R27: sync must report the multiplier change, same as the fetch path")
 }
 
+// TestSyncPreservesDescriptiveFieldsWhenProviderOmitsThem is M6:
+// applyMeteringPointFields (sync.go) must preserve a stored descriptive
+// field when a later discovery call's MeteringPoint reports nil for it —
+// "the provider omitted it this time", never "clear it". Round 1
+// unconditionally overwrote every descriptive field with whatever pt
+// carried, so a daily sync would silently erase a field an operator screen
+// had since edited, the moment the provider's own response happened to
+// omit it. A field the point DOES report is still applied normally.
+func TestSyncPreservesDescriptiveFieldsWhenProviderOmitsThem(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tn := testfixtures.NewTenant(t, ctx, pool, 9123)
+	repos := ingestTestNewRepos(pool)
+
+	now := ingestTestNow
+	ingestTestNewActiveAnalyzer(t, ctx, repos.analyzers, tn.Scope, tn.Company.ID, tn.Buildings[0].ID, model.IntegrationProviderOSOS, "SyncPreserveSub", "PRESERVE-1", decimal.NewFromInt(1), now)
+
+	creds := integration.Credentials{CredentialID: uuid.New(), CompanyID: tn.Company.ID, Provider: integration.ProviderOSOS, Subtype: "SyncPreserveSub"}
+	src := newFakeAdapter(integration.ProviderOSOS, 24*time.Hour, model.ReadingKindLoadProfile)
+	clk := clock.NewFake(now)
+	enq := newRecordingEnqueuer()
+	svc := ingestTestNewService(t, repos, creds, src, enq, clk, ingest.Options{})
+
+	// First sync: the provider reports BOTH CustomerName and Address.
+	src.points = []integration.MeteringPoint{{
+		InstallationNumber: "PRESERVE-1",
+		CustomerName:       ptrString("FIXTURE Customer Old"),
+		Address:            ptrString("FIXTURE Address Old"),
+	}}
+	require.NoError(t, svc.SyncAnalyzers(ctx, job.SyncAnalyzersPayload{CompanyID: tn.Company.ID, CredentialID: creds.CredentialID}))
+
+	byInstall, err := repos.analyzers.GetByInstallation(ctx, tn.Scope, model.IntegrationProviderOSOS, "SyncPreserveSub", "PRESERVE-1")
+	require.NoError(t, err)
+	require.NotNil(t, byInstall.CustomerName)
+	require.Equal(t, "FIXTURE Customer Old", *byInstall.CustomerName)
+
+	// Second sync: the provider omits CustomerName this time (nil) but
+	// reports a NEW Address.
+	clk.Advance(time.Hour)
+	src.points = []integration.MeteringPoint{{
+		InstallationNumber: "PRESERVE-1",
+		CustomerName:       nil,
+		Address:            ptrString("FIXTURE Address New"),
+	}}
+	require.NoError(t, svc.SyncAnalyzers(ctx, job.SyncAnalyzersPayload{CompanyID: tn.Company.ID, CredentialID: creds.CredentialID}))
+
+	after, err := repos.analyzers.GetByInstallation(ctx, tn.Scope, model.IntegrationProviderOSOS, "SyncPreserveSub", "PRESERVE-1")
+	require.NoError(t, err)
+	require.NotNil(t, after.CustomerName, "M6: a nil CustomerName from the provider must preserve the stored value, not erase it")
+	require.Equal(t, "FIXTURE Customer Old", *after.CustomerName)
+	require.NotNil(t, after.Address)
+	require.Equal(t, "FIXTURE Address New", *after.Address, "a field the point DOES report is still applied")
+}
+
 // TestIngestionMultiplierUpdateFailureDoesNotReportOrMutate is M1: a failed
 // Analyzers.Update on a resolved multiplier change must not be reported as
 // "meter multiplier changed" (it did not happen), must not leave the
@@ -1086,7 +1387,7 @@ func TestIngestionMultiplierUpdateFailureDoesNotReportOrMutate(t *testing.T) {
 	window := ingestTestWindow(ingestTestIstanbulMidnight, 2*time.Hour)
 	src.setSteps(fetchStep{result: integration.FetchResult{
 		Readings:           rows,
-		ResolvedMultiplier: &integration.ResolvedMultiplier{Value: newMultiplier, Source: integration.MultiplierFromLastEndex},
+		ResolvedMultiplier: &integration.ResolvedMultiplier{Value: newMultiplier, Source: integration.MultiplierFromLastEndex, ProviderResolved: true},
 	}})
 
 	require.NoError(t, svc.FetchReadings(ctx, job.FetchReadingsPayload{CompanyID: tn.Company.ID, CredentialID: creds.CredentialID, AnalyzerID: analyzer.ID, Kind: model.ReadingKindLoadProfile, Window: window}),
@@ -1193,4 +1494,111 @@ func TestIngestionWarningMessagesEmittedInSortedCodeOrder(t *testing.T) {
 	require.Len(t, byCode, 3)
 	require.True(t, byCode["aaa_code"].ID < byCode["mmm_code"].ID, "M5: warning messages must be emitted in sorted code order")
 	require.True(t, byCode["mmm_code"].ID < byCode["zzz_code"].ID, "M5: warning messages must be emitted in sorted code order")
+}
+
+// TestFetchReadingsRefusesInactiveCredential is X-M3 (final review B): a
+// credential an operator has deactivated (integration.Credentials.IsActive
+// == false, populated from model.IntegrationCredential.IsActive by
+// internal/credentials's buildCredentials) must stop FetchReadings before
+// any adapter call, non-retryably (ErrConfig), with the job_runs row
+// recording the failure and an operational message naming it — never
+// silently treated like an ordinary inactive ANALYZER (a routine "success,
+// skipped" case elsewhere in this file: an analyzer being off is normal
+// operator bookkeeping, but an active analyzer whose CREDENTIAL was
+// deactivated needs visibility).
+func TestFetchReadingsRefusesInactiveCredential(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tn := testfixtures.NewTenant(t, ctx, pool, 9199)
+	repos := ingestTestNewRepos(pool)
+
+	analyzer := tn.Analyzers[0]
+	creds := integration.Credentials{
+		CredentialID: uuid.New(), CompanyID: tn.Company.ID, Provider: integration.ProviderOSOS,
+		Subtype: analyzer.ProviderSubtype, IsActive: false,
+	}
+	src := newFakeAdapter(integration.ProviderOSOS, 24*time.Hour, model.ReadingKindLoadProfile)
+	clk := clock.NewFake(ingestTestNow)
+	enq := newRecordingEnqueuer()
+
+	deps := ingest.Deps{
+		Analyzers: repos.analyzers, Readings: repos.readings, Cursors: repos.cursors,
+		Anomalies: repos.anomalies, Ops: repos.ops, ProviderSeries: repos.series,
+		AdminIngestion: repos.adminIngestion, AdminJournal: repos.adminJournal,
+		Credentials: credentialOpenerFunc(func(context.Context, store.Scope, uuid.UUID) (integration.Credentials, error) {
+			return creds, nil
+		}),
+		Sources:  sourceMap{creds.Provider: src},
+		Enqueuer: enq, Clock: clk, Log: testfixtures.DiscardLogger(),
+	}
+	svc, err := ingest.New(deps, ingest.Options{})
+	require.NoError(t, err)
+
+	window := ingestTestWindow(ingestTestIstanbulMidnight, 24*time.Hour)
+	payload := job.FetchReadingsPayload{CompanyID: tn.Company.ID, CredentialID: creds.CredentialID, AnalyzerID: analyzer.ID, Kind: model.ReadingKindLoadProfile, Window: window}
+
+	err = svc.FetchReadings(ctx, payload)
+	require.Error(t, err)
+	require.ErrorIs(t, err, integration.ErrConfig, "an inactive credential must be ErrConfig, non-retryable via job.ClassifyForRetry")
+	require.Empty(t, src.requestLog(), "an inactive credential must never reach the adapter")
+
+	runs := ingestTestRunsForAnalyzer(t, ctx, repos.ops, tn.Scope, job.TypeIntegrationFetchReadings, analyzer.ID)
+	require.Len(t, runs, 1)
+	require.Equal(t, "failed", runs[0].Status)
+
+	messages, merr := repos.ops.ListMessages(ctx, tn.Scope, store.MessageFilter{})
+	require.NoError(t, merr)
+	require.NotEmpty(t, messages, "the inactive-credential refusal must leave an operational message")
+}
+
+// TestSyncAnalyzersRefusesInactiveCredential is X-M3's SyncAnalyzers half:
+// see TestFetchReadingsRefusesInactiveCredential's doc for the full
+// rationale. An inactive credential must stop discovery before the adapter
+// is ever called (DiscoverMeteringPoints must not run).
+func TestSyncAnalyzersRefusesInactiveCredential(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tn := testfixtures.NewTenant(t, ctx, pool, 9198)
+	repos := ingestTestNewRepos(pool)
+
+	creds := integration.Credentials{
+		CredentialID: uuid.New(), CompanyID: tn.Company.ID, Provider: integration.ProviderOSOS,
+		Subtype: "SyncInactiveSub", IsActive: false,
+	}
+	src := newFakeAdapter(integration.ProviderOSOS, 24*time.Hour, model.ReadingKindLoadProfile)
+	clk := clock.NewFake(ingestTestNow)
+	enq := newRecordingEnqueuer()
+
+	deps := ingest.Deps{
+		Analyzers: repos.analyzers, Readings: repos.readings, Cursors: repos.cursors,
+		Anomalies: repos.anomalies, Ops: repos.ops, ProviderSeries: repos.series,
+		AdminIngestion: repos.adminIngestion, AdminJournal: repos.adminJournal,
+		Credentials: credentialOpenerFunc(func(context.Context, store.Scope, uuid.UUID) (integration.Credentials, error) {
+			return creds, nil
+		}),
+		Sources:  sourceMap{creds.Provider: src},
+		Enqueuer: enq, Clock: clk, Log: testfixtures.DiscardLogger(),
+	}
+	svc, err := ingest.New(deps, ingest.Options{})
+	require.NoError(t, err)
+
+	// src leaves Verify/DiscoverMeteringPoints at their zero-value (nil
+	// error, no points): if the gate did NOT fire, SyncAnalyzers would run
+	// them and return nil (a normal, zero-analyzer sync), never ErrConfig —
+	// so requiring ErrConfig below also proves the gate fired before
+	// either was reached.
+	err = svc.SyncAnalyzers(ctx, job.SyncAnalyzersPayload{CompanyID: tn.Company.ID, CredentialID: creds.CredentialID})
+	require.Error(t, err)
+	require.ErrorIs(t, err, integration.ErrConfig, "an inactive credential must be ErrConfig, non-retryable via job.ClassifyForRetry")
+
+	runs, rerr := repos.ops.ListRuns(ctx, tn.Scope, store.JobRunFilter{JobType: ptrString(job.TypeIntegrationSyncAnalyzers), Page: store.Page{Limit: 5}})
+	require.NoError(t, rerr)
+	require.Len(t, runs, 1)
+	require.Equal(t, "failed", runs[0].Status)
+
+	messages, merr := repos.ops.ListMessages(ctx, tn.Scope, store.MessageFilter{})
+	require.NoError(t, merr)
+	require.NotEmpty(t, messages, "the inactive-credential refusal must leave an operational message")
 }

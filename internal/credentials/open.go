@@ -71,6 +71,7 @@ func (s *Service) buildCredentials(ctx context.Context, sc store.Scope, cred mod
 		Region:    derefOr(cred.IsolarRegion, ""),
 
 		TokenExpiresAt: cred.TokenExpiresAt,
+		IsActive:       cred.IsActive, // X-M3, final review B
 	}, nil
 }
 

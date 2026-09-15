@@ -116,12 +116,14 @@ func (c *Client) YekdemDropped() int32 { return c.yekdemDropped.Load() }
 // it from (never the value — there is no value to name, it is empty) —
 // EKOKOD_EPIAS_USERNAME / EKOKOD_EPIAS_PASSWORD (.env.example).
 //
-// Kind chosen for this configuration error: integration.ErrAuth. There is
-// no dedicated configuration-error Kind yet (a planned follow-up per the
-// task brief); ErrAuth is the closest existing sentinel — "this client
-// cannot authenticate" is true whether the credential is wrong or simply
-// absent — and, unlike ErrMalformedPayload, it is not misleading about
-// what happened.
+// Kind chosen for this configuration error: integration.ErrConfig (R48/I5;
+// round 1 chose ErrAuth for lack of a dedicated configuration-error Kind —
+// "this client cannot authenticate" is true whether the credential is
+// wrong or simply absent, but only a WRONG credential is an authentication
+// failure; a missing one is a deployment/config problem F3's credential-
+// health logic must never treat as a rejected password). Unlike
+// ErrMalformedPayload, ErrConfig is not misleading about what happened
+// either — no call was ever attempted.
 func New(pool *httpx.Pool, o Options) (*Client, error) {
 	if o.CASURL == "" {
 		o.CASURL = defaultCASURL
@@ -136,10 +138,10 @@ func New(pool *httpx.Pool, o Options) (*Client, error) {
 		o.Clock = clock.System()
 	}
 	if o.Username == "" {
-		return nil, &integration.Error{Kind: integration.ErrAuth, Provider: integration.ProviderEPIAS, Op: "config: EKOKOD_EPIAS_USERNAME is required"}
+		return nil, &integration.Error{Kind: integration.ErrConfig, Provider: integration.ProviderEPIAS, Op: "config: EKOKOD_EPIAS_USERNAME is required"}
 	}
 	if o.Password.IsZero() {
-		return nil, &integration.Error{Kind: integration.ErrAuth, Provider: integration.ProviderEPIAS, Op: "config: EKOKOD_EPIAS_PASSWORD is required"}
+		return nil, &integration.Error{Kind: integration.ErrConfig, Provider: integration.ProviderEPIAS, Op: "config: EKOKOD_EPIAS_PASSWORD is required"}
 	}
 
 	cfg := httpx.ClientConfig{

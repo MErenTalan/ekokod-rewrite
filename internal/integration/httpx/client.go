@@ -53,9 +53,14 @@ type ClientConfig struct {
 	// any other retryable failure. EPİAŞ sets 65s.
 	DefaultRateLimitWait time.Duration
 
-	// SerializeKey, if non-empty, has Do hold Pool's Locker for the whole
-	// call (all retries), TTL serializeLeaseTTL. Empty, or a Pool built
-	// with no Locker: no cross-process serialisation.
+	// SerializeKey, if non-empty, has Do hold Pool's Locker for each
+	// individual ATTEMPT (I3/R6 — see attemptWithLock's doc: acquired
+	// after the rate limiter wait, released immediately after that one
+	// round trip, never held across a retry's backoff sleep), TTL
+	// serializeLeaseTTL. M11: this comment previously (round 1) said "for
+	// the whole call (all retries)" — that was never the implementation;
+	// corrected to match attemptWithLock. Empty, or a Pool built with no
+	// Locker: no cross-process serialisation.
 	SerializeKey string
 
 	MaxBodyBytes int64 // default 50 MiB

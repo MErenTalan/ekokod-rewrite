@@ -187,6 +187,39 @@ func (f *hookFakeAnchors) SetAnchor(_ context.Context, _ store.Scope, a model.Ge
 
 var _ store.GenerationRepository = (*hookFakeAnchors)(nil)
 
+// hookAcquireSignal wraps a lock.Locker and closes fired exactly once, the
+// Nth time (armOnCall) Acquire is called on it — used by the two
+// serialisation tests below to detect "the second goroutine has reached
+// (and, if the first still holds the lease, is now blocked inside) its own
+// Acquire call" DETERMINISTICALLY (M4, final review B), replacing a fixed
+// time.Sleep whose "long enough" margin depends on machine/Docker load
+// rather than on the behaviour under test. Acquire itself is untouched —
+// this only observes calls to it, so it changes nothing about who actually
+// gets the lease or when.
+type hookAcquireSignal struct {
+	lock.Locker
+	arm int
+
+	mu    sync.Mutex
+	calls int
+	fired chan struct{}
+}
+
+func newHookAcquireSignal(inner lock.Locker, armOnCall int) *hookAcquireSignal {
+	return &hookAcquireSignal{Locker: inner, arm: armOnCall, fired: make(chan struct{})}
+}
+
+func (l *hookAcquireSignal) Acquire(ctx context.Context, key string, ttl time.Duration) (lock.Lease, error) {
+	l.mu.Lock()
+	l.calls++
+	n := l.calls
+	l.mu.Unlock()
+	if n == l.arm {
+		close(l.fired)
+	}
+	return l.Locker.Acquire(ctx, key, ttl)
+}
+
 // TestAfterPersistIsSerialisedPerAnalyzer is R52's concurrency proof: two
 // AfterPersist calls for the SAME analyzer, orchestrated so goroutine A's
 // own Range read (inside recomputeForward) is suspended AFTER it has
@@ -259,7 +292,11 @@ func TestAfterPersistIsSerialisedPerAnalyzer(t *testing.T) {
 		<-resumeCh
 	}
 
-	acc := generation.New(readings, anchors, clock.NewFake(hookTS("2026-09-05T00:00:00Z")), lock.NewMemory(nil), 0)
+	// M4: signal fires on the SECOND Acquire call ever made through this
+	// locker — A's own (first, uncontended) Acquire happens before A even
+	// reaches pauseCh, so the second call is unambiguously B's.
+	signal := newHookAcquireSignal(lock.NewMemory(nil), 2)
+	acc := generation.New(readings, anchors, clock.NewFake(hookTS("2026-09-05T00:00:00Z")), signal, 0)
 
 	errA := make(chan error, 1)
 	go func() {
@@ -282,11 +319,18 @@ func TestAfterPersistIsSerialisedPerAnalyzer(t *testing.T) {
 			hookTS("2026-09-01T10:30:00Z"), hookTS("2026-09-01T10:30:00Z"))
 	}()
 
-	// Give B time to either finish (no lock: nothing blocks it) or become
-	// blocked polling Acquire (locked: A still holds the lease) —
-	// lock.Memory polls every 5ms, so 100ms is generous headroom either way
-	// on any reasonable machine.
-	time.Sleep(100 * time.Millisecond)
+	// M4: wait for B to actually CALL Acquire (locked: it then blocks there,
+	// since A still holds the lease) instead of sleeping a fixed, load-
+	// dependent margin. If B finishes first without ever calling Acquire,
+	// the lock was not reached at all — fail immediately rather than rely
+	// on the final value assertions alone to notice.
+	select {
+	case <-signal.fired:
+	case err := <-errB:
+		t.Fatalf("B finished (err=%v) before ever calling Acquire: the per-analyzer lock was not reached", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for B to call Acquire")
+	}
 	close(resumeCh)
 
 	require.NoError(t, <-errA)
@@ -296,4 +340,132 @@ func TestAfterPersistIsSerialisedPerAnalyzer(t *testing.T) {
 	requireHookActiveExport(t, rows, "2026-09-01T10:15:00Z", "1")
 	requireHookActiveExport(t, rows, "2026-09-01T10:30:00Z", "2")
 	requireHookActiveExport(t, rows, "2026-09-01T10:45:00Z", "3")
+}
+
+// TestAfterPersistPreAnchorDerivationIsSerialisedPerAnalyzer is M4's
+// (final review B) second gap: TestAfterPersistIsSerialisedPerAnalyzer
+// above only pauses inside recomputeForward's OWN Range call, so it cannot
+// tell a lock that covers the whole call (current code) apart from one
+// narrowed to cover only recomputeForward (the reviewer's named mutation:
+// "anchor read and deriveBeforeAnchor outside the lock") — both shapes
+// serialise the one Range call this test's sibling pauses. This test
+// instead pauses inside deriveBeforeAnchor's OWN Range call (the "older
+// rows" probe, reached only when a call's `from` is at-or-before the
+// current anchor — a pre-anchor/backfill call), which sits BEFORE
+// recomputeForward and is NOT covered by a lock narrowed to recomputeForward
+// alone.
+//
+// Setup: an "initial" (synthetic, value-0) anchor at 09:00. Row Y (1 kWh)
+// already exists at 08:45 — CLOSER to the anchor. Row X (1 kWh) does not
+// exist yet and is INSERTED BY B, further back at 08:00.
+//
+// Goroutine A calls AfterPersist(from=08:45, to=08:45) — a pre-anchor call
+// (anchor 09:00 is not before 08:45) — so its deriveBeforeAnchor probe reads
+// [08:45, 09:00] and finds only Y, the FIRST Range call made at all, which
+// is exactly the one the fake pauses on.
+//
+// While A is paused, goroutine B inserts X at 08:00 and calls
+// AfterPersist(from=08:00, to=08:00) — also pre-anchor (anchor is still the
+// original 09:00 until A writes). B's own deriveBeforeAnchor probe reads
+// [08:00, 09:00] and finds BOTH X and Y (Y already existed; X is B's own
+// insert), so B moves the anchor to (0, X.Ts-15m=07:45) — the correct,
+// widest position — and its own recomputeForward(0, 07:45, now) covers both
+// rows: X=1, Y=2.
+//
+// Hand-derived, serial-equivalent, correct final result (identical
+// regardless of execution order — see the two full traces in this task's
+// final-fix-B-report.md):
+//
+//	X (08:00): 0 + 1 = 1
+//	Y (08:45): 1 + 1 = 2
+//	anchor:    (0, 07:45)
+//
+// WITH the lock covering the WHOLE call (this test, the real production
+// code path): B's own Acquire blocks entirely until A releases, so B never
+// even reaches its own deriveBeforeAnchor while A is paused. A resumes
+// holding its STALE one-row ([Y]) snapshot, moves the anchor to (0, 08:30)
+// and writes Y=1 (not yet knowing about X) — locally wrong, but B, running
+// AFTER A fully releases, reads the CURRENT anchor fresh, discovers X, moves
+// the anchor further back to (0, 07:45), and its own full recomputeForward
+// from there corrects Y back to 2. Final state: X=1, Y=2, anchor=(0,07:45)
+// — correct.
+//
+// WITHOUT the lock covering deriveBeforeAnchor (mutation: only
+// recomputeForward is wrapped in withAnalyzerLock): B is never blocked from
+// running its ENTIRE cycle (deriveBeforeAnchor AND recomputeForward) while A
+// is merely paused, unprotected. B correctly computes X=1, Y=2,
+// anchor=(0,07:45) — using the full, current picture, since nothing stopped
+// it from reading a state that already reflects both rows. But A then
+// resumes holding its OWN stale, PRE-B snapshot ([Y] only, captured before B
+// ran), and — with no lock preventing it — OVERWRITES B's correct anchor
+// with its own narrower (0, 08:30), then recomputes ONLY forward from there:
+// its own recomputeForward(0, 08:30, now) does not reach back to X (08:00,
+// before 08:30), so it writes Y = 0 + 1 = 1, clobbering B's correct 2 — and
+// nothing runs afterward to fix it, since A finishes last. Final state:
+// Y=1 (wrong; the assertion below requires 2).
+func TestAfterPersistPreAnchorDerivationIsSerialisedPerAnalyzer(t *testing.T) {
+	readings := newHookFakeReadings()
+	anchors := &hookFakeAnchors{}
+	require.NoError(t, anchors.SetAnchor(context.Background(), hookTestScope, model.GenerationAnchor{
+		AnalyzerID: hookTestAnalyzerID, AnchorTs: hookTS("2026-09-01T09:00:00Z"),
+		ActiveExport: decimal.Zero, Source: "initial",
+	}))
+	_, _, err := readings.BulkInsert(context.Background(), hookTestScope, []model.MeterReading{
+		hookReading("2026-09-01T08:45:00Z", "1"), // Y
+	})
+	require.NoError(t, err)
+
+	pauseCh := make(chan struct{})
+	resumeCh := make(chan struct{})
+	readings.onPause = func() {
+		close(pauseCh)
+		<-resumeCh
+	}
+
+	// A's own Acquire is the first call ever made through this locker; B's
+	// is the second.
+	signal := newHookAcquireSignal(lock.NewMemory(nil), 2)
+	acc := generation.New(readings, anchors, clock.NewFake(hookTS("2026-09-05T00:00:00Z")), signal, 0)
+
+	errA := make(chan error, 1)
+	go func() {
+		errA <- acc.AfterPersist(context.Background(), hookTestScope, hookTestAnalyzer(), model.ReadingKindLoadProfile,
+			hookTS("2026-09-01T08:45:00Z"), hookTS("2026-09-01T08:45:00Z"))
+	}()
+
+	<-pauseCh // A has taken its snapshot ([Y]) and is now paused inside deriveBeforeAnchor's Range call.
+
+	errB := make(chan error, 1)
+	go func() {
+		_, _, ierr := readings.BulkInsert(context.Background(), hookTestScope, []model.MeterReading{
+			hookReading("2026-09-01T08:00:00Z", "1"), // X
+		})
+		if ierr != nil {
+			errB <- ierr
+			return
+		}
+		errB <- acc.AfterPersist(context.Background(), hookTestScope, hookTestAnalyzer(), model.ReadingKindLoadProfile,
+			hookTS("2026-09-01T08:00:00Z"), hookTS("2026-09-01T08:00:00Z"))
+	}()
+
+	select {
+	case <-signal.fired:
+	case err := <-errB:
+		t.Fatalf("B finished (err=%v) before ever calling Acquire: the per-analyzer lock was not reached", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for B to call Acquire")
+	}
+	close(resumeCh)
+
+	require.NoError(t, <-errA)
+	require.NoError(t, <-errB)
+
+	rows := readings.snapshot()
+	requireHookActiveExport(t, rows, "2026-09-01T08:00:00Z", "1")
+	requireHookActiveExport(t, rows, "2026-09-01T08:45:00Z", "2")
+
+	anchor, aerr := anchors.Anchor(context.Background(), hookTestScope, hookTestAnalyzerID)
+	require.NoError(t, aerr)
+	require.True(t, hookTS("2026-09-01T07:45:00Z").Equal(anchor.AnchorTs),
+		"the anchor must reflect the EARLIEST pre-anchor row seen across both calls, not whichever call wrote last")
 }

@@ -169,23 +169,29 @@ func gridboxBaseRoutes(t *testing.T) []fake.Route {
 	}
 }
 
-// gridboxAuthFailureResponder answers 400 invalid_grant and echoes the
-// submitted form body back in the response — the only way
-// TestGridBoxErrorsCarryNoCredential can prove the credential does not
-// survive into err.Error(): httpx never returns a failed response's body to
-// the caller, so this route's ECHO is the sole channel through which the
-// plaintext password could leak, and the test asserts it does not.
-func gridboxAuthFailureResponder(t *testing.T) fake.Responder {
+// gridboxAuthFailureResponder answers 400 invalid_grant, built from the
+// recorded gridbox_auth_failure.json fixture body (I1: the fixture-matrix
+// guard requires the "auth_failure" case to actually read the file it
+// names, not merely have it exist on disk), and echoes the submitted form
+// body back in the response — the only way TestGridBoxErrorsCarryNoCredential
+// can prove the credential does not survive into err.Error(): httpx never
+// returns a failed response's body to the caller, so this route's ECHO is
+// the sole channel through which the plaintext password could leak, and the
+// test asserts it does not.
+func gridboxAuthFailureResponder(t *testing.T, fixture []byte) fake.Responder {
 	t.Helper()
+	var body map[string]string
+	require.NoError(t, json.Unmarshal(fixture, &body))
 	return func(w http.ResponseWriter, r *http.Request) {
 		raw, _ := io.ReadAll(r.Body)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error":             "invalid_grant",
-			"error_description": "FIXTURE-invalid-credentials",
-			"echo":              string(raw),
-		})
+		resp := make(map[string]string, len(body)+1)
+		for k, v := range body {
+			resp[k] = v
+		}
+		resp["echo"] = string(raw)
+		_ = json.NewEncoder(w).Encode(resp)
 	}
 }
 
@@ -288,7 +294,7 @@ func TestGridBoxFixtureMatrix(t *testing.T) {
 			name: "auth_failure",
 			from: dayFrom, to: dayTo,
 			routes: func(t *testing.T) []fake.Route {
-				return []fake.Route{{Method: http.MethodPost, Path: "/gridbox/token", Respond: gridboxAuthFailureResponder(t)}}
+				return []fake.Route{{Method: http.MethodPost, Path: "/gridbox/token", Respond: gridboxAuthFailureResponder(t, fake.Fixture(t, "gridbox", "gridbox_auth_failure.json"))}}
 			},
 			wantErr: integration.ErrAuth,
 		},
@@ -467,6 +473,43 @@ func TestGridBoxMultiplierResolution(t *testing.T) {
 		require.Len(t, fallback, 1, "exactly one WarnMultiplierFallback, got %+v", res.Warnings)
 		require.Contains(t, fallback[0].Detail, gridboxWiring, "warning must name the wiring number")
 	})
+
+	// stored_multiplier_used_but_not_provider_resolved is R51/I2's core
+	// regression: a "daily"-kind fetch (no last_endex.Multiplier, no
+	// load_profiles at all — daily's own endpoint carries neither) with
+	// req.Multiplier=40 (the analyzer's stored value, as the pipeline
+	// always sets it — R3) must resolve to 40, not fall all the way back
+	// to 1, and must report ProviderResolved=false so the pipeline never
+	// treats this as new information to persist over the stored value.
+	t.Run("stored_multiplier_used_but_not_provider_resolved", func(t *testing.T) {
+		from, to := istanbulDay(2026, 9, 1)
+		srv := fake.NewTLSServer(t, append(gridboxBaseRoutes(t),
+			fake.Route{Method: http.MethodGet, Path: "/gridbox/last-endex", Respond: fake.JSON(200, fake.Fixture(t, "gridbox", "gridbox_no_multiplier.json"))},
+			fake.Route{Method: http.MethodGet, Path: "/gridbox/endexes", Respond: fake.JSON(200, fake.Fixture(t, "gridbox", "gridbox_success.json"))},
+		)...)
+		pool, _ := gridboxTestPool(t, srv)
+		src := gridboxNewSource(pool, 0)
+		creds := gridboxTestCreds(srv, false)
+
+		req := gridboxTestRequest(model.ReadingKindDaily, from, to)
+		req.Multiplier = decimal.NewFromInt(40)
+
+		res, err := src.FetchReadings(context.Background(), creds, req)
+		require.NoError(t, err)
+		require.NotNil(t, res.ResolvedMultiplier)
+		require.Equal(t, integration.MultiplierFromRequest, res.ResolvedMultiplier.Source)
+		require.False(t, res.ResolvedMultiplier.ProviderResolved, "a stored-multiplier fallback must not be reported as provider-resolved")
+		require.True(t, decimal.NewFromInt(40).Equal(res.ResolvedMultiplier.Value), "got %s", res.ResolvedMultiplier.Value)
+
+		var fallback []integration.Warning
+		for _, w := range res.Warnings {
+			if w.Code == integration.WarnMultiplierFallback {
+				fallback = append(fallback, w)
+			}
+		}
+		require.Len(t, fallback, 1)
+		require.Contains(t, fallback[0].Detail, "40", "warning should name the reused stored value")
+	})
 }
 
 // TestGridBoxOffsetlessTimestampIsIstanbul: a ProfileDate carrying no
@@ -583,7 +626,7 @@ func TestIdempotentGridBoxRefetchYieldsIdenticalReadings(t *testing.T) {
 }
 
 func TestGridBoxVerifyMapsAuthFailure(t *testing.T) {
-	srv := fake.NewTLSServer(t, fake.Route{Method: http.MethodPost, Path: "/gridbox/token", Respond: gridboxAuthFailureResponder(t)})
+	srv := fake.NewTLSServer(t, fake.Route{Method: http.MethodPost, Path: "/gridbox/token", Respond: gridboxAuthFailureResponder(t, fake.Fixture(t, "gridbox", "gridbox_auth_failure.json"))})
 	pool, _ := gridboxTestPool(t, srv)
 	src := gridboxNewSource(pool, 0)
 
@@ -649,6 +692,50 @@ func TestGridBoxDiscoverHasNoListingEndpoint(t *testing.T) {
 	require.Empty(t, points)
 }
 
+// TestGridBoxLastSuccessDateCapsToNeverRaisesFrom is R50/I1's regression
+// test for the SEMANTIC half of the ruling (the shape half — decoding
+// ResultObject as a bare string, not an object — is proven by every other
+// test in this file now that gridbox_last_success_date.json carries the
+// legacy bare-string shape; reverting decodeLastSuccessDate to the old
+// object type makes every FetchReadings-driven test in this file fail with
+// "integration: malformed payload").
+//
+// The request window is [Sep 1, Sep 10) Istanbul; last_success_date reports
+// Sep 5 (a provider high-water mark INSIDE the window). Round 1 used this
+// to RAISE From to Sep 5, producing a request for [Sep 5, Sep 10) —
+// startDate=2026-09-05. R18/R37's re-ruling (R50) says last_success_date
+// must never raise From (only the pipeline's own cursor does) and may only
+// CAP To, so the fixed adapter must request [Sep 1, Sep 5) instead —
+// startDate=2026-09-01 (unraised), endDate=2026-09-04 (capped to the day
+// before the provider's last success).
+func TestGridBoxLastSuccessDateCapsToNeverRaisesFrom(t *testing.T) {
+	from, _ := istanbulDay(2026, 9, 1)
+	_, to := istanbulDay(2026, 9, 9) // [Sep 1, Sep 10) Istanbul
+
+	srv := fake.NewTLSServer(t,
+		fake.Route{Method: http.MethodPost, Path: "/gridbox/token", Respond: fake.JSON(200, fake.Fixture(t, "gridbox", "gridbox_token.json"))},
+		fake.Route{Method: http.MethodGet, Path: "/gridbox/last-success-date", Respond: fake.JSON(200, []byte(`{"ResultStatus":1,"ResultObject":"2026-09-05T00:00:00+03:00"}`))},
+		fake.Route{Method: http.MethodGet, Path: "/gridbox/last-endex", Respond: fake.JSON(200, fake.Fixture(t, "gridbox", "gridbox_last_endex.json"))},
+		fake.Route{Method: http.MethodGet, Path: "/gridbox/load-profiles", Respond: fake.JSON(200, fake.Fixture(t, "gridbox", "gridbox_success.json"))},
+	)
+	pool, _ := gridboxTestPool(t, srv)
+	src := gridboxNewSource(pool, 0)
+	creds := gridboxTestCreds(srv, false)
+
+	_, err := src.FetchReadings(context.Background(), creds, gridboxTestRequest(model.ReadingKindLoadProfile, from, to))
+	require.NoError(t, err)
+
+	var calls []fake.RecordedRequest
+	for _, r := range srv.Requests() {
+		if r.Path == "/gridbox/load-profiles" {
+			calls = append(calls, r)
+		}
+	}
+	require.Len(t, calls, 1)
+	require.Contains(t, calls[0].RawQuery, "startDate=2026-09-01", "last_success_date must never raise From")
+	require.Contains(t, calls[0].RawQuery, "endDate=2026-09-04", "last_success_date must cap To to the day before the provider's last success")
+}
+
 func TestGridBoxNeverReturnsReadingsOutsideWindow(t *testing.T) {
 	from, to := istanbulDay(2026, 9, 1)
 	body := []byte(`{"ResultStatus":1,"ResultObject":[
@@ -671,7 +758,7 @@ func TestGridBoxNeverReturnsReadingsOutsideWindow(t *testing.T) {
 }
 
 func TestGridBoxErrorsCarryNoCredential(t *testing.T) {
-	srv := fake.NewTLSServer(t, fake.Route{Method: http.MethodPost, Path: "/gridbox/token", Respond: gridboxAuthFailureResponder(t)})
+	srv := fake.NewTLSServer(t, fake.Route{Method: http.MethodPost, Path: "/gridbox/token", Respond: gridboxAuthFailureResponder(t, fake.Fixture(t, "gridbox", "gridbox_auth_failure.json"))})
 	pool, _ := gridboxTestPool(t, srv)
 	src := gridboxNewSource(pool, 0)
 	creds := gridboxTestCreds(srv, false)
@@ -933,8 +1020,10 @@ func TestGridBoxDuplicateTimestampConflictWarns(t *testing.T) {
 
 // TestGridBoxConfigErrorsAreDeliberate is adapter review patterns 9 and 12:
 // a missing endpoint template or a blank installation number is reported as
-// a deliberately-classified *integration.Error (ErrAuth — see configError's
-// doc in source.go for why), before ANY HTTP call is attempted.
+// a deliberately-classified *integration.Error (ErrConfig — R48/I5;
+// see configError's doc in source.go), before ANY HTTP call is attempted,
+// and MUST NOT be ErrAuth (F3's credential-health logic must never treat a
+// misconfiguration as a rejected credential).
 func TestGridBoxConfigErrorsAreDeliberate(t *testing.T) {
 	from, to := istanbulDay(2026, 9, 1)
 
@@ -946,7 +1035,8 @@ func TestGridBoxConfigErrorsAreDeliberate(t *testing.T) {
 		delete(creds.Endpoints, "load_profiles")
 
 		_, err := src.FetchReadings(context.Background(), creds, gridboxTestRequest(model.ReadingKindLoadProfile, from, to))
-		require.ErrorIs(t, err, integration.ErrAuth)
+		require.ErrorIs(t, err, integration.ErrConfig)
+		require.NotErrorIs(t, err, integration.ErrAuth)
 		var ierr *integration.Error
 		require.ErrorAs(t, err, &ierr)
 		require.Equal(t, "config:load_profiles", ierr.Op)
@@ -962,7 +1052,8 @@ func TestGridBoxConfigErrorsAreDeliberate(t *testing.T) {
 		req.Point.InstallationNumber = ""
 
 		_, err := src.FetchReadings(context.Background(), creds, req)
-		require.ErrorIs(t, err, integration.ErrAuth)
+		require.ErrorIs(t, err, integration.ErrConfig)
+		require.NotErrorIs(t, err, integration.ErrAuth)
 		require.Empty(t, srv.Requests())
 	})
 }
