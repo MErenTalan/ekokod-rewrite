@@ -58,9 +58,22 @@
 // single unscoped surface repository.go's header names (03-target-
 // architecture.md §2.5): none of its methods take a Scope, so "does it leak
 // another tenant's rows under a Scope" does not apply to it. This file uses
-// two admin repositories (admin.NewMarketDataRepository,
-// and raw SQL inserts matching other integration tests' own pattern) purely
-// as SETUP for the platform-wide-table subtests, never as a test subject.
+// ONE admin repository (admin.NewMarketDataRepository) plus raw SQL inserts
+// matching other integration tests' own pattern, purely as SETUP for the
+// platform-wide-table subtests, never as a test subject.
+//
+// FIX ROUND 1 (task-13b-fix1-findings.md). Every subtest below now pairs
+// each cross-tenant/narrow-scope ErrNotFound or exclusion assertion with a
+// POSITIVE CONTROL: the identical read, re-run under the OWNING Scope,
+// asserted to succeed and (for a List) to contain the row — a query that
+// always answers "not found" or "no rows" (e.g. an accidental `and false`)
+// now fails here instead of passing vacuously as "isolated". See
+// scopeIsoAssertGetNotFound/scopeIsoAssertListExcludes below.
+// TestScopeIsolationCoversEveryRepository also gained a METHOD-level phase:
+// every READ method (by mechanical name-prefix classification) of every
+// non-admin interface in repository.go must be called inside that
+// interface's own subtest here, or be named in scopeIsoReadMethodExemptions
+// with a reason.
 package postgres_test
 
 import (
@@ -74,6 +87,7 @@ import (
 	"regexp"
 	"runtime"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -209,10 +223,226 @@ func TestScopeIsolationCoversEveryRepository(t *testing.T) {
 	sort.Strings(stale)
 	require.Empty(t, stale,
 		"scopeIsoRegisteredRepositories names a constructor that no longer exists in package postgres: %v", stale)
+
+	// --- Method-level omission guard (folded Minor 1, fix round 1) --------
+	// Constructor-level coverage above says every REPOSITORY is exercised;
+	// this phase says every READ METHOD of every one of them is too. A
+	// subtest is matched to the interface it covers by the "repo :=
+	// postgres.New<X>Repository(...)" convention every subtest in this file
+	// follows (see the file's own doc comment) — this guard depends on that
+	// convention holding.
+	repoGoPath := filepath.Join(dir, "..", "repository.go")
+	interfaces := scopeIsoParseRepositoryInterfaces(t, repoGoPath)
+	require.NotEmpty(t, interfaces, "the repository.go interface scan found nothing — the scan itself is broken")
+
+	covered := scopeIsoParseSubtestCoverage(t, thisFile)
+
+	var uncoveredReads []string
+	for _, iface := range interfaces {
+		for _, m := range iface.methods {
+			if scopeIsoIsWriteMethod(m) {
+				continue // writes are exempt as a category (Task 9-11's own tests own write isolation)
+			}
+			key := iface.name + "." + m
+			if scopeIsoReadMethodExemptions[key] != "" {
+				continue
+			}
+			if !covered[iface.name][m] {
+				uncoveredReads = append(uncoveredReads, key)
+			}
+		}
+	}
+	sort.Strings(uncoveredReads)
+	require.Empty(t, uncoveredReads,
+		"read method(s) of a scoped repository are never called by TestScopeIsolation's own subtest for that "+
+			"repository, and are not named in scopeIsoReadMethodExemptions with a reason: %v", uncoveredReads)
 }
 
 func isTestGoFile(name string) bool {
 	return len(name) > len("_test.go") && name[len(name)-len("_test.go"):] == "_test.go"
+}
+
+// scopeIsoWriteMethodPrefixes classifies a repository method as a WRITE by
+// name prefix, mechanically, rather than hand-maintaining a per-interface
+// read/write split that silently drifts as repository.go grows. Every write
+// method across all 29 non-admin interfaces (checked by hand against
+// repository.go's full method list during this fix round) starts with one
+// of these; a method matching none of them is a READ, and
+// TestScopeIsolationCoversEveryRepository's method-level phase requires it
+// to be called (or explicitly exempted in scopeIsoReadMethodExemptions).
+var scopeIsoWriteMethodPrefixes = []string{
+	"Create", "Update", "SoftDelete", "Delete", "Replace", "Append",
+	"BulkInsert", "Insert", "Set", "Record", "Revoke", "Start", "Finish",
+	"Mark", "Resolve", "Touch", "Upsert", "Supersede", "Ensure",
+}
+
+func scopeIsoIsWriteMethod(name string) bool {
+	for _, p := range scopeIsoWriteMethodPrefixes {
+		if strings.HasPrefix(name, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// scopeIsoReadMethodExemptions lists a READ method (key "InterfaceName.Method")
+// TestScopeIsolation's own subtest for that interface deliberately does not
+// call, with the reason. Empty by design: every read method of every
+// non-admin interface is exercised somewhere in TestScopeIsolation as of
+// this fix round (see task-13b-report.md's coverage table) — an entry here
+// is meant to be a reviewed, documented exception, never a silent gap.
+var scopeIsoReadMethodExemptions = map[string]string{}
+
+// scopeIsoInterfaceMethods is one non-admin *Repository interface's name and
+// its exported method names, as found in repository.go.
+type scopeIsoInterfaceMethods struct {
+	name    string
+	methods []string
+}
+
+// scopeIsoParseRepositoryInterfaces AST-scans repoGoPath (internal/store/
+// repository.go) for every `type XRepository interface { ... }` declaration
+// whose name is NOT prefixed "Admin" (the single unscoped surface, excluded
+// by design exactly as the constructor-level scan above excludes package
+// admin) and returns each one's exported method names.
+func scopeIsoParseRepositoryInterfaces(t *testing.T, repoGoPath string) []scopeIsoInterfaceMethods {
+	t.Helper()
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, repoGoPath, nil, 0)
+	require.NoError(t, err)
+	require.Equal(t, "store", file.Name.Name, "%s is not in package store — the scan path is wrong", repoGoPath)
+
+	var out []scopeIsoInterfaceMethods
+	for _, decl := range file.Decls {
+		gd, ok := decl.(*ast.GenDecl)
+		if !ok || gd.Tok != token.TYPE {
+			continue
+		}
+		for _, spec := range gd.Specs {
+			ts, ok := spec.(*ast.TypeSpec)
+			if !ok {
+				continue
+			}
+			it, ok := ts.Type.(*ast.InterfaceType)
+			if !ok {
+				continue
+			}
+			name := ts.Name.Name
+			if !strings.HasSuffix(name, "Repository") || strings.HasPrefix(name, "Admin") {
+				continue
+			}
+			var methods []string
+			for _, m := range it.Methods.List {
+				for _, n := range m.Names { // embedded interfaces have no Names; none exist here
+					if n.IsExported() {
+						methods = append(methods, n.Name)
+					}
+				}
+			}
+			out = append(out, scopeIsoInterfaceMethods{name: name, methods: methods})
+		}
+	}
+	return out
+}
+
+// scopeIsoParseSubtestCoverage AST-scans testFilePath (this file) for
+// TestScopeIsolation's own FuncDecl, walks every `t.Run("Name", func(t
+// *testing.T) {...})` inside it, and returns, per interface name, the set
+// of method names called on a variable that subtest constructed via
+// `postgres.New<X>Repository(...)` — including calls reached only through a
+// nested closure (e.g. scopeIsoAssertGetNotFound's `get` callback), since
+// ast.Inspect walks the whole subtree regardless of nesting depth.
+func scopeIsoParseSubtestCoverage(t *testing.T, testFilePath string) map[string]map[string]bool {
+	t.Helper()
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, testFilePath, nil, 0)
+	require.NoError(t, err)
+
+	var testFn *ast.FuncDecl
+	for _, decl := range file.Decls {
+		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Recv == nil && fn.Name.Name == "TestScopeIsolation" {
+			testFn = fn
+			break
+		}
+	}
+	require.NotNil(t, testFn, "TestScopeIsolation itself was not found by the AST scan")
+
+	covered := map[string]map[string]bool{}
+	ast.Inspect(testFn.Body, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok || sel.Sel.Name != "Run" || len(call.Args) != 2 {
+			return true
+		}
+		lit, ok := call.Args[1].(*ast.FuncLit)
+		if !ok {
+			return true
+		}
+		scopeIsoCollectSubtestCoverage(lit.Body, covered)
+		return true
+	})
+	return covered
+}
+
+// scopeIsoCollectSubtestCoverage walks one t.Run subtest body: first every
+// "<ident> := postgres.New<X>Repository(...)" assignment, recording ident ->
+// X; then every "<ident>.Method(...)" call for an ident found in the first
+// pass, recording X.Method as covered.
+func scopeIsoCollectSubtestCoverage(body ast.Node, covered map[string]map[string]bool) {
+	repoVars := map[string]string{}
+	ast.Inspect(body, func(n ast.Node) bool {
+		assign, ok := n.(*ast.AssignStmt)
+		if !ok || len(assign.Lhs) != 1 || len(assign.Rhs) != 1 {
+			return true
+		}
+		ident, ok := assign.Lhs[0].(*ast.Ident)
+		if !ok {
+			return true
+		}
+		call, ok := assign.Rhs[0].(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		pkg, ok := sel.X.(*ast.Ident)
+		if !ok || pkg.Name != "postgres" || !strings.HasPrefix(sel.Sel.Name, "New") || !strings.HasSuffix(sel.Sel.Name, "Repository") {
+			return true
+		}
+		repoVars[ident.Name] = strings.TrimPrefix(sel.Sel.Name, "New")
+		return true
+	})
+	if len(repoVars) == 0 {
+		return
+	}
+	ast.Inspect(body, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		recv, ok := sel.X.(*ast.Ident)
+		if !ok {
+			return true
+		}
+		iface, ok := repoVars[recv.Name]
+		if !ok {
+			return true
+		}
+		if covered[iface] == nil {
+			covered[iface] = map[string]bool{}
+		}
+		covered[iface][sel.Sel.Name] = true
+		return true
+	})
 }
 
 // ---------------------------------------------------------------------------
@@ -220,6 +450,28 @@ func isTestGoFile(name string) bool {
 // ---------------------------------------------------------------------------
 
 var scopeIsoEpoch = time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+// scopeIsoClosedYearEpoch is a year definitely CLOSED relative to this
+// phase's clock — unlike scopeIsoEpoch's year (2026), which is the CURRENT
+// year and therefore never materialised by refresh_continuous_aggregate
+// (Important Finding 2: consumption_yearly is materialized_only = true, and
+// the bucket "now" is still inside is never in the materialized data — the
+// same trap TestAnalyticsConsumptionMonthlyAndYearlyRequireRefresh's own
+// closedYearEpoch avoids).
+var scopeIsoClosedYearEpoch = time.Date(2020, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+// scopeIsoCompanyWideTariffFrom/On are the Important Finding 4 / HANDOFF
+// ruling 7 company-wide tariff's effective_from and the date Effective is
+// resolved at in the TariffRepository subtest. Both predate
+// testfixtures.NewTenant's own building-specific tariffs (effective_from
+// scopeIsoEpoch, 2026-01-01), so at scopeIsoCompanyWideTariffOn the
+// building-specific lookup finds nothing and TariffRepository.Effective
+// falls back to the company-wide row — the documented exception under a
+// narrow Scope.
+var (
+	scopeIsoCompanyWideTariffFrom = tariffFixtureDate(2025, time.January, 1)
+	scopeIsoCompanyWideTariffOn   = tariffFixtureDate(2025, time.June, 1)
+)
 
 func scopeIsoDec(s string) decimal.Decimal { return decimal.RequireFromString(s) }
 
@@ -230,6 +482,35 @@ func scopeIsoContainsID[T any](items []T, id uuid.UUID, get func(T) uuid.UUID) b
 		}
 	}
 	return false
+}
+
+// scopeIsoAssertGetNotFound calls get(deniedScope) and requires
+// store.ErrNotFound, THEN calls get(ownerScope) and requires success — the
+// positive control (Important Finding 5) that keeps the ErrNotFound
+// assertion from passing vacuously if the underlying query always answers
+// "not found" (e.g. a mutated predicate that excludes everyone, not just
+// the other tenant).
+func scopeIsoAssertGetNotFound[T any](t *testing.T, get func(store.Scope) (T, error), deniedScope, ownerScope store.Scope, msgAndArgs ...any) {
+	t.Helper()
+	_, err := get(deniedScope)
+	require.ErrorIs(t, err, store.ErrNotFound, msgAndArgs...)
+	_, err = get(ownerScope)
+	require.NoError(t, err, msgAndArgs...)
+}
+
+// scopeIsoAssertListExcludes calls list(deniedScope), requires forbiddenID
+// absent, THEN calls list(ownerScope) and requires forbiddenID PRESENT — the
+// List-shaped equivalent of scopeIsoAssertGetNotFound: a List that always
+// returns nothing for anyone would otherwise satisfy scopeIsoRequireExcludes
+// vacuously.
+func scopeIsoAssertListExcludes[T any](t *testing.T, list func(store.Scope) ([]T, error), deniedScope, ownerScope store.Scope, forbiddenID uuid.UUID, get func(T) uuid.UUID, msgAndArgs ...any) {
+	t.Helper()
+	items, err := list(deniedScope)
+	require.NoError(t, err, msgAndArgs...)
+	scopeIsoRequireExcludes(t, items, forbiddenID, get, msgAndArgs...)
+	ownItems, err := list(ownerScope)
+	require.NoError(t, err, msgAndArgs...)
+	require.True(t, scopeIsoContainsID(ownItems, forbiddenID, get), msgAndArgs...)
 }
 
 // scopeIsoFixtures is one tenant's worth of data beyond what
@@ -294,6 +575,22 @@ type scopeIsoFixtures struct {
 	icmalImportID uuid.UUID
 
 	deviceID uuid.UUID
+
+	// Fix round 1 additions (task-13b-fix1-findings.md).
+
+	// alarmEventNullAnalyzerID is a company-level alarm event (AnalyzerID
+	// nil) on the SAME alarm as alarmEventID — Important Finding 1: the
+	// alarm_events -> alarms company_id predicate is the ONLY thing that
+	// protects it, since AlarmEventList's NULL-analyzer branch checks
+	// only all_buildings, never company_id directly.
+	alarmEventNullAnalyzerID uuid.UUID
+
+	// companyWideTariffID, companyBillID and unassignedAnalyzerID are
+	// Important Finding 4 / HANDOFF ruling 7 rows: building_id NULL,
+	// visible only to AllBuildings.
+	companyWideTariffID  uuid.UUID
+	companyBillID        uuid.UUID
+	unassignedAnalyzerID uuid.UUID
 }
 
 // scopeIsoInsertIntegrationDefinition inserts one platform-wide
@@ -352,6 +649,21 @@ func seedScopeIsoFixtures(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	// (Task 9-11's own tests already do that). AdminScope reaches both
 	// buildings of the tenant unconditionally.
 	adminScope := tenant.AdminScope
+	companyID := tenant.Company.ID
+
+	// --- unassigned analyzer (Important Finding 4 / HANDOFF ruling 7) ------
+	// building_id NULL: a narrow Scope may never CREATE one (that guard is
+	// Task 9's own), but AdminScope may, and this fixture proves a narrow
+	// Scope can never READ one either.
+	analyzerRepo := postgres.NewAnalyzerRepository(pool)
+	unassigned, err := analyzerRepo.Create(ctx, adminScope, model.Analyzer{
+		CompanyID: companyID, Provider: model.IntegrationProviderOSOS,
+		ProviderSubtype: "scope-iso", InstallationNumber: "SCOPE-ISO-UNASSIGNED-" + tenant.Company.Name,
+		MeterMultiplier: decimal.RequireFromString("1"), IsActive: true,
+		CreatedAt: scopeIsoEpoch, UpdatedAt: scopeIsoEpoch,
+	})
+	require.NoError(t, err)
+	f.unassignedAnalyzerID = unassigned.ID
 
 	// --- sessions, users ----------------------------------------------------
 	sessRepo := postgres.NewSessionRepository(pool)
@@ -367,7 +679,6 @@ func seedScopeIsoFixtures(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 
 	// --- audit ---------------------------------------------------------------
 	auditRepo := postgres.NewAuditRepository(pool)
-	companyID := tenant.Company.ID
 	_, err = auditRepo.Append(ctx, adminScope, model.AuditEntry{
 		CompanyID: &companyID, Action: "scope-iso.seed", EntityType: "fixture", CreatedAt: scopeIsoEpoch,
 	})
@@ -381,6 +692,13 @@ func seedScopeIsoFixtures(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 		readingsRow(f.analyzerID, scopeIsoEpoch, model.ReadingKindLoadProfile, "1000.0000", "1.000000"),
 		readingsRow(f.analyzerID, scopeIsoEpoch.Add(30*time.Minute), model.ReadingKindLoadProfile, "1010.0000", "1.000000"),
 		readingsRow(f.analyzerID, scopeIsoEpoch.Add(time.Hour), model.ReadingKindLoadProfile, "1025.0000", "1.000000"),
+		// Important Finding 2: consumption_yearly proof rows, in a year
+		// (scopeIsoClosedYearEpoch) definitely closed relative to this
+		// phase's clock — scopeIsoEpoch's own year (2026) never is, so the
+		// yearly continuous aggregate would never materialise anything for
+		// it no matter how thoroughly it is refreshed.
+		readingsRow(f.analyzerID, scopeIsoClosedYearEpoch, model.ReadingKindLoadProfile, "2000.0000", "1.000000"),
+		readingsRow(f.analyzerID, scopeIsoClosedYearEpoch.Add(time.Hour), model.ReadingKindLoadProfile, "2010.0000", "1.000000"),
 	})
 	require.NoError(t, err)
 
@@ -431,6 +749,15 @@ func seedScopeIsoFixtures(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	})
 	require.NoError(t, err)
 
+	// Important Finding 4 / HANDOFF ruling 7: a company-wide tariff
+	// (building_id nil) is visible only to AllBuildings; its effective_from
+	// predates every building-specific tariff testfixtures.NewTenant seeds,
+	// so TariffRepository.Effective can fall back to it (see
+	// scopeIsoCompanyWideTariffFrom/On's own doc comment).
+	companyWideTariff, err := tariffRepo.Create(ctx, adminScope, tariffFixtureRow(companyID, nil, scopeIsoCompanyWideTariffFrom))
+	require.NoError(t, err)
+	f.companyWideTariffID = companyWideTariff.ID
+
 	tariffTemplateRepo := postgres.NewTariffTemplateRepository(pool)
 	template, err := tariffTemplateRepo.Create(ctx, adminScope, model.TariffTemplate{
 		CompanyID: companyID, Name: "scope-iso template", Payload: []byte(`{}`), CreatedAt: scopeIsoEpoch, UpdatedAt: scopeIsoEpoch,
@@ -464,6 +791,12 @@ func seedScopeIsoFixtures(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 		{Ts: scopeIsoEpoch, Consumption: billDec("1.0000"), PTF: billDec("2.0000"), Yekdem: billDec("0.5000"), Kbk: billDec("1.0000"), UnitPrice: billDec("3.0000"), Cost: billDec("3.0000")},
 	})
 	require.NoError(t, err)
+
+	// Important Finding 4 / HANDOFF ruling 7: a company-level bill
+	// (building_id AND analyzer_id both nil) is visible only to AllBuildings.
+	companyBill, err := billRepo.Create(ctx, adminScope, billFixtureRow(companyID, nil, nil, model.BillScopeCompany, "2026-01"), nil, nil)
+	require.NoError(t, err)
+	f.companyBillID = companyBill.ID
 
 	// --- reports ---------------------------------------------------------------
 	reportRepo := postgres.NewReportRepository(pool)
@@ -519,6 +852,16 @@ func seedScopeIsoFixtures(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	ev, err := alarmRepo.CreateEvent(ctx, adminScope, model.AlarmEvent{AlarmID: alarm.ID, AnalyzerID: &f.analyzerID, TriggeredAt: scopeIsoEpoch, Message: "scope-iso fired"})
 	require.NoError(t, err)
 	f.alarmEventID = ev.ID
+
+	// Important Finding 1: a NULL-analyzer event (a company-level condition)
+	// on the SAME alarm. AlarmEventList's own query only checks all_buildings
+	// for this branch, never company_id — the alarms-parent company_id
+	// predicate is the ONLY thing that can exclude it cross-tenant, which
+	// f.alarmEventID (analyzer set) cannot prove because the analyzer join's
+	// OWN company_id check shadows it.
+	evNull, err := alarmRepo.CreateEvent(ctx, adminScope, model.AlarmEvent{AlarmID: alarm.ID, AnalyzerID: nil, TriggeredAt: scopeIsoEpoch.Add(time.Minute), Message: "scope-iso null-analyzer fired"})
+	require.NoError(t, err)
+	f.alarmEventNullAnalyzerID = evNull.ID
 
 	// --- files, integrations, smtp (company-only) -----------------------------
 	fileRepo := postgres.NewFileRepository(pool)
@@ -618,6 +961,19 @@ func TestScopeIsolation(t *testing.T) {
 
 	scopeIsoInsertPlatformData(t, ctx, pool)
 
+	// Important Finding 2: consumption_monthly, consumption_yearly and
+	// plant_production_monthly are materialized_only = true — refreshed ONCE
+	// here, after both af and bf are seeded, exactly as
+	// analyticsRefresh (analytics_integration_test.go, same package) does
+	// for its own tests: outside a transaction, via pool.Exec's implicit
+	// autocommit. consumption_monthly's January-2026 bucket (scopeIsoEpoch)
+	// is already closed relative to this phase's clock; consumption_yearly
+	// needs scopeIsoClosedYearEpoch's rows instead (see that var's own doc
+	// comment) since 2026 itself is still the current year.
+	analyticsRefresh(t, ctx, pool, "consumption_monthly")
+	analyticsRefresh(t, ctx, pool, "consumption_yearly")
+	analyticsRefresh(t, ctx, pool, "plant_production_monthly")
+
 	narrowRange := store.TimeRange{From: scopeIsoEpoch, To: scopeIsoEpoch.Add(2 * time.Hour)}
 	invalidScope := store.Scope{}
 
@@ -625,12 +981,14 @@ func TestScopeIsolation(t *testing.T) {
 	t.Run("CompanyRepository", func(t *testing.T) {
 		repo := postgres.NewCompanyRepository(pool)
 
-		_, err := repo.Get(ctx, tenantA.AdminScope, tenantB.Company.ID)
-		require.ErrorIs(t, err, store.ErrNotFound)
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.Company, error) { return repo.Get(ctx, s, tenantB.Company.ID) },
+			tenantA.AdminScope, tenantB.AdminScope, "CompanyRepository.Get cross-tenant")
 
-		list, err := repo.List(ctx, tenantA.AdminScope, store.CompanyFilter{})
-		require.NoError(t, err)
-		scopeIsoRequireExcludes(t, list, tenantB.Company.ID, func(c model.Company) uuid.UUID { return c.ID })
+		scopeIsoAssertListExcludes(t,
+			func(s store.Scope) ([]model.Company, error) { return repo.List(ctx, s, store.CompanyFilter{}) },
+			tenantA.AdminScope, tenantB.AdminScope, tenantB.Company.ID,
+			func(c model.Company) uuid.UUID { return c.ID }, "CompanyRepository.List cross-tenant")
 	})
 
 	// --- UserRepository (company-only) ---------------------------------------
@@ -638,28 +996,35 @@ func TestScopeIsolation(t *testing.T) {
 		repo := postgres.NewUserRepository(pool)
 		theirUser := tenantB.Users[model.UserRoleCompanyAdmin]
 
-		_, err := repo.Get(ctx, tenantA.AdminScope, theirUser.ID)
-		require.ErrorIs(t, err, store.ErrNotFound)
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.User, error) { return repo.Get(ctx, s, theirUser.ID) },
+			tenantA.AdminScope, tenantB.AdminScope, "UserRepository.Get cross-tenant")
 
-		list, err := repo.List(ctx, tenantA.AdminScope, store.UserFilter{})
-		require.NoError(t, err)
-		scopeIsoRequireExcludes(t, list, theirUser.ID, func(u model.User) uuid.UUID { return u.ID })
+		scopeIsoAssertListExcludes(t,
+			func(s store.Scope) ([]model.User, error) { return repo.List(ctx, s, store.UserFilter{}) },
+			tenantA.AdminScope, tenantB.AdminScope, theirUser.ID,
+			func(u model.User) uuid.UUID { return u.ID }, "UserRepository.List cross-tenant")
 
 		hist, err := repo.PasswordHistory(ctx, tenantA.AdminScope, theirUser.ID, 10)
 		require.ErrorIs(t, err, store.ErrNotFound)
 		require.Nil(t, hist)
+		ownHist, err := repo.PasswordHistory(ctx, tenantB.AdminScope, theirUser.ID, 10)
+		require.NoError(t, err, "positive control: tenant B's own AdminScope must read its own user's password history")
+		require.NotEmpty(t, ownHist, "this assertion is vacuous if tenant B's own SetPassword seed never ran")
 	})
 
 	// --- SessionRepository (company-only, joins through users) ---------------
 	t.Run("SessionRepository", func(t *testing.T) {
 		repo := postgres.NewSessionRepository(pool)
 
-		_, err := repo.Get(ctx, tenantA.AdminScope, bf.sessionID)
-		require.ErrorIs(t, err, store.ErrNotFound)
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.Session, error) { return repo.Get(ctx, s, bf.sessionID) },
+			tenantA.AdminScope, tenantB.AdminScope, "SessionRepository.Get cross-tenant")
 
-		list, err := repo.List(ctx, tenantA.AdminScope, store.SessionFilter{})
-		require.NoError(t, err)
-		scopeIsoRequireExcludes(t, list, bf.sessionID, func(s model.Session) uuid.UUID { return s.ID })
+		scopeIsoAssertListExcludes(t,
+			func(s store.Scope) ([]model.Session, error) { return repo.List(ctx, s, store.SessionFilter{}) },
+			tenantA.AdminScope, tenantB.AdminScope, bf.sessionID,
+			func(s model.Session) uuid.UUID { return s.ID }, "SessionRepository.List cross-tenant")
 	})
 
 	// --- AuditRepository (company-only) --------------------------------------
@@ -668,9 +1033,20 @@ func TestScopeIsolation(t *testing.T) {
 
 		list, err := repo.List(ctx, tenantA.AdminScope, store.AuditFilter{})
 		require.NoError(t, err)
+		sawOwn := false
 		for _, e := range list {
+			// Folded Minor 2: CompanyID is nullable (audit_log has no FKs,
+			// per wave-f-context.md ruling 10) — a platform-level entry with
+			// a nil CompanyID must not panic this assertion.
+			if e.CompanyID == nil {
+				continue
+			}
 			require.NotEqual(t, tenantB.Company.ID, *e.CompanyID, "tenant B's audit rows must never appear in tenant A's list")
+			if *e.CompanyID == tenantA.Company.ID {
+				sawOwn = true
+			}
 		}
+		require.True(t, sawOwn, "positive control: tenant A's own AdminScope must see at least one of its own audit rows")
 	})
 
 	// --- BuildingRepository (building-scoped) ---------------------------------
@@ -678,24 +1054,34 @@ func TestScopeIsolation(t *testing.T) {
 		repo := postgres.NewBuildingRepository(pool)
 
 		// cross-tenant
-		_, err := repo.Get(ctx, tenantA.AdminScope, tenantB.Buildings[0].ID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		crossList, err := repo.List(ctx, tenantA.AdminScope, store.BuildingFilter{})
-		require.NoError(t, err)
-		scopeIsoRequireExcludes(t, crossList, tenantB.Buildings[0].ID, func(b model.Building) uuid.UUID { return b.ID })
-		_, err = repo.Contacts(ctx, tenantA.AdminScope, tenantB.Buildings[0].ID)
-		require.ErrorIs(t, err, store.ErrNotFound)
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.Building, error) { return repo.Get(ctx, s, tenantB.Buildings[0].ID) },
+			tenantA.AdminScope, tenantB.AdminScope, "BuildingRepository.Get cross-tenant")
+		scopeIsoAssertListExcludes(t,
+			func(s store.Scope) ([]model.Building, error) { return repo.List(ctx, s, store.BuildingFilter{}) },
+			tenantA.AdminScope, tenantB.AdminScope, tenantB.Buildings[0].ID,
+			func(b model.Building) uuid.UUID { return b.ID }, "BuildingRepository.List cross-tenant")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) ([]model.BuildingContact, error) {
+				return repo.Contacts(ctx, s, tenantB.Buildings[0].ID)
+			},
+			tenantA.AdminScope, tenantB.AdminScope, "BuildingRepository.Contacts cross-tenant")
 
 		// narrow-scope: tenant A's own Buildings[1], outside tenant A's Scope
-		_, err = repo.Get(ctx, tenantA.Scope, tenantA.Buildings[1].ID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		narrowList, err := repo.List(ctx, tenantA.Scope, store.BuildingFilter{})
-		require.NoError(t, err)
-		scopeIsoRequireExcludes(t, narrowList, tenantA.Buildings[1].ID, func(b model.Building) uuid.UUID { return b.ID })
-		_, err = repo.Contacts(ctx, tenantA.Scope, tenantA.Buildings[1].ID)
-		require.ErrorIs(t, err, store.ErrNotFound)
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.Building, error) { return repo.Get(ctx, s, tenantA.Buildings[1].ID) },
+			tenantA.Scope, tenantA.AdminScope, "BuildingRepository.Get narrow-scope")
+		scopeIsoAssertListExcludes(t,
+			func(s store.Scope) ([]model.Building, error) { return repo.List(ctx, s, store.BuildingFilter{}) },
+			tenantA.Scope, tenantA.AdminScope, tenantA.Buildings[1].ID,
+			func(b model.Building) uuid.UUID { return b.ID }, "BuildingRepository.List narrow-scope")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) ([]model.BuildingContact, error) {
+				return repo.Contacts(ctx, s, tenantA.Buildings[1].ID)
+			},
+			tenantA.Scope, tenantA.AdminScope, "BuildingRepository.Contacts narrow-scope")
 
-		_, err = repo.Get(ctx, invalidScope, tenantA.Buildings[0].ID)
+		_, err := repo.Get(ctx, invalidScope, tenantA.Buildings[0].ID)
 		require.ErrorIs(t, err, store.ErrInvalidScope)
 	})
 
@@ -704,40 +1090,72 @@ func TestScopeIsolation(t *testing.T) {
 		repo := postgres.NewAnalyzerRepository(pool)
 		theirAnalyzer := tenantB.Analyzers[0]
 
-		_, err := repo.Get(ctx, tenantA.AdminScope, theirAnalyzer.ID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		_, err = repo.GetByInstallation(ctx, tenantA.AdminScope, theirAnalyzer.Provider, theirAnalyzer.ProviderSubtype, theirAnalyzer.InstallationNumber)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		crossList, err := repo.List(ctx, tenantA.AdminScope, store.AnalyzerFilter{})
-		require.NoError(t, err)
-		scopeIsoRequireExcludes(t, crossList, theirAnalyzer.ID, func(a model.Analyzer) uuid.UUID { return a.ID })
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.Analyzer, error) { return repo.Get(ctx, s, theirAnalyzer.ID) },
+			tenantA.AdminScope, tenantB.AdminScope, "AnalyzerRepository.Get cross-tenant")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.Analyzer, error) {
+				return repo.GetByInstallation(ctx, s, theirAnalyzer.Provider, theirAnalyzer.ProviderSubtype, theirAnalyzer.InstallationNumber)
+			},
+			tenantA.AdminScope, tenantB.AdminScope, "AnalyzerRepository.GetByInstallation cross-tenant")
+		scopeIsoAssertListExcludes(t,
+			func(s store.Scope) ([]model.Analyzer, error) { return repo.List(ctx, s, store.AnalyzerFilter{}) },
+			tenantA.AdminScope, tenantB.AdminScope, theirAnalyzer.ID,
+			func(a model.Analyzer) uuid.UUID { return a.ID }, "AnalyzerRepository.List cross-tenant")
 
 		outsideGrant := tenantA.Analyzers[2] // Buildings[1]
-		_, err = repo.Get(ctx, tenantA.Scope, outsideGrant.ID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		_, err = repo.GetByInstallation(ctx, tenantA.Scope, outsideGrant.Provider, outsideGrant.ProviderSubtype, outsideGrant.InstallationNumber)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		narrowList, err := repo.List(ctx, tenantA.Scope, store.AnalyzerFilter{})
-		require.NoError(t, err)
-		scopeIsoRequireExcludes(t, narrowList, outsideGrant.ID, func(a model.Analyzer) uuid.UUID { return a.ID })
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.Analyzer, error) { return repo.Get(ctx, s, outsideGrant.ID) },
+			tenantA.Scope, tenantA.AdminScope, "AnalyzerRepository.Get narrow-scope")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.Analyzer, error) {
+				return repo.GetByInstallation(ctx, s, outsideGrant.Provider, outsideGrant.ProviderSubtype, outsideGrant.InstallationNumber)
+			},
+			tenantA.Scope, tenantA.AdminScope, "AnalyzerRepository.GetByInstallation narrow-scope")
+		scopeIsoAssertListExcludes(t,
+			func(s store.Scope) ([]model.Analyzer, error) { return repo.List(ctx, s, store.AnalyzerFilter{}) },
+			tenantA.Scope, tenantA.AdminScope, outsideGrant.ID,
+			func(a model.Analyzer) uuid.UUID { return a.ID }, "AnalyzerRepository.List narrow-scope")
+
+		// Important Finding 4 / HANDOFF ruling 7: an unassigned analyzer
+		// (building_id nil) is visible only to AllBuildings.
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.Analyzer, error) { return repo.Get(ctx, s, bf.unassignedAnalyzerID) },
+			tenantA.AdminScope, tenantB.AdminScope, "AnalyzerRepository.Get cross-tenant unassigned analyzer")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.Analyzer, error) { return repo.Get(ctx, s, af.unassignedAnalyzerID) },
+			tenantA.Scope, tenantA.AdminScope, "AnalyzerRepository.Get narrow-scope unassigned analyzer")
+		scopeIsoAssertListExcludes(t,
+			func(s store.Scope) ([]model.Analyzer, error) { return repo.List(ctx, s, store.AnalyzerFilter{}) },
+			tenantA.Scope, tenantA.AdminScope, af.unassignedAnalyzerID,
+			func(a model.Analyzer) uuid.UUID { return a.ID }, "AnalyzerRepository.List narrow-scope unassigned analyzer")
 	})
 
 	// --- PlantRepository (company-only: power_plants has no building_id) -----
 	t.Run("PlantRepository", func(t *testing.T) {
 		repo := postgres.NewPlantRepository(pool)
 
-		_, err := repo.Get(ctx, tenantA.AdminScope, bf.plantID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		list, err := repo.List(ctx, tenantA.AdminScope, store.PlantFilter{})
-		require.NoError(t, err)
-		scopeIsoRequireExcludes(t, list, bf.plantID, func(p model.PowerPlant) uuid.UUID { return p.ID })
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.PowerPlant, error) { return repo.Get(ctx, s, bf.plantID) },
+			tenantA.AdminScope, tenantB.AdminScope, "PlantRepository.Get cross-tenant")
+		scopeIsoAssertListExcludes(t,
+			func(s store.Scope) ([]model.PowerPlant, error) { return repo.List(ctx, s, store.PlantFilter{}) },
+			tenantA.AdminScope, tenantB.AdminScope, bf.plantID,
+			func(p model.PowerPlant) uuid.UUID { return p.ID }, "PlantRepository.List cross-tenant")
 
-		_, err = repo.MonthlyTargets(ctx, tenantA.AdminScope, bf.plantID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		_, err = repo.Devices(ctx, tenantA.AdminScope, bf.plantID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		_, err = repo.AlarmRecipients(ctx, tenantA.AdminScope, bf.plantID)
-		require.ErrorIs(t, err, store.ErrNotFound)
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) ([]model.PlantMonthlyTarget, error) {
+				return repo.MonthlyTargets(ctx, s, bf.plantID)
+			},
+			tenantA.AdminScope, tenantB.AdminScope, "PlantRepository.MonthlyTargets cross-tenant")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) ([]model.PlantDevice, error) { return repo.Devices(ctx, s, bf.plantID) },
+			tenantA.AdminScope, tenantB.AdminScope, "PlantRepository.Devices cross-tenant")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) ([]model.PlantAlarmRecipient, error) {
+				return repo.AlarmRecipients(ctx, s, bf.plantID)
+			},
+			tenantA.AdminScope, tenantB.AdminScope, "PlantRepository.AlarmRecipients cross-tenant")
 	})
 
 	// --- ReadingRepository (building-scoped via analyzers) --------------------
@@ -746,17 +1164,41 @@ func TestScopeIsolation(t *testing.T) {
 
 		_, err := repo.Range(ctx, tenantA.AdminScope, bf.analyzerID, narrowRange, model.ReadingKindLoadProfile)
 		require.ErrorIs(t, err, store.ErrNotFound)
+		ownRange, err := repo.Range(ctx, tenantB.AdminScope, bf.analyzerID, narrowRange, model.ReadingKindLoadProfile)
+		require.NoError(t, err)
+		require.NotEmpty(t, ownRange, "positive control")
+
 		_, _, err = repo.BoundaryReadings(ctx, tenantA.AdminScope, bf.analyzerID, model.ReadingKindLoadProfile, bf.readingsFrom, bf.readingsTo)
 		require.ErrorIs(t, err, store.ErrNotFound)
+		ownStart, ownEnd, err := repo.BoundaryReadings(ctx, tenantB.AdminScope, bf.analyzerID, model.ReadingKindLoadProfile, bf.readingsFrom, bf.readingsTo)
+		require.NoError(t, err)
+		require.NotNil(t, ownStart)
+		require.NotNil(t, ownEnd)
+
 		_, err = repo.Latest(ctx, tenantA.AdminScope, bf.analyzerID, narrowRange, model.ReadingKindLoadProfile)
 		require.ErrorIs(t, err, store.ErrNotFound)
+		ownLatest, err := repo.Latest(ctx, tenantB.AdminScope, bf.analyzerID, narrowRange, model.ReadingKindLoadProfile)
+		require.NoError(t, err)
+		require.NotNil(t, ownLatest)
 
 		_, err = repo.Range(ctx, tenantA.Scope, af.analyzerID, narrowRange, model.ReadingKindLoadProfile)
 		require.ErrorIs(t, err, store.ErrNotFound)
+		ownNarrowRange, err := repo.Range(ctx, tenantA.AdminScope, af.analyzerID, narrowRange, model.ReadingKindLoadProfile)
+		require.NoError(t, err)
+		require.NotEmpty(t, ownNarrowRange, "positive control")
+
 		_, _, err = repo.BoundaryReadings(ctx, tenantA.Scope, af.analyzerID, model.ReadingKindLoadProfile, af.readingsFrom, af.readingsTo)
 		require.ErrorIs(t, err, store.ErrNotFound)
+		ownNarrowStart, ownNarrowEnd, err := repo.BoundaryReadings(ctx, tenantA.AdminScope, af.analyzerID, model.ReadingKindLoadProfile, af.readingsFrom, af.readingsTo)
+		require.NoError(t, err)
+		require.NotNil(t, ownNarrowStart)
+		require.NotNil(t, ownNarrowEnd)
+
 		_, err = repo.Latest(ctx, tenantA.Scope, af.analyzerID, narrowRange, model.ReadingKindLoadProfile)
 		require.ErrorIs(t, err, store.ErrNotFound)
+		ownNarrowLatest, err := repo.Latest(ctx, tenantA.AdminScope, af.analyzerID, narrowRange, model.ReadingKindLoadProfile)
+		require.NoError(t, err)
+		require.NotNil(t, ownNarrowLatest)
 	})
 
 	// --- CursorRepository (building-scoped via analyzers) ----------------------
@@ -765,15 +1207,27 @@ func TestScopeIsolation(t *testing.T) {
 
 		_, err := repo.Get(ctx, tenantA.AdminScope, bf.analyzerID, bf.cursorKind)
 		require.ErrorIs(t, err, store.ErrNotFound)
+		_, err = repo.Get(ctx, tenantB.AdminScope, bf.analyzerID, bf.cursorKind)
+		require.NoError(t, err, "positive control")
+
 		crossList, err := repo.List(ctx, tenantA.AdminScope, []uuid.UUID{bf.analyzerID})
 		require.NoError(t, err)
 		require.Empty(t, crossList, "an analyzer id not visible to the Scope contributes no rows to List")
+		ownCrossList, err := repo.List(ctx, tenantB.AdminScope, []uuid.UUID{bf.analyzerID})
+		require.NoError(t, err)
+		require.NotEmpty(t, ownCrossList, "positive control")
 
 		_, err = repo.Get(ctx, tenantA.Scope, af.analyzerID, af.cursorKind)
 		require.ErrorIs(t, err, store.ErrNotFound)
+		_, err = repo.Get(ctx, tenantA.AdminScope, af.analyzerID, af.cursorKind)
+		require.NoError(t, err, "positive control")
+
 		narrowList, err := repo.List(ctx, tenantA.Scope, []uuid.UUID{af.analyzerID})
 		require.NoError(t, err)
 		require.Empty(t, narrowList)
+		ownNarrowList, err := repo.List(ctx, tenantA.AdminScope, []uuid.UUID{af.analyzerID})
+		require.NoError(t, err)
+		require.NotEmpty(t, ownNarrowList, "positive control")
 	})
 
 	// --- AnomalyRepository (building-scoped via analyzers) ----------------------
@@ -782,15 +1236,27 @@ func TestScopeIsolation(t *testing.T) {
 
 		_, err := repo.Get(ctx, tenantA.AdminScope, bf.anomalyID)
 		require.ErrorIs(t, err, store.ErrNotFound)
+		_, err = repo.Get(ctx, tenantB.AdminScope, bf.anomalyID)
+		require.NoError(t, err, "positive control")
+
 		crossList, err := repo.List(ctx, tenantA.AdminScope, store.AnomalyFilter{AnalyzerIDs: []uuid.UUID{bf.analyzerID}})
 		require.NoError(t, err)
 		require.Empty(t, crossList)
+		ownCrossList, err := repo.List(ctx, tenantB.AdminScope, store.AnomalyFilter{AnalyzerIDs: []uuid.UUID{bf.analyzerID}})
+		require.NoError(t, err)
+		require.NotEmpty(t, ownCrossList, "positive control")
 
 		_, err = repo.Get(ctx, tenantA.Scope, af.anomalyID)
 		require.ErrorIs(t, err, store.ErrNotFound)
+		_, err = repo.Get(ctx, tenantA.AdminScope, af.anomalyID)
+		require.NoError(t, err, "positive control")
+
 		narrowList, err := repo.List(ctx, tenantA.Scope, store.AnomalyFilter{AnalyzerIDs: []uuid.UUID{af.analyzerID}})
 		require.NoError(t, err)
 		require.Empty(t, narrowList)
+		ownNarrowList, err := repo.List(ctx, tenantA.AdminScope, store.AnomalyFilter{AnalyzerIDs: []uuid.UUID{af.analyzerID}})
+		require.NoError(t, err)
+		require.NotEmpty(t, ownNarrowList, "positive control")
 	})
 
 	// --- ProductionRepository (company-only via power_plants) -------------------
@@ -799,8 +1265,15 @@ func TestScopeIsolation(t *testing.T) {
 
 		_, err := repo.Range(ctx, tenantA.AdminScope, bf.plantID, narrowRange)
 		require.ErrorIs(t, err, store.ErrNotFound)
+		ownRange, err := repo.Range(ctx, tenantB.AdminScope, bf.plantID, narrowRange)
+		require.NoError(t, err)
+		require.NotEmpty(t, ownRange, "positive control")
+
 		_, err = repo.Latest(ctx, tenantA.AdminScope, bf.plantID, narrowRange)
 		require.ErrorIs(t, err, store.ErrNotFound)
+		ownLatest, err := repo.Latest(ctx, tenantB.AdminScope, bf.plantID, narrowRange)
+		require.NoError(t, err)
+		require.NotNil(t, ownLatest)
 	})
 
 	// --- AnalyticsRepository (Consumption* building-scoped, Production*
@@ -808,31 +1281,88 @@ func TestScopeIsolation(t *testing.T) {
 	t.Run("AnalyticsRepository", func(t *testing.T) {
 		repo := postgres.NewAnalyticsRepository(pool)
 
+		// Important Finding 2: daily/monthly/yearly buckets are
+		// Europe/Istanbul-LOCAL instants (migration 00005) — narrowRange's
+		// [00:00,02:00) UTC window never overlaps the actual bucket instant
+		// (which can start the PREVIOUS UTC day), so every window below is
+		// widened by a day on each side instead, exactly as
+		// analytics_integration_test.go's own tests do. Only hourly has no
+		// timezone dependence and can keep narrowRange.
+		dailyRange := store.TimeRange{From: scopeIsoEpoch.Add(-24 * time.Hour), To: scopeIsoEpoch.Add(48 * time.Hour)}
+		monthRange := store.TimeRange{From: scopeIsoEpoch.Add(-24 * time.Hour), To: scopeIsoEpoch.AddDate(0, 1, 0).Add(24 * time.Hour)}
+		yearRange := store.TimeRange{From: scopeIsoClosedYearEpoch.Add(-24 * time.Hour), To: scopeIsoClosedYearEpoch.AddDate(1, 0, 0).Add(24 * time.Hour)}
+
 		crossHourly, err := repo.ConsumptionHourly(ctx, tenantA.AdminScope, []uuid.UUID{bf.analyzerID}, narrowRange)
 		require.NoError(t, err)
 		require.Empty(t, crossHourly)
-		crossDaily, err := repo.ConsumptionDaily(ctx, tenantA.AdminScope, []uuid.UUID{bf.analyzerID}, narrowRange)
+		ownHourly, err := repo.ConsumptionHourly(ctx, tenantB.AdminScope, []uuid.UUID{bf.analyzerID}, narrowRange)
+		require.NoError(t, err)
+		require.NotEmpty(t, ownHourly, "positive control: tenant B's own AdminScope must see its own hourly bucket")
+
+		crossDaily, err := repo.ConsumptionDaily(ctx, tenantA.AdminScope, []uuid.UUID{bf.analyzerID}, dailyRange)
 		require.NoError(t, err)
 		require.Empty(t, crossDaily)
-		crossMonthly, err := repo.ConsumptionMonthly(ctx, tenantA.AdminScope, []uuid.UUID{bf.analyzerID}, narrowRange)
+		ownDaily, err := repo.ConsumptionDaily(ctx, tenantB.AdminScope, []uuid.UUID{bf.analyzerID}, dailyRange)
+		require.NoError(t, err)
+		require.NotEmpty(t, ownDaily, "positive control: tenant B's own AdminScope must see its own daily bucket")
+
+		crossMonthly, err := repo.ConsumptionMonthly(ctx, tenantA.AdminScope, []uuid.UUID{bf.analyzerID}, monthRange)
 		require.NoError(t, err)
 		require.Empty(t, crossMonthly)
-		crossYearly, err := repo.ConsumptionYearly(ctx, tenantA.AdminScope, []uuid.UUID{bf.analyzerID}, narrowRange)
+		ownMonthly, err := repo.ConsumptionMonthly(ctx, tenantB.AdminScope, []uuid.UUID{bf.analyzerID}, monthRange)
+		require.NoError(t, err)
+		require.NotEmpty(t, ownMonthly, "positive control: tenant B's own AdminScope must see its own monthly bucket")
+
+		crossYearly, err := repo.ConsumptionYearly(ctx, tenantA.AdminScope, []uuid.UUID{bf.analyzerID}, yearRange)
 		require.NoError(t, err)
 		require.Empty(t, crossYearly)
-		crossProdDaily, err := repo.ProductionDaily(ctx, tenantA.AdminScope, []uuid.UUID{bf.plantID}, narrowRange)
+		ownYearly, err := repo.ConsumptionYearly(ctx, tenantB.AdminScope, []uuid.UUID{bf.analyzerID}, yearRange)
+		require.NoError(t, err)
+		require.NotEmpty(t, ownYearly, "positive control: tenant B's own AdminScope must see its own yearly bucket")
+
+		crossProdDaily, err := repo.ProductionDaily(ctx, tenantA.AdminScope, []uuid.UUID{bf.plantID}, dailyRange)
 		require.NoError(t, err)
 		require.Empty(t, crossProdDaily)
-		crossProdMonthly, err := repo.ProductionMonthly(ctx, tenantA.AdminScope, []uuid.UUID{bf.plantID}, narrowRange)
+		ownProdDaily, err := repo.ProductionDaily(ctx, tenantB.AdminScope, []uuid.UUID{bf.plantID}, dailyRange)
+		require.NoError(t, err)
+		require.NotEmpty(t, ownProdDaily, "positive control: tenant B's own AdminScope must see its own production daily bucket")
+
+		crossProdMonthly, err := repo.ProductionMonthly(ctx, tenantA.AdminScope, []uuid.UUID{bf.plantID}, monthRange)
 		require.NoError(t, err)
 		require.Empty(t, crossProdMonthly)
+		ownProdMonthly, err := repo.ProductionMonthly(ctx, tenantB.AdminScope, []uuid.UUID{bf.plantID}, monthRange)
+		require.NoError(t, err)
+		require.NotEmpty(t, ownProdMonthly, "positive control: tenant B's own AdminScope must see its own production monthly bucket")
 
 		narrowHourly, err := repo.ConsumptionHourly(ctx, tenantA.Scope, []uuid.UUID{af.analyzerID}, narrowRange)
 		require.NoError(t, err)
 		require.Empty(t, narrowHourly, "Buildings[1]'s analyzer must be invisible to the narrow Scope")
-		narrowDaily, err := repo.ConsumptionDaily(ctx, tenantA.Scope, []uuid.UUID{af.analyzerID}, narrowRange)
+		ownNarrowHourly, err := repo.ConsumptionHourly(ctx, tenantA.AdminScope, []uuid.UUID{af.analyzerID}, narrowRange)
+		require.NoError(t, err)
+		require.NotEmpty(t, ownNarrowHourly, "positive control: tenant A's own AdminScope must see Buildings[1]'s hourly bucket")
+
+		narrowDaily, err := repo.ConsumptionDaily(ctx, tenantA.Scope, []uuid.UUID{af.analyzerID}, dailyRange)
 		require.NoError(t, err)
 		require.Empty(t, narrowDaily)
+		ownNarrowDaily, err := repo.ConsumptionDaily(ctx, tenantA.AdminScope, []uuid.UUID{af.analyzerID}, dailyRange)
+		require.NoError(t, err)
+		require.NotEmpty(t, ownNarrowDaily, "positive control: tenant A's own AdminScope must see Buildings[1]'s daily bucket")
+
+		// Important Finding 2: ConsumptionMonthly/Yearly had NO narrow-scope
+		// case at all before this fix.
+		narrowMonthly, err := repo.ConsumptionMonthly(ctx, tenantA.Scope, []uuid.UUID{af.analyzerID}, monthRange)
+		require.NoError(t, err)
+		require.Empty(t, narrowMonthly, "Buildings[1]'s analyzer must be invisible to the narrow Scope")
+		ownNarrowMonthly, err := repo.ConsumptionMonthly(ctx, tenantA.AdminScope, []uuid.UUID{af.analyzerID}, monthRange)
+		require.NoError(t, err)
+		require.NotEmpty(t, ownNarrowMonthly, "positive control: tenant A's own AdminScope must see Buildings[1]'s monthly bucket")
+
+		narrowYearly, err := repo.ConsumptionYearly(ctx, tenantA.Scope, []uuid.UUID{af.analyzerID}, yearRange)
+		require.NoError(t, err)
+		require.Empty(t, narrowYearly, "Buildings[1]'s analyzer must be invisible to the narrow Scope")
+		ownNarrowYearly, err := repo.ConsumptionYearly(ctx, tenantA.AdminScope, []uuid.UUID{af.analyzerID}, yearRange)
+		require.NoError(t, err)
+		require.NotEmpty(t, ownNarrowYearly, "positive control: tenant A's own AdminScope must see Buildings[1]'s yearly bucket")
 	})
 
 	// --- PriceRepository (platform-wide: Scope narrows nothing) -----------------
@@ -850,6 +1380,16 @@ func TestScopeIsolation(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, len(fromA), len(fromB), "a platform table must return the identical rows under either tenant's Scope")
 		require.NotEmpty(t, fromA, "this assertion is vacuous if the platform seed produced no rows")
+
+		// Folded Minor 4: Yekdem itself was only ever exercised with an
+		// invalid Scope before this fix — never proven to return the SAME
+		// row under either tenant's Scope.
+		yekA, err := repo.Yekdem(ctx, tenantA.Scope, 2026, 1)
+		require.NoError(t, err)
+		yekB, err := repo.Yekdem(ctx, tenantB.Scope, 2026, 1)
+		require.NoError(t, err)
+		require.True(t, yekA.Value.Equal(yekB.Value), "a platform table must return the identical row under either tenant's Scope")
+		require.True(t, yekA.FetchedAt.Equal(yekB.FetchedAt))
 	})
 
 	// --- ForecastRepository (building-scoped via analyzers) -----------------------
@@ -858,70 +1398,137 @@ func TestScopeIsolation(t *testing.T) {
 
 		_, err := repo.Range(ctx, tenantA.AdminScope, bf.analyzerID, narrowRange)
 		require.ErrorIs(t, err, store.ErrNotFound)
+		ownRange, err := repo.Range(ctx, tenantB.AdminScope, bf.analyzerID, narrowRange)
+		require.NoError(t, err)
+		require.NotEmpty(t, ownRange, "positive control")
+
 		_, err = repo.LatestRun(ctx, tenantA.AdminScope, bf.analyzerID, narrowRange)
 		require.ErrorIs(t, err, store.ErrNotFound)
+		ownLatestRun, err := repo.LatestRun(ctx, tenantB.AdminScope, bf.analyzerID, narrowRange)
+		require.NoError(t, err)
+		require.NotEmpty(t, ownLatestRun, "positive control")
+
 		_, err = repo.Gaps(ctx, tenantA.AdminScope, bf.analyzerID, bf.forecastGeneratedAt)
 		require.ErrorIs(t, err, store.ErrNotFound)
+		ownGaps, err := repo.Gaps(ctx, tenantB.AdminScope, bf.analyzerID, bf.forecastGeneratedAt)
+		require.NoError(t, err)
+		require.NotEmpty(t, ownGaps, "positive control")
 
 		_, err = repo.Range(ctx, tenantA.Scope, af.analyzerID, narrowRange)
 		require.ErrorIs(t, err, store.ErrNotFound)
+		ownNarrowRange, err := repo.Range(ctx, tenantA.AdminScope, af.analyzerID, narrowRange)
+		require.NoError(t, err)
+		require.NotEmpty(t, ownNarrowRange, "positive control")
+
 		_, err = repo.LatestRun(ctx, tenantA.Scope, af.analyzerID, narrowRange)
 		require.ErrorIs(t, err, store.ErrNotFound)
+		ownNarrowLatestRun, err := repo.LatestRun(ctx, tenantA.AdminScope, af.analyzerID, narrowRange)
+		require.NoError(t, err)
+		require.NotEmpty(t, ownNarrowLatestRun, "positive control")
+
 		_, err = repo.Gaps(ctx, tenantA.Scope, af.analyzerID, af.forecastGeneratedAt)
 		require.ErrorIs(t, err, store.ErrNotFound)
+		ownNarrowGaps, err := repo.Gaps(ctx, tenantA.AdminScope, af.analyzerID, af.forecastGeneratedAt)
+		require.NoError(t, err)
+		require.NotEmpty(t, ownNarrowGaps, "positive control")
 	})
 
 	// --- TariffRepository (building-scoped) ----------------------------------------
 	t.Run("TariffRepository", func(t *testing.T) {
 		repo := postgres.NewTariffRepository(pool)
 
-		_, err := repo.Get(ctx, tenantA.AdminScope, bf.tariffID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		crossList, err := repo.List(ctx, tenantA.AdminScope, store.TariffFilter{})
-		require.NoError(t, err)
-		scopeIsoRequireExcludes(t, crossList, bf.tariffID, func(tar model.Tariff) uuid.UUID { return tar.ID })
-		_, err = repo.Effective(ctx, tenantA.AdminScope, bf.buildingID, scopeIsoEpoch.Add(time.Hour))
-		require.ErrorIs(t, err, store.ErrNotFound)
-		_, err = repo.Taxes(ctx, tenantA.AdminScope, bf.tariffID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		_, err = repo.ManualYekdem(ctx, tenantA.AdminScope, bf.tariffID)
-		require.ErrorIs(t, err, store.ErrNotFound)
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.Tariff, error) { return repo.Get(ctx, s, bf.tariffID) },
+			tenantA.AdminScope, tenantB.AdminScope, "TariffRepository.Get cross-tenant")
+		scopeIsoAssertListExcludes(t,
+			func(s store.Scope) ([]model.Tariff, error) { return repo.List(ctx, s, store.TariffFilter{}) },
+			tenantA.AdminScope, tenantB.AdminScope, bf.tariffID,
+			func(tar model.Tariff) uuid.UUID { return tar.ID }, "TariffRepository.List cross-tenant")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.Tariff, error) {
+				return repo.Effective(ctx, s, bf.buildingID, scopeIsoEpoch.Add(time.Hour))
+			},
+			tenantA.AdminScope, tenantB.AdminScope, "TariffRepository.Effective cross-tenant")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) ([]model.TariffTax, error) { return repo.Taxes(ctx, s, bf.tariffID) },
+			tenantA.AdminScope, tenantB.AdminScope, "TariffRepository.Taxes cross-tenant")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) ([]model.TariffManualYekdem, error) { return repo.ManualYekdem(ctx, s, bf.tariffID) },
+			tenantA.AdminScope, tenantB.AdminScope, "TariffRepository.ManualYekdem cross-tenant")
+		// Important Finding 4: tenant B's company-wide tariff must be
+		// invisible even to tenant A's AdminScope — company_id, not the
+		// building branch, is what protects it here.
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.Tariff, error) { return repo.Get(ctx, s, bf.companyWideTariffID) },
+			tenantA.AdminScope, tenantB.AdminScope, "TariffRepository.Get cross-tenant company-wide")
 
-		_, err = repo.Get(ctx, tenantA.Scope, af.tariffID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		narrowList, err := repo.List(ctx, tenantA.Scope, store.TariffFilter{})
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.Tariff, error) { return repo.Get(ctx, s, af.tariffID) },
+			tenantA.Scope, tenantA.AdminScope, "TariffRepository.Get narrow-scope")
+		scopeIsoAssertListExcludes(t,
+			func(s store.Scope) ([]model.Tariff, error) { return repo.List(ctx, s, store.TariffFilter{}) },
+			tenantA.Scope, tenantA.AdminScope, af.tariffID,
+			func(tar model.Tariff) uuid.UUID { return tar.ID }, "TariffRepository.List narrow-scope")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.Tariff, error) {
+				return repo.Effective(ctx, s, af.buildingID, scopeIsoEpoch.Add(time.Hour))
+			},
+			tenantA.Scope, tenantA.AdminScope, "TariffRepository.Effective narrow-scope")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) ([]model.TariffTax, error) { return repo.Taxes(ctx, s, af.tariffID) },
+			tenantA.Scope, tenantA.AdminScope, "TariffRepository.Taxes narrow-scope")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) ([]model.TariffManualYekdem, error) { return repo.ManualYekdem(ctx, s, af.tariffID) },
+			tenantA.Scope, tenantA.AdminScope, "TariffRepository.ManualYekdem narrow-scope")
+
+		// Important Finding 4 / HANDOFF ruling 7: a company-wide tariff
+		// (building_id nil) is visible only to AllBuildings; Effective still
+		// resolves it for a building the narrow Scope DOES grant, when no
+		// building-specific tariff is effective yet — the documented
+		// exception (see scopeIsoCompanyWideTariffFrom/On's own doc comment).
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.Tariff, error) { return repo.Get(ctx, s, af.companyWideTariffID) },
+			tenantA.Scope, tenantA.AdminScope, "TariffRepository.Get narrow-scope company-wide")
+		narrowListExcludesCompanyWide, err := repo.List(ctx, tenantA.Scope, store.TariffFilter{})
 		require.NoError(t, err)
-		scopeIsoRequireExcludes(t, narrowList, af.tariffID, func(tar model.Tariff) uuid.UUID { return tar.ID })
-		_, err = repo.Effective(ctx, tenantA.Scope, af.buildingID, scopeIsoEpoch.Add(time.Hour))
-		require.ErrorIs(t, err, store.ErrNotFound)
-		_, err = repo.Taxes(ctx, tenantA.Scope, af.tariffID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		_, err = repo.ManualYekdem(ctx, tenantA.Scope, af.tariffID)
-		require.ErrorIs(t, err, store.ErrNotFound)
+		scopeIsoRequireExcludes(t, narrowListExcludesCompanyWide, af.companyWideTariffID, func(tar model.Tariff) uuid.UUID { return tar.ID })
+
+		resolved, err := repo.Effective(ctx, tenantA.Scope, tenantA.Buildings[0].ID, scopeIsoCompanyWideTariffOn)
+		require.NoError(t, err, "Effective must resolve the company-wide tariff for a building the narrow Scope DOES grant")
+		require.Equal(t, af.companyWideTariffID, resolved.ID)
 	})
 
 	// --- TariffTemplateRepository (company-only) ------------------------------------
 	t.Run("TariffTemplateRepository", func(t *testing.T) {
 		repo := postgres.NewTariffTemplateRepository(pool)
 
-		_, err := repo.Get(ctx, tenantA.AdminScope, bf.tariffTemplateID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		list, err := repo.List(ctx, tenantA.AdminScope, store.TariffTemplateFilter{})
-		require.NoError(t, err)
-		scopeIsoRequireExcludes(t, list, bf.tariffTemplateID, func(tt model.TariffTemplate) uuid.UUID { return tt.ID })
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.TariffTemplate, error) { return repo.Get(ctx, s, bf.tariffTemplateID) },
+			tenantA.AdminScope, tenantB.AdminScope, "TariffTemplateRepository.Get cross-tenant")
+		scopeIsoAssertListExcludes(t,
+			func(s store.Scope) ([]model.TariffTemplate, error) {
+				return repo.List(ctx, s, store.TariffTemplateFilter{})
+			},
+			tenantA.AdminScope, tenantB.AdminScope, bf.tariffTemplateID,
+			func(tt model.TariffTemplate) uuid.UUID { return tt.ID }, "TariffTemplateRepository.List cross-tenant")
 	})
 
 	// --- SolarTariffRepository (company-only, prices a plant) ------------------------
 	t.Run("SolarTariffRepository", func(t *testing.T) {
 		repo := postgres.NewSolarTariffRepository(pool)
 
-		_, err := repo.Get(ctx, tenantA.AdminScope, bf.solarTariffID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		list, err := repo.List(ctx, tenantA.AdminScope, store.SolarTariffFilter{})
-		require.NoError(t, err)
-		scopeIsoRequireExcludes(t, list, bf.solarTariffID, func(st model.SolarTariff) uuid.UUID { return st.ID })
-		_, err = repo.Effective(ctx, tenantA.AdminScope, bf.plantID, scopeIsoEpoch.Add(time.Hour))
-		require.ErrorIs(t, err, store.ErrNotFound)
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.SolarTariff, error) { return repo.Get(ctx, s, bf.solarTariffID) },
+			tenantA.AdminScope, tenantB.AdminScope, "SolarTariffRepository.Get cross-tenant")
+		scopeIsoAssertListExcludes(t,
+			func(s store.Scope) ([]model.SolarTariff, error) { return repo.List(ctx, s, store.SolarTariffFilter{}) },
+			tenantA.AdminScope, tenantB.AdminScope, bf.solarTariffID,
+			func(st model.SolarTariff) uuid.UUID { return st.ID }, "SolarTariffRepository.List cross-tenant")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.SolarTariff, error) {
+				return repo.Effective(ctx, s, bf.plantID, scopeIsoEpoch.Add(time.Hour))
+			},
+			tenantA.AdminScope, tenantB.AdminScope, "SolarTariffRepository.Effective cross-tenant")
 	})
 
 	// --- NationalTariffRepository (platform-wide) --------------------------------------
@@ -937,87 +1544,176 @@ func TestScopeIsolation(t *testing.T) {
 		require.NoError(t, err)
 		require.NotEmpty(t, fromA)
 		require.Equal(t, len(fromA), len(fromB))
+
+		// Important Finding 3: Effective was never exercised at all before
+		// this fix — platform-wide (no company_id), so isolation is
+		// invalid-scope rejection plus identical resolution under either
+		// tenant's Scope.
+		_, err = repo.Effective(ctx, invalidScope, model.UserGroupCommercial, model.VoltageLevelLV, model.TariffTermMonomial, scopeIsoEpoch)
+		require.ErrorIs(t, err, store.ErrInvalidScope)
+
+		effA, err := repo.Effective(ctx, tenantA.Scope, model.UserGroupCommercial, model.VoltageLevelLV, model.TariffTermMonomial, scopeIsoEpoch)
+		require.NoError(t, err)
+		effB, err := repo.Effective(ctx, tenantB.AdminScope, model.UserGroupCommercial, model.VoltageLevelLV, model.TariffTermMonomial, scopeIsoEpoch)
+		require.NoError(t, err)
+		require.Equal(t, effA.ID, effB.ID, "both tenants must resolve the identical national tariff row")
 	})
 
 	// --- IcmalRepository (company-only import, building-tagged rows) -------------------
 	t.Run("IcmalRepository", func(t *testing.T) {
 		repo := postgres.NewIcmalRepository(pool)
 
-		_, err := repo.GetImport(ctx, tenantA.AdminScope, bf.icmalImportID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		list, err := repo.ListImports(ctx, tenantA.AdminScope, store.IcmalFilter{})
-		require.NoError(t, err)
-		scopeIsoRequireExcludes(t, list, bf.icmalImportID, func(i model.IcmalImport) uuid.UUID { return i.ID })
-		_, err = repo.ListRows(ctx, tenantA.AdminScope, bf.icmalImportID, store.Page{})
-		require.ErrorIs(t, err, store.ErrNotFound)
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.IcmalImport, error) { return repo.GetImport(ctx, s, bf.icmalImportID) },
+			tenantA.AdminScope, tenantB.AdminScope, "IcmalRepository.GetImport cross-tenant")
+		scopeIsoAssertListExcludes(t,
+			func(s store.Scope) ([]model.IcmalImport, error) { return repo.ListImports(ctx, s, store.IcmalFilter{}) },
+			tenantA.AdminScope, tenantB.AdminScope, bf.icmalImportID,
+			func(i model.IcmalImport) uuid.UUID { return i.ID }, "IcmalRepository.ListImports cross-tenant")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) ([]model.IcmalRow, error) {
+				return repo.ListRows(ctx, s, bf.icmalImportID, store.Page{})
+			},
+			tenantA.AdminScope, tenantB.AdminScope, "IcmalRepository.ListRows cross-tenant")
 	})
 
 	// --- BillRepository (building-scoped, with several no-company_id children) --------
 	t.Run("BillRepository", func(t *testing.T) {
 		repo := postgres.NewBillRepository(pool)
 
-		_, err := repo.Get(ctx, tenantA.AdminScope, bf.billID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		crossList, err := repo.List(ctx, tenantA.AdminScope, store.BillFilter{})
-		require.NoError(t, err)
-		scopeIsoRequireExcludes(t, crossList, bf.billID, func(b model.Bill) uuid.UUID { return b.ID })
-		_, err = repo.Current(ctx, tenantA.AdminScope, model.BillScopeBuilding, bf.buildingID, "2026-01")
-		require.ErrorIs(t, err, store.ErrNotFound)
-		_, err = repo.Lines(ctx, tenantA.AdminScope, bf.billID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		_, err = repo.Members(ctx, tenantA.AdminScope, bf.billID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		_, err = repo.HourlyDetail(ctx, tenantA.AdminScope, bf.billID)
-		require.ErrorIs(t, err, store.ErrNotFound)
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.Bill, error) { return repo.Get(ctx, s, bf.billID) },
+			tenantA.AdminScope, tenantB.AdminScope, "BillRepository.Get cross-tenant")
+		scopeIsoAssertListExcludes(t,
+			func(s store.Scope) ([]model.Bill, error) { return repo.List(ctx, s, store.BillFilter{}) },
+			tenantA.AdminScope, tenantB.AdminScope, bf.billID,
+			func(b model.Bill) uuid.UUID { return b.ID }, "BillRepository.List cross-tenant")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.Bill, error) {
+				return repo.Current(ctx, s, model.BillScopeBuilding, bf.buildingID, "2026-01")
+			},
+			tenantA.AdminScope, tenantB.AdminScope, "BillRepository.Current cross-tenant")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) ([]model.BillLine, error) { return repo.Lines(ctx, s, bf.billID) },
+			tenantA.AdminScope, tenantB.AdminScope, "BillRepository.Lines cross-tenant")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) ([]model.BillMember, error) { return repo.Members(ctx, s, bf.billID) },
+			tenantA.AdminScope, tenantB.AdminScope, "BillRepository.Members cross-tenant")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) ([]model.BillHourlyDetail, error) { return repo.HourlyDetail(ctx, s, bf.billID) },
+			tenantA.AdminScope, tenantB.AdminScope, "BillRepository.HourlyDetail cross-tenant")
+		// Important Finding 4: tenant B's company-level bill must be
+		// invisible even to tenant A's AdminScope.
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.Bill, error) { return repo.Get(ctx, s, bf.companyBillID) },
+			tenantA.AdminScope, tenantB.AdminScope, "BillRepository.Get cross-tenant company-level")
 
-		_, err = repo.Get(ctx, tenantA.Scope, af.billID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		narrowList, err := repo.List(ctx, tenantA.Scope, store.BillFilter{})
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.Bill, error) { return repo.Get(ctx, s, af.billID) },
+			tenantA.Scope, tenantA.AdminScope, "BillRepository.Get narrow-scope")
+		scopeIsoAssertListExcludes(t,
+			func(s store.Scope) ([]model.Bill, error) { return repo.List(ctx, s, store.BillFilter{}) },
+			tenantA.Scope, tenantA.AdminScope, af.billID,
+			func(b model.Bill) uuid.UUID { return b.ID }, "BillRepository.List narrow-scope")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.Bill, error) {
+				return repo.Current(ctx, s, model.BillScopeBuilding, af.buildingID, "2026-01")
+			},
+			tenantA.Scope, tenantA.AdminScope, "BillRepository.Current narrow-scope")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) ([]model.BillLine, error) { return repo.Lines(ctx, s, af.billID) },
+			tenantA.Scope, tenantA.AdminScope, "BillRepository.Lines narrow-scope")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) ([]model.BillMember, error) { return repo.Members(ctx, s, af.billID) },
+			tenantA.Scope, tenantA.AdminScope, "BillRepository.Members narrow-scope")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) ([]model.BillHourlyDetail, error) { return repo.HourlyDetail(ctx, s, af.billID) },
+			tenantA.Scope, tenantA.AdminScope, "BillRepository.HourlyDetail narrow-scope")
+
+		// Important Finding 4 / HANDOFF ruling 7: a company-level bill
+		// (building_id AND analyzer_id both nil) is visible only to
+		// AllBuildings.
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.Bill, error) { return repo.Get(ctx, s, af.companyBillID) },
+			tenantA.Scope, tenantA.AdminScope, "BillRepository.Get narrow-scope company-level")
+		narrowListExcludesCompanyBill, err := repo.List(ctx, tenantA.Scope, store.BillFilter{})
 		require.NoError(t, err)
-		scopeIsoRequireExcludes(t, narrowList, af.billID, func(b model.Bill) uuid.UUID { return b.ID })
-		_, err = repo.Current(ctx, tenantA.Scope, model.BillScopeBuilding, af.buildingID, "2026-01")
-		require.ErrorIs(t, err, store.ErrNotFound)
-		_, err = repo.Lines(ctx, tenantA.Scope, af.billID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		_, err = repo.Members(ctx, tenantA.Scope, af.billID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		_, err = repo.HourlyDetail(ctx, tenantA.Scope, af.billID)
-		require.ErrorIs(t, err, store.ErrNotFound)
+		scopeIsoRequireExcludes(t, narrowListExcludesCompanyBill, af.companyBillID, func(b model.Bill) uuid.UUID { return b.ID })
 	})
 
 	// --- ReportRepository (building-scoped, building_id NOT NULL) ---------------------
 	t.Run("ReportRepository", func(t *testing.T) {
 		repo := postgres.NewReportRepository(pool)
 
-		_, err := repo.Get(ctx, tenantA.AdminScope, bf.reportID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		crossList, err := repo.List(ctx, tenantA.AdminScope, store.ReportFilter{})
-		require.NoError(t, err)
-		scopeIsoRequireExcludes(t, crossList, bf.reportID, func(r model.Report) uuid.UUID { return r.ID })
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.Report, error) { return repo.Get(ctx, s, bf.reportID) },
+			tenantA.AdminScope, tenantB.AdminScope, "ReportRepository.Get cross-tenant")
+		scopeIsoAssertListExcludes(t,
+			func(s store.Scope) ([]model.Report, error) { return repo.List(ctx, s, store.ReportFilter{}) },
+			tenantA.AdminScope, tenantB.AdminScope, bf.reportID,
+			func(r model.Report) uuid.UUID { return r.ID }, "ReportRepository.List cross-tenant")
 
-		_, err = repo.Get(ctx, tenantA.Scope, af.reportID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		narrowList, err := repo.List(ctx, tenantA.Scope, store.ReportFilter{})
-		require.NoError(t, err)
-		scopeIsoRequireExcludes(t, narrowList, af.reportID, func(r model.Report) uuid.UUID { return r.ID })
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.Report, error) { return repo.Get(ctx, s, af.reportID) },
+			tenantA.Scope, tenantA.AdminScope, "ReportRepository.Get narrow-scope")
+		scopeIsoAssertListExcludes(t,
+			func(s store.Scope) ([]model.Report, error) { return repo.List(ctx, s, store.ReportFilter{}) },
+			tenantA.Scope, tenantA.AdminScope, af.reportID,
+			func(r model.Report) uuid.UUID { return r.ID }, "ReportRepository.List narrow-scope")
 	})
 
 	// --- AlarmRepository (company-only: alarms carries no building_id) ----------------
 	t.Run("AlarmRepository", func(t *testing.T) {
 		repo := postgres.NewAlarmRepository(pool)
 
-		_, err := repo.Get(ctx, tenantA.AdminScope, bf.alarmID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		list, err := repo.List(ctx, tenantA.AdminScope, store.AlarmFilter{})
-		require.NoError(t, err)
-		scopeIsoRequireExcludes(t, list, bf.alarmID, func(a model.Alarm) uuid.UUID { return a.ID })
-		_, err = repo.Analyzers(ctx, tenantA.AdminScope, bf.alarmID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		_, err = repo.Channels(ctx, tenantA.AdminScope, bf.alarmID)
-		require.ErrorIs(t, err, store.ErrNotFound)
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.Alarm, error) { return repo.Get(ctx, s, bf.alarmID) },
+			tenantA.AdminScope, tenantB.AdminScope, "AlarmRepository.Get cross-tenant")
+		scopeIsoAssertListExcludes(t,
+			func(s store.Scope) ([]model.Alarm, error) { return repo.List(ctx, s, store.AlarmFilter{}) },
+			tenantA.AdminScope, tenantB.AdminScope, bf.alarmID,
+			func(a model.Alarm) uuid.UUID { return a.ID }, "AlarmRepository.List cross-tenant")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) ([]model.AlarmAnalyzer, error) { return repo.Analyzers(ctx, s, bf.alarmID) },
+			tenantA.AdminScope, tenantB.AdminScope, "AlarmRepository.Analyzers cross-tenant")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) ([]model.AlarmChannel, error) { return repo.Channels(ctx, s, bf.alarmID) },
+			tenantA.AdminScope, tenantB.AdminScope, "AlarmRepository.Channels cross-tenant")
+
+		// --- ListEvents: Important Finding 1. AlarmEventList's `alarms`
+		// parent predicate (a.company_id = ...) is the ONLY thing protecting
+		// a NULL-analyzer event (a company-level condition) — its own branch
+		// checks only all_buildings, never company_id directly. Filtering by
+		// bf.alarmID and asserting emptiness alone would be shadowed by the
+		// an.company_id check on the analyzer join for bf.alarmEventID
+		// (analyzer set), which is why bf.alarmEventNullAnalyzerID is seeded
+		// and checked explicitly here.
 		events, err := repo.ListEvents(ctx, tenantA.AdminScope, store.AlarmEventFilter{AlarmID: &bf.alarmID})
 		require.NoError(t, err)
-		require.Empty(t, events)
+		require.Empty(t, events, "tenant B's alarm events, including its NULL-analyzer one, must never appear under tenant A's AdminScope")
+		ownEvents, err := repo.ListEvents(ctx, tenantB.AdminScope, store.AlarmEventFilter{AlarmID: &bf.alarmID})
+		require.NoError(t, err)
+		require.True(t, scopeIsoContainsID(ownEvents, bf.alarmEventID, func(e model.AlarmEvent) uuid.UUID { return e.ID }))
+		require.True(t, scopeIsoContainsID(ownEvents, bf.alarmEventNullAnalyzerID, func(e model.AlarmEvent) uuid.UUID { return e.ID }),
+			"positive control: tenant B's own AdminScope must see its own NULL-analyzer event")
+
+		// --- narrow-scope half: ListEvents is the one AlarmRepository
+		// method that DOES narrow by building (through the event's
+		// analyzer, when set) — unlike Get/List/Analyzers/Channels, which
+		// repository.go's own doc comment says are company-only (alarms
+		// carries no building_id); that classification does not extend to
+		// ListEvents' analyzer join. af.alarmEventID's analyzer sits on
+		// Buildings[1] (outside the narrow Scope's grant); af's
+		// NULL-analyzer event has no building at all.
+		narrowEvents, err := repo.ListEvents(ctx, tenantA.Scope, store.AlarmEventFilter{AlarmID: &af.alarmID})
+		require.NoError(t, err)
+		require.Empty(t, narrowEvents,
+			"af's alarm's events — one on Buildings[1]'s analyzer, one with no analyzer at all — must both be invisible to the narrow Scope")
+		ownNarrowEvents, err := repo.ListEvents(ctx, tenantA.AdminScope, store.AlarmEventFilter{AlarmID: &af.alarmID})
+		require.NoError(t, err)
+		require.True(t, scopeIsoContainsID(ownNarrowEvents, af.alarmEventID, func(e model.AlarmEvent) uuid.UUID { return e.ID }))
+		require.True(t, scopeIsoContainsID(ownNarrowEvents, af.alarmEventNullAnalyzerID, func(e model.AlarmEvent) uuid.UUID { return e.ID }),
+			"positive control: tenant A's own AdminScope must see Buildings[1]'s NULL-analyzer event")
 	})
 
 	// --- CarbonRepository (factors company/platform; activities+reports
@@ -1025,13 +1721,21 @@ func TestScopeIsolation(t *testing.T) {
 	t.Run("CarbonRepository", func(t *testing.T) {
 		repo := postgres.NewCarbonRepository(pool)
 
-		_, err := repo.Factor(ctx, tenantA.AdminScope, bf.carbonFactorID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		factorList, err := repo.ListFactors(ctx, tenantA.AdminScope, store.EmissionFactorFilter{})
-		require.NoError(t, err)
-		scopeIsoRequireExcludes(t, factorList, bf.carbonFactorID, func(f model.EmissionFactor) uuid.UUID { return f.ID })
-		_, err = repo.Conversions(ctx, tenantA.AdminScope, bf.carbonFactorID)
-		require.ErrorIs(t, err, store.ErrNotFound)
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.EmissionFactor, error) { return repo.Factor(ctx, s, bf.carbonFactorID) },
+			tenantA.AdminScope, tenantB.AdminScope, "CarbonRepository.Factor cross-tenant")
+		scopeIsoAssertListExcludes(t,
+			func(s store.Scope) ([]model.EmissionFactor, error) {
+				return repo.ListFactors(ctx, s, store.EmissionFactorFilter{})
+			},
+			tenantA.AdminScope, tenantB.AdminScope, bf.carbonFactorID,
+			func(f model.EmissionFactor) uuid.UUID { return f.ID }, "CarbonRepository.ListFactors cross-tenant")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) ([]model.EmissionFactorConversion, error) {
+				return repo.Conversions(ctx, s, bf.carbonFactorID)
+			},
+			tenantA.AdminScope, tenantB.AdminScope, "CarbonRepository.Conversions cross-tenant")
+
 		// SelectedActivities has no ErrNotFound path (repository.go carries
 		// no such note for it, and the implementation just filters by scope
 		// and returns whatever matches): a building the Scope cannot see
@@ -1039,26 +1743,44 @@ func TestScopeIsolation(t *testing.T) {
 		crossSelected, err := repo.SelectedActivities(ctx, tenantA.AdminScope, bf.buildingID)
 		require.NoError(t, err)
 		require.Empty(t, crossSelected)
-		_, err = repo.Activity(ctx, tenantA.AdminScope, bf.carbonActivityID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		activityList, err := repo.ListActivities(ctx, tenantA.AdminScope, store.CarbonActivityFilter{})
+		ownCrossSelected, err := repo.SelectedActivities(ctx, tenantB.AdminScope, bf.buildingID)
 		require.NoError(t, err)
-		scopeIsoRequireExcludes(t, activityList, bf.carbonActivityID, func(a model.CarbonActivity) uuid.UUID { return a.ID })
-		reportList, err := repo.ListReports(ctx, tenantA.AdminScope, nil, store.Page{})
-		require.NoError(t, err)
-		scopeIsoRequireExcludes(t, reportList, bf.carbonReportID, func(r model.CarbonReport) uuid.UUID { return r.ID })
+		require.NotEmpty(t, ownCrossSelected, "positive control")
+
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.CarbonActivity, error) { return repo.Activity(ctx, s, bf.carbonActivityID) },
+			tenantA.AdminScope, tenantB.AdminScope, "CarbonRepository.Activity cross-tenant")
+		scopeIsoAssertListExcludes(t,
+			func(s store.Scope) ([]model.CarbonActivity, error) {
+				return repo.ListActivities(ctx, s, store.CarbonActivityFilter{})
+			},
+			tenantA.AdminScope, tenantB.AdminScope, bf.carbonActivityID,
+			func(a model.CarbonActivity) uuid.UUID { return a.ID }, "CarbonRepository.ListActivities cross-tenant")
+		scopeIsoAssertListExcludes(t,
+			func(s store.Scope) ([]model.CarbonReport, error) { return repo.ListReports(ctx, s, nil, store.Page{}) },
+			tenantA.AdminScope, tenantB.AdminScope, bf.carbonReportID,
+			func(r model.CarbonReport) uuid.UUID { return r.ID }, "CarbonRepository.ListReports cross-tenant")
 
 		narrowSelected, err := repo.SelectedActivities(ctx, tenantA.Scope, af.buildingID)
 		require.NoError(t, err)
 		require.Empty(t, narrowSelected, "Buildings[1]'s selected activities must be invisible to the narrow Scope")
-		_, err = repo.Activity(ctx, tenantA.Scope, af.carbonActivityID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		narrowActivityList, err := repo.ListActivities(ctx, tenantA.Scope, store.CarbonActivityFilter{})
+		ownNarrowSelected, err := repo.SelectedActivities(ctx, tenantA.AdminScope, af.buildingID)
 		require.NoError(t, err)
-		scopeIsoRequireExcludes(t, narrowActivityList, af.carbonActivityID, func(a model.CarbonActivity) uuid.UUID { return a.ID })
-		narrowReportList, err := repo.ListReports(ctx, tenantA.Scope, nil, store.Page{})
-		require.NoError(t, err)
-		scopeIsoRequireExcludes(t, narrowReportList, af.carbonReportID, func(r model.CarbonReport) uuid.UUID { return r.ID })
+		require.NotEmpty(t, ownNarrowSelected, "positive control")
+
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.CarbonActivity, error) { return repo.Activity(ctx, s, af.carbonActivityID) },
+			tenantA.Scope, tenantA.AdminScope, "CarbonRepository.Activity narrow-scope")
+		scopeIsoAssertListExcludes(t,
+			func(s store.Scope) ([]model.CarbonActivity, error) {
+				return repo.ListActivities(ctx, s, store.CarbonActivityFilter{})
+			},
+			tenantA.Scope, tenantA.AdminScope, af.carbonActivityID,
+			func(a model.CarbonActivity) uuid.UUID { return a.ID }, "CarbonRepository.ListActivities narrow-scope")
+		scopeIsoAssertListExcludes(t,
+			func(s store.Scope) ([]model.CarbonReport, error) { return repo.ListReports(ctx, s, nil, store.Page{}) },
+			tenantA.Scope, tenantA.AdminScope, af.carbonReportID,
+			func(r model.CarbonReport) uuid.UUID { return r.ID }, "CarbonRepository.ListReports narrow-scope")
 	})
 
 	// --- ISO50001Repository (building-scoped project, with no-company_id
@@ -1066,34 +1788,46 @@ func TestScopeIsolation(t *testing.T) {
 	t.Run("ISO50001Repository", func(t *testing.T) {
 		repo := postgres.NewISO50001Repository(pool)
 
-		_, err := repo.Project(ctx, tenantA.AdminScope, bf.buildingID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		_, err = repo.ClauseDates(ctx, tenantA.AdminScope, bf.isoProjectID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		_, err = repo.Notes(ctx, tenantA.AdminScope, bf.isoProjectID, nil)
-		require.ErrorIs(t, err, store.ErrNotFound)
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.ISO50001Project, error) { return repo.Project(ctx, s, bf.buildingID) },
+			tenantA.AdminScope, tenantB.AdminScope, "ISO50001Repository.Project cross-tenant")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) ([]model.ISO50001ClauseDate, error) {
+				return repo.ClauseDates(ctx, s, bf.isoProjectID)
+			},
+			tenantA.AdminScope, tenantB.AdminScope, "ISO50001Repository.ClauseDates cross-tenant")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) ([]model.ISO50001Note, error) { return repo.Notes(ctx, s, bf.isoProjectID, nil) },
+			tenantA.AdminScope, tenantB.AdminScope, "ISO50001Repository.Notes cross-tenant")
 
-		_, err = repo.Project(ctx, tenantA.Scope, af.buildingID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		_, err = repo.ClauseDates(ctx, tenantA.Scope, af.isoProjectID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		_, err = repo.Notes(ctx, tenantA.Scope, af.isoProjectID, nil)
-		require.ErrorIs(t, err, store.ErrNotFound)
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.ISO50001Project, error) { return repo.Project(ctx, s, af.buildingID) },
+			tenantA.Scope, tenantA.AdminScope, "ISO50001Repository.Project narrow-scope")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) ([]model.ISO50001ClauseDate, error) {
+				return repo.ClauseDates(ctx, s, af.isoProjectID)
+			},
+			tenantA.Scope, tenantA.AdminScope, "ISO50001Repository.ClauseDates narrow-scope")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) ([]model.ISO50001Note, error) { return repo.Notes(ctx, s, af.isoProjectID, nil) },
+			tenantA.Scope, tenantA.AdminScope, "ISO50001Repository.Notes narrow-scope")
 	})
 
 	// --- FileRepository (company-only, no building_id) ---------------------------------
 	t.Run("FileRepository", func(t *testing.T) {
 		repo := postgres.NewFileRepository(pool)
 
-		_, err := repo.Get(ctx, tenantA.AdminScope, bf.fileID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		list, err := repo.List(ctx, tenantA.AdminScope, store.FileFilter{})
-		require.NoError(t, err)
-		scopeIsoRequireExcludes(t, list, bf.fileID, func(f model.StoredFile) uuid.UUID { return f.ID })
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.StoredFile, error) { return repo.Get(ctx, s, bf.fileID) },
+			tenantA.AdminScope, tenantB.AdminScope, "FileRepository.Get cross-tenant")
+		scopeIsoAssertListExcludes(t,
+			func(s store.Scope) ([]model.StoredFile, error) { return repo.List(ctx, s, store.FileFilter{}) },
+			tenantA.AdminScope, tenantB.AdminScope, bf.fileID,
+			func(f model.StoredFile) uuid.UUID { return f.ID }, "FileRepository.List cross-tenant")
 	})
 
 	// --- IntegrationRepository (Definitions/Definition platform-wide;
-	// Credential/ListCredentials company-only) -------------------------------------------
+	// Credential/ListCredentials/OpenSecret company-only) -------------------------------------------
 	t.Run("IntegrationRepository", func(t *testing.T) {
 		repo := postgres.NewIntegrationRepository(pool, cipher)
 
@@ -1119,40 +1853,70 @@ func TestScopeIsolation(t *testing.T) {
 		// id: bf.integrationDefinitionID is a definition ONLY tenant B ever
 		// created a credential against, so a non-ErrNotFound result here
 		// could only be tenant B's own credential leaking through.
-		_, err = repo.Credential(ctx, tenantA.AdminScope, bf.integrationDefinitionID)
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.IntegrationCredential, error) {
+				return repo.Credential(ctx, s, bf.integrationDefinitionID)
+			},
+			tenantA.AdminScope, tenantB.AdminScope, "IntegrationRepository.Credential cross-tenant")
+		scopeIsoAssertListExcludes(t,
+			func(s store.Scope) ([]model.IntegrationCredential, error) { return repo.ListCredentials(ctx, s) },
+			tenantA.AdminScope, tenantB.AdminScope, bf.credentialID,
+			func(c model.IntegrationCredential) uuid.UUID { return c.ID }, "IntegrationRepository.ListCredentials cross-tenant")
+
+		// Important Finding 3: OpenSecret is keyed by the credential's OWN
+		// surrogate id (query IntegrationGetCredential: id, company_id) — a
+		// DIFFERENT query from Credential's (IntegrationGetCredentialByDefinition,
+		// keyed by definition_id). The reviewer's tautology on
+		// IntegrationGetCredential's company_id predicate stayed green
+		// because OpenSecret was never exercised here at all before this fix.
+		secretDenied, extraDenied, err := repo.OpenSecret(ctx, tenantA.AdminScope, bf.credentialID)
 		require.ErrorIs(t, err, store.ErrNotFound)
-		list, err := repo.ListCredentials(ctx, tenantA.AdminScope)
-		require.NoError(t, err)
-		scopeIsoRequireExcludes(t, list, bf.credentialID, func(c model.IntegrationCredential) uuid.UUID { return c.ID })
+		require.Nil(t, secretDenied)
+		require.Nil(t, extraDenied)
+		secretOwn, _, err := repo.OpenSecret(ctx, tenantB.AdminScope, bf.credentialID)
+		require.NoError(t, err, "positive control: tenant B's own AdminScope must decrypt its own credential secret")
+		require.Equal(t, []byte("scope-iso-secret"), secretOwn)
 	})
 
 	// --- SMTPRepository (company-only, one row per company keyed by
 	// company_id — no id parameter anywhere on this interface, so the
-	// isolation proof is on the CONTENT of what Get returns rather than on
-	// ErrNotFound: both tenants have their own row, seeded with the identical
-	// fixture shape by seedScopeIsoFixtures, so a leak would be invisible
-	// unless the returned CompanyID is checked directly) -----------------------------
+	// isolation proof is on the CONTENT of what Get/OpenPassword return
+	// rather than on ErrNotFound: both tenants have their own row, seeded
+	// with the identical fixture shape by seedScopeIsoFixtures, so a leak
+	// would be invisible unless the returned content is checked directly) --
 	t.Run("SMTPRepository", func(t *testing.T) {
 		repo := postgres.NewSMTPRepository(pool, cipher)
 
 		got, err := repo.Get(ctx, tenantA.AdminScope)
 		require.NoError(t, err)
 		require.Equal(t, tenantA.Company.ID, got.CompanyID, "tenant A's Get must never return tenant B's smtp_settings row")
+
+		// Important Finding 3: OpenPassword has no id parameter at all (one
+		// row per company, keyed by the Scope's OWN company_id) — there is
+		// no way to hand it another tenant's id, so its isolation proof is
+		// that it decrypts to exactly what THIS company's own Upsert stored.
+		password, err := repo.OpenPassword(ctx, tenantA.AdminScope)
+		require.NoError(t, err)
+		require.Equal(t, []byte("scope-iso-pw"), password)
 	})
 
 	// --- CalendarRepository (company-only) ------------------------------------------------
 	t.Run("CalendarRepository", func(t *testing.T) {
 		repo := postgres.NewCalendarRepository(pool)
 
-		_, err := repo.Event(ctx, tenantA.AdminScope, bf.calendarEventID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		list, err := repo.ListEvents(ctx, tenantA.AdminScope, store.CalendarFilter{})
-		require.NoError(t, err)
-		scopeIsoRequireExcludes(t, list, bf.calendarEventID, func(e model.CalendarEvent) uuid.UUID { return e.ID })
-
-		vac, err := repo.Vacations(ctx, tenantA.AdminScope, nil)
-		require.NoError(t, err)
-		scopeIsoRequireExcludes(t, vac, bf.calendarVacationID, func(v model.CompanyVacation) uuid.UUID { return v.ID })
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.CalendarEvent, error) { return repo.Event(ctx, s, bf.calendarEventID) },
+			tenantA.AdminScope, tenantB.AdminScope, "CalendarRepository.Event cross-tenant")
+		scopeIsoAssertListExcludes(t,
+			func(s store.Scope) ([]model.CalendarEvent, error) {
+				return repo.ListEvents(ctx, s, store.CalendarFilter{})
+			},
+			tenantA.AdminScope, tenantB.AdminScope, bf.calendarEventID,
+			func(e model.CalendarEvent) uuid.UUID { return e.ID }, "CalendarRepository.ListEvents cross-tenant")
+		scopeIsoAssertListExcludes(t,
+			func(s store.Scope) ([]model.CompanyVacation, error) { return repo.Vacations(ctx, s, nil) },
+			tenantA.AdminScope, tenantB.AdminScope, bf.calendarVacationID,
+			func(v model.CompanyVacation) uuid.UUID { return v.ID }, "CalendarRepository.Vacations cross-tenant")
 
 		// WeekendDays' rows have no independent surrogate id to exclude by
 		// (company_id IS the row's identity beyond day_of_week), and both
@@ -1171,19 +1935,26 @@ func TestScopeIsolation(t *testing.T) {
 	t.Run("OpsRepository", func(t *testing.T) {
 		repo := postgres.NewOpsRepository(pool)
 
-		_, err := repo.GetRun(ctx, tenantA.AdminScope, bf.jobRunID)
-		require.ErrorIs(t, err, store.ErrNotFound)
-		list, err := repo.ListRuns(ctx, tenantA.AdminScope, store.JobRunFilter{})
-		require.NoError(t, err)
-		scopeIsoRequireExcludes(t, list, bf.jobRunID, func(r model.JobRun) uuid.UUID { return r.ID })
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.JobRun, error) { return repo.GetRun(ctx, s, bf.jobRunID) },
+			tenantA.AdminScope, tenantB.AdminScope, "OpsRepository.GetRun cross-tenant")
+		scopeIsoAssertListExcludes(t,
+			func(s store.Scope) ([]model.JobRun, error) { return repo.ListRuns(ctx, s, store.JobRunFilter{}) },
+			tenantA.AdminScope, tenantB.AdminScope, bf.jobRunID,
+			func(r model.JobRun) uuid.UUID { return r.ID }, "OpsRepository.ListRuns cross-tenant")
 
 		// Both tenants' seeding appends a message with the identical Category
 		// ("scope-iso"), so the isolation proof is on the message's own ID
 		// (bigserial, globally unique) rather than on its Category value.
 		messages, err := repo.ListMessages(ctx, tenantA.AdminScope, store.MessageFilter{})
 		require.NoError(t, err)
+		sawOwn := false
 		for _, m := range messages {
 			require.NotEqual(t, bf.opsMessageID, m.ID, "tenant B's operational message must never appear in tenant A's list")
+			if m.ID == af.opsMessageID {
+				sawOwn = true
+			}
 		}
+		require.True(t, sawOwn, "positive control: tenant A's own AdminScope must see its own operational message")
 	})
 }
