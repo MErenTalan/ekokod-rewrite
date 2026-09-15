@@ -11,6 +11,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/internal/pgerr"
+	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/internal/pgnum"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/sqlcgen"
 )
 
@@ -63,7 +64,7 @@ func (r *MarketDataRepository) UpsertHourlyPrices(ctx context.Context, prices []
 	fetchedAt := make([]pgtype.Timestamptz, len(prices))
 	for i, p := range prices {
 		ts[i] = pgtype.Timestamptz{Time: p.Ts, Valid: true}
-		ptf[i] = decimalToNumeric(p.PTF)
+		ptf[i] = pgnum.DecimalToNumeric(p.PTF)
 		fetchedAt[i] = pgtype.Timestamptz{Time: fetchedAtOrNow(p.FetchedAt), Valid: true}
 	}
 
@@ -99,7 +100,7 @@ func (r *MarketDataRepository) UpsertYekdem(ctx context.Context, values []model.
 	for i, v := range values {
 		years[i] = v.Year
 		months[i] = v.Month
-		amounts[i] = decimalToNumeric(v.Value)
+		amounts[i] = pgnum.DecimalToNumeric(v.Value)
 		fetchedAt[i] = pgtype.Timestamptz{Time: fetchedAtOrNow(v.FetchedAt), Valid: true}
 	}
 

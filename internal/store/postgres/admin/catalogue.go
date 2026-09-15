@@ -12,6 +12,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/internal/pgerr"
+	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/internal/pgnum"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/sqlcgen"
 )
 
@@ -169,7 +170,7 @@ func (r *CatalogueRepository) UpsertPlatformFactor(ctx context.Context, f model.
 		MainCategory:  f.MainCategory,
 		SubCategories: subCats,
 		CategoryPath:  catPath,
-		BaseFactor:    decimalToNumeric(f.BaseFactor),
+		BaseFactor:    pgnum.DecimalToNumeric(f.BaseFactor),
 		BaseUnit:      f.BaseUnit,
 		FuelType:      f.FuelType,
 		VehicleType:   f.VehicleType,
@@ -187,7 +188,7 @@ func (r *CatalogueRepository) UpsertPlatformFactor(ctx context.Context, f model.
 }
 
 func catalogueEmissionFactorFromRow(row sqlcgen.EmissionFactor) (model.EmissionFactor, error) {
-	baseFactor, err := numericToDecimal(row.BaseFactor)
+	baseFactor, err := pgnum.NumericToDecimal(row.BaseFactor)
 	if err != nil {
 		return model.EmissionFactor{}, fmt.Errorf("emission_factors.base_factor: %w", err)
 	}

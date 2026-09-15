@@ -1,4 +1,4 @@
-package postgres
+package pgnum_test
 
 import (
 	"testing"
@@ -6,15 +6,19 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
+
+	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/internal/pgnum"
 )
 
 // These tests exist to fail against a float64-based implementation of the
 // numeric<->decimal pair, not merely to pass against the real one. Every case
 // below was chosen because it survives the exponent/coefficient conversion and
-// does NOT survive a Float64Value round trip; the suite has been run against a
-// deliberately float-based numericToDecimal/decimalToNumeric to confirm that
-// (transcript in the task report). A conversion test written with 12.34 and
-// 0.5 would pass either way and would therefore prove nothing.
+// does NOT survive a Float64Value round trip; the suite has been re-run
+// against a deliberately float-based NumericToDecimal/DecimalToNumeric, after
+// this file's move from internal/store/postgres/numeric_test.go at the Wave F
+// integration commit, to confirm it still fails (transcript in the Wave F
+// integration report). A conversion test written with 12.34 and 0.5 would
+// pass either way and would therefore prove nothing.
 
 // numericOf builds a pgtype.Numeric by parsing decimal TEXT through pgtype's
 // own scanner — the same path a value takes off the wire in text format. The
@@ -111,14 +115,14 @@ func TestNumericToDecimalIsExact(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := numericToDecimal(numericOf(t, tc.decimal))
+			got, err := pgnum.NumericToDecimal(numericOf(t, tc.decimal))
 			require.NoError(t, err)
 
 			want, err := decimal.NewFromString(tc.decimal)
 			require.NoError(t, err, "test expectation %q is not a decimal", tc.decimal)
 
 			require.Truef(t, want.Equal(got),
-				"numericToDecimal(%s) = %s, want %s: the conversion lost precision, "+
+				"NumericToDecimal(%s) = %s, want %s: the conversion lost precision, "+
 					"which is what happens when it goes through float64",
 				tc.decimal, got.String(), want.String())
 		})
@@ -135,7 +139,7 @@ func TestDecimalToNumericIsExact(t *testing.T) {
 			d, err := decimal.NewFromString(tc.decimal)
 			require.NoError(t, err)
 
-			n := decimalToNumeric(d)
+			n := pgnum.DecimalToNumeric(d)
 			require.True(t, n.Valid, "a decimal is never NULL")
 			require.False(t, n.NaN)
 			require.Equal(t, pgtype.Finite, n.InfinityModifier)
@@ -144,10 +148,10 @@ func TestDecimalToNumericIsExact(t *testing.T) {
 			// Compare through the value the numeric denotes (Int x 10^Exp)
 			// rather than through the raw pair, so an equal value at a
 			// different scale is not a spurious failure.
-			back, err := numericToDecimal(n)
+			back, err := pgnum.NumericToDecimal(n)
 			require.NoError(t, err)
 			require.Truef(t, d.Equal(back),
-				"decimalToNumeric(%s) denotes %s", d.String(), back.String())
+				"DecimalToNumeric(%s) denotes %s", d.String(), back.String())
 		})
 	}
 }
@@ -166,23 +170,23 @@ func TestNumericDecimalRoundTripIsExact(t *testing.T) {
 
 			start := numericOf(t, tc.decimal)
 
-			mid, err := numericToDecimal(start)
+			mid, err := pgnum.NumericToDecimal(start)
 			require.NoError(t, err)
 
-			end := decimalToNumeric(mid)
+			end := pgnum.DecimalToNumeric(mid)
 			require.True(t, end.Valid)
 
 			// The pair may legitimately renormalise (decimal trims a
 			// trailing-zero coefficient), so the round trip is asserted on
 			// the NUMBER the pair denotes, via a second conversion.
-			endDecimal, err := numericToDecimal(end)
+			endDecimal, err := pgnum.NumericToDecimal(end)
 			require.NoError(t, err)
 			require.Truef(t, mid.Equal(endDecimal),
 				"round trip changed the value: %s -> %s", mid.String(), endDecimal.String())
 
 			// And independently of the conversion pair: pgtype's own text
 			// encoder must render the same number at both ends, so neither
-			// numericToDecimal nor decimalToNumeric is on the path from the
+			// NumericToDecimal nor DecimalToNumeric is on the path from the
 			// numerics to this verdict.
 			require.Truef(t, sameNumber(t, numericText(t, start), numericText(t, end)),
 				"round trip changed the encoded value: %s -> %s",
@@ -203,12 +207,12 @@ func TestNumericToDecimalHandlesAPositiveExponent(t *testing.T) {
 	n := numericOf(t, "123")
 	n.Exp = 7 // 123 x 10^7
 
-	got, err := numericToDecimal(n)
+	got, err := pgnum.NumericToDecimal(n)
 	require.NoError(t, err)
 	require.Equal(t, "1230000000", got.String())
 
 	// And back: the value survives, whatever scale it lands on.
-	back, err := numericToDecimal(decimalToNumeric(got))
+	back, err := pgnum.NumericToDecimal(pgnum.DecimalToNumeric(got))
 	require.NoError(t, err)
 	require.True(t, got.Equal(back))
 }
@@ -219,7 +223,7 @@ func TestNumericToDecimalHandlesAPositiveExponent(t *testing.T) {
 //
 // The comparison runs through decimal's own text parser, which is NOT the code
 // under test: the values reaching it came out of pgtype's text ENCODER, so
-// neither numericToDecimal nor decimalToNumeric is on the path from the
+// neither NumericToDecimal nor DecimalToNumeric is on the path from the
 // numerics to this verdict.
 func sameNumber(t *testing.T, a, b string) bool {
 	t.Helper()
@@ -233,8 +237,8 @@ func sameNumber(t *testing.T, a, b string) bool {
 func TestNumericToDecimalRejectsNull(t *testing.T) {
 	t.Parallel()
 
-	_, err := numericToDecimal(pgtype.Numeric{})
-	require.ErrorIs(t, err, errNumericNull,
+	_, err := pgnum.NumericToDecimal(pgtype.Numeric{})
+	require.ErrorIs(t, err, pgnum.ErrNull,
 		"a NULL in a NOT NULL column must be an error, never a silent zero: "+
 			"zero is a real meter reading and a real charge")
 }
@@ -249,8 +253,8 @@ func TestNumericToDecimalRejectsNaNAndInfinity(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			_, err := numericToDecimal(n)
-			require.ErrorIs(t, err, errNumericNotFinite,
+			_, err := pgnum.NumericToDecimal(n)
+			require.ErrorIs(t, err, pgnum.ErrNotFinite,
 				"decimal.Decimal cannot represent %s; converting it to zero would "+
 					"fabricate a number", name)
 		})
@@ -263,7 +267,7 @@ func TestNumericToDecimalRejectsNaNAndInfinity(t *testing.T) {
 func TestNumericToDecimalTreatsAValidNilCoefficientAsZero(t *testing.T) {
 	t.Parallel()
 
-	got, err := numericToDecimal(pgtype.Numeric{Valid: true})
+	got, err := pgnum.NumericToDecimal(pgtype.Numeric{Valid: true})
 	require.NoError(t, err)
 	require.True(t, got.IsZero())
 }
@@ -271,7 +275,7 @@ func TestNumericToDecimalTreatsAValidNilCoefficientAsZero(t *testing.T) {
 func TestNumericToDecimalPtrReportsNullAsNil(t *testing.T) {
 	t.Parallel()
 
-	got, err := numericToDecimalPtr(pgtype.Numeric{})
+	got, err := pgnum.NumericToDecimalPtr(pgtype.Numeric{})
 	require.NoError(t, err)
 	require.Nil(t, got,
 		"a nullable numeric column's NULL is a nil pointer, never a zero decimal: "+
@@ -282,8 +286,8 @@ func TestNumericToDecimalPtrReportsNullAsNil(t *testing.T) {
 func TestNumericToDecimalPtrPropagatesNonFinite(t *testing.T) {
 	t.Parallel()
 
-	_, err := numericToDecimalPtr(pgtype.Numeric{NaN: true, Valid: true})
-	require.ErrorIs(t, err, errNumericNotFinite)
+	_, err := pgnum.NumericToDecimalPtr(pgtype.Numeric{NaN: true, Valid: true})
+	require.ErrorIs(t, err, pgnum.ErrNotFinite)
 }
 
 func TestNumericToDecimalPtrIsExact(t *testing.T) {
@@ -293,7 +297,7 @@ func TestNumericToDecimalPtrIsExact(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := numericToDecimalPtr(numericOf(t, tc.decimal))
+			got, err := pgnum.NumericToDecimalPtr(numericOf(t, tc.decimal))
 			require.NoError(t, err)
 			require.NotNil(t, got)
 
@@ -307,13 +311,13 @@ func TestNumericToDecimalPtrIsExact(t *testing.T) {
 func TestDecimalPtrToNumericMapsNilToSQLNull(t *testing.T) {
 	t.Parallel()
 
-	n := decimalPtrToNumeric(nil)
+	n := pgnum.DecimalPtrToNumeric(nil)
 	require.False(t, n.Valid, "nil must encode as SQL NULL, not as the number zero")
 
 	zero := decimal.Zero
-	n = decimalPtrToNumeric(&zero)
+	n = pgnum.DecimalPtrToNumeric(&zero)
 	require.True(t, n.Valid, "a pointer to zero is the number zero, not NULL")
-	back, err := numericToDecimal(n)
+	back, err := pgnum.NumericToDecimal(n)
 	require.NoError(t, err)
 	require.True(t, back.IsZero())
 }
@@ -326,7 +330,7 @@ func TestConversionDoesNotAliasItsInput(t *testing.T) {
 	t.Parallel()
 
 	n := numericOf(t, "123456789012.345678")
-	d, err := numericToDecimal(n)
+	d, err := pgnum.NumericToDecimal(n)
 	require.NoError(t, err)
 
 	// Mutate the source coefficient; the converted decimal must not move.
@@ -334,7 +338,7 @@ func TestConversionDoesNotAliasItsInput(t *testing.T) {
 	require.Equal(t, "123456789012.345678", d.String())
 
 	d2 := decimal.RequireFromString("987654321098.765432")
-	n2 := decimalToNumeric(d2)
+	n2 := pgnum.DecimalToNumeric(d2)
 	n2.Int.SetInt64(1)
 	require.Equal(t, "987654321098.765432", d2.String())
 }
@@ -347,7 +351,7 @@ func TestDecimalToNumericPreservesScale(t *testing.T) {
 	t.Parallel()
 
 	d := decimal.RequireFromString("1.500000")
-	n := decimalToNumeric(d)
+	n := pgnum.DecimalToNumeric(d)
 	require.EqualValues(t, -6, n.Exp)
 	require.Equal(t, "1500000", n.Int.String())
 }
@@ -362,7 +366,7 @@ func TestFloatWouldFailThisSuite(t *testing.T) {
 
 	n := numericOf(t, "12345678901234567890.123456789")
 
-	exact, err := numericToDecimal(n)
+	exact, err := pgnum.NumericToDecimal(n)
 	require.NoError(t, err)
 
 	f, err := n.Float64Value()

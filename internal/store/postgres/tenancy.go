@@ -371,7 +371,7 @@ func (r *UserRepository) PasswordHistory(ctx context.Context, s store.Scope, use
 	if !s.Valid() {
 		return nil, store.ErrInvalidScope
 	}
-	visible, err := r.q.SessionUserVisible(ctx, sqlcgen.SessionUserVisibleParams{UserID: userID, CompanyID: s.CompanyID})
+	visible, err := r.q.UserVisible(ctx, sqlcgen.UserVisibleParams{ID: userID, CompanyID: s.CompanyID})
 	if err != nil {
 		return nil, pgerr.Translate(r.pool, "check user visibility", err)
 	}
