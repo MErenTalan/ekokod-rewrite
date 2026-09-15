@@ -10,7 +10,6 @@ package seed_test
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -243,50 +242,15 @@ func TestSeedReplacesConversionsExactly(t *testing.T) {
 	}
 }
 
-// TestSeedLoadsNationalTariffScheduleFixture proves the loader's parsing and
-// writing path for a NON-EMPTY national tariff schedule, using the same
-// fixture datasets_test.go validates
-// (testdata/national_tariff_schedule_fixture.json) — the shipped production
-// file is empty (see datasets.go), so nothing else in this package exercises
-// UpsertNationalTariffSchedule with real rows end-to-end through the loader
-// shape. This test calls the admin repository directly with the fixture's
-// parsed rows (parseNationalTariffSchedule is unexported; this package can
-// only reach it through seed.NationalTariffSchedule(), which decodes the
-// EMBEDDED file) to prove the model conversion + admin call this loader
-// performs for a non-empty dataset behaves the same way Load's own
-// (empty-dataset) path does.
-func TestSeedLoadsNationalTariffScheduleFixture(t *testing.T) {
-	ctx := context.Background()
-	pool := testfixtures.NewIsolatedDB(t)
-	catalogue := admin.NewCatalogueRepository(pool)
-
-	entries := []model.NationalTariffScheduleEntry{
-		{
-			EffectiveFrom:     mustParseDate(t, "2006-01-02", "2021-01-01"),
-			UserGroup:         model.UserGroupResidential,
-			VoltageLevel:      model.VoltageLevelLV,
-			Term:              model.TariffTermMonomial,
-			EnergyPrice:       decimal.RequireFromString("1.500000"),
-			DistributionPrice: decimal.RequireFromString("0.300000"),
-			VatRate:           decimal.RequireFromString("18.000"),
-		},
-	}
-	n, err := catalogue.UpsertNationalTariffSchedule(ctx, entries)
-	require.NoError(t, err)
-	require.EqualValues(t, 1, n)
-
-	n, err = catalogue.UpsertNationalTariffSchedule(ctx, entries)
-	require.NoError(t, err)
-	require.EqualValues(t, 1, n, "re-upserting the same natural key converges, not duplicates")
-
-	var count int
-	require.NoError(t, pool.QueryRow(ctx, `select count(*) from national_tariff_schedule`).Scan(&count))
-	require.Equal(t, 1, count)
-}
-
-func mustParseDate(t *testing.T, layout, s string) time.Time {
-	t.Helper()
-	tm, err := time.Parse(layout, s)
-	require.NoError(t, err)
-	return tm
-}
+// TestSeedLoadsNationalTariffScheduleFixture used to live here, calling
+// UpsertNationalTariffSchedule directly with one hand-written
+// model.NationalTariffScheduleEntry. It never read
+// testdata/national_tariff_schedule_fixture.json and never called this
+// package's loadNationalTariffSchedule or toModelNationalTariffSchedule, so
+// the loader's real 14-field mapping never ran against non-empty data (the
+// shipped dataset is `[]`). Fix round 1 (task-12b-fix1-findings.md, Important
+// 1) replaced it with TestLoadNationalTariffScheduleFixtureMapsEveryField in
+// the white-box seed_national_tariff_fixture_test.go (package seed, not
+// seed_test), which reads the fixture, parses it with the unexported
+// parseNationalTariffSchedule, and drives it through the real
+// loadNationalTariffSchedule function.

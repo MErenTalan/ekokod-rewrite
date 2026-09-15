@@ -108,7 +108,11 @@ func load(ctx context.Context, catalogue store.AdminCatalogueRepository, log *sl
 	}
 	result.IntegrationDefinitions = defCount
 
-	tariffCount, err := loadNationalTariffSchedule(ctx, catalogue, log)
+	tariffEntries, err := NationalTariffSchedule()
+	if err != nil {
+		return Result{}, fmt.Errorf("load national tariff schedule dataset: %w", err)
+	}
+	tariffCount, err := loadNationalTariffSchedule(ctx, catalogue, log, tariffEntries)
 	if err != nil {
 		return Result{}, err
 	}
@@ -164,12 +168,18 @@ func loadIntegrationDefinitions(ctx context.Context, catalogue store.AdminCatalo
 	return n, nil
 }
 
-func loadNationalTariffSchedule(ctx context.Context, catalogue store.AdminCatalogueRepository, log *slog.Logger) (int64, error) {
-	entries, err := NationalTariffSchedule()
-	if err != nil {
-		return 0, fmt.Errorf("load national tariff schedule dataset: %w", err)
-	}
-
+// loadNationalTariffSchedule writes entries (already decoded+validated by
+// NationalTariffSchedule() or, in a test, by parseNationalTariffSchedule
+// against a fixture file) through toModelNationalTariffSchedule and
+// UpsertNationalTariffSchedule. entries is a parameter — rather than this
+// function calling NationalTariffSchedule() itself, as loadEmissionFactors
+// and loadIntegrationDefinitions do for their own datasets — purely as a
+// test seam: it lets seed_test's white-box loader test drive this exact
+// function, including its field mapping, through the non-empty
+// testdata/national_tariff_schedule_fixture.json fixture without needing a
+// second embedded data file. Production behaviour is unchanged: load's only
+// caller passes NationalTariffSchedule()'s own return value.
+func loadNationalTariffSchedule(ctx context.Context, catalogue store.AdminCatalogueRepository, log *slog.Logger, entries []NationalTariffScheduleEntry) (int64, error) {
 	n, err := catalogue.UpsertNationalTariffSchedule(ctx, toModelNationalTariffSchedule(entries))
 	if err != nil {
 		return 0, fmt.Errorf("upsert national tariff schedule: %w", err)
