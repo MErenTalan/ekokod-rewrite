@@ -12,35 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const analyzerBuildingVisible = `-- name: AnalyzerBuildingVisible :one
-select exists(
-    select 1 from buildings
-    where id = $1
-      and company_id = $2
-      and ($3::boolean or id = any($4::uuid[]))
-      and deleted_at is null
-)
-`
-
-type AnalyzerBuildingVisibleParams struct {
-	BuildingID   uuid.UUID
-	CompanyID    uuid.UUID
-	AllBuildings bool
-	BuildingIds  []uuid.UUID
-}
-
-func (q *Queries) AnalyzerBuildingVisible(ctx context.Context, arg AnalyzerBuildingVisibleParams) (bool, error) {
-	row := q.db.QueryRow(ctx, analyzerBuildingVisible,
-		arg.BuildingID,
-		arg.CompanyID,
-		arg.AllBuildings,
-		arg.BuildingIds,
-	)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
-}
-
 const analyzerCreate = `-- name: AnalyzerCreate :one
 insert into analyzers
     (id, company_id, building_id, provider, provider_subtype, installation_number,

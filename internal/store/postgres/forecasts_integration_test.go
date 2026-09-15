@@ -238,16 +238,29 @@ func TestForecastRangeAndLatestRunNeverReturnForeignDataEvenWhenForeignAnalyzerH
 	repo := postgres.NewForecastRepository(pool)
 	validRange := store.TimeRange{From: forecastsEpoch, To: forecastsEpoch.Add(time.Hour)}
 
-	// Cross-tenant: tenant B's analyzer really has a forecast.
+	// Cross-tenant: tenant B's analyzer really has a forecast. Called with
+	// tenant A's AdminScope (all_buildings), not the narrow Scope: under a
+	// narrow Scope the building predicate alone already excludes tenant B's
+	// analyzer (its building_id is never in A's building_ids), which would
+	// let a tautologised company_id predicate hide behind the building
+	// predicate and still pass. AdminScope removes that cover, so only the
+	// company_id check in ForecastRange/ForecastLatestRun stands between
+	// tenant A and tenant B's row.
 	foreign := forecastsRow(tenantB.Analyzers[0].ID, forecastsEpoch, forecastsEpoch, "999")
 	_, _, err := repo.BulkInsert(ctx, tenantB.Scope, []model.Forecast{foreign})
 	require.NoError(t, err)
 
-	got, err := repo.Range(ctx, tenantA.Scope, tenantB.Analyzers[0].ID, validRange)
+	// Self-evident non-vacuity: the row above really exists — tenant B can
+	// read it back through its own Scope.
+	selfB, err := repo.Range(ctx, tenantB.Scope, tenantB.Analyzers[0].ID, validRange)
+	require.NoError(t, err)
+	require.Len(t, selfB, 1)
+
+	got, err := repo.Range(ctx, tenantA.AdminScope, tenantB.Analyzers[0].ID, validRange)
 	require.ErrorIs(t, err, store.ErrNotFound)
 	require.Empty(t, got)
 
-	latestGot, err := repo.LatestRun(ctx, tenantA.Scope, tenantB.Analyzers[0].ID, validRange)
+	latestGot, err := repo.LatestRun(ctx, tenantA.AdminScope, tenantB.Analyzers[0].ID, validRange)
 	require.ErrorIs(t, err, store.ErrNotFound)
 	require.Empty(t, latestGot)
 
@@ -282,13 +295,25 @@ func TestForecastGapsNeverReturnsForeignDataEvenWhenForeignAnalyzerHasGaps(t *te
 	tenantB := testfixtures.NewTenant(t, ctx, pool, 2)
 	repo := postgres.NewForecastRepository(pool)
 
+	// Called with tenant A's AdminScope, not the narrow Scope: under a narrow
+	// Scope the building predicate alone already excludes tenant B's
+	// analyzer (its building_id is never in A's building_ids), so a
+	// tautologised a.company_id = sqlc.arg(company_id) in ForecastGapsByRun
+	// would hide behind it and this test would still pass. AdminScope
+	// removes that cover.
 	foreignGap := model.ForecastGap{
 		AnalyzerID: tenantB.Analyzers[0].ID, GeneratedAt: forecastsEpoch,
 		GapStart: forecastsEpoch, GapEnd: forecastsEpoch.Add(time.Hour), MissingHours: 1,
 	}
 	require.NoError(t, repo.RecordGaps(ctx, tenantB.Scope, []model.ForecastGap{foreignGap}))
 
-	got, err := repo.Gaps(ctx, tenantA.Scope, tenantB.Analyzers[0].ID, forecastsEpoch)
+	// Self-evident non-vacuity: the gap above really exists — tenant B can
+	// read it back through its own Scope.
+	selfB, err := repo.Gaps(ctx, tenantB.Scope, tenantB.Analyzers[0].ID, forecastsEpoch)
+	require.NoError(t, err)
+	require.Len(t, selfB, 1)
+
+	got, err := repo.Gaps(ctx, tenantA.AdminScope, tenantB.Analyzers[0].ID, forecastsEpoch)
 	require.ErrorIs(t, err, store.ErrNotFound)
 	require.Empty(t, got)
 

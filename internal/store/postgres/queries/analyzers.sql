@@ -46,15 +46,6 @@ where company_id = sqlc.arg(company_id)
 order by installation_number
 limit sqlc.arg(page_limit) offset sqlc.arg(page_offset);
 
--- name: AnalyzerBuildingVisible :one
-select exists(
-    select 1 from buildings
-    where id = sqlc.arg(building_id)
-      and company_id = sqlc.arg(company_id)
-      and (sqlc.arg(all_buildings)::boolean or id = any(sqlc.arg(building_ids)::uuid[]))
-      and deleted_at is null
-);
-
 -- name: AnalyzerCreate :one
 -- coalesce(sqlc.narg(at)::timestamptz, now()): a caller that leaves CreatedAt at its zero
 -- value gets the database's own now() rather than writing 0001-01-01.

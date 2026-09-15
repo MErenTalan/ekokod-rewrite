@@ -353,10 +353,41 @@ func TestReadingRangeNeverReturnsForeignDataEvenWhenForeignAnalyzerHasReadings(t
 	_, _, err := repo.BulkInsert(ctx, tenantB.Scope, []model.MeterReading{foreign})
 	require.NoError(t, err)
 
-	// tenant A's scope, tenant B's real (and populated) analyzer id.
-	got, err := repo.Range(ctx, tenantA.Scope, tenantB.Analyzers[0].ID, validRange, model.ReadingKindLoadProfile)
+	// Self-evident non-vacuity: the row above really exists — tenant B can
+	// read it back through its own Scope.
+	selfB, err := repo.Range(ctx, tenantB.Scope, tenantB.Analyzers[0].ID, validRange, model.ReadingKindLoadProfile)
+	require.NoError(t, err)
+	require.Len(t, selfB, 1)
+
+	// tenant A's AdminScope (all_buildings), tenant B's real (and populated)
+	// analyzer id. AdminScope, not the narrow Scope: under a narrow Scope the
+	// building predicate alone already excludes tenant B's analyzer (its
+	// building_id is never in A's building_ids), so a tautologised
+	// a.company_id = sqlc.arg(company_id) in ReadingRange would hide behind
+	// the building predicate and this test would still pass. AdminScope
+	// removes that cover, leaving only the company_id check standing between
+	// tenant A and tenant B's row.
+	got, err := repo.Range(ctx, tenantA.AdminScope, tenantB.Analyzers[0].ID, validRange, model.ReadingKindLoadProfile)
 	require.ErrorIs(t, err, store.ErrNotFound)
 	require.Empty(t, got)
+
+	// Narrow scope: tenant A's OWN analyzer, outside Buildings[0], with real
+	// data — the building predicate (not the company_id predicate) is what
+	// must reject this one.
+	narrow := readingsRow(tenantA.Analyzers[2].ID, readingsEpoch, model.ReadingKindLoadProfile, "777.0000", "1")
+	_, _, err = repo.BulkInsert(ctx, tenantA.AdminScope, []model.MeterReading{narrow})
+	require.NoError(t, err)
+
+	got, err = repo.Range(ctx, tenantA.Scope, tenantA.Analyzers[2].ID, validRange, model.ReadingKindLoadProfile)
+	require.ErrorIs(t, err, store.ErrNotFound)
+	require.Empty(t, got)
+
+	// The same narrow-scope analyzer IS reachable under AdminScope, and its
+	// real reading comes back — confirming the ErrNotFound above is the
+	// Scope's doing, not a fixture mistake.
+	wide, err := repo.Range(ctx, tenantA.AdminScope, tenantA.Analyzers[2].ID, validRange, model.ReadingKindLoadProfile)
+	require.NoError(t, err)
+	require.Len(t, wide, 1)
 }
 
 // TestReadingBoundaryReadingsNeverReturnsForeignDataEvenWhenForeignAnalyzerHasReadings
@@ -376,11 +407,22 @@ func TestReadingBoundaryReadingsNeverReturnsForeignDataEvenWhenForeignAnalyzerHa
 	repo := postgres.NewReadingRepository(pool)
 
 	// Cross-tenant: tenant B's analyzer really has a reading at readingsEpoch.
+	// Called with tenant A's AdminScope, not the narrow Scope: under a narrow
+	// Scope the building predicate alone already excludes tenant B's
+	// analyzer, so a tautologised company_id check would hide behind it.
 	foreign := readingsRow(tenantB.Analyzers[0].ID, readingsEpoch, model.ReadingKindLoadProfile, "999.0000", "1")
 	_, _, err := repo.BulkInsert(ctx, tenantB.Scope, []model.MeterReading{foreign})
 	require.NoError(t, err)
 
-	start, end, err := repo.BoundaryReadings(ctx, tenantA.Scope, tenantB.Analyzers[0].ID,
+	// Self-evident non-vacuity: the row above really exists — tenant B can
+	// read it back through its own Scope.
+	startB, endB, err := repo.BoundaryReadings(ctx, tenantB.Scope, tenantB.Analyzers[0].ID,
+		model.ReadingKindLoadProfile, readingsEpoch, readingsEpoch)
+	require.NoError(t, err)
+	require.NotNil(t, startB)
+	require.NotNil(t, endB)
+
+	start, end, err := repo.BoundaryReadings(ctx, tenantA.AdminScope, tenantB.Analyzers[0].ID,
 		model.ReadingKindLoadProfile, readingsEpoch, readingsEpoch)
 	require.ErrorIs(t, err, store.ErrNotFound)
 	require.Nil(t, start)
@@ -418,11 +460,21 @@ func TestReadingLatestNeverReturnsForeignDataEvenWhenForeignAnalyzerHasReadings(
 	repo := postgres.NewReadingRepository(pool)
 	validRange := store.TimeRange{From: readingsEpoch, To: readingsEpoch.Add(time.Hour)}
 
+	// Cross-tenant, called with tenant A's AdminScope, not the narrow Scope:
+	// under a narrow Scope the building predicate alone already excludes
+	// tenant B's analyzer, so a tautologised company_id check would hide
+	// behind it.
 	foreign := readingsRow(tenantB.Analyzers[0].ID, readingsEpoch, model.ReadingKindLoadProfile, "999.0000", "1")
 	_, _, err := repo.BulkInsert(ctx, tenantB.Scope, []model.MeterReading{foreign})
 	require.NoError(t, err)
 
-	got, err := repo.Latest(ctx, tenantA.Scope, tenantB.Analyzers[0].ID, validRange, model.ReadingKindLoadProfile)
+	// Self-evident non-vacuity: the row above really exists — tenant B can
+	// read it back through its own Scope.
+	selfB, err := repo.Latest(ctx, tenantB.Scope, tenantB.Analyzers[0].ID, validRange, model.ReadingKindLoadProfile)
+	require.NoError(t, err)
+	require.NotNil(t, selfB)
+
+	got, err := repo.Latest(ctx, tenantA.AdminScope, tenantB.Analyzers[0].ID, validRange, model.ReadingKindLoadProfile)
 	require.ErrorIs(t, err, store.ErrNotFound)
 	require.Nil(t, got)
 
