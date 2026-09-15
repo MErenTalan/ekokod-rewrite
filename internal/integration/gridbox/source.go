@@ -193,15 +193,14 @@ func (s *Source) dataClient(creds integration.Credentials) *httpx.Client {
 // serialised (SerializeKey) per company: the token call is a non-idempotent
 // OAuth2 grant exchange that must never be retried blindly, and two
 // concurrent jobs must never race two token exchanges against the same
-// credential. Controller ruling R32 (Task 2 fix round 1): a
-// `httpx.Request.NoRetry` field is landing on Task 2's branch, not yet on
-// this base — see the R32 comment on token() below, the one call site every
+// credential. Controller ruling R32 (Task 2 fix round 1): NoRetry: true is
+// set on the request in token() below, the one call site every
 // login/refresh goes through.
 //
 // This key is kept DISTINCT from dataClientConfig's own per-company
 // SerializeKey (fix round 1, I1) rather than merged into one lock: a token
 // exchange and a data call are different operations with different retry
-// rules (token: MaxAttempts effectively 1 once R32 lands; data: the
+// rules (token: MaxAttempts forced to 1 via NoRetry; data: the
 // Client's normal jittered retries), and merging their locks would have an
 // in-flight token refresh block every data call for the same company (and
 // vice versa) for no reason the brief asks for — 06 §3 only requires that
@@ -233,14 +232,14 @@ func (s *Source) token(ctx context.Context, creds integration.Credentials) (stri
 		"grant_type": {"password"},
 	}
 
-	// R32: set NoRetry: true once httpx.Request.NoRetry lands (Task 2 fix
-	// round 1) — this exchange must never be retried in-client.
+	// R32: this exchange must never be retried in-client.
 	resp, err := s.tokenClient(creds).Do(ctx, httpx.Request{
 		Op:          "token",
 		Method:      http.MethodPost,
 		Template:    creds.Endpoints["token"],
 		Body:        []byte(form.Encode()),
 		ContentType: "application/x-www-form-urlencoded",
+		NoRetry:     true,
 	})
 	if err != nil {
 		return "", remapTokenAuthFailure(err)

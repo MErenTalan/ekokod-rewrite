@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -870,4 +871,30 @@ func TestOSOSDiscoverSkipsRowsWithEmptyInstallationNumber(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, points, 1)
 	require.Equal(t, "FX0001", points[0].InstallationNumber)
+}
+
+// TestOSOSAuthenticationNeverRetries is adapter review pattern 10 (ruling
+// R32): the login POST is marked NoRetry, so a retryable-classified failure
+// (here, 500 -> ErrUpstreamUnavailable, which IS retryable in general)
+// still produces exactly one HTTP attempt. Removing NoRetry: true from
+// authenticate's httpx.Request makes this test FAIL (calls == 3, the
+// Client's default MaxAttempts).
+func TestOSOSAuthenticationNeverRetries(t *testing.T) {
+	var calls int
+	var mu sync.Mutex
+	srv := fake.NewTLSServer(t, fake.Route{Method: http.MethodPost, Path: "/osos/auth", Respond: func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		calls++
+		mu.Unlock()
+		w.WriteHeader(http.StatusInternalServerError)
+	}})
+	pool, _ := ososTestPool(t, srv)
+	src := osos.New(pool, osos.Options{Clock: clock.NewFake(fixtureNow)})
+
+	err := src.Verify(context.Background(), ososTestCreds(srv))
+	require.Error(t, err)
+	require.ErrorIs(t, err, integration.ErrUpstreamUnavailable)
+	mu.Lock()
+	defer mu.Unlock()
+	require.Equal(t, 1, calls, "R32: a non-idempotent login POST must never be retried in-client")
 }

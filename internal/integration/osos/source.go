@@ -152,13 +152,12 @@ func (s *Source) authenticate(ctx context.Context, cl *httpx.Client, creds integ
 	}
 
 	// R32 (controller ruling, Task 2 review): authentication is a
-	// non-idempotent login POST and must not be retried in-client. Set
-	// NoRetry: true here once httpx.Request.NoRetry lands (Task 2 fix
-	// round 1) — it does not exist on this adapter's base yet.
+	// non-idempotent login POST and must not be retried in-client.
 	resp, err := cl.Do(ctx, httpx.Request{
 		Op:       "authentication",
 		Method:   http.MethodPost,
 		Template: tmpl,
+		NoRetry:  true,
 		Params: map[string]httpx.Param{
 			"username_or_email": {Value: creds.Username},
 			"secret_password":   {Value: creds.Secret.Reveal(), Secret: true},

@@ -966,3 +966,29 @@ func TestGridBoxConfigErrorsAreDeliberate(t *testing.T) {
 		require.Empty(t, srv.Requests())
 	})
 }
+
+// TestGridBoxTokenExchangeNeverRetries is adapter review pattern 10 (ruling
+// R32): the token exchange POST is marked NoRetry, so a retryable-classified
+// failure (here, 500 -> ErrUpstreamUnavailable, which IS retryable in
+// general) still produces exactly one HTTP attempt. Removing NoRetry: true
+// from token()'s httpx.Request makes this test FAIL (calls == 3, the
+// Client's default MaxAttempts).
+func TestGridBoxTokenExchangeNeverRetries(t *testing.T) {
+	var mu sync.Mutex
+	var calls int
+	srv := fake.NewTLSServer(t, fake.Route{Method: http.MethodPost, Path: "/gridbox/token", Respond: func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		calls++
+		mu.Unlock()
+		w.WriteHeader(http.StatusInternalServerError)
+	}})
+	pool, _ := gridboxTestPool(t, srv)
+	src := gridboxNewSource(pool, 0)
+
+	err := src.Verify(context.Background(), gridboxTestCreds(srv, false))
+	require.Error(t, err)
+	require.ErrorIs(t, err, integration.ErrUpstreamUnavailable)
+	mu.Lock()
+	defer mu.Unlock()
+	require.Equal(t, 1, calls, "R32: a non-idempotent token exchange POST must never be retried in-client")
+}
