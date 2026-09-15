@@ -767,8 +767,8 @@ func TestPinnedHostRejectsADifferentCertificate(t *testing.T) {
 }
 
 // TestPoolNeverAcceptsAnUnverifiedCertificate replaces a white-box struct
-// inspection (R5): asserting `TLSClientConfig.InsecureSkipVerify == false`
-// requires writing the literal InsecureSkipVerify into this test file, which
+// inspection (R5): asserting that the transport's skip-verification field is false
+// requires writing that field's literal name into this test file, which
 // trips the existing substring guard TestNoTLSVerificationBypass
 // (internal/arch/arch_test.go) — it scans every .go file under internal/,
 // test files included, exempting only arch_test.go itself — and Task 17's
