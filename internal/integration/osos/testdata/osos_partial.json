@@ -1,0 +1,58 @@
+{
+  "energy": [
+    {
+      "meter_date": "01/08/2026 10:00:00",
+      "meter_serial_no": "SN0001",
+      "t_top_kWh": "1000,500",
+      "t_ri_kVarh": "50,250",
+      "t_rc_kVarh": "10,000",
+      "t_t1_kWh": "400,000",
+      "t_t2_kWh": "300,000",
+      "t_t3_kWh": "300,000",
+      "t_p_kW": "25,000",
+      "u_top_kWh": "5,000",
+      "u_ri_kVarh": "1,000",
+      "u_rc_kVarh": "0,500",
+      "u_u1_kWh": "2,000",
+      "u_u2_kWh": "2,000",
+      "u_u3_kWh": "1,000",
+      "u_p_kW": "3,000"
+    },
+    {
+      "meter_date": "not-a-date",
+      "meter_serial_no": "SN0001",
+      "t_top_kWh": "1001,000",
+      "t_ri_kVarh": "50,500",
+      "t_rc_kVarh": "10,100",
+      "t_t1_kWh": "400,300",
+      "t_t2_kWh": "300,300",
+      "t_t3_kWh": "300,400",
+      "t_p_kW": "26,000",
+      "u_top_kWh": "5,100",
+      "u_ri_kVarh": "1,050",
+      "u_rc_kVarh": "0,550",
+      "u_u1_kWh": "2,050",
+      "u_u2_kWh": "2,050",
+      "u_u3_kWh": "1,000",
+      "u_p_kW": "3,050"
+    },
+    {
+      "meter_date": "01/08/2026 10:30:00",
+      "meter_serial_no": "SN0001",
+      "t_top_kWh": "not-a-number",
+      "t_ri_kVarh": "50,750",
+      "t_rc_kVarh": "10,200",
+      "t_t1_kWh": "400,600",
+      "t_t2_kWh": "300,600",
+      "t_t3_kWh": "300,800",
+      "t_p_kW": "27,000",
+      "u_top_kWh": "5,200",
+      "u_ri_kVarh": "1,100",
+      "u_rc_kVarh": "0,600",
+      "u_u1_kWh": "2,100",
+      "u_u2_kWh": "2,100",
+      "u_u3_kWh": "1,000",
+      "u_p_kW": "3,100"
+    }
+  ]
+}

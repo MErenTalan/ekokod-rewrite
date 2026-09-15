@@ -1,0 +1,4 @@
+{"ResultStatus": 1, "ResultObject": [
+  {"ProfileDateTime": "2026-09-01T10:00:00Z", "ActiveEndex": 100},
+  {"ProfileDateTime": "not-a-timestamp", "ActiveEndex": 200}
+]}

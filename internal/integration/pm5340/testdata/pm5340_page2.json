@@ -1,0 +1,30 @@
+{
+  "items": [
+    {
+      "meterDate": "2026-01-05T08:30:00+03:00",
+      "activeImport_kWh": 1526.000,
+      "inductive_kvarh": 88.800,
+      "capacitive_kvarh": 12.200,
+      "dmdKwPeak_kW": 47.100,
+      "currentGeneration": 4.400,
+      "deviceId": "FIXTURE-DEVICE-01",
+      "deviceIp": "127.0.0.1"
+    },
+    {
+      "meterDate": "2026-01-05T08:45:00+03:00",
+      "activeImport_kWh": 1527.150,
+      "inductive_kvarh": 89.000,
+      "capacitive_kvarh": 12.250,
+      "dmdKwPeak_kW": 47.900,
+      "currentGeneration": 4.800,
+      "deviceId": "FIXTURE-DEVICE-01",
+      "deviceIp": "127.0.0.1"
+    }
+  ],
+  "limit": 2,
+  "cursorNext": null,
+  "hasMore": false,
+  "total": 4,
+  "sort": "asc",
+  "filters": {}
+}
