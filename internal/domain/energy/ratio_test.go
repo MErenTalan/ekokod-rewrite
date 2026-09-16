@@ -20,8 +20,8 @@ func TestRatioIsNilWhenDenominatorIsNegative(t *testing.T) {
 }
 
 func TestRatioIsAnUnroundedFraction(t *testing.T) {
-	require.Equal(t, "0.33020408163265306122", energy.Ratio(dec("4.045"), dec("12.25")).String())
-	require.Equal(t, "0.33333333333333333333", energy.Ratio(dec("1"), dec("3")).String())
+	requireDecimal(t, energy.Ratio(dec("4.045"), dec("12.25")), "0.33020408163265306122")
+	requireDecimal(t, energy.Ratio(dec("1"), dec("3")), "0.33333333333333333333")
 }
 
 func TestRatiosOfANormalDerivation(t *testing.T) {
@@ -34,8 +34,32 @@ func TestRatiosOfANormalDerivation(t *testing.T) {
 		},
 	}
 	inductive, capacitive := energy.Ratios(d)
-	require.Equal(t, "0.33020408163265306122", inductive.String())
-	require.Equal(t, "0.0816326530612244898", capacitive.String())
+	requireDecimal(t, inductive, "0.33020408163265306122")
+	requireDecimal(t, capacitive, "0.0816326530612244898")
+}
+
+// TestRatiosWhenInductiveRegisterIsSuspectOnlyInductiveIsNil proves Ratios
+// operates per-register: active_import is sound so the ratio call proceeds,
+// but Difference's contract (Values[reg]=nil whenever Suspect[reg] is set)
+// means a suspect reactive_inductive_import arrives as a nil numerator, so
+// Ratio's nil-numerator rule makes the inductive ratio nil while the
+// capacitive ratio — whose register is sound — is still computed normally.
+func TestRatiosWhenInductiveRegisterIsSuspectOnlyInductiveIsNil(t *testing.T) {
+	delta := dec("-1")
+	d := energy.Derivation{
+		Emitted: true,
+		Values: map[energy.Register]*decimal.Decimal{
+			energy.ActiveImport:             dec("12.25"),
+			energy.ReactiveInductiveImport:  nil,
+			energy.ReactiveCapacitiveImport: dec("1"),
+		},
+		Suspect: map[energy.Register]energy.Suspicion{
+			energy.ReactiveInductiveImport: {Reason: energy.ReasonNegativeDelta, Delta: delta},
+		},
+	}
+	inductive, capacitive := energy.Ratios(d)
+	require.Nil(t, inductive)
+	requireDecimal(t, capacitive, "0.0816326530612244898")
 }
 
 func TestRatiosOfADerivationWhoseActiveImportIsSuspectAreNil(t *testing.T) {

@@ -26,6 +26,12 @@ const DivisionScale int32 = 20
 // masked rather than handled"). Ratio never reproduces that: a
 // non-positive or missing denominator, or a missing numerator, yields nil,
 // never a substituted value.
+//
+// Ratio does not special-case a negative numerator: it returns a negative
+// ratio, unrounded, exactly as division would. This is never reached from a
+// sound derivation in practice — Difference's contract turns a negative
+// difference suspect and nils the numerator upstream (§3.1), so a negative
+// consumption value never survives to reach Ratio as a numerator here.
 func Ratio(numerator, denominator *decimal.Decimal) *decimal.Decimal {
 	if numerator == nil || denominator == nil {
 		return nil

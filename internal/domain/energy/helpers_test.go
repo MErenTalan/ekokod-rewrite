@@ -93,6 +93,15 @@ func vals(active, t1 string) map[energy.Register]*decimal.Decimal {
 	}
 }
 
+// requireDecimal fails the test cleanly if got is nil (rather than letting a
+// later got.String() panic with a nil pointer dereference — see task-3-review
+// I1), then compares got's value against want by value.
+func requireDecimal(t *testing.T, got *decimal.Decimal, want string) {
+	t.Helper()
+	require.NotNil(t, got)
+	require.Equal(t, want, got.String())
+}
+
 // istanbul loads the Europe/Istanbul location, failing the test immediately
 // if it cannot be resolved (it always can: internal/domain/energy blank-
 // imports time/tzdata precisely so this never depends on the host's system
