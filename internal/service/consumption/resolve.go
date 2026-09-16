@@ -325,7 +325,7 @@ func (b *Billing) rederiveBucketWithReset(ctx context.Context, sc store.Scope, a
 	if err != nil {
 		return Row{}, false, err
 	}
-	row, ok := deriveRow(analyzerID, period, data, []energy.Reading{proposed})
+	row, ok := deriveRow(analyzerID, period, data, []energy.Reading{proposed}, level)
 	return row, ok, nil
 }
 

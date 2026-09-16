@@ -23,14 +23,23 @@ var billingT0 = time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
 // newBilling builds a *consumption.Billing wired to readings, with
 // AnomalyRepository and OpsRepository set to the panicking no-op fakes
 // (Task 7's Consumption must never reach either — that is Task 8's
-// ConsumptionAndRecord, on the same type).
+// ConsumptionAndRecord, on the same type). The clock is fixed at billingT0.
 func newBilling(t *testing.T, readings fakeReadings) *consumption.Billing {
+	t.Helper()
+	return newBillingAt(t, readings, billingT0)
+}
+
+// newBillingAt is newBilling with an explicit clock instant, for a test
+// whose own fixture window must be CLOSED under R98 (Billing drops every
+// bucket whose To is after the deps clock's now) even though that window
+// does not fall entirely before the file's shared billingT0 anchor.
+func newBillingAt(t *testing.T, readings fakeReadings, now time.Time) *consumption.Billing {
 	t.Helper()
 	b, err := consumption.NewBilling(consumption.BillingDeps{
 		Readings:  readings,
 		Anomalies: noAnomalies{},
 		Ops:       noOps{},
-		Clock:     clock.NewFake(billingT0),
+		Clock:     clock.NewFake(now),
 		Log:       testLog(t),
 	})
 	require.NoError(t, err)
@@ -94,6 +103,52 @@ func TestBillingRefusesARequestOverTheMaxBucketsCap(t *testing.T) {
 
 	_, err := b.Consumption(ctx, scope, req)
 	require.ErrorIs(t, err, consumption.ErrInvalidRequest)
+}
+
+// --- R98: an open or future bucket is never emitted, complete or partial --
+
+// TestBillingNeverEmitsAnOpenOrFutureBucket is R98's own acceptance probe
+// (final review A I-1's exact scenario): 15-minute load_profile readings
+// exist up to Jan 30 22:00 Istanbul (3872, so 3872-1000=2872 accrued so
+// far). Requesting the whole January Monthly bucket ([Jan1, Feb1)) while
+// the clock still reads Jan 30 22:00 — well before the bucket's own To —
+// must yield NO row at all: the pre-R98 defect let the Feb-01 boundary
+// resolve to the Jan 30 22:00 reading (inside R96's 36h load_profile
+// tolerance) and silently returned one row, 2872, as if the month were
+// closed. Advancing the clock to exactly Feb 1 00:00 (the bucket's own To)
+// closes it and the row appears, unchanged.
+func TestBillingNeverEmitsAnOpenOrFutureBucket(t *testing.T) {
+	loc := istanbulLoc(t)
+	jan1 := time.Date(2026, 1, 1, 0, 0, 0, 0, loc)
+	feb1 := time.Date(2026, 2, 1, 0, 0, 0, 0, loc)
+	jan30At22 := time.Date(2026, 1, 30, 22, 0, 0, 0, loc)
+	analyzerID := uuid.New()
+
+	readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
+		model.ReadingKindLoadProfile: {
+			readingRow(analyzerID, jan1, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}),
+			readingRow(analyzerID, jan30At22, model.ReadingKindLoadProfile, map[string]string{"active_import": "3872"}),
+		},
+	}}
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+	req := consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{analyzerID},
+		Level:       energy.Monthly,
+		Range:       store.TimeRange{From: jan1, To: feb1},
+	}
+
+	stillOpen := newBillingAt(t, readings, jan30At22)
+	rows, err := stillOpen.Consumption(ctx, scope, req)
+	require.NoError(t, err)
+	require.Empty(t, rows, "January has not closed yet (now is Jan 30 22:00, well inside the bucket): no row, never a partial 2872")
+
+	closed := newBillingAt(t, readings, feb1)
+	rows, err = closed.Consumption(ctx, scope, req)
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "at Feb 1 00:00 the bucket has closed")
+	require.NotNil(t, rows[0].Values[energy.ActiveImport])
+	require.Equal(t, "2872", rows[0].Values[energy.ActiveImport].String())
 }
 
 // TestMonthlyPrefersBillingKindReadingsWhenPresent is R62/R63's acceptance
@@ -249,7 +304,9 @@ func TestBillingNeverUsesCurrentIndexReadingsAsBoundaries(t *testing.T) {
 			readingRow(analyzerID, hourStart.Add(time.Hour), model.ReadingKindCurrentIndex, map[string]string{"active_import": "9999"}),
 		},
 	}}
-	b := newBilling(t, readings)
+	// R98: the clock must be at or after the bucket's own To (hourStart+1h)
+	// for this still-open-at-billingT0 hour to be emitted as a row at all.
+	b := newBillingAt(t, readings, hourStart.Add(time.Hour))
 
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -294,7 +351,10 @@ func billingHourlyAndDailyFor(t *testing.T, analyzerID uuid.UUID, dayStart time.
 	fake := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
 		model.ReadingKindLoadProfile: readings,
 	}}
-	b := newBilling(t, fake)
+	// R98: the clock must be at or after dayStart+24h — the widest bucket
+	// (Daily) this helper requests — for both the hourly and the daily
+	// buckets to be closed, never dropped as still-open/future.
+	b := newBillingAt(t, fake, dayStart.Add(24*time.Hour))
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
 
@@ -464,7 +524,9 @@ func TestBillingResetPriorsAreLoadProfileOnly(t *testing.T) {
 			readingRow(analyzerID, day.Add(12*time.Hour), model.ReadingKindReset, map[string]string{"active_import": "0"}),
 		},
 	}}
-	b := newBilling(t, readings)
+	// R98: this fixture's day (Mar 10) is after billingT0 (Mar 1); the clock
+	// must be at or after day+24h for the bucket to be closed.
+	b := newBillingAt(t, readings, day.Add(24*time.Hour))
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
 
@@ -498,7 +560,8 @@ func TestBillingIncludesAFirstBucketWhoseStartReadingPrecedesFrom(t *testing.T) 
 			readingRow(analyzerID, day.Add(45*time.Minute), model.ReadingKindLoadProfile, map[string]string{"active_import": "1030"}),
 		},
 	}}
-	b := newBilling(t, readings)
+	// R98: the fixture window closes at day+1h, after billingT0.
+	b := newBillingAt(t, readings, day.Add(time.Hour))
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
 
@@ -644,7 +707,8 @@ func TestBillingFallsBackToDailyWhenLoadProfileHasNoUsablePair(t *testing.T) {
 			readingRow(analyzerID, day.Add(24*time.Hour), model.ReadingKindDaily, map[string]string{"active_import": "1300"}),
 		},
 	}}
-	b := newBilling(t, readings)
+	// R98: the fixture window closes at day+24h, after billingT0.
+	b := newBillingAt(t, readings, day.Add(24*time.Hour))
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
 
@@ -677,7 +741,8 @@ func TestBillingPrefersLoadProfileOverDailyWhenBothPresent(t *testing.T) {
 			readingRow(analyzerID, day.Add(24*time.Hour), model.ReadingKindDaily, map[string]string{"active_import": "1300"}),
 		},
 	}}
-	b := newBilling(t, readings)
+	// R98: the fixture window closes at day+24h, after billingT0.
+	b := newBillingAt(t, readings, day.Add(24*time.Hour))
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
 
@@ -789,12 +854,15 @@ func TestMonthlyFallsBackToDailyWhenNeitherBillingNorLoadProfileCover(t *testing
 
 // TestBillingRatiosAndMaxDemandFromDerivedValues is I-5's Billing half.
 // Deltas: active 1000->1100 = 100, reactive_inductive 100->125 = 25 (ratio
-// 0.25), reactive_capacitive 40->52 = 12 (ratio 0.12). Max demand must be
-// the maximum of load_profile (10 at the start boundary), daily (20, inside
-// the window) and billing (15, inside the window) — never the
-// current_index decoy (999, wrong kind, always excluded) and never the 500
-// peak sitting exactly at w.To (excluded by the half-open window: it
-// belongs to the NEXT bucket, not this one).
+// 0.25), reactive_capacitive 40->52 = 12 (ratio 0.12). R101 (amending R65):
+// at Hourly, MaxDemandKindsFor allows only load_profile — daily (20) and
+// billing (15) rows, however INSIDE the window, must no longer win, proving
+// a coarser kind's peak cannot land inside a single hour. Max demand is
+// therefore the maximum of load_profile ALONE: 10, at the start boundary
+// (the 500 load_profile peak sits exactly at w.To, excluded by the
+// half-open window — it belongs to the NEXT bucket) — never the
+// current_index decoy (999, wrong kind, always excluded regardless of
+// level) and never daily's 20 or billing's 15.
 func TestBillingRatiosAndMaxDemandFromDerivedValues(t *testing.T) {
 	h := billingT0
 	analyzerID := uuid.New()
@@ -818,7 +886,8 @@ func TestBillingRatiosAndMaxDemandFromDerivedValues(t *testing.T) {
 			mustSetMaxDemand(readingRow(analyzerID, h.Add(10*time.Minute), model.ReadingKindCurrentIndex, map[string]string{"active_import": "1010"}), "999"),
 		},
 	}}
-	b := newBilling(t, readings)
+	// R98: the fixture window closes at h+1h, at or after billingT0.
+	b := newBillingAt(t, readings, h.Add(time.Hour))
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
 
@@ -837,8 +906,8 @@ func TestBillingRatiosAndMaxDemandFromDerivedValues(t *testing.T) {
 	require.Equal(t, "0.12", row.CapacitiveRatio.String())
 
 	require.NotNil(t, row.MaxDemandKw)
-	require.Equal(t, "20", row.MaxDemandKw.String(),
-		"the maximum of load_profile/daily/billing INSIDE the window, never current_index and never the peak at w.To")
+	require.Equal(t, "10", row.MaxDemandKw.String(),
+		"R101: only load_profile counts at Hourly — daily's 20 and billing's 15 must not land in this hour, current_index is always excluded, and the 500 peak sits at w.To")
 }
 
 // mustSetMaxDemand sets r.MaxDemandKw to v, for readingRow fixtures that
@@ -988,9 +1057,23 @@ func TestBillingValidatesBeforeAnyIO(t *testing.T) {
 	}
 }
 
-// TestBillingAcceptsExactlyMaxBuckets is I-6's positive control: a request
-// AT the cap (not over it) must be accepted and reach the (empty) fake.
-func TestBillingAcceptsExactlyMaxBuckets(t *testing.T) {
+// TestBillingExactlyMaxBucketsAtHourlyNowHitsMaxRequestSpanFirst mirrors
+// analytics_test.go's TestExactlyMaxBucketsAtHourlyNowHitsMaxRequestSpanFirst
+// (X1): MaxBuckets (10000) hourly buckets is a 10000h span, WIDER than
+// MaxRequestSpan (400d = 9600h, R99) — the tighter of the two checks always
+// wins, so this request — I-6's original MaxBuckets positive control — is
+// now refused by the span cap before bucketCountExceeds is ever reached.
+// The binding limit at Hourly is MaxRequestSpan, not MaxBuckets: the real
+// positive control for what a caller can actually request is
+// TestBillingAcceptsExactlyMaxRequestSpan below.
+//
+// MaxBuckets is not reachable at ANY level under MaxRequestSpan (R99 does
+// not remove it — it stays in force as defence-in-depth against a future,
+// looser span cap): a 9600h span gives at most 9600 Hourly buckets (< the
+// 10000 cap; DST never adds an extra bucket, only alters one bucket's own
+// width), at most 400 Daily buckets, at most ~14 Monthly buckets and at
+// most 2 Yearly buckets — every level's true ceiling is far below 10000.
+func TestBillingExactlyMaxBucketsAtHourlyNowHitsMaxRequestSpanFirst(t *testing.T) {
 	b := newBilling(t, fakeReadings{})
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -999,9 +1082,26 @@ func TestBillingAcceptsExactlyMaxBuckets(t *testing.T) {
 		Level:       energy.Hourly,
 		Range:       store.TimeRange{From: billingT0, To: billingT0.Add(time.Duration(consumption.MaxBuckets) * time.Hour)},
 	}
+	_, err := b.Consumption(ctx, scope, req)
+	require.ErrorIs(t, err, consumption.ErrInvalidRequest, "10000h > MaxRequestSpan's 9600h: refused before any ReadingRepository call")
+}
+
+// TestBillingAcceptsExactlyMaxRequestSpan is R99's positive control for the
+// span cap on the Billing path: exactly 400 days, well before billingT0 (so
+// R98 never drops a bucket here), must not be refused.
+func TestBillingAcceptsExactlyMaxRequestSpan(t *testing.T) {
+	from := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	b := newBillingAt(t, fakeReadings{}, from.Add(consumption.MaxRequestSpan))
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+	req := consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{uuid.New()},
+		Level:       energy.Yearly,
+		Range:       store.TimeRange{From: from, To: from.Add(consumption.MaxRequestSpan)},
+	}
 	rows, err := b.Consumption(ctx, scope, req)
 	require.NoError(t, err)
-	require.Empty(t, rows)
+	require.Empty(t, rows, "the (empty) fake has no data — this only proves the request itself is accepted")
 }
 
 // --- R96/K1: a kind's tolerance is capped at half the bucket's width ------
@@ -1035,7 +1135,8 @@ func TestDailyMissingSnapshotYieldsNoRowForEitherAdjacentDayNotOneMergedRow(t *t
 			readingRow(analyzerID, mar12, model.ReadingKindDaily, map[string]string{"active_import": "1400"}),
 		},
 	}}
-	b := newBilling(t, readings)
+	// R98: the fixture window closes at mar12, after billingT0.
+	b := newBillingAt(t, readings, mar12)
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
 
@@ -1239,7 +1340,8 @@ func TestBillingDailyLookbackFeedsTheSharedMinimum(t *testing.T) {
 			readingRow(analyzerID, day.Add(-2*time.Hour), model.ReadingKindReset, map[string]string{"active_import": "0"}),
 		},
 	}}
-	b := newBilling(t, readings)
+	// R98: the fixture window closes at day+24h, after billingT0.
+	b := newBillingAt(t, readings, day.Add(24*time.Hour))
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
 
@@ -1368,16 +1470,19 @@ func TestBillingMixesLoadProfileStartWithDailyEndUnderR96(t *testing.T) {
 	require.Equal(t, "5010", rows[0].Values[energy.ActiveImport].String())
 }
 
-// --- I-D: billing-kind rows must count as a MaxDemand source too ----------
+// --- R101: a billing-kind row's peak must not land in an Hourly bucket ----
 
-// TestBillingMaxDemandFromBillingKindIsTheUniqueMaximum is I-D: the
-// review's original TestBillingRatiosAndMaxDemandFromDerivedValues fixture
-// never made the billing-kind reading's own MaxDemandKw (15) the unique
-// maximum, so dropping billing-kind rows from the MaxDemand read
-// (billing.go:216/248) stayed green (daily's 20 already won). Here the
-// billing-kind reading is the ONLY one with a large MaxDemandKw (500);
-// load_profile and daily are both small decoys.
-func TestBillingMaxDemandFromBillingKindIsTheUniqueMaximum(t *testing.T) {
+// TestBillingHourlyMaxDemandExcludesBillingKindEvenAsTheUniqueMaximum is
+// R101's Hourly proof (amending I-D/R65, which used to require the
+// opposite): the billing-kind reading is the ONLY one with a large
+// MaxDemandKw (500) — load_profile (5 at h, 8 at h+1h, excluded by the
+// half-open window) and daily (10) are both small decoys — yet at Hourly,
+// energy.MaxDemandKindsFor allows load_profile only, so 500 must NOT win
+// even though it is the unique maximum in the window: the answer is 5 (the
+// one load_profile reading actually inside [h, h+1h)). Mutation "use the
+// unqualified MaxDemandKinds (or MaxDemandKindsFor at every level) instead
+// of MaxDemandKindsFor(level)" makes this 500.
+func TestBillingHourlyMaxDemandExcludesBillingKindEvenAsTheUniqueMaximum(t *testing.T) {
 	h := billingT0
 	analyzerID := uuid.New()
 
@@ -1393,7 +1498,8 @@ func TestBillingMaxDemandFromBillingKindIsTheUniqueMaximum(t *testing.T) {
 			mustSetMaxDemand(readingRow(analyzerID, h.Add(40*time.Minute), model.ReadingKindBilling, map[string]string{}), "500"),
 		},
 	}}
-	b := newBilling(t, readings)
+	// R98: the fixture window closes at h+1h, at or after billingT0.
+	b := newBillingAt(t, readings, h.Add(time.Hour))
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
 
@@ -1405,12 +1511,15 @@ func TestBillingMaxDemandFromBillingKindIsTheUniqueMaximum(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.NotNil(t, rows[0].MaxDemandKw)
-	require.Equal(t, "500", rows[0].MaxDemandKw.String(), "billing-kind rows must count as a MaxDemand source (R65)")
+	require.Equal(t, "5", rows[0].MaxDemandKw.String(), "R101: billing's 500 (and daily's 10) must not land in an Hourly bucket, even as the unique maximum")
 }
 
 // TestBillingMonthlyMaxDemandFromBillingKindIsTheUniqueMaximum is I-G
-// (re-review round 2): TestBillingMaxDemandFromBillingKindIsTheUniqueMaximum
-// above only exercises the HOURLY leg of I-D's fix (billing.go:216/248), so
+// (re-review round 2): the Hourly test above (now
+// TestBillingHourlyMaxDemandExcludesBillingKindEvenAsTheUniqueMaximum,
+// R101) proves the OPPOSITE at that level; this is R101's Monthly/Yearly
+// positive control, where billing-kind rows still count. Originally this
+// only exercised the HOURLY leg of I-D's fix (billing.go:216/248), so
 // dropping billing-kind rows from the MONTHLY MaxDemand read
 // (`maxDemandBilling := billing[:0]` at billing.go:229) stayed green — at
 // Monthly, `billing` is already loaded for boundary resolution and reused
@@ -1450,6 +1559,43 @@ func TestBillingMonthlyMaxDemandFromBillingKindIsTheUniqueMaximum(t *testing.T) 
 	require.Equal(t, "500", rows[0].MaxDemandKw.String(), "the Monthly leg must also count billing-kind rows as a MaxDemand source (R65)")
 }
 
+// TestBillingDailyMaxDemandExcludesBillingKindRow is R101's Daily proof:
+// MaxDemandKindsFor(Daily) is load_profile+daily, NOT billing — a whole
+// month's own stamped peak (billing-kind, 500) must not land inside a
+// single day even when it sits inside that day's own window, while a
+// daily-kind reading's peak (20, that DAY's own stamped maximum) still
+// counts. Mutation "use MaxDemandKinds (or MaxDemandKindsFor at every
+// level) instead of MaxDemandKindsFor(level)" makes this 500.
+func TestBillingDailyMaxDemandExcludesBillingKindRow(t *testing.T) {
+	loc := istanbulLoc(t)
+	day := time.Date(2026, 1, 10, 0, 0, 0, 0, loc)
+	analyzerID := uuid.New()
+
+	readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
+		model.ReadingKindDaily: {
+			readingRow(analyzerID, day, model.ReadingKindDaily, map[string]string{"active_import": "1000"}),
+			mustSetMaxDemand(readingRow(analyzerID, day.Add(6*time.Hour), model.ReadingKindDaily, map[string]string{}), "20"),
+			readingRow(analyzerID, day.Add(24*time.Hour), model.ReadingKindDaily, map[string]string{"active_import": "1300"}),
+		},
+		model.ReadingKindBilling: {
+			mustSetMaxDemand(readingRow(analyzerID, day.Add(12*time.Hour), model.ReadingKindBilling, map[string]string{}), "500"),
+		},
+	}}
+	b := newBilling(t, readings)
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+
+	rows, err := b.Consumption(ctx, scope, consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{analyzerID},
+		Level:       energy.Daily,
+		Range:       store.TimeRange{From: day, To: day.Add(24 * time.Hour)},
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.NotNil(t, rows[0].MaxDemandKw)
+	require.Equal(t, "20", rows[0].MaxDemandKw.String(), "R101: billing's month-wide 500 must not land inside a single Daily bucket")
+}
+
 // --- I-E: the I-9 sort.Search lower bound must include w.From -------------
 
 // TestMaxDemandIncludesAReadingExactlyAtTheBucketStartButExcludesWTo is I-E:
@@ -1472,7 +1618,8 @@ func TestMaxDemandIncludesAReadingExactlyAtTheBucketStartButExcludesWTo(t *testi
 			mustSetMaxDemand(readingRow(analyzerID, h.Add(2*time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "1020"}), "99"),
 		},
 	}}
-	b := newBilling(t, readings)
+	// R98: the fixture window closes at h+2h, after billingT0.
+	b := newBillingAt(t, readings, h.Add(2*time.Hour))
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
 

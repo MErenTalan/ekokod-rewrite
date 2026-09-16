@@ -81,7 +81,11 @@ func NewBilling(d BillingDeps) (*Billing, error) {
 // Consumption derives consumption from meter_readings at the true period
 // boundaries (02 §3.1, §3.2). It is exact, slower, and the only path that
 // may feed an invoice. A suspect period returns nil values and a
-// Suspicion; it never returns a number (removed-behaviour 1). Writing the
+// Suspicion; it never returns a number (removed-behaviour 1). R98: it also
+// never returns a bucket whose To is after the deps clock's Now — an open
+// or still-accruing period is neither billed as a number nor marked
+// Partial, it is simply absent from the result until it closes (an
+// invoice-grade figure is complete or absent, never partial). Writing the
 // anomaly row and the operator message is Task 8's ConsumptionAndRecord
 // wrapper, on the same type.
 func (b *Billing) Consumption(ctx context.Context, sc store.Scope, req SeriesRequest) ([]Row, error) {
@@ -183,7 +187,18 @@ func (b *Billing) consumptionForAnalyzer(ctx context.Context, sc store.Scope, an
 	rows := make([]Row, 0, len(buckets))
 	var gaps []bucketGap
 	for _, w := range buckets {
-		row, ok := deriveRow(analyzerID, w, data, nil)
+		// R98 (amending/generalising R97 ruling (i)): a bucket that is not
+		// yet CLOSED — its own To after the deps clock's now — is dropped
+		// before deriveRow ever runs: never a row (open/future consumption
+		// is not invoice-grade, even when every boundary happens to
+		// resolve), and never a gap either (otherwise every run over the
+		// still-accruing current period would write one). closedBucket is
+		// the ONE shared predicate both rulings now use, so they can never
+		// drift apart again.
+		if !closedBucket(w, now) {
+			continue
+		}
+		row, ok := deriveRow(analyzerID, w, data, nil, level)
 		if ok {
 			rows = append(rows, row)
 			continue
@@ -201,12 +216,6 @@ func (b *Billing) consumptionForAnalyzer(ctx context.Context, sc store.Scope, an
 		// actually unbillable, so no gap anomaly is ever written and no
 		// Hourly missing_readings row can exist after this change.
 		if level == energy.Hourly {
-			continue
-		}
-		// R97 ruling (i): a bucket still open or in the future never gets a
-		// gap — otherwise every run over the current, still-accruing period
-		// would write one.
-		if w.To.After(now) {
 			continue
 		}
 		// R97 ruling (ii): a bucket that ends at or before the analyzer's
@@ -234,7 +243,7 @@ func (b *Billing) consumptionForAnalyzer(ctx context.Context, sc store.Scope, an
 		// independence rather than needing its own separate, wider query.
 		// A bucket that gets a row this way is removed from gaps: it is
 		// either a row or a gap, never both.
-		overrideRows, remaining, oerr := b.applyResolvedGapOverrides(ctx, sc, analyzerID, gaps, data)
+		overrideRows, remaining, oerr := b.applyResolvedGapOverrides(ctx, sc, analyzerID, level, gaps, data)
 		if oerr != nil {
 			return nil, nil, oerr
 		}
@@ -290,7 +299,7 @@ func earliestBoundaryReading(data analyzerBoundaryData) *time.Time {
 // for the whole request — data.resolved already covers every bucket's own
 // boundary instant (R96), so this never re-queries ReadingRepository per
 // overridden gap.
-func (b *Billing) applyResolvedGapOverrides(ctx context.Context, sc store.Scope, analyzerID uuid.UUID, gaps []bucketGap, data analyzerBoundaryData) ([]Row, []bucketGap, error) {
+func (b *Billing) applyResolvedGapOverrides(ctx context.Context, sc store.Scope, analyzerID uuid.UUID, level energy.Level, gaps []bucketGap, data analyzerBoundaryData) ([]Row, []bucketGap, error) {
 	from, to := gaps[0].Window.From, gaps[0].Window.To
 	for _, g := range gaps[1:] {
 		if g.Window.From.Before(from) {
@@ -353,7 +362,7 @@ func (b *Billing) applyResolvedGapOverrides(ctx context.Context, sc store.Scope,
 			AnalyzerID:  analyzerID,
 			Window:      g.Window,
 			Values:      values,
-			MaxDemandKw: maxDemandInWindow(g.Window, data.loadProfile, data.daily, data.maxDemandBilling),
+			MaxDemandKw: maxDemandInWindow(level, g.Window, data.loadProfile, data.daily, data.maxDemandBilling),
 			Resolution:  resolution,
 		}
 		// R97 rule 7 / Minor m-2: Indexes is the end reading's own values
@@ -367,6 +376,17 @@ func (b *Billing) applyResolvedGapOverrides(ctx context.Context, sc store.Scope,
 		overrideRows = append(overrideRows, row)
 	}
 	return overrideRows, remaining, nil
+}
+
+// closedBucket implements R98: a bucket counts as closed exactly when its
+// own To is at or before now — never a strict-before, since a bucket
+// closing at exactly this instant has fully accrued. This is the ONE
+// predicate consumptionForAnalyzer's loop uses both to decide whether a
+// derived row may be emitted at all and whether a missed bucket may be
+// recorded as a gap (R97 ruling (i)), so the two rulings can never resolve
+// an open/future bucket differently from each other.
+func closedBucket(w energy.Window, now time.Time) bool {
+	return !w.To.After(now)
 }
 
 // classifyGap implements R97 spec point 2: with start/end the resolved
@@ -426,7 +446,7 @@ type analyzerBoundaryData struct {
 // energy.Derive did not emit (see classifyGap's doc for the exhaustive
 // list) — the caller decides what "no row" means for its own purpose
 // (Consumption: omit; ConsumptionAndRecord: a gap; ResolveAnomaly: reject).
-func deriveRow(analyzerID uuid.UUID, w energy.Window, data analyzerBoundaryData, extraResets []energy.Reading) (Row, bool) {
+func deriveRow(analyzerID uuid.UUID, w energy.Window, data analyzerBoundaryData, extraResets []energy.Reading, level energy.Level) (Row, bool) {
 	start := data.resolved[w.From.UnixNano()]
 	end := data.resolved[w.To.UnixNano()]
 
@@ -467,7 +487,10 @@ func deriveRow(analyzerID uuid.UUID, w energy.Window, data analyzerBoundaryData,
 		Indexes:    endIndexes(end),
 		// I-9: only the bucket's own sub-range of each already-sorted
 		// source is ever scanned, never the whole loaded set per bucket.
-		MaxDemandKw: maxDemandInWindow(w, data.loadProfile, data.daily, data.maxDemandBilling),
+		// R101: kinds are scoped to level (energy.MaxDemandKindsFor), so a
+		// coarser kind's peak (daily at Hourly, billing at Hourly/Daily)
+		// can never land inside a finer window.
+		MaxDemandKw: maxDemandInWindow(level, w, data.loadProfile, data.daily, data.maxDemandBilling),
 		// Source is exactly derivation.Source: the END boundary's own
 		// Kind (R96), or start.Kind when end is a reset row (M-4). Under
 		// R96 a period's start and end boundary can resolve to DIFFERENT
@@ -828,8 +851,14 @@ func (b *Billing) firstBoundaryLookback(ctx context.Context, sc store.Scope, ana
 // sort.Search — O(log n) per source per bucket — instead of rescanning the
 // whole loaded set on every bucket (O(buckets x readings), the shape that
 // cost 2.78s for one analyzer-year of 15-minute readings at Hourly). Only
-// the bounded sub-slice is ever handed to energy.MaxDemand.
-func maxDemandInWindow(w energy.Window, sources ...[]energy.Reading) *decimal.Decimal {
+// the bounded sub-slice is ever handed to energy.MaxDemandOf.
+//
+// R101: the kind allowlist is energy.MaxDemandKindsFor(level), not the
+// unqualified energy.MaxDemandKinds — a daily row's own day-peak must not
+// win inside a single Hourly bucket, and a billing row's own month-peak
+// must not win inside a single Hourly or Daily bucket (final review A M-2).
+func maxDemandInWindow(level energy.Level, w energy.Window, sources ...[]energy.Reading) *decimal.Decimal {
+	kinds := energy.MaxDemandKindsFor(level)
 	var max *decimal.Decimal
 	for _, src := range sources {
 		lo := sort.Search(len(src), func(i int) bool { return !src[i].TS.Before(w.From) })
@@ -837,7 +866,7 @@ func maxDemandInWindow(w energy.Window, sources ...[]energy.Reading) *decimal.De
 		if lo >= hi {
 			continue
 		}
-		if m := energy.MaxDemand(w, src[lo:hi]); m != nil && (max == nil || m.GreaterThan(*max)) {
+		if m := energy.MaxDemandOf(w, src[lo:hi], kinds); m != nil && (max == nil || m.GreaterThan(*max)) {
 			v := *m
 			max = &v
 		}

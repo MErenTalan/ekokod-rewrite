@@ -138,8 +138,12 @@ type SeriesRequest struct {
 // always nil there, exactly as they are absent from bucketIndexes' map.
 // Partial is true for every bucket Analytics composes from consumption_daily
 // at Monthly/Yearly (R94, amending R88) — the still-open trailing period AND
-// any earlier closed-but-unrefreshed one — never set by Billing, which only
-// ever reads closed periods. M-4: a composed figure is closing-to-closing
+// any earlier closed-but-unrefreshed one — never set by Billing: R98 drops
+// every bucket whose To is after BillingDeps.Clock's Now before it can ever
+// become a row, so Billing has no open period left to mark Partial in the
+// first place (it is not that Billing declines to flag one — final review A
+// I-1 found it silently emitting an open period as if it were a closed,
+// complete one). M-4: a composed figure is closing-to-closing
 // across whatever materialisation gap it fills and is NOT directly
 // comparable to the later materialised row for the same window — it can
 // differ by the boundary step the materialised aggregate itself measures
