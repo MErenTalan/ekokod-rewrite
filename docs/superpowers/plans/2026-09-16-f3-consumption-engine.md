@@ -179,8 +179,8 @@ At most 5 concurrent agents, at most 3 running Docker-backed suites. A wave star
 |---|---|---|
 | A | 1 ✅, 5 ✅, 6 | Pre-flight |
 | B | 2, 3 | 1 |
-| C | 4, 7, 11a | 2+3 (4, 7); 6 (7, 11a); 1 (11a) |
-| D | 8, 9, 10, 11b | 7 (8, 9, 10); 5 (10); 11a (11b) |
+| C | 4, 7, 10, 11a | 2+3 (4, 7); 6 (7, 11a); 1 (11a); 5 (10 — it reads `store.AnalyticsRepository` directly under R87, so it no longer waits for Task 7) |
+| D | 8, 9, 11b | 7 (8, 9); 11a (11b) |
 | E | 13 | all |
 
 ## File ownership (parallel tasks never edit the same file)
@@ -1754,7 +1754,7 @@ func TestExportColumnsAreStableAndUnrounded(t *testing.T) {
 | Test | Mutation |
 |---|---|
 | `TestSummariseGivesANilTotalWhenARegisterIsReportedOnlyBySuspectRows` | treat a suspect row's nil value as zero when summing: expect FAIL — the total becomes `"0"` instead of nil. Restore. |
-| `TestSummariseCountsSuspectRowsAndExcludesThemFromTotals` | add suspect rows' nil values as zero: expect FAIL on the count. Restore. |
+| `TestSummariseCountsSuspectRowsAndExcludesThemFromTotals` | count a row as suspect only when EVERY register is suspect: expect FAIL on `Suspect`. (Adding suspect rows' nil values as zero is a numeric no-op on a mixed fixture; that mutation is caught by the all-suspect-register nil-total test instead.) Restore. |
 | `TestExportColumnsAreStableAndUnrounded` | render an unavailable value as `0`: expect FAIL. Restore. |
 | `TestExportColumnsAreStableAndUnrounded` | round to 3 decimals: expect FAIL — `"12.253"` (or `"12.252"`) ≠ `"12.2525"` (I-8: the fixture carries a 4th decimal digit precisely so this mutation is observable). Restore. |
 
