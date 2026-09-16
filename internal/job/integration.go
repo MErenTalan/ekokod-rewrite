@@ -13,16 +13,16 @@ import (
 )
 
 // Integration task type names. TypeConsumptionRefresh (R17) was declared
-// here in F2 so job payloads and the queue names were stable ahead of its
-// handler; F3 Task 11a adds that handler (see consumption.go) and
-// Register now wires it whenever Handlers.ConsumptionRefresh is non-nil.
+// before its handler existed so job payloads and the queue names stayed
+// stable; the handler (see consumption.go) is wired into Register whenever
+// Handlers.ConsumptionRefresh is non-nil.
 const (
 	TypeIntegrationSyncDispatch  = "integration.sync_dispatch" // R16, platform
 	TypeIntegrationSyncAnalyzers = "integration.sync_analyzers"
 	TypeIntegrationFetchReadings = "integration.fetch_readings"
 	TypeIntegrationBackfill      = "integration.backfill" // R16
 	TypeEPIASSyncPrices          = "epias.sync_prices"
-	TypeConsumptionRefresh       = "consumption.refresh" // R17: declared, not handled, in F2
+	TypeConsumptionRefresh       = "consumption.refresh" // R17
 )
 
 // Window is a half-open [From, To) UTC range carried by a job payload.
@@ -80,13 +80,12 @@ type BackfillPayload struct {
 // the handler, not this payload).
 type SyncPricesPayload struct{ Window *Window }
 
-// ConsumptionRefreshPayload is R17's payload shape, declared in F2 so the
-// wire format was stable ahead of its handler. F3 Task 11a adds its
-// constructor (NewConsumptionRefreshTask), decoder (DecodeConsumptionRefresh)
-// and handler seam (Refresher) in consumption.go; Task 11b wires
-// internal/ingest's enqueue call site to it (worker/wiring.go's
-// consumptionRefreshEnqueuer), so this task is enqueued on every qualifying
-// fetch run.
+// ConsumptionRefreshPayload is R17's payload shape, declared ahead of its
+// handler so the wire format was stable. Its constructor
+// (NewConsumptionRefreshTask), decoder (DecodeConsumptionRefresh) and
+// handler seam (Refresher) live in consumption.go; internal/ingest enqueues
+// it through worker/wiring.go's consumptionRefreshEnqueuer under R100's
+// enqueue conditions (only when a fetch run persisted load_profile rows).
 type ConsumptionRefreshPayload struct {
 	CompanyID, AnalyzerID uuid.UUID
 	From, To              time.Time
@@ -281,19 +280,19 @@ func DecodeSyncPrices(t *asynq.Task) (SyncPricesPayload, error) {
 
 // Ingestion is what handles the day-to-day integration tasks: the platform
 // dispatch tick, per-credential analyzer discovery and per-analyzer
-// reading fetches. Task 10 implements it.
+// reading fetches.
 type Ingestion interface {
 	Dispatch(ctx context.Context) error
 	SyncAnalyzers(ctx context.Context, p SyncAnalyzersPayload) error
 	FetchReadings(ctx context.Context, p FetchReadingsPayload) error
 }
 
-// Backfiller handles integration.backfill. Task 10/15 implements it.
+// Backfiller handles integration.backfill.
 type Backfiller interface {
 	Backfill(ctx context.Context, p BackfillPayload) error
 }
 
-// PriceSyncer handles epias.sync_prices. Task 12 implements it.
+// PriceSyncer handles epias.sync_prices.
 type PriceSyncer interface {
 	SyncPrices(ctx context.Context, p SyncPricesPayload) error
 }

@@ -98,10 +98,10 @@ func resetAt(tsStr string) model.MeterReading {
 
 // fetchStep is one scripted response fakeAdapter.FetchReadings returns, in
 // order, to successive calls. before, when set, runs immediately before the
-// step's result/err is returned — TestFailFetchRunOnAContextCancellationCause
-// (fetch_refresh_test.go, I2) uses it to cancel the run's own ctx at the
-// exact moment between "page 1 already persisted" and "page 2's call
-// returns", which no other trigger in this fake can express.
+// step's result/err is returned — a test in fetch_refresh_test.go uses it to
+// cancel the run's own ctx at the exact moment between "page 1 already
+// persisted" and "page 2's call returns", which no other trigger in this
+// fake can express.
 type fetchStep struct {
 	result integration.FetchResult
 	err    error
@@ -109,7 +109,7 @@ type fetchStep struct {
 }
 
 // ingestTestSpyHook is an ingest.PostPersistHook that records every call's
-// arguments instead of doing anything — M2's proof that hooks see the
+// arguments instead of doing anything — used to prove hooks see the
 // range actually persisted THAT PAGE, not the outer chunk bound.
 type ingestTestSpyHook struct {
 	mu    sync.Mutex
@@ -138,7 +138,7 @@ func (h *ingestTestSpyHook) callsSoFar() []ingestTestHookCall {
 
 // ingestTestSecretLeakingAnalyzerRepo wraps a real store.AnalyzerRepository
 // and forces Create to fail for one installation number with an error whose
-// text embeds a credential fragment — I4's fixture for proving SyncAnalyzers'
+// text embeds a credential fragment — proves SyncAnalyzers'
 // failed_points detail is redacted exactly like every other record
 // TestIngestionFailureMessageContainsNoSecret already pins for FetchReadings.
 type ingestTestSecretLeakingAnalyzerRepo struct {
@@ -155,7 +155,7 @@ func (r *ingestTestSecretLeakingAnalyzerRepo) Create(ctx context.Context, s stor
 }
 
 // ingestTestFailingUpdateAnalyzerRepo wraps a real store.AnalyzerRepository
-// and forces every Update to fail — M1's fixture for proving a failed
+// and forces every Update to fail — proves a failed
 // multiplier-update neither reports "meter multiplier changed" nor mutates
 // the in-memory analyzer FetchReadings keeps using for the rest of its run.
 type ingestTestFailingUpdateAnalyzerRepo struct {
@@ -281,11 +281,10 @@ func (f credentialOpenerFunc) Open(ctx context.Context, s store.Scope, credentia
 
 // fixedCredentialOpener always returns creds, regardless of the requested
 // credentialID, for tests that only ever exercise one credential. IsActive
-// is forced true (X-M3, final review B introduced the field; every existing
-// caller here builds creds without ever meaning to exercise the new
-// inactive-credential gate, so this keeps them all passing) — a test that
-// specifically wants an INACTIVE credential builds its own CredentialOpener
-// inline instead of using this helper.
+// is forced true (every existing caller here builds creds without ever
+// meaning to exercise the inactive-credential gate, so this keeps them all
+// passing) — a test that specifically wants an INACTIVE credential builds
+// its own CredentialOpener inline instead of using this helper.
 func fixedCredentialOpener(creds integration.Credentials) credentialOpenerFunc {
 	creds.IsActive = true
 	return func(context.Context, store.Scope, uuid.UUID) (integration.Credentials, error) { return creds, nil }

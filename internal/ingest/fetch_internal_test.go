@@ -11,7 +11,7 @@ import (
 var fetchInternalTestNow = time.Date(2026, time.June, 15, 12, 0, 0, 0, time.UTC)
 
 // TestShouldEnqueueConsumptionRefresh is a pure, unit-level table test of
-// the decision shouldEnqueueConsumptionRefresh implements: R73/I-13's
+// the decision shouldEnqueueConsumptionRefresh implements: R73's
 // threshold, amended by R100(1) (hasLoadProfile) and R100(6) (29-day
 // threshold, one day of margin inside consumption_hourly's own 30-day
 // policy window).

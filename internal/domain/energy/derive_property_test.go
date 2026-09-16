@@ -16,16 +16,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/energy"
 )
 
-// --- Permanent brute-force property test (fix round 4, I-11) --------------
-//
-// This is the widened replacement for the fix-round-3 generator. That
-// earlier generator flattened every meter's increments across a swap to
-// zero (the "zero-gap" construction), which made its "nil-or-exact-truth"
-// assertion sound but also made it structurally blind to R93 — the round's
-// main rule — because a reset row in that model always carried both
-// tracked registers and never sat exactly on a window boundary. See the
-// fix-round-3 review's I-11 finding and the verified prototype at
-// .superpowers/sdd/2026-09-16-f3-consumption-engine/task-2-r3-property-prototype.go.txt.
+// --- Brute-force property test ---------------------------------------------
 //
 // Physical model. Each scenario is a minute grid of N ticks with 0-3 meter
 // swaps at distinct ticks (biased toward the grid's edges, with a 12%
@@ -53,7 +44,7 @@ import (
 // mixed, or "mixed plus every reset row" (reset rows sorted before or
 // after same-instant readings at random); when a chosen boundary is itself
 // a reset row, that one row is left out of the resets slice passed to
-// Derive half the time (the M-13/R93-boundary case).
+// Derive half the time (the R93 boundary case).
 //
 // Oracle. The full truth (start.TS, end.TS] is accepted whenever Derive
 // returns it. Otherwise, the ONLY other acceptable non-suspect value is
@@ -64,24 +55,23 @@ import (
 // before-reset search Derive itself performs), plus the truth from the
 // last reset to end. If that reading is missing or lacks the register, ANY
 // non-nil value is a counterexample — this is what exposes a wrong prior
-// search (M4) without needing a fixed anchor. Every register is also
+// search without needing a fixed anchor. Every register is also
 // checked for the general invariants: a boundary that lacks the register
 // gives nil with no suspicion; when both boundaries report it, a value and
 // a suspicion never both appear and never both are absent;
 // ReasonNegativeDelta always carries a negative Delta and ReasonMeterReset
 // always carries a nil Delta; Emitted matches start.TS.Before(end.TS).
 //
-// Mutations this generator is proven (fix-round-4 report has the verbatim
-// counterexample or table entry for each) to catch on its own, with no
-// fixed anchor: dropping R90's end-instant check, dropping R92's
-// start-instant check, narrowing either gate to load_profile only,
-// loosening either equality check to an inequality, undoing R93 on the
-// window side or the start side, treating a nil reset value as zero,
-// ignoring a reset-kind boundary missing from resets, letting the prior
-// search include TS == start.TS, taking .Abs() of a segment delta, and
-// billing a negative segment — including the specific "return the end
-// value on a negative final segment" shape the fix-round-3 generator
-// missed.
+// Mutations this generator catches on its own, with no fixed anchor:
+// removing the whole R90 end-instant block (a narrower flag-only mutation
+// inside that block is oracle-equivalent and is NOT caught here — see
+// reset_test.go's unit tests for that), dropping R92's start-instant
+// check, narrowing either gate to load_profile only, loosening either
+// equality check to an inequality, undoing R93 on the window side or the
+// start side, treating a nil reset value as zero, ignoring a reset-kind
+// boundary missing from resets, letting the prior search include TS ==
+// start.TS, taking .Abs() of a segment delta, and billing a negative
+// segment, including returning the end value on a negative final segment.
 //
 // It remains blind to reason-only mutations (which Reason a suspicion
 // carries, never which value it bills) and to mutations that only widen
@@ -90,8 +80,8 @@ import (
 
 const propertyDefaultScenarios = 20000
 
-// propertyScenarioCount lets a caller opt into a much larger run (the
-// optional env knob the task allows) without touching the default budget
+// propertyScenarioCount lets a caller opt into a much larger run via the
+// ENERGY_PROPERTY_SCENARIOS env var, without touching the default budget
 // this file's normal `go test` run stays inside.
 func propertyScenarioCount() int {
 	if v := os.Getenv("ENERGY_PROPERTY_SCENARIOS"); v != "" {
@@ -176,7 +166,7 @@ func generatePropertyScenario(seed int64) *propertyScenario {
 	sc.hasT1 = rng.Float64() < 0.7
 
 	// 0-3 swaps, biased toward the grid's edges, with a chance of two
-	// swaps sharing one instant (R92(3)'s tie-break case, M8).
+	// swaps sharing one instant (R92(3)'s tie-break case).
 	var nSwaps int
 	switch x := rng.Float64(); {
 	case x < 0.35:
@@ -282,8 +272,7 @@ func generatePropertyScenario(seed int64) *propertyScenario {
 
 	// Reset rows: one per swap that isn't the (at most one) unreset swap,
 	// each independently omitting a register 7% of the time — R93's
-	// central case, rather than the fix-round-3 generator's always-
-	// complete row.
+	// central case.
 	for k, sw := range sc.swaps {
 		if sw.unreset {
 			continue
@@ -386,11 +375,11 @@ func (sc *propertyScenario) dump(start, end *energy.Reading, resets []energy.Rea
 }
 
 // deterministicNegativeAndStartPriorEdgeCases anchors 3 fixed fixtures that
-// are cheap to keep even though the widened random generator above now
-// reaches the same mutations (fix-round-4 report): a plain-difference
-// negative delta, a reset-path segment negative delta, and a prior that
-// duplicates the start reading itself (R91 must exclude it by strict TS >
-// start.TS, never use it as before-reset evidence).
+// are cheap to keep even though the random generator above now reaches the
+// same mutations: a plain-difference negative delta, a reset-path segment
+// negative delta, and a prior that duplicates the start reading itself
+// (R91 must exclude it by strict TS > start.TS, never use it as
+// before-reset evidence).
 func deterministicNegativeAndStartPriorEdgeCases(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -428,10 +417,10 @@ func deterministicNegativeAndStartPriorEdgeCases(t *testing.T) {
 			start:  &energy.Reading{TS: t0, Kind: energy.KindLoadProfile, Values: map[energy.Register]*decimal.Decimal{energy.ActiveImport: decPtr(900)}},
 			end:    &energy.Reading{TS: t0.Add(time.Hour), Kind: energy.KindLoadProfile, Values: map[energy.Register]*decimal.Decimal{energy.ActiveImport: decPtr(40)}},
 			resets: []energy.Reading{{TS: t0.Add(40 * time.Minute), Kind: energy.KindReset, Values: map[energy.Register]*decimal.Decimal{energy.ActiveImport: decPtr(0)}}},
-			// priors duplicates start itself (Task 7 always includes the
-			// boundary reading in priors) with NO other reading between
-			// start.TS and the reset — R91 must exclude it (strict TS >
-			// start.TS), never use it as before-reset evidence.
+			// priors duplicates start itself (a caller's priors typically
+			// include the boundary reading too) with NO other reading
+			// between start.TS and the reset — R91 must exclude it (strict
+			// TS > start.TS), never use it as before-reset evidence.
 			priors:     []energy.Reading{{TS: t0, Kind: energy.KindLoadProfile, Values: map[energy.Register]*decimal.Decimal{energy.ActiveImport: decPtr(900)}}},
 			wantReason: energy.ReasonMeterReset,
 		},
@@ -460,10 +449,9 @@ func deterministicNegativeAndStartPriorEdgeCases(t *testing.T) {
 // to Derive for this window) whose value for reg is nil or differs from
 // end's own reported value.
 //
-// This is the review's minimal oracle fix (final-review-B-report.md,
-// property test section): the R55/R91 gap allowance below exists for
-// segments Derive legitimately cannot resolve past a reset it has no
-// evidence for at all — an "unreset" swap (no reset row anywhere) is that
+// The R55/R91 gap allowance below exists for segments Derive legitimately
+// cannot resolve past a reset it has no evidence for at all — an "unreset"
+// swap (no reset row anywhere) is that
 // case and is deliberately left to the existing exp-based check. This
 // helper instead targets the narrower shape where a reset row DOES cover
 // end.TS but end's own reported value doesn't agree with it: reset.go's
@@ -551,15 +539,15 @@ func TestDerivePropertyNeverBillsAWrongNumber(t *testing.T) {
 			}
 
 			// A boundary that is itself a reset row is left out of the
-			// resets slice passed to Derive half the time (the M-13/R93
-			// boundary case), identified by pointer identity so only that
-			// exact row (never a same-instant sibling) is dropped. This is
-			// restricted to instants with exactly one reset row: dropping
-			// one of TWO same-instant reset rows lands on M-15 (a known,
-			// accepted Minor defect — end billed against the OTHER row at
-			// the same instant — that needs two reset rows sharing an
-			// instant, which the primary key (analyzer_id, ts, kind) makes
-			// unreachable in production), not a code counterexample.
+			// resets slice passed to Derive half the time (the R93 boundary
+			// case), identified by pointer identity so only that exact row
+			// (never a same-instant sibling) is dropped. This is restricted
+			// to instants with exactly one reset row: dropping one of TWO
+			// same-instant reset rows would bill end against the OTHER row
+			// at the same instant, which needs two reset rows sharing an
+			// instant — unreachable in production because the primary key
+			// (analyzer_id, ts, kind) forbids it, so that shape is a known,
+			// accepted limitation, not a code counterexample.
 			resets := sc.resets
 			for _, bnd := range []*energy.Reading{start, end} {
 				if bnd.Kind != energy.KindReset || wrng.Float64() >= 0.5 {

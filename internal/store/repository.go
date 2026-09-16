@@ -1275,7 +1275,7 @@ type FileRepository interface {
 // The plaintext/ciphertext split is the whole design here. Get and List return
 // model.IntegrationCredential, which holds CIPHERTEXT and has no plaintext
 // field at all; a caller that genuinely needs the secret asks OpenSecret,
-// which decrypts on the spot with internal/platform/crypto. Task 11's
+// which decrypts on the spot with internal/platform/crypto.
 // TestIntegrationCredentialsAreNeverReturnedInPlaintext pins that the ordinary
 // read never carries it.
 type IntegrationRepository interface {
@@ -1493,8 +1493,9 @@ type ProviderSeriesRepository interface {
 // package internal/arch's TestEveryStoreMethodIsScoped exempts. That guard
 // walks internal/store/postgres/... and fails on any exported context-taking
 // method without a Scope, so an implementation placed anywhere else in that
-// tree is red. It does NOT see code outside internal/store/postgres; keeping
-// implementations out of other packages is review's job, and Task 11's.
+// tree is red. It does NOT see code outside internal/store/postgres, so
+// keeping every implementation confined to internal/store/postgres/admin is
+// a closed-list discipline this package's own structure must maintain.
 // Product request handling never depends on these interfaces except where a
 // method names its caller.
 //
@@ -1514,7 +1515,7 @@ type ProviderSeriesRepository interface {
 // permanent unscoped path into the database.
 
 // AdminAuthRepository resolves the two credentials a request presents before it
-// has a tenant. Implemented by Task 9.
+// has a tenant.
 type AdminAuthRepository interface {
 	// UserByEmail resolves a login. It cannot take a Scope because the Scope
 	// is what a successful login PRODUCES: the request carries an email and a
@@ -1546,7 +1547,7 @@ type AdminAuthRepository interface {
 	SessionByRefreshTokenHash(ctx context.Context, hash string) (model.Session, model.User, error)
 }
 
-// AdminAuditRepository appends platform audit rows. Implemented by Task 9.
+// AdminAuditRepository appends platform audit rows.
 type AdminAuditRepository interface {
 	// AppendPlatform appends an audit row with company_id NULL: an action
 	// by the platform or an operator that belongs to no tenant (a catalogue
@@ -1560,7 +1561,7 @@ type AdminAuditRepository interface {
 }
 
 // AdminMarketDataRepository writes the platform-wide market series that every
-// tenant's bills are priced from. Implemented by Task 10.
+// tenant's bills are priced from.
 //
 // None of it can take a Scope: the prices are published for the whole market,
 // the ingestion job that fetches them acts for no tenant, and any Scope that
@@ -1586,8 +1587,8 @@ type AdminMarketDataRepository interface {
 	UpsertYekdem(ctx context.Context, values []model.YekdemMonthly) (int64, error)
 }
 
-// AdminCatalogueRepository writes the platform reference catalogues.
-// Implemented by Task 11; Task 12's seed loader is its main caller.
+// AdminCatalogueRepository writes the platform reference catalogues. The
+// seed loader is its main caller.
 //
 // None of it can take a Scope: the catalogues are shared by every tenant and
 // maintained by the platform, so a Scope would identify no owner — and any
@@ -1622,7 +1623,6 @@ type AdminCatalogueRepository interface {
 // AdminJournalRepository records platform jobs — work that runs for no tenant,
 // such as the market price import — in the same job_runs and
 // operational_messages tables tenants' jobs use, with company_id NULL.
-// Implemented by Task 11.
 //
 // None of it can take a Scope: the schema says platform work is company_id
 // NULL, a Scope's CompanyID is never Nil, and a platform job made to borrow a
@@ -1650,7 +1650,7 @@ type AdminJournalRepository interface {
 // must fan out to. It cannot take a Scope: the dispatcher acts for no
 // tenant and must see every tenant's active credentials in one pass, the
 // same reason AdminMarketDataRepository and AdminCatalogueRepository cannot
-// take one. Implemented by F2 Task 5.
+// take one.
 type AdminIngestionRepository interface {
 	// ActiveCredentials returns every is_active credential of a non-deleted
 	// company, ordered by (company_id, credential id). No secret column
@@ -1659,8 +1659,7 @@ type AdminIngestionRepository interface {
 	ActiveCredentials(ctx context.Context) ([]model.CredentialRef, error)
 }
 
-// AdminAggregateRepository refreshes continuous aggregates. Implemented by
-// Task 6.
+// AdminAggregateRepository refreshes continuous aggregates.
 //
 // This is platform work, not tenant work: refresh_continuous_aggregate takes
 // a time range and nothing else, so the call necessarily covers every

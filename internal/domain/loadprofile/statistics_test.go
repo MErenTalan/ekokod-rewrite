@@ -9,8 +9,7 @@ import (
 )
 
 // TestStatsMatchHandComputedValues pins Stats against arithmetic worked out
-// by hand (see the task report for the full derivation), not against the
-// implementation under test.
+// by hand, not against the implementation under test.
 //
 // hours 0..3 = 10, 20, 30, 40; the other 20 hours are nil.
 // mean = 25, max = 40 (hour 3), min = 10, range = 30,

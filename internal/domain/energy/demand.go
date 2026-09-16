@@ -2,12 +2,14 @@ package energy
 
 import "github.com/shopspring/decimal"
 
-// MaxDemandKinds is the allowlist of reading kinds MaxDemand considers
-// (C-3, R65 re-ruled). current_index is deliberately excluded: ARIL stamps
-// those rows at ProfileDate, so a current_index row can carry the previous
-// month's peak — the misattribution F2's R49 fixed. ARIL's authoritative
-// monthly maximum instead arrives on billing rows keyed to the Istanbul
-// month of the row's own timestamp (verified in
+// MaxDemandKinds is the allowlist of reading kinds MaxDemand considers by
+// default — the widest, Monthly/Yearly set (R101, amending R65); a caller
+// wanting the narrower Hourly or Daily set restricts the readings it passes
+// to MaxDemand before calling it. current_index is deliberately excluded:
+// ARIL stamps those rows at ProfileDate, so a current_index row can carry
+// the previous month's peak — the misattribution F2's R49 fixed. ARIL's
+// authoritative monthly maximum instead arrives on billing rows keyed to
+// the Istanbul month of the row's own timestamp (verified in
 // internal/integration/aril/source.go). reset rows are excluded too: a
 // reset row is evidence of a physical register reset, not a demand
 // reading.

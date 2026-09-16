@@ -1,25 +1,23 @@
 // Package worker is the single wiring point for the background worker
-// process: it constructs every F2 dependency from configuration and
-// returns the job.Handlers internal/cli/worker.go registers on the asynq
-// mux, and Task 17's acceptance test exercises directly.
+// process: it constructs every dependency from configuration and returns
+// the job.Handlers internal/cli/worker.go registers on the asynq mux.
 //
-// Build wires the whole F2 graph in one pass: the shared Redis lock, the
+// Build wires the whole graph in one pass: the shared Redis lock, the
 // httpx pool, the EPİAŞ client, internal/marketdata.Syncer
 // (Handlers.Prices), the encryption cipher, every tenant repository, the
 // meter-adapter registry (osos/gridbox/aril/pm5340), the iSolarCloud
 // client, internal/credentials.Service, the PM5340 generation accumulator
 // hook, internal/ingest.Service (Handlers.Ingestion),
 // internal/ingest/backfill.Backfiller (Handlers.Backfill) and
-// internal/service/consumption.Refresher (Handlers.ConsumptionRefresh, F3
-// Task 11a — the globally-locked consumption.refresh handler, R100). F3
-// Task 11b wires ingestDeps.ConsumptionRefresh to a small adapter over the
-// same *job.Client (consumptionRefreshEnqueuer below) and threads
-// cfg.ConsumptionRefreshEnabled / cfg.ConsumptionRefreshLockTTL through, so
-// the enqueue seam F2 left nil is now live; the same adapter also backs
-// consumption.RefreshDeps.Enqueuer, so lock contention re-enqueues through
-// the identical path (R100(4)). Every resource
-// Build opens before a later step fails is closed on that step's error
-// path (see closers/closeAll below), and again, idempotently, by
+// internal/service/consumption.Refresher (Handlers.ConsumptionRefresh —
+// the globally-locked consumption.refresh handler, R100).
+// ingestDeps.ConsumptionRefresh is wired to a small adapter over the same
+// *job.Client (consumptionRefreshEnqueuer below) and threads
+// cfg.ConsumptionRefreshEnabled / cfg.ConsumptionRefreshLockTTL through;
+// the same adapter also backs consumption.RefreshDeps.Enqueuer, so lock
+// contention re-enqueues through the identical path (R100(4)). Every
+// resource Build opens before a later step fails is closed on that step's
+// error path (see closers/closeAll below), and again, idempotently, by
 // Built.Close on the success path — TestWorkerBuildClosesEarlierResourcesOnLateFailure
 // proves this by forcing crypto.NewCipher to fail after redis and the job
 // client are already open.
@@ -111,9 +109,9 @@ type Built struct {
 }
 
 // namedCloser is one long-lived resource build() opened, tagged with a name
-// so a test can assert exactly which resources a graph holds closers for
-// (fix round 1, I4), rather than only observing their combined effect via a
-// side channel like a connection count.
+// so a test can assert exactly which resources a graph holds closers for,
+// rather than only observing their combined effect via a side channel like
+// a connection count.
 type namedCloser struct {
 	name  string
 	close func()
@@ -123,11 +121,11 @@ type namedCloser struct {
 // it into Built's public two-field shape. Splitting construction out of
 // Build into build() gives the same-package tests in this file access to
 // pieces Built alone cannot prove: which key source feeds
-// credentials.Deps.StateKey and the integration repository's cipher (C1,
-// C2), which hook is registered for PM5340 (I1), how verifierResolver
-// routes providers (I2), and which resources are closed on every return
-// path (I4). Build's exported signature and Built are unchanged — this is
-// purely an internal seam, no behaviour change.
+// credentials.Deps.StateKey and the integration repository's cipher, which
+// hook is registered for PM5340, how verifierResolver routes providers,
+// and which resources are closed on every return path. Build's exported
+// signature and Built are unchanged — this is purely an internal seam, no
+// behaviour change.
 type graph struct {
 	cipher          *crypto.Cipher
 	integrationRepo *postgres.IntegrationRepository
@@ -161,7 +159,7 @@ func (v verifierResolver) Verifier(p integration.Provider) (credentials.Verifier
 }
 
 // consumptionRefreshEnqueuer adapts *job.Client to BOTH
-// ingest.ConsumptionRefreshEnqueuer (F3 Task 11b) and
+// ingest.ConsumptionRefreshEnqueuer and
 // consumption.Enqueuer (R100(4)) — the two interfaces share the identical
 // EnqueueConsumptionRefresh method shape by design, so this one adapter
 // satisfies both with no glue: it is the enqueue seam a fetch run uses to
@@ -196,9 +194,9 @@ func (e consumptionRefreshEnqueuer) EnqueueConsumptionRefresh(ctx context.Contex
 	return err
 }
 
-// Build constructs every F2 dependency from configuration: it is the
-// single wiring point; internal/cli/worker.go calls it and Task 17's
-// acceptance test calls it. It is a thin wrapper over build() (below),
+// Build constructs every dependency from configuration: it is the single
+// wiring point; internal/cli/worker.go calls it. It is a thin wrapper over
+// build() (below),
 // which does the actual assembly — Build's only job is to turn a graph
 // into Built's public two-field shape and guard Close with sync.Once so it
 // is safe to call more than once.
@@ -218,7 +216,7 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 	return Built{Handlers: g.handlers, Close: closeAll}, nil
 }
 
-// build assembles the full F2 dependency graph. Every resource opened
+// build assembles the full dependency graph. Every resource opened
 // before a later construction step fails is closed on that step's own
 // error path via closeAll, in reverse-open order — see the closers slice
 // below. build is unexported: Build (above) is the only production caller;
@@ -250,9 +248,8 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 	}
 	closers = append(closers, namedCloser{"redis", func() { _ = redisClient.Close() }})
 	// R2: this value is passed directly wherever a Locker (or Consumer) is
-	// wanted — httpx.Locker is a type alias for lock.Locker (Task 2), so
-	// *lock.Redis already satisfies it. There is no worker.httpxLocker
-	// adapter anywhere in F2.
+	// wanted — httpx.Locker is a type alias for lock.Locker, so *lock.Redis
+	// already satisfies it. There is no worker.httpxLocker adapter.
 	redisLock := lock.NewRedis(redisClient)
 
 	httpxPool, err := httpx.NewPool(httpx.PoolOptions{
@@ -285,7 +282,7 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 
 	syncer := marketdata.New(epiasClient, adminMarketDataRepo, adminJournalRepo, clock.System(), log)
 
-	// C2: cipher is built from cfg.Security.EncryptionKey, never from
+	// cipher is built from cfg.Security.EncryptionKey, never from
 	// cfg.Security.JWTSigningKey — the integration repository below shares
 	// this single instance, so a same-package test can seal through it and
 	// open with a cipher independently built from EncryptionKey to pin the
@@ -320,7 +317,7 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 	isolarClient := isolar.New(httpxPool, isolar.Options{})
 	verifiers := verifierResolver{registry: registry, isolar: isolarClient}
 
-	// C1: StateKey is derived from cfg.Security.JWTSigningKey, never from
+	// StateKey is derived from cfg.Security.JWTSigningKey, never from
 	// cfg.Security.EncryptionKey — credDeps is the exact literal passed to
 	// credentials.New, so a same-package test can read StateKey back off
 	// it directly (see wiring_internal_test.go).
@@ -351,7 +348,7 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 	// source, no risk of the two adapters drifting apart.
 	consumptionRefreshEnq := consumptionRefreshEnqueuer{client: jobClient, maxRetry: cfg.Worker.MaxRetries, clock: clock.System()}
 
-	// I1: the PM5340 hook list is built once here as ingestDeps, the exact
+	// the PM5340 hook list is built once here as ingestDeps, the exact
 	// literal passed to ingest.New — a same-package test asserts it holds
 	// exactly one *generation.Accumulator (see wiring_internal_test.go).
 	ingestDeps := ingest.Deps{
@@ -367,18 +364,18 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		Sources:        registry,
 		Enqueuer:       jobClient,
 		Hooks: map[model.IntegrationProvider][]ingest.PostPersistHook{
-			// R52/M12: the generation hook shares the SAME redisLock every
-			// other Locker consumer in this graph does (I3), and is bounded
-			// by the SAME configured cfg.Ingest.FutureTolerance the
-			// ingest.Service below is built with (M12) — never the
-			// package's own default. wiring_internal_test.go's
+			// R52: the generation hook shares the SAME redisLock every other
+			// Locker consumer in this graph does, and is bounded by the SAME
+			// configured cfg.Ingest.FutureTolerance the ingest.Service below
+			// is built with — never the package's own default.
+			// wiring_internal_test.go's
 			// TestBuildGraphGenerationHookUsesRedisLockAndConfiguredFutureTolerance
 			// pins both.
 			model.IntegrationProviderPM5340: {generation.New(readingRepo, generationRepo, clock.System(), redisLock, cfg.Ingest.FutureTolerance)},
 		},
-		// F3 Task 11b: the enqueue seam F2 left nil is now wired to the same
-		// jobClient every other integration task in this graph enqueues
-		// through, gated by cfg.ConsumptionRefreshEnabled below.
+		// the enqueue seam is wired to the same jobClient every other
+		// integration task in this graph enqueues through, gated by
+		// cfg.ConsumptionRefreshEnabled below.
 		ConsumptionRefresh: consumptionRefreshEnq,
 		Clock:              clock.System(),
 		Log:                log,
@@ -405,8 +402,8 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		MaxRetry:    cfg.Worker.MaxRetries,
 	})
 
-	// R71/R72 (Task 11a) / Task 11b / R100: the refresher reuses the SAME
-	// redisLock every other Locker consumer in this graph does — now under
+	// R71/R72/R100: the refresher reuses the SAME redisLock every other
+	// Locker consumer in this graph does — now under
 	// R100(4)'s single global key rather than one key per view — and is
 	// bounded by cfg.ConsumptionRefreshLockTTL (EKOKOD_CONSUMPTION_REFRESH_LOCK_TTL,
 	// default 30m, R100(5)). Enqueuer is the SAME consumptionRefreshEnq

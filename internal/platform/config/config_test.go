@@ -288,7 +288,7 @@ func TestJobMaxRetriesRejectsNegative(t *testing.T) {
 // TestConsumptionRefreshDefaults pins R100(5)'s defaults: enabled by
 // default (an operator who never heard of this knob still gets the R73
 // promise), and a 30-minute lock TTL (long enough for a platform-wide
-// yearly recompute, final review A I-3(d)).
+// yearly recompute).
 func TestConsumptionRefreshDefaults(t *testing.T) {
 	cfg, err := config.Load(lookupFrom(valid()))
 	require.NoError(t, err)
@@ -322,8 +322,8 @@ func TestConsumptionRefreshLockTTLRejectsNonPositive(t *testing.T) {
 }
 
 // TestConfigCheckListsConsumptionRefreshVariables guards `ekokod
-// config:check`'s coverage of the two Task 11b knobs, exactly like
-// TestConfigCheckListsIngestVariables does for EKOKOD_INGEST_*.
+// config:check`'s coverage of the two consumption-refresh knobs, exactly
+// like TestConfigCheckListsIngestVariables does for EKOKOD_INGEST_*.
 func TestConfigCheckListsConsumptionRefreshVariables(t *testing.T) {
 	cfg, err := config.Load(lookupFrom(valid()))
 	require.NoError(t, err)

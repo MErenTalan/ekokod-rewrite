@@ -8,7 +8,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/energy"
 )
 
-// TestDerivationSuspectRegistersOrder pins I-9: SuspectRegisters must return
+// TestDerivationSuspectRegistersOrder proves SuspectRegisters returns
 // suspect registers in AllRegisters order, regardless of the order they
 // were inserted into the Suspect map (map iteration order is random, so a
 // mutation that ranges over d.Suspect directly instead of allRegisters

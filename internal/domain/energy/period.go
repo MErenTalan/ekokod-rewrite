@@ -29,9 +29,11 @@ import (
 // repeats and time.Date(y, m, d, hour, …, loc) picks the LATER of the two
 // occurrences, silently producing a bucket that does not even contain ts
 // (see TestBucketHourlyAcrossTheHistoricalFallBack). Second, this is safe
-// for Istanbul specifically because every one of its historical UTC offsets
-// has been a whole number of hours (+01, +02, +03; no half-hour offset was
-// ever in effect), so a UTC top-of-hour is always also an Istanbul
+// for Istanbul specifically because every UTC offset the tz database
+// assigns it from 1910 onward is a whole number of hours (+02, +03; no
+// half-hour offset appears in the modern era) — the only earlier entry,
+// +01:56:56 LMT, predates any reading this system will ever bucket. So for
+// every date this system handles, a UTC top-of-hour is also an Istanbul
 // top-of-hour: truncating in UTC never produces a bucket boundary that
 // falls mid-hour on the local wall clock.
 func Bucket(level Level, ts time.Time, loc *time.Location) Window {

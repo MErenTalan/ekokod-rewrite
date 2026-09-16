@@ -21,5 +21,5 @@
 //     never a fixed offset.
 //   - Suspicion, Reason, Derivation, Difference — 02 §3.1: the core
 //     difference operation for one window with no reset evidence. Applying
-//     reset evidence (02 §3.2) is Derive's job, added in Task 2.
+//     reset evidence (02 §3.2) is Derive's job.
 package energy

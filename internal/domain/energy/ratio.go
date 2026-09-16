@@ -3,9 +3,9 @@ package energy
 import "github.com/shopspring/decimal"
 
 // DivisionScale is how many decimal places every division in this package is
-// carried to (C-5). It exists for precision, not presentation (R79 as
-// amended): storage rounding happens once, when Postgres writes a value into
-// a numeric column, and presentation rounding is F6's — nothing in this
+// carried to. It exists for precision, not presentation (R79 as amended):
+// storage rounding happens once, when Postgres writes a value into a
+// numeric column, and presentation rounding is F6's — nothing in this
 // package rounds for either purpose.
 const DivisionScale int32 = 20
 

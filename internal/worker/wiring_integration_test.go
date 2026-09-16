@@ -48,11 +48,9 @@ func workerTestConfig(t *testing.T, dsn string, redisCfg config.Redis) *config.C
 
 // TestWorkerRegistersEveryF2AndF3Handler proves the wiring the acceptance
 // suite relies on: worker.Build wires a real Handlers.Ingestion,
-// Handlers.Backfill, Handlers.Prices and (F3 Task 11a) Handlers.ConsumptionRefresh,
-// so every F2 integration task type AND R17's consumption.refresh route to a
-// handler. Renamed from TestWorkerRegistersEveryF2Handler: consumption.refresh
-// was declared but deliberately left unhandled in F2 — Task 11a is what
-// makes that no longer true.
+// Handlers.Backfill, Handlers.Prices and Handlers.ConsumptionRefresh, so
+// every integration task type and R17's consumption.refresh route to a
+// handler.
 func TestWorkerRegistersEveryF2AndF3Handler(t *testing.T) {
 	dsn := testfixtures.StartPostgres(t)
 	pool := testfixtures.NewPool(t, dsn)
@@ -85,11 +83,11 @@ func TestWorkerRegistersEveryF2AndF3Handler(t *testing.T) {
 	}
 }
 
-// TestWorkerBuildClosesCleanlyTwice is the fix-round-1 M1 test: Built.Close
-// is guarded by sync.Once (worker.Build wraps graph.closers in one), so it
-// is safe to call twice, not merely "safe once, and probably fine again
-// because the underlying clients happen to tolerate it" — this actually
-// calls Close() twice and requires neither call to panic.
+// TestWorkerBuildClosesCleanlyTwice proves Built.Close is guarded by
+// sync.Once (worker.Build wraps graph.closers in one), so it is safe to
+// call twice, not merely "safe once, and probably fine again because the
+// underlying clients happen to tolerate it" — this actually calls Close()
+// twice and requires neither call to panic.
 func TestWorkerBuildClosesCleanlyTwice(t *testing.T) {
 	dsn := testfixtures.StartPostgres(t)
 	pool := testfixtures.NewPool(t, dsn)
@@ -102,10 +100,10 @@ func TestWorkerBuildClosesCleanlyTwice(t *testing.T) {
 	require.NotPanics(t, built.Close, "Built.Close must be idempotent: a second call must not panic")
 }
 
-// TestWorkerBuildCloseReleasesRedisOnSuccessPath is the fix-round-1 I3
-// test: TestWorkerBuildClosesCleanlyTwice only proved Close() doesn't
-// panic, not that it actually releases anything — a no-op Close would pass
-// it too. This asserts the platform redis client's connection is gone
+// TestWorkerBuildCloseReleasesRedisOnSuccessPath proves more than
+// TestWorkerBuildClosesCleanlyTwice, which only shows Close() doesn't
+// panic — a no-op Close would pass that too. This asserts the platform
+// redis client's connection is gone
 // (connected_clients back at baseline) after built.Close() on the ordinary
 // success path, the same connected_clients technique
 // TestWorkerBuildClosesEarlierResourcesOnLateFailure below uses for the
@@ -158,10 +156,10 @@ func connectedClients(t *testing.T, c *goredis.Client) int {
 	return 0
 }
 
-// TestWorkerBuildClosesEarlierResourcesOnLateFailure is the Task 16 part-A
-// review carryover: when a LATE Build step fails, every long-lived resource
-// already opened FOR THIS CALL must be closed on that step's error path,
-// not leaked until process exit.
+// TestWorkerBuildClosesEarlierResourcesOnLateFailure proves that when a
+// LATE Build step fails, every long-lived resource already opened FOR THIS
+// CALL must be closed on that step's error path, not leaked until process
+// exit.
 //
 // The failing step is crypto.NewCipher: this test truncates the already
 // config.Load-validated cfg.Security.EncryptionKey to 16 bytes (32

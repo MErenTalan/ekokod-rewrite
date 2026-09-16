@@ -1,9 +1,9 @@
 //go:build integration
 
-// Task 11b (R73, I-12, I-13): the ingest enqueue seam. These tests drive
+// R73: the ingest enqueue seam. These tests drive
 // ingest.Service.FetchReadings through a real database exactly like
 // ingest_integration_test.go's suite, adding a
-// recordingConsumptionRefreshEnqueuer in place of the nil F2 left
+// recordingConsumptionRefreshEnqueuer in place of a nil
 // Deps.ConsumptionRefresh, so the enqueue call site's gating (nil seam,
 // config.ConsumptionRefreshEnabled, the affected-range threshold) and its
 // choice of window (the affected range, never the requested one) are all
@@ -149,7 +149,7 @@ func fetchRefreshTestRedisLocker(t *testing.T) lock.Locker {
 // bucket appear.
 //
 // consumption_monthly (materialized_only), not consumption_hourly, is the
-// view asserted here: Task 6's TestRefreshMaterialisesAnHourBelowTheWatermark
+// view asserted here: TestRefreshMaterialisesAnHourBelowTheWatermark's
 // pattern requires first moving the real-time watermark forward with a
 // SEPARATE recent reading, which would muddy this test's one point (that
 // consumption.refresh, and only consumption.refresh, is what makes a
@@ -168,7 +168,7 @@ func TestABackfillTwoHundredDaysOldEntersTheAggregateAfterTheJobRuns(t *testing.
 
 	src := newFakeAdapter(integration.ProviderOSOS, 40*24*time.Hour, model.ReadingKindLoadProfile)
 	// fetchRefreshTestNow's June 2026 is comfortably after February 2026 —
-	// firstAt is ~217 days before it, well past both the 30-day enqueue
+	// firstAt is ~217 days before it, well past both the 29-day enqueue
 	// threshold and any refresh-policy watermark.
 	clk := clock.NewFake(fetchRefreshTestNow)
 	refreshEnq := newRecordingConsumptionRefreshEnqueuer()
@@ -225,12 +225,12 @@ func TestABackfillTwoHundredDaysOldEntersTheAggregateAfterTheJobRuns(t *testing.
 }
 
 // ---------------------------------------------------------------------------
-// The affected range, not the requested window; both finish paths (I-12).
+// The affected range, not the requested window; both finish paths.
 // ---------------------------------------------------------------------------
 
 // TestFetchEnqueuesExactlyOneRefreshForTheAffectedRange proves the enqueued
 // window is the affected range actually persisted, not the (much wider)
-// requested window — I-12's "the window enqueued is the affected range".
+// requested window.
 func TestFetchEnqueuesExactlyOneRefreshForTheAffectedRange(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -256,10 +256,9 @@ func TestFetchEnqueuesExactlyOneRefreshForTheAffectedRange(t *testing.T) {
 	calls := refreshEnq.enqueued()
 	require.Len(t, calls, 1)
 	require.True(t, calls[0].From.Equal(firstAt), "want enqueued From == affected range start, got %s", calls[0].From)
-	// Fix round 1 (C1/I1, task-11b-review.md): the enqueued To is the
-	// affected range's end WIDENED by one microsecond via refreshRangeFor —
-	// acc.affectedTo is the inclusive last-reading timestamp, but the
-	// payload's To is an exclusive bound.
+	// The enqueued To is the affected range's end WIDENED by one microsecond
+	// via refreshRangeFor — acc.affectedTo is the inclusive last-reading
+	// timestamp, but the payload's To is an exclusive bound.
 	require.True(t, calls[0].To.Equal(secondAt.Add(time.Microsecond)), "want enqueued To == affected range end + 1us (not the requested window's bound, and not the bare inclusive timestamp), got %s", calls[0].To)
 	require.Equal(t, fx.tenant.Company.ID, calls[0].CompanyID)
 	require.Equal(t, fx.analyzer.ID, calls[0].AnalyzerID)
@@ -287,7 +286,7 @@ func TestFetchDoesNotEnqueueWhenNothingWasPersisted(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// R73/I-13: the threshold's two sides and its exact boundary.
+// R73: the threshold's two sides and its exact boundary.
 // ---------------------------------------------------------------------------
 
 // TestFetchDoesNotEnqueueWhenTheAffectedRangeIsEntirelyWithinTheLastTwentyNineDays
@@ -338,13 +337,14 @@ func TestFetchEnqueuesWhenTheAffectedRangeStartsBeforeTwentyNineDaysAgo(t *testi
 
 // TestFetchDoesNotEnqueueAtExactlyTwentyNineDaysBoundary and
 // TestFetchEnqueuesJustPastTheTwentyNineDayBoundary pin the exact boundary
-// (R100(6), amending R73/I-13's 30-day threshold down to 29 — one day of
-// margin inside consumption_hourly's own 30-day policy window, final
-// review A M-3): an affected range starting EXACTLY 29 days before now is
+// (R100(6), amending R73's 30-day threshold down to 29 — one day of
+// margin inside consumption_hourly's own 30-day policy window): an
+// affected range starting EXACTLY 29 days before now is
 // still "within" the policy window (the comparison is strict Before, not
 // Before-or-equal) and does not enqueue; one microsecond earlier does.
 // Microsecond, not nanosecond, because pgx/Postgres timestamptz columns are
-// microsecond precision (see fetch.go's M1 comment on the same trap).
+// microsecond precision (see fetch.go's refreshRangeFor comment on the same
+// trap).
 func TestFetchDoesNotEnqueueAtExactlyTwentyNineDaysBoundary(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -421,7 +421,7 @@ func TestFetchDoesNotEnqueueWhenTheRunPersistedNoLoadProfileRows(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// I-12: the partial-run path enqueues too.
+// The partial-run path enqueues too.
 // ---------------------------------------------------------------------------
 
 // TestFailFetchRunStillEnqueuesWhenSomeRowsWerePersistedBeforeTheFailure
@@ -460,7 +460,7 @@ func TestFailFetchRunStillEnqueuesWhenSomeRowsWerePersistedBeforeTheFailure(t *t
 	calls := refreshEnq.enqueued()
 	require.Len(t, calls, 1, "a partial run that persisted rows before failing must still enqueue for what it actually persisted")
 	require.True(t, calls[0].From.Equal(page1From))
-	// Fix round 1 (C1/I1): widened by one microsecond, same reasoning as
+	// Widened by one microsecond, same reasoning as
 	// TestFetchEnqueuesExactlyOneRefreshForTheAffectedRange above.
 	require.True(t, calls[0].To.Equal(page1To.Add(time.Microsecond)))
 }
@@ -586,14 +586,14 @@ func TestFetchUsesTheDepsClockNotWallClockForTheEnqueueThreshold(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Fix round 1 (task-11b-review.md): C1's exclusive upper bound and I1's
-// single-instant run.
+// refreshRangeFor's one-microsecond widening: the exclusive upper bound and
+// the single-instant run.
 // ---------------------------------------------------------------------------
 
-// TestFetchEnqueuesTheHourlyBucketWhenTheLastReadingLandsOnAnHourBoundary is
-// C1's real-bug proof. A run's LAST persisted reading sits exactly on an
-// hour boundary, below consumption_hourly's real-time watermark (moved
-// forward first, exactly like aggregates_integration_test.go's
+// TestFetchEnqueuesTheHourlyBucketWhenTheLastReadingLandsOnAnHourBoundary
+// proves the widening is load-bearing. A run's LAST persisted reading sits
+// exactly on an hour boundary, below consumption_hourly's real-time
+// watermark (moved forward first, exactly like aggregates_integration_test.go's
 // TestRefreshMaterialisesAnHourBelowTheWatermark), and drives the REAL
 // enqueue -> REAL refresher. Before refreshRangeFor widened the payload's
 // To by one microsecond, RefreshConsumption's own
@@ -674,7 +674,7 @@ func TestFetchEnqueuesTheHourlyBucketWhenTheLastReadingLandsOnAnHourBoundary(t *
 	require.Len(t, after, 1, "the hour bucket containing the boundary reading as its first reading must be materialised after the refresh")
 }
 
-// TestFetchEnqueuesExactlyOneRefreshForASingleReadingRun is I1's fix proof: a
+// TestFetchEnqueuesExactlyOneRefreshForASingleReadingRun proves that a
 // run whose only persisted reading makes affectedFrom == affectedTo must
 // still enqueue a valid job.ConsumptionRefreshPayload (From < To) — not
 // silently swallow the enqueue via job.NewConsumptionRefreshTask's own
@@ -746,14 +746,14 @@ func TestFetchEnqueuesExactlyOneRefreshForASingleReadingRun(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Fix round 1 (task-11b-review.md I2): failFetchRun on a cancelled context.
+// failFetchRun on a cancelled context.
 // ---------------------------------------------------------------------------
 
-// cancelSensitiveConsumptionRefreshEnqueuer is I2's fixture:
+// cancelSensitiveConsumptionRefreshEnqueuer is a fixture:
 // recordingConsumptionRefreshEnqueuer ignores ctx entirely, which cannot
 // tell "enqueued with a live context" apart from "enqueued with the run's
-// own, already-cancelled context" — exactly the distinction I2's fix makes.
-// This records each call's ctx.Err() at call time alongside its payload.
+// own, already-cancelled context". This records each call's ctx.Err() at
+// call time alongside its payload.
 type cancelSensitiveConsumptionRefreshEnqueuer struct {
 	mu      sync.Mutex
 	calls   []job.ConsumptionRefreshPayload
@@ -770,15 +770,15 @@ func (e *cancelSensitiveConsumptionRefreshEnqueuer) EnqueueConsumptionRefresh(ct
 
 var _ ingest.ConsumptionRefreshEnqueuer = (*cancelSensitiveConsumptionRefreshEnqueuer)(nil)
 
-// TestFailFetchRunEnqueuesWithAnUncancelledContextAfterCancellation is I2's
-// fix proof. The run's own ctx is cancelled right as page 2 is requested —
-// after page 1 has already persisted rows past the threshold — forcing
-// failFetchRun down the partial-failure path. It must still enqueue exactly
-// one refresh for what page 1 persisted, and it must NOT be given the run's
-// own (now cancelled) context: task-11b-review.md I2 is exactly that
-// "enqueueing with the cancelled ctx fails". A mutant that skips the enqueue
-// when ctx.Err() != nil, or that passes ctx straight through instead of a
-// context.WithoutCancel-derived one, turns this red.
+// TestFailFetchRunEnqueuesWithAnUncancelledContextAfterCancellation proves
+// the enqueue survives run cancellation. The run's own ctx is cancelled
+// right as page 2 is requested — after page 1 has already persisted rows
+// past the threshold — forcing failFetchRun down the partial-failure path.
+// It must still enqueue exactly one refresh for what page 1 persisted, and
+// it must NOT be given the run's own (now cancelled) context, since
+// enqueueing with a cancelled ctx would otherwise fail. A mutant that skips
+// the enqueue when ctx.Err() != nil, or that passes ctx straight through
+// instead of a context.WithoutCancel-derived one, turns this red.
 func TestFailFetchRunEnqueuesWithAnUncancelledContextAfterCancellation(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())

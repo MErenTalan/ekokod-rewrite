@@ -74,8 +74,8 @@ func Stats(p Profile) Statistics {
 		// variance is a sum of squares divided by a positive count, so it is
 		// never negative; PowWithPrecision's documented failures (0**0,
 		// negative base with a non-integer exponent) cannot occur here. This
-		// branch exists only so a future decimal upgrade cannot turn into a
-		// silently wrong stddev instead of a visible one.
+		// branch is unreachable defensive code: Stats has no error return, so
+		// it falls back to a zero stddev rather than surfacing the error.
 		zero := decimal.Zero
 		stdDev = zero
 	}

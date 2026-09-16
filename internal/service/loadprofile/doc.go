@@ -30,7 +30,7 @@
 //     escalation to F6 — 09-implementation-plan.md §F6 line 434's wording
 //     implies a calendar-event-driven split, but F6 must not build that
 //     without a product-owner ruling, and F3 does not anticipate it.
-//   - R87 (new ruling C-7): hour h's load-profile value is
+//   - R87: hour h's load-profile value is
 //     ActiveImportStart(h+1) − ActiveImportStart(h) across two CONSECUTIVE
 //     consumption_hourly rows — never that hour's own active_consumption
 //     column, which is structurally ZERO for a 1-hour meter (its one

@@ -1,10 +1,10 @@
-// Package backfill implements F2 Task 15 (06 §9 Backfill): an explicit,
+// Package backfill implements 06 §9 Backfill: an explicit,
 // operator-specified historical range for one credential, split into
 // consecutive per-window integration.fetch_readings tasks and enqueued
-// through the same job.NewFetchReadingsTask (Task 1) the cursor-driven
-// pipeline (Task 10) uses for a single explicit-window fetch.
+// through the same job.NewFetchReadingsTask the cursor-driven
+// pipeline uses for a single explicit-window fetch.
 //
-// Backfill itself never calls Task 10's Service.FetchReadings — it only
+// Backfill itself never calls Service.FetchReadings directly — it only
 // plans and enqueues. Resumability comes entirely from
 // job.NewFetchReadingsTask's deterministic TaskID for a windowed payload
 // (integFetchReadingsTaskID: a pure function of analyzer, kind and window
@@ -41,21 +41,20 @@ const maxBackfillSpan = 5 * 365 * 24 * time.Hour
 
 // aggregateHorizon is how far back the consumption aggregates reach without
 // a consumption.refresh run: 04-data-model.md's `start_offset => interval
-// '30 days'` (R17, the F1 start_offset fact), minus one day of margin —
-// the same amendment R100(6) makes to internal/ingest's own enqueue
-// threshold (final review A M-3), so this informational message never
-// undersells what a backfill older than the ingest side's own threshold
-// already gets refreshed.
+// '30 days'` minus one day of margin — the same amendment R100(6) makes to
+// internal/ingest's own enqueue threshold, so this informational message
+// never undersells what a backfill older than the ingest side's own
+// threshold already gets refreshed.
 const aggregateHorizon = 29 * 24 * time.Hour
 
 // Windows splits [from, to) into consecutive half-open windows of at most
 // max, aligned to Istanbul-local midnight so a window never splits a local
 // day. It is a thin wrapper over normalize.Chunk (S7 — the ONE range-chunking
-// implementation in F2, shared with Task 10's pipeline and Task 12's EPİAŞ
+// implementation, shared with the cursor-driven pipeline and the EPİAŞ
 // pagination): Windows exists at all only because callers here want
 // job.Window, not normalize.Window, and the two are structurally identical
-// but distinct types (normalize has zero F2-task dependencies and must stay
-// that way, so it cannot import internal/job to return job.Window directly).
+// but distinct types (normalize has no dependency on internal/job and must
+// stay that way, so it cannot return job.Window directly).
 func Windows(from, to time.Time, max time.Duration) []job.Window {
 	chunks := normalize.Chunk(from, to, max)
 	windows := make([]job.Window, len(chunks))
@@ -125,7 +124,7 @@ func (b *Backfiller) Backfill(ctx context.Context, p job.BackfillPayload) error 
 		return err
 	}
 
-	// X-M3, final review B: see internal/ingest/fetch.go's identical gate —
+	// See internal/ingest/fetch.go's identical gate —
 	// an operator-deactivated credential must stop the backfill here,
 	// before any window is even planned, non-retryably (ErrConfig ->
 	// job.ClassifyForRetry -> asynq.SkipRetry, applied by the job handler
@@ -360,7 +359,7 @@ func redacted(creds integration.Credentials, err error) string {
 // (already_enqueued) — a run where every window collided with an earlier
 // run's still-retained id did not itself fetch anything new, so it must
 // never report "success" and read as "this backfill request did nothing,
-// and that's fine" (final-review-A I4). failed is reserved for a run where
+// and that's fine". failed is reserved for a run where
 // EVERYTHING failed and NOTHING even reached already-enqueued; every other
 // mix (some skipped, some failed, or a mix of processed/skipped/failed) is
 // partial.

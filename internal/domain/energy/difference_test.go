@@ -33,12 +33,12 @@ func TestDifferenceEmitsNothingWhenBothBoundariesAreTheSameReading(t *testing.T)
 	require.Nil(t, same.Values)
 	require.Nil(t, same.Suspect)
 
-	// I-7: two DISTINCT *Reading values carrying the same TS and Kind (the
-	// normal shape once a converter selects "the reading at ts" separately
-	// for each boundary, as Task 7's converter will) must be treated
-	// identically to the one-pointer case above. A pointer-identity check
-	// (`start == end`) would let these two separately allocated Readings
-	// slip through as an emitted zero row, exactly what §3.1 forbids.
+	// Two DISTINCT *Reading values carrying the same TS and Kind (the shape
+	// produced when a converter selects "the reading at ts" separately for
+	// each boundary) must be treated identically to the one-pointer case
+	// above. A pointer-identity check (`start == end`) would let these two
+	// separately allocated Readings slip through as an emitted zero row,
+	// which §3.1 forbids.
 	start := &energy.Reading{TS: t0, Kind: energy.KindLoadProfile, Values: vals("100.0000", "10.0000")}
 	end := &energy.Reading{TS: t0, Kind: energy.KindLoadProfile, Values: vals("150.0000", "20.0000")}
 	distinct := energy.Difference(w, start, end)
@@ -48,7 +48,7 @@ func TestDifferenceEmitsNothingWhenBothBoundariesAreTheSameReading(t *testing.T)
 }
 
 func TestDifferenceOnReversedBoundariesEmitsNothing(t *testing.T) {
-	// M-6: end.TS before start.TS is a caller bug (Difference's documented
+	// end.TS before start.TS is a caller bug (Difference's documented
 	// precondition is !end.TS.Before(start.TS)), not a meter event. A
 	// caller passing boundaries out of order must get "no row", never a
 	// negative-delta suspicion that would write a spurious anomaly
@@ -64,23 +64,23 @@ func TestDifferenceOnReversedBoundariesEmitsNothing(t *testing.T) {
 func TestDifferenceSubtractsPerRegisterAndKeepsNilNil(t *testing.T) {
 	w := win(t0, time.Hour)
 	start := &energy.Reading{TS: t0, Kind: energy.KindLoadProfile, Values: map[energy.Register]*decimal.Decimal{
-		// M-3: a 4-decimal-place fixture, so a delta.Round(3) mutation
-		// changes the asserted string ("12.2525" would become "12.253" or
-		// similar) instead of coincidentally matching.
+		// A 4-decimal-place fixture, so a delta.Round(3) mutation changes
+		// the asserted string ("12.2525" would become "12.253" or similar)
+		// instead of coincidentally matching.
 		energy.ActiveImport: dec("1000.1234"), energy.T1Import: dec("400.0000"),
 	}}
 	end := &energy.Reading{TS: t0.Add(time.Hour), Kind: energy.KindBilling, Values: map[energy.Register]*decimal.Decimal{
 		energy.ActiveImport: dec("1012.3759"), // T1Import absent at the end boundary
-		// I-6: absent at the START boundary, with a large end value. A
-		// mutation that treats a nil start register as zero would return
-		// the full end register value here (removed-behaviour 1 in a new
-		// form) instead of leaving it nil.
+		// T2Import is absent at the start boundary but carries a large
+		// value at the end. A mutation that treats a nil start register as
+		// zero would wrongly return the full end register value here
+		// instead of leaving it nil.
 		energy.T2Import: dec("5000.0000"),
 	}}
 	d := energy.Difference(w, start, end)
 	require.True(t, d.Emitted)
 
-	// M-4: Window and Source are asserted, and Source is distinguished from
+	// Window and Source are asserted, and Source is distinguished from
 	// start.Kind by using a KindBilling end reading.
 	require.True(t, w.From.Equal(d.Window.From), "got %s", d.Window.From)
 	require.True(t, w.To.Equal(d.Window.To), "got %s", d.Window.To)
