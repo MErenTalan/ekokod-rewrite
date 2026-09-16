@@ -237,6 +237,50 @@ func TestNarrowScopeSeesNothingOnBothPaths(t *testing.T) {
 	aEmpty, err := analytics.Consumption(ctx, tenant.Scope, req(outOfScope))
 	require.NoError(t, err)
 	require.Empty(t, aEmpty)
+
+	// I-7's re-review remainder: the Monthly billing-kind Range/look-back and
+	// the Analytics composition path (composeMissingPeriods' ConsumptionDaily
+	// call) run only at Monthly, never at Hourly — a scope-substitution
+	// mutation on either stayed green in unit AND integration because this
+	// test previously only ever asked at Hourly. consumption_monthly is
+	// deliberately NEVER refreshed here, so Analytics must compose from
+	// consumption_daily (the review's own probe: the mutated code leaked a
+	// Partial row with active_import=380 for the out-of-scope analyzer).
+	loc, err := time.LoadLocation("Europe/Istanbul")
+	require.NoError(t, err)
+	dec31 := time.Date(2025, 12, 31, 0, 0, 0, 0, loc)
+	jan1 := time.Date(2026, 1, 1, 0, 0, 0, 0, loc)
+	feb1 := jan1.AddDate(0, 1, 0)
+	for _, id := range []uuid.UUID{inScope, outOfScope} {
+		// A reading strictly BEFORE January is required too: composing
+		// January needs a consumption_daily bucket both inside the month
+		// (Jan 1) and before it (Dec 31) to diff against (M-2).
+		pathsSeedReading(t, ctx, repo, tenant.AdminScope, readingRow(id, dec31, model.ReadingKindLoadProfile, map[string]string{"active_import": "500"}))
+		pathsSeedReading(t, ctx, repo, tenant.AdminScope, readingRow(id, jan1, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}))
+		pathsSeedReading(t, ctx, repo, tenant.AdminScope, readingRow(id, feb1, model.ReadingKindLoadProfile, map[string]string{"active_import": "1380"}))
+	}
+
+	monthlyReq := func(id uuid.UUID) consumption.SeriesRequest {
+		return consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{id}, Level: energy.Monthly, Range: store.TimeRange{From: jan1, To: feb1}}
+	}
+
+	// Positive control: the in-scope analyzer is visible on both paths at
+	// Monthly too.
+	monthlyBRows, err := billing.Consumption(ctx, tenant.Scope, monthlyReq(inScope))
+	require.NoError(t, err)
+	require.Len(t, monthlyBRows, 1)
+	monthlyARows, err := analytics.Consumption(ctx, tenant.Scope, monthlyReq(inScope))
+	require.NoError(t, err)
+	require.Len(t, monthlyARows, 1)
+	require.True(t, monthlyARows[0].Partial, "consumption_monthly is never refreshed here: the row must be composed")
+
+	// The narrow scope must see nothing of the out-of-scope analyzer at
+	// Monthly either, on either path.
+	_, err = billing.Consumption(ctx, tenant.Scope, monthlyReq(outOfScope))
+	require.ErrorIs(t, err, store.ErrNotFound)
+	monthlyAEmpty, err := analytics.Consumption(ctx, tenant.Scope, monthlyReq(outOfScope))
+	require.NoError(t, err)
+	require.Empty(t, monthlyAEmpty, "the composition path must never leak a composed row to a narrow scope")
 }
 
 // TestAnalyticsIsolatesTenants is I-7's Analytics half: the other tenant's
