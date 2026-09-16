@@ -226,7 +226,8 @@ func oracleCompute(in billing.Input) oracleOut {
 	o.net = net
 
 	energyCost := zero
-	if t.PriceType == model.PriceTypeMultiTime {
+	switch {
+	case t.PriceType == model.PriceTypeMultiTime:
 		b := []decimal.Decimal{*q.T1, *q.T2, *q.T3}
 		if t.GenerationUsage == model.GenerationUsageSubtractFromConsumption {
 			total := b[0].Add(b[1]).Add(b[2])
@@ -247,11 +248,11 @@ func oracleCompute(in billing.Input) oracleOut {
 				energyCost = energyCost.Add(charge(code, round(b[i].Mul(*prices[i]))))
 			}
 		}
-	} else if t.UsePtfYekdem {
+	case t.UsePtfYekdem:
 		if in.Pricing.EnergyUnitPrice != nil {
 			energyCost = charge("energy", round(net.Mul(*in.Pricing.EnergyUnitPrice)))
 		}
-	} else {
+	default:
 		groupThreshold, groupOK := p.TieringGroups[t.UserGroup]
 		threshold := groupThreshold
 		if t.OveruseThresholdKwhPerDay != nil {
@@ -462,17 +463,18 @@ func randomInput(r *rand.Rand, loc *time.Location) billing.Input {
 	if t.Term == model.TariffTermBinomial {
 		t.ContractedPowerKw, t.PowerUnitPrice = decPtr(dec(500, 1)), maybe(10, dec(60, 4))
 	}
-	if t.UsePtfYekdem {
+	switch {
+	case t.UsePtfYekdem:
 		t.KbkEnergy = decPtr(dec(2, 4))
 		t.KbkT1, t.KbkT2, t.KbkT3 = maybe(20, dec(2, 4)), maybe(20, dec(2, 4)), maybe(20, dec(2, 4))
 		t.KbkPowerPrice, t.KbkReactivePower, t.KbkDistributionCostTlPerKwh = maybe(30, dec(40, 4)), maybe(30, dec(2, 4)), maybe(30, dec(2, 6))
-	} else if t.PriceType == model.PriceTypeSingleTime {
+	case t.PriceType == model.PriceTypeSingleTime:
 		t.SingleTimePrice = decPtr(dec(5, 6))
 		t.OverusePrice = maybe(25, dec(7, 6))
 		if pick(5) == 0 {
 			t.OveruseThresholdKwhPerDay = decPtr(dec(40, 1).Add(decimal.NewFromInt(1)))
 		}
-	} else {
+	default:
 		t.T1Price, t.T2Price, t.T3Price = decPtr(dec(5, 6)), decPtr(dec(5, 6)), decPtr(dec(5, 6))
 		t.OverusePrice = maybe(25, dec(7, 6))
 	}
@@ -492,6 +494,12 @@ func randomInput(r *rand.Rand, loc *time.Location) billing.Input {
 	q.ReactiveCapacitive = maybe(10, imp.Mul(decimal.New(r.Int64N(400), -3)))
 	if pick(7) == 0 && q.ReactiveInductive != nil {
 		q.ReactiveInductive = decPtr(dec(3, 2))
+	}
+	if pick(8) == 0 && q.ActiveImport.IsPositive() && t.GenerationUsage != model.GenerationUsageSubtractFromConsumption {
+		// Exactly at a band limit: the strict > must not charge (02 §6.6).
+		limits := []string{"0.33", "0.20", "0.15"}
+		q.ReactiveInductive = decPtr(imp.Mul(decimal.RequireFromString(limits[pick(3)])))
+		q.ReactiveCapacitive = decPtr(imp.Mul(decimal.RequireFromString(limits[pick(3)])))
 	}
 	switch pick(6) {
 	case 0:
@@ -523,27 +531,22 @@ func randomInput(r *rand.Rand, loc *time.Location) billing.Input {
 			Amount: dec(60, 3).Sub(decimal.NewFromInt(10)), SortOrder: int16(pick(3))})
 	}
 	if t.UsePtfYekdem {
-		base := dec(4, 6)
-		times := func(k *decimal.Decimal) *decimal.Decimal {
-			if k == nil {
-				return nil
+		// Priced through tariff.Price over one day of market data, so its R119
+		// coefficient rules are under the oracle too.
+		day := energy.Window{From: from, To: from.Add(24 * time.Hour)}
+		m := tariff.Market{PTF: map[time.Time]decimal.Decimal{}, Yekdem: map[tariff.YearMonth]decimal.Decimal{{Year: 2026, Month: time.January}: dec(1500, 2)}}
+		var hours []tariff.HourConsumption
+		gaps := pick(3)
+		for h := 0; h < 24; h++ {
+			at := from.Add(time.Duration(h) * time.Hour).UTC()
+			if h >= gaps {
+				m.PTF[at] = dec(4000, 2)
 			}
-			return decPtr(base.Mul(*k))
+			hours = append(hours, tariff.HourConsumption{Hour: at, Kwh: dec(100, 3)})
 		}
-		pr := tariff.Pricing{Method: tariff.MethodPeriodAverage, BasePrice: &base, EnergyUnitPrice: times(t.KbkEnergy),
-			T1: times(t.KbkT1), T2: times(t.KbkT2), T3: times(t.KbkT3), Complete: pick(5) != 0}
-		if pick(2) == 0 {
-			pr.EnergyUnitPrice = decPtr(dec(5, 20)) // an hourly consumption-weighted price
-		}
-		pr.PowerUnitPrice, pr.ReactiveUnitPrice, pr.DistributionUnitPrice = tariff.FixedUnitPrices(t)
-		if t.PowerPriceSource == model.PriceSourceKbk {
-			pr.PowerUnitPrice = times(t.KbkPowerPrice)
-		}
-		if t.ReactivePriceSource == model.PriceSourceKbk {
-			pr.ReactiveUnitPrice = times(t.KbkReactivePower)
-		}
-		if t.DistributionPriceSource == model.PriceSourceKbk {
-			pr.DistributionUnitPrice = t.KbkDistributionCostTlPerKwh
+		pr, err := tariff.Price(t, day, hours, pick(2) == 0, m, p, loc)
+		if err != nil {
+			panic(err)
 		}
 		in.Pricing = &pr
 	}
