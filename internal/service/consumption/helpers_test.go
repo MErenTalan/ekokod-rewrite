@@ -43,7 +43,7 @@ func dec(s string) *decimal.Decimal {
 // needed; the integration tests in paths_integration_test.go, which already
 // depend on testfixtures for NewIsolatedDB/NewTenant, use
 // testfixtures.DiscardLogger directly instead of this helper.
-func testLog(t *testing.T) *slog.Logger {
+func testLog(t testing.TB) *slog.Logger {
 	t.Helper()
 	return slog.New(slog.DiscardHandler)
 }
@@ -55,6 +55,17 @@ func testLog(t *testing.T) *slog.Logger {
 // level-specific field is nil; a level-specific field (hourlyRows,
 // dailyRows, monthlyRows, yearlyRows) overrides it. ProductionDaily/Monthly
 // are never used by this package and always return nil, nil.
+// calls, when non-nil, records every (method, Scope, analyzerIDs, TimeRange)
+// this fakeAnalytics call receives, in call order (I-1, I-7): a test can
+// inspect it afterwards to assert the exact range/scope a caller queried
+// with, without needing a bespoke recording type per assertion.
+type analyticsCall struct {
+	method      string
+	scope       store.Scope
+	analyzerIDs []uuid.UUID
+	r           store.TimeRange
+}
+
 type fakeAnalytics struct {
 	rows        []model.ConsumptionBucket
 	hourlyRows  []model.ConsumptionBucket
@@ -62,30 +73,52 @@ type fakeAnalytics struct {
 	monthlyRows []model.ConsumptionBucket
 	yearlyRows  []model.ConsumptionBucket
 	err         error
+
+	calls *[]analyticsCall
+
+	// t and wantScope, when both set, fail the test immediately (I-7) if
+	// any method is called with a Scope other than wantScope — a mutation
+	// that substitutes a different Scope on one call turns this red.
+	t         *testing.T
+	wantScope *store.Scope
 }
 
-func (f fakeAnalytics) ConsumptionHourly(context.Context, store.Scope, []uuid.UUID, store.TimeRange) ([]model.ConsumptionBucket, error) {
+func (f fakeAnalytics) record(method string, s store.Scope, ids []uuid.UUID, r store.TimeRange) {
+	if f.t != nil && f.wantScope != nil {
+		f.t.Helper()
+		require.Equal(f.t, *f.wantScope, s, "%s called with a different Scope than the caller's own", method)
+	}
+	if f.calls != nil {
+		*f.calls = append(*f.calls, analyticsCall{method: method, scope: s, analyzerIDs: ids, r: r})
+	}
+}
+
+func (f fakeAnalytics) ConsumptionHourly(_ context.Context, s store.Scope, ids []uuid.UUID, r store.TimeRange) ([]model.ConsumptionBucket, error) {
+	f.record("ConsumptionHourly", s, ids, r)
 	if f.hourlyRows != nil {
 		return f.hourlyRows, f.err
 	}
 	return f.rows, f.err
 }
 
-func (f fakeAnalytics) ConsumptionDaily(context.Context, store.Scope, []uuid.UUID, store.TimeRange) ([]model.ConsumptionBucket, error) {
+func (f fakeAnalytics) ConsumptionDaily(_ context.Context, s store.Scope, ids []uuid.UUID, r store.TimeRange) ([]model.ConsumptionBucket, error) {
+	f.record("ConsumptionDaily", s, ids, r)
 	if f.dailyRows != nil {
 		return f.dailyRows, f.err
 	}
 	return f.rows, f.err
 }
 
-func (f fakeAnalytics) ConsumptionMonthly(context.Context, store.Scope, []uuid.UUID, store.TimeRange) ([]model.ConsumptionBucket, error) {
+func (f fakeAnalytics) ConsumptionMonthly(_ context.Context, s store.Scope, ids []uuid.UUID, r store.TimeRange) ([]model.ConsumptionBucket, error) {
+	f.record("ConsumptionMonthly", s, ids, r)
 	if f.monthlyRows != nil {
 		return f.monthlyRows, f.err
 	}
 	return f.rows, f.err
 }
 
-func (f fakeAnalytics) ConsumptionYearly(context.Context, store.Scope, []uuid.UUID, store.TimeRange) ([]model.ConsumptionBucket, error) {
+func (f fakeAnalytics) ConsumptionYearly(_ context.Context, s store.Scope, ids []uuid.UUID, r store.TimeRange) ([]model.ConsumptionBucket, error) {
+	f.record("ConsumptionYearly", s, ids, r)
 	if f.yearlyRows != nil {
 		return f.yearlyRows, f.err
 	}
@@ -98,6 +131,36 @@ func (f fakeAnalytics) ProductionDaily(context.Context, store.Scope, []uuid.UUID
 
 func (f fakeAnalytics) ProductionMonthly(context.Context, store.Scope, []uuid.UUID, store.TimeRange) ([]model.PlantProductionBucket, error) {
 	return nil, nil
+}
+
+// noAnalytics panics on every method (I-6): used for validation tests on the
+// Analytics path, so a validation check that runs after the first I/O call
+// (rather than before, as MaxBuckets and the other checks must) fails the
+// test immediately instead of quietly returning a fake's zero value.
+type noAnalytics struct{}
+
+func (noAnalytics) ConsumptionHourly(context.Context, store.Scope, []uuid.UUID, store.TimeRange) ([]model.ConsumptionBucket, error) {
+	panic("consumption: validation must run before any AnalyticsRepository.ConsumptionHourly call")
+}
+
+func (noAnalytics) ConsumptionDaily(context.Context, store.Scope, []uuid.UUID, store.TimeRange) ([]model.ConsumptionBucket, error) {
+	panic("consumption: validation must run before any AnalyticsRepository.ConsumptionDaily call")
+}
+
+func (noAnalytics) ConsumptionMonthly(context.Context, store.Scope, []uuid.UUID, store.TimeRange) ([]model.ConsumptionBucket, error) {
+	panic("consumption: validation must run before any AnalyticsRepository.ConsumptionMonthly call")
+}
+
+func (noAnalytics) ConsumptionYearly(context.Context, store.Scope, []uuid.UUID, store.TimeRange) ([]model.ConsumptionBucket, error) {
+	panic("consumption: validation must run before any AnalyticsRepository.ConsumptionYearly call")
+}
+
+func (noAnalytics) ProductionDaily(context.Context, store.Scope, []uuid.UUID, store.TimeRange) ([]model.PlantProductionBucket, error) {
+	panic("consumption: validation must run before any AnalyticsRepository.ProductionDaily call")
+}
+
+func (noAnalytics) ProductionMonthly(context.Context, store.Scope, []uuid.UUID, store.TimeRange) ([]model.PlantProductionBucket, error) {
+	panic("consumption: validation must run before any AnalyticsRepository.ProductionMonthly call")
 }
 
 // --- fakeReadings: store.ReadingRepository ----------------------------------
@@ -115,13 +178,30 @@ func (f fakeAnalytics) ProductionMonthly(context.Context, store.Scope, []uuid.UU
 type fakeReadings struct {
 	byKind map[model.ReadingKind][]model.MeterReading
 	err    error
+
+	// t and wantScope, when both set, fail the test immediately (I-7) if
+	// any method is called with a Scope other than wantScope — a mutation
+	// that substitutes a different (even if still valid) Scope on one
+	// repository call turns this red, rather than relying on an accidental
+	// ErrNotFound from an unrelated sibling call.
+	t         *testing.T
+	wantScope *store.Scope
+}
+
+func (f fakeReadings) checkScope(s store.Scope) {
+	if f.t == nil || f.wantScope == nil {
+		return
+	}
+	f.t.Helper()
+	require.Equal(f.t, *f.wantScope, s, "called with a different Scope than the caller's own")
 }
 
 func (f fakeReadings) BulkInsert(context.Context, store.Scope, []model.MeterReading) (int, int, error) {
 	return 0, 0, nil
 }
 
-func (f fakeReadings) Range(_ context.Context, _ store.Scope, _ uuid.UUID, r store.TimeRange, kind model.ReadingKind) ([]model.MeterReading, error) {
+func (f fakeReadings) Range(_ context.Context, s store.Scope, _ uuid.UUID, r store.TimeRange, kind model.ReadingKind) ([]model.MeterReading, error) {
+	f.checkScope(s)
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -134,7 +214,8 @@ func (f fakeReadings) Range(_ context.Context, _ store.Scope, _ uuid.UUID, r sto
 	return out, nil
 }
 
-func (f fakeReadings) BoundaryReadings(_ context.Context, _ store.Scope, _ uuid.UUID, kind model.ReadingKind, start, end time.Time) (*model.MeterReading, *model.MeterReading, error) {
+func (f fakeReadings) BoundaryReadings(_ context.Context, s store.Scope, _ uuid.UUID, kind model.ReadingKind, start, end time.Time) (*model.MeterReading, *model.MeterReading, error) {
+	f.checkScope(s)
 	if f.err != nil {
 		return nil, nil, f.err
 	}
@@ -155,6 +236,28 @@ func (f fakeReadings) BoundaryReadings(_ context.Context, _ store.Scope, _ uuid.
 
 func (f fakeReadings) Latest(context.Context, store.Scope, uuid.UUID, store.TimeRange, model.ReadingKind) (*model.MeterReading, error) {
 	return nil, nil
+}
+
+// noReadings panics on every method (I-6): used for validation tests on the
+// Billing path, so a validation check that runs after the first I/O call
+// fails the test immediately instead of quietly returning a fake's zero
+// value.
+type noReadings struct{}
+
+func (noReadings) BulkInsert(context.Context, store.Scope, []model.MeterReading) (int, int, error) {
+	panic("consumption: validation must run before any ReadingRepository.BulkInsert call")
+}
+
+func (noReadings) Range(context.Context, store.Scope, uuid.UUID, store.TimeRange, model.ReadingKind) ([]model.MeterReading, error) {
+	panic("consumption: validation must run before any ReadingRepository.Range call")
+}
+
+func (noReadings) BoundaryReadings(context.Context, store.Scope, uuid.UUID, model.ReadingKind, time.Time, time.Time) (*model.MeterReading, *model.MeterReading, error) {
+	panic("consumption: validation must run before any ReadingRepository.BoundaryReadings call")
+}
+
+func (noReadings) Latest(context.Context, store.Scope, uuid.UUID, store.TimeRange, model.ReadingKind) (*model.MeterReading, error) {
+	panic("consumption: validation must run before any ReadingRepository.Latest call")
 }
 
 // --- no-op AnomalyRepository / OpsRepository --------------------------------

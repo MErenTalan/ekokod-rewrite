@@ -60,11 +60,29 @@ const MaxBuckets = 10000
 // covering the month (I-3).
 const BillingSnapshotTolerance = 72 * time.Hour
 
+// DailySnapshotTolerance bounds R95's daily-kind fallback boundary: a
+// daily-kind reading older than this relative to its own bound does not
+// count as covering the period, exactly as BillingSnapshotTolerance bounds
+// the billing-kind fallback for R63. `daily` is a fallback boundary kind at
+// Daily, Monthly and Yearly only — never Hourly — tried after load_profile
+// fails to emit a usable pair for the period. 36h admits an end-of-day
+// stamp taken at 23:59 or at the next day's 00:00 either way.
+const DailySnapshotTolerance = 36 * time.Hour
+
 // SeriesRequest asks for one or more analyzers' series at one level.
 //
 // AnalyzerIDs is required and positional: empty means no rows, never "all"
 // (R89 — resolving "every analyzer under a building" is F6's job, not
 // F3's).
+//
+// M3: multi-analyzer semantics differ between the two paths. One invisible
+// (not-Scope-visible, or nonexistent) analyzer id makes Billing fail the
+// WHOLE request with store.ErrNotFound (ReadingRepository's per-call
+// isolation contract), while Analytics silently omits that analyzer's rows
+// and returns the rest (AnalyticsRepository's aggregate queries simply
+// produce no rows for an id the Scope cannot see). A caller iterating
+// multiple analyzers in one request should not expect the two paths to fail
+// or partially-succeed the same way.
 type SeriesRequest struct {
 	AnalyzerIDs []uuid.UUID
 	Level       energy.Level
@@ -77,14 +95,23 @@ type SeriesRequest struct {
 // value cannot compile. Indexes carries the register's CLOSING index for
 // the period (05 §5 "every index field", Task 9): Analytics fills it from
 // the bucket's own closing index columns, Billing from the end boundary
-// reading. Partial is true for an open (still-in-progress) period Analytics
-// composes from consumption_daily (R88) — never set by Billing, which only
-// ever reads closed periods. Resolution is populated by Task 8's
-// override-substitution logic in billing.go (C-6): a register present here
-// was covered by a resolved manual_override anomaly for this window, and
-// its Values entry is the operator-supplied figure, not a derived one. Task
-// 7 itself always leaves this nil — there is no anomaly-reading logic in
-// Task 7's own Consumption.
+// reading — a composed Analytics row (below) only ever has the seven
+// registers migration 00005 gives consumption_daily a closing-index column
+// to (M-2): the other five (every export register but active_export) are
+// always nil there, exactly as they are absent from bucketIndexes' map.
+// Partial is true for every bucket Analytics composes from consumption_daily
+// at Monthly/Yearly (R94, amending R88) — the still-open trailing period AND
+// any earlier closed-but-unrefreshed one — never set by Billing, which only
+// ever reads closed periods. M-4: a composed figure is closing-to-closing
+// across whatever materialisation gap it fills and is NOT directly
+// comparable to the later materialised row for the same window — it can
+// differ by the boundary step the materialised aggregate itself measures
+// differently once the underlying data is refreshed. Resolution is
+// populated by Task 8's override-substitution logic in billing.go (C-6): a
+// register present here was covered by a resolved manual_override anomaly
+// for this window, and its Values entry is the operator-supplied figure,
+// not a derived one. Task 7 itself always leaves this nil — there is no
+// anomaly-reading logic in Task 7's own Consumption.
 type Row struct {
 	AnalyzerID      uuid.UUID
 	Window          energy.Window
@@ -120,12 +147,15 @@ func mustLoadIstanbul() *time.Location {
 
 // validateRequest applies the shared fail-closed checks both Analytics and
 // Billing run before any I/O: a valid Scope, a non-empty AnalyzerIDs, a
-// valid Range, and a bucket count at Level within MaxBuckets.
+// valid Level, a valid Range, and a bucket count at Level within MaxBuckets.
 func validateRequest(sc store.Scope, req SeriesRequest) error {
 	if !sc.Valid() {
 		return ErrInvalidRequest
 	}
 	if len(req.AnalyzerIDs) == 0 {
+		return ErrInvalidRequest
+	}
+	if !validLevel(req.Level) {
 		return ErrInvalidRequest
 	}
 	if !req.Range.Valid() {
@@ -136,6 +166,22 @@ func validateRequest(sc store.Scope, req SeriesRequest) error {
 		return ErrInvalidRequest
 	}
 	return nil
+}
+
+// validLevel reports whether l is one of the four levels 02 §3.4 defines
+// (M-1). Without this check an unrecognised Level passed validateRequest
+// silently (bucketCountExceeds reports "not exceeded" for a level Bucket
+// does not recognise, since Bucket returns the invalid zero Window and the
+// counting loop never starts), and both Consumption methods then returned
+// (nil, nil) instead of ErrInvalidRequest — fetchBuckets' own default
+// branch was unreachable in practice because validateRequest ran first.
+func validLevel(l energy.Level) bool {
+	switch l {
+	case energy.Hourly, energy.Daily, energy.Monthly, energy.Yearly:
+		return true
+	default:
+		return false
+	}
 }
 
 // errRequired formats the missing-dependency error both NewAnalytics and
