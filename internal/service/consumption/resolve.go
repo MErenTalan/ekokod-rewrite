@@ -311,20 +311,37 @@ func resetValuesEqual(existing model.MeterReading, after map[energy.Register]dec
 // data loadAnalyzerBoundaryData would load for a one-bucket request over
 // period, then derives that one bucket with proposed merged into the
 // resets slice — reusing deriveRow (billing.go), never a second boundary
-// selection. inferLevel recovers the level a period this package itself
-// created was originally bucketed at: a period that is not exactly one
-// whole bucket at any level is ErrInvalidRequest.
+// selection. resetRederivationMode recovers how the period was derived; a
+// period it does not recognise is ErrInvalidRequest.
 func (b *Billing) rederiveBucketWithReset(ctx context.Context, sc store.Scope, analyzerID uuid.UUID, period energy.Window, proposed energy.Reading) (Row, bool, error) {
-	level, ok := inferLevel(period, istanbul)
+	mode, ok := resetRederivationMode(period)
 	if !ok {
 		return Row{}, false, ErrInvalidRequest
 	}
-	data, err := b.loadAnalyzerBoundaryData(ctx, sc, analyzerID, level, []energy.Window{period})
+	data, err := b.loadAnalyzerBoundaryData(ctx, sc, analyzerID, mode, []energy.Window{period})
 	if err != nil {
 		return Row{}, false, err
 	}
-	row, ok := deriveRow(analyzerID, period, data, []energy.Reading{proposed}, level)
+	row, ok := deriveRow(analyzerID, period, data, []energy.Reading{proposed}, mode.level)
 	return row, ok, nil
+}
+
+// resetRederivationMode is inferLevel's calendar bucket, else explicit-window
+// semantics for a cut-off period (R107). Cut-off periods run between Istanbul
+// midnights, so any other non-bucket period stays rejected.
+func resetRederivationMode(period energy.Window) (windowMode, bool) {
+	if level, ok := inferLevel(period, istanbul); ok {
+		return windowMode{level: level}, true
+	}
+	if !isDayStart(period.From) || !isDayStart(period.To) || validPeriodWindow(period) != nil {
+		return windowMode{}, false
+	}
+	return windowMode{level: energy.Monthly, explicit: true}, true
+}
+
+// isDayStart reports whether ts is an Istanbul midnight.
+func isDayStart(ts time.Time) bool {
+	return energy.Bucket(energy.Daily, ts, istanbul).From.Equal(ts)
 }
 
 // allRegistersValid reports whether every key of m is one of
