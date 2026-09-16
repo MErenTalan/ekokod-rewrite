@@ -46,12 +46,14 @@ func workerTestConfig(t *testing.T, dsn string, redisCfg config.Redis) *config.C
 	return cfg
 }
 
-// TestWorkerRegistersEveryF2Handler proves the wiring the acceptance suite
-// relies on: worker.Build wires a real Handlers.Ingestion, Handlers.Backfill
-// and Handlers.Prices, so every F2 integration task type routes to a
-// handler, and R17's consumption.refresh (declared, never enqueued in F2)
-// has none.
-func TestWorkerRegistersEveryF2Handler(t *testing.T) {
+// TestWorkerRegistersEveryF2AndF3Handler proves the wiring the acceptance
+// suite relies on: worker.Build wires a real Handlers.Ingestion,
+// Handlers.Backfill, Handlers.Prices and (F3 Task 11a) Handlers.ConsumptionRefresh,
+// so every F2 integration task type AND R17's consumption.refresh route to a
+// handler. Renamed from TestWorkerRegistersEveryF2Handler: consumption.refresh
+// was declared but deliberately left unhandled in F2 — Task 11a is what
+// makes that no longer true.
+func TestWorkerRegistersEveryF2AndF3Handler(t *testing.T) {
 	dsn := testfixtures.StartPostgres(t)
 	pool := testfixtures.NewPool(t, dsn)
 	redisCfg := testfixtures.RedisConfig(t)
@@ -65,6 +67,7 @@ func TestWorkerRegistersEveryF2Handler(t *testing.T) {
 	require.NotNil(t, built.Handlers.Ingestion)
 	require.NotNil(t, built.Handlers.Backfill)
 	require.NotNil(t, built.Handlers.Prices)
+	require.NotNil(t, built.Handlers.ConsumptionRefresh)
 
 	mux := asynq.NewServeMux()
 	job.Register(mux, built.Handlers)
@@ -75,13 +78,11 @@ func TestWorkerRegistersEveryF2Handler(t *testing.T) {
 		job.TypeIntegrationFetchReadings,
 		job.TypeIntegrationBackfill,
 		job.TypeEPIASSyncPrices,
+		job.TypeConsumptionRefresh,
 	} {
 		_, pattern := mux.Handler(asynq.NewTask(typ, nil))
 		require.Equal(t, typ, pattern, "no handler for %s", typ)
 	}
-
-	_, pattern := mux.Handler(asynq.NewTask(job.TypeConsumptionRefresh, nil))
-	require.Empty(t, pattern, "R17: consumption.refresh has no F2 handler")
 }
 
 // TestWorkerBuildClosesCleanlyTwice is the fix-round-1 M1 test: Built.Close

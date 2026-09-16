@@ -45,9 +45,10 @@ func RedisOpt(cfg config.Redis) (asynq.RedisClientOpt, error) {
 type Handlers struct {
 	Log *slog.Logger
 
-	Ingestion Ingestion
-	Backfill  Backfiller
-	Prices    PriceSyncer
+	Ingestion          Ingestion
+	Backfill           Backfiller
+	Prices             PriceSyncer
+	ConsumptionRefresh Refresher
 }
 
 // Register attaches every handler to the mux. TypeNoop is always
@@ -71,5 +72,8 @@ func Register(mux *asynq.ServeMux, h *Handlers) {
 	}
 	if h.Prices != nil {
 		mux.HandleFunc(TypeEPIASSyncPrices, h.integHandleSyncPrices)
+	}
+	if h.ConsumptionRefresh != nil {
+		mux.HandleFunc(TypeConsumptionRefresh, h.integHandleConsumptionRefresh)
 	}
 }
