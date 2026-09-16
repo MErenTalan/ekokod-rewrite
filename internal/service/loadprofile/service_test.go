@@ -130,6 +130,20 @@ func TestProfilesValidatesBeforeAnyIO(t *testing.T) {
 		{"span over 400 days", validScope, Request{AnalyzerIDs: oneID, Range: store.TimeRange{From: from, To: from.Add(401 * 24 * time.Hour)}}},
 		{"zero analyzer ids", validScope, Request{AnalyzerIDs: nil, Range: validRange}},
 		{"two analyzer ids", validScope, Request{AnalyzerIDs: []uuid.UUID{uuid.New(), uuid.New()}, Range: validRange}},
+		// m-5 (final fix X review): consumption's SeriesRequest accepts up
+		// to MaxAnalyzersPerRequest (50) distinct ids and separately rejects
+		// a duplicate; this package's Request has no such multi-id concept
+		// at all — 05-api-contract.md §5's /load-profile takes exactly ONE
+		// analyzer_id (the doc comment on Request above), so a duplicate id
+		// (two elements, even if identical) or 51 ids both fail the SAME
+		// "not exactly one" check "two analyzer ids" above already pins.
+		// These two rows exist so a future change to req.AnalyzerIDs'
+		// shape (e.g. widening it to accept several ids, mirroring
+		// consumption's own MaxAnalyzersPerRequest) is forced to consider
+		// duplicate-id and over-count handling explicitly rather than
+		// inheriting them for free from the singular-length check.
+		{"duplicate analyzer id", validScope, Request{AnalyzerIDs: duplicateAnalyzerID(), Range: validRange}},
+		{"51 analyzer ids", validScope, Request{AnalyzerIDs: newUUIDs(51), Range: validRange}},
 	}
 
 	for _, tc := range cases {
@@ -138,6 +152,23 @@ func TestProfilesValidatesBeforeAnyIO(t *testing.T) {
 			require.Error(t, err, "must be refused before any I/O: noCalendar/noHourly panic on any call")
 		})
 	}
+}
+
+// duplicateAnalyzerID and newUUIDs mirror internal/service/consumption's own
+// test helpers of the same name (m-5, final fix X review) — this package
+// has no shared test package with consumption, so they are duplicated here
+// rather than imported.
+func duplicateAnalyzerID() []uuid.UUID {
+	id := uuid.New()
+	return []uuid.UUID{id, id}
+}
+
+func newUUIDs(n int) []uuid.UUID {
+	ids := make([]uuid.UUID, n)
+	for i := range ids {
+		ids[i] = uuid.New()
+	}
+	return ids
 }
 
 // TestProfilesRejectsASpanOver400Days pins R99's exact boundary: 401 days is
