@@ -626,6 +626,136 @@ func TestRequestedKeysNarrowResultAndFillMissingWithEmptyProfile(t *testing.T) {
 	require.Nil(t, res.Statistics["weekend"].Max)
 }
 
+// TestCompanyWeekendDaysOverrideTheDefault proves resolveWeekendDays'
+// "company" branch — including the DayOfWeek -> time.Weekday mapping — is
+// exercised end to end, not just the "no rows -> default" fallback every
+// other test in this file reaches. The company configures Friday as its
+// ONLY weekend day; the fixture spans a Friday, a Saturday and a Sunday, so
+// a day that would be weekend/weekday under the {Sat,Sun} default lands the
+// opposite way here.
+func TestCompanyWeekendDaysOverrideTheDefault(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
+
+	calendar := postgres.NewCalendarRepository(pool)
+	analytics := postgres.NewAnalyticsRepository(pool)
+	readings := postgres.NewReadingRepository(pool)
+	svc := newTestService(t, calendar, analytics)
+
+	err := calendar.ReplaceWeekendDays(ctx, tenant.Scope, []int16{int16(time.Friday)})
+	require.NoError(t, err)
+
+	analyzerID := tenant.Analyzers[0].ID
+	// 2026-01-09 (Fri), 2026-01-10 (Sat), 2026-01-11 (Sun).
+	days := []struct {
+		date int
+		v0   string
+		v1   string
+	}{
+		{9, "1000.0000", "1006.0000"},  // Fri: the company's only weekend day
+		{10, "2000.0000", "2010.0000"}, // Sat: weekday under this company's calendar
+		{11, "3000.0000", "3005.0000"}, // Sun: weekday under this company's calendar
+	}
+	var rows []model.MeterReading
+	for _, d := range days {
+		rows = append(rows,
+			model.MeterReading{
+				AnalyzerID: analyzerID, Ts: istanbulAt(2026, time.January, d.date, 0).UTC(),
+				Kind: model.ReadingKindLoadProfile, ActiveImport: decPtr(d.v0),
+				MultiplierApplied: decimal.RequireFromString("1"),
+				SourceProvider:    model.IntegrationProviderOSOS, IngestedAt: time.Now().UTC(),
+			},
+			model.MeterReading{
+				AnalyzerID: analyzerID, Ts: istanbulAt(2026, time.January, d.date, 1).UTC(),
+				Kind: model.ReadingKindLoadProfile, ActiveImport: decPtr(d.v1),
+				MultiplierApplied: decimal.RequireFromString("1"),
+				SourceProvider:    model.IntegrationProviderOSOS, IngestedAt: time.Now().UTC(),
+			},
+		)
+	}
+	_, _, err = readings.BulkInsert(ctx, tenant.Scope, rows)
+	require.NoError(t, err)
+
+	req := loadprofile.Request{
+		AnalyzerIDs: []uuid.UUID{analyzerID},
+		Range:       store.TimeRange{From: istanbulAt(2026, time.January, 9, 0), To: istanbulAt(2026, time.January, 12, 0)},
+	}
+	res, err := svc.Profiles(ctx, tenant.Scope, req)
+	require.NoError(t, err)
+
+	require.Equal(t, "company", res.Config.WeekendSource)
+	require.Equal(t, []time.Weekday{time.Friday}, res.Config.WeekendDays)
+	require.Equal(t, 1, res.Profiles["weekend"].Days, "Friday must be the company's only weekend day")
+	require.Equal(t, 2, res.Profiles["weekday"].Days, "Saturday and Sunday must count as weekdays under this company's Friday-only weekend")
+}
+
+// TestNarrowScopeCannotReadAnAnalyzerOutsideItsBuildings proves hourValues
+// forwards the caller's Scope, unwidened, into the hourly read: requesting
+// an analyzer that belongs to a building OUTSIDE a narrow Scope's
+// BuildingIDs must return no data, mirroring
+// TestAnalyticsConsumptionHourlyIDsOutsideScopeContributeNoRows at the
+// repository layer. tenant.Scope grants only Buildings[0]; tenant.Analyzers
+// is built two-per-building in building order, so Analyzers[2] is the first
+// analyzer under Buildings[1] — outside the grant.
+func TestNarrowScopeCannotReadAnAnalyzerOutsideItsBuildings(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
+
+	calendar := postgres.NewCalendarRepository(pool)
+	analytics := postgres.NewAnalyticsRepository(pool)
+	readings := postgres.NewReadingRepository(pool)
+	svc := newTestService(t, calendar, analytics)
+
+	outsideAnalyzer := tenant.Analyzers[2]
+	require.NotEqual(t, tenant.Buildings[0].ID, *outsideAnalyzer.BuildingID,
+		"fixture precondition: this analyzer must be outside Buildings[0]")
+	require.False(t, tenant.Scope.AllowsBuilding(*outsideAnalyzer.BuildingID),
+		"fixture precondition: tenant.Scope must not grant this analyzer's building")
+
+	// 2026-01-05 is a Monday: a weekday under the default calendar.
+	rows := []model.MeterReading{
+		{AnalyzerID: outsideAnalyzer.ID, Ts: istanbulAt(2026, time.January, 5, 0).UTC(),
+			Kind: model.ReadingKindLoadProfile, ActiveImport: decPtr("1000.0000"),
+			MultiplierApplied: decimal.RequireFromString("1"),
+			SourceProvider:    model.IntegrationProviderOSOS, IngestedAt: time.Now().UTC()},
+		{AnalyzerID: outsideAnalyzer.ID, Ts: istanbulAt(2026, time.January, 5, 1).UTC(),
+			Kind: model.ReadingKindLoadProfile, ActiveImport: decPtr("1006.0000"),
+			MultiplierApplied: decimal.RequireFromString("1"),
+			SourceProvider:    model.IntegrationProviderOSOS, IngestedAt: time.Now().UTC()},
+	}
+	// AdminScope: BulkInsert itself enforces Scope against the analyzer's
+	// building, so a narrow scope can never even seed this fixture.
+	_, _, err := readings.BulkInsert(ctx, tenant.AdminScope, rows)
+	require.NoError(t, err)
+
+	req := loadprofile.Request{
+		AnalyzerIDs: []uuid.UUID{outsideAnalyzer.ID},
+		Range:       store.TimeRange{From: istanbulAt(2026, time.January, 5, 0), To: istanbulAt(2026, time.January, 6, 0)},
+	}
+
+	// Positive control: the same request under AdminScope (AllBuildings)
+	// returns real data.
+	admin, err := svc.Profiles(ctx, tenant.AdminScope, req)
+	require.NoError(t, err)
+	require.Equal(t, 1, admin.Profiles["weekday"].Days, "positive control: AdminScope must see this analyzer's data")
+	require.NotNil(t, admin.Statistics["weekday"].Mean)
+
+	// Under the narrow Scope (Buildings[0] only), the analyzer belongs to
+	// Buildings[1]: no data must come back.
+	narrow, err := svc.Profiles(ctx, tenant.Scope, req)
+	require.NoError(t, err)
+	require.Zero(t, narrow.Profiles["weekday"].Days)
+	require.Zero(t, narrow.Profiles["weekend"].Days)
+	require.Nil(t, narrow.Statistics["weekday"].Mean)
+	for _, h := range narrow.Profiles["weekday"].Hours {
+		require.Nil(t, h)
+	}
+}
+
 func decPtr(s string) *decimal.Decimal {
 	d := decimal.RequireFromString(s)
 	return &d
