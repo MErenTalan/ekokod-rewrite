@@ -512,9 +512,10 @@ func Load(lookup func(string) (string, bool)) (*Config, error) {
 	}
 
 	// R73/Task 11b: the ingest enqueue gate and consumption.Refresher's
-	// per-view lock TTL (wired into RefreshDeps.LockTTL by worker/wiring.go).
+	// single global lock TTL (wired into RefreshDeps.LockTTL by
+	// worker/wiring.go). R100(5): 30m default.
 	c.ConsumptionRefreshEnabled = l.boolVal("EKOKOD_CONSUMPTION_REFRESH_ENABLED", true)
-	c.ConsumptionRefreshLockTTL = l.positiveDuration("EKOKOD_CONSUMPTION_REFRESH_LOCK_TTL", 10*time.Minute)
+	c.ConsumptionRefreshLockTTL = l.positiveDuration("EKOKOD_CONSUMPTION_REFRESH_LOCK_TTL", 30*time.Minute)
 
 	c.resolved = l.resolved
 	if len(l.errs) > 0 {

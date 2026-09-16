@@ -14,6 +14,7 @@ import (
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/job"
+	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/lock"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/consumption"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
@@ -69,9 +70,17 @@ func TestRefreshConsumptionMaterialisesAClosedMonthBelowThePolicyWindow(t *testi
 	aggregateRepo := admin.NewAggregateRepository(pool)
 
 	locker := newRedisLocker(t)
+	// R100(3): a month ~two years back is older than hourly (30d), daily
+	// (90d) and monthly (1y)'s own policy horizons but NEWER than yearly's
+	// (5y) — so this still exercises exactly the "closed month two years
+	// back must still refresh" proof the fix wave asked to keep green;
+	// Enqueuer is a no-op fake because the real Redis locker here never
+	// contends (single caller, single lock acquisition).
 	refresher, err := consumption.NewRefresher(consumption.RefreshDeps{
 		Aggregates: aggregateRepo,
 		Locker:     locker,
+		Enqueuer:   &fakeEnqueuer{},
+		Clock:      clock.System(),
 		LockTTL:    2 * time.Minute,
 		Location:   testIstanbul,
 		Log:        discardLog(),

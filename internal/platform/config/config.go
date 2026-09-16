@@ -62,10 +62,13 @@ type Config struct {
 	ConsumptionRefreshEnabled bool
 	// ConsumptionRefreshLockTTL is wired into
 	// internal/service/consumption.RefreshDeps.LockTTL by worker/wiring.go
-	// (F3 Task 11a/11b): how long the per-view lock consumption.Refresher
-	// holds is allowed to run before another worker could, in principle,
-	// acquire the same key (there is no lease renewal — see RefreshDeps'
-	// doc). EKOKOD_CONSUMPTION_REFRESH_LOCK_TTL, default 10m, must be > 0.
+	// (F3 Task 11a/11b, R100(5)): how long the SINGLE global
+	// "consumption.refresh" lock consumption.Refresher holds is allowed to
+	// run before another worker could, in principle, acquire the same key
+	// (there is no lease renewal — see RefreshDeps' doc). 30 minutes
+	// comfortably covers a platform-wide yearly recompute (final review A
+	// I-3(d): the old 10m default was shorter than that worst case).
+	// EKOKOD_CONSUMPTION_REFRESH_LOCK_TTL, default 30m, must be > 0.
 	ConsumptionRefreshLockTTL time.Duration
 
 	resolved []Resolved
