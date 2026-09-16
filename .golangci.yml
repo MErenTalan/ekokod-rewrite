@@ -41,6 +41,22 @@ linters:
         domain-is-pure:
           files:
             - "**/internal/domain/**"
+            # _test.go files are exempted, not weakened: this rule mirrors
+            # internal/arch/arch_test.go's TestDomainHasNoProjectImports and
+            # TestNoFloatFieldsInModelOrStore, and both are explicitly
+            # documented as production-code-only ("packages are loaded
+            # without tests, so this guards production code only" —
+            # arch_test.go) because packages.Load's default Tests: false
+            # never even sees a _test.go file. internal/domain/loadprofile
+            # (F3 task 5) is the first domain package with unit tests of its
+            # own logic (earlier internal/domain/model held only struct
+            # definitions), so this is the first time the gap between the Go
+            # guard's scope and this depguard rule's scope was reachable.
+            # "testing" and "github.com/stretchr/testify/..." never link
+            # into the production binary; time/tzdata is imported only so a
+            # test can load Europe/Istanbul without depending on the host's
+            # system tzdata.
+            - "!**/internal/domain/**/*_test.go"
           list-mode: strict
           allow:
             # the domain layer's own tree — subpackages import each other.
