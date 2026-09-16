@@ -25,16 +25,17 @@
 // acceptance-layer restatement here would only re-assert "the six files
 // exist and run", which TestGolden already guarantees.
 //
-// TestF3NegativeDeltaProducesNullSuspectAndMessage (the negative-delta ->
-// NULL + suspect + operator message criterion) is deliberately ABSENT from
-// this file: it needs Task 8's Billing.ConsumptionAndRecord (the write-and-
-// record wrapper that owns consumption_anomalies and OperationalMessage),
-// which is not on this branch's base (Task 8 is still in its fix round). It
-// will be added once Task 8 merges.
+// TestF3NegativeDeltaProducesNullSuspectAndMessage, below, is the
+// negative-delta -> NULL + suspect + operator message criterion: it needs
+// Task 8's Billing.ConsumptionAndRecord (the write-and-record wrapper that
+// owns consumption_anomalies and OperationalMessage), which is now on this
+// branch (Task 8 merged into phase/f3-consumption-engine ahead of this
+// dispatch).
 package consumption_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -46,8 +47,10 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/energy"
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
+	"github.com/MErenTalan/ekokod-rewrite/internal/platform/lock"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/consumption"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
+	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
 )
 
@@ -382,4 +385,96 @@ func TestF3ZeroConsumptionProducesANullRatio(t *testing.T) {
 	require.Equal(t, "0", analyticsRows[0].Values[energy.ActiveImport].String())
 	require.Nil(t, analyticsRows[0].InductiveRatio, "the analytics path must apply the same null-on-zero-denominator rule")
 	require.Nil(t, analyticsRows[0].CapacitiveRatio)
+}
+
+// f3NewBillingAndRecord builds a *consumption.Billing wired with every Task
+// 8 dependency (real AnomalyRepository/OpsRepository, plus a real Locker)
+// against a real Postgres pool — mirroring anomalies_integration_test.go's
+// anomaliesNewBilling, but local to this file so criterion tests here do not
+// depend on that file's own helper staying unchanged. lock.NewMemory is a
+// real, mutex-backed Locker (not a fake): it proves the same
+// check-then-create serialisation ConsumptionAndRecord relies on (C-6)
+// without a second container under memory pressure.
+func f3NewBillingAndRecord(t *testing.T, readingRepo store.ReadingRepository, anomalyRepo store.AnomalyRepository, opsRepo store.OpsRepository, now time.Time) *consumption.Billing {
+	t.Helper()
+	b, err := consumption.NewBilling(consumption.BillingDeps{
+		Readings:  readingRepo,
+		Anomalies: anomalyRepo,
+		Ops:       opsRepo,
+		Clock:     clock.NewFake(now),
+		Log:       testfixtures.DiscardLogger(),
+		Locker:    lock.NewMemory(nil),
+	})
+	require.NoError(t, err)
+	return b
+}
+
+// TestF3NegativeDeltaProducesNullSuspectAndMessage is 09 §F3's criterion:
+// "A negative delta without a reset event yields NULL consumption, a
+// suspect flag and an operational message — asserted, not assumed."
+//
+// One analyzer, one hour, real Postgres repositories and a real Locker,
+// through Billing.ConsumptionAndRecord: active_import 1000 -> 900 (a
+// negative 100 delta) with no meter_reset reading anywhere near the
+// boundary. The row's own value must be nil (never a number, never the
+// legacy "bill the end reading" defect), the register must be suspect with
+// reason negative_delta, exactly one consumption_anomalies row must exist
+// with R60's own detail shape (code, period bounds, the register's reason
+// and delta), and exactly one operational message must exist for it with
+// Category "consumption-suspect-period" and Status "error".
+func TestF3NegativeDeltaProducesNullSuspectAndMessage(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
+	analyzerID := tenant.Analyzers[0].ID
+
+	readingRepo := pathsNewReadingRepo(pool)
+	anomalyRepo := postgres.NewAnomalyRepository(pool)
+	opsRepo := postgres.NewOpsRepository(pool)
+
+	h := time.Date(2026, 7, 1, 8, 0, 0, 0, time.UTC)
+	rows := []model.MeterReading{
+		readingRow(analyzerID, h, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}),
+		readingRow(analyzerID, h.Add(time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "900"}),
+	}
+	_, _, err := readingRepo.BulkInsert(ctx, tenant.Scope, rows)
+	require.NoError(t, err)
+
+	billing := f3NewBillingAndRecord(t, readingRepo, anomalyRepo, opsRepo, h.Add(time.Hour))
+
+	req := consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{analyzerID},
+		Level:       energy.Hourly,
+		Range:       store.TimeRange{From: h, To: h.Add(time.Hour)},
+	}
+	billingRows, err := billing.ConsumptionAndRecord(ctx, tenant.Scope, req)
+	require.NoError(t, err)
+	require.Len(t, billingRows, 1)
+	require.Nil(t, billingRows[0].Values[energy.ActiveImport], "a negative delta with no covering reset must never be billed as a number")
+	require.Contains(t, billingRows[0].Suspect, energy.ActiveImport)
+	require.Equal(t, energy.ReasonNegativeDelta, billingRows[0].Suspect[energy.ActiveImport].Reason)
+
+	anomalies, err := billing.ListAnomalies(ctx, tenant.AdminScope, consumption.AnomalyListRequest{AnalyzerIDs: []uuid.UUID{analyzerID}, Unresolved: true})
+	require.NoError(t, err)
+	require.Len(t, anomalies, 1)
+	require.Equal(t, "negative_delta", anomalies[0].Reason)
+	require.Equal(t, h, anomalies[0].PeriodStart.UTC())
+	require.Equal(t, h.Add(time.Hour), anomalies[0].PeriodEnd.UTC())
+
+	var detail map[string]any
+	require.NoError(t, json.Unmarshal(anomalies[0].Detail, &detail))
+	require.Equal(t, "consumption.suspect_period", detail["code"], "R60's own detail shape")
+	regs, ok := detail["registers"].(map[string]any)
+	require.True(t, ok)
+	reg, ok := regs["active_import"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "negative_delta", reg["reason"])
+	require.Equal(t, "-100", reg["delta"])
+
+	msgs, err := opsRepo.ListMessages(ctx, tenant.AdminScope, store.MessageFilter{RelatedID: &anomalies[0].ID})
+	require.NoError(t, err)
+	require.Len(t, msgs, 1, "exactly one operational message for the suspect period")
+	require.Equal(t, "consumption-suspect-period", msgs[0].Category)
+	require.Equal(t, "error", msgs[0].Status)
 }
