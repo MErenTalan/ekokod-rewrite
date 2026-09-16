@@ -139,19 +139,29 @@ import (
 // found anywhere earlier in the window, not only one that would coincide
 // with this check.
 //
-// A reset row with no value for a register carries no evidence for that
-// register: that register derives across the reset by plain difference
-// between start and end, and is suspect only if that plain difference is
-// negative (I-16). This is also exactly what happens when there is no
-// reset evidence for a register at all.
+// R93 (reverses I-16): a reset row that participates in the window — inside
+// (start.TS, end.TS], or at the start.TS/end.TS instant per R92(2)/R90 —
+// but has NO value for a register that BOTH boundary readings report
+// carries UNUSABLE evidence for that register: the register is
+// ReasonMeterReset-suspect, never a plain difference across the reset. This
+// holds even when another reset row in the same window does carry the
+// register — a single partial row is enough, because we cannot tell what
+// happened to that register at the meter event the partial row records. A
+// register that NEITHER boundary reports is untouched by this rule and
+// stays nil with no suspicion, as always (it is simply unreported). Plain
+// difference across a reset only happens when NO reset row participates in
+// the window at all for either boundary (the true I-2 "no reset evidence"
+// case) — see the fast path above and the len(windowResets)==0 branch
+// below.
 //
 // Suspicion.ResetRows on every Suspicion this function returns is the
 // count of resets inside the segmentation window (start.TS, end.TS],
 // regardless of whether they carried evidence for the suspect register,
-// PLUS one more when a start-side reset (R92(2)) carried a value for that
-// register — it lets the operator message distinguish "a reset exists but
-// could not be applied" from "no reset at all" (line up with the same rule
-// in Task 1's Suspicion doc).
+// PLUS one more when a start-side reset (R92(2)) was inspected for that
+// register (whether or not it carried a value — R93 makes an unusable
+// start-side row suspect too) — it lets the operator message distinguish
+// "a reset exists but could not be applied" from "no reset at all" (line up
+// with the same rule in Task 1's Suspicion doc).
 //
 // Registers untouched by any problem keep their derived values (R58). No
 // rounding, no modulus, no rollover arithmetic (R57).
@@ -188,6 +198,27 @@ func Derive(w Window, start, end *Reading, resets []Reading, priors []Reading) D
 
 	windowResets := inEvidenceWindow(resets, start.TS, end.TS)
 	startReset := lastResetAt(resets, start.TS) // R92(2)/(3)
+
+	// M-13: a boundary reading of KindReset is always treated as reset
+	// evidence at its own instant, whether or not the caller also included
+	// it in resets. Task 7 never selects a reset row as a SelectBoundary
+	// result, but a caller must not have to duplicate a reset-kind boundary
+	// into resets for Derive to see it as evidence. end is appended (not
+	// prepended) because inEvidenceWindow already returns entries in
+	// ascending TS order and end.TS is the window's maximum instant — this
+	// only fires when no element of resets already sits at end.TS, so the
+	// slice stays sorted. On the start side, no analogous append is needed:
+	// deriveRegister's R92(2) check is gated on start.Kind != KindReset, so
+	// a start.Kind == KindReset boundary is never inspected as ambiguous
+	// evidence regardless of startReset's value (see M-8) — startReset is
+	// still set here for documentation symmetry with the ruling's wording,
+	// but it changes no behaviour.
+	if end.Kind == KindReset && lastResetAt(resets, end.TS) == nil {
+		windowResets = append(windowResets, *end)
+	}
+	if start.Kind == KindReset && startReset == nil {
+		startReset = start
+	}
 
 	if len(windowResets) == 0 && startReset == nil {
 		// I-2 fast path: no reset evidence in the window for any register,
@@ -302,32 +333,49 @@ func deriveRegister(reg Register, start, end *Reading, windowResets []Reading, s
 	// for reg; a mismatch is meter_reset-suspect, decided before any
 	// segmentation is attempted (mirrors R90's ordering relative to
 	// finalDelta, and R92(4)'s precedence over any later negative segment).
+	//
+	// R93 (reverses I-16): resetRows counts this row whenever it is
+	// inspected here, whether or not it carries reg — a reset row that
+	// PARTICIPATES at start.TS but has no value for reg is unusable
+	// evidence for reg, not silent non-evidence, since both boundaries
+	// report reg (checked above).
 	if startReset != nil && start.Kind != KindReset {
-		if srVal := startReset.Value(reg); srVal != nil {
-			resetRows++
-			if !startValue.Equal(*srVal) {
-				return nil, &Suspicion{Reason: ReasonMeterReset, ResetRows: resetRows}
-			}
+		resetRows++
+		srVal := startReset.Value(reg)
+		if srVal == nil {
+			return nil, &Suspicion{Reason: ReasonMeterReset, ResetRows: resetRows}
+		}
+		if !startValue.Equal(*srVal) {
+			return nil, &Suspicion{Reason: ReasonMeterReset, ResetRows: resetRows}
 		}
 	}
 
-	var regResets []Reading
+	// R93 (reverses I-16): a reset row inside the segmentation window that
+	// has no value for reg is unusable evidence for reg — never a plain
+	// difference across it — because both boundaries report reg (checked
+	// above) and we cannot tell what happened at that meter event for reg.
+	// This fires even when OTHER resets in the same window do carry reg:
+	// one partial row is enough to make reg suspect. After this loop,
+	// windowResets is safe to use directly as every element (if any) is
+	// guaranteed to carry reg.
 	for _, r := range windowResets {
-		if r.Value(reg) != nil {
-			regResets = append(regResets, r)
+		if r.Value(reg) == nil {
+			return nil, &Suspicion{Reason: ReasonMeterReset, ResetRows: resetRows}
 		}
 	}
 
-	if len(regResets) == 0 {
-		// No usable reset evidence for this register at all: plain
-		// difference (I-16 covers both "no resets in window" and "resets
-		// exist but none carry this register").
+	if len(windowResets) == 0 {
+		// I-2: no reset evidence anywhere in the window for ANY register
+		// (R93 above already handles "resets exist but omit reg"), so
+		// nothing marks a segmentation point: plain difference (§3.1),
+		// suspect only when it happens to be negative.
 		delta := endValue.Sub(*startValue)
 		if delta.IsNegative() {
 			return nil, &Suspicion{Reason: ReasonNegativeDelta, Delta: &delta, ResetRows: resetRows}
 		}
 		return &delta, nil
 	}
+	regResets := windowResets
 
 	total := decimal.Zero
 	segStart := startValue

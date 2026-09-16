@@ -229,12 +229,14 @@ func TestDeriveIsSuspectWhenTheLastPriorDoesNotReportTheRegister(t *testing.T) {
 	require.Equal(t, 2, d.Suspect[energy.T1Import].ResetRows)
 }
 
-// I-16: a reset row that reports no value for a register carries no
-// evidence for it. active_import (which the reset does cover) still
-// derives through the reset formula; t1_import (which it does not) falls
-// back to a plain difference across the whole period and is suspect only
-// because that plain difference happens to be negative here — not because
-// of the reset at all.
+// R93 (reverses I-16, review I-9): a reset row that reports no value for a
+// register that BOTH boundary readings report is unusable evidence for that
+// register — never a plain difference across the reset. active_import
+// (which the reset does cover) still derives through the reset formula;
+// t1_import (which it does not) is meter_reset-suspect, regardless of the
+// sign the plain difference would have had. This is the reviewer's minimal
+// fixture: a physical replacement where the operator's ResetAfter omitted
+// t1_import must never let t1_import bill a number at all.
 func TestDeriveWithAnUnusableResetRowIsSuspectForThatRegisterOnly(t *testing.T) {
 	reset := resetAt(t0.Add(40*time.Minute), "0") // resetAt only ever carries active_import
 	start := &energy.Reading{TS: t0, Kind: energy.KindLoadProfile, Values: vals("900", "400")}
@@ -245,25 +247,51 @@ func TestDeriveWithAnUnusableResetRowIsSuspectForThatRegisterOnly(t *testing.T) 
 	requireValue(t, d, energy.ActiveImport, "140")
 	require.Empty(t, d.Suspect[energy.ActiveImport].Reason, "a sound register still derives through the reset")
 
-	require.Nil(t, d.Values[energy.T1Import])
-	require.Equal(t, energy.ReasonNegativeDelta, d.Suspect[energy.T1Import].Reason, "I-16: no evidence from the reset means plain difference, not meter_reset")
-	requireDelta(t, d.Suspect[energy.T1Import], "-390")
+	require.Nil(t, d.Values[energy.T1Import], "never -390 or any other plain difference")
+	require.Equal(t, energy.ReasonMeterReset, d.Suspect[energy.T1Import].Reason, "R93: an unusable reset row is meter_reset, not negative_delta")
+	require.Nil(t, d.Suspect[energy.T1Import].Delta, "meter_reset never carries a Delta (M-2)")
 	require.Equal(t, 1, d.Suspect[energy.T1Import].ResetRows, "ResetRows counts in-window resets regardless of whether they applied to this register")
 }
 
-// I-16, positive case: a reset row missing a register's value still lets
-// that register derive normally by plain difference when the difference
-// is not negative.
-func TestDeriveWithAnUnusableResetRowStillDerivesWhenThePlainDifferenceIsPositive(t *testing.T) {
-	reset := resetAt(t0.Add(40*time.Minute), "0")
+// R93 (reverses I-16, review I-9): the reviewer's minimal money fixture. A
+// plain difference across the omitted register would have been POSITIVE
+// (4610) and so, under the old I-16 rule, would have billed silently and
+// unflagged — this is the over-bill the property test found in review
+// round 2. It must be meter_reset-suspect regardless of the sign the plain
+// difference would have had.
+func TestDeriveWithAnUnusableResetRowIsSuspectEvenWhenThePlainDifferenceWouldBePositive(t *testing.T) {
 	start := &energy.Reading{TS: t0, Kind: energy.KindLoadProfile, Values: vals("900", "400")}
-	end := &energy.Reading{TS: t0.Add(time.Hour), Kind: energy.KindLoadProfile, Values: vals("40", "440")}
+	prior := &energy.Reading{TS: t0.Add(30 * time.Minute), Kind: energy.KindLoadProfile, Values: vals("1000", "450")}
+	reset := &energy.Reading{ // ResetAfter omitted t1_import
+		TS: t0.Add(40 * time.Minute), Kind: energy.KindReset,
+		Values: map[energy.Register]*decimal.Decimal{energy.ActiveImport: dec("5000")},
+	}
+	end := &energy.Reading{TS: t0.Add(time.Hour), Kind: energy.KindLoadProfile, Values: vals("5040", "5010")}
+
+	d := energy.Derive(win(t0, time.Hour), start, end, []energy.Reading{*reset}, []energy.Reading{*prior})
+
+	requireValue(t, d, energy.ActiveImport, "140")
+	require.Empty(t, d.Suspect[energy.ActiveImport].Reason)
+
+	require.Nil(t, d.Values[energy.T1Import], "never 4610")
+	require.Equal(t, energy.ReasonMeterReset, d.Suspect[energy.T1Import].Reason, "never 4610, unflagged")
+}
+
+// R93: a register that NEITHER boundary reports is simply unreported — a
+// reset row omitting a register nobody asked about must not manufacture
+// suspicion for it. This is unaffected by R93 because the up-front
+// startValue/endValue nil check in deriveRegister returns before the new
+// reset-participation rule ever runs.
+func TestDeriveLeavesARegisterNeitherBoundaryReportsNilWithoutSuspicion(t *testing.T) {
+	reset := resetAt(t0.Add(40*time.Minute), "0") // carries only active_import
+	start := readingAt(t0, "900")                 // carries only active_import
+	end := readingAt(t0.Add(time.Hour), "40")     // carries only active_import
 
 	d := energy.Derive(win(t0, time.Hour), start, end, []energy.Reading{*reset}, []energy.Reading{*readingAt(t0.Add(30*time.Minute), "1000")})
 
 	requireValue(t, d, energy.ActiveImport, "140")
-	requireValue(t, d, energy.T1Import, "40")
-	require.NotContains(t, d.Suspect, energy.T1Import)
+	require.Nil(t, d.Values[energy.T1Import])
+	require.NotContains(t, d.Suspect, energy.T1Import, "neither boundary reports t1_import, so it is unreported, not suspect")
 }
 
 func TestDeriveHandlesTwoResetsInOnePeriod(t *testing.T) {
@@ -500,6 +528,94 @@ func TestDeriveIsSuspectWhenTheStartReadingAtTheResetInstantIsNotPostReset(t *te
 	require.Equal(t, 1, d.Suspect[energy.ActiveImport].ResetRows)
 }
 
+// I-8 (review round 2): the start-side R92(2) check must apply for any
+// non-reset start kind, not only KindLoadProfile — Task 7's billing-derived
+// windows pass a KindBilling start, and a gate narrowed to load_profile let
+// the legacy over-bill (4030) back in for a billing start. This mirrors
+// TestDeriveIsSuspectWhenABillingEndAtTheResetInstantIsNotPostReset on the
+// other boundary.
+func TestDeriveIsSuspectWhenABillingStartAtTheResetInstantIsNotPostReset(t *testing.T) {
+	start := &energy.Reading{
+		TS: t0, Kind: energy.KindBilling,
+		Values: map[energy.Register]*decimal.Decimal{energy.ActiveImport: dec("1010")}, // old meter's closing value
+	}
+	reset := resetAt(t0, "5000") // reset.TS == start.TS
+	end := &energy.Reading{
+		TS: t0.Add(time.Hour), Kind: energy.KindBilling,
+		Values: map[energy.Register]*decimal.Decimal{energy.ActiveImport: dec("5040")},
+	}
+
+	d := energy.Derive(win(t0, time.Hour), start, end, []energy.Reading{*reset}, nil)
+
+	require.Nil(t, d.Values[energy.ActiveImport])
+	require.Equal(t, energy.ReasonMeterReset, d.Suspect[energy.ActiveImport].Reason, "never 4030")
+	require.Nil(t, d.Suspect[energy.ActiveImport].Delta)
+	require.Equal(t, 1, d.Suspect[energy.ActiveImport].ResetRows)
+}
+
+// I-8 (review round 2): the start-side equality check must be exact
+// (decimal.Equal), never loosened to "at or below" the reset value — a
+// start ABOVE the reset value at the reset instant is exactly as ambiguous
+// as one below it (it could still be the old meter's last cumulative
+// index), and billing it would derive 540 (6040-5500) against a true usage
+// of 1040.
+func TestDeriveIsSuspectWhenTheStartReadingAtTheResetInstantIsAboveTheResetValue(t *testing.T) {
+	start := readingAt(t0, "5500") // ABOVE the reset's own value, old meter's closing value
+	reset := resetAt(t0, "5000")   // reset.TS == start.TS
+	end := readingAt(t0.Add(time.Hour), "6040")
+
+	d := energy.Derive(win(t0, time.Hour), start, end, []energy.Reading{*reset}, nil)
+
+	require.Nil(t, d.Values[energy.ActiveImport])
+	require.Equal(t, energy.ReasonMeterReset, d.Suspect[energy.ActiveImport].Reason, "never 540")
+	require.Nil(t, d.Suspect[energy.ActiveImport].Delta)
+	require.Equal(t, 1, d.Suspect[energy.ActiveImport].ResetRows)
+}
+
+// M-11 (review round 2): R92(4)'s precedence must also hold at the R90
+// end-of-window check specifically — an earlier negative segment must not
+// win when the end-of-window mismatch is meter_reset. reset1@20 follows a
+// negative segment (800-900); reset2 sits at end.TS and end (70) mismatches
+// its own value (0). meter_reset must win, never negative_delta (-100).
+func TestDeriveMeterResetWinsWhenAnEarlierSegmentIsNegativeAndTheEndMismatches(t *testing.T) {
+	start := readingAt(t0, "900")
+	prior1 := readingAt(t0.Add(10*time.Minute), "800") // 800-900 = -100, negative
+	reset1 := resetAt(t0.Add(20*time.Minute), "0")
+	prior2 := readingAt(t0.Add(40*time.Minute), "30")
+	reset2 := resetAt(t0.Add(time.Hour), "0") // reset2.TS == end.TS
+	end := readingAt(t0.Add(time.Hour), "70") // mismatches reset2's own value
+
+	d := energy.Derive(win(t0, time.Hour), start, end,
+		[]energy.Reading{*reset1, *reset2}, []energy.Reading{*prior1, *prior2})
+
+	require.Nil(t, d.Values[energy.ActiveImport])
+	require.Equal(t, energy.ReasonMeterReset, d.Suspect[energy.ActiveImport].Reason, "never negative_delta (-100)")
+	require.Nil(t, d.Suspect[energy.ActiveImport].Delta)
+	require.Equal(t, 2, d.Suspect[energy.ActiveImport].ResetRows)
+}
+
+// M-13 (review round 2): a boundary reading of Kind == KindReset is always
+// treated as reset evidence at its own instant, even when the caller did
+// not also include it in resets. Without this, end being the reset row
+// itself but absent from resets would take the I-2 fast path and derive a
+// plain difference (5000-100 = 4900), which is wrong: 150 (the prior) minus
+// 100 (start) is the pre-reset segment (50), and the trailing segment from
+// the reset to itself is zero. The expected result is 50, NOT a suspicion:
+// end being the reset row itself removes R90's old/new-meter ambiguity
+// entirely (mirroring M-8's treatment of a reset at start when start IS
+// that reset row) — there is nothing to disambiguate about a reset row's
+// own value against itself.
+func TestDeriveTreatsAResetKindBoundaryAsEvidenceEvenWhenAbsentFromResets(t *testing.T) {
+	start := readingAt(t0, "100")
+	prior := readingAt(t0.Add(30*time.Minute), "150")
+	end := resetAt(t0.Add(time.Hour), "5000") // end IS a reset row, but resets is nil
+
+	d := energy.Derive(win(t0, time.Hour), start, end, nil, []energy.Reading{*prior})
+
+	requireValue(t, d, energy.ActiveImport, "50")
+	require.Empty(t, d.Suspect, "never 4900")
+}
+
 // I-6, matching case: start's value equals the reset row's own value
 // exactly, so start counts as trustworthy post-reset evidence and the
 // window derives normally (no other reset falls inside (start.TS, end.TS]).
@@ -538,6 +654,14 @@ func TestDeriveIgnoresAResetAtStartWhenStartIsThatResetRow(t *testing.T) {
 // both be invisible to Derive: the result is identical to
 // TestDeriveAppliesTheResetFormula, which uses the same true fixture
 // without either wrong-kind element.
+// M-12: two wrong-kind elements in resets, one before and one after the
+// real reset. A filterKind that dropped only the FIRST wrong-kind element
+// and blindly copied every later one (however correctly filtered the tail
+// looked with a single wrong-kind fixture) would leak notAResetAfter
+// through as a bogus segmentation point at 45min, between the real reset
+// (40min) and end (60min) — with no prior in that gap, the missing
+// before-reset value would make active_import wrongly suspect instead of
+// 140.
 func TestDeriveIgnoresElementsOfTheWrongKind(t *testing.T) {
 	start := readingAt(t0, "900")
 	truePrior := readingAt(t0.Add(30*time.Minute), "1000")
@@ -548,13 +672,17 @@ func TestDeriveIgnoresElementsOfTheWrongKind(t *testing.T) {
 		TS: t0.Add(5 * time.Minute), Kind: energy.KindLoadProfile,
 		Values: map[energy.Register]*decimal.Decimal{energy.ActiveImport: dec("99999")},
 	}
+	notAResetAfter := energy.Reading{ // billing, not reset — placed AFTER the real reset (M-12)
+		TS: t0.Add(45 * time.Minute), Kind: energy.KindBilling,
+		Values: map[energy.Register]*decimal.Decimal{energy.ActiveImport: dec("12345")},
+	}
 	notAPrior := energy.Reading{ // billing, not load_profile — must not be used as before_reset
 		TS: t0.Add(35 * time.Minute), Kind: energy.KindBilling,
 		Values: map[energy.Register]*decimal.Decimal{energy.ActiveImport: dec("777")},
 	}
 
 	d := energy.Derive(win(t0, time.Hour), start, end,
-		[]energy.Reading{notAReset, *reset},
+		[]energy.Reading{notAReset, *reset, notAResetAfter},
 		[]energy.Reading{*truePrior, notAPrior})
 
 	requireValue(t, d, energy.ActiveImport, "140")
