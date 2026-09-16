@@ -167,6 +167,28 @@ func TestRefreshRejectsAnInvalidRange(t *testing.T) {
 	require.ErrorIs(t, err, store.ErrInvalidRange)
 }
 
+// TestRefreshReturnsTheDatabaseError proves Refresh surfaces a genuine
+// database-level rejection rather than swallowing it: a one-hour window
+// passes store.TimeRange.Valid() (both ends set, From before To) but
+// TimescaleDB itself rejects refresh_continuous_aggregate on
+// consumption_daily (bucket width one day) with "refresh window too small",
+// so this exercises the CALL's own error path, not either pre-I/O check.
+func TestRefreshReturnsTheDatabaseError(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	repo := admin.NewAggregateRepository(pool)
+
+	now := time.Now().UTC()
+	tooSmall := store.TimeRange{From: now.Add(-time.Hour), To: now}
+	require.True(t, tooSmall.Valid(), "the window must pass Valid() so only the database rejection is exercised")
+
+	err := repo.Refresh(ctx, store.ViewConsumptionDaily, tooSmall)
+	require.Error(t, err)
+	require.NotErrorIs(t, err, store.ErrUnknownView)
+	require.NotErrorIs(t, err, store.ErrInvalidRange)
+}
+
 // TestRefreshWalksTheFourViewsFinestFirst pins store.ConsumptionViews' order:
 // a caller (Task 11's handler) that refreshes in this order never has a
 // coarser view appear to lag a finer one it depends on for its own story
