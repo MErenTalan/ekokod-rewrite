@@ -60,14 +60,27 @@ const MaxBuckets = 10000
 // covering the month (I-3).
 const BillingSnapshotTolerance = 72 * time.Hour
 
-// DailySnapshotTolerance bounds R95's daily-kind fallback boundary: a
+// DailySnapshotTolerance bounds R95/R96's daily-kind fallback boundary: a
 // daily-kind reading older than this relative to its own bound does not
-// count as covering the period, exactly as BillingSnapshotTolerance bounds
+// count as covering the boundary, exactly as BillingSnapshotTolerance bounds
 // the billing-kind fallback for R63. `daily` is a fallback boundary kind at
-// Daily, Monthly and Yearly only — never Hourly — tried after load_profile
-// fails to emit a usable pair for the period. 36h admits an end-of-day
-// stamp taken at 23:59 or at the next day's 00:00 either way.
+// Daily, Monthly and Yearly only — never Hourly. 36h admits an end-of-day
+// stamp taken at 23:59 or at the next day's 00:00 either way. R96 caps this
+// (and every other kind's tolerance) at half the width of the bucket(s)
+// meeting at the boundary instant — see boundaryTolerance in billing.go — so
+// at Daily level this 36h never actually applies uncapped: a normal 24h day
+// caps every kind at 12h.
 const DailySnapshotTolerance = 36 * time.Hour
+
+// LoadProfileBoundaryTolerance bounds R96's load_profile boundary at Daily,
+// Monthly and Yearly levels: a load_profile reading older than this relative
+// to its own bound does not count as a usable boundary candidate there, so a
+// stale load_profile reading no longer beats a fresher daily pair (R96's K3
+// finding: an unbounded load_profile look-back at these levels let a stale
+// snapshot win over correct, fresh daily-kind evidence). At Hourly level
+// load_profile keeps 02 §3.1's original, deliberately unbounded look-back —
+// this tolerance is never applied there.
+const LoadProfileBoundaryTolerance = 36 * time.Hour
 
 // SeriesRequest asks for one or more analyzers' series at one level.
 //

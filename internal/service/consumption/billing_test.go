@@ -178,15 +178,21 @@ func TestMonthlyFallsBackToLoadProfileWhenBillingReadingsDoNotCoverTheMonth(t *t
 	require.Equal(t, "200", row.Values[energy.ActiveImport].String())
 }
 
-// TestMonthlyFallsBackWhenTheOnlyBillingSnapshotIsOlderThanTheTolerance is
-// I-3: a billing-kind reading exists near the START boundary (3 days before
-// January's own start — exactly at BillingSnapshotTolerance, still
-// covering) but the reading nearest the END boundary is 4 days (96h, over
-// the 72h tolerance) before February's start. One stale side is enough to
-// fail coverage for the whole month (R63: "each of the month's two
-// boundary readings"), so this falls back to load_profile exactly as if no
-// billing reading existed at all: 1200 - 1000 = 200.
-func TestMonthlyFallsBackWhenTheOnlyBillingSnapshotIsOlderThanTheTolerance(t *testing.T) {
+// TestMonthlyMixesBillingStartWithLoadProfileEndWhenOnlyTheEndSnapshotIsStale
+// is R96's amendment of the old "one stale side fails coverage for the WHOLE
+// month" rule (formerly I-3/C3, back when a period's boundaries were chosen
+// together, per PERIOD, never mixing kinds). A billing-kind reading exists
+// near the START boundary (exactly at BillingSnapshotTolerance, still
+// covering), but the reading nearest the END boundary is 4 days (96h, over
+// the 72h tolerance) before February's start. Under R96 each boundary
+// instant resolves independently: the START still resolves to billing
+// (900), but the END — having no usable billing candidate — falls back on
+// its own to load_profile (1200), giving a MIXED-kind row: 1200 - 900 = 300,
+// Source = load_profile (the END boundary's own kind). This is deliberately
+// no longer "200" (the pre-R96 answer of falling back to load_profile at
+// BOTH ends merely because one side was stale): 300 uses the freshest
+// available reading at each side, and is the more correct figure.
+func TestMonthlyMixesBillingStartWithLoadProfileEndWhenOnlyTheEndSnapshotIsStale(t *testing.T) {
 	loc := istanbulLoc(t)
 	jan1 := time.Date(2026, 1, 1, 0, 0, 0, 0, loc)
 	feb1 := time.Date(2026, 2, 1, 0, 0, 0, 0, loc)
@@ -218,9 +224,9 @@ func TestMonthlyFallsBackWhenTheOnlyBillingSnapshotIsOlderThanTheTolerance(t *te
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	row := rows[0]
-	require.Equal(t, energy.KindLoadProfile, row.Source)
+	require.Equal(t, energy.KindLoadProfile, row.Source, "the END boundary's own kind (R96), even though the START resolved to billing")
 	require.NotNil(t, row.Values[energy.ActiveImport])
-	require.Equal(t, "200", row.Values[energy.ActiveImport].String())
+	require.Equal(t, "300", row.Values[energy.ActiveImport].String(), "900 (billing start) to 1200 (load_profile end)")
 }
 
 // TestBillingNeverUsesCurrentIndexReadingsAsBoundaries is R64: current_index
@@ -509,12 +515,16 @@ func TestBillingIncludesAFirstBucketWhoseStartReadingPrecedesFrom(t *testing.T) 
 
 // --- C3: START-side staleness of the billing snapshot ----------------------
 
-// TestMonthlyFallsBackWhenTheStartSnapshotIsStale is C3 (review probe P3b).
-// The START billing snapshot is 73h before January (just over
-// BillingSnapshotTolerance); the END snapshot is fresh. Mutation (d')
-// (disabling only the START-side tolerance check) leaves this GREEN with
-// the wrong number (6000, ten December days billed into January); the
-// correct fallback answer is load_profile's 5000.
+// TestMonthlyFallsBackWhenTheStartSnapshotIsStale is C3 (review probe P3b),
+// updated for R96: the START billing snapshot is 73h before January (just
+// over BillingSnapshotTolerance), so the START boundary falls back to
+// load_profile (1000) on its own; the END billing snapshot is fresh (exactly
+// at February's own bound), so the END boundary still resolves to billing
+// (6000). Under the pre-R96 whole-period rule this fell back to load_profile
+// at BOTH ends; under R96 only the stale side does, giving a MIXED row
+// (Source = billing, the END boundary's own kind) with the SAME correct
+// value, 5000 — a stale START must still never let the wrong December
+// figure (6000 - 0 = 6000, ten December days billed into January) through.
 func TestMonthlyFallsBackWhenTheStartSnapshotIsStale(t *testing.T) {
 	loc := istanbulLoc(t)
 	jan1 := time.Date(2026, 1, 1, 0, 0, 0, 0, loc)
@@ -543,14 +553,16 @@ func TestMonthlyFallsBackWhenTheStartSnapshotIsStale(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	require.Equal(t, energy.KindLoadProfile, rows[0].Source)
-	require.Equal(t, "5000", rows[0].Values[energy.ActiveImport].String(), "a stale START snapshot must not count as covering")
+	require.Equal(t, energy.KindBilling, rows[0].Source, "R96: the END boundary resolves independently and is fresh billing")
+	require.Equal(t, "5000", rows[0].Values[energy.ActiveImport].String(), "a stale START snapshot must not count as covering AT THAT BOUNDARY")
 }
 
-// TestMonthlyFallsBackWhenTheStartSnapshotIsMissing is C3's second fixture:
-// no billing reading anywhere near the START boundary at all (only at
-// February's own start), so the month is not covered and falls back to
-// load_profile exactly as a stale one would.
+// TestMonthlyFallsBackWhenTheStartSnapshotIsMissing is C3's second fixture,
+// updated for R96: no billing reading anywhere near the START boundary at
+// all (only at February's own start), so the START boundary falls back to
+// load_profile (1000) on its own, while the END boundary — billing exists
+// exactly at February's own bound — still resolves to billing (6000): a
+// MIXED row, Source = billing, value unchanged at 5000.
 func TestMonthlyFallsBackWhenTheStartSnapshotIsMissing(t *testing.T) {
 	loc := istanbulLoc(t)
 	jan1 := time.Date(2026, 1, 1, 0, 0, 0, 0, loc)
@@ -577,7 +589,7 @@ func TestMonthlyFallsBackWhenTheStartSnapshotIsMissing(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	require.Equal(t, energy.KindLoadProfile, rows[0].Source)
+	require.Equal(t, energy.KindBilling, rows[0].Source, "R96: the END boundary resolves independently and is fresh billing")
 	require.Equal(t, "5000", rows[0].Values[energy.ActiveImport].String())
 }
 
@@ -843,35 +855,105 @@ func mustSetMaxDemand(r model.MeterReading, v string) model.MeterReading {
 
 // TestBillingReadingCallsUseTheCallersScope is I-7's unit half: a
 // scope-checking fakeReadings fails the test immediately if ANY call
-// (load_profile, reset, billing, daily) uses a Scope other than the
+// (load_profile, reset, billing, daily, or any of the three kinds'
+// firstBoundaryLookback BoundaryReadings calls) uses a Scope other than the
 // caller's own. sc deliberately has AllBuildings=false with an explicit
 // BuildingIDs, so it is NOT equal to store.SystemScope(sc.CompanyID) —
-// mutation (f) (substituting SystemScope(sc.CompanyID) on the reset Range
-// call) is only provable if the two scopes actually differ.
+// mutation (f) (substituting SystemScope(sc.CompanyID) on any one Range or
+// BoundaryReadings call) is only provable if the two scopes actually differ.
+//
+// R96's re-review (I-7 remainder) found this test ran at Hourly ONLY, so the
+// billing- and daily-kind Range calls and their look-backs — which exist
+// only at Daily/Monthly — were never exercised: a mutation on
+// billing.go:186's billing Range call stayed green in unit and integration.
+// Table-driven across Hourly, Daily and Monthly (each level's own fixture
+// supplies every kind that level's Consumption call touches) closes that
+// gap: every call site in consumptionForAnalyzer now runs under the
+// scope-checking fake at least once.
 func TestBillingReadingCallsUseTheCallersScope(t *testing.T) {
 	analyzerID := uuid.New()
 	sc := store.Scope{CompanyID: uuid.New(), BuildingIDs: []uuid.UUID{uuid.New()}}
-	readings := fakeReadings{
-		t: t, wantScope: &sc,
-		byKind: map[model.ReadingKind][]model.MeterReading{
-			model.ReadingKindLoadProfile: {
-				readingRow(analyzerID, billingT0, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}),
-				readingRow(analyzerID, billingT0.Add(time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "1110"}),
+	loc := istanbulLoc(t)
+	day := time.Date(2026, 3, 10, 0, 0, 0, 0, loc)
+	jan1 := time.Date(2026, 1, 1, 0, 0, 0, 0, loc)
+	feb1 := time.Date(2026, 2, 1, 0, 0, 0, 0, loc)
+
+	cases := []struct {
+		name  string
+		level energy.Level
+		from  time.Time
+		to    time.Time
+		kinds map[model.ReadingKind][]model.MeterReading
+	}{
+		{
+			name: "hourly", level: energy.Hourly, from: billingT0, to: billingT0.Add(time.Hour),
+			kinds: map[model.ReadingKind][]model.MeterReading{
+				model.ReadingKindLoadProfile: {
+					readingRow(analyzerID, billingT0, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}),
+					readingRow(analyzerID, billingT0.Add(time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "1110"}),
+				},
+				model.ReadingKindReset: {
+					readingRow(analyzerID, billingT0.Add(time.Hour), model.ReadingKindReset, map[string]string{"active_import": "100"}),
+				},
 			},
-			model.ReadingKindReset: {
-				readingRow(analyzerID, billingT0.Add(time.Hour), model.ReadingKindReset, map[string]string{"active_import": "100"}),
+		},
+		{
+			// Exercises the daily-kind Range and its own look-back (useDaily,
+			// billing.go's non-Hourly branch), absent at Hourly.
+			name: "daily", level: energy.Daily, from: day, to: day.Add(24 * time.Hour),
+			kinds: map[model.ReadingKind][]model.MeterReading{
+				model.ReadingKindLoadProfile: {
+					readingRow(analyzerID, day, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}),
+					readingRow(analyzerID, day.Add(24*time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "1100"}),
+				},
+				model.ReadingKindDaily: {
+					readingRow(analyzerID, day, model.ReadingKindDaily, map[string]string{"active_import": "1000"}),
+					readingRow(analyzerID, day.Add(24*time.Hour), model.ReadingKindDaily, map[string]string{"active_import": "1100"}),
+				},
+				model.ReadingKindReset: {
+					readingRow(analyzerID, day.Add(12*time.Hour), model.ReadingKindReset, map[string]string{"active_import": "0"}),
+				},
+			},
+		},
+		{
+			// Exercises the billing-kind Range and look-back (useBilling),
+			// Monthly-only, the specific call site (billing.go:186) the
+			// re-review's mutation targeted.
+			name: "monthly", level: energy.Monthly, from: jan1, to: feb1,
+			kinds: map[model.ReadingKind][]model.MeterReading{
+				model.ReadingKindBilling: {
+					readingRow(analyzerID, jan1, model.ReadingKindBilling, map[string]string{"active_import": "1000"}),
+					readingRow(analyzerID, feb1, model.ReadingKindBilling, map[string]string{"active_import": "6000"}),
+				},
+				model.ReadingKindLoadProfile: {
+					readingRow(analyzerID, jan1, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}),
+					readingRow(analyzerID, feb1, model.ReadingKindLoadProfile, map[string]string{"active_import": "1200"}),
+				},
+				model.ReadingKindDaily: {
+					readingRow(analyzerID, jan1, model.ReadingKindDaily, map[string]string{"active_import": "1000"}),
+					readingRow(analyzerID, feb1, model.ReadingKindDaily, map[string]string{"active_import": "1300"}),
+				},
+				model.ReadingKindReset: {
+					readingRow(analyzerID, jan1.Add(15*24*time.Hour), model.ReadingKindReset, map[string]string{"active_import": "0"}),
+				},
 			},
 		},
 	}
-	b := newBilling(t, readings)
-	ctx := context.Background()
-	req := consumption.SeriesRequest{
-		AnalyzerIDs: []uuid.UUID{analyzerID},
-		Level:       energy.Hourly,
-		Range:       store.TimeRange{From: billingT0, To: billingT0.Add(time.Hour)},
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			readings := fakeReadings{t: t, wantScope: &sc, byKind: tc.kinds}
+			b := newBilling(t, readings)
+			ctx := context.Background()
+			req := consumption.SeriesRequest{
+				AnalyzerIDs: []uuid.UUID{analyzerID},
+				Level:       tc.level,
+				Range:       store.TimeRange{From: tc.from, To: tc.to},
+			}
+			_, err := b.Consumption(ctx, sc, req)
+			require.NoError(t, err, "every repository call must use the caller's own Scope, never a substituted one")
+		})
 	}
-	_, err := b.Consumption(ctx, sc, req)
-	require.NoError(t, err, "every repository call must use the caller's own Scope, never a substituted one")
 }
 
 // --- I6: validation runs before ANY I/O, on the Billing path --------------
@@ -920,4 +1002,383 @@ func TestBillingAcceptsExactlyMaxBuckets(t *testing.T) {
 	rows, err := b.Consumption(ctx, scope, req)
 	require.NoError(t, err)
 	require.Empty(t, rows)
+}
+
+// --- R96/K1: a kind's tolerance is capped at half the bucket's width ------
+
+// TestDailyMissingSnapshotYieldsNoRowForEitherAdjacentDayNotOneMergedRow is
+// R96's K1 fix: a daily-only analyzer's Mar 10 00:00 snapshot is missing.
+// Without R96's bucketWidth/2 cap, DailySnapshotTolerance (36h) exceeds a
+// normal Daily bucket's own width (24h): the Mar 10 boundary would resolve
+// to the STALE Mar 9 00:00 reading (24h away, inside an uncapped 36h),
+// silently moving Mar 9's and Mar 10's true consumption into a single "Mar
+// 10" row. R96 caps every kind's tolerance at half the bucket's width — 12h
+// at Daily level for a normal 24h day — so a reading 24h away no longer
+// qualifies: the Mar 10 boundary resolves to nil, and BOTH Mar 9 (whose own
+// END boundary is now nil) and Mar 10 (whose own START boundary is nil) are
+// silently absent, never merged into one wrong row. Mar 11, whose own
+// boundaries both have exact daily readings, is unaffected: 1400 - 1300 =
+// 100.
+func TestDailyMissingSnapshotYieldsNoRowForEitherAdjacentDayNotOneMergedRow(t *testing.T) {
+	loc := istanbulLoc(t)
+	mar9 := time.Date(2026, 3, 9, 0, 0, 0, 0, loc)
+	mar10 := mar9.Add(24 * time.Hour)
+	mar11 := mar10.Add(24 * time.Hour)
+	mar12 := mar11.Add(24 * time.Hour)
+	analyzerID := uuid.New()
+
+	readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
+		model.ReadingKindDaily: {
+			readingRow(analyzerID, mar9, model.ReadingKindDaily, map[string]string{"active_import": "1000"}),
+			// Mar 10's own snapshot is missing entirely.
+			readingRow(analyzerID, mar11, model.ReadingKindDaily, map[string]string{"active_import": "1300"}),
+			readingRow(analyzerID, mar12, model.ReadingKindDaily, map[string]string{"active_import": "1400"}),
+		},
+	}}
+	b := newBilling(t, readings)
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+
+	rows, err := b.Consumption(ctx, scope, consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{analyzerID},
+		Level:       energy.Daily,
+		Range:       store.TimeRange{From: mar9, To: mar12},
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "Mar 9 and Mar 10 must both be silently absent — never merged into one row")
+	require.True(t, rows[0].Window.From.Equal(mar11), "the only surviving row is Mar 11, whose own boundaries are both exact")
+	require.Equal(t, "100", rows[0].Values[energy.ActiveImport].String())
+}
+
+// --- R96/K2: adjacent periods telescope exactly, never gap nor overlap ----
+
+// TestAdjacentMonthlyPeriodsTelescopeToTheTrueTotal is R96's K2 fix (the
+// review's adjacent-months probe): December has no billing-kind reading of
+// its own near its START, but January's billing snapshot was taken 48h
+// early (Dec 30, well within BillingSnapshotTolerance) — the SAME resolved
+// reading is used for BOTH December's own END boundary and January's own
+// START boundary, because R96 resolves each boundary INSTANT exactly once
+// and reuses it on both sides. December's start falls back to daily (Dec
+// 1); January's end falls back to daily too (Feb 1 — no billing snapshot
+// exists anywhere near it, only the stale Dec 30 one). The two monthly rows
+// must sum to EXACTLY the true total between the first and last resolved
+// boundary reading — 7200 - 1000 = 6200 — with no gap and no double-count
+// at the Dec 30/Jan 1 seam.
+func TestAdjacentMonthlyPeriodsTelescopeToTheTrueTotal(t *testing.T) {
+	loc := istanbulLoc(t)
+	dec1 := time.Date(2025, 12, 1, 0, 0, 0, 0, loc)
+	dec30 := time.Date(2025, 12, 30, 0, 0, 0, 0, loc)
+	feb1 := time.Date(2026, 2, 1, 0, 0, 0, 0, loc)
+	analyzerID := uuid.New()
+
+	readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
+		model.ReadingKindBilling: {
+			readingRow(analyzerID, dec30, model.ReadingKindBilling, map[string]string{"active_import": "6200"}),
+		},
+		model.ReadingKindDaily: {
+			readingRow(analyzerID, dec1, model.ReadingKindDaily, map[string]string{"active_import": "1000"}),
+			readingRow(analyzerID, feb1, model.ReadingKindDaily, map[string]string{"active_import": "7200"}),
+		},
+	}}
+	b := newBilling(t, readings)
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+
+	rows, err := b.Consumption(ctx, scope, consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{analyzerID},
+		Level:       energy.Monthly,
+		Range:       store.TimeRange{From: dec1, To: feb1},
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 2, "December and January")
+
+	december, january := rows[0], rows[1]
+	require.Equal(t, energy.KindBilling, december.Source, "December's END boundary resolves to the Dec 30 billing snapshot")
+	require.Equal(t, energy.KindDaily, january.Source, "January's END boundary falls back to the Feb 1 daily snapshot")
+
+	sum := december.Values[energy.ActiveImport].Add(*january.Values[energy.ActiveImport])
+	require.Equal(t, "6200", sum.String(), "the two rows must telescope to EXACTLY the true total, no gap and no overlap")
+}
+
+// --- R96/K3: a stale load_profile boundary must not beat a fresh daily pair
+
+// TestBillingPrefersFreshDailyOverStaleLoadProfileAtMonthly is R96's K3 fix
+// (Q7's "known risk", now closed): load_profile stops reporting after Jan 10
+// (2500), while daily-kind readings cover the whole month fresh at both
+// ends (1000 -> 6000). Before R96, load_profile's look-back at Daily/Monthly/
+// Yearly was deliberately UNBOUNDED (02 §3.1), so the stale Jan 10 reading
+// (22 days from February's own bound) would still win the END boundary over
+// the fresh daily pair, giving 2500-1000=1500 instead of the true 5000. R96
+// gives load_profile its own LoadProfileBoundaryTolerance (36h) at these
+// levels: the Jan 10 reading is far outside it, so the END boundary falls
+// through to daily, and the row comes out 6000-1000=5000, Source=daily.
+func TestBillingPrefersFreshDailyOverStaleLoadProfileAtMonthly(t *testing.T) {
+	loc := istanbulLoc(t)
+	jan1 := time.Date(2026, 1, 1, 0, 0, 0, 0, loc)
+	jan10 := time.Date(2026, 1, 10, 0, 0, 0, 0, loc)
+	feb1 := time.Date(2026, 2, 1, 0, 0, 0, 0, loc)
+	analyzerID := uuid.New()
+
+	readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
+		model.ReadingKindLoadProfile: {
+			readingRow(analyzerID, jan1, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}),
+			readingRow(analyzerID, jan10, model.ReadingKindLoadProfile, map[string]string{"active_import": "2500"}),
+		},
+		model.ReadingKindDaily: {
+			readingRow(analyzerID, jan1, model.ReadingKindDaily, map[string]string{"active_import": "1000"}),
+			readingRow(analyzerID, feb1, model.ReadingKindDaily, map[string]string{"active_import": "6000"}),
+		},
+	}}
+	b := newBilling(t, readings)
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+
+	rows, err := b.Consumption(ctx, scope, consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{analyzerID},
+		Level:       energy.Monthly,
+		Range:       store.TimeRange{From: jan1, To: feb1},
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, energy.KindDaily, rows[0].Source)
+	require.Equal(t, "5000", rows[0].Values[energy.ActiveImport].String(), "never 1500 (the stale load_profile reading)")
+}
+
+// --- I-A: the C1 shared-minimum look-back must include the DAILY leg ------
+
+// TestBillingDailyLookbackFeedsTheSharedMinimum is I-A (re-review round 1):
+// C1's shared-minimum look-back must reach back through DAILY's own
+// look-back too, never merely load_profile's. Daily level, no load_profile
+// data at all: the daily-kind reading nearest the START (D-6h=1000) is what
+// this request's own daily look-back finds, and a reset sits between it and
+// D (D-2h=0) with NO load_profile prior anywhere. Unmutated: the shared
+// minimum reaches back to D-6h, the reset IS found in the evidence window,
+// and — since no load_profile prior exists at all to supply a before-reset
+// value — the register comes out nil + meter_reset, the SAFE outcome (R91/
+// I-1: a missing before-reset value is never billed as a number). Mutation
+// (dropping dailyLookback's contribution to the shared minimum) makes the
+// reset invisible instead: resets are then fetched only from first.From
+// onward, missing D-2h entirely, and Derive's fast path returns a WRONG,
+// UNFLAGGED plain difference (1300-1000=300) rather than the safe
+// suspicion.
+func TestBillingDailyLookbackFeedsTheSharedMinimum(t *testing.T) {
+	loc := istanbulLoc(t)
+	day := time.Date(2026, 3, 10, 0, 0, 0, 0, loc)
+	analyzerID := uuid.New()
+
+	readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
+		model.ReadingKindDaily: {
+			readingRow(analyzerID, day.Add(-6*time.Hour), model.ReadingKindDaily, map[string]string{"active_import": "1000"}),
+			readingRow(analyzerID, day.Add(24*time.Hour), model.ReadingKindDaily, map[string]string{"active_import": "1300"}),
+		},
+		model.ReadingKindReset: {
+			readingRow(analyzerID, day.Add(-2*time.Hour), model.ReadingKindReset, map[string]string{"active_import": "0"}),
+		},
+	}}
+	b := newBilling(t, readings)
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+
+	rows, err := b.Consumption(ctx, scope, consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{analyzerID},
+		Level:       energy.Daily,
+		Range:       store.TimeRange{From: day, To: day.Add(24 * time.Hour)},
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "a suspect register is still a row (nil values + Suspicion), never omitted")
+	require.Equal(t, energy.KindDaily, rows[0].Source)
+	require.Nil(t, rows[0].Values[energy.ActiveImport], "no load_profile prior exists anywhere: never billed as a number")
+	require.Contains(t, rows[0].Suspect, energy.ActiveImport)
+	require.Equal(t, energy.ReasonMeterReset, rows[0].Suspect[energy.ActiveImport].Reason)
+}
+
+// --- I-B: R95/R96 daily fallback staleness on the END side ----------------
+
+// TestMonthlyEndSideDailyStalenessYieldsNoRow is I-B: the START daily
+// boundary is fresh (exact), but the only daily reading near the END is 37h
+// before February's own bound — one hour over DailySnapshotTolerance (36h;
+// the Monthly bucket is far wider than 72h, so R96's bucketWidth/2 cap never
+// binds here). With no load_profile or billing data at all, the END
+// boundary resolves to nil and the whole row is skipped, never billed from
+// a stale end snapshot.
+func TestMonthlyEndSideDailyStalenessYieldsNoRow(t *testing.T) {
+	loc := istanbulLoc(t)
+	jan1 := time.Date(2026, 1, 1, 0, 0, 0, 0, loc)
+	feb1 := time.Date(2026, 2, 1, 0, 0, 0, 0, loc)
+	analyzerID := uuid.New()
+
+	readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
+		model.ReadingKindDaily: {
+			readingRow(analyzerID, jan1, model.ReadingKindDaily, map[string]string{"active_import": "1000"}),
+			readingRow(analyzerID, feb1.Add(-37*time.Hour), model.ReadingKindDaily, map[string]string{"active_import": "6000"}),
+		},
+	}}
+	b := newBilling(t, readings)
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+
+	rows, err := b.Consumption(ctx, scope, consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{analyzerID},
+		Level:       energy.Monthly,
+		Range:       store.TimeRange{From: jan1, To: feb1},
+	})
+	require.NoError(t, err)
+	require.Empty(t, rows, "a daily boundary older than DailySnapshotTolerance on the END side must not count as covering")
+}
+
+// TestMonthlyDailyCoversWhenBothBoundsAreExactlyAtTolerance is I-B's
+// positive control, pinning the boundary itself on BOTH sides: a daily
+// reading exactly DailySnapshotTolerance (36h) before its own bound still
+// counts as covering ("<=", not "<"), on the START side as well as the END.
+func TestMonthlyDailyCoversWhenBothBoundsAreExactlyAtTolerance(t *testing.T) {
+	loc := istanbulLoc(t)
+	jan1 := time.Date(2026, 1, 1, 0, 0, 0, 0, loc)
+	feb1 := time.Date(2026, 2, 1, 0, 0, 0, 0, loc)
+	analyzerID := uuid.New()
+
+	readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
+		model.ReadingKindDaily: {
+			readingRow(analyzerID, jan1.Add(-consumption.DailySnapshotTolerance), model.ReadingKindDaily, map[string]string{"active_import": "1000"}),
+			readingRow(analyzerID, feb1.Add(-consumption.DailySnapshotTolerance), model.ReadingKindDaily, map[string]string{"active_import": "6000"}),
+		},
+	}}
+	b := newBilling(t, readings)
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+
+	rows, err := b.Consumption(ctx, scope, consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{analyzerID},
+		Level:       energy.Monthly,
+		Range:       store.TimeRange{From: jan1, To: feb1},
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, energy.KindDaily, rows[0].Source)
+	require.Equal(t, "5000", rows[0].Values[energy.ActiveImport].String())
+}
+
+// --- I-C: R96 explicitly ALLOWS a period to start and end on different -----
+// --- kinds; the pre-R96 "load_profile fails to emit as a pair" concept is --
+// --- obsolete (kept here only as a positive demonstration). ---------------
+
+// TestBillingMixesLoadProfileStartWithDailyEndUnderR96 replaces the old I-C
+// concern. Pre-R96, load_profile was used for a period only when it
+// resolved to two DISTINCT boundary readings for that whole period
+// (boundaryPairEmits); a single load_profile reading (here, only one exists,
+// at Jan 1) made load_profile resolve the SAME reading for both January's
+// start AND its end, so the whole period fell back to daily instead. R96
+// deleted that period-level concept entirely: each boundary instant is
+// resolved on its own. January's START still finds that one load_profile
+// reading (fresh, distance 0) and uses it; January's END has no usable
+// load_profile candidate (the same one reading is 31 days stale) and falls
+// through to daily on its own. The result is a MIXED row — load_profile
+// start, daily end — Source = daily (the END's own kind), value 5010. This
+// is deliberately no longer "no row" or "daily for the whole period": R96
+// allows, and this test pins, exactly this mix.
+func TestBillingMixesLoadProfileStartWithDailyEndUnderR96(t *testing.T) {
+	loc := istanbulLoc(t)
+	jan1 := time.Date(2026, 1, 1, 0, 0, 0, 0, loc)
+	feb1 := time.Date(2026, 2, 1, 0, 0, 0, 0, loc)
+	analyzerID := uuid.New()
+
+	readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
+		model.ReadingKindLoadProfile: {
+			readingRow(analyzerID, jan1, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}),
+		},
+		model.ReadingKindDaily: {
+			readingRow(analyzerID, feb1, model.ReadingKindDaily, map[string]string{"active_import": "6010"}),
+		},
+	}}
+	b := newBilling(t, readings)
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+
+	rows, err := b.Consumption(ctx, scope, consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{analyzerID},
+		Level:       energy.Monthly,
+		Range:       store.TimeRange{From: jan1, To: feb1},
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, energy.KindDaily, rows[0].Source, "the END boundary's own kind, even though the START resolved via load_profile")
+	require.Equal(t, "5010", rows[0].Values[energy.ActiveImport].String())
+}
+
+// --- I-D: billing-kind rows must count as a MaxDemand source too ----------
+
+// TestBillingMaxDemandFromBillingKindIsTheUniqueMaximum is I-D: the
+// review's original TestBillingRatiosAndMaxDemandFromDerivedValues fixture
+// never made the billing-kind reading's own MaxDemandKw (15) the unique
+// maximum, so dropping billing-kind rows from the MaxDemand read
+// (billing.go:216/248) stayed green (daily's 20 already won). Here the
+// billing-kind reading is the ONLY one with a large MaxDemandKw (500);
+// load_profile and daily are both small decoys.
+func TestBillingMaxDemandFromBillingKindIsTheUniqueMaximum(t *testing.T) {
+	h := billingT0
+	analyzerID := uuid.New()
+
+	readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
+		model.ReadingKindLoadProfile: {
+			mustSetMaxDemand(readingRow(analyzerID, h, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}), "5"),
+			mustSetMaxDemand(readingRow(analyzerID, h.Add(time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "1100"}), "8"),
+		},
+		model.ReadingKindDaily: {
+			mustSetMaxDemand(readingRow(analyzerID, h.Add(20*time.Minute), model.ReadingKindDaily, map[string]string{}), "10"),
+		},
+		model.ReadingKindBilling: {
+			mustSetMaxDemand(readingRow(analyzerID, h.Add(40*time.Minute), model.ReadingKindBilling, map[string]string{}), "500"),
+		},
+	}}
+	b := newBilling(t, readings)
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+
+	rows, err := b.Consumption(ctx, scope, consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{analyzerID},
+		Level:       energy.Hourly,
+		Range:       store.TimeRange{From: h, To: h.Add(time.Hour)},
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.NotNil(t, rows[0].MaxDemandKw)
+	require.Equal(t, "500", rows[0].MaxDemandKw.String(), "billing-kind rows must count as a MaxDemand source (R65)")
+}
+
+// --- I-E: the I-9 sort.Search lower bound must include w.From -------------
+
+// TestMaxDemandIncludesAReadingExactlyAtTheBucketStartButExcludesWTo is I-E:
+// two adjacent hourly buckets. A peak sits exactly at the first bucket's own
+// w.From (50) and must be INCLUDED; a peak sits exactly at the boundary
+// between the two buckets (70) and must count for the SECOND bucket (whose
+// own w.From it is) but be EXCLUDED from the first (whose own w.To it is);
+// a peak at the very last w.To (99) must be excluded from both, since there
+// is no third bucket for it to belong to.
+func TestMaxDemandIncludesAReadingExactlyAtTheBucketStartButExcludesWTo(t *testing.T) {
+	h := billingT0
+	analyzerID := uuid.New()
+
+	readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
+		model.ReadingKindLoadProfile: {
+			mustSetMaxDemand(readingRow(analyzerID, h, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}), "50"),
+			mustSetMaxDemand(readingRow(analyzerID, h.Add(30*time.Minute), model.ReadingKindLoadProfile, map[string]string{}), "10"),
+			mustSetMaxDemand(readingRow(analyzerID, h.Add(time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "1010"}), "70"),
+			mustSetMaxDemand(readingRow(analyzerID, h.Add(90*time.Minute), model.ReadingKindLoadProfile, map[string]string{}), "5"),
+			mustSetMaxDemand(readingRow(analyzerID, h.Add(2*time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "1020"}), "99"),
+		},
+	}}
+	b := newBilling(t, readings)
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+
+	rows, err := b.Consumption(ctx, scope, consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{analyzerID},
+		Level:       energy.Hourly,
+		Range:       store.TimeRange{From: h, To: h.Add(2 * time.Hour)},
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	require.NotNil(t, rows[0].MaxDemandKw)
+	require.Equal(t, "50", rows[0].MaxDemandKw.String(), "the reading exactly at the first bucket's w.From must be included")
+	require.NotNil(t, rows[1].MaxDemandKw)
+	require.Equal(t, "70", rows[1].MaxDemandKw.String(), "the reading exactly at the shared boundary belongs to the SECOND bucket, and 99 at the final w.To is excluded from both")
 }
