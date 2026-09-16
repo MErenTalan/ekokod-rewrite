@@ -22,11 +22,12 @@
 **Design rules (07, as ruled)**
 - **Only token utilities.** The palette comes from `tokens.css` (T1). Tailwind's default colours do not exist (`--color-*: initial`). Colour literals (`#hex`, `rgb(`, `hsl(`, `oklch(` …) may appear only in `web/src/styles/tokens.css`. ESLint enforces this in `src/**/*.{ts,tsx}`, and a vitest scan enforces it for `src/**/*.css` (D5). No `dark:` variant anywhere: dark mode comes from tokens (D4), and a component that needs dark-specific behaviour needs a new token.
 - **Status = colour + icon + text.** `StatusBadge`, `Alert`, `Toast` and `DataQualityBadge` take a required text label and render a Lucide icon with `aria-hidden`. No emoji anywhere, including stories.
-- **Energy colours (`consumption`, `generation`, `reactive-inductive`, `reactive-capacitive`, `cost`, `revenue`, `forecast`, `brand`) are graphics only.** Use them for lines, bars, swatches and markers, never as text colour (D3). Forecast is always `--color-forecast` and dashed.
+- **Energy colours (`consumption`, `generation`, `reactive-inductive`, `reactive-capacitive`, `cost`, `revenue`, `forecast`, `brand`) are graphics only.** Use them for lines, bars, swatches and markers, never as text colour (D3). Forecast is always `--color-forecast` and dashed. On `primary-subtle` use only `foreground` or `primary` text (M-1: `foreground-muted`/`foreground-subtle` on `primary-subtle` fail contrast in dark). ESLint bans `text-(brand|consumption|generation|reactive-inductive|reactive-capacitive|cost|revenue|forecast)` (T1 Step 5) so the graphics-only rule is enforced, not just prose.
 - **Focus rings are global.** `:focus-visible { outline: 2px solid var(--color-ring); outline-offset: 2px }` lives in `globals.css`. Components never set an `outline-*` class.
 - **Touch targets.** Every interactive element gets `pointer-coarse:min-h-11 pointer-coarse:min-w-11`, on itself or on a wrapper marked `data-touch-target`. On a fine pointer the visual minimum is 32 px (D13).
-- **Motion.** Use CSS transitions with the duration custom properties from T1 (`duration-(--duration-hover)` and so on). Animate only `transform` and `opacity`, except for hover colour transitions. Exit is faster than entry. No GSAP. Never animate a table or a number. `prefers-reduced-motion` is handled globally in `globals.css`, and Recharts animation is handled through `chartAnimation()` (T5).
-- **Numbers.** `formatNumber`, `formatCurrency` and `formatQuantity` from `@/lib/format` always use `tr-TR` separators (D9). Tabular numbers use `type-data` or `type-metric` (JetBrains Mono). API decimals arrive as strings and go to `Intl` as strings (D11).
+- **Motion.** Use CSS transitions with the duration custom properties from T1 (`duration-(--duration-hover)` and so on). Animate only `transform` and `opacity`, except for hover colour transitions. Exit is faster than entry. No GSAP. Never animate a table or a number. `prefers-reduced-motion` is handled globally in `globals.css`, and Recharts animation is handled through `chartAnimation()` (T5). Overlays (Dialog, Drawer, Popover, Tooltip, picker popovers) use the T1 `@keyframes`/`--animate-*` tokens (I-14): `data-[state=open]:animate-<x>-in data-[state=closed]:animate-<x>-out` — never hand-rolled keyframes, because Radix `Presence` only delays unmount for CSS animations, not transitions.
+- **Numbers.** `formatNumber`, `formatCurrency` and `formatQuantity` from `@/lib/format` always use `tr-TR` separators (D9). Tabular numbers use `type-data` or `type-metric` (JetBrains Mono, ligatures off, M-3). API decimals arrive as strings and go to `Intl` as strings (D11). `formatDate(iso, locale)` / `formatMonth(iso, locale)` (`Europe/Istanbul`) are the only date formatters (M-19); next-intl's `format.number` is never used (it would apply `en` separators and break D9).
+- **Component tests scope role queries with `within(container)`** when the role can come from a provider (`LiveAnnouncerProvider`, `Toaster`) that every `renderWithProviders` render includes (I-9).
 - **Logical properties.** Use `ms-/me-/ps-/pe-/start-/end-/text-start`, never `ml-/mr-/pl-/pr-/left-/right-/text-left`. This keeps RTL cheap later (Q2). It is a review item, not a lint rule.
 - **Every UI string lives in `web/messages/{tr,en}/<namespace>.json`.** Each task owns its namespaces (ownership table). A key matches `^[a-zA-Z][a-zA-Z0-9]*$`. Interpolation is ICU (`{count}`), never `{{count}}`. Take Turkish and English values from `docs/rewrite/appendix/i18n-{tr,en}.json` when a legacy string with the same meaning exists (D7).
 
@@ -38,11 +39,12 @@
 
 **Resources (the machine is shared with F4)**
 - **Command prefix:** `export PATH="$HOME/.local/go/bin:$HOME/.local/node/bin:$HOME/go/bin:$PATH"`.
-- **At most 2 F5 implementers run at once.** Builds run only in native worktrees under `/home/personal/`, never on `/mnt/c`.
+- **At most 2 F5 implementers run at once, and never two heavy builds concurrently** (I-2). Builds run only in native worktrees under `/home/personal/`, never on `/mnt/c`.
 - **Vitest runs with at most 2 workers:** `pnpm test --maxWorkers=2` (the config also sets it after T2). Never use watch mode.
-- **`next build` and `storybook build` run with `NODE_OPTIONS=--max-old-space-size=4096`.** Run them once per task gate, not per step.
-- **Never leave a server running.** No `next dev`, `storybook dev`, `vitest --watch` or `playwright --ui`. Playwright's `webServer` starts and stops the static server itself. Before you report, `pgrep -fa "next dev|storybook dev|vitest|http.server 6007"` must print nothing.
-- **Scoped a11y runs.** Per task: `STORIES='UI/Input,UI/Select' pnpm test:a11y` (comma-separated title prefixes). The full sweep runs only in T8 and in CI.
+- **Heavy steps are machine-wide serialised and capped at 3 GB (I-2).** Wrap `pnpm build`, `pnpm storybook:build` and `pnpm test:a11y` in `flock /home/personal/.ekokod-f5-heavy.lock <cmd>` so only one heavy step runs machine-wide. Run with `NODE_OPTIONS=--max-old-space-size=3072`; if a run OOMs at 3072, raise it only for that run while still holding the lock. Run each once per task gate, not per step.
+- **Each worktree exports its own Storybook port (I-1):** `SB_PORT=60<NN>` (T1→6001, T2→6002, T3→6003, T4→6004, T5→6005, T6→6006, T7→6007; T8 runs alone on the merged phase tip and keeps the default 6007). `playwright.config.ts` reads `const port = Number(process.env.SB_PORT ?? 6007)` for both `webServer.command` and `baseURL`.
+- **Never leave a server running.** No `next dev`, `storybook dev`, `vitest --watch` or `playwright --ui`. Playwright's `webServer` starts and stops the static server itself. Before you report, `pgrep -fa "ekokod-f5.*(next dev|storybook dev|vitest)|http.server 60[0-9][0-9]"` must print nothing (M-20: scoped to this project so it doesn't match other work on the shared machine).
+- **Scoped a11y runs.** Per task: `SB_PORT=60<NN> STORIES='UI/Input,UI/Select' pnpm test:a11y` (comma-separated title prefixes). The full sweep runs only in T8 and in CI.
 - **Worktree setup:**
   ```bash
   git worktree add -b f5/task-N /home/personal/ekokod-f5-tN phase/f5-design-system
@@ -54,11 +56,11 @@
 
 **Task gate (every task, in its worktree's `web/`)**
 ```bash
-pnpm lint && pnpm typecheck && pnpm check:i18n-parity && pnpm check:contrast   # check:contrast exists from T1
+pnpm lint && pnpm typecheck && pnpm check:i18n-parity && pnpm check:contrast   # all scripts added by T1 (I-3)
 pnpm test --maxWorkers=2
-NODE_OPTIONS=--max-old-space-size=4096 pnpm storybook:build                     # from T2
-STORIES='<the task's title prefixes>' pnpm test:a11y                            # from T2
-NODE_OPTIONS=--max-old-space-size=4096 pnpm build                               # T1, T6, T8 only
+flock /home/personal/.ekokod-f5-heavy.lock env NODE_OPTIONS=--max-old-space-size=3072 pnpm storybook:build   # script from T1
+SB_PORT=60<NN> flock /home/personal/.ekokod-f5-heavy.lock env STORIES='<the task's title prefixes>' pnpm test:a11y   # script from T1
+flock /home/personal/.ekokod-f5-heavy.lock env NODE_OPTIONS=--max-old-space-size=3072 pnpm build   # T1, T6, T8 only
 ```
 - **Every guard is proven to fail** (each guard step names a mutation; the report records the red output, then the revert). **Commits** are conventional, one logical change each, ending with the `<TRAILERS>` the controller supplies at dispatch.
 
@@ -86,16 +88,18 @@ NODE_OPTIONS=--max-old-space-size=4096 pnpm build                               
 | D12 | "Every chart has a data table" vs `Sparkline`. | `Sparkline` is exempt. It is a supplementary glyph inside `MetricCard`, whose figure is shown as text. It is `role="img"` with an `aria-label` giving first, last, min and max. | A table per tile repeats the tile. | Add a toggle. |
 | D13 | "Touch targets ≥ 44×44" vs a density-8 dashboard. | 44×44 applies under `pointer: coarse` (Tailwind `pointer-coarse:`). On a fine pointer, controls are at least 32 px tall (≥ WCAG 2.2 2.5.8's 24 px). Checked by `touch-targets.spec.ts` in a `hasTouch`/`isMobile` context. | These are touch targets. A 44 px mouse-only table row halves data density. | Class change in `buttonVariants` and inputs. |
 | D14 | "Every form field has a visible label" vs the top-bar search. | Every field takes a required `label` rendered visibly. The only exception is `SearchInput` with `labelVisibility="hidden"` in the `TopBar`: leading search icon plus `aria-label`. Placeholders are never labels. | Standard global-search affordance. The exception is bounded to one call site. | One prop. |
-| D15 | Customiser scope (01 §6: light/dark, LTR/RTL, theme colour, vertical/horizontal, boxed/full, sidebar collapse, card border/shadow, radius slider). | Built: theme `light\|dark\|system`, layout `vertical\|horizontal`, container `full\|boxed`, sidebar `expanded\|collapsed`, card `border\|shadow`, radius scale 0.5–1.5. Not built: RTL (no RTL locale, Q2) and theme colour (collides with brand/status/energy semantics, Q1). Persisted in cookie `ekokod_ui`, applied server-side as `<html data-*>`. F6 syncs it to the user profile. | "Nothing is lost" where it is coherent. The two omissions contradict 07 §1–§2. | Two presets later. |
+| D15 | Customiser scope (01 §6: light/dark, LTR/RTL, theme colour, vertical/horizontal, boxed/full, sidebar collapse, card border/shadow, radius slider). | Built: theme `light\|dark\|system`, layout `vertical\|horizontal`, container `full\|boxed`, sidebar `expanded\|collapsed`, card `border\|shadow`, radius scale 0.5–1.5. Not built: RTL (no RTL locale, Q2) and theme colour (collides with brand/status/energy semantics, Q1). Persisted in cookie `ekokod_ui`, applied server-side as `<html data-*>`. F6 syncs it to the user profile. | "Nothing is lost" where it is coherent. The two omissions contradict 07 §1–§2. Cookie instead of `localStorage` so SSR renders the right theme and layout without a flash; F6 syncs to the profile (M-9). | Two presets later. |
 | D16 | Gallery and a11y harness. | Storybook 10.6 `@storybook/nextjs-vite`. Playwright runs against `storybook-static` served by `python3 -m http.server` as its `webServer`. Globals `theme` and `locale` go in the URL. | Named in §F5 verification. A static build means no dev server. | — |
 | D17 | Where domain components live and what data they take. | `src/components/domain/**`. They are presentational: typed view-model props in, callbacks out, no fetching, no generated client (the OpenAPI client is F6). View-model types are owned by F5 (e.g., `InvoiceLineView`). F8 maps F4's API shapes to them. | F4 is in flight. Coupling to its unmerged types would block F5. | A mapper in F8. |
 | D18 | Sidebar placement of Water/Gas (07 §7: under Data Analysis; 01 §5: "Consumption → Water"). Calendar is not listed in either. | Follow 07 §7: Water, Gas and EV Drivers are disabled children of Data Analysis. No Calendar entry in F5 (Q6). The nav config is data (`nav-config.ts`), so F6 edits one array. | 07 is the layout authority. | One array edit. |
 | D19 | Date values in pickers. | Calendar dates are ISO strings: `'YYYY-MM-DD'`, `{ from, to }`, `'YYYY-MM'`. Weeks start Monday. The date-fns `tr` / `enUS` locale follows next-intl. Never `Date` in props. | A `Date` crosses timezones and shifts by a day in Istanbul vs UTC. | Prop types. |
 | D20 | Latest majors `react-day-picker` 10 and `@tanstack/react-table` 9 are recent. | Pin 9.14.0 and 8.21.3. Revisit in F15. | Well-known, stable APIs. Implementers must not guess new APIs. | Upgrade later. |
 | D21 | "More than 6 series means a different visualisation." | A wrapper given more than 6 series renders `Alert tone="warning"` (`charts.tooManySeries`) instead of a chart. Tested. | Makes the rule observable. | — |
-| D22 | CSV from `ExportMenu` / `Table`. | `toCsv` uses `;` as the delimiter, CRLF line endings and a UTF-8 BOM. Numbers use `tr-TR` formatting. | Turkish Excel parses `;` with a decimal comma. | One constant. |
-| D23 | Map tile source default (03 §5.2: configurable, degrade to a coordinate list). | `NEXT_PUBLIC_MAP_TILE_URL` (style JSON or raster template). If unset, or the source fails to load within 8 s, or WebGL is unavailable, render the accessible coordinate list. No public OSM default (Q5). | OSM's tile policy forbids unagreed heavy use. Offline installs have no tiles. | Set an env var. |
+| D22 | CSV from `ExportMenu` / `Table`. | `toCsv` uses `;` as the delimiter, CRLF line endings and a UTF-8 BOM. Numbers use `tr-TR` formatting. `toCsv` prefixes `'` to text cells that start with `=`, `+`, `-`, `@`, TAB or CR (formula-injection guard), but not to cells already produced by `formatNumber` (M-12). | Turkish Excel parses `;` with a decimal comma. | One constant. |
+| D23 | Map tile source default (03 §5.2: configurable, degrade to a coordinate list). | `NEXT_PUBLIC_MAP_TILE_URL` (style JSON or raster template). If unset, or the source fails to load within 8 s, or WebGL is unavailable, render the accessible coordinate list. No public OSM default (Q5). `MapMarker` is the marker type, not a component; markers render inside `Map` and as rows in `MapMarkerList` (M-11). | OSM's tile policy forbids unagreed heavy use. Offline installs have no tiles. | Set an env var. |
 | D24 | Horizontal layout under `lg`. | Below 1024 px the horizontal layout collapses to the same overlay drawer as vertical. At ≥1024 px it renders a top nav whose groups are `DropdownMenu`s. | One mobile pattern. | — |
+| D25 | Pagination's page-size control (I-6): `Popover` is a T2 file but `Select` is T3, and `Pagination` is T4. | The page-size control is a labelled native `<select>` with token classes (`border-border-control bg-surface rounded-md h-8 pointer-coarse:min-h-11`), not the T3 `Select`. | Avoids a T4→T3 dependency for one control. | Swap the markup later. |
+| D26 | 07 §8 card-grid stagger (300–450 ms, 60 ms apart) has no token or ruling (M-10). | Add `--duration-stagger-step: 60ms` (T1). Ruling: `animation-delay: calc(var(--i) * var(--duration-stagger-step))` on page card grids — deferred to F6, since F5 ships no page that uses a card grid. | F5 has the token ready without inventing an unused component behaviour now. | Apply the class in F6. |
 
 ## Open questions (non-blocking; defaults above apply)
 
@@ -113,7 +117,7 @@ A task starts only when every dependency is **merged** into `phase/f5-design-sys
 
 | Wave | Tasks | Depends on | Starts |
 |---|---|---|---|
-| A | **T1** Foundation · **T2** Gallery, harness, Button | — (T2 merges after T1 and runs its a11y gate after merging the phase tip, which contains T1) | immediately, both |
+| A | **T1** Foundation · **T2** Gallery, harness, Button | — (T1 owns every dependency install, `package.json` script and `pnpm-workspace.yaml` edit, I-3; T2 writes code from the start on a speculative base but runs `git merge phase/f5-design-system` as soon as T1 merges, and before its first `pnpm test`; T2 edits `messages/*/common.json` only after that merge) | immediately, both |
 | B | **T3** Form controls · **T4** Containers, overlays, feedback, Table | T1, T2 | after A |
 | C | **T5** Charts · **T6** Shell, preferences, customiser | T5: T4 · T6: T3, T4 | after B |
 | D | **T7** Domain components + Map | T3, T4, T5 (`MetricCard` stories embed `Sparkline`) | takes the slot T5 frees |
@@ -123,22 +127,22 @@ A task starts only when every dependency is **merged** into `phase/f5-design-sys
 
 | Task | Owns | Message namespaces |
 |---|---|---|
-| T1 | `design-system/**`, `web/src/styles/**`, `web/src/app/{globals.css,layout.tsx,page.tsx}`, `web/src/components/health-status*`, `web/src/lib/{cn,format}.ts(+tests)`, `web/src/i18n/{request.ts,locale.ts,app-config.d.ts}`, `web/messages/**` (creates every namespace file, empty `{}` where not T1's), `web/scripts/**`, `web/eslint.config.mjs`, `web/tsconfig.json`, `scripts/check-i18n-parity.mjs` (delete), `web/package.json` (runtime deps + `check:*` scripts) | `app`, `health`, `units` |
-| T2 | `web/.storybook/**`, `web/playwright.config.ts`, `web/tests/a11y/{helpers.ts,stories,keyboard,touch-targets,reduced-motion}.spec.ts`, `web/src/test/**`, `web/vitest.{config,setup}.ts`, `web/src/components/providers.tsx`, `web/src/components/stories-coverage.test.ts`, `web/src/components/ui/{button,icon-button,tooltip,visually-hidden}.*`, `web/package.json` (devDeps + `storybook:build`, `test:a11y`), `.github/workflows/ci.yml`, `Makefile`, `.gitignore` | `common` |
+| T1 | `design-system/**`, `web/src/styles/**`, `web/src/app/{globals.css,layout.tsx,page.tsx,_components/health-status*}`, `web/src/lib/{cn,format}.ts(+tests)`, `web/src/i18n/{request.ts,locale.ts,app-config.d.ts}`, `web/messages/**` (creates every namespace file, empty `{}` where not T1's), `web/scripts/**`, `web/eslint.config.mjs`, `web/tsconfig.json`, `scripts/check-i18n-parity.mjs` (delete), `web/package.json` (**all** deps and **all** scripts, I-3), `web/pnpm-workspace.yaml` (I-4) | `app`, `health`, `units` |
+| T2 | `web/.storybook/**`, `web/playwright.config.ts`, `web/tests/a11y/{helpers.ts,fixtures,stories,keyboard,touch-targets,reduced-motion}.spec.ts`, `web/src/test/**`, `web/vitest.{config,setup}.ts`, `web/src/components/providers.tsx`, `web/src/components/stories-coverage.test.ts`, `web/src/components/ui/{button,icon-button,tooltip,visually-hidden,popover}.*` (I-6), `.github/workflows/ci.yml`, `Makefile`, `.gitignore`, `.dockerignore` (M-13) | `common` |
 | T3 | `web/src/components/ui/{field,input,textarea,number-input,select,combobox,multi-select,checkbox,radio-group,switch,slider,search-input,date-picker,date-range-picker,month-picker,file-upload,file-list,form-error-summary}.*` | `forms` |
-| T4 | `web/src/components/ui/{card,stat-tile,badge,status-badge,alert,toast,live-announcer,empty-state,skeleton,progress-bar,stepper,tabs,accordion,dialog,drawer,popover,dropdown-menu,breadcrumb,pagination,table,data-table}.*`, `web/src/lib/csv.ts(+test)`, `web/tests/a11y/overlay-motion.spec.ts`, `providers.tsx` (adds `Toaster` and `LiveAnnouncerProvider` only) | `feedback`, `table` |
+| T4 | `web/src/components/ui/{card,stat-tile,badge,status-badge,alert,toast,live-announcer,empty-state,skeleton,progress-bar,stepper,tabs,accordion,dialog,drawer,dropdown-menu,breadcrumb,pagination,table,data-table}.*` (no `popover`, moved to T2 per I-6), `web/src/lib/csv.ts(+test)`, `web/tests/a11y/overlay-motion.spec.ts`, `providers.tsx` (adds `Toaster` and `LiveAnnouncerProvider` only) | `feedback`, `table` |
 | T5 | `web/src/components/charts/**` | `charts` |
-| T6 | `web/src/components/shell/**`, `web/src/lib/ui-preferences.ts(+test)`, `web/src/i18n/actions.ts`, `web/src/app/layout.tsx` (html attributes + providers), `web/src/app/(app)/**` (moves `page.tsx` in), `web/tests/a11y/shell.spec.ts`, `providers.tsx` (adds `UiPreferencesProvider` only) | `shell` |
+| T6 | `web/src/components/shell/**`, `web/src/lib/ui-preferences.ts(+test)`, `web/src/i18n/actions.ts`, `web/src/app/layout.tsx` (html attributes + mounts `UiPreferencesProvider`, I-15), `web/src/app/(app)/**` (moves `page.tsx` and `_components/health-status*` in, I-19), `web/tests/a11y/shell.spec.ts`, `web/src/test/render.tsx` (adds `preferences?` option only, I-15), `.storybook/preview.tsx` (wraps `UiPreferencesProvider`, `theme` from globals, only, I-15) | `shell` |
 | T7 | `web/src/components/domain/**`, `web/src/components/map/**` | `domain`, `map` |
 | T8 | `design-system/bcem-energy/checklists/f5-predelivery.md`, `docs/superpowers/handoffs/2026-09-f5-design-system.md`, fixes routed back to owners' files by the controller | — |
 
 ## Task 1: Foundation — MASTER.md, tokens, fonts, guards, catalogues
 
 **Interfaces — Produces (later tasks rely on these exact names; Consumes: nothing new):**
-- Tailwind utilities: `bg|text|border|fill|stroke|ring-{primary,primary-hover,primary-subtle,on-primary,brand,background,surface,surface-raised,surface-sunken,foreground,foreground-muted,foreground-subtle,border,border-strong,border-control,ring,success,success-subtle,warning,warning-subtle,danger,danger-subtle,on-danger,info,info-subtle,consumption,generation,reactive-inductive,reactive-capacitive,cost,revenue,forecast,overlay,card-edge}`. Also `font-heading|font-sans|font-mono`, `shadow-sm|md|lg`, `rounded-sm|md|lg|full`, and the composite typography utilities `type-display|h1|h2|h3|body|body-lg|small|caption|metric|data`.
-- CSS custom properties: `--duration-hover` 150ms, `--duration-popover` 180ms, `--duration-dialog-in` 250ms, `--duration-dialog-out` 180ms, `--duration-tab` 200ms, `--duration-chart` 400ms, `--radius-scale` (default 1).
+- Tailwind utilities: `bg|text|border|fill|stroke|ring-{primary,primary-hover,primary-subtle,on-primary,brand,background,surface,surface-raised,surface-sunken,foreground,foreground-muted,foreground-subtle,border,border-strong,border-control,ring,success,success-subtle,warning,warning-subtle,danger,danger-subtle,on-danger,info,info-subtle,consumption,generation,reactive-inductive,reactive-capacitive,cost,revenue,forecast,overlay,card-edge}`. Also `font-heading|font-sans|font-mono`, `shadow-sm|md|lg`, `rounded-sm|md|lg|full`, the composite typography utilities `type-display|h1|h2|h3|body|body-lg|small|caption|metric|data`, and the overlay-motion utilities `animate-{fade-in,fade-out,dialog-in,dialog-out,drawer-in-start,drawer-out-start,drawer-in-end,drawer-out-end,drawer-in-bottom,drawer-out-bottom,popover-in,popover-out}` (I-14).
+- CSS custom properties: `--duration-hover` 150ms, `--duration-popover` 180ms, `--duration-dialog-in` 250ms, `--duration-dialog-out` 180ms, `--duration-tab` 200ms, `--duration-chart` 400ms, `--duration-stagger-step` 60ms (D26, M-10), `--radius-scale` (default 1).
 - `cn(...inputs: ClassValue[]): string` from `@/lib/cn`.
-- `@/lib/format`: `NUMBER_LOCALE = 'tr-TR'`; `type Decimalish = string | number | null | undefined`; `formatNumber(v: Decimalish, o?: { minFractionDigits?: number; maxFractionDigits?: number }): string` (`null` → `'—'`); `formatCurrency(v: Decimalish, o?): string`; `type Unit = 'kWh' | 'MWh' | 'kW' | 'kVArh' | 'TRY' | 'tCO2e' | 'kgCO2e' | 'percent'`; `unitSymbol(u: Unit): string`; `formatQuantity(v: Decimalish, u: Unit, o?): string`.
+- `@/lib/format`: `NUMBER_LOCALE = 'tr-TR'`; `type Decimalish = string | number | null | undefined`; `formatNumber(v: Decimalish, o?: { minFractionDigits?: number; maxFractionDigits?: number }): string` (`null` → `'—'`; default precision — string input: `minimumFractionDigits=0`, `maximumFractionDigits` = the string's own fraction digits capped at 20; number input: `maximumFractionDigits=3`, I-13); `formatCurrency(v: Decimalish, o?): string`; `type Unit = 'kWh' | 'MWh' | 'kW' | 'kVArh' | 'TRY' | 'tCO2e' | 'kgCO2e' | 'percent'`; `unitSymbol(u: Unit): string`; `formatQuantity(v: Decimalish, u: Unit, o?): string`; `formatDate(iso: string, locale: Locale): string`; `formatMonth(iso: string, locale: Locale): string` (both `Europe/Istanbul`, M-19).
 - `@/i18n/locale`: `locales`, `type Locale = 'tr' | 'en'`, `defaultLocale`, `LOCALE_COOKIE = 'NEXT_LOCALE'`, `resolveLocale(v?: string): Locale`.
 - `messages` from `web/messages/index.ts`: `{ tr: Messages; en: Messages }`, with `Messages` registered in next-intl's `AppConfig`, so an unknown key fails `pnpm typecheck`.
 - `@/styles/fonts`: `fontVariables: string`.
@@ -148,7 +152,7 @@ A task starts only when every dependency is **merged** into `phase/f5-design-sys
 UIPM=/home/personal/.claude/plugins/cache/ui-ux-pro-max-skill/ui-ux-pro-max/2.13.0/.claude/skills/ui-ux-pro-max
 python3 "$UIPM/scripts/search.py" "energy monitoring sustainability analytics dashboard" \
   --design-system --density 8 --motion 4 --variance 5 -p "BCEM Energy" --persist --output-dir /home/personal/ekokod-f5-t1
-test -f /home/personal/ekokod-f5-t1/design-system/bcem-energy/MASTER.md && head -12 design-system/bcem-energy/MASTER.md
+test -f /home/personal/ekokod-f5-t1/design-system/bcem-energy/MASTER.md && head -12 /home/personal/ekokod-f5-t1/design-system/bcem-energy/MASTER.md
 ```
 Write `design-system/bcem-energy/OVERRIDES.md` with one row per conflict: style (glassmorphism → flat surfaces with border/shadow in the dashboard; glass only on the public site, 07 §10), colours (→ 07 §2 as ruled by D3/D4), typography (→ Lexend / Source Sans 3 / JetBrains Mono, 07 §3), spacing names (→ Tailwind's 4 px scale = 07 §4 `--space-N` = `p-N`), shadows (→ 07 §4), motion (→ CSS transitions per 07 §8; no GSAP, no `back.out` overshoot), page pattern ("Real-Time/Operations Landing" → F12 only). Its first line: "Binding. Where MASTER.md disagrees, this file and docs/rewrite/07-design-system.md win."
 
@@ -166,23 +170,25 @@ Write `design-system/bcem-energy/OVERRIDES.md` with one row per conflict: style 
 | › `i18next double braces are rejected` | `'{{count}} yeni'` → problem `a.x uses {{…}}` |
 | › `keys must be identifiers` | key `'Carbon Footprint'` → problem `invalid key` |
 | › `a namespace file missing in one locale is reported` | tr has `forms.json`, en does not → problem |
-| `src/styles/raw-color-lint.test.ts` (ESLint API `lintText`, `filePath: 'src/components/ui/x.tsx'`, 30 s timeout) › one test per case | Must error: `className="bg-[#fff]"`, `` `text-[rgb(0_0_0)]` ``, `className="bg-red-500"`, `className="hover:text-neutral-900"`, `className="outline-none"`, `className="dark:bg-surface"`, `import { LineChart } from 'recharts'`. Must pass: `href="#main"`, `href="#add-row"`, `className="bg-primary text-on-primary"` |
+| `src/styles/raw-color-lint.test.ts` (ESLint API `lintText`, `filePath: 'src/components/ui/x.tsx'`, 30 s timeout) › one test per case | Must error: `className="bg-[#fff]"`, `` `text-[rgb(0_0_0)]` ``, `className="bg-red-500"`, `className="hover:text-neutral-900"`, `className="text-consumption"` (M-1), `className="outline-none"`, `className="dark:bg-surface"`, `import { LineChart } from 'recharts'`. Must pass: `href="#main"`, `href="#add-row"`, `className="bg-primary text-on-primary"`, `className="fill-consumption"` |
 | `src/styles/raw-color-css.test.ts` › `no CSS file except tokens.css holds a colour literal` | Walk `src/**/*.css`, skip `src/styles/tokens.css`, `RAW_COLOR` has zero matches |
 | `src/styles/fonts.test.ts` › `each family covers Turkish and is subset` | For each woff2 (fontkit): `hasGlyphForCodePoint` is true for every char of `ğĞşŞıİçÇöÖüÜ0123456789.,%`, false for `Ж` (U+0416); file ≤ 150 000 bytes; `variationAxes.wght` exists. The test logs ₺/₂ coverage for the report |
 | `src/lib/format.test.ts` › `formats with Turkish separators` | `formatNumber('1234.567890', { maxFractionDigits: 2 })` = `'1.234,57'` |
 | › `keeps full precision for decimal strings` | `formatNumber('12345678901234567890.123456', { maxFractionDigits: 6 })` = `'12.345.678.901.234.567.890,123456'` |
+| › `default precision follows the string input, not Intl's default 3` | `formatNumber('1234.567891')` = `'1.234,567891'` (I-13) |
 | › `null is an em dash, never zero` | `formatNumber(null)` = `'—'`; `formatCurrency(undefined)` = `'—'` |
 | › `currency and units` | `formatCurrency('1234.56')` = `'₺1.234,56'`; `formatQuantity('1234.5','tCO2e')` = `'1.234,5 tCO₂e'`; `formatQuantity('12.5','percent')` = `'%12,5'` |
+| › `dates and months follow the locale, in Istanbul time` | `formatDate('2026-09-17','tr')` / `formatMonth('2026-09-01','en')` (M-19) |
 | `src/i18n/locale.test.ts` › `unknown or missing cookie falls back to tr` | `resolveLocale(undefined)` = `'tr'`, `resolveLocale('de')` = `'tr'`, `resolveLocale('en')` = `'en'` |
 
-Run `pnpm test --maxWorkers=2 scripts src/styles src/lib src/i18n`. Expected: FAIL (modules missing).
+`scripts/lib/*.test.ts`, `src/styles/raw-color-lint.test.ts` and `src/styles/fonts.test.ts` each start with `// @vitest-environment node` (M-2: avoids jsdom realm/`TextEncoder` mismatches for the ESLint API and fontkit Buffers). Run `pnpm test --maxWorkers=2 scripts src/styles src/lib src/i18n`. Expected: FAIL (modules missing).
 
 - [ ] **Step 3: Tokens and globals (full code: exact values).** `web/src/styles/tokens.css`:
 ```css
 /* 07-design-system.md §2–§4, §8 as ruled by plan D3/D4. The ONLY file in web/src allowed colour literals (D5). */
 :root { color-scheme: light; --radius-scale: 1;
   --duration-hover: 150ms; --duration-popover: 180ms; --duration-dialog-in: 250ms; --duration-dialog-out: 180ms;
-  --duration-tab: 200ms; --duration-chart: 400ms; }
+  --duration-tab: 200ms; --duration-chart: 400ms; --duration-stagger-step: 60ms; }
 :root[data-theme='dark'] { color-scheme: dark; }
 :root[data-theme='system'] { color-scheme: light dark; }
 
@@ -223,7 +229,32 @@ Run `pnpm test --maxWorkers=2 scripts src/styles src/lib src/i18n`. Expected: FA
   --shadow-sm: 0 1px 2px light-dark(rgb(11 42 34 / 0.06), transparent);
   --shadow-md: 0 4px 12px light-dark(rgb(11 42 34 / 0.08), transparent);
   --shadow-lg: 0 12px 32px light-dark(rgb(11 42 34 / 0.1), transparent);
+  /* I-14: keyframes for overlays. Presence only delays unmount for CSS animations, not transitions. */
+  --animate-fade-in: fade-in var(--duration-popover) ease-out;
+  --animate-fade-out: fade-out var(--duration-popover) ease-in;
+  --animate-dialog-in: dialog-in var(--duration-dialog-in) ease-out;
+  --animate-dialog-out: dialog-out var(--duration-dialog-out) ease-in;
+  --animate-drawer-in-start: drawer-in-start var(--duration-dialog-in) ease-out;
+  --animate-drawer-out-start: drawer-out-start var(--duration-dialog-out) ease-in;
+  --animate-drawer-in-end: drawer-in-end var(--duration-dialog-in) ease-out;
+  --animate-drawer-out-end: drawer-out-end var(--duration-dialog-out) ease-in;
+  --animate-drawer-in-bottom: drawer-in-bottom var(--duration-dialog-in) ease-out;
+  --animate-drawer-out-bottom: drawer-out-bottom var(--duration-dialog-out) ease-in;
+  --animate-popover-in: popover-in var(--duration-popover) ease-out;
+  --animate-popover-out: popover-out var(--duration-popover) ease-in;
 }
+@keyframes fade-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes fade-out { from { opacity: 1 } to { opacity: 0 } }
+@keyframes dialog-in { from { opacity: 0; transform: scale(.96) } to { opacity: 1; transform: scale(1) } }
+@keyframes dialog-out { from { opacity: 1; transform: scale(1) } to { opacity: 0; transform: scale(.96) } }
+@keyframes drawer-in-start { from { transform: translateX(-100%) } to { transform: translateX(0) } }
+@keyframes drawer-out-start { from { transform: translateX(0) } to { transform: translateX(-100%) } }
+@keyframes drawer-in-end { from { transform: translateX(100%) } to { transform: translateX(0) } }
+@keyframes drawer-out-end { from { transform: translateX(0) } to { transform: translateX(100%) } }
+@keyframes drawer-in-bottom { from { transform: translateY(100%) } to { transform: translateY(0) } }
+@keyframes drawer-out-bottom { from { transform: translateY(0) } to { transform: translateY(100%) } }
+@keyframes popover-in { from { opacity: 0; transform: scale(.98) } to { opacity: 1; transform: scale(1) } }
+@keyframes popover-out { from { opacity: 1; transform: scale(1) } to { opacity: 0; transform: scale(.98) } }
 @theme inline {
   --font-heading: var(--font-lexend), ui-sans-serif, system-ui, sans-serif;
   --font-sans: var(--font-source-sans-3), ui-sans-serif, system-ui, sans-serif;
@@ -233,8 +264,9 @@ Run `pnpm test --maxWorkers=2 scripts src/styles src/lib src/i18n`. Expected: FA
 @utility type-h2 { font-family: var(--font-heading); font-size: 20px; line-height: 28px; font-weight: 600; } @utility type-h3 { font-family: var(--font-heading); font-size: 16px; line-height: 24px; font-weight: 600; }
 @utility type-body { font-family: var(--font-sans); font-size: 14px; line-height: 20px; font-weight: 400; } @utility type-body-lg { font-family: var(--font-sans); font-size: 16px; line-height: 24px; font-weight: 400; }
 @utility type-small { font-family: var(--font-sans); font-size: 13px; line-height: 18px; font-weight: 400; } @utility type-caption { font-family: var(--font-sans); font-size: 12px; line-height: 16px; font-weight: 500; }
-@utility type-metric { font-family: var(--font-mono); font-size: 28px; line-height: 32px; font-weight: 600; font-variant-numeric: tabular-nums; } @utility type-data { font-family: var(--font-mono); font-size: 13px; line-height: 18px; font-weight: 400; font-variant-numeric: tabular-nums; }
+@utility type-metric { font-family: var(--font-mono); font-size: 28px; line-height: 32px; font-weight: 600; font-variant-numeric: tabular-nums; font-variant-ligatures: none; } @utility type-data { font-family: var(--font-mono); font-size: 13px; line-height: 18px; font-weight: 400; font-variant-numeric: tabular-nums; font-variant-ligatures: none; }
 ```
+`font-variant-ligatures: none` on `type-data`/`type-metric` (M-3) stops JetBrains Mono's `calt`/`liga` turning `>=`, `->`, `--` into ligatures in data cells; the subset in Step 6 keeps the features for code contexts elsewhere.
 `web/src/app/globals.css`:
 ```css
 @import 'tailwindcss';
@@ -282,6 +314,7 @@ export const exempt: Record<string, string> = {
 ```js
 const RAW_COLOR = String.raw`(?<![\w&-])#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})(?![\w-])|\b(?:rgba?|hsla?|oklch|oklab|lab|lch|hwb)\(`;
 const PALETTE = String.raw`(?:^|[\s:])(?:bg|text|border|ring|fill|stroke|outline|decoration|divide|accent|caret|placeholder|from|via|to|shadow)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|black|white)(?:-\d{2,3})?(?:\/\d+)?(?=\s|$)`;
+const ENERGY_TEXT = String.raw`(?:^|[\s:])text-(?:brand|consumption|generation|reactive-inductive|reactive-capacitive|cost|revenue|forecast)(?=\s|$)`;
 const FORBIDDEN = String.raw`(?:^|[\s:])(?:outline-none|outline-hidden)(?=\s|$)|(?:^|\s)dark:`;
 const ban = (re, message) => [
   { selector: `Literal[value=/${re}/]`, message },
@@ -292,6 +325,7 @@ config.push(
     'no-restricted-syntax': ['error',
       ...ban(RAW_COLOR, 'Raw colour literal: use a design token (07 §2.4, plan D5).'),
       ...ban(PALETTE, 'Tailwind default palette: use a token utility (plan D5).'),
+      ...ban(ENERGY_TEXT, 'Energy colours are graphics only, never text colour (plan D3, M-1).'),
       ...ban(FORBIDDEN, 'outline-none / dark: are forbidden: focus rings are global, dark mode is token-driven (plan D4).')],
     'no-restricted-imports': ['error', { paths: [
       { name: 'recharts', message: 'Use src/components/charts (07 §5, plan D10).' },
@@ -305,7 +339,7 @@ config.push(
 
 - [ ] **Step 6: Fonts (D6).**
 ```bash
-python3 -m venv "$SCRATCH/fontenv" && "$SCRATCH/fontenv/bin/pip" install fonttools brotli
+python3 -m venv /home/personal/.cache/ekokod-fontenv && /home/personal/.cache/ekokod-fontenv/bin/pip install fonttools brotli
 ```
 `web/scripts/subset-fonts.sh` (mode 100755, shellcheck-clean) downloads `ofl/lexend/Lexend[wght].ttf`, `ofl/sourcesans3/SourceSans3[wght].ttf` and `ofl/jetbrainsmono/JetBrainsMono[wght].ttf` from `https://raw.githubusercontent.com/google/fonts/<SHA>/`. Resolve the SHA once with `git ls-remote https://github.com/google/fonts HEAD` and hard-code it. The script runs `pyftsubset` with `--unicodes=U+0020-007E,U+00A0-017F,U+2013-2014,U+2018-201E,U+2022,U+2026,U+2030,U+2032-2033,U+2039-203A,U+20AC,U+20BA,U+2080-2089,U+2122,U+2190-2193,U+2212,U+2264-2265 --layout-features=kern,liga,calt,tnum,lnum,case,ccmp,locl,mark,mkmk --flavor=woff2` into `src/styles/fonts/{lexend,source-sans-3,jetbrains-mono}.woff2`, and copies each `OFL.txt`. `src/styles/fonts.ts` uses `next/font/local` with `variable: '--font-lexend' | '--font-source-sans-3' | '--font-jetbrains-mono'`, `display: 'swap'` and weight ranges `'100 900'`, `'200 900'`, `'100 800'`. It exports `fontVariables`.
 
@@ -315,11 +349,22 @@ import type { Messages } from '../../messages';
 import type { Locale } from './locale';
 declare module 'next-intl' { interface AppConfig { Locale: Locale; Messages: Messages } }
 ```
-Update `request.ts` to cookie-based per D8: `resolveLocale((await cookies()).get(LOCALE_COOKIE)?.value)`, `messages[locale]`, `timeZone: 'Europe/Istanbul'`. Update `layout.tsx`: `<html lang={locale} data-theme="system" className={fontVariables}>` and `<body>` with no colour classes. Replace every default-palette class in `page.tsx` and `health-status.tsx` with tokens (`text-foreground-muted`, `border-danger bg-danger-subtle text-danger`, `border-border`). `health-status.test.tsx` imports `messages` from `../../messages`.
+Update `request.ts` to cookie-based per D8: `resolveLocale((await cookies()).get(LOCALE_COOKIE)?.value)`, `messages[locale]`, `timeZone: 'Europe/Istanbul'`. Update `layout.tsx`: `<html lang={locale} data-theme="system" className={fontVariables}>` and `<body>` with no colour classes. Move `health-status.tsx` (and its test) to `web/src/app/_components/health-status.tsx` (I-19: outside `src/components/**` so T2's `stories-coverage.test.ts` guard, which only scans that tree, never fires on this F0 diagnostic file; T6 wires it into `(app)/page.tsx`). Replace every default-palette class in `page.tsx` and `health-status.tsx` with tokens (`text-foreground-muted`, `border-danger bg-danger-subtle text-danger`, `border-border`). `health-status.test.tsx` imports `messages` from the `web/messages` package.
 
-- [ ] **Step 8: Runtime deps.** `pnpm add -E radix-ui@1.6.7 lucide-react@1.46.0 class-variance-authority@0.7.1 clsx@2.1.1 tailwind-merge@3.7.0 cmdk@1.1.1 react-day-picker@9.14.0 date-fns@4.4.0 @tanstack/react-table@8.21.3 recharts@3.10.1 maplibre-gl@6.10.0` and `pnpm add -DE fontkit@2.0.4` (plus `@types/fontkit` if `pnpm typecheck` needs it). Delete `scripts/check-i18n-parity.mjs`.
+- [ ] **Step 8: All F5 dependencies and scripts (I-3: T1 owns every install and every `package.json` script, so T2's later merge never touches `package.json`/`pnpm-lock.yaml`/`pnpm-workspace.yaml`).**
+```bash
+pnpm add -E radix-ui@1.6.7 lucide-react@1.46.0 class-variance-authority@0.7.1 clsx@2.1.1 tailwind-merge@3.7.0 \
+  cmdk@1.1.1 react-day-picker@9.14.0 date-fns@4.4.0 @tanstack/react-table@8.21.3 recharts@3.10.1 \
+  maplibre-gl@6.10.0 react-is@19.2.8   # react-is: explicit recharts peer (M-5)
+pnpm add -DE fontkit@2.0.4 vite@8.2.2 storybook@10.6.0 @storybook/nextjs-vite@10.6.0 \
+  @storybook/addon-a11y@10.6.0 @storybook/addon-docs@10.6.0 @playwright/test@1.63.0 \
+  @axe-core/playwright@4.13.0 axe-core@4.13.0 @testing-library/user-event@14.6.7   # vite pinned exact so vitest and Storybook share one Vite (M-5)
+  # plus @types/fontkit if pnpm typecheck needs it
+pnpm install
+```
+Read the install's "Ignored build scripts" line and add each entry (expected: `esbuild: true`, pulled in by `storybook`) to `allowBuilds` in `web/pnpm-workspace.yaml`, in the comment style of the existing entries (I-4). Acceptance: the install output lists no ignored builds, and a clean `pnpm install --frozen-lockfile` succeeds in a fresh worktree. Add `package.json` scripts `"storybook:build": "storybook build --quiet -o storybook-static"` and `"test:a11y": "playwright test tests/a11y/"` (T2 consumes both; I-3). Delete `scripts/check-i18n-parity.mjs`.
 
-- [ ] **Step 9: Green, then prove each guard red.** Run the task gate (no Storybook yet) and `NODE_OPTIONS=--max-old-space-size=4096 pnpm build`. Then run these mutations one at a time, record the output, and revert each:
+- [ ] **Step 9: Green, then prove each guard red.** Run the task gate (no Storybook yet — deps for T2's harness exist from Step 8 but `storybook:build`/`test:a11y` are proven by T2), `pnpm audit --audit-level=high` (I-5: only T1's gate and T8 run this, since only T1 installs deps; fix a high advisory with a `pnpm-workspace.yaml` `overrides` entry and a justification comment, as for `postcss` — never downgrade the gate), and `flock /home/personal/.ekokod-f5-heavy.lock env NODE_OPTIONS=--max-old-space-size=3072 pnpm build`. Then run these mutations one at a time, record the output, and revert each:
 
 | Guard | Mutation | Must see |
 |---|---|---|
@@ -334,17 +379,18 @@ Update `request.ts` to cookie-based per D8: `resolveLocale((await cookies()).get
 ## Task 2: Gallery, test harness and the canonical Button
 
 **Interfaces**
-- Consumes (from T1, by name, merged or not): token utilities, `cn`, `messages`, `fontVariables`, `globals.css`. Before T1 merges, the Storybook build renders unstyled. The a11y gate runs only after `git merge phase/f5-design-system` brings T1 in.
+- Consumes (from T1): token utilities, `cn`, `messages`, `fontVariables`, `globals.css`, and every devDependency (Storybook, Playwright, axe, fontkit — installed by T1 Step 8, I-3). T2 drafts code from the start against the speculative dependency set, but its first `pnpm test`/`pnpm lint`/a11y gate run only after `git merge phase/f5-design-system` brings T1's merged tip in (I-3). Before that merge, T2 does not run the harness against real dependencies.
 - Produces:
   - `renderWithProviders(ui: ReactElement, o?: { locale?: Locale }): RenderResult & { user: UserEvent }` (`@/test/render`). It wraps `NextIntlClientProvider` (`timeZone: 'Europe/Istanbul'`, `onError` rethrows) plus `AppProviders`.
   - `expectNoAxeViolations(el: Element): Promise<void>` (`@/test/axe`; axe-core with `color-contrast` and `region` disabled).
   - `setMatchMedia(matches: (query: string) => boolean): void` (`@/test/match-media`).
+  - `setMockPathname(path: string): void`, `mockRouter: { push, replace, refresh, back, prefetch }` (all `vi.fn()`) (`@/test/navigation`; backs the `vi.mock('next/navigation', …)` in `vitest.setup.ts`, I-8).
   - `AppProviders({ children })` (`@/components/providers`, `'use client'`; T2 adds `Tooltip.Provider delayDuration={300}`).
-  - `Button`, `buttonVariants`, `ButtonProps` (code below); `IconButton({ label: string; icon: LucideIcon; variant?; size?; ...button })`; `Tooltip({ content: ReactNode; side?: 'top'|'right'|'bottom'|'left'; children: ReactElement })`; `VisuallyHidden`.
+  - `Button`, `buttonVariants`, `ButtonProps` (code below); `IconButton({ label: string; icon: LucideIcon; variant?; size?; ...button })`; `Tooltip({ content: ReactNode; side?: 'top'|'right'|'bottom'|'left'; children: ReactElement })`; `VisuallyHidden`; `Popover({ trigger: ReactElement; children; align?; side? })` (Radix, `animate-popover-in`/`-out`, 180 ms; moved here from T4 per I-6 since T2 already owns the Tooltip popper motion and both T3 and T4 consume it).
   - Storybook globals `theme: 'light'|'dark'` and `locale: 'tr'|'en'`. Story URL: `iframe.html?id=<id>&viewMode=story&globals=theme:<t>;locale:<l>`.
-  - `tests/a11y/helpers.ts`: `loadStories(): { id: string; title: string; name: string }[]` (from `storybook-static/index.json`; `type: 'story'` entries minus tag `no-sweep`, filtered by env `STORIES` title prefixes), `gotoStory(page, id, { theme, locale })` (navigates, then waits until `window.__STORYBOOK_PREVIEW__.currentRender.phase === 'completed'` so `play` functions have finished; verify the property in 10.6 and record it), `THEMES`, `LOCALES`, `expectNoHorizontalScroll(page)`, `expectNoClippedText(page)`, `tabbables(page)`.
+  - `tests/a11y/helpers.ts`: `loadStories(): { id: string; title: string; name: string; tags: string[] }[]` (from `storybook-static/index.json`; `type: 'story'` entries minus tag `no-sweep`, filtered by env `STORIES` title prefixes), `gotoStory(page, id, { theme, locale })` (navigates, then waits until `window.__STORYBOOK_PREVIEW__.currentRender.phase === 'completed'` so `play` functions have finished; verify the property in 10.6 and record it), `THEMES`, `LOCALES`, `expectNoHorizontalScroll(page)`, `expectNoClippedText(page)`, `tabbables(page, scope?: Locator)` (I-7: scoped to the overlay when one is open).
 
-- [ ] **Step 1: Deps and config.** `pnpm add -DE storybook@10.6.0 @storybook/nextjs-vite@10.6.0 @storybook/addon-a11y@10.6.0 @storybook/addon-docs@10.6.0 @playwright/test@1.63.0 @axe-core/playwright@4.13.0 axe-core@4.13.0 @testing-library/user-event@14.6.7`. Add scripts `"storybook:build": "storybook build --quiet -o storybook-static"` and `"test:a11y": "playwright test tests/a11y/"`. Add `web/storybook-static/`, `web/playwright-report/` and `web/test-results/` to `.gitignore`. `vitest.config.ts`: `test.maxWorkers: 2` and `test.exclude: ['tests/**', 'node_modules/**', 'storybook-static/**']`. `vitest.setup.ts`: `ResizeObserver` stub; `Element.prototype.{scrollIntoView,hasPointerCapture,releasePointerCapture}` stubs; `window.matchMedia` default (all false) installed through `setMatchMedia`.
+- [ ] **Step 1: Config (deps and scripts come from T1 Step 8, I-3 — nothing to `pnpm add` here).** Add `web/storybook-static/`, `web/playwright-report/` and `web/test-results/` to `.gitignore`, and the same three paths to `.dockerignore` (M-13, keeps Storybook/Playwright output out of the Docker build context). `vitest.config.ts`: `test.maxWorkers: 2` and `test.exclude: ['tests/**', 'node_modules/**', 'storybook-static/**']`. `vitest.setup.ts`: `ResizeObserver` stub; `Element.prototype.{scrollIntoView,hasPointerCapture,releasePointerCapture}` stubs; `window.matchMedia` default (all false) installed through `setMatchMedia`; `vi.mock('next/navigation', …)` with `usePathname` returning a mutable `mockPathname` (default `'/'`) and `useRouter` returning `mockRouter` (I-8, backs `@storybook/nextjs-vite`'s equivalent mock in Storybook and lets `app-shell.test`/`language-switcher.test` render `useRouter()`/`usePathname()` without throwing).
 
 - [ ] **Step 2: `.storybook/main.ts`** with framework `@storybook/nextjs-vite`, stories `../src/components/**/*.stories.tsx`, addons a11y and docs, and `core.disableTelemetry`. **`.storybook/preview.tsx`** (full):
 ```tsx
@@ -373,10 +419,11 @@ const preview: Preview = {
   initialGlobals: { theme: 'light', locale: 'tr' },
   globalTypes: { theme: { toolbar: { title: 'Theme', items: ['light', 'dark'] } },
     locale: { toolbar: { title: 'Locale', items: ['tr', 'en'] } } },
-  parameters: { layout: 'padded', a11y: { test: 'error' } },
+  parameters: { layout: 'padded', nextjs: { appDirectory: true }, a11y: { test: 'error' } },
 };
 export default preview;
 ```
+`nextjs.appDirectory: true` (I-8) is required for `@storybook/nextjs-vite` to mock `next/navigation` hooks; without it every `Shell/*` story throws "invariant expected app router to be mounted". T6 stories additionally set `parameters.nextjs.navigation.pathname` per story.
 
 - [ ] **Step 3: Button tests first (red).** `button.test.tsx`:
 
@@ -451,24 +498,24 @@ export function Button({ variant, size, loading = false, iconStart: IconStart, i
 ```
 `button.stories.tsx`: `title: 'UI/Button'` and stories `Variants` (all 4), `Sizes`, `Loading`, `Disabled`, `WithIcons`, `AsLink`, `LongTurkishLabel`. Labels come from `useTranslations('common')` inside `render`. `common.json` (tr/en, from the appendix `common.*` where it exists): `loading`, `save`, `cancel`, `close`, `apply`, `clear`, `search`, `add`, `edit`, `delete`, `actions`, `notifications`, `more`.
 
-- [ ] **Step 5: Playwright harness.** `playwright.config.ts`: `testDir: 'tests/a11y'`, `workers: 2`, `fullyParallel: true`, `reporter: 'list'`, `use.baseURL: 'http://127.0.0.1:6007'`, viewport 1280×800, Chromium project, `webServer: { command: 'python3 -m http.server 6007 --bind 127.0.0.1 --directory storybook-static', url: 'http://127.0.0.1:6007/index.json', reuseExistingServer: false }`. Specs:
-  - `stories.spec.ts`: for every story × THEMES × LOCALES, collect console errors and `pageerror`; `gotoStory`; `#storybook-root` visible; `body` has no class `sb-show-errordisplay`. Then `AxeBuilder.withTags(['wcag2a','wcag2aa','wcag21a','wcag21aa','wcag22aa']).exclude('#storybook-docs')`, with `.disableRules(['region','landmark-one-main','page-has-heading-one'])` unless the title starts with `Shell/`. Violations mapped to `id: targets` equal `[]`. Then `expectNoHorizontalScroll` (`scrollWidth <= innerWidth`), `expectNoClippedText` (no element under the root whose `scrollWidth > clientWidth + 1` while `overflow-x` is `hidden|clip` and `text-overflow` is not `ellipsis`), and errors equal `[]`.
-  - `keyboard.spec.ts` (light/tr): press Tab repeatedly until focus leaves `#storybook-root` or repeats. Every focused element has computed `outline-style !== 'none'` and `outline-width >= 2px`, and a non-empty bounding box. Every element from `tabbables(page)` was reached.
-  - `touch-targets.spec.ts` (`hasTouch: true, isMobile: true`, 375×812): every tabbable, or its closest `[data-touch-target]` or `label`, has a bounding box ≥ 44×44.
+- [ ] **Step 5: Playwright harness.** `playwright.config.ts` (I-1, M-8): `testDir: 'tests'`, `workers: 2`, `fullyParallel: true`, `reporter: 'list'`, `projects: [{ name: 'a11y', testMatch: 'a11y/**' }]`, `const port = Number(process.env.SB_PORT ?? 6007)`, `use.baseURL: \`http://127.0.0.1:${port}\``, viewport 1280×800, Chromium project, `webServer: { command: \`python3 -m http.server ${port} --bind 127.0.0.1 --directory storybook-static\`, url: \`http://127.0.0.1:${port}/index.json\`, reuseExistingServer: false }`. F6 adds an `e2e` project under `tests/e2e/` and turns `webServer` into an array (handoff note, M-8). Specs (all under `tests/a11y/`):
+  - `stories.spec.ts` (I-18: full matrix only where it earns its cost): for each component's **first** story and every story tagged `open`, run THEMES × LOCALES (2×2); every other story runs only the diagonal, `light/tr` and `dark/en`. That still proves every component in light/dark and tr/en. For each run: collect console errors and `pageerror`; `gotoStory`; `#storybook-root` visible; `body` has no class `sb-show-errordisplay`. Then `AxeBuilder.withTags(['wcag2a','wcag2aa','wcag21a','wcag21aa','wcag22aa']).exclude('#storybook-docs')`, with `.disableRules(['region','landmark-one-main','page-has-heading-one'])` unless the title starts with `Shell/`. Violations mapped to `id: targets` equal `[]`. Then `expectNoHorizontalScroll` (`scrollWidth <= innerWidth`), `expectNoClippedText` (no element under the root whose `scrollWidth > clientWidth + 1` while `overflow-x` is `hidden|clip` and `text-overflow` is not `ellipsis`), and errors equal `[]`.
+  - `keyboard.spec.ts` (light/tr; I-7, rewritten so portalled overlays don't fail every `open`-tagged story): the walk scope is `[aria-modal="true"]` when one exists on the page, otherwise `#storybook-root` plus any `[data-radix-popper-content-wrapper]`. Press Tab repeatedly until focus leaves the scope or repeats. `tabbables(page, scope)` is computed over the same scope, and every element from it was reached. Every focused element has computed `outline-style !== 'none'` and `outline-width >= 2px`, and a non-empty bounding box. Stories whose `play` opens an overlay carry tag `open`; for those, keyboard.spec additionally asserts focus starts inside the overlay and that `Escape` returns focus to the opener. A T2 red-proof: add `tests/a11y/fixtures/dialog-fixture.stories.tsx` (a bare `@radix-ui/react-dialog` modal, tag `open`, no dependency on T4's `Dialog`) and prove it passes before T4 exists, so the harness logic is proven independently of the real component.
+  - `touch-targets.spec.ts` (`hasTouch: true, isMobile: true`, 375×812): call `el.focus()` on each tabbable before measuring it (M-6: reveals the `sr-only` skip link, which is 1×1 until focused), or skip `[data-skip-link]` and assert its focused size separately. Every tabbable, or its closest `[data-touch-target]` or `label`, has a bounding box ≥ 44×44.
   - `reduced-motion.spec.ts`: `UI/Button` computed `transition-duration` is `0.15s`. With `page.emulateMedia({ reducedMotion: 'reduce' })` it is ≤ `0.001s`. `UI/IconButton`: after focusing, the tooltip content's `animation-duration` is ≤ `0.001s` under reduce.
 
-- [ ] **Step 6: Gallery guard.** `src/components/stories-coverage.test.ts` › `every component file has a story and a test`: for every `src/components/**/*.tsx` not matching `*.test.tsx`, `*.stories.tsx`, `_*`, `providers.tsx`, the sibling `.stories.tsx` and `.test.tsx` exist. Mutation: delete `button.stories.tsx` → red.
+- [ ] **Step 6: Gallery guard.** `src/components/stories-coverage.test.ts` › `every component file has a story and a test`: for every `src/components/**/*.tsx` not matching `*.test.tsx`, `*.stories.tsx`, `_*`, `providers.tsx`, the sibling `.stories.tsx` and `.test.tsx` exist. `health-status.tsx` lives at `src/app/_components/health-status.tsx` (T1, I-19), outside this glob, so it never needs an exclusion. Mutation: delete `button.stories.tsx` → red.
 
-- [ ] **Step 7: CI and Makefile.** In the `web` job after `pnpm check:i18n-parity`, add `pnpm check:contrast`. After `pnpm build`, add `pnpm exec playwright install --with-deps chromium`, `NODE_OPTIONS=--max-old-space-size=4096 pnpm storybook:build`, `pnpm test:a11y`, and `actions/upload-artifact@v4` of `web/playwright-report` `if: failure()`. Makefile: `web-lint` gains `pnpm check:contrast`. New target `web-a11y` runs `cd web && pnpm storybook:build && pnpm test:a11y`, and is added to `.PHONY` and to `ci`.
+- [ ] **Step 7: CI and Makefile.** In the `web` job after `pnpm check:i18n-parity`, add `pnpm check:contrast`. Set `timeout-minutes: 45` on the `web` job (I-18: the full sweep, at roughly 300 stories with the reduced matrix, plus keyboard/touch/shell specs, comfortably exceeds the default). After `pnpm build`, add `pnpm exec playwright install --with-deps chromium`, `NODE_OPTIONS=--max-old-space-size=3072 pnpm storybook:build` (I-2), `pnpm test:a11y`, and `actions/upload-artifact@v4` of `web/playwright-report` `if: failure()`. Makefile: `web-lint` gains `pnpm check:contrast`. New target `web-a11y` runs `cd web && pnpm storybook:build && pnpm test:a11y`, added to `.PHONY` only — **not** to `ci` (M-13: `web-a11y` is slow and memory-heavy; a local `make ci`, including F4's, must not pay for it. CI still runs the full sweep through the workflow step above).
 
-- [ ] **Step 8: Gate** (after merging the phase tip containing T1): `STORIES='UI/Button,UI/IconButton' pnpm test:a11y`. Prove the harness red: temporarily add `text-foreground-subtle bg-surface-sunken opacity-40` to the `Variants` story wrapper → axe `color-contrast` fails; temporarily add `style={{ outline: 'none' }}` to `Button` → `keyboard.spec` fails. Revert both. Commit `feat(f5): task-2 — Storybook gallery, Playwright a11y harness, Button/IconButton/Tooltip` `<TRAILERS>`.
+- [ ] **Step 8: Gate** (after merging the phase tip containing T1, and before this is run at all, per Wave A): `SB_PORT=6002 STORIES='UI/Button,UI/IconButton,UI/Tooltip,UI/VisuallyHidden' pnpm test:a11y` (M-16: the original list omitted `Tooltip` and `VisuallyHidden`). Prove the harness red: temporarily add `text-foreground-subtle bg-surface-sunken opacity-40` to the `Variants` story wrapper → axe `color-contrast` fails; temporarily add `style={{ outline: 'none' }}` to `Button` → `keyboard.spec` fails. Revert both. Commit `feat(f5): task-2 — Storybook gallery, Playwright a11y harness, Button/IconButton/Tooltip/Popover` `<TRAILERS>`.
 
 ## Task 3: Form controls
 
-**Interfaces** — Consumes: T1 tokens, `cn`, and `@/lib/format`; T2 `Button`, `IconButton`, `Tooltip`, test helpers. Produces (all under `src/components/ui/`; every field-like control takes the shared `FieldProps`):
+**Interfaces** — Consumes: T1 tokens, `cn`, and `@/lib/format`; T2 `Button`, `IconButton`, `Tooltip`, `Popover` (I-6: `Combobox`, `DatePicker`, `DateRangePicker` and `MonthPicker` popovers all use T2's `Popover`), test helpers. Produces (all under `src/components/ui/`; every field-like control takes the shared `FieldProps`):
 ```ts
 // field.tsx — label/description/error wiring used by every control below
-export type FieldProps = { label: string; description?: string; error?: string; required?: boolean; id?: string };
+export type FieldProps = { label: string; description?: string; error?: string; required?: boolean; id?: string; disabled?: boolean };
 export function Field(props: FieldProps & { labelVisibility?: 'visible' | 'hidden'; children: (ids: {
   controlId: string; describedBy: string | undefined; invalid: boolean }) => ReactNode }): ReactElement;
 export type Option = { value: string; label: string; disabled?: boolean };
@@ -479,8 +526,8 @@ export type Option = { value: string; label: string; disabled?: boolean };
 | `Textarea` | `ComponentPropsWithRef<'textarea'>`, `rows` default 4 |
 | `NumberInput` | `value: string \| null; onValueChange(v: string \| null): void; min?: string; max?: string; fractionDigits?: number; unit?: Unit` — displays `formatNumber`, parses `1.234,56` → `'1234.56'` without floats |
 | `Select` | `options: Option[]; value: string \| null; onValueChange(v: string): void; placeholder?: string; disabled?: boolean` (Radix Select) |
-| `Combobox` | `options: Option[]; value: string \| null; onValueChange(v: string \| null): void; searchPlaceholder: string; emptyText: string` (cmdk in Popover, `role="combobox"`) |
-| `MultiSelect` | `options: Option[]; value: string[]; onValueChange(v: string[]): void; searchPlaceholder: string; emptyText: string; maxChips?: number` (trigger shows chips, then `forms.moreSelected {count}`) |
+| `Combobox` | `options: Option[]; value: string \| null; onValueChange(v: string \| null): void; searchPlaceholder: string; emptyText: string` (cmdk in T2's `Popover`, `role="combobox"`; filters with `s.toLocaleLowerCase('tr').replaceAll('ı','i')` on both sides via cmdk `shouldFilter={false}`, I-11) |
+| `MultiSelect` | `options: Option[]; value: string[]; onValueChange(v: string[]): void; searchPlaceholder: string; emptyText: string; maxChips?: number` (trigger shows chips as token-styled `span`s, not `Badge`, I-6; then `forms.moreSelected {count}`) |
 | `Checkbox` | `checked: boolean \| 'indeterminate'; onCheckedChange(v: boolean): void` (label to the right, row is `data-touch-target`) |
 | `Switch` | `checked: boolean; onCheckedChange(v: boolean): void` |
 | `RadioGroup` | `options: Option[]; value: string; onValueChange(v: string): void; orientation?: 'horizontal' \| 'vertical'` (`label` renders as `<legend>` of a fieldset) |
@@ -490,7 +537,7 @@ export type Option = { value: string; label: string; disabled?: boolean };
 | `DateRangePicker` | `value: { from: string; to: string } \| null; onValueChange(v): void; presets?: { id: string; label: string; range: { from: string; to: string } }[]; min?; max?` |
 | `MonthPicker` | `value: string \| null /* YYYY-MM */; onValueChange(v: string \| null): void; min?: string; max?: string` (12-month grid, year arrows) |
 | `FileUpload` | `accept: string; maxSizeBytes: number; multiple?: boolean; onFilesSelected(files: File[]): void` (drop zone plus button; rejects oversize or wrong type with `error` text) |
-| `FileList` | `files: { id: string; name: string; sizeBytes: number; status: 'uploading' \| 'done' \| 'error'; progress?: number; error?: string }[]; onRemove(id: string): void` (no `FieldProps`) |
+| `FileList` | `files: { id: string; name: string; sizeBytes: number; status: 'uploading' \| 'done' \| 'error'; progress?: number; error?: string }[]; onRemove(id: string): void` (no `FieldProps`; renders its own `role="progressbar"` bar per uploading row — it does not use `ProgressBar`, I-6) |
 | `FormErrorSummary` | `errors: { fieldId: string; message: string }[]; title: string` — `role="alert"`, `tabIndex={-1}`, focuses itself when `errors` goes from empty to non-empty, and each item links `#fieldId` (no `FieldProps`) |
 
 Rules: the label is always rendered (visually hidden only for `SearchInput` with `hidden`). The error sits under the field with `id` wired through `aria-describedby`, and `aria-invalid` is set. The error text starts with an `AlertCircle` icon. Controls use `border-border-control`, `bg-surface` and `rounded-md`, 36 px tall with `pointer-coarse:min-h-11`. Picker popovers use `duration-(--duration-popover)`. Dates follow D19 (`date-fns` `tr`/`enUS` chosen from `useLocale()`, `weekStartsOn: 1`).
@@ -505,13 +552,13 @@ Rules: the label is always rendered (visually hidden only for `SearchInput` with
 | › `empty is null, not zero` | Clearing → `onValueChange(null)` |
 | › `rejects letters` | Typing `12a` → the value stays `'12'`; `error` text is not required from the component |
 | `select.test` › `keyboard selects an option` | Focus the trigger, `{ArrowDown}{ArrowDown}{Enter}` → `onValueChange('b')` |
-| `combobox.test` › `filters by Turkish text case-insensitively` | Typing `ıstanbul` shows `İstanbul Ofis` (tr locale compare via `toLocaleLowerCase('tr')`) |
+| `combobox.test` › `filters by Turkish text case-insensitively, including dotless ı` | Typing `istanbul`, `ISTANBUL` **and** `ıstanbul` each show `İstanbul Ofis` (`toLocaleLowerCase('tr').replaceAll('ı','i')` on both sides, `shouldFilter={false}`, I-11: `'İstanbul'.toLocaleLowerCase('tr')` alone is `'istanbul'`, never matching a literal `ıstanbul` query) |
 | › `empty text is shown when nothing matches` | `getByText(emptyText)` |
 | `multi-select.test` › `toggles values and summarises overflow` | Selecting 4 with `maxChips=2` → 2 chips plus `+2` text from `forms.moreSelected` |
 | `radio-group.test` › `arrow keys move selection` | `{ArrowRight}` → `onValueChange('second')` |
 | `switch.test` › `space toggles` | `onCheckedChange(true)` |
 | `date-picker.test` › `emits ISO dates and never a Date` | Choosing the 15th → `onValueChange('2026-09-15')`; `typeof arg === 'string'` |
-| › `week starts on Monday in both locales` | The first column header is Monday (`Pzt` / `Mo`) |
+| › `week starts on Monday in both locales` | The first `columnheader`'s accessible name (`aria-label`, full weekday) is `Pazartesi` / `Monday` (I-12: this doesn't depend on `react-day-picker`'s short `"cccccc"` display format, whose tr short form is `"Pt"`, not `"Pzt"`) |
 | `date-range-picker.test` › `preset applies its range` | Clicking the "Son 7 gün" preset → `onValueChange({ from, to })` |
 | `month-picker.test` › `emits YYYY-MM and respects min` | `2026-03`; months before `min` are `aria-disabled` |
 | `file-upload.test` › `rejects oversize files with a visible error` | A 2 MB file with `maxSizeBytes=1_000_000` → `onFilesSelected` not called, the error text is visible |
@@ -520,34 +567,33 @@ Rules: the label is always rendered (visually hidden only for `SearchInput` with
 | `search-input.test` › `hidden label still names the field` | `getByRole('searchbox', { name: 'Ara' })` |
 
 - [ ] **Step 2: Implement** until green. `forms.json` holds `required`, `optional`, `moreSelected` (`"+{count}"`), `noResults`, `clear`, `chooseDate`, `chooseMonth`, `previousMonth`, `nextMonth`, `previousYear`, `nextYear`, `dropFiles`, `browse`, `fileTooLarge` (`"{name} en fazla {max} olabilir"`), `fileTypeNotAllowed`, `uploading`, `removeFile` (`"{name} dosyasını kaldır"`), `errorSummaryTitle`, and the preset labels `last7Days`, `lastMonth`, `last6Months`, `thisYear`, `lastYear` (appendix values where present).
-- [ ] **Step 3: Stories** for every component: default, error, disabled, `LongTurkishLabel`, and an open state for the pickers (`play` opens the popover).
+- [ ] **Step 3: Stories** for every component: default, error, disabled, `LongTurkishLabel`, and an `Open` state tagged `open` for the pickers (`play` opens the popover, I-7).
 - [ ] **Step 4: Gate** with `STORIES='UI/Field,UI/Input,UI/Textarea,UI/NumberInput,UI/Select,UI/Combobox,UI/MultiSelect,UI/Checkbox,UI/Switch,UI/RadioGroup,UI/Slider,UI/SearchInput,UI/DatePicker,UI/DateRangePicker,UI/MonthPicker,UI/FileUpload,UI/FileList,UI/FormErrorSummary'`. Commit `feat(f5): task-3 — form controls` `<TRAILERS>`.
 
 ## Task 4: Containers, overlays, feedback, navigation and the data table
 
-**Interfaces** — Consumes: T1 and T2. Produces (under `src/components/ui/`):
+**Interfaces** — Consumes: T1, T2 (including `Popover`, moved from T4 to T2 per I-6). Produces (under `src/components/ui/`):
 
 | Component | Props |
 |---|---|
 | `Card`, `CardHeader`, `CardTitle` (`as?: 'h2'\|'h3'`), `CardDescription`, `CardContent`, `CardFooter` | div props. `rounded-lg bg-surface-raised border border-border in-data-[card=shadow]:border-card-edge in-data-[card=shadow]:shadow-md` (in dark the shadow is transparent and `card-edge` draws the edge, D4) |
 | `StatTile` | `label: string; value: string /* preformatted */; unit?: Unit; hint?: string` |
-| `Badge` | `tone: 'neutral'\|'brand'\|'info'\|'success'\|'warning'\|'danger'; children: ReactNode` |
+| `Badge` | `tone: 'neutral'\|'brand'\|'info'\|'success'\|'warning'\|'danger'; children: ReactNode` plus `ComponentPropsWithRef<'span'>` (M-4: T7's `DataQualityBadge` uses it as a focusable `Tooltip` trigger, needs `tabIndex`/`ref`) |
 | `StatusBadge` | `status: 'success'\|'warning'\|'danger'\|'info'\|'neutral'; label: string` (icons `CheckCircle2`, `AlertTriangle`, `XCircle`, `Info`, `CircleDashed`) |
 | `Alert` | `tone: 'info'\|'success'\|'warning'\|'danger'; title: string; children?: ReactNode; action?: ReactNode` (`role="alert"` for warning/danger, else `role="status"`) |
-| `Toaster`, `useToast()` → `toast({ tone, title, description?, action?: { label: string; onClick(): void } }): void` | Radix Toast, bottom-end, 6 s, pauses on hover and focus |
-| `LiveAnnouncerProvider`, `useAnnounce()` → `announce(message: string, politeness?: 'polite'\|'assertive'): void` | Two visually hidden live regions |
+| `Toaster`, `useToast()` → `{ toast({ tone, title, description?, action?: { label: string; onClick(): void } }): void }` (M-4: return shape stated explicitly) | Radix Toast, bottom-end, 6 s, pauses on hover and focus |
+| `LiveAnnouncerProvider`, `useAnnounce()` → `announce(message: string, politeness?: 'polite'\|'assertive'): void` | Two visually hidden live regions, `aria-live` plus `aria-atomic`, **no** `role` (I-9: an explicit `role="status"` here would make `getByRole('status')` ambiguous against `Alert`/`Toast`) |
 | `EmptyState` | `icon?: LucideIcon; title: string; description: string /* what to do next */; action?: ReactNode` |
 | `Skeleton` | `className` (size from the caller; `aria-hidden`); `SkeletonText({ lines: number })` |
 | `ProgressBar` | `label: string; value: number \| null /* null = indeterminate */; max?: number; thresholds?: { value: number; label: string }[]; valueText?: string` |
 | `Stepper` | `steps: { id: string; label: string; description?: string }[]; currentIndex: number` (`aria-current="step"`) |
 | `Tabs` (`items: { value: string; label: string; content: ReactNode; disabled?: boolean }[]; value?; defaultValue?; onValueChange?`) | Radix Tabs, `duration-(--duration-tab)` |
 | `Accordion` (`items: { value: string; title: string; content: ReactNode }[]; type: 'single'\|'multiple'`) | Radix |
-| `Dialog` | `open: boolean; onOpenChange(o: boolean): void; title: string; description?: string; children: ReactNode; footer?: ReactNode; size?: 'sm'\|'md'\|'lg'` (enter 250 ms / exit 180 ms, fade plus scale; close `IconButton` labelled `common.close`) |
-| `Drawer` | Dialog props plus `side: 'start'\|'end'\|'bottom'` (translate) |
-| `Popover` (`trigger: ReactElement; children; align?; side?`) | Radix, 180 ms |
-| `DropdownMenu` (`trigger: ReactElement; items: ({ type: 'item'; label: string; icon?: LucideIcon; onSelect(): void; disabled?: boolean; tone?: 'danger' } \| { type: 'separator' } \| { type: 'label'; label: string })[]`) | Radix |
-| `Breadcrumb` | `items: { label: string; href?: string }[]` (last item `aria-current="page"`, `nav aria-label={t('feedback.breadcrumb')}`) |
-| `Pagination` | `page: number /* 1-based */; pageCount: number; onPageChange(p: number): void; pageSize?: number; pageSizeOptions?: number[]; onPageSizeChange?(n: number): void; totalItems?: number` |
+| `Dialog` | `open: boolean; onOpenChange(o: boolean): void; title: string; description?: string; children: ReactNode; footer?: ReactNode; size?: 'sm'\|'md'\|'lg'; trigger?: ReactElement` (rendered via `Dialog.Trigger asChild`, I-10) (`animate-dialog-in`/`-out`, enter 250 ms / exit 180 ms, fade plus scale; close `IconButton` labelled `common.close`). When `trigger` is absent, record `document.activeElement` when `open` becomes true, and in `onCloseAutoFocus` call `event.preventDefault()` then focus the recorded element if still connected (I-10: Radix's own `onCloseAutoFocus` only knows `Dialog.Trigger`'s ref, so an externally-triggered dialog would otherwise drop focus to `body`) |
+| `Drawer` | Dialog props (including `trigger?` and the same focus-restore fallback, I-10) plus `side: 'start'\|'end'\|'bottom'` (`animate-drawer-in-<side>`/`-out-<side>`, translate) |
+| `DropdownMenu` (`trigger: ReactElement; items: ({ type: 'item'; label: string; icon?: LucideIcon; description?: string; onSelect(): void; disabled?: boolean; tone?: 'danger' } \| { type: 'separator' } \| { type: 'label'; label: string })[]`, exported as `DropdownMenuItem`, M-4: `description?` used by T6 TopNav for disabled items, type consumed by `DataTable.rowActions` and T6/T7) | Radix |
+| `Breadcrumb` | `items: BreadcrumbItem[]` where `export type BreadcrumbItem = { label: string; href?: string }` (M-4: exported for T6's `PageHeader.breadcrumb?`) (last item `aria-current="page"`, `nav aria-label={t('feedback.breadcrumb')}`) |
+| `Pagination` | `page: number /* 1-based */; pageCount: number; onPageChange(p: number): void; pageSize?: number; pageSizeOptions?: number[]; onPageSizeChange?(n: number): void; totalItems?: number` (D25: the page-size control is a labelled native `<select>` with token classes, not the T3 `Select`) |
 | `Table` parts `TableContainer`, `Table`, `TableHeader`, `TableBody`, `TableRow`, `TableHead`, `TableCell` (`numeric?: boolean` → `text-end type-data`) | Semantic table; `TableContainer` is `overflow-auto` with `tabIndex={0}` and `role="region"` plus an `aria-label` |
 | `DataTable<T>` | `columns: ColumnDef<T, unknown>[]; data: T[]; caption: string; getRowId(row: T): string; initialSorting?: SortingState; pageSize?: number \| false /* default 25 */; enableColumnVisibility?: boolean; rowActions?(row: T): DropdownMenu items; toolbar?: ReactNode; loading?: boolean; empty: { title: string; description: string; action?: ReactNode }; maxHeight?: string /* sticky header scroll */` |
 | `getExportRows(table)` (`data-table.tsx`) and `toCsv(rows: string[][]): string` (`@/lib/csv`) | Visible columns only, formatted cell text; D22 |
@@ -560,10 +606,11 @@ Column meta: `meta: { numeric?: boolean; exportValue?(row: T): string }`. Sortin
 |---|---|
 | `status-badge.test` › `status is never colour alone` | Renders text `label` plus an `svg[aria-hidden]` |
 | `alert.test` › `danger announces, info does not interrupt` | `role="alert"` vs `role="status"` |
-| `toast.test` › `toast text reaches a live region` | After `toast({ title: 'Kaydedildi' })`, `getByRole('status')` contains it |
+| `toast.test` › `toast text reaches a live region` | After `toast({ title: 'Kaydedildi' })`, `findByText('Kaydedildi')` has a closest `[aria-live]` or `role="status"` ancestor (I-9: not a bare `getByRole('status')`, which is ambiguous once `LiveAnnouncerProvider` and Radix Toast regions are both mounted) |
 | `live-announcer.test` › `assertive uses the alert region` | `announce('x','assertive')` → `[aria-live="assertive"]` text `x` |
-| `dialog.test` › `traps focus, Escape closes, focus returns` | Open from a trigger → focus is inside; `Tab` ×10 stays inside; `{Escape}` → `onOpenChange(false)`; rerender closed → trigger `toHaveFocus()` |
+| `dialog.test` › `traps focus, Escape closes, focus returns` | Open from a trigger → focus is inside; `Tab` ×10 stays inside; `{Escape}` → `onOpenChange(false)`; rerender closed → trigger `toHaveFocus()`. Test both paths (I-10): with `trigger` set, and without it (record `document.activeElement` before opening, assert it regains focus on close) |
 | `drawer.test` › `has the dialog role and a title` | `getByRole('dialog', { name })` |
+| › `without a trigger, focus restores on close` | Same as `dialog.test`'s no-trigger path (I-10) |
 | `tabs.test` › `arrow keys move between tabs` | `{ArrowRight}` → second tab `aria-selected="true"` |
 | `dropdown-menu.test` › `arrow and Enter select` | `onSelect` called |
 | `breadcrumb.test` › `last item is the current page` | `aria-current="page"` and not a link |
@@ -576,12 +623,13 @@ Column meta: `meta: { numeric?: boolean; exportValue?(row: T): string }`. Sortin
 | › `loading renders skeleton rows, empty renders EmptyState` | 5 `[data-skeleton-row]`; `getByText(empty.title)` |
 | › `row actions are a labelled menu` | `getByRole('button', { name: /İşlemler/ })` opens a menu |
 | `csv.test` › `semicolon, CRLF, BOM and quoting` | `toCsv([['a;b','1.234,5'],['"q"','x']])` = `'﻿"a;b";1.234,5\r\n"""q""";x'` |
+| › `escapes formula-injection prefixes` | `toCsv([['=SUM(A1)','+1','-1','@x','plain']])` prefixes `'` to the `=`/`+`/`-`/`@`-leading cells but not `plain`; a `formatNumber`-produced cell such as `'-1.234,5'` is left as-is (M-12) |
 
 `tests/a11y/overlay-motion.spec.ts`: the `UI/Dialog` `Open` story's content has `animation-duration` `0.25s`, and ≤ `0.001s` under `reducedMotion: 'reduce'`.
 
 - [ ] **Step 2: Implement** until green. Add `Toaster` and `LiveAnnouncerProvider` to `providers.tsx`. Namespaces: `feedback.json` (`breadcrumb`, `close`, `pageOf` `"Sayfa {page} / {count}"`, `previousPage`, `nextPage`, `rowsPerPage`, `loading`, `dismiss`, `stepOf`, `notifications`); `table.json` (`columns`, `actions`, `sortAscending`, `sortDescending`, `noResults`, `export`). Use appendix values where present.
-- [ ] **Step 3: Stories** for each: `Dialog`/`Drawer`/`Popover`/`DropdownMenu` include an `Open` story (a `play` function opens it) so the sweep checks portalled content. `DataTable` has `Default` (40 Turkish building rows, numeric columns), `Loading`, `Empty` and `ManyColumns` (horizontal scroll inside the container, never the page).
-- [ ] **Step 4: Gate** with `STORIES='UI/Card,UI/StatTile,UI/Badge,UI/StatusBadge,UI/Alert,UI/Toast,UI/LiveAnnouncer,UI/EmptyState,UI/Skeleton,UI/ProgressBar,UI/Stepper,UI/Tabs,UI/Accordion,UI/Dialog,UI/Drawer,UI/Popover,UI/DropdownMenu,UI/Breadcrumb,UI/Pagination,UI/Table,UI/DataTable'` plus `overlay-motion.spec.ts`. Commit `feat(f5): task-4 — containers, overlays, feedback, navigation, data table` `<TRAILERS>`.
+- [ ] **Step 3: Stories** for each: `Dialog`/`Drawer`/`DropdownMenu` include an `Open` story tagged `open` (a `play` function opens it, I-7) so the sweep checks portalled content. `DataTable` has `Default` (40 Turkish building rows, numeric columns), `Loading`, `Empty` and `ManyColumns` (horizontal scroll inside the container, never the page).
+- [ ] **Step 4: Gate** with `STORIES='UI/Card,UI/StatTile,UI/Badge,UI/StatusBadge,UI/Alert,UI/Toast,UI/LiveAnnouncer,UI/EmptyState,UI/Skeleton,UI/ProgressBar,UI/Stepper,UI/Tabs,UI/Accordion,UI/Dialog,UI/Drawer,UI/DropdownMenu,UI/Breadcrumb,UI/Pagination,UI/Table,UI/DataTable'` (no `UI/Popover`: it is T2's, I-6) plus `overlay-motion.spec.ts`. Commit `feat(f5): task-4 — containers, overlays, feedback, navigation, data table` `<TRAILERS>`.
 
 ## Task 5: Chart wrappers
 
@@ -609,7 +657,10 @@ export function chartAnimation(reducedMotion: boolean) {
 export function toPlot(v: number | string | null): number | null { return v === null ? null : Number(v); } // D11
 export const AXIS = { stroke: 'var(--color-border-strong)', tick: { fill: 'var(--color-foreground-muted)', fontSize: 12 } };
 export const GRID = { stroke: 'var(--color-border)', strokeDasharray: '3 3' };
+export const CURSOR = { fill: 'var(--color-surface-sunken)' }; // Recharts Tooltip cursor default (#ccc) ignores theme (M-15)
+export const ACTIVE_DOT = { stroke: 'var(--color-surface)', fill: 'var(--color-brand)' }; // default activeDot fill (#fff) ignores theme (M-15)
 ```
+Every wrapper passes `CURSOR` to `Tooltip.cursor` and `ACTIVE_DOT` to `Line`/`Area`'s `activeDot`, because those are inline SVG attributes Recharts does not theme itself (M-15).
 - `usePrefersReducedMotion(): boolean` (`use-reduced-motion.ts`, a `matchMedia` subscription).
 - `downsampleLttb(data: Datum[], seriesKey: string, threshold = 1000): Datum[]` (`downsample.ts`, largest-triangle-three-buckets on the first series, keeping first and last).
 - `ChartFrame` props, shared by every wrapper as `BaseChartProps`:
@@ -622,7 +673,7 @@ export type BaseChartProps = {
   footnote?: string; dataTableDefaultOpen?: boolean;
 };
 ```
-`ChartFrame` renders a `<figure aria-labelledby aria-describedby>`: title (`type-h3`), description, `ChartLegend` (a swatch drawn as an SVG line with the series dash, then label, then `(unit symbol)`), then the plot area at a fixed `height`. When loading it shows `Skeleton` at that height. With no data it shows `EmptyState`. With more than `MAX_SERIES` series it shows `Alert` (D21). With more than 1000 points it downsamples and appends the `charts.downsampled` footnote (`"{shown} / {total} nokta gösteriliyor"`). A toggle `Button` (`aria-expanded`, `aria-controls`) labelled `charts.showTable` / `charts.hideTable` opens `ChartDataTable`, which is `Table` with `caption=title`, columns `xLabel` then `label (unit)`, and cells `formatNumber(original string)` using `numeric`. It always covers the full, not downsampled, data. `ChartTooltip` lists **every** series at the hovered x with `formatQuantity`.
+`ChartFrame` renders a `<figure aria-labelledby aria-describedby>`: title (`type-h3`), description, `ChartLegend` (a swatch drawn as an SVG line with the series dash, then label, then `(unit symbol)`), then the plot area at a fixed `height`. When loading it shows `Skeleton` at that height. With no data it shows `EmptyState`. With more than `MAX_SERIES` series it shows `Alert tone="warning"` (`role="alert"`, D21) in place of the chart — queried as `within(getByRole('figure', { name: title })).getByRole('alert')` (I-9: a warning `Alert` is `role="alert"`, so a bare `getByRole('status')` cannot find it). With more than 1000 points it downsamples and appends the `charts.downsampled` footnote (`"{shown} / {total} nokta gösteriliyor"`), with `{shown}` and `{total}` passed through `formatNumber` (M-7: so `1000`/`3000` render as `1.000`/`3.000`, matching every other number on the page). A toggle `Button` (`aria-expanded`, `aria-controls`) labelled `charts.showTable` / `charts.hideTable` opens `ChartDataTable`, which is `Table` with `caption=title`, columns `xLabel` then `label (unit)`, and cells `formatNumber(original string)` using `numeric`. It always covers the full, not downsampled, data. `ChartTooltip` lists **every** series at the hovered x with `formatQuantity`, using `CURSOR`/`ACTIVE_DOT` (M-15).
 
 | Wrapper | Extra props | Rendering rules |
 |---|---|---|
@@ -650,8 +701,8 @@ In tests, Recharts wrappers render inside `ResponsiveContainer initialDimension=
 | › `data table toggles and shows exact values with units` | Click `charts.showTable` → `aria-expanded="true"`; header `Tüketim (kWh)`; cell `1.234,567891` for input `'1234.567891'` |
 | › `loading keeps the final height` | Skeleton `style.height` = `'320px'` |
 | › `empty state explains what is missing` | `getByText(empty.title)`; no `svg.recharts-surface` |
-| › `more than six series renders an alert, not a chart` | 7 series → `getByRole('status')` text `charts.tooManySeries` |
-| › `over 1000 points downsamples and says so` | 3000 points → footnote text contains `1000` and `3000`; the table still has 3000 rows when opened |
+| › `more than six series renders an alert, not a chart` | 7 series → `within(getByRole('figure', { name: title })).getByRole('alert')` text `charts.tooManySeries` (I-9) |
+| › `over 1000 points downsamples and says so` | 3000 points → footnote text contains `1.000` and `3.000` (`formatNumber`, M-7); the table still has 3000 rows when opened |
 | `_chart-legend.test` › `legend shows label, unit and dash sample` | Text `Üretim (kWh)`; swatch `line[stroke-dasharray="6 3"]` for series index 1 |
 | `_chart-tooltip.test` › `lists every series at x with units` | Given a payload of 3 series → 3 rows, each with `formatQuantity` text |
 | `line-chart.test` › `renders one path per series with the series dash` | 2 series → 2 `.recharts-line-curve`; the second has `stroke-dasharray="6 3"` |
@@ -738,19 +789,19 @@ export const navigation: NavEntry[] = [
 
 | Component | Props / behaviour |
 |---|---|
-| `AppShell` | `{ children; breadcrumb: BreadcrumbItem[]; user: { name: string; email: string; roleLabel: string }; notificationCount?: number; initialPreferences: UiPreferences }`. Renders a skip link (`shell.skipToContent`) → `<main id="main-content" tabIndex={-1}>`. Layout is a 12-column grid with `gap-6` gutters; `data-container=boxed` → `max-w-[1600px] mx-auto`; at 2xl the content is capped at 1600 px and centred |
+| `AppShell` | `{ children; user: { name: string; email: string; roleLabel: string }; notificationCount?: number }` (I-15: no `breadcrumb`/`initialPreferences` — a route-group `layout.tsx` never learns the current page, so a per-page prop there would force an F6 redesign). The breadcrumb is derived inside the shell from `usePathname()` and `navigation`, overridable per page via `PageHeader.breadcrumb?: BreadcrumbItem[]`. The shell reads preferences through `useUiPreferences()`, not a prop. Renders a skip link (`shell.skipToContent`) → `<main id="main-content" tabIndex={-1}>`. Layout is a 12-column grid with `gap-6` gutters; `data-container=boxed` → `max-w-[1600px] mx-auto`; at 2xl the content is capped at 1600 px and centred |
 | `Sidebar` | `{ collapsed: boolean; onNavigate?(): void }`. `nav aria-label={shell.nav.label}`; groups are disclosure buttons (`aria-expanded`); the active leaf has `aria-current="page"` (from `usePathname`) and a `brand` start-edge bar. Disabled leaf: `<span role="link" aria-disabled="true" tabIndex={0}>` wrapped in `Tooltip content={t('shell.notYetAvailable')}`, `text-foreground-subtle`. Collapsed (≥lg) shows icons only with a `Tooltip` label each |
 | `TopNav` | Horizontal layout at ≥lg: groups as `DropdownMenu`s; disabled items `disabled` with the same tooltip text in the menu item's description (D24) |
 | `TopBar` | Logo (`brand`), `SearchInput labelVisibility="hidden"`, notifications `IconButton` plus `Badge` count (`aria-label` `shell.notificationsCount {count}`), `LanguageSwitcher`, `ThemeToggle`, `UserMenu`, customiser `IconButton` (`Settings2`), sidebar toggle `IconButton` (`PanelLeft`, `aria-expanded`) |
-| Responsive | `<lg`: sidebar is a `Drawer side="start"` opened by the toggle; `≥lg`: sidebar docked (collapsed or expanded). `<md`: the search collapses to an `IconButton` that opens a `Popover` with `SearchInput`. The page body never scrolls sideways |
-| `PageHeader` | `{ title: string; description?: string; actions?: ReactNode }` (`h1 type-h1`; actions wrap under the title below `md`) |
+| Responsive | CSS-first, not JS-first (I-16: a `useMediaQuery`-only layout renders drawer mode on the server and on first client paint, then docks after hydration — a visible shift at ≥lg on every navigation). The docked sidebar is `hidden lg:flex` (collapsed or expanded from `data-sidebar` on `<html>`); the toggle that opens the `Drawer` is `lg:hidden`. The `Drawer` mounts only while open. `useMediaQuery('(min-width: 1024px)')` is used only to close an already-open drawer when the viewport crosses `lg`. `<md`: the search collapses to an `IconButton` that opens a `Popover` with `SearchInput`. The page body never scrolls sideways |
+| `PageHeader` | `{ title: string; description?: string; actions?: ReactNode; breadcrumb?: BreadcrumbItem[] }` (`h1 type-h1`; `breadcrumb` overrides the shell's derived one, I-15; actions wrap under the title below `md`) |
 | `FilterBar` | `{ children: ReactNode; onApply?(): void; activeCount?: number }`: `sticky top-0 z-10 bg-background`. `<sm`: a `Button` "Filtreler (n)" opens `Drawer side="bottom"` holding the children plus apply |
 | `ThemeCustomizer` | `{ open: boolean; onOpenChange(o: boolean): void }`: `Drawer side="end"` with `RadioGroup` theme, `RadioGroup` layout, `RadioGroup` container, `Switch` sidebar collapsed, `RadioGroup` card, `Slider` radius 0.5–1.5 step 0.25, and a reset `Button` |
 | `LanguageSwitcher` | `DropdownMenu` of Türkçe / English → `setLocale` then `router.refresh()`; the trigger `aria-label` is `shell.language` |
 | `ThemeToggle` | Cycles light → dark → system; `aria-label` includes the current mode |
 | `UserMenu` | Name, role, profile/logout items (callbacks are no-ops until F6) |
 
-Next integration: `src/app/layout.tsx` reads `UI_COOKIE` with `cookies()` and spreads `htmlAttributes(parseUiPreferences(...))` onto `<html>` (keeping `lang` and `fontVariables`) and nests `NextIntlClientProvider` → `UiPreferencesProvider` → `AppProviders`. Breakpoints use `useMediaQuery(query: string): boolean` (`shell/use-media-query.ts`). `src/app/(app)/layout.tsx` renders `AppShell` with placeholder user `{ name: 'Demo', … }` (F6 replaces it). Move `src/app/page.tsx` to `src/app/(app)/page.tsx` with `PageHeader` plus `HealthStatus`.
+Next integration: `src/app/layout.tsx` reads `UI_COOKIE` with `cookies()` and spreads `htmlAttributes(parseUiPreferences(...))` onto `<html>` (keeping `lang` and `fontVariables`) and nests `NextIntlClientProvider` → `UiPreferencesProvider` → `AppProviders`. `UiPreferencesProvider` is mounted here only, never in `providers.tsx` (I-15, resolves the ambiguity about `AppProviders`' signature). Breakpoints use `useMediaQuery(query: string): boolean` (`shell/use-media-query.ts`). `src/app/(app)/layout.tsx` renders `AppShell` with placeholder user `{ name: 'Demo', … }` (F6 replaces it). Move `src/app/page.tsx` to `src/app/(app)/page.tsx` with `PageHeader` plus `HealthStatus` (component at `src/app/_components/health-status.tsx`, T1; I-19). T6 also edits `src/test/render.tsx` (new `preferences?: Partial<UiPreferences>` option, wraps `UiPreferencesProvider`) and `.storybook/preview.tsx` (wraps `UiPreferencesProvider` with `theme` taken from Storybook globals) — both are narrow, named exceptions to T2's ownership of those files (I-15).
 
 - [ ] **Step 1: Tests first (red).**
 
@@ -765,7 +816,7 @@ Next integration: `src/app/layout.tsx` reads `UI_COOKIE` with `cookies()` and sp
 | › `disabled entries are visible, not links, and explain why` | `Su`, `Doğal Gaz`, `EV Sürücüleri`, `Yapay Zeka`, `Tasarruf Önerileri`: `aria-disabled="true"`, no `href`; focusing one → `findByRole('tooltip')` text `shell.notYetAvailable` |
 | › `active route is marked` | With `usePathname` mocked to `/load-profile` → that link `aria-current="page"`, its group expanded |
 | `app-shell.test` › `skip link moves focus to main` | Activating the skip link → `#main-content` `toHaveFocus()` |
-| › `below lg the sidebar is a drawer` | `setMatchMedia(q => !q.includes('1024'))`; the toggle opens `getByRole('dialog', { name: shell.nav.label })` |
+| › `the sidebar toggle opens a dialog` | Clicking the toggle → `getByRole('dialog', { name: shell.nav.label })` (I-16: visibility per width is CSS-only and stays in `shell.spec.ts`, which already checks it at all four widths; this test no longer depends on `setMatchMedia`) |
 | `language-switcher.test` › `calls setLocale then refresh` | Mocked action called with `'en'`; `router.refresh` called |
 | `filter-bar.test` › `small screens get a filter sheet with the active count` | Button text `Filtreler (2)` |
 | `page-header.test` › `title is the page h1` | `getByRole('heading', { level: 1 })` |
@@ -778,8 +829,8 @@ Next integration: `src/app/layout.tsx` reads `UI_COOKIE` with `cookies()` and sp
   - A screenshot is saved to `test-results/shell-<w>-<theme>.png` (evidence for T8, not committed).
 
 - [ ] **Step 2: Implement** until green. `shell.json`: `nav.*` (the keys above plus `label`), `notYetAvailable` ("Bu bölüm henüz kullanıma açılmadı" / "This section is not available yet"), `skipToContent`, `search`, `notificationsCount`, `language`, `theme.{light,dark,system,label,toggle}`, `customizer.{title,layout,vertical,horizontal,container,full,boxed,sidebarCollapsed,card,border,shadow,radius,reset}`, `userMenu.{profile,logout}`, `filters`, `filtersCount`, `toggleSidebar`.
-- [ ] **Step 3: Stories:** `Shell/AppShell` (`Default`, `Horizontal`, `Collapsed`, `Boxed`, `WithFilterBar` containing `PageHeader`, `FilterBar` and a `StatTile` row), `Shell/ThemeCustomizer` (`Open`), `Shell/PageHeader`, `Shell/FilterBar`, `Shell/Sidebar`, `Shell/TopBar`, `Shell/TopNav`, `Shell/LanguageSwitcher`, `Shell/ThemeToggle`, `Shell/UserMenu`. Stories use `parameters.nextjs.navigation.pathname`.
-- [ ] **Step 4: Gate** with `STORIES='Shell/'` plus `pnpm exec playwright test tests/a11y/shell.spec.ts`, and `NODE_OPTIONS=--max-old-space-size=4096 pnpm build` (proves the RSC/client boundaries, cookies and fonts in a real build). Commit `feat(f5): task-6 — app shell, UI preferences, theme customiser, locale switch` `<TRAILERS>`.
+- [ ] **Step 3: Stories:** `Shell/AppShell` (`Default`, `Horizontal`, `Collapsed`, `Boxed`, `WithFilterBar` containing `PageHeader`, `FilterBar` and a `StatTile` row), `Shell/ThemeCustomizer` (`Open`, tagged `open`, I-7), `Shell/PageHeader`, `Shell/FilterBar`, `Shell/Sidebar`, `Shell/TopBar`, `Shell/TopNav`, `Shell/LanguageSwitcher`, `Shell/ThemeToggle`, `Shell/UserMenu`. Stories use `parameters.nextjs.navigation.pathname`.
+- [ ] **Step 4: Gate** with `SB_PORT=6006 STORIES='Shell/'` plus `pnpm exec playwright test tests/a11y/shell.spec.ts`, and `flock /home/personal/.ekokod-f5-heavy.lock env NODE_OPTIONS=--max-old-space-size=3072 pnpm build` (I-2; proves the RSC/client boundaries, cookies and fonts in a real build). Commit `feat(f5): task-6 — app shell, UI preferences, theme customiser, locale switch` `<TRAILERS>`.
 
 ## Task 7: Domain components and Map
 
@@ -788,11 +839,11 @@ Next integration: `src/app/layout.tsx` reads `UI_COOKIE` with `cookies()` and sp
 | Component | Props |
 |---|---|
 | `BuildingAnalyzerPicker` | `buildings: { id: string; name: string; active: boolean }[]; analyzers: { id: string; buildingId: string; name: string; active: boolean }[]; value: { buildingId: string \| null; analyzerId: string \| null }; onValueChange(v): void; activeOnly: boolean; onActiveOnlyChange(v: boolean): void`. Two `Combobox`es; the analyzer list is filtered to the building (and `active` when `activeOnly`); changing the building clears an analyzer that no longer belongs. "Remembered selection" is the caller's job (F6 store). The analyzer `Combobox` is `disabled` until a building is chosen, with description `domain.picker.chooseBuildingFirst` |
-| `PeriodFilterBar` | `granularity: 'hourly' \| 'daily' \| 'monthly' \| 'yearly'; onGranularityChange(g): void; range: { from: string; to: string }; onRangeChange(r): void; onApply(): void; today: string /* YYYY-MM-DD, injected — no clock in the component */; applying?: boolean; allowedGranularities?: Granularity[]`. Presets computed from `today`: last 7 days, last month, last 6 months, this year, last year. Renders its own control row (no dependency on T6); pages place it inside `FilterBar` |
+| `PeriodFilterBar` | `granularity: Granularity; onGranularityChange(g): void; range: { from: string; to: string }; onRangeChange(r): void; onApply(): void; today: string /* YYYY-MM-DD, injected — no clock in the component */; applying?: boolean; allowedGranularities?: Granularity[]`, where `export type Granularity = 'hourly' \| 'daily' \| 'monthly' \| 'yearly'` (M-4). Presets computed from `today`: last 7 days, last month, last 6 months (M-14: from the first day of the month 5 months before `today`'s month, to `today` — e.g. `today='2026-09-17'` → `{ from: '2026-04-01', to: '2026-09-17' }`), this year, last year. Renders its own control row (no dependency on T6); pages place it inside `FilterBar` |
 | `MetricCard` | `label: string; value: string \| null; unit: Unit; delta?: { value: string /* signed decimal percent */; direction: 'up' \| 'down' \| 'flat'; sentiment: 'good' \| 'bad' \| 'neutral'; comparisonLabel: string }; sparkline?: ReactNode; quality?: DataQuality; loading?: boolean`. Value in `type-metric`; the delta shows an arrow icon, sign, `%` and text, coloured by `sentiment` (success/danger/foreground-muted), never by direction |
-| `ReactiveStatusCard` | `inductive: { ratio: string \| null; limit: string }; capacitive: { ratio: string \| null; limit: string }; penaltyApplied: boolean \| null; advisory?: string; period: string`. Each ratio is a `ProgressBar` with a threshold marker at the limit, plus a `StatusBadge` (within limit → success "Sınır içinde", over → danger "Sınır aşıldı", null → neutral `domain.reactive.noData`) |
+| `ReactiveStatusCard` | `inductive: { ratio: string \| null /* decimal fraction, e.g. '0.25'; displayed as %25 via formatQuantity(_, 'percent'), M-14 */; limit: string }; capacitive: { ratio: string \| null; limit: string }; penaltyApplied: boolean \| null; advisory?: string; period: string`. Each ratio is a `ProgressBar` with a threshold marker at the limit, plus a `StatusBadge` (within limit → success "Sınır içinde", over → danger "Sınır aşıldı", null → neutral `domain.reactive.noData`) |
 | `InvoiceLineTable` | `lines: InvoiceLineView[]; currency: 'TRY'; totals: { label: string; amount: string }[]; caption: string` with `export type InvoiceLineView = { id: string; description: string; quantity: string \| null; unit: Unit \| null; unitPrice: string \| null; amount: string; kind: 'energy' \| 'distribution' \| 'tax' \| 'penalty' \| 'other' }`. Static `Table` (no pagination), numeric cells, the totals row in `tfoot`, `penalty` rows marked with a `Badge tone="danger"` text |
-| `ExportMenu` | `formats?: ('csv' \| 'excel' \| 'pdf' \| 'email')[] /* default all */; onExport(format): void \| Promise<void>; busyFormat?: string \| null; disabled?: boolean`. `DropdownMenu` with icons; while busy the trigger shows `loading` and announces `domain.export.started` |
+| `ExportMenu` | `formats?: ('csv' \| 'excel' \| 'pdf' \| 'email')[] /* default all */; onExport(format): void \| Promise<void>; busyFormat?: string \| null; disabled?: boolean`. `DropdownMenu` with icons; while busy the trigger shows `loading` and announces `domain.export.started`; blocks `onOpenChange(true)` while `busyFormat` is set (M-17: `Button loading` only swallows `click`, but Radix `DropdownMenu.Trigger` opens on `pointerdown`, so the menu would still open while busy) |
 | `JobStatusBanner` | `job: { id: string; label: string; status: 'queued' \| 'running' \| 'succeeded' \| 'failed'; progress?: number \| null; message?: string; resultAction?: { label: string; onClick(): void } } \| null; onDismiss?(): void`. `Alert` (info/running, success, danger) with `ProgressBar`; a status transition calls `announce` (assertive on failure) |
 | `DataQualityBadge` | `quality: DataQuality` with `export type DataQuality = { state: 'complete' } \| { state: 'estimated' \| 'incomplete' \| 'suspect'; reason: string; coverage?: string /* decimal percent */ }`. Renders nothing for `complete`; otherwise `Badge` (warning for estimated/incomplete, danger for suspect) with icon, text and a `Tooltip` holding `reason` and coverage. The badge is focusable (`tabIndex={0}`) so the tooltip is keyboard reachable |
 
@@ -805,7 +856,7 @@ Next integration: `src/app/layout.tsx` reads `UI_COOKIE` with `cookies()` and sp
 | `building-analyzer-picker.test` › `analyzers are filtered to the building` | After choosing building A, only A's analyzers are options |
 | › `changing building clears a foreign analyzer` | `onValueChange({ buildingId: 'b', analyzerId: null })` |
 | › `active only hides passive entries` | A passive analyzer is absent with `activeOnly` |
-| `period-filter-bar.test` › `presets are computed from the injected today` | `today='2026-09-17'`: "Son 7 gün" → `{ from: '2026-09-11', to: '2026-09-17' }`; "Geçen yıl" → `{ from: '2025-01-01', to: '2025-12-31' }`; "Geçen ay" → `{ from: '2026-08-01', to: '2026-08-31' }` |
+| `period-filter-bar.test` › `presets are computed from the injected today` | `today='2026-09-17'`: "Son 7 gün" → `{ from: '2026-09-11', to: '2026-09-17' }`; "Geçen yıl" → `{ from: '2025-01-01', to: '2025-12-31' }`; "Geçen ay" → `{ from: '2026-08-01', to: '2026-08-31' }`; "Son 6 ay" → `{ from: '2026-04-01', to: '2026-09-17' }` (M-14) |
 | › `apply is a button that reports busy` | `applying` → `aria-busy` |
 | `metric-card.test` › `delta colour follows sentiment, not direction` | `direction:'up', sentiment:'bad'` → delta element has class `text-danger` and an up-arrow `svg` |
 | › `null value is an em dash and quality badge shows` | `—` plus `getByText('Tahmini')` |
@@ -827,17 +878,21 @@ Next integration: `src/app/layout.tsx` reads `UI_COOKIE` with `cookies()` and sp
 
 **Interfaces** — Consumes: everything merged. Produces: evidence, the checklist file and the handoff. Fixes go to the owning task's files; the controller dispatches each fix as `f5/fix-<n>`.
 
-- [ ] **Step 1: Full verification block** (from `09` §F5, verbatim plus the build), run on the merged phase tip in `/home/personal/ekokod-f5-phase/web`. Record the output:
+- [ ] **Step 1: Full verification block** (from `09` §F5, verbatim plus the build), run on the merged phase tip in `/home/personal/ekokod-f5-phase/web`. Record the output. Fix re-runs (not this final evidence run) use `STORIES=<affected prefixes>` then `pnpm exec playwright test --last-failed`; only the run below is the full sweep (I-18):
 ```bash
 pnpm install --frozen-lockfile
 pnpm lint && pnpm typecheck && pnpm test --maxWorkers=2
 pnpm run check:contrast
 pnpm run check:i18n-parity
-NODE_OPTIONS=--max-old-space-size=4096 pnpm storybook:build
-pnpm exec playwright test tests/a11y/
-NODE_OPTIONS=--max-old-space-size=4096 pnpm build
+pnpm audit --audit-level=high   # I-5
+flock /home/personal/.ekokod-f5-heavy.lock env NODE_OPTIONS=--max-old-space-size=3072 pnpm storybook:build
+flock /home/personal/.ekokod-f5-heavy.lock env SB_PORT=6007 pnpm exec playwright test tests/a11y/
+flock /home/personal/.ekokod-f5-heavy.lock env NODE_OPTIONS=--max-old-space-size=3072 pnpm build
 git grep -nE "#[0-9a-fA-F]{6}\b" -- 'web/src/**' ':!web/src/styles/tokens.css' ':!web/src/styles/*.test.ts'   # expect no output
-pgrep -fa "next dev|storybook dev|vitest|http.server 6007" || echo "no servers left running"
+pgrep -fa "ekokod-f5.*(next dev|storybook dev|vitest)|http.server 60[0-9][0-9]" || echo "no servers left running"
+git diff --stat 58597ec..HEAD -- '*.go' go.mod go.sum   # expect no output: F5 touched no Go (I-17)
+make lint build web-lint web-test web-build web-audit   # I-17: the 09 phase-end gate's web part
+flock /home/personal/.ekokod-f5-heavy.lock make test    # I-17, I-2: only while F4 is not running Docker tests; if memory doesn't allow it, record the last F3 SHA that proved it instead
 ```
 - [ ] **Step 2: Run the §11 checklist** and write `design-system/bcem-energy/checklists/f5-predelivery.md`. Each item is a checked box followed by the evidence (command, test name or screenshot path) that proves it:
 
@@ -861,7 +916,7 @@ pgrep -fa "next dev|storybook dev|vitest|http.server 6007" || echo "no servers l
 
 Items that cannot be automated (the ≥ 8 px spacing between touch targets, visual quality of both themes) are checked by the controller from the Storybook build screenshots, and the file says so.
 
-- [ ] **Step 3: Handoff** `docs/superpowers/handoffs/2026-09-f5-design-system.md` (not `HANDOFF_NEXT_SESSION.md`, which the F4 track owns). Contents: state and SHAs; rulings D1–D24; open questions Q1–Q7; what F6 must do (sync `ekokod_ui` to the user profile, replace the `(app)` placeholder user, role-filter `navigation`, the generated OpenAPI client plus TanStack Query, the `BuildingAnalyzerPicker` remembered-selection store, Calendar placement Q6); what F8 must do (map F4's invoice DTO → `InvoiceLineView`); what F12 must do (public-site locale routing D8, spacious scale, glassmorphism allowed there only). Include the environment and resource rules.
+- [ ] **Step 3: Handoff** `docs/superpowers/handoffs/2026-09-f5-design-system.md` (not `HANDOFF_NEXT_SESSION.md`, which the F4 track owns). Contents: state and SHAs; rulings D1–D26; open questions Q1–Q7; instruct every future UI plan's Global Constraints to say "read `MASTER.md` **then `OVERRIDES.md`**" (M-9); the supported-browser floor, Chrome/Edge ≥123, Firefox ≥120, Safari ≥17.5, for F15 and the PO (M-18); flag the expected merge of `.github/workflows/ci.yml` and `Makefile` with `phase/f4-billing-engine` (M-13); what F6 must do (sync `ekokod_ui` to the user profile, replace the `(app)` placeholder user, role-filter `navigation`, the generated OpenAPI client plus TanStack Query, the `BuildingAnalyzerPicker` remembered-selection store, Calendar placement Q6, the card-grid stagger D26); what F8 must do (map F4's invoice DTO → `InvoiceLineView`); what F12 must do (public-site locale routing D8, spacious scale, glassmorphism allowed there only). Include the environment and resource rules.
 - [ ] **Step 4: Commit** `docs(f5): task-8 — acceptance evidence, §11 pre-delivery checklist, F6 handoff` `<TRAILERS>`.
 
 ## Carried forward — explicitly NOT F5
@@ -891,13 +946,13 @@ Skill + `MASTER.md` → T1 Step 1 · tokens into Tailwind, no raw hex → T1 · 
 
 ### Type-consistency check (names used across tasks)
 
-`Unit`, `formatNumber`, `formatQuantity`, `unitSymbol` (T1 → T3, T4, T5, T7) · `renderWithProviders`, `expectNoAxeViolations`, `setMatchMedia` (T2 → all) · `Button`, `IconButton`, `Tooltip` (T2 → T3–T7) · `Option`, `FieldProps` (T3) · `DataTable`, `getExportRows`, `toCsv`, `useAnnounce`, `Drawer`, `DropdownMenu` item union (T4 → T5–T7) · `ChartSeries`, `SeriesKind`, `BaseChartProps`, `chartAnimation`, `usePrefersReducedMotion` (T5) · `UiPreferences`, `parseUiPreferences`, `htmlAttributes`, `UI_COOKIE`, `navigation`, `setLocale` (T6) · `InvoiceLineView`, `DataQuality`, `MapMarker` (T7). Every name appears with one spelling.
+`Unit`, `formatNumber`, `formatQuantity`, `unitSymbol`, `formatDate`, `formatMonth` (T1 → T3, T4, T5, T6, T7) · `renderWithProviders`, `expectNoAxeViolations`, `setMatchMedia`, `setMockPathname`, `mockRouter` (T2 → all) · `Button`, `IconButton`, `Tooltip`, `Popover` (T2 → T3–T7, I-6) · `Option`, `FieldProps` (T3) · `DataTable`, `getExportRows`, `toCsv`, `useAnnounce`, `Drawer`, `BreadcrumbItem`, `DropdownMenuItem` (T4 → T5–T7, M-4) · `ChartSeries`, `SeriesKind`, `BaseChartProps`, `chartAnimation`, `usePrefersReducedMotion` (T5) · `UiPreferences`, `useUiPreferences`, `parseUiPreferences`, `htmlAttributes`, `UI_COOKIE`, `navigation`, `setLocale` (T6) · `InvoiceLineView`, `DataQuality`, `MapMarker`, `Granularity` (T7, M-4). Every name appears with one spelling.
 
 ### Known risks, stated rather than hidden
 
 1. **The spec contradicts itself in three places**: its light palette fails its own contrast rule (D3, Q4), the skill's `MASTER.md` contradicts 07 wholesale (D1; a future phase reading only `MASTER.md` would build slate glassmorphism in Fira), and the appendix catalogue is not importable (D7; every later UI phase reconciles its namespace).
 2. **Toolchain compatibility is unverified**: Storybook 10.6 nextjs-vite with Next 15.5, vite 8 and Tailwind 4.3. If `storybook build` cannot process Tailwind v4 through PostCSS, add `@tailwindcss/vite` in `viteFinal` (T2) and record it. If the Playwright 1.63 browser revision differs from `chromium-1243`, `playwright install chromium` downloads about 150 MB.
-3. **`light-dark()` raises the browser floor** to Safari 17.5 / Chrome 123 / Firefox 120 (D4). No supported-browser matrix exists in the spec.
+3. **`light-dark()` raises the browser floor** to Safari 17.5 / Chrome 123 / Firefox 120 (D4). No supported-browser matrix exists in the spec; T8's handoff records it for F15 and the PO (M-18).
 4. **Glyph coverage for ₺ and ₂** in Lexend and JetBrains Mono is unknown until T1 Step 6. Missing glyphs fall back to the system font. The T1 report states which.
-5. **Sweep cost**: roughly 150 stories × 4 combinations of axe runs, plus keyboard, touch and shell specs. Expect 8–15 min at 2 workers. Scoped `STORIES=` runs keep per-task gates short.
+5. **Sweep cost**: the plan's own story lists add up to roughly 250–300 stories across T3–T7, at least 4× that in raw axe page loads if every story ran the full theme×locale matrix. I-18 scopes the full 2×2 to each component's first story and every `open`-tagged story, with other stories running only the `light/tr`/`dark/en` diagonal — expect 15–25 min at 2 workers for the full sweep (T8, CI). Scoped `STORIES=` runs, plus `--last-failed` on fix re-runs, keep per-task gates and fix rounds short.
 6. **Recharts in jsdom** needs `initialDimension` and a `ResizeObserver` stub. SVG-level assertions stay minimal. Behaviour is asserted through `_theme.ts`, the frame, the legend, the tooltip and the table.
