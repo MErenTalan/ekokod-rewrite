@@ -1,0 +1,55 @@
+{
+  "name": "reset_without_event",
+  "doc": "02 §3.2/removed-behaviour 1: a negative register difference with no covering reset row is negative_delta-suspect — active_import is nil, never the negative number or the raw end value — while a sound register (t1_import) in the same period still derives normally (R58: suspicion is per register).",
+  "input": {
+    "window": {
+      "from": "2025-04-02T00:00:00+03:00",
+      "to": "2025-04-02T01:00:00+03:00"
+    },
+    "readings": [
+      {
+        "ts": "2025-04-02T00:00:00+03:00",
+        "kind": "load_profile",
+        "values": {
+          "active_import": "1000",
+          "t1_import": "400"
+        }
+      },
+      {
+        "ts": "2025-04-02T01:00:00+03:00",
+        "kind": "load_profile",
+        "values": {
+          "active_import": "980",
+          "t1_import": "410"
+        }
+      }
+    ],
+    "resets": []
+  },
+  "want": {
+    "emitted": true,
+    "values": {
+      "active_import": null,
+      "reactive_inductive_import": null,
+      "reactive_capacitive_import": null,
+      "t1_import": "10",
+      "t2_import": null,
+      "t3_import": null,
+      "active_export": null,
+      "reactive_inductive_export": null,
+      "reactive_capacitive_export": null,
+      "t1_export": null,
+      "t2_export": null,
+      "t3_export": null
+    },
+    "suspect": {
+      "active_import": {
+        "reason": "negative_delta",
+        "delta": "-20"
+      }
+    },
+    "inductive_ratio": null,
+    "capacitive_ratio": null,
+    "max_demand_kw": null
+  }
+}
