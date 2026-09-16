@@ -1,0 +1,175 @@
+{
+  "description": "export 5 kWh \u003e 1 exempts",
+  "input": {
+    "PeriodKey": "2026-01",
+    "Period": {
+      "From": "2026-01-01T00:00:00+03:00",
+      "To": "2026-01-31T00:00:00+03:00"
+    },
+    "Days": 30,
+    "Tariff": {
+      "ID": "00000000-0000-0000-0000-000000000000",
+      "CompanyID": "00000000-0000-0000-0000-000000000000",
+      "BuildingID": null,
+      "Name": null,
+      "EffectiveFrom": "2025-01-01T00:00:00Z",
+      "Currency": "TRY",
+      "EnergyType": "grid_energy",
+      "VoltageLevel": "lv",
+      "UserGroup": "commercial",
+      "PriceType": "single_time",
+      "Term": "binomial",
+      "SupplyCompany": "incumbent",
+      "SingleTimePrice": "2.5",
+      "T1Price": null,
+      "T2Price": null,
+      "T3Price": null,
+      "OverusePrice": "3.5",
+      "OveruseThresholdKwhPerDay": null,
+      "DistributionCost": "0.5",
+      "ReactivePowerPrice": "2",
+      "GreenEnergyPrice": null,
+      "GreenEnergyDistributionCost": null,
+      "ContractedPowerKw": "100",
+      "PowerUnitPrice": "40",
+      "GenerationUsage": "none",
+      "GenerationPricePerKwh": null,
+      "VatRate": "20",
+      "UsePtfYekdem": false,
+      "KbkEnergy": null,
+      "KbkT1": null,
+      "KbkT2": null,
+      "KbkT3": null,
+      "KbkPowerPrice": null,
+      "KbkOverusePrice": null,
+      "KbkReactivePower": null,
+      "KbkDistributionCostTlPerKwh": null,
+      "UseManualYekdem": false,
+      "PowerPriceSource": "",
+      "ReactivePriceSource": "",
+      "DistributionPriceSource": "",
+      "CreatedBy": null,
+      "CreatedAt": "0001-01-01T00:00:00Z",
+      "UpdatedAt": "0001-01-01T00:00:00Z",
+      "DeletedAt": null
+    },
+    "Taxes": null,
+    "ExtraCharges": null,
+    "Params": {
+      "EffectiveFrom": "2000-01-01T00:00:00Z",
+      "ReactivePenaltyBasis": "whole_quantity",
+      "ReactiveExemptBelowKw": "9",
+      "ReactiveExemptTerms": [
+        "monomial"
+      ],
+      "ReactiveExemptUserGroups": [
+        "residential",
+        "lighting"
+      ],
+      "ReactiveGenerationExemptKwh": "1",
+      "ReactiveBands": [
+        {
+          "MinKw": "9",
+          "MaxKw": "30",
+          "Inductive": "0.33",
+          "Capacitive": "0.2"
+        },
+        {
+          "MinKw": "30",
+          "MaxKw": null,
+          "Inductive": "0.2",
+          "Capacitive": "0.15"
+        }
+      ],
+      "TieringGroups": {
+        "commercial": "30",
+        "residential": "8"
+      },
+      "TieringMode": "split_at_threshold",
+      "TieringVoltageLevels": [
+        "lv"
+      ],
+      "TieringSupplyCompanies": [
+        "incumbent"
+      ],
+      "PTFMissingHourTolerance": "0.02",
+      "DemandOverrunMultiplier": "2",
+      "MoneyRoundingMode": "half_up",
+      "CreatedAt": "0001-01-01T00:00:00Z"
+    },
+    "Quantities": {
+      "ActiveImport": "1000",
+      "T1": null,
+      "T2": null,
+      "T3": null,
+      "ReactiveInductive": "500",
+      "ReactiveCapacitive": "100",
+      "ActiveExport": "5",
+      "ActiveExportKnownSum": "5",
+      "ActiveExportPartial": false,
+      "MaxDemandKw": "90",
+      "IndexStart": null,
+      "IndexEnd": null
+    },
+    "InstalledPowerKw": "50",
+    "Pricing": null
+  },
+  "expected": {
+    "lines": [
+      {
+        "code": "energy_low_tier",
+        "quantity": "900",
+        "unit_price": "2.5",
+        "rate_pct": null,
+        "amount": "2250"
+      },
+      {
+        "code": "energy_high_tier",
+        "quantity": "100",
+        "unit_price": "3.5",
+        "rate_pct": null,
+        "amount": "350"
+      },
+      {
+        "code": "distribution",
+        "quantity": "1000",
+        "unit_price": "0.5",
+        "rate_pct": null,
+        "amount": "500"
+      },
+      {
+        "code": "power",
+        "quantity": "100",
+        "unit_price": "40",
+        "rate_pct": null,
+        "amount": "4000"
+      },
+      {
+        "code": "vat",
+        "quantity": null,
+        "unit_price": null,
+        "rate_pct": "20",
+        "amount": "1420"
+      }
+    ],
+    "net_consumption": "1000",
+    "low_tier_kwh": "900",
+    "high_tier_kwh": "100",
+    "energy_cost": "2600",
+    "distribution_cost": "500",
+    "power_cost": "4000",
+    "demand_overrun_cost": "0",
+    "reactive_penalty": "0",
+    "extra_charges_cost": "0",
+    "other_taxes_cost": "0",
+    "vat_base": "7100",
+    "vat_cost": "1420",
+    "generation_credit": "0",
+    "total_cost": "8520",
+    "flags": [],
+    "tiered_applied": true,
+    "reactive_applied": false,
+    "reactive_exempt": true,
+    "demand_data_available": true
+  }
+}
