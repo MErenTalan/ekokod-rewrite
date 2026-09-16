@@ -648,9 +648,15 @@ func TestBillingMonthlyResetBeforeLoadProfileLookback(t *testing.T) {
 // TestBillingResetPriorsAreLoadProfileOnly is C2's unit half (review probe
 // P2). Daily level: lp 00:00=1000, lp 10:00=1100 (old meter), current_index
 // 11:00=1500 (a decoy that must never be treated as a prior), reset
-// 12:00=0, lp 24:00=200. True = (1100-1000) + (200-0) = 300. Mutation (a)
-// (priors := a current_index Range) makes the decoy the "before_reset"
-// value instead of the real 1100, producing 700 unflagged.
+// 12:00=0, lp 24:00=200. True = (1100-1000) + (200-0) = 300.
+//
+// m-6 (final fix X review): mutation (a) (priors := a current_index Range)
+// does NOT produce "700 unflagged" under the current code — that claim was
+// stale. It makes the reset segment's own before/after values disagree
+// (the decoy 1500 in place of the real 1100 prior), which Derive reports as
+// a suspect meter_reset (nil values + Suspicion), not a wrong plain number.
+// The assertions below still catch the mutation either way: Suspect is no
+// longer empty and the value is no longer "300".
 func TestBillingResetPriorsAreLoadProfileOnly(t *testing.T) {
 	loc := istanbulLoc(t)
 	day := time.Date(2026, 3, 10, 0, 0, 0, 0, loc)
@@ -1084,6 +1090,15 @@ func TestMonthlyFallsBackToDailyWhenNeitherBillingNorLoadProfileCover(t *testing
 // half-open window — it belongs to the NEXT bucket) — never the
 // current_index decoy (999, wrong kind, always excluded regardless of
 // level) and never daily's 20 or billing's 15.
+//
+// m-4 (final fix X review): the daily and billing decoys here no longer
+// prove the kind exclusion by themselves — loadAnalyzerBoundaryData never
+// fetches daily- or billing-kind readings for MaxDemand at Hourly at all
+// now (they were dead reads once R101 excluded both kinds there), so a
+// regression in maxDemandInWindow's own kind filter is no longer provable
+// through this fixture. TestMaxDemandInWindowExcludesDisallowedKindsPerLevel
+// (billing_internal_test.go) is the white-box test that still pins it
+// directly.
 func TestBillingRatiosAndMaxDemandFromDerivedValues(t *testing.T) {
 	h := billingT0
 	analyzerID := uuid.New()
@@ -1596,6 +1611,16 @@ func TestMonthlyEndSideDailyStalenessYieldsNoRow(t *testing.T) {
 // positive control, pinning the boundary itself on BOTH sides: a daily
 // reading exactly DailySnapshotTolerance (36h) before its own bound still
 // counts as covering ("<=", not "<"), on the START side as well as the END.
+//
+// m-3 (final review B I-2 / final fix X review): the offset here is a
+// LITERAL 36*time.Hour, never `-consumption.DailySnapshotTolerance` — the
+// self-referential shape a mutation to the constant's own value would move
+// in lockstep with, so the test could never actually pin what the constant
+// IS, only that the code uses it consistently. TestDailySnapshotTolerance
+// IsThirtySixHours below pins the literal value directly; a mutation to
+// DailySnapshotTolerance (35h or 24h) makes THIS test's fixed 36h-old
+// reading fall outside the (now narrower) tolerance on both sides, so no
+// row is emitted at all and `require.Len(rows, 1)` below goes red.
 func TestMonthlyDailyCoversWhenBothBoundsAreExactlyAtTolerance(t *testing.T) {
 	loc := istanbulLoc(t)
 	jan1 := time.Date(2026, 1, 1, 0, 0, 0, 0, loc)
@@ -1604,8 +1629,8 @@ func TestMonthlyDailyCoversWhenBothBoundsAreExactlyAtTolerance(t *testing.T) {
 
 	readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
 		model.ReadingKindDaily: {
-			readingRow(analyzerID, jan1.Add(-consumption.DailySnapshotTolerance), model.ReadingKindDaily, map[string]string{"active_import": "1000"}),
-			readingRow(analyzerID, feb1.Add(-consumption.DailySnapshotTolerance), model.ReadingKindDaily, map[string]string{"active_import": "6000"}),
+			readingRow(analyzerID, jan1.Add(-36*time.Hour), model.ReadingKindDaily, map[string]string{"active_import": "1000"}),
+			readingRow(analyzerID, feb1.Add(-36*time.Hour), model.ReadingKindDaily, map[string]string{"active_import": "6000"}),
 		},
 	}}
 	b := newBilling(t, readings)
@@ -1621,6 +1646,14 @@ func TestMonthlyDailyCoversWhenBothBoundsAreExactlyAtTolerance(t *testing.T) {
 	require.Len(t, rows, 1)
 	require.Equal(t, energy.KindDaily, rows[0].Source)
 	require.Equal(t, "5000", rows[0].Values[energy.ActiveImport].String())
+}
+
+// TestDailySnapshotToleranceIsThirtySixHours is m-3's own constant pin: the
+// literal 36h TestMonthlyDailyCoversWhenBothBoundsAreExactlyAtTolerance uses
+// as its own offset must actually equal the constant it is meant to be
+// pinning.
+func TestDailySnapshotToleranceIsThirtySixHours(t *testing.T) {
+	require.Equal(t, 36*time.Hour, consumption.DailySnapshotTolerance)
 }
 
 // --- I-C: R96 explicitly ALLOWS a period to start and end on different -----
@@ -1679,9 +1712,18 @@ func TestBillingMixesLoadProfileStartWithDailyEndUnderR96(t *testing.T) {
 // half-open window) and daily (10) are both small decoys — yet at Hourly,
 // energy.MaxDemandKindsFor allows load_profile only, so 500 must NOT win
 // even though it is the unique maximum in the window: the answer is 5 (the
-// one load_profile reading actually inside [h, h+1h)). Mutation "use the
-// unqualified MaxDemandKinds (or MaxDemandKindsFor at every level) instead
-// of MaxDemandKindsFor(level)" makes this 500.
+// one load_profile reading actually inside [h, h+1h)).
+//
+// m-4 (final fix X review): the daily and billing decoys no longer prove
+// the kind exclusion by themselves — loadAnalyzerBoundaryData never
+// fetches daily- or billing-kind readings for MaxDemand at Hourly at all
+// now (dead reads once R101 excluded both kinds there), so the "use the
+// unqualified MaxDemandKinds instead of MaxDemandKindsFor(level)" mutation
+// this comment used to name no longer makes this 500: neither decoy is
+// ever loaded to win in the first place.
+// TestMaxDemandInWindowExcludesDisallowedKindsPerLevel
+// (billing_internal_test.go) is the white-box test that still pins that
+// mutation directly.
 func TestBillingHourlyMaxDemandExcludesBillingKindEvenAsTheUniqueMaximum(t *testing.T) {
 	h := billingT0
 	analyzerID := uuid.New()
@@ -1764,8 +1806,17 @@ func TestBillingMonthlyMaxDemandFromBillingKindIsTheUniqueMaximum(t *testing.T) 
 // month's own stamped peak (billing-kind, 500) must not land inside a
 // single day even when it sits inside that day's own window, while a
 // daily-kind reading's peak (20, that DAY's own stamped maximum) still
-// counts. Mutation "use MaxDemandKinds (or MaxDemandKindsFor at every
-// level) instead of MaxDemandKindsFor(level)" makes this 500.
+// counts.
+//
+// m-4 (final fix X review): the billing decoy no longer proves the kind
+// exclusion by itself — loadAnalyzerBoundaryData never fetches billing-kind
+// readings for MaxDemand at Daily at all now (a dead read once R101
+// excluded that kind there), so the "use MaxDemandKinds instead of
+// MaxDemandKindsFor(level)" mutation this comment used to name no longer
+// makes this 500: the decoy is never loaded to win in the first place.
+// TestMaxDemandInWindowExcludesDisallowedKindsPerLevel
+// (billing_internal_test.go) is the white-box test that still pins that
+// mutation directly.
 func TestBillingDailyMaxDemandExcludesBillingKindRow(t *testing.T) {
 	loc := istanbulLoc(t)
 	day := time.Date(2026, 1, 10, 0, 0, 0, 0, loc)
