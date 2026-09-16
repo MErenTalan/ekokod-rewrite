@@ -41,8 +41,12 @@ const maxBackfillSpan = 5 * 365 * 24 * time.Hour
 
 // aggregateHorizon is how far back the consumption aggregates reach without
 // a consumption.refresh run: 04-data-model.md's `start_offset => interval
-// '30 days'` (R17, the F1 start_offset fact).
-const aggregateHorizon = 30 * 24 * time.Hour
+// '30 days'` (R17, the F1 start_offset fact), minus one day of margin —
+// the same amendment R100(6) makes to internal/ingest's own enqueue
+// threshold (final review A M-3), so this informational message never
+// undersells what a backfill older than the ingest side's own threshold
+// already gets refreshed.
+const aggregateHorizon = 29 * 24 * time.Hour
 
 // Windows splits [from, to) into consecutive half-open windows of at most
 // max, aligned to Istanbul-local midnight so a window never splits a local
