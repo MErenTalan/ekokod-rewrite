@@ -7,8 +7,17 @@ import "github.com/shopspring/decimal"
 // ts <= bound". Either may be nil. A negative difference is left suspect
 // with ReasonNegativeDelta; applying reset evidence is Derive's job (Task 2).
 //
+// Precondition: !end.TS.Before(start.TS). A caller must select start and end
+// in chronological order; Difference does not infer intent from a reversed
+// pair, and treats one as "no row" (Emitted: false) rather than emitting a
+// negative-delta suspicion that a caller bug, not a meter event, produced.
+//
 // Difference never rounds (R79) and never mutates its inputs: it only reads
 // start and end's Values maps and produces new decimal.Decimal values.
+//
+// !Emitted always leaves Values and Suspect nil, never an empty non-nil
+// map: a caller must be able to tell "no row" apart from "a row with
+// nothing suspect" without inspecting Emitted at all.
 func Difference(w Window, start, end *Reading) Derivation {
 	d := Derivation{Window: w}
 
@@ -20,6 +29,12 @@ func Difference(w Window, start, end *Reading) Derivation {
 	}
 	if start.TS.Equal(end.TS) && start.Kind == end.Kind {
 		// The same reading was selected for both bounds: still no row.
+		return d
+	}
+	if end.TS.Before(start.TS) {
+		// Boundaries out of order is a caller bug (see precondition above),
+		// not a meter event: emit nothing rather than a negative-delta
+		// suspicion that would write a spurious anomaly downstream.
 		return d
 	}
 

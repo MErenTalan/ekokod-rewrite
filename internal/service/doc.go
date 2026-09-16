@@ -1,5 +1,5 @@
 // Package service is the root of the service layer F3 introduces above
-// internal/domain: internal/service/consumption (Tasks 7-9, 11) and
+// internal/domain: internal/service/consumption (Tasks 7-9, 11a, 11b) and
 // internal/service/loadprofile (Task 10). It sits between internal/api and
 // internal/domain (03 §2.1, §2.2; R75, R76):
 //
@@ -7,9 +7,11 @@
 //
 // A service package may import internal/domain/..., internal/store,
 // internal/job and internal/platform/.... It must NOT import internal/api or
-// internal/ingest. internal/store/... and internal/integration/... must not
-// import internal/service/... — enforced by
+// internal/ingest, directly or transitively — enforced by
 // internal/arch/arch_test.go's TestServiceLayerImportBoundaries.
+// internal/store/... and internal/integration/... must not import
+// internal/service/... — enforced by
+// TestStoreAndIntegrationDoNotImportAPIOrService.
 //
 // Every service method that touches tenant data takes ctx first and
 // store.Scope second, validated with Scope.Valid() before any I/O — the same

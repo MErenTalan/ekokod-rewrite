@@ -118,9 +118,12 @@ const (
 
 // Derivation is the result for one window.
 //
-// Emitted is false for §3.1's "no row" cases: a missing boundary reading, or
-// a start and end that are the same reading. A caller must not turn
-// !Emitted into a zero row.
+// Emitted is false for §3.1's "no row" cases: a missing boundary reading, a
+// start and end that are the same reading, or boundaries passed in reversed
+// order. A caller must not turn !Emitted into a zero row. When Emitted is
+// false, Values and Suspect are always nil — never a non-nil empty map — so
+// a caller can distinguish "no row" from "a row with nothing suspect" from
+// the maps alone.
 type Derivation struct {
 	Window  Window
 	Emitted bool

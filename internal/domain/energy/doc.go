@@ -2,7 +2,9 @@
 // meter-reading register contract, the Istanbul-local aggregation buckets,
 // and the §3.1 core differencing operation.
 //
-// It is pure: no I/O, no clock, no package-level state. The current instant,
+// It is pure: no I/O, no clock, no package-level mutable state (allRegisters
+// is a package-level slice, but it is never mutated after init and is only
+// ever exposed through AllRegisters' fresh copy). The current instant,
 // the location and every reading are parameters — never read from the
 // environment. Enforced by internal/arch/arch_test.go
 // (TestDomainHasNoProjectImports, TestDomainHasNoIOImports).
