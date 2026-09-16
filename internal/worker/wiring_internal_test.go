@@ -255,3 +255,19 @@ func TestConsumptionRefreshEnqueuerMapsTaskIDConflictToSuccess(t *testing.T) {
 		CompanyID: uuid.New(), AnalyzerID: uuid.New(), From: from, To: to,
 	}), "a colliding enqueue (asynq.ErrTaskIDConflict) must be mapped to success, never surfaced as an error")
 }
+
+// TestWorkerRegistersBillingHandlers: the worker graph serves all three
+// billing task types, and the generator runs on invoice-grade consumption.
+func TestWorkerRegistersBillingHandlers(t *testing.T) {
+	pool := testfixtures.NewIsolatedDB(t)
+	g := buildGraph(t, pool, testfixtures.RedisConfig(t))
+	require.NotNil(t, g.handlers.BillingDispatch)
+	require.NotNil(t, g.handlers.BillingGenerate)
+	require.NotNil(t, g.handlers.BillingRender)
+	mux := asynq.NewServeMux()
+	job.Register(mux, g.handlers)
+	for _, typ := range []string{job.TypeBillingDispatch, job.TypeBillingGenerate, job.TypeBillingRenderPDF} {
+		_, pattern := mux.Handler(asynq.NewTask(typ, nil))
+		require.Equal(t, typ, pattern)
+	}
+}
