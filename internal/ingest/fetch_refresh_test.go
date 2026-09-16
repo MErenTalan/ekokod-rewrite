@@ -18,8 +18,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	goredis "github.com/redis/go-redis/v9"
 	"github.com/jackc/pgx/v5/pgxpool"
+	goredis "github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
