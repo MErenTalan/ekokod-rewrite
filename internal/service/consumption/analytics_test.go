@@ -297,7 +297,7 @@ func TestAnalyticsValidatesBeforeAnyIO(t *testing.T) {
 		{"invalid scope", store.Scope{}, consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{uuid.New()}, Level: energy.Hourly, Range: validRange}},
 		{"empty analyzer ids", validScope, consumption.SeriesRequest{AnalyzerIDs: nil, Level: energy.Hourly, Range: validRange}},
 		{"invalid range", validScope, consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{uuid.New()}, Level: energy.Hourly, Range: store.TimeRange{From: from, To: from}}},
-		{"over MaxBuckets", validScope, consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{uuid.New()}, Level: energy.Hourly, Range: store.TimeRange{From: from, To: from.Add(time.Duration(consumption.MaxBuckets+1) * time.Hour)}}},
+		{"over MaxCells", validScope, consumption.SeriesRequest{AnalyzerIDs: newUUIDs(21), Level: energy.Hourly, Range: store.TimeRange{From: from, To: from.Add(2381 * time.Hour)}}},
 		{"duplicate analyzer id (I-5's probe)", validScope, consumption.SeriesRequest{AnalyzerIDs: duplicateAnalyzerID(), Level: energy.Hourly, Range: validRange}},
 		{"51 analyzer ids", validScope, consumption.SeriesRequest{AnalyzerIDs: newUUIDs(consumption.MaxAnalyzersPerRequest + 1), Level: energy.Hourly, Range: validRange}},
 		{"401-day span", validScope, consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{uuid.New()}, Level: energy.Yearly, Range: store.TimeRange{From: from, To: from.Add(401 * 24 * time.Hour)}}},
@@ -313,29 +313,48 @@ func TestAnalyticsValidatesBeforeAnyIO(t *testing.T) {
 	}
 }
 
-// TestExactlyMaxBucketsAtHourlyNowHitsMaxRequestSpanFirst documents R99's
-// interaction with I-6's original MaxBuckets positive control: MaxBuckets
-// (10000) hourly buckets is a 10000h span, which is now WIDER than
-// MaxRequestSpan (400d = 9600h) — the tightest of the two checks always
-// wins. So a request that used to be I-6's accepted boundary case is now
-// refused by the span cap before bucketCountExceeds is even reached; the
-// real positive control for what a caller can actually request is
-// TestAnalyticsAcceptsExactlyMaxRequestSpan below. MaxBuckets stays in
-// force as defence-in-depth (R99 does not remove it), it is just no longer
-// reachable at any level within MaxRequestSpan.
-func TestExactlyMaxBucketsAtHourlyNowHitsMaxRequestSpanFirst(t *testing.T) {
+// --- R104(2): MaxCells replaces MaxBuckets -----------------------------
+
+// TestAnalyticsAcceptsExactlyMaxCells is R104(2)'s positive control on the
+// Analytics path (the Billing-side twin is
+// billing_test.go's TestBillingAcceptsExactlyMaxCells): 50 analyzers
+// (MaxAnalyzersPerRequest) times 1000 Hourly buckets = exactly MaxCells
+// (50000) cells must not be refused.
+func TestAnalyticsAcceptsExactlyMaxCells(t *testing.T) {
+	a, err := consumption.NewAnalytics(consumption.AnalyticsDeps{Analytics: fakeAnalytics{}, Log: testLog(t)})
+	require.NoError(t, err)
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+	from, to := cellsWindow(1000)
+	req := consumption.SeriesRequest{
+		AnalyzerIDs: newUUIDs(consumption.MaxAnalyzersPerRequest),
+		Level:       energy.Hourly,
+		Range:       store.TimeRange{From: from, To: to},
+	}
+	require.Equal(t, consumption.MaxAnalyzersPerRequest*1000, consumption.MaxCells, "the fixture must land exactly on MaxCells")
+	rows, err := a.Consumption(ctx, scope, req)
+	require.NoError(t, err)
+	require.Empty(t, rows)
+}
+
+// TestAnalyticsRefusesOverMaxCells is R104(2)'s own probe on the Analytics
+// path, replacing the deleted MaxBuckets test: 21 analyzers times 2381
+// Hourly buckets is exactly MaxCells+1 (50001) cells — refused before any
+// I/O against noAnalytics, which panics on any repository call.
+func TestAnalyticsRefusesOverMaxCells(t *testing.T) {
 	a, err := consumption.NewAnalytics(consumption.AnalyticsDeps{Analytics: noAnalytics{}, Log: testLog(t)})
 	require.NoError(t, err)
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
-	from := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+	from, to := cellsWindow(2381)
 	req := consumption.SeriesRequest{
-		AnalyzerIDs: []uuid.UUID{uuid.New()},
+		AnalyzerIDs: newUUIDs(21),
 		Level:       energy.Hourly,
-		Range:       store.TimeRange{From: from, To: from.Add(time.Duration(consumption.MaxBuckets) * time.Hour)},
+		Range:       store.TimeRange{From: from, To: to},
 	}
+	require.Equal(t, consumption.MaxCells+1, 21*2381, "the fixture must land exactly one over MaxCells")
 	_, err = a.Consumption(ctx, scope, req)
-	require.ErrorIs(t, err, consumption.ErrInvalidRequest, "10000h > MaxRequestSpan's 9600h: refused before any AnalyticsRepository call")
+	require.ErrorIs(t, err, consumption.ErrInvalidRequest, "must be refused before any AnalyticsRepository call: noAnalytics panics on any call")
 }
 
 // duplicateAnalyzerID reproduces final review A's I-5 probe verbatim: the

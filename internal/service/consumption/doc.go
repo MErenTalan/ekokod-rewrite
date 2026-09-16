@@ -56,28 +56,81 @@ var ErrInvalidRequest = errors.New("consumption: invalid request")
 // caller that only checks the store-level sentinel still recognises it.
 var ErrConflict = fmt.Errorf("consumption: %w", store.ErrConflict)
 
-// MaxBuckets bounds a single request's bucket count at its Level: a request
-// whose [Range.From, Range.To) would expand past this many buckets fails
-// ErrInvalidRequest before any I/O (I-17) — a runaway range is a client
-// error, not a slow query.
-const MaxBuckets = 10000
+// MaxCells bounds a single request's total cell count — len(AnalyzerIDs)
+// times the number of buckets at Level over the request's Range — validated
+// before any I/O on both consumption paths (R104(2), amending R99).
+// MaxBuckets (bucket count alone, no analyzer factor) is deleted: final
+// review X found it unreachable at any level once MaxRequestSpan existed
+// (a 9600h/400d span never produces more than 9600 Hourly buckets, the
+// worst case), while the PRODUCT R99 left uncapped was still large enough
+// to hurt — the review measured one analyzer's own 400-day Hourly request
+// retaining ~14 MB of []Row, so a legal 50-analyzer request at the same
+// span retains on the order of 0.7-1.4 GB before a caller can even
+// serialise it. MaxCells is checked with the SAME shared predicate on both
+// Billing.Consumption and Analytics.Consumption, before either makes a
+// single repository call.
+const MaxCells = 50000
 
 // MaxAnalyzersPerRequest bounds AnalyzerIDs (R99, final review A I-4/I-5): a
 // request naming more than this many analyzers fails ErrInvalidRequest
-// before any I/O. Combined with MaxRequestSpan below, this bounds the
-// len(AnalyzerIDs) * buckets cell count Analytics and Billing both
-// preallocate, so neither can be driven to the multi-GB allocation the
-// review's I-4 finding demonstrated.
+// before any I/O. Combined with MaxRequestSpan below and MaxCells above,
+// this bounds the len(AnalyzerIDs) * buckets cell count Analytics and
+// Billing both preallocate, so neither can be driven to the multi-GB
+// allocation the review's I-4 finding demonstrated.
 const MaxAnalyzersPerRequest = 50
 
 // MaxRequestSpan bounds Range.To - Range.From at every Level (R99, final
 // review A I-4): a request whose raw wall-clock span exceeds this fails
 // ErrInvalidRequest before any I/O, regardless of how few buckets that span
 // would expand to at Level — this is what actually bounds Billing's
-// meter_readings load, which is proportional to the span, not to
-// MaxBuckets' bucket COUNT (a 10-year Yearly request is only 10 buckets but
-// loads a decade of readings). F6 pages a longer report by year.
+// meter_readings load, which is proportional to the span, not to a bucket
+// COUNT alone (a 10-year Yearly request is only 10 buckets but loads a
+// decade of readings). F6 pages a longer report by year.
 const MaxRequestSpan = 400 * 24 * time.Hour
+
+// SettleDelayHourly, SettleDelayDaily and SettleDelayMonthly are R104(1)'s
+// amendment to R98: a bucket is closed only once the ordinary ingestion lag
+// for its own level's boundary data has had time to land, never merely once
+// the clock has passed its own To. Final review X's I-A found R98's
+// clock-only rule billing a daily-only meter's January as 300 instead of
+// the true 310 when queried at Feb 1 06:00 — before the Feb 1 00:00 snapshot
+// had arrived, even though it was well within R96's own boundary tolerance
+// once it did — and, for the same reason, writing a false missing_readings
+// anomaly for a Daily bucket in the few hours right after its own midnight.
+// Each delay is at least that level's own boundary tolerance (R96's
+// DailySnapshotTolerance/BillingSnapshotTolerance/LoadProfileBoundaryTolerance),
+// so an in-tolerance late snapshot can still arrive and be used before the
+// bucket is ever treated as closed: Hourly 2h (load_profile's own look-back
+// is unbounded there, but a normal ingestion cycle is short); Daily 36h
+// (DailySnapshotTolerance itself); Monthly and Yearly 72h
+// (BillingSnapshotTolerance, the widest tolerance either level ever applies).
+const (
+	SettleDelayHourly  = 2 * time.Hour
+	SettleDelayDaily   = 36 * time.Hour
+	SettleDelayMonthly = 72 * time.Hour
+	SettleDelayYearly  = 72 * time.Hour
+)
+
+// SettleDelay returns R104(1)'s settle delay for level: the ONE function
+// closedBucket (billing.go) calls, so a bucket's closedness, whether a
+// missing_readings gap may be recorded for it (R97/R103), and whether a
+// resolved gap override may be emitted for it (billing.go's
+// applyResolvedGapOverrides, which only ever runs over already-filtered
+// `gaps`) can never disagree with each other. An unrecognised level returns
+// 0 (callers are expected to have validated Level already, exactly as
+// MaxDemandKindsFor documents for the same reason).
+func SettleDelay(level energy.Level) time.Duration {
+	switch level {
+	case energy.Hourly:
+		return SettleDelayHourly
+	case energy.Daily:
+		return SettleDelayDaily
+	case energy.Monthly, energy.Yearly:
+		return SettleDelayMonthly
+	default:
+		return 0
+	}
+}
 
 // BillingSnapshotTolerance bounds R63's "covering": a billing-kind boundary
 // reading older than this relative to its own bound does not count as
@@ -189,9 +242,9 @@ func mustLoadIstanbul() *time.Location {
 // validateRequest applies the shared fail-closed checks both Analytics and
 // Billing run before any I/O: a valid Scope, a non-empty, duplicate-free
 // AnalyzerIDs no longer than MaxAnalyzersPerRequest, a valid Level, a valid
-// Range no wider than MaxRequestSpan, and a bucket count at Level within
-// MaxBuckets (R99: every check below runs before either path makes a single
-// repository call).
+// Range no wider than MaxRequestSpan, and a cell count (AnalyzerIDs times
+// the bucket count at Level) within MaxCells (R99/R104(2): every check
+// below runs before either path makes a single repository call).
 func validateRequest(sc store.Scope, req SeriesRequest) error {
 	if !sc.Valid() {
 		return ErrInvalidRequest
@@ -215,7 +268,7 @@ func validateRequest(sc store.Scope, req SeriesRequest) error {
 		return ErrInvalidRequest
 	}
 	w := energy.Window{From: req.Range.From, To: req.Range.To}
-	if bucketCountExceeds(req.Level, w, istanbul, MaxBuckets) {
+	if cellsExceed(req.Level, w, istanbul, len(req.AnalyzerIDs), MaxCells) {
 		return ErrInvalidRequest
 	}
 	return nil
@@ -238,9 +291,9 @@ func hasDuplicateAnalyzerID(ids []uuid.UUID) bool {
 
 // validLevel reports whether l is one of the four levels 02 §3.4 defines
 // (M-1). Without this check an unrecognised Level passed validateRequest
-// silently (bucketCountExceeds reports "not exceeded" for a level Bucket
-// does not recognise, since Bucket returns the invalid zero Window and the
-// counting loop never starts), and both Consumption methods then returned
+// silently (cellsExceed reports "not exceeded" for a level Bucket does not
+// recognise, since Bucket returns the invalid zero Window and the counting
+// loop never starts), and both Consumption methods then returned
 // (nil, nil) instead of ErrInvalidRequest — fetchBuckets' own default
 // branch was unreachable in practice because validateRequest ran first.
 func validLevel(l energy.Level) bool {
@@ -259,14 +312,20 @@ func errRequired(field string) error {
 	return fmt.Errorf("consumption: %s is required", field)
 }
 
-// bucketCountExceeds reports whether Level's bucket count over w would
-// exceed max, WITHOUT materialising energy.Buckets' full slice — the same
-// stepping logic as energy.Buckets, but counting only, so that a
-// pathological request (a multi-century hourly range) is rejected in O(max)
-// steps instead of allocating a result the caller was always going to
-// refuse. An invalid window or an unrecognised level reports false (not
-// exceeded): those are caught by validateRequest's other checks first.
-func bucketCountExceeds(level energy.Level, w energy.Window, loc *time.Location, max int) bool {
+// cellsExceed reports whether analyzerCount times Level's bucket count over
+// w would exceed max (R104(2), replacing the bucket-count-only MaxBuckets
+// cap final review X found unreachable under MaxRequestSpan), WITHOUT
+// materialising energy.Buckets' full slice — the same stepping logic as
+// energy.Buckets, but counting only, so that a pathological request (many
+// analyzers over a long fine-grained range) is rejected in a bounded number
+// of steps instead of allocating a result the caller was always going to
+// refuse. An invalid window, an unrecognised level, or a non-positive
+// analyzerCount reports false (not exceeded): those are caught by
+// validateRequest's other checks first.
+func cellsExceed(level energy.Level, w energy.Window, loc *time.Location, analyzerCount int, max int) bool {
+	if analyzerCount <= 0 {
+		return false
+	}
 	if !w.Valid() {
 		return false
 	}
@@ -277,7 +336,7 @@ func bucketCountExceeds(level energy.Level, w energy.Window, loc *time.Location,
 	count := 0
 	for cur.From.Before(w.To) {
 		count++
-		if count > max {
+		if count*analyzerCount > max {
 			return true
 		}
 		next := energy.Bucket(level, cur.To, loc)

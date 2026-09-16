@@ -138,7 +138,7 @@ func TestF3LevelsDeriveFromTheirOwnBoundaries(t *testing.T) {
 	_, _, err := readingRepo.BulkInsert(ctx, tenant.Scope, hourlyFixture)
 	require.NoError(t, err)
 
-	billing := f3NewBilling(t, readingRepo, dayStart.Add(24*time.Hour))
+	billing := f3NewBilling(t, readingRepo, dayStart.Add(24*time.Hour).Add(consumption.SettleDelayDaily))
 
 	hourlyRows, err := billing.Consumption(ctx, tenant.Scope, consumption.SeriesRequest{
 		AnalyzerIDs: []uuid.UUID{hourlyAnalyzerID},
@@ -183,7 +183,7 @@ func TestF3LevelsDeriveFromTheirOwnBoundaries(t *testing.T) {
 	_, _, err = readingRepo.BulkInsert(ctx, tenant.Scope, monthRows)
 	require.NoError(t, err)
 
-	monthBilling := f3NewBilling(t, readingRepo, feb1)
+	monthBilling := f3NewBilling(t, readingRepo, feb1.Add(consumption.SettleDelayMonthly))
 
 	monthlyDailyRows, err := monthBilling.Consumption(ctx, tenant.Scope, consumption.SeriesRequest{
 		AnalyzerIDs: []uuid.UUID{monthlyAnalyzerID},
@@ -242,7 +242,7 @@ func TestF3LevelsDeriveFromTheirOwnBoundaries(t *testing.T) {
 	_, _, err = readingRepo.BulkInsert(ctx, tenant.AdminScope, yearRows)
 	require.NoError(t, err)
 
-	yearBilling := f3NewBilling(t, readingRepo, yearNextJan1)
+	yearBilling := f3NewBilling(t, readingRepo, yearNextJan1.Add(consumption.SettleDelayMonthly))
 
 	yearlyMonthlyRows, err := yearBilling.Consumption(ctx, tenant.AdminScope, consumption.SeriesRequest{
 		AnalyzerIDs: []uuid.UUID{yearlyAnalyzerID},
@@ -302,7 +302,7 @@ func TestF3BillingAndAnalyticsDifferByTheBoundaryStep(t *testing.T) {
 	require.NoError(t, err)
 
 	analytics := f3NewAnalytics(t, analyticsRepo)
-	billing := f3NewBilling(t, readingRepo, hourStart.Add(time.Hour))
+	billing := f3NewBilling(t, readingRepo, hourStart.Add(time.Hour).Add(consumption.SettleDelayHourly))
 
 	req := consumption.SeriesRequest{
 		AnalyzerIDs: []uuid.UUID{analyzerID},
@@ -367,7 +367,7 @@ func TestF3MonthlyPrefersBillingReadings(t *testing.T) {
 	_, _, err := readingRepo.BulkInsert(ctx, tenant.Scope, rows)
 	require.NoError(t, err)
 
-	billing := f3NewBilling(t, readingRepo, feb1)
+	billing := f3NewBilling(t, readingRepo, feb1.Add(consumption.SettleDelayMonthly))
 
 	reqFor := func(id uuid.UUID) consumption.SeriesRequest {
 		return consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{id}, Level: energy.Monthly, Range: store.TimeRange{From: jan1, To: feb1}}
@@ -433,7 +433,7 @@ func TestF3ZeroConsumptionProducesANullRatio(t *testing.T) {
 		Range:       store.TimeRange{From: hourStart, To: hourStart.Add(time.Hour)},
 	}
 
-	billing := f3NewBilling(t, readingRepo, hourStart.Add(time.Hour))
+	billing := f3NewBilling(t, readingRepo, hourStart.Add(time.Hour).Add(consumption.SettleDelayHourly))
 	billingRows, err := billing.Consumption(ctx, tenant.Scope, req)
 	require.NoError(t, err)
 	require.Len(t, billingRows, 1)
@@ -508,7 +508,7 @@ func TestF3NegativeDeltaProducesNullSuspectAndMessage(t *testing.T) {
 	_, _, err := readingRepo.BulkInsert(ctx, tenant.Scope, rows)
 	require.NoError(t, err)
 
-	billing := f3NewBillingAndRecord(t, readingRepo, anomalyRepo, opsRepo, h.Add(time.Hour))
+	billing := f3NewBillingAndRecord(t, readingRepo, anomalyRepo, opsRepo, h.Add(time.Hour).Add(consumption.SettleDelayHourly))
 
 	req := consumption.SeriesRequest{
 		AnalyzerIDs: []uuid.UUID{analyzerID},

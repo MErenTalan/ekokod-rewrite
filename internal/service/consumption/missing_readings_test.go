@@ -74,7 +74,7 @@ func TestMissingReadingsEndOnlyGap(t *testing.T) {
 		model.ReadingKindBilling: {},
 	}}
 	anomalies := &fakeAnomalies{}
-	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), day1.To.Add(time.Hour))
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), day1.To.Add(consumption.SettleDelayDaily))
 
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{analyzerID}, Level: energy.Daily, Range: store.TimeRange{From: day1.From, To: day1.To}}
 	rows, err := b.ConsumptionAndRecord(ctx, scope, req)
@@ -111,7 +111,7 @@ func TestMissingReadingsStartOnlyGap(t *testing.T) {
 		model.ReadingKindBilling: {},
 	}}
 	anomalies := &fakeAnomalies{}
-	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), day1.To.Add(time.Hour))
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), day1.To.Add(consumption.SettleDelayDaily))
 
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{analyzerID}, Level: energy.Daily, Range: store.TimeRange{From: day1.From, To: day1.To}}
 	rows, err := b.ConsumptionAndRecord(ctx, scope, req)
@@ -146,7 +146,7 @@ func TestMissingReadingsBothSidesGap(t *testing.T) {
 		model.ReadingKindBilling: {},
 	}}
 	anomalies := &fakeAnomalies{}
-	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), day3.To.Add(time.Hour))
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), day3.To.Add(consumption.SettleDelayDaily))
 
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{analyzerID}, Level: energy.Daily, Range: store.TimeRange{From: day2.From, To: day3.To}}
 	rows, err := b.ConsumptionAndRecord(ctx, scope, req)
@@ -174,7 +174,7 @@ func TestMissingReadingsNoGapsWhenAnalyzerHasNoReadingsAtAll(t *testing.T) {
 
 	readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{}}
 	anomalies := &fakeAnomalies{}
-	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), day1.To.Add(time.Hour))
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), day1.To.Add(consumption.SettleDelayDaily))
 
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{analyzerID}, Level: energy.Daily, Range: store.TimeRange{From: day1.From, To: day1.To}}
 	rows, err := b.ConsumptionAndRecord(ctx, scope, req)
@@ -212,6 +212,40 @@ func TestMissingReadingsFutureBucketSkipped(t *testing.T) {
 	require.Empty(t, anomalies.rows, "an open/future bucket must never get a gap")
 }
 
+// TestNoFalseMissingReadingsAnomalyJustAfterMidnightAtDaily is R104(1)'s own
+// fix for final review X's I-A finding: right after a Daily bucket's own
+// midnight — before its own 00:00 snapshot has had time to arrive from the
+// provider — the plain R98 clock-only rule already treated the bucket as
+// closed, and since its own end boundary could not yet resolve, wrote a
+// missing_readings anomaly for a day that was not actually missing
+// anything, only not yet ingested. Here the analyzer's only reading is its
+// own START (day1.From); day1's own END (day1.To) has simply not arrived
+// yet. At day1.To + 10 minutes — well inside SettleDelayDaily (36h) — the
+// bucket must not even be evaluated: no row, and no gap either.
+func TestNoFalseMissingReadingsAnomalyJustAfterMidnightAtDaily(t *testing.T) {
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+	analyzerID := uuid.New()
+	loc := missingReadingsIstanbul(t)
+	day1 := energy.Bucket(energy.Daily, resolveT0, loc)
+
+	readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
+		model.ReadingKindLoadProfile: {
+			readingRow(analyzerID, day1.From, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}),
+		},
+		model.ReadingKindDaily:   {},
+		model.ReadingKindBilling: {},
+	}}
+	anomalies := &fakeAnomalies{}
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), day1.To.Add(10*time.Minute))
+
+	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{analyzerID}, Level: energy.Daily, Range: store.TimeRange{From: day1.From, To: day1.To}}
+	rows, err := b.ConsumptionAndRecord(ctx, scope, req)
+	require.NoError(t, err)
+	require.Empty(t, rows, "the bucket has not settled yet")
+	require.Empty(t, anomalies.rows, "a bucket still inside its own settle window must never get a false missing_readings anomaly")
+}
+
 // --- R97: resolution rules --------------------------------------------------
 
 // missingReadingsDailyGap seeds a single Daily "start"-only gap for day1
@@ -241,7 +275,7 @@ func TestMissingReadingsResetRegisteredRejected(t *testing.T) {
 
 	readings := missingReadingsDailyGap(analyzerID, day1)
 	anomalies := &fakeAnomalies{}
-	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), day1.To.Add(time.Hour))
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), day1.To.Add(consumption.SettleDelayDaily))
 
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{analyzerID}, Level: energy.Daily, Range: store.TimeRange{From: day1.From, To: day1.To}}
 	_, err := b.ConsumptionAndRecord(ctx, scope, req)
@@ -283,7 +317,7 @@ func TestMissingReadingsAcceptedProducesNoRowAndIsNotRecreated(t *testing.T) {
 
 	readings := missingReadingsDailyGap(analyzerID, day1)
 	anomalies := &fakeAnomalies{}
-	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), day1.To.Add(time.Hour))
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), day1.To.Add(consumption.SettleDelayDaily))
 
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{analyzerID}, Level: energy.Daily, Range: store.TimeRange{From: day1.From, To: day1.To}}
 	_, err := b.ConsumptionAndRecord(ctx, scope, req)
@@ -325,7 +359,7 @@ func TestMissingReadingsOverrideEmitsRow(t *testing.T) {
 
 	readings := missingReadingsDailyGap(analyzerID, day1)
 	anomalies := &fakeAnomalies{}
-	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), day1.To.Add(time.Hour))
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), day1.To.Add(consumption.SettleDelayDaily))
 
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{analyzerID}, Level: energy.Daily, Range: store.TimeRange{From: day1.From, To: day1.To}}
 	_, err := b.ConsumptionAndRecord(ctx, scope, req)
@@ -373,7 +407,7 @@ func TestMissingReadingsOverrideRowIndexesAreNilWithoutAnEndReading(t *testing.T
 		model.ReadingKindBilling: {},
 	}}
 	anomalies := &fakeAnomalies{}
-	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), day1.To.Add(time.Hour))
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), day1.To.Add(consumption.SettleDelayDaily))
 
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{analyzerID}, Level: energy.Daily, Range: store.TimeRange{From: day1.From, To: day1.To}}
 	_, err := b.ConsumptionAndRecord(ctx, scope, req)
@@ -408,7 +442,7 @@ func TestMissingReadingsOverrideAcceptsAnyRegister(t *testing.T) {
 
 	readings := missingReadingsDailyGap(analyzerID, day1)
 	anomalies := &fakeAnomalies{}
-	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), day1.To.Add(time.Hour))
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), day1.To.Add(consumption.SettleDelayDaily))
 
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{analyzerID}, Level: energy.Daily, Range: store.TimeRange{From: day1.From, To: day1.To}}
 	_, err := b.ConsumptionAndRecord(ctx, scope, req)
@@ -434,7 +468,7 @@ func TestMissingReadingsRerunCreatesOneRow(t *testing.T) {
 
 	readings := missingReadingsDailyGap(analyzerID, day1)
 	anomalies := &fakeAnomalies{}
-	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), day1.To.Add(time.Hour))
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), day1.To.Add(consumption.SettleDelayDaily))
 
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{analyzerID}, Level: energy.Daily, Range: store.TimeRange{From: day1.From, To: day1.To}}
 	_, err := b.ConsumptionAndRecord(ctx, scope, req)
@@ -474,7 +508,7 @@ func TestMissingReadingsPreInstallationBucketSkipped(t *testing.T) {
 		model.ReadingKindBilling: {},
 	}}
 	anomalies := &fakeAnomalies{}
-	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), day1.To.Add(2*time.Hour))
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), day1.To.Add(consumption.SettleDelayDaily))
 
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{analyzerID}, Level: energy.Daily, Range: store.TimeRange{From: day1.From, To: day1.To}}
 	_, err := b.ConsumptionAndRecord(ctx, scope, req)
@@ -502,7 +536,7 @@ func TestNoMissingReadingsAnomalyAtHourly(t *testing.T) {
 		},
 	}}
 	anomalies := &fakeAnomalies{}
-	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), h.Add(11*time.Hour))
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), h.Add(10*time.Hour).Add(consumption.SettleDelayHourly))
 
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{analyzerID}, Level: energy.Hourly, Range: store.TimeRange{From: h, To: h.Add(10 * time.Hour)}}
 	rows, err := b.ConsumptionAndRecord(ctx, scope, req)
@@ -641,7 +675,7 @@ func TestOutageResumingMidRequestDoesNotTreatEarlierDaysAsPreInstallation(t *tes
 		model.ReadingKindBilling: {},
 	}}
 	anomalies := &fakeAnomalies{}
-	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), day6.To.Add(time.Hour))
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), day6.To.Add(consumption.SettleDelayDaily))
 
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{analyzerID}, Level: energy.Daily, Range: store.TimeRange{From: day1.From, To: day6.To}}
 	_, err := b.ConsumptionAndRecord(ctx, scope, req)
@@ -751,7 +785,7 @@ func TestDailyGapUsesDailyKindPriorRangeIndependently(t *testing.T) {
 	loc := missingReadingsIstanbul(t)
 	jan1 := energy.Bucket(energy.Daily, time.Date(2026, 1, 1, 0, 0, 0, 0, loc), loc)
 	apr1 := energy.Bucket(energy.Daily, time.Date(2026, 4, 1, 0, 0, 0, 0, loc), loc)
-	now := apr1.To.Add(24 * time.Hour)
+	now := apr1.To.Add(consumption.SettleDelayDaily)
 
 	newReadings := func() fakeReadings {
 		daily := make([]model.MeterReading, 0, 10)
@@ -867,7 +901,7 @@ func TestGapOverrideSupersededByRealDerivationOnceBackfilled(t *testing.T) {
 
 	readings := missingReadingsDailyGap(analyzerID, day1) // end-boundary reading = 1000, active_import
 	anomalies := &fakeAnomalies{}
-	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), day1.To.Add(time.Hour))
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), day1.To.Add(consumption.SettleDelayDaily))
 
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{analyzerID}, Level: energy.Daily, Range: store.TimeRange{From: day1.From, To: day1.To}}
 	_, err := b.ConsumptionAndRecord(ctx, scope, req)
@@ -937,7 +971,7 @@ func TestConcurrentGapRunsAreSerializedByTheLock(t *testing.T) {
 		listBarrier:   dedupRangeBarrier(2, 150*time.Millisecond),
 		createBarrier: raceBarrier(2, 150*time.Millisecond),
 	}
-	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), day1.To.Add(time.Hour))
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), day1.To.Add(consumption.SettleDelayDaily))
 
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{analyzerID}, Level: energy.Daily, Range: store.TimeRange{From: day1.From, To: day1.To}}
 
@@ -982,7 +1016,7 @@ func TestGapResolutionNeverCascadesToOverlappingF2Rows(t *testing.T) {
 
 	readings := missingReadingsDailyGap(analyzerID, day1)
 	anomalies := &fakeAnomalies{}
-	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), day1.To.Add(time.Hour))
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), day1.To.Add(consumption.SettleDelayDaily))
 
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{analyzerID}, Level: energy.Daily, Range: store.TimeRange{From: day1.From, To: day1.To}}
 	_, err := b.ConsumptionAndRecord(ctx, scope, req)

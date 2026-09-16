@@ -66,7 +66,7 @@ func TestBillingAndAnalyticsDifferByTheBucketBoundaryStep(t *testing.T) {
 	require.NoError(t, err)
 	billing, err := consumption.NewBilling(consumption.BillingDeps{
 		Readings: readingRepo, Anomalies: noAnomalies{}, Ops: noOps{},
-		Clock: clock.NewFake(hourStart.Add(time.Hour)), Log: testfixtures.DiscardLogger(),
+		Clock: clock.NewFake(hourStart.Add(time.Hour).Add(consumption.SettleDelayHourly)), Log: testfixtures.DiscardLogger(),
 	})
 	require.NoError(t, err)
 
@@ -119,7 +119,7 @@ func TestBillingIsolatesTenants(t *testing.T) {
 
 	billing, err := consumption.NewBilling(consumption.BillingDeps{
 		Readings: readingRepo, Anomalies: noAnomalies{}, Ops: noOps{},
-		Clock: clock.NewFake(pathsEpoch.Add(time.Hour)), Log: testfixtures.DiscardLogger(),
+		Clock: clock.NewFake(pathsEpoch.Add(time.Hour).Add(consumption.SettleDelayHourly)), Log: testfixtures.DiscardLogger(),
 	})
 	require.NoError(t, err)
 
@@ -172,7 +172,7 @@ func TestBillingFlagsAResetAtTheUpperBoundAgainstARealDatabase(t *testing.T) {
 
 	billing, err := consumption.NewBilling(consumption.BillingDeps{
 		Readings: repo, Anomalies: noAnomalies{}, Ops: noOps{},
-		Clock: clock.NewFake(h.Add(time.Hour)), Log: testfixtures.DiscardLogger(),
+		Clock: clock.NewFake(h.Add(time.Hour).Add(consumption.SettleDelayHourly)), Log: testfixtures.DiscardLogger(),
 	})
 	require.NoError(t, err)
 
@@ -213,7 +213,7 @@ func TestNarrowScopeSeesNothingOnBothPaths(t *testing.T) {
 
 	billing, err := consumption.NewBilling(consumption.BillingDeps{
 		Readings: repo, Anomalies: noAnomalies{}, Ops: noOps{},
-		Clock: clock.NewFake(h.Add(time.Hour)), Log: testfixtures.DiscardLogger(),
+		Clock: clock.NewFake(h.Add(time.Hour).Add(consumption.SettleDelayHourly)), Log: testfixtures.DiscardLogger(),
 	})
 	require.NoError(t, err)
 	analytics, err := consumption.NewAnalytics(consumption.AnalyticsDeps{Analytics: pathsNewAnalyticsRepo(pool), Log: testfixtures.DiscardLogger()})

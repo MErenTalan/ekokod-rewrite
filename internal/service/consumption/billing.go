@@ -187,15 +187,16 @@ func (b *Billing) consumptionForAnalyzer(ctx context.Context, sc store.Scope, an
 	rows := make([]Row, 0, len(buckets))
 	var gaps []bucketGap
 	for _, w := range buckets {
-		// R98 (amending/generalising R97 ruling (i)): a bucket that is not
-		// yet CLOSED — its own To after the deps clock's now — is dropped
-		// before deriveRow ever runs: never a row (open/future consumption
-		// is not invoice-grade, even when every boundary happens to
-		// resolve), and never a gap either (otherwise every run over the
-		// still-accruing current period would write one). closedBucket is
-		// the ONE shared predicate both rulings now use, so they can never
-		// drift apart again.
-		if !closedBucket(w, now) {
+		// R98/R104(1) (amending/generalising R97 ruling (i)): a bucket that
+		// is not yet CLOSED — now before its own To plus level's own
+		// SettleDelay — is dropped before deriveRow ever runs: never a row
+		// (open/future/not-yet-settled consumption is not invoice-grade,
+		// even when every boundary happens to resolve), and never a gap
+		// either (otherwise every run over the still-accruing current
+		// period, or one still inside its own ingestion-lag window, would
+		// write one). closedBucket is the ONE shared predicate both
+		// rulings now use, so they can never drift apart again.
+		if !closedBucket(w, now, level) {
 			continue
 		}
 		row, ok := deriveRow(analyzerID, w, data, nil, level)
@@ -378,15 +379,24 @@ func (b *Billing) applyResolvedGapOverrides(ctx context.Context, sc store.Scope,
 	return overrideRows, remaining, nil
 }
 
-// closedBucket implements R98: a bucket counts as closed exactly when its
-// own To is at or before now — never a strict-before, since a bucket
-// closing at exactly this instant has fully accrued. This is the ONE
-// predicate consumptionForAnalyzer's loop uses both to decide whether a
-// derived row may be emitted at all and whether a missed bucket may be
-// recorded as a gap (R97 ruling (i)), so the two rulings can never resolve
-// an open/future bucket differently from each other.
-func closedBucket(w energy.Window, now time.Time) bool {
-	return !w.To.After(now)
+// closedBucket implements R98 as amended by R104(1): a bucket counts as
+// closed exactly when now is at or after its own To PLUS level's own
+// SettleDelay — never a strict-after, since a bucket whose settle window
+// ends at exactly this instant has fully settled. The plain R98 clock-only
+// rule (closed the instant To passes) let a bucket bill a stale end
+// boundary as complete during the ordinary ingestion-lag window right after
+// it closed — final review X's I-A probe: a daily-only meter's January
+// billed as 300 (from a Jan 30 22:00 snapshot, still inside R96's own
+// tolerance) instead of the true 310, when queried at Feb 1 06:00, before
+// the Feb 1 00:00 snapshot had arrived — and, for the same reason, wrote a
+// false missing_readings anomaly for a Daily bucket in the few hours right
+// after its own midnight. This is the ONE predicate consumptionForAnalyzer's
+// loop uses both to decide whether a derived row may be emitted at all and
+// whether a missed bucket may be recorded as a gap (R97 ruling (i)) or a
+// resolved gap override may be emitted for it, so none of the three can
+// ever resolve an unsettled bucket differently from the others.
+func closedBucket(w energy.Window, now time.Time, level energy.Level) bool {
+	return !now.Before(w.To.Add(SettleDelay(level)))
 }
 
 // classifyGap implements R97 spec point 2: with start/end the resolved
@@ -633,9 +643,10 @@ func (b *Billing) loadAnalyzerBoundaryData(ctx context.Context, sc store.Scope, 
 	}
 
 	// R95: daily readings, for the Daily/Monthly/Yearly fallback boundary
-	// kind. At Hourly, daily is never a boundary candidate, but R65 still
-	// allows it as a MaxDemand source, so it is fetched over the plain
-	// window instead of a look-back-widened one.
+	// kind. At Hourly, daily is never a boundary candidate, AND (R101,
+	// amending R65) energy.MaxDemandKindsFor(Hourly) excludes daily-kind
+	// readings too — there is no purpose left for daily at Hourly, so
+	// (m-4) it is never fetched there at all: `daily` stays nil.
 	var daily []energy.Reading
 	if useDaily {
 		dailyRows, dailyErr := b.deps.Readings.Range(ctx, sc, analyzerID, store.TimeRange{From: dailyLookback, To: rangeTo.Add(time.Microsecond)}, model.ReadingKindDaily)
@@ -643,20 +654,18 @@ func (b *Billing) loadAnalyzerBoundaryData(ctx context.Context, sc store.Scope, 
 			return analyzerBoundaryData{}, dailyErr
 		}
 		daily = toEnergyReadings(dailyRows)
-	} else {
-		dailyRows, dailyErr := b.deps.Readings.Range(ctx, sc, analyzerID, store.TimeRange{From: first.From, To: rangeTo}, model.ReadingKindDaily)
-		if dailyErr != nil {
-			return analyzerBoundaryData{}, dailyErr
-		}
-		daily = toEnergyReadings(dailyRows)
 	}
 
-	// MaxDemand also allows billing-kind readings at every level, not only
-	// Monthly (R65): when Monthly already loaded them above, that slice is
-	// reused; otherwise they are fetched here, over the plain window, for
-	// MaxDemand alone.
+	// MaxDemand allows billing-kind readings only at Monthly and Yearly
+	// (R101, amending R65): when Monthly already loaded them above (as a
+	// boundary candidate), that slice is reused; at Yearly, billing is
+	// never a boundary candidate but IS still a MaxDemand source, so it is
+	// fetched here, over the plain window, for MaxDemand alone. At Hourly
+	// and Daily, energy.MaxDemandKindsFor excludes billing-kind readings
+	// entirely, so (final fix X review's m-4) they are never fetched there: maxDemandBilling
+	// stays nil (== billing, itself nil at those levels).
 	maxDemandBilling := billing
-	if !useBilling {
+	if !useBilling && level == energy.Yearly {
 		billingRows, billingErr := b.deps.Readings.Range(ctx, sc, analyzerID, store.TimeRange{From: first.From, To: rangeTo}, model.ReadingKindBilling)
 		if billingErr != nil {
 			return analyzerBoundaryData{}, billingErr

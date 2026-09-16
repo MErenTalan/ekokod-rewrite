@@ -51,7 +51,7 @@ func BenchmarkBillingYearHourly(b *testing.B) {
 		Readings:  fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{model.ReadingKindLoadProfile: rows}},
 		Anomalies: noAnomalies{},
 		Ops:       noOps{},
-		Clock:     clock.NewFake(to),
+		Clock:     clock.NewFake(to.Add(consumption.SettleDelayHourly)),
 		Log:       testLog(b),
 	})
 	require.NoError(b, err)

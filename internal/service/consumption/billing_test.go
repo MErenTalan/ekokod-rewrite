@@ -98,24 +98,60 @@ func TestBillingRefusesAnEmptyAnalyzerList(t *testing.T) {
 	require.ErrorIs(t, err, consumption.ErrInvalidRequest)
 }
 
-// TestBillingRefusesARequestOverTheMaxBucketsCap proves the MaxBuckets cap
-// (10000) is enforced before any I/O: fakeReadings{} would panic-free but
-// return nothing useful anyway, so a non-empty result here could only come
-// from the cap failing to apply.
-func TestBillingRefusesARequestOverTheMaxBucketsCap(t *testing.T) {
-	b := newBilling(t, fakeReadings{})
+// --- R104(2): MaxCells replaces MaxBuckets -----------------------------
 
+// cellsWindow returns a UTC range (Hourly, no DST in play so the bucket
+// count equals the number of whole hours exactly) whose Hourly bucket count
+// times analyzerCount is exactly cells — the caller picks analyzerCount and
+// hours so the product lands exactly on the boundary under test, never
+// merely "over".
+func cellsWindow(hours int) (time.Time, time.Time) {
+	from := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	return from, from.Add(time.Duration(hours) * time.Hour)
+}
+
+// TestBillingAcceptsExactlyMaxCells is R104(2)'s positive control on the
+// Billing path: 50 analyzers (MaxAnalyzersPerRequest) times 1000 Hourly
+// buckets = exactly MaxCells (50000) cells must not be refused. noReadings
+// panics on any repository call, so a non-nil error here could only be
+// ErrInvalidRequest, never a panic escaping as a different failure.
+func TestBillingAcceptsExactlyMaxCells(t *testing.T) {
+	from, to := cellsWindow(1000)
+	b, err := consumption.NewBilling(consumption.BillingDeps{Readings: fakeReadings{}, Anomalies: noAnomalies{}, Ops: noOps{}, Clock: clock.NewFake(to), Log: testLog(t)})
+	require.NoError(t, err)
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
 	req := consumption.SeriesRequest{
-		AnalyzerIDs: []uuid.UUID{uuid.New()},
+		AnalyzerIDs: newUUIDs(consumption.MaxAnalyzersPerRequest),
 		Level:       energy.Hourly,
-		// MaxBuckets+1 hourly buckets: one over the cap.
-		Range: store.TimeRange{From: billingT0, To: billingT0.Add(time.Duration(consumption.MaxBuckets+1) * time.Hour)},
+		Range:       store.TimeRange{From: from, To: to},
 	}
+	require.Equal(t, consumption.MaxAnalyzersPerRequest*1000, consumption.MaxCells, "the fixture must land exactly on MaxCells")
+	rows, err := b.Consumption(ctx, scope, req)
+	require.NoError(t, err)
+	require.Empty(t, rows, "the (empty) fake has no data — this only proves the request itself is accepted")
+}
 
-	_, err := b.Consumption(ctx, scope, req)
-	require.ErrorIs(t, err, consumption.ErrInvalidRequest)
+// TestBillingRefusesOverMaxCells is R104(2)'s own probe on the Billing
+// path, replacing the deleted MaxBuckets test: 21 analyzers times 2381
+// Hourly buckets is exactly MaxCells+1 (50001) cells — one analyzer, or one
+// bucket, short of the cap either way would pass — refused before any I/O.
+// noReadings panics on any repository call, proving the refusal happens
+// before a single Range call.
+func TestBillingRefusesOverMaxCells(t *testing.T) {
+	from, to := cellsWindow(2381)
+	b, err := consumption.NewBilling(consumption.BillingDeps{Readings: noReadings{}, Anomalies: noAnomalies{}, Ops: noOps{}, Clock: clock.NewFake(to), Log: testLog(t)})
+	require.NoError(t, err)
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+	req := consumption.SeriesRequest{
+		AnalyzerIDs: newUUIDs(21),
+		Level:       energy.Hourly,
+		Range:       store.TimeRange{From: from, To: to},
+	}
+	require.Equal(t, consumption.MaxCells+1, 21*2381, "the fixture must land exactly one over MaxCells")
+	_, err = b.Consumption(ctx, scope, req)
+	require.ErrorIs(t, err, consumption.ErrInvalidRequest, "must be refused before any ReadingRepository call: noReadings panics on any call")
 }
 
 // --- R98: an open or future bucket is never emitted, complete or partial --
@@ -128,8 +164,10 @@ func TestBillingRefusesARequestOverTheMaxBucketsCap(t *testing.T) {
 // must yield NO row at all: the pre-R98 defect let the Feb-01 boundary
 // resolve to the Jan 30 22:00 reading (inside R96's 36h load_profile
 // tolerance) and silently returned one row, 2872, as if the month were
-// closed. Advancing the clock to exactly Feb 1 00:00 (the bucket's own To)
-// closes it and the row appears, unchanged.
+// closed. Advancing the clock to Feb 1 00:00 + SettleDelayMonthly (R104(1):
+// a bucket is closed only once its own settle window has elapsed too, not
+// merely once its own To has passed) closes it and the row appears,
+// unchanged.
 func TestBillingNeverEmitsAnOpenOrFutureBucket(t *testing.T) {
 	loc := istanbulLoc(t)
 	jan1 := time.Date(2026, 1, 1, 0, 0, 0, 0, loc)
@@ -156,12 +194,96 @@ func TestBillingNeverEmitsAnOpenOrFutureBucket(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, rows, "January has not closed yet (now is Jan 30 22:00, well inside the bucket): no row, never a partial 2872")
 
-	closed := newBillingAt(t, readings, feb1)
+	closed := newBillingAt(t, readings, feb1.Add(consumption.SettleDelayMonthly))
 	rows, err = closed.Consumption(ctx, scope, req)
 	require.NoError(t, err)
-	require.Len(t, rows, 1, "at Feb 1 00:00 the bucket has closed")
+	require.Len(t, rows, 1, "at Feb 1 00:00 + SettleDelayMonthly the bucket has settled")
 	require.NotNil(t, rows[0].Values[energy.ActiveImport])
 	require.Equal(t, "2872", rows[0].Values[energy.ActiveImport].String())
+}
+
+// TestBillingSettleDelayAvoidsBillingAStaleEndBoundaryJustAfterClose is
+// R104(1)'s own acceptance probe (final review X's I-A exact scenario): a
+// daily-only meter's daily-kind snapshots stamp Jan 1 (1000) and Jan 31
+// (1300) exactly at 00:00; February's own snapshot (1310) exists in the
+// fixture but the request is run BEFORE R104(1)'s settle delay has
+// elapsed. Requesting the whole January Monthly bucket at Feb 1 06:00 — six
+// hours past the bucket's own To, and well inside R96's DailySnapshotTolerance
+// (36h) — must yield NO row: under the plain R98 clock-only rule, the Jan
+// 31 00:00 snapshot was still within tolerance of the Feb 1 bound, so the
+// bucket would have silently billed 300 (1300-1000) instead of the true 310
+// — a boundary the provider had not actually stamped for February yet.
+// Once SettleDelayMonthly elapses (Feb 4 00:00), the bucket closes and
+// bills the REAL Feb 1 00:00 snapshot: 310.
+func TestBillingSettleDelayAvoidsBillingAStaleEndBoundaryJustAfterClose(t *testing.T) {
+	loc := istanbulLoc(t)
+	jan1 := time.Date(2026, 1, 1, 0, 0, 0, 0, loc)
+	jan31 := jan1.AddDate(0, 0, 30)
+	feb1 := time.Date(2026, 2, 1, 0, 0, 0, 0, loc)
+	analyzerID := uuid.New()
+
+	readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
+		model.ReadingKindDaily: {
+			readingRow(analyzerID, jan1, model.ReadingKindDaily, map[string]string{"active_import": "1000"}),
+			readingRow(analyzerID, jan31, model.ReadingKindDaily, map[string]string{"active_import": "1300"}),
+			readingRow(analyzerID, feb1, model.ReadingKindDaily, map[string]string{"active_import": "1310"}),
+		},
+	}}
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+	req := consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{analyzerID},
+		Level:       energy.Monthly,
+		Range:       store.TimeRange{From: jan1, To: feb1},
+	}
+
+	notYetSettled := newBillingAt(t, readings, feb1.Add(6*time.Hour))
+	rows, err := notYetSettled.Consumption(ctx, scope, req)
+	require.NoError(t, err)
+	require.Empty(t, rows, "Feb 1 06:00 is only 6h past the bucket's own To — well inside SettleDelayMonthly (72h) — so the bucket must not be billed yet, even though the stale Jan 31 snapshot is itself still within DailySnapshotTolerance")
+
+	settled := newBillingAt(t, readings, feb1.Add(consumption.SettleDelayMonthly))
+	rows, err = settled.Consumption(ctx, scope, req)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.NotNil(t, rows[0].Values[energy.ActiveImport])
+	require.Equal(t, "310", rows[0].Values[energy.ActiveImport].String(), "the true Feb 1 00:00 snapshot, never the stale Jan 31 one")
+}
+
+// TestClosedBucketExactSettleDelayEdge is R104(1)'s own exact-edge pin: a
+// bucket is closed exactly when now equals its own To plus SettleDelay for
+// its level — never one microsecond earlier. Hourly is used because its
+// settle delay (2h) keeps the fixture simple; closedBucket itself has no
+// per-level branching (SettleDelay does), so this pins the shared
+// predicate directly.
+func TestClosedBucketExactSettleDelayEdge(t *testing.T) {
+	h := billingT0
+	analyzerID := uuid.New()
+
+	readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
+		model.ReadingKindLoadProfile: {
+			readingRow(analyzerID, h, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}),
+			readingRow(analyzerID, h.Add(time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "1040"}),
+		},
+	}}
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+	req := consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{analyzerID},
+		Level:       energy.Hourly,
+		Range:       store.TimeRange{From: h, To: h.Add(time.Hour)},
+	}
+	settleAt := h.Add(time.Hour).Add(consumption.SettleDelayHourly)
+
+	exactlyAtEdge := newBillingAt(t, readings, settleAt)
+	rows, err := exactlyAtEdge.Consumption(ctx, scope, req)
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "now == To + SettleDelay must be closed")
+
+	oneMicrosecondEarly := newBillingAt(t, readings, settleAt.Add(-time.Microsecond))
+	rows, err = oneMicrosecondEarly.Consumption(ctx, scope, req)
+	require.NoError(t, err)
+	require.Empty(t, rows, "one microsecond before To + SettleDelay must still be open")
 }
 
 // TestMonthlyPrefersBillingKindReadingsWhenPresent is R62/R63's acceptance
@@ -329,7 +451,7 @@ func TestBillingNeverUsesCurrentIndexReadingsAsBoundaries(t *testing.T) {
 	}}
 	// R98: the clock must be at or after the bucket's own To (hourStart+1h)
 	// for this still-open-at-billingT0 hour to be emitted as a row at all.
-	b := newBillingAt(t, readings, hourStart.Add(time.Hour))
+	b := newBillingAt(t, readings, hourStart.Add(time.Hour).Add(consumption.SettleDelayHourly))
 
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -377,7 +499,7 @@ func billingHourlyAndDailyFor(t *testing.T, analyzerID uuid.UUID, dayStart time.
 	// R98: the clock must be at or after dayStart+24h — the widest bucket
 	// (Daily) this helper requests — for both the hourly and the daily
 	// buckets to be closed, never dropped as still-open/future.
-	b := newBillingAt(t, fake, dayStart.Add(24*time.Hour))
+	b := newBillingAt(t, fake, dayStart.Add(24*time.Hour).Add(consumption.SettleDelayDaily))
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
 
@@ -549,7 +671,7 @@ func TestBillingResetPriorsAreLoadProfileOnly(t *testing.T) {
 	}}
 	// R98: this fixture's day (Mar 10) is after billingT0 (Mar 1); the clock
 	// must be at or after day+24h for the bucket to be closed.
-	b := newBillingAt(t, readings, day.Add(24*time.Hour))
+	b := newBillingAt(t, readings, day.Add(24*time.Hour).Add(consumption.SettleDelayDaily))
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
 
@@ -584,7 +706,7 @@ func TestBillingIncludesAFirstBucketWhoseStartReadingPrecedesFrom(t *testing.T) 
 		},
 	}}
 	// R98: the fixture window closes at day+1h, after billingT0.
-	b := newBillingAt(t, readings, day.Add(time.Hour))
+	b := newBillingAt(t, readings, day.Add(time.Hour).Add(consumption.SettleDelayHourly))
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
 
@@ -788,7 +910,7 @@ func TestBillingFallsBackToDailyWhenLoadProfileHasNoUsablePair(t *testing.T) {
 		},
 	}}
 	// R98: the fixture window closes at day+24h, after billingT0.
-	b := newBillingAt(t, readings, day.Add(24*time.Hour))
+	b := newBillingAt(t, readings, day.Add(24*time.Hour).Add(consumption.SettleDelayDaily))
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
 
@@ -822,7 +944,7 @@ func TestBillingPrefersLoadProfileOverDailyWhenBothPresent(t *testing.T) {
 		},
 	}}
 	// R98: the fixture window closes at day+24h, after billingT0.
-	b := newBillingAt(t, readings, day.Add(24*time.Hour))
+	b := newBillingAt(t, readings, day.Add(24*time.Hour).Add(consumption.SettleDelayDaily))
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
 
@@ -863,7 +985,7 @@ func TestBillingDailyBoundaryToleranceCapsAtTwelveHoursOnANormalDay(t *testing.T
 			},
 		}}
 		// R98: the fixture window closes at day+24h, after billingT0.
-		b := newBillingAt(t, readings, day.Add(24*time.Hour))
+		b := newBillingAt(t, readings, day.Add(24*time.Hour).Add(consumption.SettleDelayDaily))
 		ctx := context.Background()
 		scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
 
@@ -986,7 +1108,7 @@ func TestBillingRatiosAndMaxDemandFromDerivedValues(t *testing.T) {
 		},
 	}}
 	// R98: the fixture window closes at h+1h, at or after billingT0.
-	b := newBillingAt(t, readings, h.Add(time.Hour))
+	b := newBillingAt(t, readings, h.Add(time.Hour).Add(consumption.SettleDelayHourly))
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
 
@@ -1143,7 +1265,15 @@ func TestBillingValidatesBeforeAnyIO(t *testing.T) {
 		{"invalid scope", store.Scope{}, consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{uuid.New()}, Level: energy.Hourly, Range: validRange}},
 		{"empty analyzer ids", validScope, consumption.SeriesRequest{AnalyzerIDs: nil, Level: energy.Hourly, Range: validRange}},
 		{"invalid range", validScope, consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{uuid.New()}, Level: energy.Hourly, Range: store.TimeRange{From: billingT0, To: billingT0}}},
-		{"over MaxBuckets", validScope, consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{uuid.New()}, Level: energy.Hourly, Range: store.TimeRange{From: billingT0, To: billingT0.Add(time.Duration(consumption.MaxBuckets+1) * time.Hour)}}},
+		{"over MaxCells", validScope, consumption.SeriesRequest{AnalyzerIDs: newUUIDs(21), Level: energy.Hourly, Range: store.TimeRange{From: billingT0, To: billingT0.Add(2381 * time.Hour)}}},
+		// m-5: these three (duplicate id, 51 ids, 401-day span) were
+		// previously exercised only on the Analytics side
+		// (analytics_test.go's TestAnalyticsValidatesBeforeAnyIO); Billing
+		// shares the same validateRequest, but nothing pinned that fact
+		// directly against the Billing path until now.
+		{"duplicate analyzer id (I-5's probe)", validScope, consumption.SeriesRequest{AnalyzerIDs: duplicateAnalyzerID(), Level: energy.Hourly, Range: validRange}},
+		{"51 analyzer ids", validScope, consumption.SeriesRequest{AnalyzerIDs: newUUIDs(consumption.MaxAnalyzersPerRequest + 1), Level: energy.Hourly, Range: validRange}},
+		{"401-day span", validScope, consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{uuid.New()}, Level: energy.Yearly, Range: store.TimeRange{From: billingT0, To: billingT0.Add(401 * 24 * time.Hour)}}},
 	}
 
 	for _, tc := range cases {
@@ -1154,35 +1284,6 @@ func TestBillingValidatesBeforeAnyIO(t *testing.T) {
 			require.ErrorIs(t, err, consumption.ErrInvalidRequest, "must be refused before any ReadingRepository call: noReadings panics on any call")
 		})
 	}
-}
-
-// TestBillingExactlyMaxBucketsAtHourlyNowHitsMaxRequestSpanFirst mirrors
-// analytics_test.go's TestExactlyMaxBucketsAtHourlyNowHitsMaxRequestSpanFirst
-// (X1): MaxBuckets (10000) hourly buckets is a 10000h span, WIDER than
-// MaxRequestSpan (400d = 9600h, R99) — the tighter of the two checks always
-// wins, so this request — I-6's original MaxBuckets positive control — is
-// now refused by the span cap before bucketCountExceeds is ever reached.
-// The binding limit at Hourly is MaxRequestSpan, not MaxBuckets: the real
-// positive control for what a caller can actually request is
-// TestBillingAcceptsExactlyMaxRequestSpan below.
-//
-// MaxBuckets is not reachable at ANY level under MaxRequestSpan (R99 does
-// not remove it — it stays in force as defence-in-depth against a future,
-// looser span cap): a 9600h span gives at most 9600 Hourly buckets (< the
-// 10000 cap; DST never adds an extra bucket, only alters one bucket's own
-// width), at most 400 Daily buckets, at most ~14 Monthly buckets and at
-// most 2 Yearly buckets — every level's true ceiling is far below 10000.
-func TestBillingExactlyMaxBucketsAtHourlyNowHitsMaxRequestSpanFirst(t *testing.T) {
-	b := newBilling(t, fakeReadings{})
-	ctx := context.Background()
-	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
-	req := consumption.SeriesRequest{
-		AnalyzerIDs: []uuid.UUID{uuid.New()},
-		Level:       energy.Hourly,
-		Range:       store.TimeRange{From: billingT0, To: billingT0.Add(time.Duration(consumption.MaxBuckets) * time.Hour)},
-	}
-	_, err := b.Consumption(ctx, scope, req)
-	require.ErrorIs(t, err, consumption.ErrInvalidRequest, "10000h > MaxRequestSpan's 9600h: refused before any ReadingRepository call")
 }
 
 // TestBillingAcceptsExactlyMaxRequestSpan is R99's positive control for the
@@ -1235,7 +1336,7 @@ func TestDailyMissingSnapshotYieldsNoRowForEitherAdjacentDayNotOneMergedRow(t *t
 		},
 	}}
 	// R98: the fixture window closes at mar12, after billingT0.
-	b := newBillingAt(t, readings, mar12)
+	b := newBillingAt(t, readings, mar12.Add(consumption.SettleDelayDaily))
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
 
@@ -1440,7 +1541,7 @@ func TestBillingDailyLookbackFeedsTheSharedMinimum(t *testing.T) {
 		},
 	}}
 	// R98: the fixture window closes at day+24h, after billingT0.
-	b := newBillingAt(t, readings, day.Add(24*time.Hour))
+	b := newBillingAt(t, readings, day.Add(24*time.Hour).Add(consumption.SettleDelayDaily))
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
 
@@ -1598,7 +1699,7 @@ func TestBillingHourlyMaxDemandExcludesBillingKindEvenAsTheUniqueMaximum(t *test
 		},
 	}}
 	// R98: the fixture window closes at h+1h, at or after billingT0.
-	b := newBillingAt(t, readings, h.Add(time.Hour))
+	b := newBillingAt(t, readings, h.Add(time.Hour).Add(consumption.SettleDelayHourly))
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
 
@@ -1718,7 +1819,7 @@ func TestMaxDemandIncludesAReadingExactlyAtTheBucketStartButExcludesWTo(t *testi
 		},
 	}}
 	// R98: the fixture window closes at h+2h, after billingT0.
-	b := newBillingAt(t, readings, h.Add(2*time.Hour))
+	b := newBillingAt(t, readings, h.Add(2*time.Hour).Add(consumption.SettleDelayHourly))
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
 
@@ -1773,7 +1874,7 @@ func TestYearlyDoesNotEqualTheSumOfItsMonthsWhenOneMonthBucketIsMissing(t *testi
 		model.ReadingKindLoadProfile: lp,
 	}}
 	// R98: the fixture window closes at nextJan1, after billingT0.
-	b := newBillingAt(t, readings, nextJan1)
+	b := newBillingAt(t, readings, nextJan1.Add(consumption.SettleDelayMonthly))
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
 

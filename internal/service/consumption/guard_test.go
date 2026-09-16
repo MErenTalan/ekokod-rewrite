@@ -113,6 +113,42 @@ func TestFindForbiddenFieldCatchesANarrowerConsumerDefinedInterface(t *testing.T
 	require.Contains(t, path, "Fallback")
 }
 
+// TestFindForbiddenFieldCatchesAnInterfaceMethodReturningTheForbiddenType is
+// m-1 (final fix X review): a field typed as an interface whose method set
+// has nothing to do with the forbidden repository's own method set —
+// neither implements nor is implemented by it — but ONE of whose methods
+// RETURNS the forbidden repository (a provider/factory shape: "give me the
+// repository when I ask for it") must still be caught. Neither of
+// findForbiddenField's two interface checks (equals/implements, or is
+// implemented by a forbidden type) fires here, since `Readings() ...` is
+// not a method store.ReadingRepository itself has.
+func TestFindForbiddenFieldCatchesAnInterfaceMethodReturningTheForbiddenType(t *testing.T) {
+	readingRepo := reflect.TypeOf((*store.ReadingRepository)(nil)).Elem()
+	type readingProvider interface {
+		Readings() store.ReadingRepository
+	}
+	type poisoned struct {
+		Provider readingProvider
+	}
+	path, found := findForbiddenField(reflect.TypeOf(poisoned{}), readingRepo)
+	require.True(t, found, "an interface field whose method RETURNS the forbidden repository must be caught, not silently skipped")
+	require.Contains(t, path, "Provider")
+}
+
+// TestFindForbiddenFieldCatchesAChanOfTheForbiddenType is m-1 (final fix X
+// review): a field typed `chan store.ReadingRepository` must be caught —
+// reflect.Chan was entirely absent from the walk's switch, exactly like
+// reflect.Func was before Minor M-a.
+func TestFindForbiddenFieldCatchesAChanOfTheForbiddenType(t *testing.T) {
+	readingRepo := reflect.TypeOf((*store.ReadingRepository)(nil)).Elem()
+	type poisoned struct {
+		Ch chan store.ReadingRepository
+	}
+	path, found := findForbiddenField(reflect.TypeOf(poisoned{}), readingRepo)
+	require.True(t, found, "a field typed chan store.ReadingRepository must be caught, not silently skipped")
+	require.Contains(t, path, "Ch")
+}
+
 // assertNoForbiddenField fails the test immediately if findForbiddenField
 // finds a match — the reporting half of the guard every real R61 guard test
 // above calls.
@@ -184,7 +220,7 @@ func findForbiddenField(typ reflect.Type, forbidden ...reflect.Type) (string, bo
 		}
 
 		switch cur.Kind() {
-		case reflect.Pointer, reflect.Slice, reflect.Array:
+		case reflect.Pointer, reflect.Slice, reflect.Array, reflect.Chan:
 			walk(cur.Elem(), p+"[]")
 		case reflect.Map:
 			walk(cur.Key(), p+"[key]")
@@ -200,6 +236,22 @@ func findForbiddenField(typ reflect.Type, forbidden ...reflect.Type) (string, bo
 			}
 			for i := 0; i < cur.NumOut(); i++ {
 				walk(cur.Out(i), fmt.Sprintf("%s(out %d)", p, i))
+			}
+		case reflect.Interface:
+			// m-1 (final fix X review): an interface field whose own method
+			// set neither equals/implements a forbidden type nor is
+			// satisfied by one (the two checks above) can still RETURN a
+			// forbidden repository from one of its methods — a
+			// provider/factory shape (`interface{ Readings()
+			// store.ReadingRepository }`) that neither of those checks
+			// reaches, since the interface's own method set has nothing to
+			// do with ReadingRepository's. Each method's signature is
+			// walked exactly like a Func field's (the case above), so a
+			// forbidden type surfacing as any parameter or return value of
+			// any method is caught the same way.
+			for i := 0; i < cur.NumMethod(); i++ {
+				m := cur.Method(i)
+				walk(m.Type, fmt.Sprintf("%s.%s", p, m.Name))
 			}
 		}
 	}
