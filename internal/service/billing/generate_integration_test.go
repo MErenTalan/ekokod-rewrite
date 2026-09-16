@@ -5,6 +5,7 @@ package billing_test
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"sync"
 	"testing"
 	"time"
@@ -598,4 +599,66 @@ func TestGenerateIsolatesTenants(t *testing.T) {
 	require.NoError(t, err, "positive control")
 	_, _, _, err = h.svc.Get(h.ctx, other.AdminScope, res.Bill.ID)
 	require.ErrorIs(t, err, store.ErrNotFound)
+}
+
+// TestGenerateMatchesDomainComputeOverRandomTariffs is Task 7's end-to-end
+// brute force: Generate must persist exactly what billing.Compute prices for
+// the same tariff, parameters and consumption.
+func TestGenerateMatchesDomainComputeOverRandomTariffs(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, 7022)
+	a := h.tenant.Analyzers[0]
+	h.seed(a.ID, h.window.From, "1000", "0", "0")
+	h.seed(a.ID, h.window.To, "2734.567", "812.25", "40.5")
+	params, err := h.deps.Params.Effective(h.ctx, h.tenant.Scope, h.window.From)
+	require.NoError(t, err)
+	rng := rand.New(rand.NewPCG(20260917, 7))
+	pick := func(n int) int { return rng.IntN(n) }
+	money := func(maxUnits int64) *decimal.Decimal {
+		return dec(decimal.New(rng.Int64N(maxUnits*1_000_000), -6).String())
+	}
+	n := 200
+	if testing.Short() {
+		n = 20
+	}
+	for i := range n {
+		tar := h.tenant.Tariffs[0]
+		tar.UserGroup = model.DistributionUserGroups()[pick(9)]
+		tar.VoltageLevel = model.VoltageLevels()[pick(2)]
+		tar.SupplyCompany = model.SupplyCompanies()[pick(2)]
+		tar.Term = model.TariffTerms()[pick(2)]
+		tar.SingleTimePrice, tar.OverusePrice = money(5), money(7)
+		tar.DistributionCost, tar.ReactivePowerPrice, tar.VatRate = *money(2), *money(3), *dec("20")
+		tar.ContractedPowerKw, tar.PowerUnitPrice = nil, nil
+		if tar.Term == model.TariffTermBinomial {
+			tar.ContractedPowerKw, tar.PowerUnitPrice = dec("300"), money(50)
+		}
+		_, err := h.tariffs.Update(h.ctx, h.tenant.AdminScope, tar)
+		require.NoError(t, err)
+		taxes := []model.TariffTax{{Name: "BTV", Rate: *money(10)}}
+		_, err = h.tariffs.ReplaceTaxes(h.ctx, h.tenant.AdminScope, tar.ID, taxes)
+		require.NoError(t, err)
+
+		res, err := h.generate(h.tenant.Scope, model.BillScopeAnalyzer, a.ID, func(r *billingsvc.GenerateRequest) { r.Force = true })
+		require.NoError(t, err, "scenario %d", i)
+
+		stored, err := h.tariffs.Get(h.ctx, h.tenant.AdminScope, tar.ID)
+		require.NoError(t, err)
+		storedTaxes, err := h.tariffs.Taxes(h.ctx, h.tenant.AdminScope, tar.ID)
+		require.NoError(t, err)
+		want, err := domain.Compute(domain.Input{
+			PeriodKey: "2026-01", Period: h.window, Days: 31, Tariff: stored, Taxes: storedTaxes, Params: params,
+			Quantities: domain.Quantities{ActiveImport: dec("1734.567"), ReactiveInductive: dec("812.25"), ReactiveCapacitive: dec("40.5"),
+				ActiveExport: dec("0")},
+			InstalledPowerKw: a.InstalledPowerKw,
+		})
+		require.NoError(t, err)
+		require.True(t, want.TotalCost.Equal(res.Bill.TotalCost), "scenario %d: total %s vs %s", i, want.TotalCost, res.Bill.TotalCost)
+		require.True(t, want.VatBase.Equal(res.Bill.VatBase), "scenario %d", i)
+		got := lineAmounts(t, h, res.Bill.ID)
+		require.Len(t, got, len(want.Lines), "scenario %d", i)
+		for _, l := range want.Lines {
+			require.Equal(t, l.Amount.StringFixed(2), got[l.Code], "scenario %d line %s", i, l.Code)
+		}
+	}
 }
