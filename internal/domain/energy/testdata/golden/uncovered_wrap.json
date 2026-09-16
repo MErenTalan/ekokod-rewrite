@@ -1,0 +1,53 @@
+{
+  "name": "uncovered_wrap",
+  "doc": "I-3(b)/R57: a register wrap near its modulus with NO covering reset row is an ordinary negative_delta suspect carrying the raw (uncorrected) delta — never a 10^n-modulus reconstruction. Contrast rollover.json, the same shape WITH a covering reset row.",
+  "input": {
+    "window": {
+      "from": "2025-06-03T00:00:00+03:00",
+      "to": "2025-06-03T01:00:00+03:00"
+    },
+    "readings": [
+      {
+        "ts": "2025-06-03T00:00:00+03:00",
+        "kind": "load_profile",
+        "values": {
+          "active_import": "999990"
+        }
+      },
+      {
+        "ts": "2025-06-03T01:00:00+03:00",
+        "kind": "load_profile",
+        "values": {
+          "active_import": "25"
+        }
+      }
+    ],
+    "resets": []
+  },
+  "want": {
+    "emitted": true,
+    "values": {
+      "active_import": null,
+      "reactive_inductive_import": null,
+      "reactive_capacitive_import": null,
+      "t1_import": null,
+      "t2_import": null,
+      "t3_import": null,
+      "active_export": null,
+      "reactive_inductive_export": null,
+      "reactive_capacitive_export": null,
+      "t1_export": null,
+      "t2_export": null,
+      "t3_export": null
+    },
+    "suspect": {
+      "active_import": {
+        "reason": "negative_delta",
+        "delta": "-999965"
+      }
+    },
+    "inductive_ratio": null,
+    "capacitive_ratio": null,
+    "max_demand_kw": null
+  }
+}

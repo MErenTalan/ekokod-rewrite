@@ -137,6 +137,14 @@ type propertyScenario struct {
 	resets   []energy.Reading // sorted by TS
 	priors   []energy.Reading // the load_profile subset of readings
 	hasT1    bool
+
+	// oldAtSwap marks a reading (keyed by TS.String()+string(Kind)) that
+	// was generated from an old-or-intermediate physical meter at a swap
+	// tick (the deliberate R90/R92 ambiguity, see the reading loop below).
+	// The oracle uses this to know when a reading's own reported value is
+	// stale evidence, not a trustworthy boundary (see
+	// endOldOffMeterMismatch).
+	oldAtSwap map[string]bool
 }
 
 func propertyTS(tick, offSeconds int) time.Time {
@@ -164,7 +172,7 @@ func decPtr(v int64) *decimal.Decimal {
 
 func generatePropertyScenario(seed int64) *propertyScenario {
 	rng := rand.New(rand.NewSource(seed))
-	sc := &propertyScenario{n: 10 + rng.Intn(31), tickOf: map[time.Time]int{}} // 10..40 ticks
+	sc := &propertyScenario{n: 10 + rng.Intn(31), tickOf: map[time.Time]int{}, oldAtSwap: map[string]bool{}} // 10..40 ticks
 	sc.hasT1 = rng.Float64() < 0.7
 
 	// 0-3 swaps, biased toward the grid's edges, with a chance of two
@@ -313,6 +321,9 @@ func generatePropertyScenario(seed int64) *propertyScenario {
 			r := energy.Reading{TS: propertyTS(t, off), Kind: kind, Values: mkVals(meter, t, 0.07)}
 			sc.readings = append(sc.readings, r)
 			sc.tickOf[r.TS] = t
+			if meter < kAfter {
+				sc.oldAtSwap[r.TS.String()+string(kind)] = true
+			}
 		}
 	}
 	sort.SliceStable(sc.readings, func(i, j int) bool { return sc.readings[i].TS.Before(sc.readings[j].TS) })
@@ -443,6 +454,51 @@ func deterministicNegativeAndStartPriorEdgeCases(t *testing.T) {
 	}
 }
 
+// endOldOffMeterMismatch reports whether end is a reading generated from an
+// old-or-intermediate physical meter at a swap tick (sc.oldAtSwap), AND a
+// reset row EXISTS at exactly end.TS in resets (the slice actually passed
+// to Derive for this window) whose value for reg is nil or differs from
+// end's own reported value.
+//
+// This is the review's minimal oracle fix (final-review-B-report.md,
+// property test section): the R55/R91 gap allowance below exists for
+// segments Derive legitimately cannot resolve past a reset it has no
+// evidence for at all — an "unreset" swap (no reset row anywhere) is that
+// case and is deliberately left to the existing exp-based check. This
+// helper instead targets the narrower shape where a reset row DOES cover
+// end.TS but end's own reported value doesn't agree with it: reset.go's
+// R90 end-side check exists precisely to catch a reading physically taken
+// off the meter being replaced, reported at the exact instant of the
+// swap. When this is true, the R55-gap fallback does not apply to reg:
+// Derive must return nil (suspect) or the exact full truth, never a
+// number built from that stale evidence, even one that happens to equal
+// the R55/R91 formula's output.
+//
+// The value-equality exemption (no mismatch when the reset row's value for
+// reg equals end's own value) is required: an old meter's final reading
+// can legitimately coincide with the new meter's base, and R90 then
+// correctly bills across the swap using that shared value.
+func (sc *propertyScenario) endOldOffMeterMismatch(end *energy.Reading, reg energy.Register, resets []energy.Reading) bool {
+	if !sc.oldAtSwap[end.TS.String()+string(end.Kind)] {
+		return false
+	}
+	var last *energy.Reading
+	for i := range resets {
+		if resets[i].TS.Equal(end.TS) {
+			r := resets[i]
+			last = &r
+		}
+	}
+	if last == nil {
+		return false
+	}
+	rv := last.Value(reg)
+	if rv == nil {
+		return true
+	}
+	return !rv.Equal(*end.Value(reg))
+}
+
 func TestDerivePropertyNeverBillsAWrongNumber(t *testing.T) {
 	deterministicNegativeAndStartPriorEdgeCases(t)
 
@@ -571,6 +627,10 @@ func TestDerivePropertyNeverBillsAWrongNumber(t *testing.T) {
 				if val.Equal(decimal.NewFromInt(sc.truth(reg, sTick, eTick))) {
 					stats["exact"]++
 					continue // the full physical truth is never a wrong bill
+				}
+				if sc.endOldOffMeterMismatch(end, reg, resets) {
+					fail("Derive=%s but end is an old/intermediate-meter reading at a reset instant whose value mismatches (or is uncovered by) the reset row — the R55-gap allowance does not apply to usage the end reading itself measured; want nil or the full truth=%d",
+						val, sc.truth(reg, sTick, eTick))
 				}
 				// Expected per R55/R91 from the PHYSICAL series: sum of
 				// physical usage over each segment's credited interval

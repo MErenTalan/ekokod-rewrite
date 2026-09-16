@@ -70,28 +70,31 @@ func TestRefreshConsumptionMaterialisesAClosedMonthBelowThePolicyWindow(t *testi
 	aggregateRepo := admin.NewAggregateRepository(pool)
 
 	locker := newRedisLocker(t)
-	// R100(3): a month ~two years back is older than hourly (30d), daily
-	// (90d) and monthly (1y)'s own policy horizons but NEWER than yearly's
-	// (5y) — so this still exercises exactly the "closed month two years
-	// back must still refresh" proof the fix wave asked to keep green;
-	// Enqueuer is a no-op fake because the real Redis locker here never
-	// contends (single caller, single lock acquisition).
+
+	// A month about two years back, unambiguously closed relative to the
+	// fixed clock below — same fixture shape as Task 6's
+	// TestRefreshMaterialisesAClosedMonth.
+	monthStart := time.Date(2024, time.March, 1, 0, 0, 0, 0, testIstanbul)
+	monthWindow := store.TimeRange{From: monthStart, To: monthStart.AddDate(0, 1, 0)}
+
+	// Final review B (M-6): clock.System() over a fixed March 2024 month
+	// made this test's "NEWER than yearly's 5y" claim depend on the wall
+	// clock the suite happens to run under — true today, false from March
+	// 2029 onward, at which point yearly would also refresh and the test
+	// would keep passing without proving the stated thing anymore. A fake
+	// clock fixed exactly two years after monthStart proves the same fact
+	// (older than hourly's 30d, daily's 90d and monthly's 1y policy
+	// horizons, but newer than yearly's 5y) in any year this suite runs.
 	refresher, err := consumption.NewRefresher(consumption.RefreshDeps{
 		Aggregates: aggregateRepo,
 		Locker:     locker,
 		Enqueuer:   &fakeEnqueuer{},
-		Clock:      clock.System(),
+		Clock:      clock.NewFake(monthStart.AddDate(2, 0, 10)),
 		LockTTL:    2 * time.Minute,
 		Location:   testIstanbul,
 		Log:        discardLog(),
 	})
 	require.NoError(t, err)
-
-	// A month about two years back, unambiguously closed relative to any
-	// clock this test runs under — same fixture shape as Task 6's
-	// TestRefreshMaterialisesAClosedMonth.
-	monthStart := time.Date(2024, time.March, 1, 0, 0, 0, 0, testIstanbul)
-	monthWindow := store.TimeRange{From: monthStart, To: monthStart.AddDate(0, 1, 0)}
 
 	firstReadingAt := time.Date(2024, time.March, 10, 12, 0, 0, 0, testIstanbul)
 	secondReadingAt := time.Date(2024, time.March, 20, 12, 0, 0, 0, testIstanbul)

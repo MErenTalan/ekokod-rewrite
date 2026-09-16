@@ -1,0 +1,58 @@
+{
+  "name": "max_demand_kind_filter",
+  "doc": "I-3(c): runCase calls energy.MaxDemand(window, readings) exactly as production's maxDemandInWindow does (billing.go) — never with resets. This fixture instead proves MaxDemandKinds' kind filter with a current_index reading INSIDE the readings pool: it sits strictly between the two load_profile boundary readings (so SelectBoundary never picks it — SelectBoundary has no opinion on kind and the caller must have already filtered, I-17) and carries a higher max_demand_kw than either load_profile reading. Dropping the kind filter in MaxDemand must let it win.",
+  "input": {
+    "window": {
+      "from": "2025-06-04T00:00:00+03:00",
+      "to": "2025-06-04T01:00:00+03:00"
+    },
+    "readings": [
+      {
+        "ts": "2025-06-04T00:00:00+03:00",
+        "kind": "load_profile",
+        "values": {
+          "active_import": "1000"
+        },
+        "max_demand_kw": "12.5"
+      },
+      {
+        "ts": "2025-06-04T00:15:00+03:00",
+        "kind": "current_index",
+        "values": {
+          "active_import": "1000"
+        },
+        "max_demand_kw": "999"
+      },
+      {
+        "ts": "2025-06-04T01:00:00+03:00",
+        "kind": "load_profile",
+        "values": {
+          "active_import": "1010"
+        },
+        "max_demand_kw": "10"
+      }
+    ],
+    "resets": []
+  },
+  "want": {
+    "emitted": true,
+    "values": {
+      "active_import": "10",
+      "reactive_inductive_import": null,
+      "reactive_capacitive_import": null,
+      "t1_import": null,
+      "t2_import": null,
+      "t3_import": null,
+      "active_export": null,
+      "reactive_inductive_export": null,
+      "reactive_capacitive_export": null,
+      "t1_export": null,
+      "t2_export": null,
+      "t3_export": null
+    },
+    "suspect": {},
+    "inductive_ratio": null,
+    "capacitive_ratio": null,
+    "max_demand_kw": "12.5"
+  }
+}
