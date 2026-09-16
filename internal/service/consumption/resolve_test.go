@@ -569,7 +569,7 @@ func TestRegisteringAValidResetSucceeds(t *testing.T) {
 		Reason: "negative_delta", Detail: f3Detail(t, period, "negative_delta", "active_import"),
 	})
 
-	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{analyzer: model.Analyzer{Provider: model.IntegrationProviderOSOS}}, lock.NewMemory(nil), h.Add(time.Hour))
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{analyzer: model.Analyzer{Provider: model.IntegrationProviderOSOS}}, lock.NewMemory(nil), h.Add(time.Hour).Add(consumption.SettleDelayHourly))
 
 	resetTS := h.Add(30 * time.Minute)
 	resolved, err := b.ResolveAnomaly(ctx, scope, an.ID, uuid.New(), consumption.Resolution{
@@ -622,7 +622,7 @@ func TestRegisteringAValidResetSucceedsAtDailyLevel(t *testing.T) {
 		Reason: "negative_delta", Detail: f3Detail(t, day, "negative_delta", "active_import"),
 	})
 
-	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{analyzer: model.Analyzer{Provider: model.IntegrationProviderOSOS}}, lock.NewMemory(nil), day.To.Add(time.Hour))
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{analyzer: model.Analyzer{Provider: model.IntegrationProviderOSOS}}, lock.NewMemory(nil), day.To.Add(consumption.SettleDelayDaily))
 
 	resetTS := day.From.Add(21 * time.Hour)
 	resolved, err := b.ResolveAnomaly(ctx, scope, an.ID, uuid.New(), consumption.Resolution{
@@ -668,7 +668,7 @@ func TestRegisteringAValidResetSucceedsAtMonthlyLevel(t *testing.T) {
 		Reason: "negative_delta", Detail: f3Detail(t, month, "negative_delta", "active_import"),
 	})
 
-	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{analyzer: model.Analyzer{Provider: model.IntegrationProviderOSOS}}, lock.NewMemory(nil), month.To.Add(time.Hour))
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{analyzer: model.Analyzer{Provider: model.IntegrationProviderOSOS}}, lock.NewMemory(nil), month.To.Add(consumption.SettleDelayMonthly))
 
 	resetTS := month.From.AddDate(0, 0, 21)
 	resolved, err := b.ResolveAnomaly(ctx, scope, an.ID, uuid.New(), consumption.Resolution{
@@ -719,7 +719,7 @@ func TestRegisteringAValidResetSucceedsOnADSTDay(t *testing.T) {
 		Reason: "negative_delta", Detail: f3Detail(t, dstDay, "negative_delta", "active_import"),
 	})
 
-	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{analyzer: model.Analyzer{Provider: model.IntegrationProviderOSOS}}, lock.NewMemory(nil), dstDay.To.Add(time.Hour))
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{analyzer: model.Analyzer{Provider: model.IntegrationProviderOSOS}}, lock.NewMemory(nil), dstDay.To.Add(consumption.SettleDelayDaily))
 
 	resetTS := dstDay.From.Add(11 * time.Hour)
 	resolved, err := b.ResolveAnomaly(ctx, scope, an.ID, uuid.New(), consumption.Resolution{
@@ -778,7 +778,7 @@ func TestDedupFindsAnExistingRowPastFiveHundredNoiseRows(t *testing.T) {
 			readingRow(analyzerID, h.Add(time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "900"}),
 		},
 	}}
-	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), h.Add(time.Hour))
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), h.Add(time.Hour).Add(consumption.SettleDelayHourly))
 
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{analyzerID}, Level: energy.Hourly, Range: store.TimeRange{From: h, To: h.Add(time.Hour)}}
 	_, err := b.ConsumptionAndRecord(ctx, scope, req)
@@ -839,7 +839,7 @@ func TestOverrideLookupFindsAResolvedRowPastFiveHundredNoiseRows(t *testing.T) {
 			readingRow(analyzerID, h.Add(time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "900"}),
 		},
 	}}
-	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), h.Add(time.Hour))
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), h.Add(time.Hour).Add(consumption.SettleDelayHourly))
 
 	rows, err := b.Consumption(ctx, scope, consumption.SeriesRequest{
 		AnalyzerIDs: []uuid.UUID{analyzerID}, Level: energy.Hourly, Range: store.TimeRange{From: period.From, To: period.To},
@@ -921,7 +921,7 @@ func TestDedupKeyRequiresPeriodEndAsWellAsStart(t *testing.T) {
 		model.ReadingKindDaily:       {},
 		model.ReadingKindBilling:     {},
 	}}
-	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), midnight.AddDate(0, 0, 1))
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), midnight.AddDate(0, 0, 1).Add(consumption.SettleDelayDaily))
 
 	// Directly exercise createAnomalyForReason's own dedup key via a second,
 	// Daily-shaped suspect row sharing period_start with the Hourly one
@@ -1036,7 +1036,7 @@ func TestConcurrentRunsAreSerializedByTheLockNotByLuck(t *testing.T) {
 		listBarrier:   dedupRangeBarrier(2, 150*time.Millisecond),
 		createBarrier: raceBarrier(2, 150*time.Millisecond),
 	}
-	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), h.Add(time.Hour))
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), h.Add(time.Hour).Add(consumption.SettleDelayHourly))
 
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{analyzerID}, Level: energy.Hourly, Range: store.TimeRange{From: h, To: h.Add(time.Hour)}}
 
@@ -1403,7 +1403,7 @@ func TestOverrideRecomputesRatios(t *testing.T) {
 		Reason: "negative_delta", Detail: f3Detail(t, period, "negative_delta", "active_import"),
 	})
 
-	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), h.Add(time.Hour))
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), h.Add(time.Hour).Add(consumption.SettleDelayHourly))
 
 	_, err := b.ResolveAnomaly(ctx, scope, an.ID, uuid.New(), consumption.Resolution{
 		Mode:      consumption.ResolveByOverride,
@@ -1454,7 +1454,7 @@ func TestRegisteringAResetAtAnExistingTimestampConflictsOnDifferentValues(t *tes
 		Reason: "negative_delta", Detail: f3Detail(t, period, "negative_delta", "active_import"),
 	})
 
-	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), h.Add(time.Hour))
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), h.Add(time.Hour).Add(consumption.SettleDelayHourly))
 
 	_, err := b.ResolveAnomaly(ctx, scope, an.ID, uuid.New(), consumption.Resolution{
 		Mode:       consumption.ResolveByRegisteringReset,
@@ -1496,7 +1496,7 @@ func TestRegisteringAResetAtAnExistingTimestampIsIdempotentOnIdenticalValues(t *
 		Reason: "negative_delta", Detail: f3Detail(t, period, "negative_delta", "active_import"),
 	})
 
-	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), h.Add(time.Hour))
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), h.Add(time.Hour).Add(consumption.SettleDelayHourly))
 
 	resolved, err := b.ResolveAnomaly(ctx, scope, an.ID, uuid.New(), consumption.Resolution{
 		Mode:       consumption.ResolveByRegisteringReset,
@@ -1535,7 +1535,7 @@ func TestF2RowAtBucketBoundsNeitherBlocksF3NorAcceptsOverride(t *testing.T) {
 			readingRow(analyzerID, h.Add(time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "900"}),
 		},
 	}}
-	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), h.Add(time.Hour))
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), h.Add(time.Hour).Add(consumption.SettleDelayHourly))
 
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{analyzerID}, Level: energy.Hourly, Range: store.TimeRange{From: h, To: h.Add(time.Hour)}}
 	_, err := b.ConsumptionAndRecord(ctx, scope, req)

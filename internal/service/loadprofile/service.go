@@ -15,9 +15,17 @@ import (
 )
 
 // ErrInvalidRequest is returned before any I/O when a Request cannot be
-// served: not exactly one AnalyzerIDs entry, or a Keys entry that is not one
-// of the ten profile keys internal/domain/loadprofile produces.
+// served: not exactly one AnalyzerIDs entry, a Keys entry that is not one of
+// the ten profile keys internal/domain/loadprofile produces, or a Range
+// wider than MaxRequestSpan (R99).
 var ErrInvalidRequest = errors.New("loadprofile: invalid request")
+
+// MaxRequestSpan bounds Request.Range's raw wall-clock span (R99, final
+// review A I-4: service.go:157-165 had no range cap at all, so a Profiles
+// call could load an unbounded number of consumption_hourly buckets). A
+// Range wider than this fails ErrInvalidRequest before any I/O, mirroring
+// internal/service/consumption's own MaxRequestSpan.
+const MaxRequestSpan = 400 * 24 * time.Hour
 
 // DefaultWeekendDays is applied when a company has configured no
 // company_weekend_days rows (R69; 01-project-context.md's stated default).
@@ -159,6 +167,9 @@ func (s *Service) Profiles(ctx context.Context, sc store.Scope, req Request) (Re
 	}
 	if !req.Range.Valid() {
 		return Result{}, store.ErrInvalidRange
+	}
+	if req.Range.To.Sub(req.Range.From) > MaxRequestSpan {
+		return Result{}, ErrInvalidRequest
 	}
 	if len(req.AnalyzerIDs) != 1 {
 		return Result{}, ErrInvalidRequest

@@ -137,7 +137,7 @@ func (f fakeAnalytics) ProductionMonthly(context.Context, store.Scope, []uuid.UU
 
 // noAnalytics panics on every method (I-6): used for validation tests on the
 // Analytics path, so a validation check that runs after the first I/O call
-// (rather than before, as MaxBuckets and the other checks must) fails the
+// (rather than before, as MaxCells and the other checks must) fails the
 // test immediately instead of quietly returning a fake's zero value.
 type noAnalytics struct{}
 

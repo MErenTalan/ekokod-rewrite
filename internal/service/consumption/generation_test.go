@@ -92,6 +92,19 @@ func TestGenerationRowsNeverRendersASuspectExportRegisterAsANumber(t *testing.T)
 	require.Nil(t, out[0].Values[energy.ActiveExport], "active_export is suspect: must never render as 999")
 }
 
+// TestGenerationRowsBlanksASuspectExportRegistersIndex is final review A
+// M-4: a suspect export register's closing index must come back nil from
+// GenerationRows, exactly as ExportRows already blanks it (sound.go's
+// soundIndex). Reverting GenerationRows' Indexes field to a bare
+// map-read (no soundIndex check) must turn this red.
+func TestGenerationRowsBlanksASuspectExportRegistersIndex(t *testing.T) {
+	in := generationRow()
+	in.Suspect = map[energy.Register]energy.Suspicion{energy.ActiveExport: {Reason: energy.ReasonNegativeDelta}}
+
+	out := consumption.GenerationRows([]consumption.Row{in})
+	require.Nil(t, out[0].Indexes[energy.ActiveExport], "active_export is suspect: its closing index must never render as 50")
+}
+
 // TestGenerationRowsDoesNotAliasInputValuesMap is guard (c) from the task
 // brief: GenerationRows must never share the input row's Values (or Indexes)
 // map. Mutating the returned map must not change the input row's own map.

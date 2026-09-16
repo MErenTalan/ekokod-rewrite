@@ -25,16 +25,17 @@
 // acceptance-layer restatement here would only re-assert "the six files
 // exist and run", which TestGolden already guarantees.
 //
-// TestF3NegativeDeltaProducesNullSuspectAndMessage (the negative-delta ->
-// NULL + suspect + operator message criterion) is deliberately ABSENT from
-// this file: it needs Task 8's Billing.ConsumptionAndRecord (the write-and-
-// record wrapper that owns consumption_anomalies and OperationalMessage),
-// which is not on this branch's base (Task 8 is still in its fix round). It
-// will be added once Task 8 merges.
+// TestF3NegativeDeltaProducesNullSuspectAndMessage, below, is the
+// negative-delta -> NULL + suspect + operator message criterion: it needs
+// Task 8's Billing.ConsumptionAndRecord (the write-and-record wrapper that
+// owns consumption_anomalies and OperationalMessage), which is now on this
+// branch (Task 8 merged into phase/f3-consumption-engine ahead of this
+// dispatch).
 package consumption_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -46,8 +47,10 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/energy"
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
+	"github.com/MErenTalan/ekokod-rewrite/internal/platform/lock"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/consumption"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
+	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
 )
 
@@ -108,6 +111,17 @@ func f3NewAnalytics(t *testing.T, analyticsRepo store.AnalyticsRepository) *cons
 //     monthly/daily pair: the two missing daily buckets (worth exactly
 //     value(Jan 16) - value(Jan 14) = 200) are invisible to a sum of the
 //     level below, but not to the monthly row's own boundary derivation.
+//
+//  3. Yearly vs. Monthly (final review B I-1: no test in this package ever
+//     requested energy.Yearly at all, so a mutation replacing the yearly
+//     figure with the sum of 12 monthly Derive calls left the whole package
+//     green). One reading at every month's own 00:00 boundary,
+//     value(m) = 1000 + 100*m for m = 0..12, EXCEPT July 1's (m=6) is never
+//     written: neither June (own END is July 1) nor July (own START is
+//     July 1) can resolve, so 10 of the 12 monthly rows survive, and their
+//     values sum to one thousand. The yearly row derives from its own two
+//     boundaries alone (1000 -> 2200 = 1200). 1200 != 1000 is the same
+//     assertion at the yearly/monthly pair.
 func TestF3LevelsDeriveFromTheirOwnBoundaries(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -124,7 +138,7 @@ func TestF3LevelsDeriveFromTheirOwnBoundaries(t *testing.T) {
 	_, _, err := readingRepo.BulkInsert(ctx, tenant.Scope, hourlyFixture)
 	require.NoError(t, err)
 
-	billing := f3NewBilling(t, readingRepo, dayStart.Add(24*time.Hour))
+	billing := f3NewBilling(t, readingRepo, dayStart.Add(24*time.Hour).Add(consumption.SettleDelayDaily))
 
 	hourlyRows, err := billing.Consumption(ctx, tenant.Scope, consumption.SeriesRequest{
 		AnalyzerIDs: []uuid.UUID{hourlyAnalyzerID},
@@ -169,7 +183,7 @@ func TestF3LevelsDeriveFromTheirOwnBoundaries(t *testing.T) {
 	_, _, err = readingRepo.BulkInsert(ctx, tenant.Scope, monthRows)
 	require.NoError(t, err)
 
-	monthBilling := f3NewBilling(t, readingRepo, feb1)
+	monthBilling := f3NewBilling(t, readingRepo, feb1.Add(consumption.SettleDelayMonthly))
 
 	monthlyDailyRows, err := monthBilling.Consumption(ctx, tenant.Scope, consumption.SeriesRequest{
 		AnalyzerIDs: []uuid.UUID{monthlyAnalyzerID},
@@ -198,6 +212,62 @@ func TestF3LevelsDeriveFromTheirOwnBoundaries(t *testing.T) {
 	require.Equal(t, "2900", dailySum.String())
 	require.NotEqual(t, monthlyRows[0].Values[energy.ActiveImport].String(), dailySum.String(),
 		"summing the daily rows is not how the monthly figure is produced")
+
+	// --- Part 3: Yearly vs. Monthly (final review B I-1) ---------------
+	//
+	// One load_profile reading at every month's own 00:00 boundary,
+	// value(m) = 1000 + 100*m for m = 0..12 (Jan 1 year 1 through Jan 1
+	// year 2), EXCEPT month 6's reading (July 1) is never written. Neither
+	// the June bucket (own END is July 1) nor the July bucket (own START is
+	// July 1) can resolve, so 10 of the 12 monthly buckets survive, summing
+	// to 1200 (the true year total) - 100 (June's missing delta) - 100
+	// (July's missing delta) = 1000. The yearly row derives directly from
+	// its own two boundaries (1000 -> 2200): 2200 - 1000 = 1200.
+	yearlyAnalyzerID := tenant.Analyzers[2].ID
+	yearJan1 := time.Date(2026, 1, 1, 0, 0, 0, 0, loc)
+	yearNextJan1 := yearJan1.AddDate(1, 0, 0)
+
+	var yearRows []model.MeterReading
+	for m := 0; m <= 12; m++ {
+		if m == 6 {
+			continue // July 1's own reading is deliberately missing.
+		}
+		ts := yearJan1.AddDate(0, m, 0)
+		val := fmt.Sprintf("%d", 1000+100*m)
+		yearRows = append(yearRows, readingRow(yearlyAnalyzerID, ts, model.ReadingKindLoadProfile, map[string]string{"active_import": val}))
+	}
+	// tenant.Scope covers Buildings[0] only; Analyzers[2] is under
+	// Buildings[1] (Analyzers[0] and [1] are already used by Parts 1 and 2
+	// above, over an overlapping date range), so this part uses AdminScope.
+	_, _, err = readingRepo.BulkInsert(ctx, tenant.AdminScope, yearRows)
+	require.NoError(t, err)
+
+	yearBilling := f3NewBilling(t, readingRepo, yearNextJan1.Add(consumption.SettleDelayMonthly))
+
+	yearlyMonthlyRows, err := yearBilling.Consumption(ctx, tenant.AdminScope, consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{yearlyAnalyzerID},
+		Level:       energy.Monthly,
+		Range:       store.TimeRange{From: yearJan1, To: yearNextJan1},
+	})
+	require.NoError(t, err)
+	require.Len(t, yearlyMonthlyRows, 10, "12 months minus June and July, both touching the missing July-1 boundary")
+
+	monthlySumOfYear := decimal.Zero
+	for _, r := range yearlyMonthlyRows {
+		monthlySumOfYear = monthlySumOfYear.Add(*r.Values[energy.ActiveImport])
+	}
+	require.Equal(t, "1000", monthlySumOfYear.String())
+
+	yearlyRows, err := yearBilling.Consumption(ctx, tenant.AdminScope, consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{yearlyAnalyzerID},
+		Level:       energy.Yearly,
+		Range:       store.TimeRange{From: yearJan1, To: yearNextJan1},
+	})
+	require.NoError(t, err)
+	require.Len(t, yearlyRows, 1)
+	require.NotNil(t, yearlyRows[0].Values[energy.ActiveImport])
+	require.Equal(t, "1200", yearlyRows[0].Values[energy.ActiveImport].String(), "the yearly row derives from its own two boundaries")
+	require.NotEqual(t, "1200", monthlySumOfYear.String(), "summing the monthly rows is not how the yearly figure is produced")
 }
 
 // TestF3BillingAndAnalyticsDifferByTheBoundaryStep is 09 §F3's criterion:
@@ -232,7 +302,7 @@ func TestF3BillingAndAnalyticsDifferByTheBoundaryStep(t *testing.T) {
 	require.NoError(t, err)
 
 	analytics := f3NewAnalytics(t, analyticsRepo)
-	billing := f3NewBilling(t, readingRepo, hourStart.Add(time.Hour))
+	billing := f3NewBilling(t, readingRepo, hourStart.Add(time.Hour).Add(consumption.SettleDelayHourly))
 
 	req := consumption.SeriesRequest{
 		AnalyzerIDs: []uuid.UUID{analyzerID},
@@ -297,7 +367,7 @@ func TestF3MonthlyPrefersBillingReadings(t *testing.T) {
 	_, _, err := readingRepo.BulkInsert(ctx, tenant.Scope, rows)
 	require.NoError(t, err)
 
-	billing := f3NewBilling(t, readingRepo, feb1)
+	billing := f3NewBilling(t, readingRepo, feb1.Add(consumption.SettleDelayMonthly))
 
 	reqFor := func(id uuid.UUID) consumption.SeriesRequest {
 		return consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{id}, Level: energy.Monthly, Range: store.TimeRange{From: jan1, To: feb1}}
@@ -363,7 +433,7 @@ func TestF3ZeroConsumptionProducesANullRatio(t *testing.T) {
 		Range:       store.TimeRange{From: hourStart, To: hourStart.Add(time.Hour)},
 	}
 
-	billing := f3NewBilling(t, readingRepo, hourStart.Add(time.Hour))
+	billing := f3NewBilling(t, readingRepo, hourStart.Add(time.Hour).Add(consumption.SettleDelayHourly))
 	billingRows, err := billing.Consumption(ctx, tenant.Scope, req)
 	require.NoError(t, err)
 	require.Len(t, billingRows, 1)
@@ -382,4 +452,96 @@ func TestF3ZeroConsumptionProducesANullRatio(t *testing.T) {
 	require.Equal(t, "0", analyticsRows[0].Values[energy.ActiveImport].String())
 	require.Nil(t, analyticsRows[0].InductiveRatio, "the analytics path must apply the same null-on-zero-denominator rule")
 	require.Nil(t, analyticsRows[0].CapacitiveRatio)
+}
+
+// f3NewBillingAndRecord builds a *consumption.Billing wired with every Task
+// 8 dependency (real AnomalyRepository/OpsRepository, plus a real Locker)
+// against a real Postgres pool — mirroring anomalies_integration_test.go's
+// anomaliesNewBilling, but local to this file so criterion tests here do not
+// depend on that file's own helper staying unchanged. lock.NewMemory is a
+// real, mutex-backed Locker (not a fake): it proves the same
+// check-then-create serialisation ConsumptionAndRecord relies on (C-6)
+// without a second container under memory pressure.
+func f3NewBillingAndRecord(t *testing.T, readingRepo store.ReadingRepository, anomalyRepo store.AnomalyRepository, opsRepo store.OpsRepository, now time.Time) *consumption.Billing {
+	t.Helper()
+	b, err := consumption.NewBilling(consumption.BillingDeps{
+		Readings:  readingRepo,
+		Anomalies: anomalyRepo,
+		Ops:       opsRepo,
+		Clock:     clock.NewFake(now),
+		Log:       testfixtures.DiscardLogger(),
+		Locker:    lock.NewMemory(nil),
+	})
+	require.NoError(t, err)
+	return b
+}
+
+// TestF3NegativeDeltaProducesNullSuspectAndMessage is 09 §F3's criterion:
+// "A negative delta without a reset event yields NULL consumption, a
+// suspect flag and an operational message — asserted, not assumed."
+//
+// One analyzer, one hour, real Postgres repositories and a real Locker,
+// through Billing.ConsumptionAndRecord: active_import 1000 -> 900 (a
+// negative 100 delta) with no meter_reset reading anywhere near the
+// boundary. The row's own value must be nil (never a number, never the
+// legacy "bill the end reading" defect), the register must be suspect with
+// reason negative_delta, exactly one consumption_anomalies row must exist
+// with R60's own detail shape (code, period bounds, the register's reason
+// and delta), and exactly one operational message must exist for it with
+// Category "consumption-suspect-period" and Status "error".
+func TestF3NegativeDeltaProducesNullSuspectAndMessage(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
+	analyzerID := tenant.Analyzers[0].ID
+
+	readingRepo := pathsNewReadingRepo(pool)
+	anomalyRepo := postgres.NewAnomalyRepository(pool)
+	opsRepo := postgres.NewOpsRepository(pool)
+
+	h := time.Date(2026, 7, 1, 8, 0, 0, 0, time.UTC)
+	rows := []model.MeterReading{
+		readingRow(analyzerID, h, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}),
+		readingRow(analyzerID, h.Add(time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "900"}),
+	}
+	_, _, err := readingRepo.BulkInsert(ctx, tenant.Scope, rows)
+	require.NoError(t, err)
+
+	billing := f3NewBillingAndRecord(t, readingRepo, anomalyRepo, opsRepo, h.Add(time.Hour).Add(consumption.SettleDelayHourly))
+
+	req := consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{analyzerID},
+		Level:       energy.Hourly,
+		Range:       store.TimeRange{From: h, To: h.Add(time.Hour)},
+	}
+	billingRows, err := billing.ConsumptionAndRecord(ctx, tenant.Scope, req)
+	require.NoError(t, err)
+	require.Len(t, billingRows, 1)
+	require.Nil(t, billingRows[0].Values[energy.ActiveImport], "a negative delta with no covering reset must never be billed as a number")
+	require.Contains(t, billingRows[0].Suspect, energy.ActiveImport)
+	require.Equal(t, energy.ReasonNegativeDelta, billingRows[0].Suspect[energy.ActiveImport].Reason)
+
+	anomalies, err := billing.ListAnomalies(ctx, tenant.AdminScope, consumption.AnomalyListRequest{AnalyzerIDs: []uuid.UUID{analyzerID}, Unresolved: true})
+	require.NoError(t, err)
+	require.Len(t, anomalies, 1)
+	require.Equal(t, "negative_delta", anomalies[0].Reason)
+	require.Equal(t, h, anomalies[0].PeriodStart.UTC())
+	require.Equal(t, h.Add(time.Hour), anomalies[0].PeriodEnd.UTC())
+
+	var detail map[string]any
+	require.NoError(t, json.Unmarshal(anomalies[0].Detail, &detail))
+	require.Equal(t, "consumption.suspect_period", detail["code"], "R60's own detail shape")
+	regs, ok := detail["registers"].(map[string]any)
+	require.True(t, ok)
+	reg, ok := regs["active_import"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "negative_delta", reg["reason"])
+	require.Equal(t, "-100", reg["delta"])
+
+	msgs, err := opsRepo.ListMessages(ctx, tenant.AdminScope, store.MessageFilter{RelatedID: &anomalies[0].ID})
+	require.NoError(t, err)
+	require.Len(t, msgs, 1, "exactly one operational message for the suspect period")
+	require.Equal(t, "consumption-suspect-period", msgs[0].Category)
+	require.Equal(t, "error", msgs[0].Status)
 }

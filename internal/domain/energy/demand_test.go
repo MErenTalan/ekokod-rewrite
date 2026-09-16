@@ -84,3 +84,88 @@ func TestMaxDemandDoesNotAliasTheInputReadingsPointer(t *testing.T) {
 
 	requireDecimal(t, rs[0].MaxDemandKw, "12.5")
 }
+
+// --- R101: MaxDemandKindsFor / MaxDemandOf ----------------------------------
+
+// TestMaxDemandKindsForMatchesTheRuledSetPerLevel pins R101's exact table:
+// Hourly load_profile only; Daily load_profile+daily; Monthly and Yearly
+// load_profile+daily+billing (MaxDemandKinds' original, unqualified set).
+func TestMaxDemandKindsForMatchesTheRuledSetPerLevel(t *testing.T) {
+	require.ElementsMatch(t, []energy.Kind{energy.KindLoadProfile}, energy.MaxDemandKindsFor(energy.Hourly))
+	require.ElementsMatch(t, []energy.Kind{energy.KindLoadProfile, energy.KindDaily}, energy.MaxDemandKindsFor(energy.Daily))
+	require.ElementsMatch(t, []energy.Kind{energy.KindLoadProfile, energy.KindDaily, energy.KindBilling}, energy.MaxDemandKindsFor(energy.Monthly))
+	require.ElementsMatch(t, []energy.Kind{energy.KindLoadProfile, energy.KindDaily, energy.KindBilling}, energy.MaxDemandKindsFor(energy.Yearly))
+	require.Equal(t, energy.MaxDemandKinds, energy.MaxDemandKindsFor(energy.Yearly), "Monthly/Yearly's set is exactly MaxDemandKinds")
+}
+
+// TestMaxDemandOfAtHourlyExcludesADailyRow is R101's M-2 fix: at Hourly, a
+// daily-kind row's day-peak must NOT win — it used to, under the
+// unqualified MaxDemandKinds allowlist MaxDemand still uses by default.
+func TestMaxDemandOfAtHourlyExcludesADailyRow(t *testing.T) {
+	rs := []energy.Reading{
+		demandAt(t0, "12.5"),
+		demandAtKind(t0.Add(15*time.Minute), energy.KindDaily, "77.25"),
+	}
+	kinds := energy.MaxDemandKindsFor(energy.Hourly)
+	requireDecimal(t, energy.MaxDemandOf(win(t0, time.Hour), rs, kinds), "12.5")
+}
+
+// TestMaxDemandOfAtHourlyExcludesABillingRow is the same fix for a
+// billing-kind row at Hourly.
+func TestMaxDemandOfAtHourlyExcludesABillingRow(t *testing.T) {
+	rs := []energy.Reading{
+		demandAt(t0, "12.5"),
+		demandAtKind(t0.Add(15*time.Minute), energy.KindBilling, "999"),
+	}
+	kinds := energy.MaxDemandKindsFor(energy.Hourly)
+	requireDecimal(t, energy.MaxDemandOf(win(t0, time.Hour), rs, kinds), "12.5")
+}
+
+// TestMaxDemandOfAtDailyAllowsDailyButExcludesBilling is R101: at Daily, a
+// daily-kind row counts (it is that day's own stamped peak) but a
+// billing-kind row (a whole month's peak) must not leak into a single day.
+func TestMaxDemandOfAtDailyAllowsDailyButExcludesBilling(t *testing.T) {
+	kinds := energy.MaxDemandKindsFor(energy.Daily)
+
+	rs := []energy.Reading{
+		demandAt(t0, "12.5"),
+		demandAtKind(t0.Add(15*time.Minute), energy.KindDaily, "77.25"),
+	}
+	requireDecimal(t, energy.MaxDemandOf(win(t0, time.Hour), rs, kinds), "77.25")
+
+	rsBilling := []energy.Reading{
+		demandAt(t0, "12.5"),
+		demandAtKind(t0.Add(15*time.Minute), energy.KindBilling, "999"),
+	}
+	requireDecimal(t, energy.MaxDemandOf(win(t0, time.Hour), rsBilling, kinds), "12.5")
+}
+
+// TestMaxDemandOfAtMonthlyAndYearlyAllowsEveryCountedKind is R101: Monthly
+// and Yearly allow load_profile, daily AND billing rows — exactly
+// MaxDemandKinds' original set — since a billing row's month-wide peak is
+// only ever attributable at those two coarser levels.
+func TestMaxDemandOfAtMonthlyAndYearlyAllowsEveryCountedKind(t *testing.T) {
+	for _, level := range []energy.Level{energy.Monthly, energy.Yearly} {
+		kinds := energy.MaxDemandKindsFor(level)
+		rs := []energy.Reading{
+			demandAt(t0, "12.5"),
+			demandAtKind(t0.Add(15*time.Minute), energy.KindBilling, "999"),
+		}
+		requireDecimal(t, energy.MaxDemandOf(win(t0, time.Hour), rs, kinds), "999")
+	}
+}
+
+// TestMaxDemandEqualsMaxDemandOfWithMaxDemandKinds proves MaxDemand is
+// exactly MaxDemandOf(w, readings, MaxDemandKinds) (R101's doc comment):
+// nothing about MaxDemand's own behaviour has changed.
+func TestMaxDemandEqualsMaxDemandOfWithMaxDemandKinds(t *testing.T) {
+	rs := []energy.Reading{
+		demandAt(t0, "12.5"),
+		demandAtKind(t0.Add(15*time.Minute), energy.KindDaily, "77.25"),
+		demandAtKind(t0.Add(30*time.Minute), energy.KindBilling, "55.5"),
+	}
+	w := win(t0, time.Hour)
+	want := energy.MaxDemandOf(w, rs, energy.MaxDemandKinds)
+	got := energy.MaxDemand(w, rs)
+	require.Equal(t, want.String(), got.String())
+}
