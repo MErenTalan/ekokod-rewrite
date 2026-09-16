@@ -73,6 +73,23 @@ func TestFindForbiddenFieldCatchesAFuncTypedField(t *testing.T) {
 	require.Contains(t, path, "Get")
 }
 
+// TestFindForbiddenFieldCatchesAMapKeyTypedField is Minor M-e (re-review
+// round 2): the original Map case walked only Elem(), never Key(), so a
+// field typed `map[store.ReadingRepository]bool` (the forbidden repository
+// used as a map KEY rather than a value) stayed invisible to this guard.
+// findForbiddenField now walks both Key() and Elem() for reflect.Map, so
+// this probe — mirroring TestFindForbiddenFieldCatchesAFuncTypedField's
+// shape for the Func case — must be caught.
+func TestFindForbiddenFieldCatchesAMapKeyTypedField(t *testing.T) {
+	readingRepo := reflect.TypeOf((*store.ReadingRepository)(nil)).Elem()
+	type poisoned struct {
+		ByRepo map[store.ReadingRepository]bool
+	}
+	path, found := findForbiddenField(reflect.TypeOf(poisoned{}), readingRepo)
+	require.True(t, found, "a field typed map[store.ReadingRepository]bool must be caught via its KEY type, not silently skipped")
+	require.Contains(t, path, "ByRepo")
+}
+
 // assertNoForbiddenField fails the test immediately if findForbiddenField
 // finds a match — the reporting half of the guard every real R61 guard test
 // above calls.
@@ -95,6 +112,11 @@ func assertNoForbiddenField(t *testing.T, typ reflect.Type, forbidden ...reflect
 // could call instead of storing the repository directly) stayed invisible
 // to this guard. Every parameter and every return type of a Func field is
 // now walked exactly like any other field's type.
+//
+// M-e: the original Map case walked only Elem(), never Key(), so a field
+// typed `map[store.ReadingRepository]T` (the forbidden repository used as
+// the map's KEY rather than its value) stayed invisible. Both Key() and
+// Elem() are now walked for reflect.Map.
 func findForbiddenField(typ reflect.Type, forbidden ...reflect.Type) (string, bool) {
 	seen := make(map[reflect.Type]bool)
 	var path string
@@ -118,6 +140,7 @@ func findForbiddenField(typ reflect.Type, forbidden ...reflect.Type) (string, bo
 		case reflect.Pointer, reflect.Slice, reflect.Array:
 			walk(cur.Elem(), p+"[]")
 		case reflect.Map:
+			walk(cur.Key(), p+"[key]")
 			walk(cur.Elem(), p+"[]")
 		case reflect.Struct:
 			for i := 0; i < cur.NumField(); i++ {

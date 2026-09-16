@@ -1050,6 +1050,59 @@ func TestDailyMissingSnapshotYieldsNoRowForEitherAdjacentDayNotOneMergedRow(t *t
 	require.Equal(t, "100", rows[0].Values[energy.ActiveImport].String())
 }
 
+// TestBillingDailyBucketToleranceCapsAtTheDSTNarrowedBucketWidth is Minor
+// M-f (re-review round 2): boundaryTolerance's cap (billing.go:355-382)
+// consults BOTH the bucket ending at bound and the bucket beginning at
+// bound, taking the SMALLER width — but the committed suite only ever
+// exercised normal 24h days, where both neighbours are the same width, so a
+// mutant that looks at only the NEXT bucket's width (billing.go:373's `next`
+// alone) stays green. 2015-03-29 in Europe/Istanbul is the spring-forward
+// day: the bucket [Mar 29 00:00, Mar 30 00:00) is 23h wide, one hour short
+// of a normal Daily bucket, so half of it is 11h30m rather than 12h. A
+// daily-kind reading exactly 11h30m before Mar 30 00:00 (the boundary where
+// the 23h bucket and the following normal 24h bucket meet) is within the
+// capped tolerance and must yield the Mar 29 row; one 11h45m before it must
+// not.
+func TestBillingDailyBucketToleranceCapsAtTheDSTNarrowedBucketWidth(t *testing.T) {
+	loc := istanbulLoc(t)
+	mar29 := time.Date(2015, 3, 29, 0, 0, 0, 0, loc)
+	mar30 := time.Date(2015, 3, 30, 0, 0, 0, 0, loc)
+	require.Equal(t, 23*time.Hour, mar30.Sub(mar29), "2015-03-29 must be the 23h Istanbul spring-forward day")
+	analyzerID := uuid.New()
+
+	run := func(t *testing.T, offset time.Duration, wantRow bool) {
+		readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
+			model.ReadingKindDaily: {
+				readingRow(analyzerID, mar29, model.ReadingKindDaily, map[string]string{"active_import": "1000"}),
+				readingRow(analyzerID, mar30.Add(-offset), model.ReadingKindDaily, map[string]string{"active_import": "1100"}),
+			},
+		}}
+		b := newBilling(t, readings)
+		ctx := context.Background()
+		scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+
+		rows, err := b.Consumption(ctx, scope, consumption.SeriesRequest{
+			AnalyzerIDs: []uuid.UUID{analyzerID},
+			Level:       energy.Daily,
+			Range:       store.TimeRange{From: mar29, To: mar30},
+		})
+		require.NoError(t, err)
+		if wantRow {
+			require.Len(t, rows, 1, "11h30m is exactly half of the 23h bucket — within the capped tolerance")
+			require.Equal(t, "100", rows[0].Values[energy.ActiveImport].String())
+		} else {
+			require.Empty(t, rows, "11h45m exceeds half of the 23h bucket — outside the capped tolerance")
+		}
+	}
+
+	t.Run("11h30m before the bound yields a row", func(t *testing.T) {
+		run(t, 11*time.Hour+30*time.Minute, true)
+	})
+	t.Run("11h45m before the bound yields no row", func(t *testing.T) {
+		run(t, 11*time.Hour+45*time.Minute, false)
+	})
+}
+
 // --- R96/K2: adjacent periods telescope exactly, never gap nor overlap ----
 
 // TestAdjacentMonthlyPeriodsTelescopeToTheTrueTotal is R96's K2 fix (the
@@ -1068,6 +1121,7 @@ func TestAdjacentMonthlyPeriodsTelescopeToTheTrueTotal(t *testing.T) {
 	loc := istanbulLoc(t)
 	dec1 := time.Date(2025, 12, 1, 0, 0, 0, 0, loc)
 	dec30 := time.Date(2025, 12, 30, 0, 0, 0, 0, loc)
+	jan1 := time.Date(2026, 1, 1, 0, 0, 0, 0, loc)
 	feb1 := time.Date(2026, 2, 1, 0, 0, 0, 0, loc)
 	analyzerID := uuid.New()
 
@@ -1077,6 +1131,7 @@ func TestAdjacentMonthlyPeriodsTelescopeToTheTrueTotal(t *testing.T) {
 		},
 		model.ReadingKindDaily: {
 			readingRow(analyzerID, dec1, model.ReadingKindDaily, map[string]string{"active_import": "1000"}),
+			readingRow(analyzerID, jan1, model.ReadingKindDaily, map[string]string{"active_import": "6400"}),
 			readingRow(analyzerID, feb1, model.ReadingKindDaily, map[string]string{"active_import": "7200"}),
 		},
 	}}
@@ -1095,6 +1150,15 @@ func TestAdjacentMonthlyPeriodsTelescopeToTheTrueTotal(t *testing.T) {
 	december, january := rows[0], rows[1]
 	require.Equal(t, energy.KindBilling, december.Source, "December's END boundary resolves to the Dec 30 billing snapshot")
 	require.Equal(t, energy.KindDaily, january.Source, "January's END boundary falls back to the Feb 1 daily snapshot")
+
+	// The Jan 1 daily reading (6400) sits exactly at the Dec/Jan seam instant,
+	// but must NOT be used for January's own START: the resolver picks the
+	// billing snapshot (Dec 30) for that instant, exactly the same reading
+	// December's own END used. If a regression let the two sides of the seam
+	// resolve to different readings, December would still read 5200 but
+	// January would read 800 (7200-6400) instead of 1000 (7200-6200).
+	require.Equal(t, "5200", december.Values[energy.ActiveImport].String(), "December: 6200 (Dec 30 billing) - 1000 (Dec 1 daily)")
+	require.Equal(t, "1000", january.Values[energy.ActiveImport].String(), "January: 7200 (Feb 1 daily) - 6200 (the SAME Dec 30 billing reading), never 800")
 
 	sum := december.Values[energy.ActiveImport].Add(*january.Values[energy.ActiveImport])
 	require.Equal(t, "6200", sum.String(), "the two rows must telescope to EXACTLY the true total, no gap and no overlap")
@@ -1342,6 +1406,48 @@ func TestBillingMaxDemandFromBillingKindIsTheUniqueMaximum(t *testing.T) {
 	require.Len(t, rows, 1)
 	require.NotNil(t, rows[0].MaxDemandKw)
 	require.Equal(t, "500", rows[0].MaxDemandKw.String(), "billing-kind rows must count as a MaxDemand source (R65)")
+}
+
+// TestBillingMonthlyMaxDemandFromBillingKindIsTheUniqueMaximum is I-G
+// (re-review round 2): TestBillingMaxDemandFromBillingKindIsTheUniqueMaximum
+// above only exercises the HOURLY leg of I-D's fix (billing.go:216/248), so
+// dropping billing-kind rows from the MONTHLY MaxDemand read
+// (`maxDemandBilling := billing[:0]` at billing.go:229) stayed green — at
+// Monthly, `billing` is already loaded for boundary resolution and reused
+// as-is for MaxDemand, and that is exactly where R65/R85's ARIL demand
+// charge lives. Here the billing-kind reading (Jan 16, far from either
+// boundary, so it is never itself a boundary candidate under
+// BillingSnapshotTolerance) carries the only large MaxDemandKw (500);
+// load_profile at both January boundaries is a small decoy.
+func TestBillingMonthlyMaxDemandFromBillingKindIsTheUniqueMaximum(t *testing.T) {
+	loc := istanbulLoc(t)
+	jan1 := time.Date(2026, 1, 1, 0, 0, 0, 0, loc)
+	jan16 := time.Date(2026, 1, 16, 0, 0, 0, 0, loc)
+	feb1 := time.Date(2026, 2, 1, 0, 0, 0, 0, loc)
+	analyzerID := uuid.New()
+
+	readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
+		model.ReadingKindLoadProfile: {
+			mustSetMaxDemand(readingRow(analyzerID, jan1, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}), "5"),
+			mustSetMaxDemand(readingRow(analyzerID, feb1, model.ReadingKindLoadProfile, map[string]string{"active_import": "1100"}), "8"),
+		},
+		model.ReadingKindBilling: {
+			mustSetMaxDemand(readingRow(analyzerID, jan16, model.ReadingKindBilling, map[string]string{}), "500"),
+		},
+	}}
+	b := newBilling(t, readings)
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+
+	rows, err := b.Consumption(ctx, scope, consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{analyzerID},
+		Level:       energy.Monthly,
+		Range:       store.TimeRange{From: jan1, To: feb1},
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.NotNil(t, rows[0].MaxDemandKw)
+	require.Equal(t, "500", rows[0].MaxDemandKw.String(), "the Monthly leg must also count billing-kind rows as a MaxDemand source (R65)")
 }
 
 // --- I-E: the I-9 sort.Search lower bound must include w.From -------------
