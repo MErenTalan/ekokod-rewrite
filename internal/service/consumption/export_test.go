@@ -102,12 +102,10 @@ func TestExportRowsEmptySuspectIsEmptyString(t *testing.T) {
 	require.Equal(t, "", e.Rows[0][suspectColumn])
 }
 
-// TestExportRowsNeverRendersASuspectRegisterAsANumber is task-9-review.md
-// finding (c): a hand-built Row whose Values AND Indexes entries are
-// non-nil for a suspect register must render "" in BOTH its consumption
-// column and its <register>_index column, never "999". Removing exportRow's
-// soundValue/soundIndex calls (reverting to bare r.Values[reg]/
-// r.Indexes[reg] reads) must turn this red.
+// TestExportRowsNeverRendersASuspectRegisterAsANumber proves a hand-built
+// Row whose Values AND Indexes entries are non-nil for a suspect register
+// must render "" in BOTH its consumption column and its <register>_index
+// column, never "999".
 func TestExportRowsNeverRendersASuspectRegisterAsANumber(t *testing.T) {
 	w := energy.Window{From: summaryT0, To: summaryT0.Add(time.Hour)}
 	rows := []consumption.Row{{

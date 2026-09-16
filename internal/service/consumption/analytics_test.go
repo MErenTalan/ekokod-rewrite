@@ -29,16 +29,16 @@ func istanbulLoc(t *testing.T) *time.Location {
 // in the plan's own guard list: AnalyticsDeps has no ReadingRepository field
 // at all, so there is nothing to poison and no fallback path to
 // accidentally take. fakeAnalytics{rows: nil} deliberately returns NO rows
-// (I-8) — the one condition under which a "fall back to Readings when the
+// — the one condition under which a "fall back to Readings when the
 // aggregate is empty" mutation would actually have somewhere to fall back
 // TO, which is what makes this fixture prove the mutation's absence rather
 // than merely fail to exercise it.
 //
-// I-4 (final review B): this behavioural probe alone is vacuous against a
+// This behavioural probe alone is vacuous against a
 // FIELD-level bypass — adding a poisoned field nobody's code path ever
 // calls (or a narrower consumer-defined interface a real repository could
-// still satisfy, guard_test.go's own I-4 fix) leaves it green. It now
-// delegates to guard_test.go's reflection walk (the same one
+// still satisfy) leaves it green. It delegates to guard_test.go's
+// reflection walk (the same one
 // TestAnalyticsDepsHasNoReadingOrAnomalyRepositoryField calls) FIRST, so the
 // plan's own named guard also catches what the structural guard catches,
 // not only what this call happens to exercise at runtime.
@@ -78,10 +78,10 @@ func TestAnalyticsPathCannotReachTheHypertable(t *testing.T) {
 //
 //	composed February active_import = 5300 - 5000 = 300
 //
-// I-2: MaxDemandKw is the MAXIMUM over EVERY daily bucket inside February,
+// MaxDemandKw is the MAXIMUM over EVERY daily bucket inside February,
 // not merely the last one — 5 Feb's peak (96) is both earlier than and
 // larger than 10 Feb's own (42), so a bug that took only the last bucket's
-// figure (the review's I-2 finding) would report 42, not the true 96.
+// figure would report 42, not the true 96.
 func TestOpenMonthIsComposedFromDailyClosingIndexes(t *testing.T) {
 	loc := istanbulLoc(t)
 	analyzerID := uuid.New()
@@ -199,7 +199,7 @@ func TestAnalyticsComposesEveryAbsentBucketNotOnlyTheLast(t *testing.T) {
 	require.False(t, hasApr, "no daily bucket at all inside or before April: absent, not a zero row")
 }
 
-// TestAnalyticsQueriesTheWidenedBucketRange is I-1: a monthly request
+// TestAnalyticsQueriesTheWidenedBucketRange proves a monthly request
 // starting mid-month (Feb 15) must still query the aggregate from the WHOLE
 // bucket's own start (Feb 1), never from req.Range.From directly — the
 // materialised view's predicate is `bucket >= from_ts`, so querying with
@@ -231,10 +231,10 @@ func TestAnalyticsQueriesTheWidenedBucketRange(t *testing.T) {
 	require.True(t, calls[0].r.To.Equal(mar1))
 }
 
-// --- I5: ratios must come from the bucket's consumption, not its index ----
+// --- Ratios must come from the bucket's consumption, not its index -------
 
-// TestAnalyticsRatiosComeFromConsumptionValuesNotClosingIndexes is I-5's
-// Analytics half: the bucket's consumption values (100/30/6) and its
+// TestAnalyticsRatiosComeFromConsumptionValuesNotClosingIndexes proves the
+// bucket's consumption values (100/30/6) and its
 // closing indexes (99999/...) are deliberately set to wildly different
 // numbers, so a mutation that computed the ratio from Indexes instead of
 // Values would produce an obviously different, wrong ratio.
@@ -278,7 +278,7 @@ func TestAnalyticsRatiosComeFromConsumptionValuesNotClosingIndexes(t *testing.T)
 	require.Equal(t, "99999", rows[0].Indexes[energy.ActiveImport].String())
 }
 
-// --- I6: validation runs before ANY I/O, on the Analytics path -----------
+// --- Validation runs before ANY I/O, on the Analytics path ---------------
 
 // TestAnalyticsValidatesBeforeAnyIO uses noAnalytics — which panics on
 // every method — so a validation check that runs after even the FIRST
@@ -357,7 +357,7 @@ func TestAnalyticsRefusesOverMaxCells(t *testing.T) {
 	require.ErrorIs(t, err, consumption.ErrInvalidRequest, "must be refused before any AnalyticsRepository call: noAnalytics panics on any call")
 }
 
-// duplicateAnalyzerID reproduces final review A's I-5 probe verbatim: the
+// duplicateAnalyzerID returns two uuid.UUIDs that are the
 // same id listed twice.
 func duplicateAnalyzerID() []uuid.UUID {
 	id := uuid.New()
@@ -409,7 +409,7 @@ func TestAnalyticsAcceptsExactlyMaxRequestSpan(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// TestAnalyticsRefusesAnUnrecognisedLevel is M-1: an unknown Level must be
+// TestAnalyticsRefusesAnUnrecognisedLevel proves an unknown Level must be
 // refused by validateRequest, never silently reach fetchBuckets' otherwise
 // unreachable default branch and return (nil, nil).
 func TestAnalyticsRefusesAnUnrecognisedLevel(t *testing.T) {
@@ -426,9 +426,9 @@ func TestAnalyticsRefusesAnUnrecognisedLevel(t *testing.T) {
 	require.ErrorIs(t, err, consumption.ErrInvalidRequest)
 }
 
-// --- I7: Analytics repository calls must use the caller's own Scope -------
+// --- Analytics repository calls must use the caller's own Scope ----------
 
-// TestAnalyticsCallsUseTheCallersScope is I-7's Analytics-side unit test,
+// TestAnalyticsCallsUseTheCallersScope is the Analytics-side unit test,
 // symmetric to TestBillingReadingCallsUseTheCallersScope.
 func TestAnalyticsCallsUseTheCallersScope(t *testing.T) {
 	analyzerID := uuid.New()
@@ -493,11 +493,10 @@ func TestComposedRowRatioComesFromConsumptionValuesNotClosingIndexes(t *testing.
 	require.Equal(t, "0.12", rows[0].CapacitiveRatio.String())
 }
 
-// TestAnalyticsCallsUseTheCallersScopeAtMonthlyComposition is I-7's
-// remainder: the re-review found TestAnalyticsCallsUseTheCallersScope ran at
-// Hourly only, so composeMissingPeriods' own ConsumptionDaily call
-// (analytics.go:185) was never exercised by any scope-checking test — a
-// mutation substituting store.SystemScope(sc.CompanyID) there stayed green.
+// TestAnalyticsCallsUseTheCallersScopeAtMonthlyComposition proves
+// composeMissingPeriods' own ConsumptionDaily call (analytics.go:185) also
+// uses the caller's own Scope — TestAnalyticsCallsUseTheCallersScope alone
+// only exercises Hourly, never this call.
 // monthlyRows is empty (no materialised row at all), forcing composition to
 // run; dailyRows supplies enough for composeOpenPeriodRow to emit a row.
 func TestAnalyticsCallsUseTheCallersScopeAtMonthlyComposition(t *testing.T) {
@@ -530,10 +529,10 @@ func TestAnalyticsCallsUseTheCallersScopeAtMonthlyComposition(t *testing.T) {
 	require.Len(t, rows, 1, "sanity: composition actually ran and produced a row")
 }
 
-// --- M-2: a composed row with nothing before it is omitted, not all-nil ---
+// --- A composed row with nothing before it is omitted, not all-nil -------
 
-// TestComposedRowIsOmittedWhenNoDailyBucketPrecedesThePeriod is M-2: when
-// there is no consumption_daily bucket at all before the missing period,
+// TestComposedRowIsOmittedWhenNoDailyBucketPrecedesThePeriod proves that
+// when there is no consumption_daily bucket at all before the missing period,
 // there is nothing to subtract from, so no row is emitted — never a row
 // whose every value is nil.
 func TestComposedRowIsOmittedWhenNoDailyBucketPrecedesThePeriod(t *testing.T) {
@@ -565,8 +564,8 @@ func TestComposedRowIsOmittedWhenNoDailyBucketPrecedesThePeriod(t *testing.T) {
 
 // --- R102: a negative consumption is nil, never a suspicious number --------
 
-// TestMaterialisedNegativeConsumptionIsNilNotNegative reproduces final
-// review A's meter-swap probe (M-1): a materialised bucket whose own delta
+// TestMaterialisedNegativeConsumptionIsNilNotNegative proves a materialised
+// bucket whose own delta
 // column has gone negative (index 50000, then 120 after a physical meter
 // swap) must surface as nil, never as -49880 — Analytics has no suspicion
 // channel, so a negative number here would silently double-count into

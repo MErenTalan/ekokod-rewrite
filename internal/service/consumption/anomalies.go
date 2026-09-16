@@ -26,8 +26,8 @@ import (
 func ptr[T any](v T) *T { return &v }
 
 // anomalyLockTTL, anomalyLockAcquireWait and anomalyLockAcquireAttempts bound
-// the dedup lock ConsumptionAndRecord holds per (analyzer, period_start)
-// (C-6): the partial index on consumption_anomalies claims no database-level
+// the dedup lock ConsumptionAndRecord holds per (analyzer, period_start):
+// the partial index on consumption_anomalies claims no database-level
 // uniqueness, so this lock is what actually prevents two concurrent runs
 // from creating two rows for the same period. Acquire itself already polls
 // until its ctx is done (platform/lock's contract), so each attempt is given
@@ -48,7 +48,7 @@ const anomalyDetailCode = "consumption.suspect_period"
 
 // anomalyRegisterDetail is one register's entry in anomalyDetail.Registers
 // (R60). Delta is omitted (not merely null) for a meter_reset reason, since
-// energy.Suspicion.Delta is nil there (M-2) — Reason and ResetRows are
+// energy.Suspicion.Delta is nil there — Reason and ResetRows are
 // always present, matching every Suspicion this package ever builds one
 // from.
 type anomalyRegisterDetail struct {
@@ -75,7 +75,7 @@ type anomalyDetail struct {
 }
 
 // anomalyCode is used to peek at just the "code" field of an anomaly's
-// detail JSON, without decoding the rest — C1(c): Consumption's override
+// detail JSON, without decoding the rest — Consumption's override
 // substitution (applyResolvedAnomalies) must never apply an F2-shaped row's
 // (or any other unrecognised shape's) values, only a row this package
 // itself wrote with R60's own "code":"consumption.suspect_period".
@@ -98,7 +98,7 @@ func hasSuspectPeriodCode(detail json.RawMessage) bool {
 // buildAnomalyDetail renders R60's detail JSON for ONE (analyzer, period,
 // reason) anomaly row: regs holds only the registers suspect for THIS
 // reason (the caller, groupSuspectByReason, already split a mixed-reason
-// period into one call per reason — R58/C-4: one row per reason, not one
+// period into one call per reason — R58: one row per reason, not one
 // row per register).
 func buildAnomalyDetail(period energy.Window, regs map[energy.Register]energy.Suspicion) ([]byte, error) {
 	out := anomalyDetail{
@@ -121,7 +121,7 @@ func buildAnomalyDetail(period energy.Window, regs map[energy.Register]energy.Su
 // buildMissingReadingsDetail renders R97's own detail shape: R60's code,
 // period bounds, and "boundaries" naming the unresolved side(s) — no
 // "registers" key at all (there is no derived value to attribute to one).
-// m2-4: boundaries reflects classifyGap's decision AT RECORDING TIME only —
+// boundaries reflects classifyGap's decision AT RECORDING TIME only —
 // a dedup hit on an already-unresolved row (createAnomalyForReason above)
 // keeps this original detail as-is, so a later partial backfill that
 // narrows the live gap (e.g. "start","end" down to just "end") is not
@@ -140,7 +140,7 @@ func buildMissingReadingsDetail(period energy.Window, boundaries []string) ([]by
 // suspectRegistersFromDetail parses an anomaly's own detail JSON (R60's
 // shape) back into the set of registers it names — used by ResolveByOverride
 // validation (an override must name one of THESE registers) and by
-// Billing.Consumption's accepted-resolution substitution (C-6: which
+// Billing.Consumption's accepted-resolution substitution (which
 // registers an "accepted" anomaly leaves null).
 func suspectRegistersFromDetail(detail json.RawMessage) (map[energy.Register]bool, error) {
 	var d anomalyDetail
@@ -157,7 +157,7 @@ func suspectRegistersFromDetail(detail json.RawMessage) (map[energy.Register]boo
 // decodeOverrideValues parses a resolved manual_override anomaly's
 // OverrideValues column (map[register]decimal-string, ResolveAnomaly's own
 // encodeOverrideValues format) back into decimals, for Billing.Consumption's
-// substitution (C-6).
+// substitution.
 func decodeOverrideValues(raw json.RawMessage) (map[energy.Register]decimal.Decimal, error) {
 	if len(raw) == 0 {
 		return nil, nil
@@ -184,7 +184,7 @@ func decodeOverrideValues(raw json.RawMessage) (map[energy.Register]decimal.Deci
 var reasonOrder = []energy.Reason{energy.ReasonNegativeDelta, energy.ReasonMeterReset, energy.ReasonMissingReadings}
 
 // groupSuspectByReason splits a Row's mixed-reason Suspect map into one
-// sub-map per Reason (R58, C-4: "one row per reason, each listing its
+// sub-map per Reason (R58: "one row per reason, each listing its
 // registers" — never one row per register).
 func groupSuspectByReason(suspect map[energy.Register]energy.Suspicion) map[energy.Reason]map[energy.Register]energy.Suspicion {
 	out := make(map[energy.Reason]map[energy.Register]energy.Suspicion, len(suspect))
@@ -261,17 +261,17 @@ func (b *Billing) releaseAnomalyLock(ctx context.Context, lease lock.Lease) {
 
 // ConsumptionAndRecord runs Consumption and, for every suspect register it
 // finds, writes one consumption_anomalies row and one operator message per
-// distinct reason in the period (R58-R60, C-4). It is the only method on
+// distinct reason in the period (R58-R60). It is the only method on
 // Billing that writes.
 //
 // Re-running it for the same period does not create a second row for the
-// same (analyzer, period_start, period_end, reason) — C-6: the dedup check
+// same (analyzer, period_start, period_end, reason) — the dedup check
 // lists BOTH resolved and unresolved anomalies (matching F2's
 // negativeDeltaAnomalyExists exactly), serialised per (analyzer,
 // period_start) by acquireAnomalyLock, since the table's own partial index
 // claims no uniqueness.
 func (b *Billing) ConsumptionAndRecord(ctx context.Context, sc store.Scope, req SeriesRequest) ([]Row, error) {
-	// I1: Locker's presence is checked up front, before Consumption runs at
+	// Locker's presence is checked up front, before Consumption runs at
 	// all — never discovered only once the first suspect period appears. A
 	// mis-wired Billing (Locker left nil) must fail every
 	// ConsumptionAndRecord call, not just the ones lucky enough to hit a
@@ -307,7 +307,7 @@ func (b *Billing) ConsumptionAndRecord(ctx context.Context, sc store.Scope, req 
 
 // recordSuspectPeriod writes one anomaly row (+ operator message) per
 // distinct reason in row.Suspect, under ONE held lease for the whole period
-// (R58, C-4, C-6).
+// (R58).
 func (b *Billing) recordSuspectPeriod(ctx context.Context, sc store.Scope, row Row) error {
 	groups := groupSuspectByReason(row.Suspect)
 	if len(groups) == 0 {
@@ -328,7 +328,7 @@ func (b *Billing) recordSuspectPeriod(ctx context.Context, sc store.Scope, row R
 	return nil
 }
 
-// createAnomalyForReason implements C-6's dedup-then-create for one
+// createAnomalyForReason runs the dedup-then-create for one
 // (analyzer, period, reason): register-shaped rows (negative_delta,
 // meter_reset) — R97's missing_readings goes through
 // createMissingReadingsAnomaly, sharing the same dedupAndCreateAnomaly core.
@@ -345,13 +345,13 @@ func (b *Billing) createAnomalyForReason(ctx context.Context, sc store.Scope, ro
 // under AnomalyRepository's own maximum page cap (1000, the postgres
 // implementation's anomalyMaxPageLimit) so that a SHORT returned page
 // unambiguously means "no more rows" — never "the repository silently
-// capped a larger request I made" (C3).
+// capped a larger request I made".
 const anomalyPageSize = 500
 
 // listAllAnomalies pages through f with anomalyPageSize until a short page
-// comes back, returning every matching row (C3): the dedup check and the
+// comes back, returning every matching row: the dedup check and the
 // resolved-override lookup must never miss a row merely because it fell
-// past a repository's own default page of 100 (P4, P5).
+// past a repository's own default page of 100.
 func (b *Billing) listAllAnomalies(ctx context.Context, sc store.Scope, f store.AnomalyFilter) ([]model.ConsumptionAnomaly, error) {
 	f.Page = store.Page{Limit: anomalyPageSize, Offset: f.Page.Offset}
 	var out []model.ConsumptionAnomaly
@@ -368,13 +368,13 @@ func (b *Billing) listAllAnomalies(ctx context.Context, sc store.Scope, f store.
 	}
 }
 
-// dedupAndCreateAnomaly implements C-6's dedup-then-create, shared by every
+// dedupAndCreateAnomaly runs the dedup-then-create shared by every
 // reason this package writes: it lists BOTH resolved and unresolved rows
 // already covering the exact same (analyzer, period_start, period_end,
 // reason) and skips creation when one exists, exactly as F2's
 // negativeDeltaAnomalyExists does for its own table of anomalies.
 //
-// C3: the dedup query narrows to the EXACT period_start instant
+// The dedup query narrows to the EXACT period_start instant
 // ([window.From, window.From+1µs)) — never the whole [window.From,
 // window.To) range, which (since AnomalyList filters on period_start alone)
 // would match every OTHER anomaly whose own period_start merely falls
@@ -391,18 +391,18 @@ func (b *Billing) dedupAndCreateAnomaly(ctx context.Context, sc store.Scope, ana
 		return err
 	}
 	for _, a := range existing {
-		// I4: dedup matches only rows THIS package wrote (R60's own code) —
+		// Dedup matches only rows THIS package wrote (R60's own code) —
 		// never an F2-shaped row that happens to share the exact same
 		// (period_start, period_end) and reason (common: a 1-hour meter's
 		// own load_profile step at Hourly, a daily-kind pair at Daily, a
-		// billing pair at Monthly). An F2 row is cleared separately, by I-5's
+		// billing pair at Monthly). An F2 row is cleared separately, by the
 		// cascade once the F3 row it overlaps is resolved — it must never
 		// suppress that F3 row's own creation in the first place.
 		if !hasSuspectPeriodCode(a.Detail) {
 			continue
 		}
 		if a.PeriodStart.Equal(window.From) && a.PeriodEnd.Equal(window.To) {
-			// M1: Create may have succeeded on a prior run while its
+			// Create may have succeeded on a prior run while its
 			// AppendMessage failed — an unresolved row missing its operator
 			// message gets one now rather than staying silently unnotified.
 			if a.ResolvedAt == nil {
@@ -436,7 +436,7 @@ func (b *Billing) dedupAndCreateAnomaly(ctx context.Context, sc store.Scope, ana
 	return err
 }
 
-// ensureAnomalyMessage implements M1: on a dedup hit against an unresolved
+// ensureAnomalyMessage runs on a dedup hit against an unresolved
 // row, check it already has its operator message (by RelatedID) and append
 // one only when it is missing — a prior run's Create that succeeded while
 // its own AppendMessage failed must not leave the anomaly forever silent.
@@ -516,14 +516,13 @@ type anomalyPeriodKey struct {
 	start, end int64
 }
 
-// applyResolvedAnomalies implements C-6: Billing.Consumption itself — not
-// only ConsumptionAndRecord — must reflect a resolved manual_override or
+// applyResolvedAnomalies ensures Billing.Consumption itself — not
+// only ConsumptionAndRecord — reflects a resolved manual_override or
 // accepted anomaly for a period, so a caller that reads Consumption
 // directly still sees the operator's own resolution. It post-processes the
 // []Row Consumption already built (mutating it in place; rows is a slice
-// over the caller's own backing array) — called from billing.go's
-// Consumption with a single line near its return, per the controller's
-// note to keep billing.go's own diff minimal ahead of R96's rework there.
+// over the caller's own backing array), called from billing.go's
+// Consumption with a single line near its return.
 //
 // Rows are grouped by analyzer so each analyzer's resolved anomalies are
 // listed ONCE, over that analyzer's own rows' combined window, rather than
@@ -549,10 +548,10 @@ func (b *Billing) applyResolvedAnomalies(ctx context.Context, sc store.Scope, ro
 			}
 		}
 
-		// C3: page through ALL resolved anomalies over the analyzer's whole
+		// Page through ALL resolved anomalies over the analyzer's whole
 		// combined window — never rely on the repository's own default page
-		// of 100 (P4: a resolved override past the 100th row was silently
-		// dropped).
+		// of 100 (a resolved override past the 100th row would otherwise be
+		// silently dropped).
 		anomalies, err := b.listAllAnomalies(ctx, sc, store.AnomalyFilter{
 			AnalyzerIDs: []uuid.UUID{analyzerID},
 			Range:       &store.TimeRange{From: from, To: to.Add(time.Microsecond)},
@@ -563,14 +562,14 @@ func (b *Billing) applyResolvedAnomalies(ctx context.Context, sc store.Scope, ro
 
 		byPeriod := make(map[anomalyPeriodKey][]model.ConsumptionAnomaly, len(anomalies))
 		for _, a := range anomalies {
-			// C1(c): only a row THIS package wrote (R60's own code) may
+			// Only a row THIS package wrote (R60's own code) may
 			// substitute a value — never an F2-shaped row, and never
 			// anything unparseable, even if its (period_start, period_end)
-			// happens to line up with a bucket exactly (P7).
+			// happens to line up with a bucket exactly.
 			if a.ResolvedAt == nil || a.Resolution == nil || !hasSuspectPeriodCode(a.Detail) {
 				continue
 			}
-			// RI-5: a resolved missing_readings anomaly is applied ONLY
+			// A resolved missing_readings anomaly is applied ONLY
 			// through applyResolvedGapOverrides (billing.go), which runs
 			// exclusively on buckets that still produce NO row from real
 			// readings. This loop instead post-processes rows Consumption
@@ -603,7 +602,7 @@ func (b *Billing) applyResolvedAnomalies(ctx context.Context, sc store.Scope, ro
 					return err
 				}
 			}
-			// I6: ratios are recomputed once, after every matching
+			// Ratios are recomputed once, after every matching
 			// anomaly's effect has been applied, from the row's
 			// POST-substitution Values/Suspect state.
 			recomputeRatios(row)
@@ -613,7 +612,7 @@ func (b *Billing) applyResolvedAnomalies(ctx context.Context, sc store.Scope, ro
 }
 
 // applyResolvedAnomaly applies ONE resolved anomaly's effect to row, per the
-// resolution recorded on it (C-6). reset_registered needs no application
+// resolution recorded on it. reset_registered needs no application
 // here: registering a reset changes meter_readings itself, so the NEXT
 // Consumption call derives a sound number the ordinary way, with no
 // special-casing in this function.
@@ -637,7 +636,7 @@ func applyResolvedAnomaly(row *Row, a model.ConsumptionAnomaly) error {
 			val := v
 			row.Values[reg] = &val
 			row.Resolution[reg] = string(ResolveByOverride)
-			// I6: an overridden register is no longer suspect, so Ratios'
+			// An overridden register is no longer suspect, so Ratios'
 			// own ActiveImport-suspect check (and any later re-derivation)
 			// treats it as sound evidence.
 			delete(row.Suspect, reg)
@@ -651,7 +650,7 @@ func applyResolvedAnomaly(row *Row, a model.ConsumptionAnomaly) error {
 			row.Resolution = make(map[energy.Register]string, len(regs))
 		}
 		for reg := range regs {
-			// M5: only a register STILL suspect on this fresh derivation is
+			// Only a register STILL suspect on this fresh derivation is
 			// nilled — a period that has since become sound for that
 			// register (new data backfilled it) is never re-nilled just
 			// because an old anomaly once named it.
@@ -667,8 +666,8 @@ func applyResolvedAnomaly(row *Row, a model.ConsumptionAnomaly) error {
 	return nil
 }
 
-// recomputeRatios implements I6: after ANY override substitution, the row's
-// reactive ratios are recomputed from the POST-substitution Values (never
+// recomputeRatios recomputes, after ANY override substitution, the row's
+// reactive ratios from the POST-substitution Values (never
 // left at whatever energy.Ratios computed before the substitution, which
 // stayed nil for as long as active_import itself was suspect). It uses
 // energy.Ratio directly (not energy.Ratios, which takes a whole
@@ -705,7 +704,7 @@ func (b *Billing) ListAnomalies(ctx context.Context, sc store.Scope, req Anomaly
 		return nil, ErrInvalidRequest
 	}
 	if req.Range != nil && !req.Range.Valid() {
-		// M7: this package's own fail-closed sentinel, not
+		// This package's own fail-closed sentinel, not
 		// store.ErrInvalidRange passed through raw — every other validation
 		// failure in this file is consumption.ErrInvalidRequest, and a
 		// caller checking errors.Is(err, consumption.ErrInvalidRequest)

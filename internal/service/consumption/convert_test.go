@@ -1,7 +1,7 @@
 package consumption
 
 // This file is package consumption (internal, not consumption_test):
-// toEnergyReading and toModelKind are unexported by design (I-11 — F3
+// toEnergyReading and toModelKind are unexported by design (F3
 // exposes only Analytics, Billing and their Deps/Row/SeriesRequest types),
 // so this is the only test file in the package allowed to call them
 // directly. Every other *_test.go file in this package is external
@@ -56,8 +56,8 @@ func convertSetRegister(mr *model.MeterReading, reg energy.Register, v *decimal.
 	}
 }
 
-// TestConvertRoundTripsEveryRegisterAndNeverReappliesTheMultiplier is I-11's
-// acceptance test: every energy.Register round-trips through
+// TestConvertRoundTripsEveryRegisterAndNeverReappliesTheMultiplier proves
+// every energy.Register round-trips through
 // toEnergyReading, and MultiplierApplied is read for audit only, never
 // reapplied — 02 §2.2 says the multiplier is applied exactly once, at
 // ingestion, so a stored reading's register values are ALREADY the true

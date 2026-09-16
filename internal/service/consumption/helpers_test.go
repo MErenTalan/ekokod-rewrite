@@ -1,6 +1,6 @@
 package consumption_test
 
-// This file is the package's ONE shared-test-helper file (I-9): Tasks 8, 9
+// This file is the package's ONE shared-test-helper file: Tasks 8, 9
 // and 11a reuse what is here and never redefine a helper with the same
 // name, matching internal/domain/energy's and internal/service/loadprofile's
 // own helpers_test.go convention.
@@ -10,8 +10,7 @@ package consumption_test
 // (insertReading, newTenant, ctx, and anything shaped like them) are either
 // avoided entirely (every test below builds its own local ctx rather than
 // sharing a package-level one) or given a "paths"-prefixed, clearly
-// path-specific name (pathsSeedReading, pathsInsertReadings). See the task-7
-// report for the full list.
+// path-specific name (pathsSeedReading, pathsInsertReadings).
 
 import (
 	"context"
@@ -58,7 +57,7 @@ func testLog(t testing.TB) *slog.Logger {
 // dailyRows, monthlyRows, yearlyRows) overrides it. ProductionDaily/Monthly
 // are never used by this package and always return nil, nil.
 // calls, when non-nil, records every (method, Scope, analyzerIDs, TimeRange)
-// this fakeAnalytics call receives, in call order (I-1, I-7): a test can
+// this fakeAnalytics call receives, in call order: a test can
 // inspect it afterwards to assert the exact range/scope a caller queried
 // with, without needing a bespoke recording type per assertion.
 type analyticsCall struct {
@@ -78,7 +77,7 @@ type fakeAnalytics struct {
 
 	calls *[]analyticsCall
 
-	// t and wantScope, when both set, fail the test immediately (I-7) if
+	// t and wantScope, when both set, fail the test immediately if
 	// any method is called with a Scope other than wantScope — a mutation
 	// that substitutes a different Scope on one call turns this red.
 	t         *testing.T
@@ -135,7 +134,7 @@ func (f fakeAnalytics) ProductionMonthly(context.Context, store.Scope, []uuid.UU
 	return nil, nil
 }
 
-// noAnalytics panics on every method (I-6): used for validation tests on the
+// noAnalytics panics on every method: used for validation tests on the
 // Analytics path, so a validation check that runs after the first I/O call
 // (rather than before, as MaxCells and the other checks must) fails the
 // test immediately instead of quietly returning a fake's zero value.
@@ -182,7 +181,7 @@ type fakeReadings struct {
 	err    error
 
 	// bulkInsertErr, when set, makes BulkInsert fail without writing
-	// anything — this fix round's C4/I2 tests use it to prove a failed
+	// anything — the reset-insert-failure tests use it to prove a failed
 	// insert never marks the anomaly resolved.
 	bulkInsertErr error
 	// inserted, when non-nil, records every row BulkInsert is called with,
@@ -190,7 +189,7 @@ type fakeReadings struct {
 	// round-tripping.
 	inserted *[]model.MeterReading
 
-	// t and wantScope, when both set, fail the test immediately (I-7) if
+	// t and wantScope, when both set, fail the test immediately if
 	// any method is called with a Scope other than wantScope — a mutation
 	// that substitutes a different (even if still valid) Scope on one
 	// repository call turns this red, rather than relying on an accidental
@@ -271,7 +270,7 @@ func (f fakeReadings) Latest(context.Context, store.Scope, uuid.UUID, store.Time
 	return nil, nil
 }
 
-// noReadings panics on every method (I-6): used for validation tests on the
+// noReadings panics on every method: used for validation tests on the
 // Billing path, so a validation check that runs after the first I/O call
 // fails the test immediately instead of quietly returning a fake's zero
 // value.
@@ -301,7 +300,7 @@ func (noReadings) Latest(context.Context, store.Scope, uuid.UUID, store.TimeRang
 // that violation immediately rather than letting a nil-ish fake silently
 // return zero values.
 //
-// List is the one exception (Task 8, C-6): Consumption itself now reads
+// List is the one exception (Task 8): Consumption itself now reads
 // resolved manual_override/accepted anomalies to substitute their values
 // (applyResolvedAnomalies, anomalies.go) — a read Task 7 never needed but
 // R61 never forbade (R61 only ever forbids Billing reaching an
@@ -436,12 +435,12 @@ func containsUUID(ids []uuid.UUID, id uuid.UUID) bool {
 }
 
 // fakeAnomalies is an in-memory, configurable store.AnomalyRepository used
-// by this fix round's unit tests (C1-C4, I1-I3, R97): it reproduces the real
-// repository's own pagination contract — a default page limit (100,
-// matching postgres's own anomalyDefaultPageLimit unless a test overrides
-// it), rows ordered by period_start desc — so a test can prove C3's full
-// paging fix and C4's dedup-key fix without a real database. Safe for
-// concurrent use (I1's deterministic race test needs that).
+// by ResolveAnomaly's and ConsumptionAndRecord's unit tests (R97): it
+// reproduces the real repository's own pagination contract — a default page
+// limit (100, matching postgres's own anomalyDefaultPageLimit unless a test
+// overrides it), rows ordered by period_start desc — so a test can prove
+// pagination and the dedup key without a real database. Safe for concurrent
+// use (a deterministic race test needs that).
 type fakeAnomalies struct {
 	mu sync.Mutex
 
@@ -451,18 +450,18 @@ type fakeAnomalies struct {
 	// defaultLimit mimics AnomalyRepository's own "a zero Limit means the
 	// repository's default" contract; 0 here defaults to 100, matching
 	// production, so a caller that (bug) never sets an explicit Page.Limit
-	// reproduces the review's P4/P5 cutoff exactly.
+	// reproduces the repository's own page-size cutoff exactly.
 	defaultLimit int32
 
 	// listBarrier, when non-nil, is invoked at the START of every List call
-	// with that call's own filter, before the read — RI-1: the caller
+	// with that call's own filter, before the read — the caller
 	// arms it only for the SHAPE of List call that actually matters (the
 	// dedup check's own exact-microsecond Range), never every List call —
 	// arming it unconditionally would fire on applyResolvedAnomalies' own
 	// unlocked List first (outside recordSuspectPeriod's lock), which both
 	// goroutines always reach at the same point regardless of whether the
 	// lock later works, making the race test pass even with the lock
-	// removed (RI-1's own finding).
+	// removed.
 	listBarrier func(filt store.AnomalyFilter)
 
 	// createBarrier and resolveBarrier, when non-nil, are invoked at the
@@ -480,17 +479,15 @@ type fakeAnomalies struct {
 	resolveBarrier func()
 
 	// resolveErr, when set, makes Resolve fail for exactly the ids it
-	// names — I2's ordering test uses this to fail the F2 cascade's own
+	// names — the ordering test uses this to fail the F2 cascade's own
 	// Resolve call and assert the F3 row's own Resolve is never reached.
 	resolveErr map[uuid.UUID]error
 
 	// rec, when non-nil, is appended to on every Get ("get") and Resolve
-	// ("resolve") call — m2-1: this is the replacement for the deleted
-	// production test hook (resolveAnomalyLockedReadContextKey,
-	// withLockedAnomalyRead, consumption.IsLockedAnomalyRead). A test shares
-	// this recorder with a fakeLocker (refresh_test.go) so it can assert
-	// ordering ("get"/"resolve" fall strictly between "acquire:"/
-	// "release:") instead of tagging a context value only a test recognises.
+	// ("resolve") call. A test shares this recorder with a fakeLocker
+	// (refresh_test.go) so it can assert ordering ("get"/"resolve" fall
+	// strictly between "acquire:"/"release:") using a behavioural fake
+	// rather than an exported test-only hook.
 	rec *recorder
 }
 
@@ -590,7 +587,7 @@ func (f *fakeAnomalies) Create(_ context.Context, _ store.Scope, a model.Consump
 }
 
 // resolveErrIDs, when an id is present, makes Resolve fail for exactly that
-// id — I2's ordering test uses this to make the F2 cascade's own Resolve
+// id — the ordering test uses this to make the F2 cascade's own Resolve
 // call fail and asserts the F3 row's own Resolve is never reached.
 func (f *fakeAnomalies) Resolve(_ context.Context, _ store.Scope, id, resolvedBy uuid.UUID, resolution string, overrides []byte, at time.Time) (model.ConsumptionAnomaly, error) {
 	if f.rec != nil {
@@ -624,9 +621,9 @@ func (f *fakeAnomalies) Resolve(_ context.Context, _ store.Scope, id, resolvedBy
 
 // --- fakeOps: store.OpsRepository --------------------------------------------
 
-// fakeOps is an in-memory store.OpsRepository fake for this fix round's
-// message-related tests (M1: a dedup hit against an unresolved row backfills
-// a missing message).
+// fakeOps is an in-memory store.OpsRepository fake for the message-related
+// tests (a dedup hit against an unresolved row backfills a missing
+// message).
 type fakeOps struct {
 	mu       sync.Mutex
 	messages []model.OperationalMessage
@@ -712,7 +709,7 @@ func (f fakeAnalyzers) TouchLastReading(context.Context, store.Scope, uuid.UUID,
 
 // --- fakeUsers: store.UserRepository -----------------------------------------
 
-// fakeUsers is a configurable store.UserRepository fake for I2/P6's
+// fakeUsers is a configurable store.UserRepository fake for the
 // resolvedBy-validated-before-any-write test: Get returns ErrNotFound for
 // any id not in validIDs, exactly like a real, scoped repository would for a
 // user outside the caller's own company.
@@ -720,9 +717,9 @@ type fakeUsers struct {
 	validIDs map[uuid.UUID]bool
 	// allowAll, when true, makes Get succeed for ANY id — R103 made
 	// BillingDeps.Users required for every ResolveAnomaly call, so tests
-	// that only care about some OTHER behaviour (most of this fix round's
-	// pre-existing suite) wire this rather than enumerating every
-	// uuid.New() resolvedBy they happen to pass.
+	// that only care about some OTHER behaviour (most of the suite) wire
+	// this rather than enumerating every uuid.New() resolvedBy they happen
+	// to pass.
 	allowAll bool
 }
 

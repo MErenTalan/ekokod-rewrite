@@ -8,7 +8,7 @@ import (
 )
 
 // toEnergyReading converts a stored meter reading into the pure domain's
-// Reading shape (I-11). Every energy.Register round-trips through the
+// Reading shape. Every energy.Register round-trips through the
 // obvious field mapping. MultiplierApplied is deliberately never read here:
 // 02-domain-rules.md §2.2 applies the multiplier exactly once, at ingestion,
 // and reapplying it in this layer would double it (Global Constraints).
@@ -56,7 +56,7 @@ func toEnergyKind(k model.ReadingKind) energy.Kind {
 	}
 }
 
-// toModelKind is toEnergyKind's inverse (I-11).
+// toModelKind is toEnergyKind's inverse.
 func toModelKind(k energy.Kind) model.ReadingKind {
 	switch k {
 	case energy.KindLoadProfile:

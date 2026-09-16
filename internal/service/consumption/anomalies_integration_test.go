@@ -105,7 +105,7 @@ func TestASuspectPeriodWritesAnAnomalyAndAnOperatorMessage(t *testing.T) {
 	require.Equal(t, "consumption_anomaly", *msgs[0].RelatedType)
 }
 
-// TestRerunningTheSamePeriodDoesNotCreateASecondAnomaly is C-6's basic dedup
+// TestRerunningTheSamePeriodDoesNotCreateASecondAnomaly is the basic dedup
 // proof: calling ConsumptionAndRecord twice for the identical still-suspect
 // period creates only one row.
 func TestRerunningTheSamePeriodDoesNotCreateASecondAnomaly(t *testing.T) {
@@ -369,7 +369,7 @@ func TestResolvingAnotherTenantsAnomalyIsNotFound(t *testing.T) {
 	require.Len(t, an, 1)
 
 	// Cross-tenant: tenant A's AdminScope must never resolve tenant B's row.
-	// I-8: resolvedBy is tenant A's OWN real admin id (never uuid.New()) —
+	// resolvedBy is tenant A's OWN real admin id (never uuid.New()) —
 	// that user WOULD pass AnomalyRepository.Resolve's own resolvedBy check
 	// (it belongs to sc.CompanyID = tenant A), so this only stays
 	// ErrNotFound if Get itself is properly scoped, never because the
@@ -388,8 +388,8 @@ func TestResolvingAnotherTenantsAnomalyIsNotFound(t *testing.T) {
 // TestAcceptedLeavesTheValueNullButClearsTheBlock: an accepted resolution
 // stamps resolved_at, leaves Values nil (never a number) but records
 // Row.Resolution, and re-running ConsumptionAndRecord for the same,
-// now-resolved period never resurrects a second row (C-6's resolved+
-// unresolved dedup).
+// now-resolved period never resurrects a second row (the dedup check
+// covers resolved and unresolved rows alike).
 func TestAcceptedLeavesTheValueNullButClearsTheBlock(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -428,7 +428,7 @@ func TestAcceptedLeavesTheValueNullButClearsTheBlock(t *testing.T) {
 	require.Nil(t, rows[0].Values[energy.ActiveImport], "still no number")
 	require.Equal(t, "accepted", rows[0].Resolution[energy.ActiveImport])
 
-	// C-6: re-running ConsumptionAndRecord for the same, now-RESOLVED period
+	// Re-running ConsumptionAndRecord for the same, now-RESOLVED period
 	// must not resurrect a second anomaly row.
 	_, err = billing.ConsumptionAndRecord(ctx, tenant.Scope, req)
 	require.NoError(t, err)
@@ -437,7 +437,7 @@ func TestAcceptedLeavesTheValueNullButClearsTheBlock(t *testing.T) {
 	require.Len(t, all, 1, "a resolved anomaly must not be recreated")
 }
 
-// TestConsumptionSubstitutesAResolvedManualOverride is C-6's headline test:
+// TestConsumptionSubstitutesAResolvedManualOverride proves
 // Billing.Consumption ITSELF (never ConsumptionAndRecord) reflects a
 // resolved manual_override.
 func TestConsumptionSubstitutesAResolvedManualOverride(t *testing.T) {
@@ -480,8 +480,8 @@ func TestConsumptionSubstitutesAResolvedManualOverride(t *testing.T) {
 	require.Equal(t, "manual_override", rows[0].Resolution[energy.ActiveImport])
 }
 
-// TestResolvingAnF3PeriodAlsoResolvesTheOverlappingF2IngestionAnomaly is
-// I-5: resolving the F3 (billing-path) anomaly also resolves F2's own
+// TestResolvingAnF3PeriodAlsoResolvesTheOverlappingF2IngestionAnomaly
+// proves resolving the F3 (billing-path) anomaly also resolves F2's own
 // ingestion-time negative_delta row for the same analyzer nested inside the
 // F3 period, with the SAME resolution and resolver.
 func TestResolvingAnF3PeriodAlsoResolvesTheOverlappingF2IngestionAnomaly(t *testing.T) {
@@ -556,9 +556,9 @@ func TestResolvingAnF3PeriodAlsoResolvesTheOverlappingF2IngestionAnomaly(t *test
 	require.Nil(t, gotOther.ResolvedAt, "another analyzer's row must never be touched")
 }
 
-// TestTwoRegistersSuspectForTheSameReasonWriteOneAnomalyRow is guard (c)'s
-// permanent proof: a period with TWO registers suspect for the SAME reason
-// writes exactly ONE anomaly row (R58/C-4: one row per reason, listing every
+// TestTwoRegistersSuspectForTheSameReasonWriteOneAnomalyRow proves a period
+// with TWO registers suspect for the SAME reason
+// writes exactly ONE anomaly row (R58: one row per reason, listing every
 // affected register — never one row per register).
 func TestTwoRegistersSuspectForTheSameReasonWriteOneAnomalyRow(t *testing.T) {
 	t.Parallel()
@@ -597,7 +597,7 @@ func TestTwoRegistersSuspectForTheSameReasonWriteOneAnomalyRow(t *testing.T) {
 	require.Contains(t, regs, "t1_import")
 }
 
-// TestNarrowScopeResolvesAnAnomalyOfAnAnalyzerInItsOwnBuilding is I-8/P8: a
+// TestNarrowScopeResolvesAnAnomalyOfAnAnalyzerInItsOwnBuilding proves a
 // narrow Scope (Buildings[0] only) can resolve an anomaly for an analyzer
 // under its OWN building; AdminScope is the positive control proving the
 // anomaly is real regardless of which scope reaches it.
@@ -634,8 +634,8 @@ func TestNarrowScopeResolvesAnAnomalyOfAnAnalyzerInItsOwnBuilding(t *testing.T) 
 	require.NotNil(t, resolved.ResolvedAt)
 }
 
-// TestNarrowScopeCannotResolveAnAnomalyOfAnAnalyzerInAnotherBuilding is the
-// negative half of P8: tenant.Scope grants Buildings[0] only, and
+// TestNarrowScopeCannotResolveAnAnomalyOfAnAnalyzerInAnotherBuilding proves
+// the negative half: tenant.Scope grants Buildings[0] only, and
 // Analyzers[2] is under Buildings[1] — resolving that anomaly through the
 // narrow Scope must be ErrNotFound, while AdminScope succeeds.
 func TestNarrowScopeCannotResolveAnAnomalyOfAnAnalyzerInAnotherBuilding(t *testing.T) {
@@ -673,8 +673,8 @@ func TestNarrowScopeCannotResolveAnAnomalyOfAnAnalyzerInAnotherBuilding(t *testi
 	require.NotNil(t, resolved.ResolvedAt)
 }
 
-// TestListAnomaliesWithEmptyAnalyzerIDsFailsClosed is I-8's mutation (g)
-// pinned directly against the real repository: an empty AnalyzerIDs must
+// TestListAnomaliesWithEmptyAnalyzerIDsFailsClosed proves, directly against
+// the real repository: an empty AnalyzerIDs must
 // never widen to "every analyzer visible to scope".
 func TestListAnomaliesWithEmptyAnalyzerIDsFailsClosed(t *testing.T) {
 	t.Parallel()

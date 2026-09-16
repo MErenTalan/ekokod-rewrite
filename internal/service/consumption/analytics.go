@@ -43,8 +43,8 @@ func NewAnalytics(d AnalyticsDeps) (*Analytics, error) {
 // multi-analyzer request. bucket is From.UnixNano() rather than the
 // time.Time itself: Time is comparable and would work as a map key too, but
 // hashing it exercises time.Time's own equality semantics (wall/monotonic
-// mix) rather than the plain instant comparison this package's M-15 rule
-// requires (.Equal, never ==) — converting to an int64 first sidesteps the
+// mix) rather than the plain instant comparison this key needs
+// (.Equal, never ==) — converting to an int64 first sidesteps the
 // question entirely rather than relying on two Time values built through
 // different paths (a domain Bucket() call vs. a Postgres-decoded column)
 // happening to compare correctly under ==.
@@ -73,7 +73,7 @@ func (a *Analytics) Consumption(ctx context.Context, sc store.Scope, req SeriesR
 		return nil, nil
 	}
 
-	// I-1: the aggregate is queried over the request WIDENED to whole
+	// The aggregate is queried over the request WIDENED to whole
 	// buckets of Level — [wanted[0].From, wanted[last].To) — never
 	// req.Range directly. The materialised view's own predicate is
 	// `bucket >= from_ts`, so a From landing mid-bucket (e.g. a monthly
@@ -137,7 +137,7 @@ func (a *Analytics) Consumption(ctx context.Context, sc store.Scope, req SeriesR
 }
 
 // fetchBuckets maps req.Level to the matching AnalyticsRepository method,
-// queried over r rather than req.Range directly (I-1: r is the request
+// queried over r rather than req.Range directly (r is the request
 // widened to whole buckets of req.Level by the caller).
 func (a *Analytics) fetchBuckets(ctx context.Context, sc store.Scope, req SeriesRequest, r store.TimeRange) ([]model.ConsumptionBucket, error) {
 	switch req.Level {
@@ -208,14 +208,14 @@ func (a *Analytics) composeMissingPeriods(ctx context.Context, sc store.Scope, l
 // (R94, amending R88), factored out so it has nothing left to depend on but
 // its inputs.
 //
-// M-2: when lastBefore is nil (no consumption_daily bucket exists before w
+// When lastBefore is nil (no consumption_daily bucket exists before w
 // at all), there is nothing to subtract from and no composed row is
 // emitted — never a row whose every value is nil. bucketIndexes only ever
 // has keys for the seven registers migration 00005 gives a closing-index
 // column to; the other five (every export register but active_export) are
 // therefore always nil in a composed row, same as in a materialised one.
 //
-// MaxDemandKw (I-2) is the MAXIMUM of MaxDemandKw over every daily bucket
+// MaxDemandKw is the MAXIMUM of MaxDemandKw over every daily bucket
 // strictly inside w, not merely the last one: a period's peak day is not
 // necessarily its most recent day.
 func composeOpenPeriodRow(analyzerID uuid.UUID, w energy.Window, dailyBuckets []model.ConsumptionBucket) *Row {
@@ -239,7 +239,7 @@ func composeOpenPeriodRow(analyzerID uuid.UUID, w energy.Window, dailyBuckets []
 		}
 	}
 	if lastInside == nil || lastBefore == nil {
-		// M-2: nothing inside the period yet, or nothing before it to
+		// Nothing inside the period yet, or nothing before it to
 		// subtract from — either way there is no sound composed figure, so
 		// no row is emitted (never an all-nil-values row).
 		return nil
@@ -274,7 +274,7 @@ func composeOpenPeriodRow(analyzerID uuid.UUID, w energy.Window, dailyBuckets []
 		Source:          energy.KindLoadProfile,
 		// R94: a composed row is closing-to-closing across whatever
 		// materialisation gap it fills and may differ from the later
-		// materialised row by the boundary step (M-4) once the view
+		// materialised row by the boundary step once the view
 		// catches up — Partial marks it as not directly comparable.
 		Partial: true,
 	}
@@ -324,7 +324,7 @@ func bucketValues(b model.ConsumptionBucket) map[energy.Register]*decimal.Decima
 }
 
 // nonNegative returns d unchanged, or nil when d is itself nil or negative
-// (R102, final review A M-1): the Analytics path never returns a negative
+// (R102): the Analytics path never returns a negative
 // consumption for a register — a materialised bucket's own delta column or a
 // composed row's closing-index subtraction can go negative across a meter
 // swap, and since Analytics has no suspicion channel (only Billing records

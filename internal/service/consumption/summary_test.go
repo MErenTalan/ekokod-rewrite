@@ -136,9 +136,9 @@ func TestPeakAndValleyIgnoreSuspectRows(t *testing.T) {
 	require.Equal(t, "5", s.Valley.Values[energy.ActiveImport].String())
 }
 
-// TestValleyIncludesAZeroConsumptionRow is task-9-review.md's minor
-// finding: a measured zero is a valid Valley candidate, not "no data" (Global
-// Constraints: "zero means measured zero"). Row 1's active_import of 0 must
+// TestValleyIncludesAZeroConsumptionRow proves a measured zero is a valid
+// Valley candidate, not "no data" (Global Constraints: "zero means measured
+// zero"). Row 1's active_import of 0 must
 // win Valley over row 0's 5, not be treated as absent/suspect.
 func TestValleyIncludesAZeroConsumptionRow(t *testing.T) {
 	rows := []consumption.Row{

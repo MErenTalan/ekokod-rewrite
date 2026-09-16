@@ -55,11 +55,10 @@ func newBillingAt(t *testing.T, readings fakeReadings, now time.Time) *consumpti
 // (noAnomalies/noOps would panic if Consumption touched either, and there
 // is no aggregate dependency present to have reached in the first place).
 //
-// I-4 (final review B): this behavioural probe alone is vacuous against a
-// FIELD-level bypass (a poisoned field nobody's code path ever calls, or a
-// narrower consumer-defined interface a real aggregate repository could
-// still satisfy — guard_test.go's own I-4 fix). It now delegates to
-// guard_test.go's reflection walk (the same one
+// This behavioural probe alone is vacuous against a FIELD-level bypass (a
+// poisoned field nobody's code path ever calls, or a narrower
+// consumer-defined interface a real aggregate repository could still
+// satisfy). It delegates to guard_test.go's reflection walk (the same one
 // TestBillingDepsHasNoAnalyticsRepositoryField calls) FIRST, so the plan's
 // own named guard also catches what the structural guard catches.
 func TestBillingPathCannotReachAnAggregate(t *testing.T) {
@@ -156,8 +155,8 @@ func TestBillingRefusesOverMaxCells(t *testing.T) {
 
 // --- R98: an open or future bucket is never emitted, complete or partial --
 
-// TestBillingNeverEmitsAnOpenOrFutureBucket is R98's own acceptance probe
-// (final review A I-1's exact scenario): 15-minute load_profile readings
+// TestBillingNeverEmitsAnOpenOrFutureBucket is R98's own acceptance test:
+// 15-minute load_profile readings
 // exist up to Jan 30 22:00 Istanbul (3872, so 3872-1000=2872 accrued so
 // far). Requesting the whole January Monthly bucket ([Jan1, Feb1)) while
 // the clock still reads Jan 30 22:00 — well before the bucket's own To —
@@ -336,14 +335,11 @@ func TestMonthlyPrefersBillingKindReadingsWhenPresent(t *testing.T) {
 // same January reading is a full month away, far outside tolerance) and
 // falls back to load_profile (1200). Source is load_profile — R96 always
 // names the END boundary's own kind — but the VALUE, 210 (1200-990), proves
-// the START actually used billing's own 990, not load_profile's 1000: M-3
-// (final review B) found the original fixture used the SAME value (1000)
-// on both kinds at January's start, so this test passed even under a
-// mutation that fell back to load_profile on BOTH sides (the pre-R96
-// whole-period rule this test's old name and doc described), because 1000
-// and 1000 are indistinguishable in the result. Mutation "resolveBoundary
-// never tries billing" (or the pre-R96 whole-period fallback) now gives
-// 200, not 210.
+// the START actually used billing's own 990, not load_profile's 1000: the
+// fixture deliberately gives the billing and load_profile readings at
+// January's start DIFFERENT values (990 vs 1000), since identical values
+// there would make a START-side fallback to load_profile indistinguishable
+// from the correct billing-preferred result (both would give 200, not 210).
 func TestMonthlyFallsBackToLoadProfileWhenBillingReadingsDoNotCoverTheMonth(t *testing.T) {
 	loc := istanbulLoc(t)
 	jan1 := time.Date(2026, 1, 1, 0, 0, 0, 0, loc)
@@ -380,8 +376,8 @@ func TestMonthlyFallsBackToLoadProfileWhenBillingReadingsDoNotCoverTheMonth(t *t
 
 // TestMonthlyMixesBillingStartWithLoadProfileEndWhenOnlyTheEndSnapshotIsStale
 // is R96's amendment of the old "one stale side fails coverage for the WHOLE
-// month" rule (formerly I-3/C3, back when a period's boundaries were chosen
-// together, per PERIOD, never mixing kinds). A billing-kind reading exists
+// month" rule (a period's boundaries used to be chosen together, per
+// PERIOD, never mixing kinds). A billing-kind reading exists
 // near the START boundary (exactly at BillingSnapshotTolerance, still
 // covering), but the reading nearest the END boundary is 4 days (96h, over
 // the 72h tolerance) before February's start. Under R96 each boundary
@@ -534,7 +530,7 @@ func sumOfNonNilHourly(hourly []consumption.Row, reg energy.Register) decimal.De
 	return total
 }
 
-// TestDailyDoesNotEqualTheSumOfItsHoursWhenOneHourIsSuspect is C-8 / 09
+// TestDailyDoesNotEqualTheSumOfItsHoursWhenOneHourIsSuspect proves 09
 // §F3's acceptance criterion: levels derive from their own boundaries,
 // never by summing the level below.
 //
@@ -565,10 +561,10 @@ func TestDailyDoesNotEqualTheSumOfItsHoursWhenOneHourIsSuspect(t *testing.T) {
 	require.NotEqual(t, "240", sum.String(), "summing the hours is not how the daily figure is produced")
 }
 
-// --- C1: reset look-back must reach the EARLIEST of any boundary kind ------
+// --- Reset look-back must reach the EARLIEST of any boundary kind ---------
 
-// TestBillingMonthlyResetBeforeLoadProfileLookback is C1's acceptance test
-// (review probe P1). Billing start snapshot Dec 30 00:00 = 900 (old meter;
+// TestBillingMonthlyResetBeforeLoadProfileLookback is the reset-look-back
+// acceptance test. Billing start snapshot Dec 30 00:00 = 900 (old meter;
 // 48h before Jan 1, within BillingSnapshotTolerance). Last old-meter
 // load_profile reading Dec 30 12:00 (36h before Jan 1) = 1000. Reset row Dec
 // 31 00:00 (24h before Jan 1) = 0. New-meter load_profile at Jan 1 00:00 =
@@ -643,19 +639,19 @@ func TestBillingMonthlyResetBeforeLoadProfileLookback(t *testing.T) {
 		"[Dec,Feb)'s January row must equal [Jan,Feb)'s own")
 }
 
-// --- C2(a): reset priors must be load_profile, never current_index --------
+// --- Reset priors must be load_profile, never current_index ---------------
 
-// TestBillingResetPriorsAreLoadProfileOnly is C2's unit half (review probe
-// P2). Daily level: lp 00:00=1000, lp 10:00=1100 (old meter), current_index
-// 11:00=1500 (a decoy that must never be treated as a prior), reset
-// 12:00=0, lp 24:00=200. True = (1100-1000) + (200-0) = 300.
+// TestBillingResetPriorsAreLoadProfileOnly proves resets' before/after
+// evidence never comes from current_index. Daily level: lp 00:00=1000, lp
+// 10:00=1100 (old meter), current_index 11:00=1500 (a decoy that must never
+// be treated as a prior), reset 12:00=0, lp 24:00=200. True =
+// (1100-1000) + (200-0) = 300.
 //
-// m-6 (final fix X review): mutation (a) (priors := a current_index Range)
-// does NOT produce "700 unflagged" under the current code — that claim was
-// stale. It makes the reset segment's own before/after values disagree
-// (the decoy 1500 in place of the real 1100 prior), which Derive reports as
-// a suspect meter_reset (nil values + Suspicion), not a wrong plain number.
-// The assertions below still catch the mutation either way: Suspect is no
+// Using current_index as a prior instead of load_profile does not silently
+// produce a wrong plain number: it makes the reset segment's own
+// before/after values disagree (the decoy 1500 in place of the real 1100
+// prior), which Derive reports as a suspect meter_reset (nil values +
+// Suspicion). The assertions below catch that either way: Suspect is no
 // longer empty and the value is no longer "300".
 func TestBillingResetPriorsAreLoadProfileOnly(t *testing.T) {
 	loc := istanbulLoc(t)
@@ -693,13 +689,12 @@ func TestBillingResetPriorsAreLoadProfileOnly(t *testing.T) {
 	require.Equal(t, "300", rows[0].Values[energy.ActiveImport].String())
 }
 
-// --- I4: no look-back must not drop a first bucket ------------------------
+// --- The look-back must not drop a first bucket ---------------------------
 
-// TestBillingIncludesAFirstBucketWhoseStartReadingPrecedesFrom is I-4
-// (review probe P3a). Mutation (b) (lookback := first.From, dropping the
-// look-back entirely) makes the reading 15 minutes before From invisible,
-// so the first bucket's own start boundary resolves to nil and the row goes
-// missing (not wrong — silently absent).
+// TestBillingIncludesAFirstBucketWhoseStartReadingPrecedesFrom proves a
+// reading 15 minutes before From is still visible to the look-back, so the
+// first bucket's own start boundary resolves and the row is not silently
+// dropped.
 func TestBillingIncludesAFirstBucketWhoseStartReadingPrecedesFrom(t *testing.T) {
 	loc := istanbulLoc(t)
 	day := time.Date(2026, 3, 10, 0, 0, 0, 0, loc)
@@ -727,10 +722,10 @@ func TestBillingIncludesAFirstBucketWhoseStartReadingPrecedesFrom(t *testing.T) 
 	require.Equal(t, "40", rows[0].Values[energy.ActiveImport].String())
 }
 
-// --- C3: START-side staleness of the billing snapshot ----------------------
+// --- START-side staleness of the billing snapshot ---------------------------
 
-// TestMonthlyFallsBackWhenTheStartSnapshotIsStale is C3 (review probe P3b),
-// updated for R96: the START billing snapshot is 73h before January (just
+// TestMonthlyFallsBackWhenTheStartSnapshotIsStale, under R96: the START
+// billing snapshot is 73h before January (just
 // over BillingSnapshotTolerance), so the START boundary falls back to
 // load_profile (1000) on its own; the END billing snapshot is fresh (exactly
 // at February's own bound), so the END boundary still resolves to billing
@@ -771,8 +766,8 @@ func TestMonthlyFallsBackWhenTheStartSnapshotIsStale(t *testing.T) {
 	require.Equal(t, "5000", rows[0].Values[energy.ActiveImport].String(), "a stale START snapshot must not count as covering AT THAT BOUNDARY")
 }
 
-// TestMonthlyFallsBackWhenTheStartSnapshotIsMissing is C3's second fixture,
-// updated for R96: no billing reading anywhere near the START boundary at
+// TestMonthlyFallsBackWhenTheStartSnapshotIsMissing, under R96: no billing
+// reading anywhere near the START boundary at
 // all (only at February's own start), so the START boundary falls back to
 // load_profile (1000) on its own, while the END boundary — billing exists
 // exactly at February's own bound — still resolves to billing (6000): a
@@ -842,15 +837,11 @@ func TestMonthlyBillingCoversWhenTheEndSnapshotIsExactlyAtTolerance(t *testing.T
 	require.Equal(t, "5000", rows[0].Values[energy.ActiveImport].String())
 }
 
-// TestMonthlyLoadProfileCoversExactlyAtToleranceButNotOneMicrosecondOver is
-// R96's LoadProfileBoundaryTolerance (36h) exact-edge pin at Monthly level
-// (final review B I-2: this parameter was unpinned by any test — mutating
-// 36h to 13h, 60h or even 168h left the whole package green, because every
-// existing user of it either had a fresher reading nearby or a
-// billing/daily fallback that happened to give the same numeric answer
-// either way). No billing or daily data exists anywhere near the END
-// boundary here, so the END boundary resolves ONLY through load_profile's
-// own tolerance check, with no fallback kind able to mask a wrong answer.
+// TestMonthlyLoadProfileCoversExactlyAtToleranceButNotOneMicrosecondOver
+// pins R96's LoadProfileBoundaryTolerance (36h) exact edge at Monthly
+// level. No billing or daily data exists anywhere near the END boundary
+// here, so the END boundary resolves ONLY through load_profile's own
+// tolerance check, with no fallback kind able to mask a wrong answer.
 //
 // The offsets below are the literal 36h, NOT consumption.LoadProfileBoundaryTolerance
 // itself: using the constant as the offset would make this test
@@ -972,12 +963,11 @@ func TestBillingPrefersLoadProfileOverDailyWhenBothPresent(t *testing.T) {
 // Daily bucket — so a daily-kind reading up to 12h before its own bound
 // still counts as covering, but one any older does not.
 //
-// M-3 (final review B): the test this replaces used a fixed 37h-old
-// reading — "one hour over the raw 36h tolerance" — but at Daily level the
-// 12h half-bucket cap ALREADY binds well before 36h, so that fixture passed
-// for ANY tolerance >= 12h (36h, 20h, 13h, ...) and never actually pinned
-// Daily's own binding edge. This exact-edge pair does: 12h must still
-// cover; 13h must not.
+// At Daily level the 12h half-bucket cap ALREADY binds well before the raw
+// 36h DailySnapshotTolerance, so a fixture using an offset merely near
+// 36h/37h would pass for ANY tolerance >= 12h (36h, 20h, 13h, ...) without
+// actually pinning Daily's own binding edge. This exact-edge pair does: 12h
+// must still cover; 13h must not.
 func TestBillingDailyBoundaryToleranceCapsAtTwelveHoursOnANormalDay(t *testing.T) {
 	loc := istanbulLoc(t)
 	day := time.Date(2026, 3, 10, 0, 0, 0, 0, loc)
@@ -1077,9 +1067,10 @@ func TestMonthlyFallsBackToDailyWhenNeitherBillingNorLoadProfileCover(t *testing
 	require.Equal(t, "5000", rows[0].Values[energy.ActiveImport].String())
 }
 
-// --- I5: ratios and max demand on the Billing path -------------------------
+// --- Ratios and max demand on the Billing path ------------------------------
 
-// TestBillingRatiosAndMaxDemandFromDerivedValues is I-5's Billing half.
+// TestBillingRatiosAndMaxDemandFromDerivedValues proves ratios and max
+// demand derive correctly on the Billing path.
 // Deltas: active 1000->1100 = 100, reactive_inductive 100->125 = 25 (ratio
 // 0.25), reactive_capacitive 40->52 = 12 (ratio 0.12). R101 (amending R65):
 // at Hourly, MaxDemandKindsFor allows only load_profile — daily (20) and
@@ -1091,7 +1082,7 @@ func TestMonthlyFallsBackToDailyWhenNeitherBillingNorLoadProfileCover(t *testing
 // current_index decoy (999, wrong kind, always excluded regardless of
 // level) and never daily's 20 or billing's 15.
 //
-// m-4 (final fix X review): the daily and billing decoys here no longer
+// The daily and billing decoys here no longer
 // prove the kind exclusion by themselves — loadAnalyzerBoundaryData never
 // fetches daily- or billing-kind readings for MaxDemand at Hourly at all
 // now (they were dead reads once R101 excluded both kinds there), so a
@@ -1156,9 +1147,9 @@ func mustSetMaxDemand(r model.MeterReading, v string) model.MeterReading {
 	return r
 }
 
-// --- I7: every repository call must use the caller's own Scope ------------
+// --- Every repository call must use the caller's own Scope ----------------
 
-// TestBillingReadingCallsUseTheCallersScope is I-7's unit half: a
+// TestBillingReadingCallsUseTheCallersScope proves a
 // scope-checking fakeReadings fails the test immediately if ANY call
 // (load_profile, reset, billing, daily, or any of the three kinds'
 // firstBoundaryLookback BoundaryReadings calls) uses a Scope other than the
@@ -1167,14 +1158,13 @@ func mustSetMaxDemand(r model.MeterReading, v string) model.MeterReading {
 // mutation (f) (substituting SystemScope(sc.CompanyID) on any one Range or
 // BoundaryReadings call) is only provable if the two scopes actually differ.
 //
-// R96's re-review (I-7 remainder) found this test ran at Hourly ONLY, so the
-// billing- and daily-kind Range calls and their look-backs — which exist
-// only at Daily/Monthly — were never exercised: a mutation on
-// billing.go:186's billing Range call stayed green in unit and integration.
-// Table-driven across Hourly, Daily and Monthly (each level's own fixture
-// supplies every kind that level's Consumption call touches) closes that
-// gap: every call site in consumptionForAnalyzer now runs under the
-// scope-checking fake at least once.
+// Table-driven coverage across Hourly, Daily and Monthly is required
+// because the billing- and daily-kind Range calls and their look-backs
+// exist only at Daily/Monthly — an Hourly-only fixture would leave a Scope
+// mutation on either call unexercised and undetected. Each level's own
+// fixture supplies every kind that level's Consumption call touches, so
+// every call site in consumptionForAnalyzer runs under the scope-checking
+// fake at least once.
 func TestBillingReadingCallsUseTheCallersScope(t *testing.T) {
 	analyzerID := uuid.New()
 	sc := store.Scope{CompanyID: uuid.New(), BuildingIDs: []uuid.UUID{uuid.New()}}
@@ -1261,7 +1251,7 @@ func TestBillingReadingCallsUseTheCallersScope(t *testing.T) {
 	}
 }
 
-// --- I6: validation runs before ANY I/O, on the Billing path --------------
+// --- Validation runs before ANY I/O, on the Billing path -------------------
 
 // TestBillingValidatesBeforeAnyIO uses noReadings — which panics on every
 // method — so a validation check that runs after even the FIRST repository
@@ -1281,7 +1271,7 @@ func TestBillingValidatesBeforeAnyIO(t *testing.T) {
 		{"empty analyzer ids", validScope, consumption.SeriesRequest{AnalyzerIDs: nil, Level: energy.Hourly, Range: validRange}},
 		{"invalid range", validScope, consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{uuid.New()}, Level: energy.Hourly, Range: store.TimeRange{From: billingT0, To: billingT0}}},
 		{"over MaxCells", validScope, consumption.SeriesRequest{AnalyzerIDs: newUUIDs(21), Level: energy.Hourly, Range: store.TimeRange{From: billingT0, To: billingT0.Add(2381 * time.Hour)}}},
-		// m-5: these three (duplicate id, 51 ids, 401-day span) were
+		// These three (duplicate id, 51 ids, 401-day span) were
 		// previously exercised only on the Analytics side
 		// (analytics_test.go's TestAnalyticsValidatesBeforeAnyIO); Billing
 		// shares the same validateRequest, but nothing pinned that fact
@@ -1524,18 +1514,18 @@ func TestBillingPrefersFreshDailyOverStaleLoadProfileAtMonthly(t *testing.T) {
 	require.Equal(t, "5000", rows[0].Values[energy.ActiveImport].String(), "never 1500 (the stale load_profile reading)")
 }
 
-// --- I-A: the C1 shared-minimum look-back must include the DAILY leg ------
+// --- The shared-minimum look-back must include the DAILY leg -------------
 
-// TestBillingDailyLookbackFeedsTheSharedMinimum is I-A (re-review round 1):
-// C1's shared-minimum look-back must reach back through DAILY's own
+// TestBillingDailyLookbackFeedsTheSharedMinimum proves the shared-minimum
+// look-back must reach back through DAILY's own
 // look-back too, never merely load_profile's. Daily level, no load_profile
 // data at all: the daily-kind reading nearest the START (D-6h=1000) is what
 // this request's own daily look-back finds, and a reset sits between it and
 // D (D-2h=0) with NO load_profile prior anywhere. Unmutated: the shared
 // minimum reaches back to D-6h, the reset IS found in the evidence window,
 // and — since no load_profile prior exists at all to supply a before-reset
-// value — the register comes out nil + meter_reset, the SAFE outcome (R91/
-// I-1: a missing before-reset value is never billed as a number). Mutation
+// value — the register comes out nil + meter_reset, the SAFE outcome (R91:
+// a missing before-reset value is never billed as a number). Mutation
 // (dropping dailyLookback's contribution to the shared minimum) makes the
 // reset invisible instead: resets are then fetched only from first.From
 // onward, missing D-2h entirely, and Derive's fast path returns a WRONG,
@@ -1573,9 +1563,9 @@ func TestBillingDailyLookbackFeedsTheSharedMinimum(t *testing.T) {
 	require.Equal(t, energy.ReasonMeterReset, rows[0].Suspect[energy.ActiveImport].Reason)
 }
 
-// --- I-B: R95/R96 daily fallback staleness on the END side ----------------
+// --- R95/R96 daily fallback staleness on the END side ---------------------
 
-// TestMonthlyEndSideDailyStalenessYieldsNoRow is I-B: the START daily
+// TestMonthlyEndSideDailyStalenessYieldsNoRow proves the START daily
 // boundary is fresh (exact), but the only daily reading near the END is 37h
 // before February's own bound — one hour over DailySnapshotTolerance (36h;
 // the Monthly bucket is far wider than 72h, so R96's bucketWidth/2 cap never
@@ -1607,12 +1597,12 @@ func TestMonthlyEndSideDailyStalenessYieldsNoRow(t *testing.T) {
 	require.Empty(t, rows, "a daily boundary older than DailySnapshotTolerance on the END side must not count as covering")
 }
 
-// TestMonthlyDailyCoversWhenBothBoundsAreExactlyAtTolerance is I-B's
-// positive control, pinning the boundary itself on BOTH sides: a daily
+// TestMonthlyDailyCoversWhenBothBoundsAreExactlyAtTolerance pins the
+// boundary itself on BOTH sides: a daily
 // reading exactly DailySnapshotTolerance (36h) before its own bound still
 // counts as covering ("<=", not "<"), on the START side as well as the END.
 //
-// m-3 (final review B I-2 / final fix X review): the offset here is a
+// The offset here is a
 // LITERAL 36*time.Hour, never `-consumption.DailySnapshotTolerance` — the
 // self-referential shape a mutation to the constant's own value would move
 // in lockstep with, so the test could never actually pin what the constant
@@ -1648,20 +1638,20 @@ func TestMonthlyDailyCoversWhenBothBoundsAreExactlyAtTolerance(t *testing.T) {
 	require.Equal(t, "5000", rows[0].Values[energy.ActiveImport].String())
 }
 
-// TestDailySnapshotToleranceIsThirtySixHours is m-3's own constant pin: the
-// literal 36h TestMonthlyDailyCoversWhenBothBoundsAreExactlyAtTolerance uses
+// TestDailySnapshotToleranceIsThirtySixHours pins the constant directly:
+// the literal 36h TestMonthlyDailyCoversWhenBothBoundsAreExactlyAtTolerance uses
 // as its own offset must actually equal the constant it is meant to be
 // pinning.
 func TestDailySnapshotToleranceIsThirtySixHours(t *testing.T) {
 	require.Equal(t, 36*time.Hour, consumption.DailySnapshotTolerance)
 }
 
-// --- I-C: R96 explicitly ALLOWS a period to start and end on different -----
+// --- R96 explicitly ALLOWS a period to start and end on different ---------
 // --- kinds; the pre-R96 "load_profile fails to emit as a pair" concept is --
 // --- obsolete (kept here only as a positive demonstration). ---------------
 
-// TestBillingMixesLoadProfileStartWithDailyEndUnderR96 replaces the old I-C
-// concern. Pre-R96, load_profile was used for a period only when it
+// TestBillingMixesLoadProfileStartWithDailyEndUnderR96 demonstrates the
+// R96 behavior directly. Pre-R96, load_profile was used for a period only when it
 // resolved to two DISTINCT boundary readings for that whole period
 // (boundaryPairEmits); a single load_profile reading (here, only one exists,
 // at Jan 1) made load_profile resolve the SAME reading for both January's
@@ -1714,12 +1704,10 @@ func TestBillingMixesLoadProfileStartWithDailyEndUnderR96(t *testing.T) {
 // even though it is the unique maximum in the window: the answer is 5 (the
 // one load_profile reading actually inside [h, h+1h)).
 //
-// m-4 (final fix X review): the daily and billing decoys no longer prove
+// The daily and billing decoys no longer prove
 // the kind exclusion by themselves — loadAnalyzerBoundaryData never
 // fetches daily- or billing-kind readings for MaxDemand at Hourly at all
-// now (dead reads once R101 excluded both kinds there), so the "use the
-// unqualified MaxDemandKinds instead of MaxDemandKindsFor(level)" mutation
-// this comment used to name no longer makes this 500: neither decoy is
+// now (dead reads once R101 excluded both kinds there): neither decoy is
 // ever loaded to win in the first place.
 // TestMaxDemandInWindowExcludesDisallowedKindsPerLevel
 // (billing_internal_test.go) is the white-box test that still pins that
@@ -1756,14 +1744,11 @@ func TestBillingHourlyMaxDemandExcludesBillingKindEvenAsTheUniqueMaximum(t *test
 	require.Equal(t, "5", rows[0].MaxDemandKw.String(), "R101: billing's 500 (and daily's 10) must not land in an Hourly bucket, even as the unique maximum")
 }
 
-// TestBillingMonthlyMaxDemandFromBillingKindIsTheUniqueMaximum is I-G
-// (re-review round 2): the Hourly test above (now
-// TestBillingHourlyMaxDemandExcludesBillingKindEvenAsTheUniqueMaximum,
+// TestBillingMonthlyMaxDemandFromBillingKindIsTheUniqueMaximum: the Hourly
+// test above
+// (TestBillingHourlyMaxDemandExcludesBillingKindEvenAsTheUniqueMaximum,
 // R101) proves the OPPOSITE at that level; this is R101's Monthly/Yearly
-// positive control, where billing-kind rows still count. Originally this
-// only exercised the HOURLY leg of I-D's fix (billing.go:216/248), so
-// dropping billing-kind rows from the MONTHLY MaxDemand read
-// (`maxDemandBilling := billing[:0]` at billing.go:229) stayed green — at
+// positive control, where billing-kind rows still count. At
 // Monthly, `billing` is already loaded for boundary resolution and reused
 // as-is for MaxDemand, and that is exactly where R65/R85's ARIL demand
 // charge lives. Here the billing-kind reading (Jan 16, far from either
@@ -1808,12 +1793,11 @@ func TestBillingMonthlyMaxDemandFromBillingKindIsTheUniqueMaximum(t *testing.T) 
 // daily-kind reading's peak (20, that DAY's own stamped maximum) still
 // counts.
 //
-// m-4 (final fix X review): the billing decoy no longer proves the kind
+// The billing decoy no longer proves the kind
 // exclusion by itself — loadAnalyzerBoundaryData never fetches billing-kind
 // readings for MaxDemand at Daily at all now (a dead read once R101
-// excluded that kind there), so the "use MaxDemandKinds instead of
-// MaxDemandKindsFor(level)" mutation this comment used to name no longer
-// makes this 500: the decoy is never loaded to win in the first place.
+// excluded that kind there): the decoy is never loaded to win in the first
+// place.
 // TestMaxDemandInWindowExcludesDisallowedKindsPerLevel
 // (billing_internal_test.go) is the white-box test that still pins that
 // mutation directly.
@@ -1847,9 +1831,9 @@ func TestBillingDailyMaxDemandExcludesBillingKindRow(t *testing.T) {
 	require.Equal(t, "20", rows[0].MaxDemandKw.String(), "R101: billing's month-wide 500 must not land inside a single Daily bucket")
 }
 
-// --- I-E: the I-9 sort.Search lower bound must include w.From -------------
+// --- The sort.Search lower bound must include w.From -----------------------
 
-// TestMaxDemandIncludesAReadingExactlyAtTheBucketStartButExcludesWTo is I-E:
+// TestMaxDemandIncludesAReadingExactlyAtTheBucketStartButExcludesWTo proves
 // two adjacent hourly buckets. A peak sits exactly at the first bucket's own
 // w.From (50) and must be INCLUDED; a peak sits exactly at the boundary
 // between the two buckets (70) and must count for the SECOND bucket (whose
@@ -1890,10 +1874,9 @@ func TestMaxDemandIncludesAReadingExactlyAtTheBucketStartButExcludesWTo(t *testi
 // --- 09 §F3 criterion 3: Yearly derives from its own boundaries too -------
 
 // TestYearlyDoesNotEqualTheSumOfItsMonthsWhenOneMonthBucketIsMissing is 09
-// §F3's criterion 3, Yearly's own leg (final review B I-1: no test in this
-// package ever requested energy.Yearly at all, so a mutation replacing the
-// yearly figure with the sum of 12 monthly Derive calls left the entire
-// package green, unit and integration).
+// §F3's criterion 3, Yearly's own leg: without this test, no test in this
+// package requests energy.Yearly at all, so a bug replacing the yearly
+// figure with the sum of 12 monthly Derive calls would go undetected.
 //
 // One load_profile reading at every month's own 00:00 boundary,
 // value(m) = 1000 + 100*m for m = 0..12 (January 1 of year 1 through
