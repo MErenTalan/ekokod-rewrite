@@ -1,9 +1,9 @@
-# Handoff — ekokod rewrite: F1 and F2 COMPLETE → next phase F3 (consumption engine)
+# Handoff — ekokod rewrite: F1, F2 and F3 COMPLETE → next phase F4 (tariff and billing engine)
 
-> **STATUS:** F1 and F2 are finished. `phase/f2-integration-layer` is at `97f7d51`, branched from F1's tip `10d6577`.
-> Both phases went through per-task review, fix rounds and a two-pass whole-branch final review with fix waves.
+> **STATUS:** F3 is finished. `phase/f3-consumption-engine` is at `8887867`, branched from F2's tip `7dbe1ea`.
+> Every task went through per-task review (opus for money/tenancy work), fix rounds, and a two-pass whole-branch final review with fix waves.
 > **Nothing has been pushed; `main` is untouched. Push and merge-to-main are the user's call.**
-> **F3 has no written plan yet** — the next session writes it first.
+> **F4 has no written plan yet** — the next session writes it first. F4 is the highest-risk phase of the project.
 
 ---
 
@@ -12,35 +12,41 @@
 > Bu, bcem-energy'nin (yeni adıyla ekokod) Go ile yeniden yazım projesi. Spesifikasyon `docs/rewrite/` içinde, faz planı
 > `docs/rewrite/09-implementation-plan.md`. Toplam 16 faz var (F0-F15).
 >
-> **Durum: F1 ve F2 tamamlandı.** F2'nin ucu `phase/f2-integration-layer` branch'inde (`97f7d51`); F1'in ucu `10d6577`.
+> **Durum: F1, F2 ve F3 tamamlandı.** F3'ün ucu `phase/f3-consumption-engine` branch'inde (`8887867`).
 > Hiçbir şey push edilmedi, `main`'e dokunulmadı. Push ve `main`'e merge kararı bana ait, sen yapma.
-> **Sıradaki faz F3 (consumption engine) ve henüz planı yok.**
+> **Sıradaki faz F4 (tarife ve faturalandırma motoru) ve henüz planı yok.** Projenin en riskli fazı.
 >
 > Şu sırayla ilerle:
 >
-> 1. **`HANDOFF_NEXT_SESSION.md`'i baştan sona oku** (bu dosya `phase/f2-integration-layer` üzerinde). Özellikle
->    "START HERE", "F3 must pick up", "Binding rulings", "Process rules" ve "Environment" bölümlerini.
-> 2. **F3 planını yaz:** `superpowers:writing-plans` ile, `docs/rewrite/09-implementation-plan.md` §F3 ve ilgili spec
->    bölümlerinden, `docs/superpowers/plans/` altına. "F3 must pick up" listesinin tamamı planda karşılanmalı. Sonra planı
->    plan-document-reviewer prompt'u ile review ettir, bulguları düzelttir ve pre-flight conflict taramasını yap.
-> 3. **`phase/f2-integration-layer`'ın ucundan `phase/f3-consumption-engine` branch'ini aç** ve F3'ü
+> 1. **`HANDOFF_NEXT_SESSION.md`'i baştan sona oku** (`phase/f3-consumption-engine` üzerinde). Özellikle "START HERE",
+>    "F4 must pick up", "Open questions", "Process rules" ve "Environment" bölümleri.
+> 2. **F4 planını yaz:** `superpowers:writing-plans` ile, `docs/rewrite/09-implementation-plan.md` §F4 ve ilgili spec
+>    bölümlerinden (`02-domain-rules.md` §4-§8, `04-data-model.md`, `06-integrations.md` EPİAŞ, `05-api-contract.md` §6-§7),
+>    `docs/superpowers/plans/` altına. Planı yazmadan önce legacy faturalama kodunu oku (`src/app/api/bill/route.ts`,
+>    `src/utils/reactivePenalty.ts`) — F3'te legacy okuması üç kural hatasını plan aşamasında yakaladı. "F4 must pick up"
+>    listesinin tamamı planda karşılanmalı. Sonra planı opus bir reviewer'a ve ayrı bir sonnet pre-flight isim taramasına
+>    ver, bulguları tek bir karar dosyasına yaz, düzelttir.
+> 3. **`phase/f3-consumption-engine`'in ucundan `phase/f4-billing-engine` branch'ini aç** ve F4'ü
 >    `superpowers:subagent-driven-development` ile yürüt: her görev için taze implementer, ardından task review, gerekirse
 >    fix turu. **Bu yöntemi onaylıyorum, sorma, devam et.**
-> 4. **Aynı anda en fazla 5 agent** (Docker'lı test koşan en fazla 3). Hızlı ol ama review'leri atlama:
->    - implementer'lar sonnet; izolasyon/güvenlik/veri kaybı riski taşıyan task review'ler opus; scoped re-review'ler sonnet;
->    - büyük transcript'li agent'ı küçük bir fix için resume etme, taze ve ucuz agent ver;
->    - bağımlılığı henüz merge edilmemiş görevleri spekülatif base üzerinde başlat, ama base'in brief'teki "Consumes"
->      listesini içerdiğini önce doğrula (`go build` + tipleri grep'le).
+> 4. **Paralellik ve bellek:** aynı anda en fazla 4 agent, Docker'lı test koşan en fazla 2. Agent'lar `make test` /
+>    `go test ./...` koşmasın; sadece kendi paketlerini, integration'ı `-parallel 4` ile, `internal/arch`'ı sonda bir kez.
+>    Tam suite yalnızca entegrasyon birleşimlerinde, başka Docker işi yokken. Büyük bir dalgadan önce
+>    `ps -eo rss,comm | grep java` ile başka projenin Gradle daemon'larına bak; varsa bana sor (F3'te WSL iki kez OOM ile çöktü).
+>    - implementer'lar sonnet; para/izolasyon/güvenlik taşıyan task review'ler ve onların re-review'leri opus;
+>      küçük test-only fix'lerde re-review koltuğu yerine controller diff'i okuyup bir mutasyonu kendisi koşsun;
+>    - implementer'lar testler yeşillenir yeşillenmez commit etsin (mutasyon kanıtlarından önce), reviewer'lar raporu adım adım yazsın.
 > 5. **Paralel iş için native-filesystem worktree kullan** (`/home/personal/...`); Agent tool'un `isolation: "worktree"`
 >    özelliği bu mount'ta ÇALIŞMIYOR — Environment bölümündeki tarifi kullan.
-> 6. **Subagent'lar arka plan komutu beklerken turlarını bitiriyor** (bu fazda 3 kez oldu). Raporsuz "bekliyorum" mesajı
->    gelirse hemen SendMessage ile dürt: gate'leri ön planda koşsun, commit etsin, raporlasın.
+> 6. **Para kodunda reviewer'dan kaba kuvvet özellik testi iste:** F3'te üç opus re-review, her seferinde yeni bir
+>    "işaretsiz yanlış sayı" sınıfı buldu; bitiren şey, rastgele senaryolarda "ya nil+şüphe ya da tam doğru değer"
+>    değişmezini tarayan bir özellik testi oldu. Kalıcı testin oracle'ının da mutasyonları yakaladığını controller doğrulasın.
 > 7. **Her guard'ın başarısız olabildiğini kanıtlat:** reviewer kendi mutasyonunu koşsun; yeşil kalan mutasyon = Important.
->    Tenant'lar arası izolasyon kanıtları **AdminScope** ile ve pozitif kontrolle yapılmalı.
-> 8. **F3 bitince dur**, handoff'u F4 için güncelle ve bana yapıştırılacak prompt ver.
+>    Tenant'lar arası izolasyon kanıtları **AdminScope** ile ve pozitif kontrolle.
+> 8. **F4 bitince dur**, handoff'u F5 için güncelle ve bana yapıştırılacak prompt ver.
 >
 > Ortam:
-> - Her komuttan önce `export PATH="$HOME/.local/go/bin:$HOME/.local/node/bin:$HOME/go/bin:$PATH" GOFLAGS=-p=4 GOMEMLIMIT=2GiB`.
+> - Her komuttan önce `export PATH="$HOME/.local/go/bin:$HOME/.local/node/bin:$HOME/go/bin:$PATH" GOFLAGS=-p=2 GOMEMLIMIT=2GiB`.
 > - Docker seanslar arası ve WSL yeniden başlayınca kapanıyor; önce `docker ps` ile doğrula. Kapalıysa benden başlatmamı iste.
 
 ---
@@ -50,134 +56,84 @@
 | Branch | Head | State |
 |---|---|---|
 | `phase/f1-data-model` | `10d6577` | F1 complete. |
-| `phase/f2-integration-layer` | `97f7d51` | F2 complete; full integration suite green; F2 verification block (09 §F2) passes. |
-| `f1/*`, `f2/*` task branches | — | merged; safe to delete. |
+| `phase/f2-integration-layer` | `7dbe1ea` | F2 complete. |
+| `phase/f3-consumption-engine` | `8887867` (+ this handoff commit) | F3 complete. Gates at the tip: lint 0, build, check-generate, unit -race ×2 (41 packages), integration ×2 run SEQUENTIALLY per package (18 packages; two Docker-load retries: service/consumption, platform/lock), F3 verification block passes (energy 99 PASS, loadprofile 14, consumption integration 194 PASS / 0 FAIL, TestGolden 9 cases). |
+| `f3/*` task and fix branches | — | merged; safe to delete. |
 
-Working copies: the main checkout `/mnt/c/Users/meren/Desktop/Work/ekokod-rewrite` sits on `phase/f1-data-model`;
-`/home/personal/ekokod-f2-phase` is the F2 phase worktree. Create F3's branch from `phase/f2-integration-layer`.
+Working copies: the main checkout `/mnt/c/Users/meren/Desktop/Work/ekokod-rewrite` still sits on `phase/f1-data-model`;
+`/home/personal/ekokod-f3-phase` is the F3 phase worktree. Create F4's branch from `phase/f3-consumption-engine`.
+The F3 SDD workspace (git-ignored) is `.superpowers/sdd/2026-09-16-f3-consumption-engine/` in the MAIN checkout.
 
-### What F2 delivered
-- `internal/integration`: the `MeterDataSource`/`Adapter` contract, `Secret` (pointer-held; `[REDACTED]` through every
-  formatting path), typed `Error` with `ErrAuth`, `ErrConfig`, `ErrRateLimited`, `ErrUpstreamUnavailable`,
-  `ErrMalformedPayload`, `ErrNotFound`.
-- `integration/httpx`: the single HTTP seam — per-host certificate pinning (pin-only trust, proven by a subprocess test),
-  per-attempt timeout + distributed lock + rate limiter, jittered backoff, Retry-After cap, strict URL templates,
-  redirects refused, `Request.NoRetry` (R32), errors that never carry a URL, body, header or secret.
-- `integration/normalize`: exact decimals, Istanbul-local timestamps, units, `Chunk` (R36: midnight-aligned windows that
-  span up to `max` whole days).
-- `integration/fake` (per-server certificates, fixture sanitiser with word-tokenised PII keys) and
-  `internal/platform/lock` (memory + Redis, owner-only release, atomic single-use consume).
-- Adapters: OSOS, GridBox, ARIL, PM5340, iSolarCloud (+ production store that quarantines plant-level samples),
-  EPİAŞ (+ `internal/marketdata` price sync).
-- Store seams: migrations `00012` (interval generation + `generation_anchors`) and `00013` (`provider_hourly_values`),
-  `GenerationRepository`, `ProviderSeriesRepository`, `admin.IngestionRepository`, `store.SystemScope`.
-- `internal/ingest`: dispatch, analyzer sync, fetch (dedupe, R13 sanity rule, attribution filter, anomalies, cursor rules),
-  run records, redacted operator messages; `ingest/generation` (PM5340 cumulative, locked per analyzer, pre-anchor
-  derivation); `ingest/backfill` (deterministic window tasks, `Force` re-run).
-- `internal/credentials`: write-only credential service and iSolarCloud OAuth (HMAC single-use state, locked refresh,
-  a zero refresh token never overwrites the stored one).
-- `internal/worker.Build`: the single wiring point; the scheduler/elector defects F1 handed over are fixed;
-  config knobs `EKOKOD_INGEST_*`, `EKOKOD_EPIAS_BASE_URL`, `EKOKOD_EPIAS_CAS_URL`, `EKOKOD_JOB_MAX_RETRIES` (0 allowed).
-- Test infrastructure: parallel-safe (protected template DB, `NewEmptyDB`, `-parallel 8`, `TESTCONTAINERS_HOST_OVERRIDE`);
-  `internal/store/postgres` went from 4m41s to ~33 s.
-- Acceptance: all 11 §F2 criteria mapped to end-to-end tests through a real worker, Redis and TimescaleDB.
+### What F3 delivered
+- `internal/domain/energy` (pure): register/kind/reading/window types; Istanbul buckets (hourly = UTC hour, whole-hour offsets since 1910); `Difference` (§3.1); `SelectBoundary` (binary search); `Derive` (§3.2 reset segmentation with R55/R90-R93); `Ratio`/`Ratios` (nil for zero/negative/nil denominators, `DivisionScale` 20); `MaxDemandOf` + `MaxDemandKindsFor(level)` (R101); `ActivityStatus` (7 days). A permanent fixed-seed property test proves "nil + suspicion, or exactly the true consumption" over random meter swaps and catches every known money mutation; a 9-file golden corpus (`TestGolden`).
+- `internal/domain/loadprofile` (pure): weekday/weekend with company weekend days + vacations, meteorological seasons, per-hour means, statistics (population stddev, load factor 0 when max is 0).
+- `internal/service/consumption`:
+  - `Analytics.Consumption` — continuous aggregates only; composes every unmaterialised month/year from `consumption_daily` as `Partial` (R94); never negative (R102).
+  - `Billing.Consumption` — `meter_readings` only; boundaries resolved per boundary INSTANT at Daily/Monthly/Yearly with capped tolerances and telescoping (R96), §3.1 at Hourly; never emits an open or future bucket (R98); request bounds (R99).
+  - `Billing.ConsumptionAndRecord` / `ListAnomalies` / `ResolveAnomaly` — suspect-period and `missing_readings` anomalies (R59, R60, R97, R103), dedup under a lock, `reset_registered` re-derives the period in memory before writing, overrides substituted only for exact buckets.
+  - Pure helpers `Summarise`, `GenerationRows`, `Balance`, `ExportRows` (suspect registers never rendered as numbers).
+  - `Refresher` for `consumption.refresh` (R100).
+- `internal/service/loadprofile`: calendar resolution + R87 hourly values (`ActiveImportStart(h+1) − ActiveImportStart(h)`).
+- Refresh path: `store.AdminAggregateRepository` (`CALL refresh_continuous_aggregate`, closed view set), `job.NewConsumptionRefreshTask` (debounced id + `ProcessIn`), ingestion enqueues backfills older than 29 days for `load_profile` runs, one global refresh lock, per-view policy-horizon clipping.
+- Guards: `internal/service` layer boundaries (transitive), float guard over `./internal/service/...`, R61 reflection guard (Analytics can never hold a reading repository, Billing never an aggregate repository).
+- Acceptance: all 8 §F3 criteria have a named in-package acceptance test (`f3_acceptance_test.go`) proven by a production mutation.
 
-### F3 must pick up
-1. **`consumption.refresh` is declared but unhandled** (R17): `job.TypeConsumptionRefresh` exists and nothing registers a
-   handler or enqueues it. F3 wires `ingest.Deps.ConsumptionRefresh`, reads `affected_from`/`affected_to` from fetch runs
-   and refreshes the continuous aggregates, including history older than the 30-day real-time horizon.
-2. **PM5340 cumulative-generation recompute cost** (parked): an old backfill recomputes every later row inside one
-   post-persist hook (~35k rows per analyzer-year). Decide whether it becomes its own queued, bounded task.
-3. **OAuth state is not bound to the browser session** (R47): the F3/F6 HTTP callback must bind the nonce to the user's
-   session cookie.
-4. **Error mapping:** `integration.ErrConfig` (R48) must surface as a configuration problem, never "authentication failed";
-   `credentials.Configure` returns an `ErrConflict`-matching error for an existing definition (R45) — callers use `Update`.
-5. **Deferred minors from the two final-review passes** live in
-   `.superpowers/sdd/2026-09-15-f2-integration-layer/final-review-A-report.md` and `final-review-B-report.md`
-   (warning `Detail` dropped by the pipeline, `NextCursor` doc inconsistency across adapters, EPİAŞ TGT re-login per
-   process, OSOS logging in on every fetch, EPİAŞ PTF chunk-seam overlap inflating counts, and the pass-B leftovers).
-   Triage them when F3 touches the same files.
+### F4 must pick up
+1. **Billing only from `Billing` rows, never `Analytics` rows.** Composed/Partial analytics rows are display-only.
+2. **Refuse to invoice any period with an unresolved `consumption_anomalies` row** — both `negative_delta`/`meter_reset` suspect periods and `missing_readings` gaps (R97/R103; gaps exist only at Daily/Monthly/Yearly). A billing month must be fully covered by sound rows; a missing row is not zero.
+3. **Never bill an open or unsettled period** — `Billing` drops a bucket until `now >= bucket.To + SettleDelay(level)` (R98, R104: Hourly 2 h, Daily 36 h, Monthly/Yearly 72 h), so a month is billable from the 4th; requests are capped at 400 days and `MaxCells = 50 000` analyzer×bucket cells (R99, R104); F4's cut-off-day periods (`billCutoffDay`) are NOT calendar months: decide how a cut-off period maps onto Daily rows (sum of sound Daily rows telescopes within the level) and write the ruling.
+4. **Max demand is real now (R65/R85/R101)** — legacy billed demand overrun as structurally zero. Invoices will change; raise with the product owner BEFORE F4 bills anything. Monthly max demand counts `billing` rows (ARIL's monthly maximum).
+5. **Ratios are nil for zero consumption (R54)** — the reactive-penalty rule must decide what a nil ratio means (never substitute 1 — that is the legacy defect in `reactivePenalty.ts:47`).
+6. **K4:** a row whose two boundaries are of different kinds carries only registers both kinds report; others are nil (unreported, not zero). T1/T2/T3 splits may be nil on such rows.
+7. **Superseded gap overrides (R103(3)):** once real readings arrive, the real derivation replaces an operator override — an invoice already issued from the override no longer matches. Re-invoicing is F4's concern.
+8. **HTTP is still F6.** F3's services are not constructed by `worker.Build`; F6 wires them and maps `consumption.ErrInvalidRequest`/`loadprofile.ErrInvalidRequest` to 422, resolves `building_id` to analyzer ids (R89), and pages multi-year reports (R99's 400-day cap).
+9. Carried from F2 still open: R47 OAuth nonce not session-bound (F6); R48 `ErrConfig` surfacing (F6).
+10. **F9 note:** `plant_production_*` continuous aggregates are never refreshed after a backfill (the F3 refresh path covers only the four consumption views).
 
 ### Open questions for the product owner
-- **BLOCKER (unchanged):** `plant_production`'s primary key requires a device id, so iSolar plant-level samples are
-  quarantined, counted and reported rather than stored.
-- Q2 ARIL `WithoutMultiplier` semantics (R9/R38 — the highest-value F14 check); Q3 analyzer commissioning date (R11);
-  Q4 OSOS multiplier and iSolar result codes (R8, R21); Q5 `contracted_power_kw` column (R30).
-- PM5340's analyzer is created **active** on operator configure (R27 applies only to discovered analyzers) — confirm.
-- Still open from F1: reactive penalty base, sub-9 kW exemption, tiered pricing groups, 2 % missing-hour tolerance, grid
-  emission factor, ISO 50001 clause texts, a GHG↔ISO mapping table, the national tariff schedule source.
-
-### F14 live-verification checklist (fixtures encode rulings, not confirmed traffic)
-OSOS multiplier and hourly `meter_date` hour-start (R35); ARIL `WithoutMultiplier` and wire field names (R38); GridBox
-`last_success_date` shape and `endDate` inclusivity (R37/R50); iSolar wire shape (R41; `install_power` vs
-`installed_power`), result codes (R21), redirect_uri/state shape (R46); EPİAŞ response field names.
+- Q1 ratio zero-case (spec says 0, acceptance says null — F3 implemented null).
+- Q3 default weekend days (implemented Saturday+Sunday when none configured).
+- **Q4 — F6 BLOCKER:** do calendar events change the weekday/weekend split? (F3: no; `calendar_events` has no non-working flag.)
+- Q5 `contracted_power_kw` destination.
+- Q6 the analytics hourly chart is all zeros for a 1-hour meter under the spec's aggregate definition.
+- Q7 `load_profile` boundary look-back (now capped by R96 at Daily+, unbounded at Hourly per §3.1).
+- Q8 uncovered register rollovers become operator work. Q9 a meter swap with no reset row cannot be detected (should a meter-serial change force a suspect period?). Q10 daily-only meters have no analytics series.
+- From F2/F1, still open: `plant_production` device-id blocker; ARIL `WithoutMultiplier`; commissioning date; OSOS multiplier / iSolar result codes; reactive penalty base; sub-9 kW exemption; tiered pricing groups; 2 % missing-hour tolerance; grid emission factor; ISO 50001 texts; GHG↔ISO table; national tariff schedule source. **§11's five questions BLOCK F4.**
 
 ---
 
 ## Binding rulings
-F1's rulings 1–14 (tenancy, FK validation in SQL, AdminScope proofs, batches, `TimeRange`, secrets, atomic upserts,
-naming) still bind — see the F1 ledger. Plan rulings R1–R36 are in the F2 plan's "Spec gaps and rulings" table.
-Rulings made during F2 execution (full text with "cost if wrong" in the F2 ledger):
-
-- **R37/R50** GridBox spec gaps (verify in F14); `last_success_date` never raises `From`, may only cap `To`.
-- **R38** ARIL spec gaps isolated in code with F14 comments.
-- **R39** A PTF backfill does not backfill YEKDEM (trailing three months from now; historical YEKDEM is a separate action).
-- **R40** iSolar endpoints come from the seeded `integration_definitions.json` (gateway + relative paths, `cloud_id`).
-- **R41** The legacy iSolar TypeScript is the wire-shape authority; F14 confirms.
-- **R42** iSolar exports `MaxWindow` (1 d minute / 31 d day) and splits minute requests into ≤3 h sub-windows.
-- **R43** One quarantine message per `Store` call; metadata carries the fetch window.
-- **R44** Non-cursor list paging derives pages from `rowCount` with a hard cap; exceeding it errors, never truncates.
-- **R45** `Configure` refuses an existing (company, definition) credential with `ErrConflict`.
-- **R46** The token exchange's `redirect_uri` is byte-identical to the authorize request's.
-- **R47** OAuth state is not session-bound yet — the F3/F6 handler binds it to the session.
-- **R48** `integration.ErrConfig`: non-retryable, never an auth failure; every adapter uses it for configuration problems.
-- **R49** ARIL max demand is keyed by `MaxDemandDate` over the whole billing month, so a resumed fetch never nulls it.
-- **R51** GridBox falls back to the analyzer's stored multiplier; the pipeline persists only provider-resolved multipliers.
-- **R52** The generation hook is serialised per analyzer; rows older than the anchor are derived (an initial anchor moves
-  back and cumulative values shift uniformly; an operator/meter anchor derives backwards).
-- **R53** Backfill `Force` re-mints task ids; windows skipped by an existing task id make the run `partial`.
-- Process rulings: speculative bases are allowed once the "Consumes" list is verified; the final whole-branch review is
-  split into a production pass and a tests pass with split fix waves; test-only integration commits with recorded
-  mutation proofs merge without a separate review seat.
+F1 rulings 1-14 and F2 rulings R1-R53 still bind. F3 rulings **R54-R104** are in the F3 plan's rulings table
+(`docs/superpowers/plans/2026-09-16-f3-consumption-engine.md`), each with "cost if wrong". Several were reversed during
+execution — the table holds the final text: I-16 → R93, R88 → R94, R63/R95 → R96, R65 → R101, R97 → R103. R74 (queued
+PM5340 recompute) was deferred to F9 and Task 12 withdrawn.
 
 ## Process rules that paid off (keep them)
-- **Prove every guard can fail.** Reviewers run their own mutations; a mutation that stays green is an Important finding.
-  This caught: a `ParseFloat` guard evadable through a function value, a TLS guard evadable through an embedded field, an
-  adapter fixture-matrix guard that only checked file existence, an end-to-end resume test that passed with the cursor
-  ignored, and two silent wrong-key wirings in the worker.
-- **The adapter review patterns** (15 items) in `.superpowers/sdd/2026-09-15-f2-integration-layer/adapter-patterns.md`
-  are the fastest way to review any new provider; item 15 (serialise every client) was missed by two adapters in a row.
-- **Trial-merge speculative bases early** — that is how the float-guard/sanitiser clash and the `MigrateDownN` guard hit
-  were found before integration.
-- **Carry a defect pattern found in one review to still-running siblings by message** (SerializeKey, `NoRetry`, patterns).
-- **Stalls:** subagents end their turn waiting on background runs; nudge immediately to finish gates in the foreground.
-- **Never redo an action the permission classifier denied for an agent** — fix the base instead.
-- **Reverting a mutation:** use a targeted edit, never `git checkout -- <file>` when that file also holds uncommitted work.
+- **Read the legacy code before planning** — it found the real "substituted 1", confirmed no rollover handling existed, and showed max demand was never produced.
+- **Pre-flight name scan** (sonnet) in parallel with the plan review (opus): the scan found 7 names that did not exist.
+- **Brute-force property tests in re-reviews of money code:** three opus rounds each found a new unflagged-wrong-number class until a 1M-scenario property test closed it; then make the property test permanent AND verify its oracle catches the known mutants (F3's first permanent version missed one because the oracle accepted the mutant's number).
+- **Per-boundary-instant resolution** (R96) is what makes adjacent periods telescope — apply the same idea to F4's cut-off-day periods.
+- **Controller-verified test-only fixes:** read the diff and run one mutation yourself instead of a re-review seat.
+- **Commit-early + incremental reports** survive WSL restarts.
+- **Never `git checkout -- <file>` / `git stash` to revert a mutation;** restore from a backup copy or a targeted edit and check `git diff`.
 
 ## Environment — read before running anything
 - Toolchain in `$HOME/.local`; prefix every command with
-  `export PATH="$HOME/.local/go/bin:$HOME/.local/node/bin:$HOME/go/bin:$PATH" GOFLAGS=-p=4 GOMEMLIMIT=2GiB`.
-- `C:\Users\meren\.wslconfig` is in effect (12 GB RAM, 10 CPUs, `autoMemoryReclaim`). Keep at most 3 agents running
-  Docker-backed suites at once; sweep leftover containers (`docker ps -a`) when readiness timeouts start appearing.
-- Docker stops on WSL restart: check `docker ps`; if it is down ask the user to start Docker Desktop.
-- Worktrees: `git worktree add -b <branch> /home/personal/<name> <base>` then
-  `git config --global --add safe.directory /home/personal/<name>`. The Agent tool's `isolation: "worktree"` fails here.
-- Integration tests: `go test ./... -tags=integration -race -count=1 -parallel 8`. A failure containing `wait until ready`
-  or SQLSTATE `55006` is Docker load — retry that package once before believing it.
-- After any migration or query change run `sqlc generate`; `make check-generate` is part of the gate.
-- The legacy repo `/mnt/c/Users/meren/Desktop/Work/bcem-apps/bcem-energy` is a slow mount: read files directly by path and
-  put `timeout` on every grep; never search `node_modules`, `.next` or `public`.
-- Commit trailers: `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>` plus the session's own
-  `Claude-Session:` URL.
+  `export PATH="$HOME/.local/go/bin:$HOME/.local/node/bin:$HOME/go/bin:$PATH" GOFLAGS=-p=2 GOMEMLIMIT=2GiB`.
+- `C:\Users\meren\.wslconfig`: 12 GB RAM, 4 GB swap, 10 CPUs. Other projects' Gradle daemons can hold 4+ GB — check before big waves.
+- Docker stops on WSL restart: check `docker ps`; if down, ask the user to start Docker Desktop.
+- Worktrees: `git worktree add -b <branch> /home/personal/<name> <base>` then `git config --global --add safe.directory /home/personal/<name>`.
+- Integration tests: `TESTCONTAINERS_HOST_OVERRIDE=127.0.0.1 go test <pkgs> -tags=integration -race -count=1 -parallel 4`. **A whole-repo integration run was killed twice for low memory at F3's end** — run the phase-end suite sequentially per package with `GOFLAGS=-p=1 GOMEMLIMIT=1500MiB -parallel 2` (about 10 minutes). `wait until ready` / SQLSTATE 55006 = Docker load: retry that package once.
+- `internal/job` integration takes ~150 s (real asynq delays).
+- The SDD workspace lives in the MAIN checkout's `.superpowers/sdd/` (git-ignored; it does not propagate to worktrees).
+- Commit trailer: `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>`.
 
 ## Key paths
 ```
-docs/rewrite/                                                   the specification
-docs/superpowers/plans/2026-09-10-f1-data-model.md               F1 plan
-docs/superpowers/plans/2026-09-15-f2-integration-layer.md        F2 plan (rulings table R1–R36)
-.superpowers/sdd/2026-09-10-f1-data-model/                       F1 SDD workspace (ledger: progress.md)
-.superpowers/sdd/2026-09-15-f2-integration-layer/                F2 SDD workspace — progress.md (ledger, all rulings),
-                                                                 adapter-patterns.md, provider-defaults.md, task reports,
-                                                                 final-review-A/B reports
-internal/integration/  internal/ingest/  internal/credentials/  internal/marketdata/  internal/worker/  internal/store/
+docs/rewrite/                                                    the specification
+docs/superpowers/plans/2026-09-16-f3-consumption-engine.md        F3 plan (rulings R54-R104)
+.superpowers/sdd/2026-09-16-f3-consumption-engine/                F3 ledger (progress.md), reviews, reports (main checkout)
+internal/domain/energy/  internal/domain/loadprofile/
+internal/service/consumption/  internal/service/loadprofile/
+internal/store/postgres/admin/aggregates.go  internal/job/consumption.go  internal/ingest/fetch.go  internal/worker/wiring.go
 ```
