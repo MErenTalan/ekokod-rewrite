@@ -1,0 +1,48 @@
+{
+  "name": "identical_values",
+  "doc": "I-3(a): two DIFFERENT readings (distinct ts) whose active_import register happens to carry the same value — a genuine zero-usage period, not the R92(1) zero-width case (identical_boundaries.json). It still emits, with active_import measured as \"0\", never nil: a mutation that treats a zero difference as unreported must fail this case.",
+  "input": {
+    "window": {
+      "from": "2025-06-02T00:00:00+03:00",
+      "to": "2025-06-02T01:00:00+03:00"
+    },
+    "readings": [
+      {
+        "ts": "2025-06-02T00:00:00+03:00",
+        "kind": "load_profile",
+        "values": {
+          "active_import": "1000"
+        }
+      },
+      {
+        "ts": "2025-06-02T01:00:00+03:00",
+        "kind": "load_profile",
+        "values": {
+          "active_import": "1000"
+        }
+      }
+    ],
+    "resets": []
+  },
+  "want": {
+    "emitted": true,
+    "values": {
+      "active_import": "0",
+      "reactive_inductive_import": null,
+      "reactive_capacitive_import": null,
+      "t1_import": null,
+      "t2_import": null,
+      "t3_import": null,
+      "active_export": null,
+      "reactive_inductive_export": null,
+      "reactive_capacitive_export": null,
+      "t1_export": null,
+      "t2_export": null,
+      "t3_export": null
+    },
+    "suspect": {},
+    "inductive_ratio": null,
+    "capacitive_ratio": null,
+    "max_demand_kw": null
+  }
+}
