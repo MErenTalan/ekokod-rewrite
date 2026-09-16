@@ -77,12 +77,9 @@ func TestGenerationRowsRatiosAreNilAndEverythingElseIsCopied(t *testing.T) {
 	require.Contains(t, got.Resolution, energy.ActiveImport)
 }
 
-// TestGenerationRowsNeverRendersASuspectExportRegisterAsANumber is
-// task-9-review.md finding (b)/(c)'s counterpart for GenerationRows: a
+// TestGenerationRowsNeverRendersASuspectExportRegisterAsANumber proves a
 // hand-built Row whose Values entry is non-nil for a suspect export
-// register must come back nil, never the raw 999. Removing
-// GenerationRows' soundValue check (reverting filterSoundValues to a bare
-// filterRegisters call) must turn this red.
+// register must come back nil, never the raw 999.
 func TestGenerationRowsNeverRendersASuspectExportRegisterAsANumber(t *testing.T) {
 	in := generationRow()
 	in.Values[energy.ActiveExport] = dec("999")
@@ -92,11 +89,9 @@ func TestGenerationRowsNeverRendersASuspectExportRegisterAsANumber(t *testing.T)
 	require.Nil(t, out[0].Values[energy.ActiveExport], "active_export is suspect: must never render as 999")
 }
 
-// TestGenerationRowsBlanksASuspectExportRegistersIndex is final review A
-// M-4: a suspect export register's closing index must come back nil from
-// GenerationRows, exactly as ExportRows already blanks it (sound.go's
-// soundIndex). Reverting GenerationRows' Indexes field to a bare
-// map-read (no soundIndex check) must turn this red.
+// TestGenerationRowsBlanksASuspectExportRegistersIndex proves a suspect
+// export register's closing index must come back nil from GenerationRows,
+// exactly as ExportRows already blanks it (sound.go's soundIndex).
 func TestGenerationRowsBlanksASuspectExportRegistersIndex(t *testing.T) {
 	in := generationRow()
 	in.Suspect = map[energy.Register]energy.Suspicion{energy.ActiveExport: {Reason: energy.ReasonNegativeDelta}}

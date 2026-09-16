@@ -2,8 +2,8 @@
 
 // This file is Task 13's acceptance suite for 09-implementation-plan.md
 // §F3: one test per acceptance criterion, named after it, with a comment
-// quoting the criterion verbatim (M-5: it lives in-package, next to the code
-// it exercises, not in a separate internal/acceptance package).
+// quoting the criterion verbatim. It lives in-package, next to the code
+// it exercises, not in a separate internal/acceptance package.
 //
 // Wiring note (clarification binding this dispatch): consumption.Analytics
 // and consumption.Billing are NOT constructed by worker.Build — their only
@@ -17,7 +17,7 @@
 // real-database tests.
 //
 // The golden-file criterion ("Golden-file tests for consumption derivation
-// against hand-computed fixtures...") is NOT re-asserted here (M-5): Task
+// against hand-computed fixtures...") is NOT re-asserted here: Task
 // 4's TestGolden (internal/domain/energy/golden_test.go, run over
 // internal/domain/energy/testdata/golden/*.json) already fails loudly on
 // any of the six cases regressing, every time `go test ./internal/domain/energy
@@ -112,10 +112,10 @@ func f3NewAnalytics(t *testing.T, analyticsRepo store.AnalyticsRepository) *cons
 //     value(Jan 16) - value(Jan 14) = 200) are invisible to a sum of the
 //     level below, but not to the monthly row's own boundary derivation.
 //
-//  3. Yearly vs. Monthly (final review B I-1: no test in this package ever
-//     requested energy.Yearly at all, so a mutation replacing the yearly
-//     figure with the sum of 12 monthly Derive calls left the whole package
-//     green). One reading at every month's own 00:00 boundary,
+//  3. Yearly vs. Monthly: no other test in this package requests
+//     energy.Yearly at the acceptance layer, so without this part a bug
+//     replacing the yearly figure with the sum of 12 monthly Derive calls
+//     would go undetected. One reading at every month's own 00:00 boundary,
 //     value(m) = 1000 + 100*m for m = 0..12, EXCEPT July 1's (m=6) is never
 //     written: neither June (own END is July 1) nor July (own START is
 //     July 1) can resolve, so 10 of the 12 monthly rows survive, and their
@@ -213,7 +213,7 @@ func TestF3LevelsDeriveFromTheirOwnBoundaries(t *testing.T) {
 	require.NotEqual(t, monthlyRows[0].Values[energy.ActiveImport].String(), dailySum.String(),
 		"summing the daily rows is not how the monthly figure is produced")
 
-	// --- Part 3: Yearly vs. Monthly (final review B I-1) ---------------
+	// --- Part 3: Yearly vs. Monthly -------------------------------------
 	//
 	// One load_profile reading at every month's own 00:00 boundary,
 	// value(m) = 1000 + 100*m for m = 0..12 (Jan 1 year 1 through Jan 1
@@ -460,8 +460,8 @@ func TestF3ZeroConsumptionProducesANullRatio(t *testing.T) {
 // anomaliesNewBilling, but local to this file so criterion tests here do not
 // depend on that file's own helper staying unchanged. lock.NewMemory is a
 // real, mutex-backed Locker (not a fake): it proves the same
-// check-then-create serialisation ConsumptionAndRecord relies on (C-6)
-// without a second container under memory pressure.
+// check-then-create serialisation ConsumptionAndRecord relies on without a
+// second container under memory pressure.
 func f3NewBillingAndRecord(t *testing.T, readingRepo store.ReadingRepository, anomalyRepo store.AnomalyRepository, opsRepo store.OpsRepository, now time.Time) *consumption.Billing {
 	t.Helper()
 	b, err := consumption.NewBilling(consumption.BillingDeps{

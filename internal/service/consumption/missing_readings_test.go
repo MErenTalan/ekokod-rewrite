@@ -1,9 +1,8 @@
 package consumption_test
 
-// This file is R97's own test suite (task-8-review.md's R97 implementation
-// spec): ConsumptionAndRecord writing missing_readings anomalies for
-// requested buckets that produced no row, and how they resolve. All tests
-// use in-memory fakes — no database.
+// This file is R97's own test suite: ConsumptionAndRecord writing
+// missing_readings anomalies for requested buckets that produced no row,
+// and how they resolve. All tests use in-memory fakes — no database.
 
 import (
 	"context"
@@ -344,12 +343,11 @@ func TestMissingReadingsAcceptedProducesNoRowAndIsNotRecreated(t *testing.T) {
 
 // TestMissingReadingsOverrideEmitsRow: a resolved manual_override
 // missing_readings anomaly makes Consumption emit the row from the override
-// values, with Resolution set and ratios computed, and Indexes nil (m-2:
-// there is no end reading loaded for THIS gap's own resolved-anomaly path
-// once it is fully covered by the override — Source stays "" and Indexes
-// stays nil per R97 rule 7 when the caller never had an end reading to
-// report; when one exists it is used instead, see
-// TestMissingReadingsOverrideRowIndexesUseTheEndReadingWhenOneExists below).
+// values, with Resolution set and ratios computed. This gap has an end
+// reading, so Indexes is populated from it — Source stays "" and Indexes
+// stays nil per R97 rule 7 only when the caller never had an end reading
+// to report at all; TestMissingReadingsOverrideRowIndexesAreNilWithoutAnEndReading
+// below covers that case.
 func TestMissingReadingsOverrideEmitsRow(t *testing.T) {
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -378,15 +376,15 @@ func TestMissingReadingsOverrideEmitsRow(t *testing.T) {
 	require.Equal(t, "42", rows[0].Values[energy.ActiveImport].String())
 	require.Equal(t, "manual_override", rows[0].Resolution[energy.ActiveImport])
 	require.Empty(t, rows[0].Suspect)
-	// m-2: this gap has an end reading (the one 4h before day1.To), so
+	// This gap has an end reading (the one 4h before day1.To), so
 	// Indexes must be populated from it, never nil AND never a map of nils.
 	require.NotNil(t, rows[0].Indexes)
 	require.NotNil(t, rows[0].Indexes[energy.ActiveImport])
 	require.Equal(t, "1000", rows[0].Indexes[energy.ActiveImport].String())
 }
 
-// TestMissingReadingsOverrideRowIndexesAreNilWithoutAnEndReading is m-2's own
-// direct proof: a gap with NEITHER boundary resolved (no readings at all
+// TestMissingReadingsOverrideRowIndexesAreNilWithoutAnEndReading proves
+// directly: a gap with NEITHER boundary resolved (no readings at all
 // near it) synthesizes Indexes as nil, never a map of 12 nil entries.
 func TestMissingReadingsOverrideRowIndexesAreNilWithoutAnEndReading(t *testing.T) {
 	ctx := context.Background()
@@ -397,7 +395,7 @@ func TestMissingReadingsOverrideRowIndexesAreNilWithoutAnEndReading(t *testing.T
 	day0 := energy.Bucket(energy.Daily, day1.From.Add(-24*time.Hour), loc)
 
 	// A reading well before day0 proves the analyzer has readings (so the
-	// gap is recorded, RC-1), but leaves NEITHER of day1's own boundaries
+	// gap is recorded), but leaves NEITHER of day1's own boundaries
 	// resolved (both fall outside every kind's tolerance).
 	readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
 		model.ReadingKindLoadProfile: {
@@ -604,15 +602,16 @@ func TestHourlyGapAnomalyResolutionRejected(t *testing.T) {
 	}
 }
 
-// --- RC-1: gap detection and gap-override lookup are range-independent -----
+// --- Gap detection and gap-override lookup are range-independent -----------
 
-// TestSingleOfflineMonthGetsItsAnomaly is RC-1's own probe: an analyzer with
-// load_profile readings Mar 1-10 (Istanbul) and nothing after gets a
-// missing_readings anomaly for a SINGLE requested month (Apr), not only when
-// the request also happens to include March. Before RC-1, "the analyzer has
-// readings" and "pre-installation" were decided from the CLAMPED look-back
-// pool, which for a single-month request is empty — so the bug reported 0
-// anomalies for exactly this case.
+// TestSingleOfflineMonthGetsItsAnomaly proves R103's range-independence: an
+// analyzer with load_profile readings Mar 1-10 (Istanbul) and nothing after
+// gets a missing_readings anomaly for a SINGLE requested month (Apr), not
+// only when the request also happens to include March. Without R103's
+// range-independent computation, "the analyzer has readings" and
+// "pre-installation" would be decided from the CLAMPED look-back pool,
+// which for a single-month request is empty — reporting 0 anomalies for
+// exactly this case.
 func TestSingleOfflineMonthGetsItsAnomaly(t *testing.T) {
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -645,14 +644,15 @@ func TestSingleOfflineMonthGetsItsAnomaly(t *testing.T) {
 	require.Equal(t, []any{"start", "end"}, detail["boundaries"])
 }
 
-// TestOutageResumingMidRequestDoesNotTreatEarlierDaysAsPreInstallation is
-// RC-1's second probe: the analyzer has a real reading LONG before this
-// request's own first bucket (proving it was already in service), then goes
-// offline for several days before the request begins, resuming only at the
-// request's last bucket. Before RC-1, earliest was computed from the
-// CLAMPED loaded slices alone, making the resumption reading look like the
-// installation date and skipping every earlier outage day as
-// "pre-installation" (0 gaps). RC-1 must record a gap for every outage day.
+// TestOutageResumingMidRequestDoesNotTreatEarlierDaysAsPreInstallation
+// proves R103's range-independence for pre-installation detection: the
+// analyzer has a real reading LONG before this request's own first bucket
+// (proving it was already in service), then goes offline for several days
+// before the request begins, resuming only at the request's last bucket.
+// Without range-independent computation, earliest would be computed from
+// the CLAMPED loaded slices alone, making the resumption reading look like
+// the installation date and skipping every earlier outage day as
+// "pre-installation" (0 gaps). A gap must be recorded for every outage day.
 func TestOutageResumingMidRequestDoesNotTreatEarlierDaysAsPreInstallation(t *testing.T) {
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -827,8 +827,9 @@ func TestDailyGapUsesDailyKindPriorRangeIndependently(t *testing.T) {
 	require.Equal(t, wide, narrow, "the gap decision must not depend on which other days share the request")
 }
 
-// TestResolvedGapOverrideGivesSameRowForNarrowAndWideRequest is RC-1's third
-// probe: a resolved gap override for April must produce the IDENTICAL row
+// TestResolvedGapOverrideGivesSameRowForNarrowAndWideRequest proves R103's
+// range-independence for the override lookup: a resolved gap override for
+// April must produce the IDENTICAL row
 // whether Consumption is asked for [Mar,May) or for [Apr,May) alone — the
 // override lookup must never depend on which OTHER buckets happen to be in
 // the same request.
@@ -882,10 +883,10 @@ func TestResolvedGapOverrideGivesSameRowForNarrowAndWideRequest(t *testing.T) {
 	require.Equal(t, "manual_override", narrowRows[0].Resolution[energy.ActiveImport])
 }
 
-// --- RI-5: a gap override applies only until real data resolves the bucket -
+// --- A gap override applies only until real data resolves the bucket ------
 
-// TestGapOverrideSupersededByRealDerivationOnceBackfilled is RI-5: a
-// resolved missing_readings override applies only while the bucket still
+// TestGapOverrideSupersededByRealDerivationOnceBackfilled proves R103's
+// rule that a resolved missing_readings override applies only while the bucket still
 // produces no row from real readings. Once a backfilled start reading makes
 // day1 derive a REAL (here, negative and therefore suspect) row, the real
 // derivation wins — Consumption must return the real Suspect state, never
@@ -914,7 +915,7 @@ func TestGapOverrideSupersededByRealDerivationOnceBackfilled(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Confirm the override applies BEFORE the backfill (RI-5's "only while
+	// Confirm the override applies BEFORE the backfill (R103's "only while
 	// the bucket still produces no row" half).
 	beforeRows, err := b.Consumption(ctx, scope, req)
 	require.NoError(t, err)
@@ -949,15 +950,14 @@ func TestGapOverrideSupersededByRealDerivationOnceBackfilled(t *testing.T) {
 	require.Equal(t, 1, negDelta, "the backfilled suspect bucket must be recorded as an ordinary suspect period")
 }
 
-// --- I1: the gap dedup lock must genuinely serialize too --------------------
+// --- The gap dedup lock must genuinely serialize too ------------------------
 
-// TestConcurrentGapRunsAreSerializedByTheLock is I1's own extension to the
-// R97 gap path: recordMissingReadingsGap (anomalies.go) takes the SAME
+// TestConcurrentGapRunsAreSerializedByTheLock extends the R97 gap path:
+// recordMissingReadingsGap (anomalies.go) takes the SAME
 // per-(analyzer, period_start) lease recordSuspectPeriod does. Two
 // goroutines racing ConsumptionAndRecord for the same still-unresolved gap
-// must still produce exactly one missing_readings row — removing
-// recordMissingReadingsGap's own lock acquisition makes this
-// deterministically red, the same two-gate (list + create) barrier shape
+// must still produce exactly one missing_readings row, using the same
+// two-gate (list + create) barrier shape
 // TestConcurrentRunsAreSerializedByTheLockNotByLuck uses.
 func TestConcurrentGapRunsAreSerializedByTheLock(t *testing.T) {
 	ctx := context.Background()
@@ -1004,7 +1004,7 @@ func TestConcurrentGapRunsAreSerializedByTheLock(t *testing.T) {
 // TestGapResolutionNeverCascadesToOverlappingF2Rows pins the "no cascade"
 // rule the R97 spec's rule 6 states explicitly: resolving a missing_readings
 // anomaly (any mode) must never touch an F2-shaped negative_delta row
-// nested inside it, unlike a register-reasoned F3 resolution's own I-5
+// nested inside it, unlike a register-reasoned F3 resolution's own
 // cascade.
 func TestGapResolutionNeverCascadesToOverlappingF2Rows(t *testing.T) {
 	ctx := context.Background()

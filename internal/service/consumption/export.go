@@ -29,7 +29,7 @@ type Export struct {
 // registers in AllRegisters() order. A register listed in a row's Suspect
 // map renders "" in BOTH its consumption column and its <register>_index
 // column, even if Values[reg] or Indexes[reg] is itself non-nil (soundValue/
-// soundIndex in sound.go re-check Suspect independently — task-9-review.md).
+// soundIndex in sound.go re-check Suspect independently).
 func ExportRows(rows []Row) Export {
 	e := Export{
 		Columns: exportColumns(),

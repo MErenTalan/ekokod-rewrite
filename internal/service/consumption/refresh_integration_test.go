@@ -77,8 +77,8 @@ func TestRefreshConsumptionMaterialisesAClosedMonthBelowThePolicyWindow(t *testi
 	monthStart := time.Date(2024, time.March, 1, 0, 0, 0, 0, testIstanbul)
 	monthWindow := store.TimeRange{From: monthStart, To: monthStart.AddDate(0, 1, 0)}
 
-	// Final review B (M-6): clock.System() over a fixed March 2024 month
-	// made this test's "NEWER than yearly's 5y" claim depend on the wall
+	// clock.System() over a fixed March 2024 month would make this test's
+	// "NEWER than yearly's 5y" claim depend on the wall
 	// clock the suite happens to run under — true today, false from March
 	// 2029 onward, at which point yearly would also refresh and the test
 	// would keep passing without proving the stated thing anymore. A fake

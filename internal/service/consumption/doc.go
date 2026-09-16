@@ -45,58 +45,56 @@ import (
 )
 
 // ErrInvalidRequest is this package's fail-closed validation sentinel.
-// store.ErrValidation does not exist (pre-flight finding): F3 defines its
-// own, here, because Analytics and Billing both validate before any I/O.
+// store.ErrValidation does not exist, so F3 defines its own, here, because
+// Analytics and Billing both validate before any I/O.
 var ErrInvalidRequest = errors.New("consumption: invalid request")
 
 // ErrConflict is returned when a write would repeat an already-settled fact
-// rather than a new one: re-resolving an already-resolved anomaly (I3), or
+// rather than a new one: re-resolving an already-resolved anomaly, or
 // registering a reset at a timestamp a reset reading with DIFFERENT values
-// already occupies (I7). errors.Is(err, store.ErrConflict) is true, so a
+// already occupies. errors.Is(err, store.ErrConflict) is true, so a
 // caller that only checks the store-level sentinel still recognises it.
 var ErrConflict = fmt.Errorf("consumption: %w", store.ErrConflict)
 
 // MaxCells bounds a single request's total cell count — len(AnalyzerIDs)
 // times the number of buckets at Level over the request's Range — validated
 // before any I/O on both consumption paths (R104(2), amending R99).
-// MaxBuckets (bucket count alone, no analyzer factor) is deleted: final
-// review X found it unreachable at any level once MaxRequestSpan existed
-// (a 9600h/400d span never produces more than 9600 Hourly buckets, the
-// worst case), while the PRODUCT R99 left uncapped was still large enough
-// to hurt — the review measured one analyzer's own 400-day Hourly request
-// retaining ~14 MB of []Row, so a legal 50-analyzer request at the same
-// span retains on the order of 0.7-1.4 GB before a caller can even
+// MaxBuckets (bucket count alone, no analyzer factor) is unreachable at any
+// level once MaxRequestSpan exists (a 9600h/400d span never produces more
+// than 9600 Hourly buckets, the worst case), while the product R99 left
+// uncapped was still large enough to hurt — one analyzer's own 400-day
+// Hourly request retains ~14 MB of []Row, so a legal 50-analyzer request at
+// the same span retains on the order of 0.7-1.4 GB before a caller can even
 // serialise it. MaxCells is checked with the SAME shared predicate on both
 // Billing.Consumption and Analytics.Consumption, before either makes a
 // single repository call.
 const MaxCells = 50000
 
-// MaxAnalyzersPerRequest bounds AnalyzerIDs (R99, final review A I-4/I-5): a
-// request naming more than this many analyzers fails ErrInvalidRequest
-// before any I/O. Combined with MaxRequestSpan below and MaxCells above,
-// this bounds the len(AnalyzerIDs) * buckets cell count Analytics and
-// Billing both preallocate, so neither can be driven to the multi-GB
-// allocation the review's I-4 finding demonstrated.
+// MaxAnalyzersPerRequest bounds AnalyzerIDs (R99): a request naming more
+// than this many analyzers fails ErrInvalidRequest before any I/O. Combined
+// with MaxRequestSpan below and MaxCells above, this bounds the
+// len(AnalyzerIDs) * buckets cell count Analytics and Billing both
+// preallocate, so neither can be driven to a multi-GB allocation.
 const MaxAnalyzersPerRequest = 50
 
-// MaxRequestSpan bounds Range.To - Range.From at every Level (R99, final
-// review A I-4): a request whose raw wall-clock span exceeds this fails
-// ErrInvalidRequest before any I/O, regardless of how few buckets that span
-// would expand to at Level — this is what actually bounds Billing's
-// meter_readings load, which is proportional to the span, not to a bucket
-// COUNT alone (a 10-year Yearly request is only 10 buckets but loads a
-// decade of readings). F6 pages a longer report by year.
+// MaxRequestSpan bounds Range.To - Range.From at every Level (R99): a
+// request whose raw wall-clock span exceeds this fails ErrInvalidRequest
+// before any I/O, regardless of how few buckets that span would expand to
+// at Level — this is what actually bounds Billing's meter_readings load,
+// which is proportional to the span, not to a bucket COUNT alone (a
+// 10-year Yearly request is only 10 buckets but loads a decade of
+// readings). F6 pages a longer report by year.
 const MaxRequestSpan = 400 * 24 * time.Hour
 
 // SettleDelayHourly, SettleDelayDaily and SettleDelayMonthly are R104(1)'s
 // amendment to R98: a bucket is closed only once the ordinary ingestion lag
 // for its own level's boundary data has had time to land, never merely once
-// the clock has passed its own To. Final review X's I-A found R98's
-// clock-only rule billing a daily-only meter's January as 300 instead of
-// the true 310 when queried at Feb 1 06:00 — before the Feb 1 00:00 snapshot
-// had arrived, even though it was well within R96's own boundary tolerance
-// once it did — and, for the same reason, writing a false missing_readings
-// anomaly for a Daily bucket in the few hours right after its own midnight.
+// the clock has passed its own To. R98's clock-only rule would bill a
+// daily-only meter's January as 300 instead of the true 310 when queried at
+// Feb 1 06:00 — before the Feb 1 00:00 snapshot had arrived, even though it
+// was well within R96's own boundary tolerance once it did — and, for the
+// same reason, would write a false missing_readings anomaly for a Daily
+// bucket in the few hours right after its own midnight.
 // Each delay is at least that level's own boundary tolerance (R96's
 // DailySnapshotTolerance/BillingSnapshotTolerance/LoadProfileBoundaryTolerance),
 // so an in-tolerance late snapshot can still arrive and be used before the
@@ -117,8 +115,13 @@ const (
 // resolved gap override may be emitted for it (billing.go's
 // applyResolvedGapOverrides, which only ever runs over already-filtered
 // `gaps`) can never disagree with each other. An unrecognised level returns
-// 0 (callers are expected to have validated Level already, exactly as
-// MaxDemandKindsFor documents for the same reason).
+// 0, which is fail-OPEN, not fail-closed: closedBucket would treat such a
+// bucket as already settled the instant its own To passes, with no extra
+// wait at all — the opposite of MaxDemandKindsFor's nil-on-unrecognised
+// default, which is fail-closed (no kind matches, so nothing is counted).
+// This is safe only because every real caller validates Level (via
+// validateRequest/validLevel) before SettleDelay is ever reached; SettleDelay
+// itself performs no such check.
 func SettleDelay(level energy.Level) time.Duration {
 	switch level {
 	case energy.Hourly:
@@ -134,7 +137,7 @@ func SettleDelay(level energy.Level) time.Duration {
 
 // BillingSnapshotTolerance bounds R63's "covering": a billing-kind boundary
 // reading older than this relative to its own bound does not count as
-// covering the month (I-3).
+// covering the month.
 const BillingSnapshotTolerance = 72 * time.Hour
 
 // DailySnapshotTolerance bounds R95/R96's daily-kind fallback boundary: a
@@ -152,9 +155,9 @@ const DailySnapshotTolerance = 36 * time.Hour
 // LoadProfileBoundaryTolerance bounds R96's load_profile boundary at Daily,
 // Monthly and Yearly levels: a load_profile reading older than this relative
 // to its own bound does not count as a usable boundary candidate there, so a
-// stale load_profile reading no longer beats a fresher daily pair (R96's K3
-// finding: an unbounded load_profile look-back at these levels let a stale
-// snapshot win over correct, fresh daily-kind evidence). At Hourly level
+// stale load_profile reading no longer beats a fresher daily pair (R96: an
+// unbounded load_profile look-back at these levels let a stale snapshot win
+// over correct, fresh daily-kind evidence). At Hourly level
 // load_profile keeps 02 §3.1's original, deliberately unbounded look-back —
 // this tolerance is never applied there.
 const LoadProfileBoundaryTolerance = 36 * time.Hour
@@ -165,7 +168,7 @@ const LoadProfileBoundaryTolerance = 36 * time.Hour
 // (R89 — resolving "every analyzer under a building" is F6's job, not
 // F3's).
 //
-// M3: multi-analyzer semantics differ between the two paths. One invisible
+// Multi-analyzer semantics differ between the two paths. One invisible
 // (not-Scope-visible, or nonexistent) analyzer id makes Billing fail the
 // WHOLE request with store.ErrNotFound (ReadingRepository's per-call
 // isolation contract), while Analytics silently omits that analyzer's rows
@@ -187,25 +190,24 @@ type SeriesRequest struct {
 // the bucket's own closing index columns, Billing from the end boundary
 // reading — a composed Analytics row (below) only ever has the seven
 // registers migration 00005 gives consumption_daily a closing-index column
-// to (M-2): the other five (every export register but active_export) are
+// to: the other five (every export register but active_export) are
 // always nil there, exactly as they are absent from bucketIndexes' map.
 // Partial is true for every bucket Analytics composes from consumption_daily
 // at Monthly/Yearly (R94, amending R88) — the still-open trailing period AND
 // any earlier closed-but-unrefreshed one — never set by Billing: R98 drops
 // every bucket whose To is after BillingDeps.Clock's Now before it can ever
 // become a row, so Billing has no open period left to mark Partial in the
-// first place (it is not that Billing declines to flag one — final review A
-// I-1 found it silently emitting an open period as if it were a closed,
-// complete one). M-4: a composed figure is closing-to-closing
-// across whatever materialisation gap it fills and is NOT directly
-// comparable to the later materialised row for the same window — it can
-// differ by the boundary step the materialised aggregate itself measures
-// differently once the underlying data is refreshed. Resolution is
-// populated by Task 8's override-substitution logic in billing.go (C-6): a
-// register present here was covered by a resolved manual_override anomaly
-// for this window, and its Values entry is the operator-supplied figure,
-// not a derived one. Task 7 itself always leaves this nil — there is no
-// anomaly-reading logic in Task 7's own Consumption.
+// first place; it must never silently emit an open period as if it were a
+// closed, complete one. A composed figure is closing-to-closing across
+// whatever materialisation gap it fills and is NOT directly comparable to
+// the later materialised row for the same window — it can differ by the
+// boundary step the materialised aggregate itself measures differently once
+// the underlying data is refreshed. Resolution is populated by Task 8's
+// override-substitution logic in billing.go: a register present here was
+// covered by a resolved manual_override anomaly for this window, and its
+// Values entry is the operator-supplied figure, not a derived one. Task 7
+// itself always leaves this nil — there is no anomaly-reading logic in
+// Task 7's own Consumption.
 type Row struct {
 	AnalyzerID      uuid.UUID
 	Window          energy.Window
@@ -275,9 +277,9 @@ func validateRequest(sc store.Scope, req SeriesRequest) error {
 }
 
 // hasDuplicateAnalyzerID reports whether ids contains the same uuid.UUID
-// twice (R99, final review A I-5): a repeated id would otherwise silently
-// double every total both paths compute for it, since neither path
-// deduplicates AnalyzerIDs itself.
+// twice (R99): a repeated id would otherwise silently double every total
+// both paths compute for it, since neither path deduplicates AnalyzerIDs
+// itself.
 func hasDuplicateAnalyzerID(ids []uuid.UUID) bool {
 	seen := make(map[uuid.UUID]bool, len(ids))
 	for _, id := range ids {
@@ -289,8 +291,8 @@ func hasDuplicateAnalyzerID(ids []uuid.UUID) bool {
 	return false
 }
 
-// validLevel reports whether l is one of the four levels 02 §3.4 defines
-// (M-1). Without this check an unrecognised Level passed validateRequest
+// validLevel reports whether l is one of the four levels 02 §3.4 defines.
+// Without this check an unrecognised Level passed validateRequest
 // silently (cellsExceed reports "not exceeded" for a level Bucket does not
 // recognise, since Bucket returns the invalid zero Window and the counting
 // loop never starts), and both Consumption methods then returned
@@ -314,8 +316,8 @@ func errRequired(field string) error {
 
 // cellsExceed reports whether analyzerCount times Level's bucket count over
 // w would exceed max (R104(2), replacing the bucket-count-only MaxBuckets
-// cap final review X found unreachable under MaxRequestSpan), WITHOUT
-// materialising energy.Buckets' full slice — the same stepping logic as
+// cap, which is unreachable under MaxRequestSpan), WITHOUT materialising
+// energy.Buckets' full slice — the same stepping logic as
 // energy.Buckets, but counting only, so that a pathological request (many
 // analyzers over a long fine-grained range) is rejected in a bounded number
 // of steps instead of allocating a result the caller was always going to

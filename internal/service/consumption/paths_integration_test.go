@@ -148,15 +148,15 @@ func TestBillingIsolatesTenants(t *testing.T) {
 	require.ErrorIs(t, err, store.ErrNotFound)
 }
 
-// TestBillingFlagsAResetAtTheUpperBoundAgainstARealDatabase is C2's
-// integration half (review probe C/(c)): a reset row sharing the request's
-// own upper bound with a non-reset end reading of a DIFFERENT value must
-// come out nil + meter_reset (R90) — never a wrong number. This is provable
-// only against a REAL timestamptz column: Go's own time.Time arithmetic has
-// nanosecond resolution and never rounds through a wire encoding the way
-// Postgres's timestamptz does, so mutation (c) (widening the reset query's
-// upper bound by time.Nanosecond instead of time.Microsecond) is invisible
-// to a fake repository and stays green against one.
+// TestBillingFlagsAResetAtTheUpperBoundAgainstARealDatabase proves a reset
+// row sharing the request's own upper bound with a non-reset end reading of
+// a DIFFERENT value must come out nil + meter_reset (R90) — never a wrong
+// number. This is provable only against a REAL timestamptz column: Go's
+// own time.Time arithmetic has nanosecond resolution and never rounds
+// through a wire encoding the way Postgres's timestamptz does, so widening
+// the reset query's upper bound by time.Nanosecond instead of
+// time.Microsecond would be invisible to a fake repository and would stay
+// green against one.
 func TestBillingFlagsAResetAtTheUpperBoundAgainstARealDatabase(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -188,7 +188,7 @@ func TestBillingFlagsAResetAtTheUpperBoundAgainstARealDatabase(t *testing.T) {
 	require.Equal(t, energy.ReasonMeterReset, rows[0].Suspect[energy.ActiveImport].Reason)
 }
 
-// TestNarrowScopeSeesNothingOnBothPaths is I-7: a same-company Scope whose
+// TestNarrowScopeSeesNothingOnBothPaths proves a same-company Scope whose
 // BuildingIDs exclude the analyzer's own building must see nothing on
 // EITHER path — Billing refuses with store.ErrNotFound (its normal per-call
 // isolation contract), Analytics returns an empty slice — with a positive
@@ -238,14 +238,13 @@ func TestNarrowScopeSeesNothingOnBothPaths(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, aEmpty)
 
-	// I-7's re-review remainder: the Monthly billing-kind Range/look-back and
-	// the Analytics composition path (composeMissingPeriods' ConsumptionDaily
-	// call) run only at Monthly, never at Hourly — a scope-substitution
-	// mutation on either stayed green in unit AND integration because this
-	// test previously only ever asked at Hourly. consumption_monthly is
+	// The Monthly billing-kind Range/look-back and the Analytics composition
+	// path (composeMissingPeriods' ConsumptionDaily call) run only at
+	// Monthly, never at Hourly, so a Scope check that only ran at Hourly
+	// above would leave them unexercised. consumption_monthly is
 	// deliberately NEVER refreshed here, so Analytics must compose from
-	// consumption_daily (the review's own probe: the mutated code leaked a
-	// Partial row with active_import=380 for the out-of-scope analyzer).
+	// consumption_daily — a scope leak here would return a Partial row for
+	// the out-of-scope analyzer instead of an empty slice.
 	loc, err := time.LoadLocation("Europe/Istanbul")
 	require.NoError(t, err)
 	dec31 := time.Date(2025, 12, 31, 0, 0, 0, 0, loc)
@@ -254,7 +253,7 @@ func TestNarrowScopeSeesNothingOnBothPaths(t *testing.T) {
 	for _, id := range []uuid.UUID{inScope, outOfScope} {
 		// A reading strictly BEFORE January is required too: composing
 		// January needs a consumption_daily bucket both inside the month
-		// (Jan 1) and before it (Dec 31) to diff against (M-2).
+		// (Jan 1) and before it (Dec 31) to diff against.
 		pathsSeedReading(t, ctx, repo, tenant.AdminScope, readingRow(id, dec31, model.ReadingKindLoadProfile, map[string]string{"active_import": "500"}))
 		pathsSeedReading(t, ctx, repo, tenant.AdminScope, readingRow(id, jan1, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}))
 		pathsSeedReading(t, ctx, repo, tenant.AdminScope, readingRow(id, feb1, model.ReadingKindLoadProfile, map[string]string{"active_import": "1380"}))
@@ -283,7 +282,7 @@ func TestNarrowScopeSeesNothingOnBothPaths(t *testing.T) {
 	require.Empty(t, monthlyAEmpty, "the composition path must never leak a composed row to a narrow scope")
 }
 
-// TestAnalyticsIsolatesTenants is I-7's Analytics half: the other tenant's
+// TestAnalyticsIsolatesTenants proves the Analytics half: the other tenant's
 // AdminScope — the widest legitimate scope a company can hold — must never
 // see a row belonging to a different company, with a positive control that
 // proves the seeded row is real before checking that it never crosses
@@ -325,13 +324,12 @@ func TestAnalyticsIsolatesTenants(t *testing.T) {
 }
 
 // TestAnalyticsComposesClosedUnrefreshedMonthsAgainstARealDatabase is R94's
-// integration acceptance test (the review's own probe): consumption_monthly
-// is NEVER refreshed. load_profile readings run continuously from Dec 31
-// through Mar 10. A request for [Jan 1, Apr 1) must return a composed,
-// Partial row for EVERY one of January, February and March — not only
-// March, which happens to be the LAST window in the request (the review's
-// I-3 finding: January and February silently vanished because only the
-// trailing window was ever a composition candidate).
+// integration acceptance test: consumption_monthly is NEVER refreshed.
+// load_profile readings run continuously from Dec 31 through Mar 10. A
+// request for [Jan 1, Apr 1) must return a composed, Partial row for EVERY
+// one of January, February and March — not only March, which happens to be
+// the LAST window in the request: composing only the trailing window would
+// silently drop January and February.
 func TestAnalyticsComposesClosedUnrefreshedMonthsAgainstARealDatabase(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

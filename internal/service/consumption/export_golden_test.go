@@ -36,7 +36,7 @@ var exportGoldenHeader = []string{
 const activeImportColumn = 5
 
 // TestExportColumnsAreStableAndUnrounded is Task 9's golden-header test
-// (Step 1/Step 5). I-8: the fixture's active_import value carries a 4th
+// (Step 1/Step 5). The fixture's active_import value carries a 4th
 // decimal digit (12.2525) precisely so a "round to 3 decimals" mutation is
 // observable — "12.253"/"12.252" would not equal "12.2525".
 func TestExportColumnsAreStableAndUnrounded(t *testing.T) {

@@ -26,7 +26,7 @@ type BalanceRow struct {
 // Generation/GridExport go through soundValue (sound.go), which
 // independently re-checks r.Suspect rather than trusting Values[reg] to
 // already be nil for a suspect register — the same "never trust the
-// caller's Row" guard Summarise and ExportRows apply (task-9-review.md).
+// caller's Row" guard Summarise and ExportRows apply.
 func Balance(rows []Row) []BalanceRow {
 	out := make([]BalanceRow, len(rows))
 	for i := range rows {

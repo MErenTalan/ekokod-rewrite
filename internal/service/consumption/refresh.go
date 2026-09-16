@@ -64,15 +64,15 @@ type RefreshDeps struct {
 // whole buckets of that view's own level, then clipped to the part OLDER
 // than that view's own policy start_offset — the scheduled
 // add_continuous_aggregate_policy job already keeps the rest live, so
-// refreshing it manually would be pure, platform-wide, redundant load
-// (final review A I-3(a)). A view with nothing older than its own horizon
+// refreshing it manually would be pure, platform-wide, redundant load.
+// A view with nothing older than its own horizon
 // is skipped entirely. The whole call is serialised by ONE global lock
 // (consumptionRefreshLockKey), not a lock per view: on contention
 // (lock.ErrNotAcquired) the handler re-enqueues the SAME payload through
 // RefreshDeps.Enqueuer and returns nil, consuming no retry budget and never
-// risking archival (final review A I-3(c): the old per-view-lock design let
+// risking archival: a per-view-lock design would let
 // a burst of distinct windows exhaust retries and archive, permanently
-// blocking that window's id).
+// blocking that window's id.
 //
 // R72: this is platform work, not tenant work — refresh_continuous_aggregate
 // takes a time range only and necessarily covers every tenant's buckets in
@@ -139,8 +139,8 @@ func NewRefresher(d RefreshDeps) (*Refresher, error) {
 // consumptionRefreshLockKey is R100(4)'s single global lock key. It
 // replaces R71's per-view key ("consumption.refresh:" + view) so a burst of
 // refreshes touching every view serialises against ONE lease instead of
-// racing four independent ones — the design final review A I-3(c) found
-// let lock contention exhaust an asynq task's retry budget and archive it,
+// racing four independent ones — a per-view-lock design lets lock
+// contention exhaust an asynq task's retry budget and archive it,
 // permanently blocking that window.
 const consumptionRefreshLockKey = "consumption.refresh"
 

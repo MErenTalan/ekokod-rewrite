@@ -17,8 +17,8 @@ import (
 )
 
 // yearOfFifteenMinuteReadings builds one analyzer-year of 15-minute
-// load_profile readings (the same shape the review's I-9 probe used), each
-// carrying a max_demand_kw value so MaxDemand has something to scan.
+// load_profile readings, each carrying a max_demand_kw value so MaxDemand
+// has something to scan.
 func yearOfFifteenMinuteReadings(analyzerID uuid.UUID, from, to time.Time) []model.MeterReading {
 	var rows []model.MeterReading
 	v := 1000
@@ -32,13 +32,13 @@ func yearOfFifteenMinuteReadings(analyzerID uuid.UUID, from, to time.Time) []mod
 	return rows
 }
 
-// BenchmarkBillingYearHourly is I-9's benchmark: one analyzer-year of
-// 15-minute load_profile readings at Hourly (8760 buckets). Before I-9's
-// fix, energy.MaxDemand rescanned the WHOLE loaded slice for every bucket
-// (O(buckets x readings)); after, each bucket's own sub-range is found with
-// sort.Search and only that bounded sub-slice is scanned. Recorded numbers
-// (task-7-report.md, "Fix round 1"): before ~2.78s/op (matching the
-// review's own measurement), after a small fraction of that.
+// BenchmarkBillingYearHourly benchmarks one analyzer-year of
+// 15-minute load_profile readings at Hourly (8760 buckets). Before
+// maxDemandInWindow's fix, energy.MaxDemand rescanned the WHOLE loaded
+// slice for every bucket (O(buckets x readings)); after, each bucket's own
+// sub-range is found with sort.Search and only that bounded sub-slice is
+// scanned. Recorded numbers: before ~2.78s/op, after a small fraction of
+// that.
 func BenchmarkBillingYearHourly(b *testing.B) {
 	loc, err := time.LoadLocation("Europe/Istanbul")
 	require.NoError(b, err)

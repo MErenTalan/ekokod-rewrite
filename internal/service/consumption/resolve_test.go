@@ -1,12 +1,13 @@
 package consumption_test
 
-// This file is Task 8's fix-round-1 unit test suite (task-8-review.md): the
-// four Criticals (C1-C4) and the Important/Minor items that do not need a
-// real database (I1-I3, I6, I7, I8's positive/empty-ids checks). Every test
-// here uses in-memory fakes (fakeReadings/fakeAnomalies/fakeOps/
-// fakeAnalyzers/fakeUsers, helpers_test.go) and a real lock.NewMemory — no
-// database — so the whole file runs under
-// `go test ./internal/service/consumption/... -race`.
+// This file is ResolveAnomaly's unit test suite: the F2 cascade
+// (resolveOverlappingIngestionAnomalies), the reset_registered
+// re-derivation path (validateAndPrepareReset), dedup/lookup pagination
+// past the repository's default page size, and the ordering/authorization
+// guards around every write. Every test here uses in-memory fakes
+// (fakeReadings/fakeAnomalies/fakeOps/fakeAnalyzers/fakeUsers,
+// helpers_test.go) and a real lock.NewMemory — no database — so the whole
+// file runs under `go test ./internal/service/consumption/... -race`.
 //
 // anomalies_integration_test.go (real Postgres, real tenancy) covers what
 // needs a real database: cross-tenant isolation, a real concurrent-run
@@ -88,12 +89,12 @@ func f3Detail(t *testing.T, period energy.Window, reason string, registers ...st
 	return b
 }
 
-// --- C1: the F2 overlap cascade must never touch an F3 row -----------------
+// --- The F2 overlap cascade must never touch an F3 row ---------------------
 
-// TestF2CascadeNeverAppliesToNestedF3Row is probe P1: a Daily anomaly
-// resolved manual_override must never cascade onto a NESTED Hourly F3 row
-// sharing the negative_delta reason, even though it lies fully inside the
-// resolved period.
+// TestF2CascadeNeverAppliesToNestedF3Row proves a Daily anomaly resolved
+// manual_override must never cascade onto a NESTED Hourly F3 row sharing
+// the negative_delta reason, even though it lies fully inside the resolved
+// period.
 func TestF2CascadeNeverAppliesToNestedF3Row(t *testing.T) {
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -124,9 +125,9 @@ func TestF2CascadeNeverAppliesToNestedF3Row(t *testing.T) {
 	require.Nil(t, got.ResolvedAt, "the Daily override must never cascade onto the nested Hourly F3 row")
 }
 
-// TestF2CascadeNeverAppliesWithinPureF3Hierarchy is probe P11: pure F3, no F2
-// row at all. Resolving a Daily anomaly must never resolve a nested Hourly
-// F3 anomaly of the same reason.
+// TestF2CascadeNeverAppliesWithinPureF3Hierarchy covers pure F3, no F2 row
+// at all: resolving a Daily anomaly must never resolve a nested Hourly F3
+// anomaly of the same reason.
 func TestF2CascadeNeverAppliesWithinPureF3Hierarchy(t *testing.T) {
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -157,9 +158,9 @@ func TestF2CascadeNeverAppliesWithinPureF3Hierarchy(t *testing.T) {
 	require.Nil(t, got.ResolvedAt, "a pure F3 hierarchy must never cascade onto a nested row")
 }
 
-// TestF2CascadeAppliesOnlyToF2ShapedRows is C1's positive control: an
-// F2-shaped row fully contained in the resolved F3 period IS cascaded, while
-// a sibling F3-shaped row at the exact same bounds is not.
+// TestF2CascadeAppliesOnlyToF2ShapedRows proves an F2-shaped row fully
+// contained in the resolved F3 period IS cascaded, while a sibling
+// F3-shaped row at the exact same bounds is not.
 func TestF2CascadeAppliesOnlyToF2ShapedRows(t *testing.T) {
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -195,7 +196,7 @@ func TestF2CascadeAppliesOnlyToF2ShapedRows(t *testing.T) {
 	require.Nil(t, gotF3Sibling.ResolvedAt, "an F3-shaped row must never be cascaded even at identical bounds")
 }
 
-// TestF2CascadeNeverCopiesOverrideValues is C1(b): a cascaded F2 row's own
+// TestF2CascadeNeverCopiesOverrideValues proves a cascaded F2 row's own
 // OverrideValues column is always nil, even when the F3 resolution being
 // cascaded is itself a manual_override.
 func TestF2CascadeNeverCopiesOverrideValues(t *testing.T) {
@@ -229,12 +230,11 @@ func TestF2CascadeNeverCopiesOverrideValues(t *testing.T) {
 	require.Empty(t, gotF2.OverrideValues, "a cascaded row must never carry the F3 resolution's own override values")
 }
 
-// --- C4(d): the cascade requires FULL containment, never mere overlap ------
+// --- The cascade requires FULL containment, never mere overlap -------------
 
 // TestF2CascadeRequiresFullContainment proves an F2 row that only overlaps
 // the resolved period (starts before it) is left untouched, while one fully
-// inside it is cascaded — C4's mutation (d) (widen the range/overlap test)
-// must turn this red.
+// inside it is cascaded.
 func TestF2CascadeRequiresFullContainment(t *testing.T) {
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -275,9 +275,9 @@ func TestF2CascadeRequiresFullContainment(t *testing.T) {
 	require.NotNil(t, gotContained.ResolvedAt, "a row fully inside the period must be cascaded")
 }
 
-// TestF2CascadeReasonFilterExcludesOtherReasons pins I-8's mutation (d3): a
-// row shaped for the cascade but reasoned meter_reset (not negative_delta)
-// must never be touched, even fully contained.
+// TestF2CascadeReasonFilterExcludesOtherReasons proves a row shaped for the
+// cascade but reasoned meter_reset (not negative_delta) must never be
+// touched, even fully contained.
 func TestF2CascadeReasonFilterExcludesOtherReasons(t *testing.T) {
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -305,11 +305,11 @@ func TestF2CascadeReasonFilterExcludesOtherReasons(t *testing.T) {
 	require.Nil(t, got.ResolvedAt, "a differently-reasoned row must never be cascaded")
 }
 
-// --- C2: reset_registered re-derives the period in memory before writing ---
+// --- reset_registered re-derives the period in memory before writing -------
 
-// TestResetOutsidePeriodRejected is probe P2: a ResetTS after the period's
-// own end must be rejected before any write, and the neighbouring period
-// must never be disturbed.
+// TestResetOutsidePeriodRejected proves a ResetTS after the period's own
+// end must be rejected before any write, and the neighbouring period must
+// never be disturbed.
 func TestResetOutsidePeriodRejected(t *testing.T) {
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -347,7 +347,7 @@ func TestResetOutsidePeriodRejected(t *testing.T) {
 }
 
 // TestResetAtOrBeforePeriodStartRejected: a ResetTS equal to period.From is
-// outside the (From, To] window C2 requires.
+// outside the (From, To] window ResolveByRegisteringReset requires.
 func TestResetAtOrBeforePeriodStartRejected(t *testing.T) {
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -380,9 +380,9 @@ func TestResetAtOrBeforePeriodStartRejected(t *testing.T) {
 	require.Empty(t, readings.byKind[model.ReadingKindReset])
 }
 
-// TestResetWithWrongAfterValueRejected is probe P3: a reset inside the
-// period whose after-value still leaves the register suspect must be
-// rejected, and nothing written.
+// TestResetWithWrongAfterValueRejected proves a reset inside the period
+// whose after-value still leaves the register suspect must be rejected,
+// and nothing written.
 func TestResetWithWrongAfterValueRejected(t *testing.T) {
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -424,11 +424,12 @@ func TestResetWithWrongAfterValueRejected(t *testing.T) {
 	require.Nil(t, got.ResolvedAt)
 }
 
-// TestResetLeavingAnotherRegisterSuspectRejected is R93's completeness rule,
-// now enforced purely by re-derivation: t1_import is reported by both
+// TestResetLeavingAnotherRegisterSuspectRejected proves R93's completeness
+// rule, enforced purely by re-derivation: t1_import is reported by both
 // boundaries and is NOT itself suspect, but omitting it from ResetAfter
 // makes it meter_reset-suspect once the reset participates in the window —
-// and C2 rejects the WHOLE request when ANY register comes back suspect.
+// and validateAndPrepareReset rejects the WHOLE request when ANY register
+// comes back suspect.
 func TestResetLeavingAnotherRegisterSuspectRejected(t *testing.T) {
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -462,7 +463,7 @@ func TestResetLeavingAnotherRegisterSuspectRejected(t *testing.T) {
 	require.Empty(t, readings.byKind[model.ReadingKindReset])
 }
 
-// TestPeriodThatIsNotABucketRejected is I-5: a period that is not exactly
+// TestPeriodThatIsNotABucketRejected proves a period that is not exactly
 // one whole bucket at any level is ErrInvalidRequest, never a silent
 // Hourly fallback.
 func TestPeriodThatIsNotABucketRejected(t *testing.T) {
@@ -493,14 +494,13 @@ func TestPeriodThatIsNotABucketRejected(t *testing.T) {
 	require.ErrorIs(t, err, consumption.ErrInvalidRequest)
 }
 
-// TestPeriodThatIsNotABucketRejectedEvenWithRealBoundaryReadings pins RI-6's
-// own "!ok -> Hourly fallback" mutation directly: a non-bucket 2-hour period
-// with REAL load_profile readings exactly at its own start/end would derive
-// a perfectly plausible (and sound) value if inferLevel silently fell back
-// to treating it as Hourly — the empty-readings TestPeriodThatIsNotABucketRejected
-// above would pass under that mutation too, since deriveRow fails anyway
-// with no data at all; this test fails unless inferLevel's own !ok is what
-// rejects the request.
+// TestPeriodThatIsNotABucketRejectedEvenWithRealBoundaryReadings uses REAL
+// load_profile readings exactly at the non-bucket period's own start/end
+// (rather than no readings at all): a silent "!ok -> treat as Hourly"
+// fallback in inferLevel would derive a perfectly plausible, sound value
+// from this fixture instead of failing for an unrelated reason, so this
+// test actually exercises inferLevel's own rejection rather than merely
+// deriveRow failing on empty data.
 func TestPeriodThatIsNotABucketRejectedEvenWithRealBoundaryReadings(t *testing.T) {
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -509,13 +509,12 @@ func TestPeriodThatIsNotABucketRejectedEvenWithRealBoundaryReadings(t *testing.T
 	period := energy.Window{From: h, To: h.Add(2 * time.Hour)} // not a bucket at any level
 
 	// A reading strictly between h and the proposed reset (h+1h) supplies
-	// the "prior" R91 needs, so a re-derivation that (bug) silently treated
-	// this 2-hour period as Hourly would come back perfectly SOUND
-	// (20 + 50 = 70, no suspicion) — the exact silent-acceptance the
-	// "!ok -> Hourly fallback" mutation must be caught by, never merely a
-	// derivation that happens to fail for an unrelated reason (R91/no-prior)
-	// the way the empty-readings TestPeriodThatIsNotABucketRejected above
-	// would under the same mutation.
+	// the "prior" R91 needs, so a re-derivation that silently treated this
+	// 2-hour period as Hourly would come back perfectly SOUND (20 + 50 =
+	// 70, no suspicion) instead of failing — proving the rejection below
+	// comes from inferLevel's own !ok, not from an unrelated derivation
+	// failure (R91/no-prior) the way the empty-readings
+	// TestPeriodThatIsNotABucketRejected above would.
 	readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
 		model.ReadingKindLoadProfile: {
 			readingRow(analyzerID, period.From, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}),
@@ -545,9 +544,9 @@ func TestPeriodThatIsNotABucketRejectedEvenWithRealBoundaryReadings(t *testing.T
 	require.Nil(t, got.ResolvedAt)
 }
 
-// TestRegisteringAValidResetSucceeds is C2's positive control: a reset that
-// fully covers every register both boundaries report is accepted, written,
-// and the anomaly resolved.
+// TestRegisteringAValidResetSucceeds proves a reset that fully covers every
+// register both boundaries report is accepted, written, and the anomaly
+// resolved.
 func TestRegisteringAValidResetSucceeds(t *testing.T) {
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -590,14 +589,13 @@ func TestRegisteringAValidResetSucceeds(t *testing.T) {
 	require.Equal(t, "130", rows[0].Values[energy.ActiveImport].String())
 }
 
-// --- RI-6/I5: inferLevel must be exercised above Hourly, and on a DST day -
+// --- inferLevel must be exercised above Hourly, and on a DST day ----------
 
-// TestRegisteringAValidResetSucceedsAtDailyLevel is RI-6's own fix: no test
-// in the prior round resolved a Daily anomaly, so mutation (e2) (inferLevel
-// always Hourly) and the "!ok -> Hourly fallback" mutation both survived.
-// The SAME numeric relationship TestRegisteringAValidResetSucceeds proves at
-// Hourly (1000 start, 1040 prior, 190 end, reset-after 100 -> 130 sound) is
-// reproduced over a whole Daily bucket.
+// TestRegisteringAValidResetSucceedsAtDailyLevel reproduces the SAME
+// numeric relationship TestRegisteringAValidResetSucceeds proves at Hourly
+// (1000 start, 1040 prior, 190 end, reset-after 100 -> 130 sound) over a
+// whole Daily bucket, so inferLevel is exercised above Hourly and not just
+// assumed correct there.
 func TestRegisteringAValidResetSucceedsAtDailyLevel(t *testing.T) {
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -642,8 +640,8 @@ func TestRegisteringAValidResetSucceedsAtDailyLevel(t *testing.T) {
 	require.Equal(t, "130", rows[0].Values[energy.ActiveImport].String())
 }
 
-// TestRegisteringAValidResetSucceedsAtMonthlyLevel is RI-6's own fix for
-// Monthly: the SAME numeric relationship, over a whole Monthly bucket.
+// TestRegisteringAValidResetSucceedsAtMonthlyLevel reproduces the SAME
+// numeric relationship at Monthly, over a whole Monthly bucket.
 func TestRegisteringAValidResetSucceedsAtMonthlyLevel(t *testing.T) {
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -688,12 +686,11 @@ func TestRegisteringAValidResetSucceedsAtMonthlyLevel(t *testing.T) {
 	require.Equal(t, "130", rows[0].Values[energy.ActiveImport].String())
 }
 
-// TestRegisteringAValidResetSucceedsOnADSTDay is RI-6's own fix for mutation
-// (e) (inferLevel/Daily not matched on a non-24h day): 2015-03-29 is
-// Istanbul's spring-forward day, a 23-hour Daily bucket. inferLevel must
-// still recognise it as exactly one Daily bucket (energy.Bucket itself
-// already handles the DST arithmetic; this pins that rederiveBucketWithReset
-// actually reaches it).
+// TestRegisteringAValidResetSucceedsOnADSTDay proves inferLevel still
+// recognises a non-24h Daily bucket as exactly one Daily bucket: 2015-03-29
+// is Istanbul's spring-forward day, a 23-hour Daily bucket (energy.Bucket
+// itself already handles the DST arithmetic; this proves
+// rederiveBucketWithReset actually reaches it).
 func TestRegisteringAValidResetSucceedsOnADSTDay(t *testing.T) {
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -739,16 +736,15 @@ func TestRegisteringAValidResetSucceedsOnADSTDay(t *testing.T) {
 	require.Equal(t, "130", rows[0].Values[energy.ActiveImport].String())
 }
 
-// --- C3: dedup and override lookups must page past the default 100 --------
+// --- Dedup and override lookups must page past the default 100 -----------
 
-// TestDedupFindsAnExistingRowPastFiveHundredNoiseRows is probes P4/P5's own
-// root cause, pinned directly: 520 OTHER anomalies share this analyzer and
-// this exact period_start (different period_end, so none of them dedup-match
-// on their own), with the REAL matching row seeded LAST. A caller relying on
-// the repository's own default page (100) — or even a single page at
-// anomalyPageSize (500) — would never see it; listAllAnomalies must page
-// until it does, and ConsumptionAndRecord's rerun must NOT create a second
-// row.
+// TestDedupFindsAnExistingRowPastFiveHundredNoiseRows seeds 520 OTHER
+// anomalies sharing this analyzer and this exact period_start (different
+// period_end, so none of them dedup-match on their own), with the REAL
+// matching row seeded LAST. A caller relying on the repository's own
+// default page (100) — or even a single page at anomalyPageSize (500) —
+// would never see it; listAllAnomalies must page until it does, and
+// ConsumptionAndRecord's rerun must NOT create a second row.
 func TestDedupFindsAnExistingRowPastFiveHundredNoiseRows(t *testing.T) {
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -793,8 +789,8 @@ func TestDedupFindsAnExistingRowPastFiveHundredNoiseRows(t *testing.T) {
 	require.Equal(t, 1, count, "the dedup check must find the real row past 520 noise rows, never create a duplicate")
 }
 
-// TestOverrideLookupFindsAResolvedRowPastFiveHundredNoiseRows is P4, pinned
-// directly against Billing.Consumption's own resolved-override lookup: 520
+// TestOverrideLookupFindsAResolvedRowPastFiveHundredNoiseRows exercises
+// Billing.Consumption's own resolved-override lookup directly: 520
 // unrelated resolved anomalies share the analyzer and have their own
 // period_start scattered WITHIN the single requested Hourly bucket (so the
 // Range filter includes them all), none matching the bucket's own exact
@@ -850,11 +846,11 @@ func TestOverrideLookupFindsAResolvedRowPastFiveHundredNoiseRows(t *testing.T) {
 	require.Equal(t, "manual_override", rows[0].Resolution[energy.ActiveImport])
 }
 
-// --- C4(b): a failed reset insert must never mark the anomaly resolved ----
+// --- A failed reset insert must never mark the anomaly resolved ----------
 
-// TestAFailedResetInsertNeverResolvesTheAnomaly is C4 mutation (b)'s own
-// permanent regression test: if BulkInsert fails, ResolveAnomaly must return
-// before ever calling AnomalyRepository.Resolve.
+// TestAFailedResetInsertNeverResolvesTheAnomaly proves that if BulkInsert
+// fails, ResolveAnomaly must return before ever calling
+// AnomalyRepository.Resolve.
 func TestAFailedResetInsertNeverResolvesTheAnomaly(t *testing.T) {
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -894,12 +890,11 @@ func TestAFailedResetInsertNeverResolvesTheAnomaly(t *testing.T) {
 	require.Nil(t, got.ResolvedAt, "a failed insert must never leave the anomaly marked resolved")
 }
 
-// --- C4(f): the dedup key must include period_end, not just period_start --
+// --- The dedup key must include period_end, not just period_start --------
 
-// TestDedupKeyRequiresPeriodEndAsWellAsStart is C4 mutation (f): an Hourly
-// anomaly and a Daily anomaly sharing the SAME period_start (both start at
-// midnight) must produce TWO separate rows, never one suppressing the
-// other.
+// TestDedupKeyRequiresPeriodEndAsWellAsStart proves an Hourly anomaly and a
+// Daily anomaly sharing the SAME period_start (both start at midnight) must
+// produce TWO separate rows, never one suppressing the other.
 func TestDedupKeyRequiresPeriodEndAsWellAsStart(t *testing.T) {
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -950,7 +945,7 @@ func TestDedupKeyRequiresPeriodEndAsWellAsStart(t *testing.T) {
 	require.Equal(t, 1, dailyCount, "the Daily row sharing period_start must still be created, never suppressed")
 }
 
-// --- I1: the dedup lock must genuinely serialize, not merely "usually work" -
+// --- The dedup lock must genuinely serialize, not merely "usually work" ---
 
 // raceBarrier holds up to `want` callers until either that many have
 // arrived, or `timeout` elapses (whichever first). Under CORRECT locking,
@@ -958,7 +953,7 @@ func TestDedupKeyRequiresPeriodEndAsWellAsStart(t *testing.T) {
 // others out), so every call times out alone and the test still passes —
 // slower, never wrong. Under a REMOVED lock, both goroutines race into the
 // barrier together and it releases immediately, letting both pass the
-// dedup check before either creates: the deterministic proof I1 asks for.
+// dedup check before either creates: the deterministic proof of a missing lock.
 func raceBarrier(want int, timeout time.Duration) func() {
 	var mu sync.Mutex
 	arrived := 0
@@ -990,14 +985,13 @@ func raceBarrier(want int, timeout time.Duration) func() {
 	}
 }
 
-// dedupRangeBarrier wraps raceBarrier for fakeAnomalies.listBarrier (RI-1):
-// it only engages for the EXACT shape dedupAndCreateAnomaly's own dedup
-// check uses — a Range exactly one microsecond wide — never for
+// dedupRangeBarrier wraps raceBarrier for fakeAnomalies.listBarrier: it
+// only engages for the EXACT shape dedupAndCreateAnomaly's own dedup check
+// uses — a Range exactly one microsecond wide — never for
 // applyResolvedAnomalies' own wider, unlocked List call. Arming the barrier
 // unconditionally (on every List call) would fire on that unlocked read
 // first, which both goroutines always reach at the same point regardless of
-// whether recordSuspectPeriod's own lock later works — RI-1's own finding
-// about the prior round's race test.
+// whether recordSuspectPeriod's own lock later works.
 func dedupRangeBarrier(want int, timeout time.Duration) func(store.AnomalyFilter) {
 	inner := raceBarrier(want, timeout)
 	return func(filt store.AnomalyFilter) {
@@ -1007,19 +1001,17 @@ func dedupRangeBarrier(want int, timeout time.Duration) func(store.AnomalyFilter
 	}
 }
 
-// TestConcurrentRunsAreSerializedByTheLockNotByLuck is I-1: two goroutines
-// are held at the dedup check (fakeAnomalies.listBarrier, armed only on the
-// dedup query's own exact-microsecond shape, RI-1) AND at the write itself
+// TestConcurrentRunsAreSerializedByTheLockNotByLuck holds two goroutines at
+// the dedup check (fakeAnomalies.listBarrier, armed only on the dedup
+// query's own exact-microsecond shape) AND at the write itself
 // (createBarrier) until both have arrived at each gate, which can only
-// happen if the lock failed to serialize them — removing
-// acquireAnomalyLock's own call makes this deterministically red, never
-// merely flaky. createBarrier is what actually forces the double-create: a
-// List-only gate proves both callers reached the CHECK together, but Go's
-// scheduler can still let the goroutine that never had to block run its
-// entire remaining check-then-act to completion before the other, just-woken
-// goroutine resumes — gating the WRITE itself is what makes both callers'
-// independent "nothing exists yet" decisions already final before either
-// acts on them.
+// happen if the lock failed to serialize them. createBarrier is what
+// actually forces the double-create: a List-only gate proves both callers
+// reached the CHECK together, but Go's scheduler can still let the
+// goroutine that never had to block run its entire remaining
+// check-then-act to completion before the other, just-woken goroutine
+// resumes — gating the WRITE itself is what makes both callers' independent
+// "nothing exists yet" decisions already final before either acts on them.
 func TestConcurrentRunsAreSerializedByTheLockNotByLuck(t *testing.T) {
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -1064,21 +1056,20 @@ func TestConcurrentRunsAreSerializedByTheLockNotByLuck(t *testing.T) {
 	require.Equal(t, 1, count, "the dedup lock must serialize concurrent creation, never create two rows for the same period")
 }
 
-// TestConcurrentResolvesAreSerializedByTheAnomalysOwnLock is RI-2/I3: two
-// goroutines call ResolveAnomaly for the SAME anomaly at the same time
-// (accepted vs manual_override). Only resolveBarrier gates: m2-1 found that
-// a Get-only gate is unnecessary here — arming a barrier on ResolveAnomaly's
-// post-lock re-read never distinguishes it from the first, pre-lock
-// existence Get either goroutine reaches immediately, so a Get gate alone
-// would (like RI-1's List finding) let both goroutines meet there
-// regardless of whether the lock later works. resolveBarrier alone already
-// gates the WRITE itself — the same shape
+// TestConcurrentResolvesAreSerializedByTheAnomalysOwnLock has two goroutines
+// call ResolveAnomaly for the SAME anomaly at the same time (accepted vs
+// manual_override). Only resolveBarrier gates: a Get-only gate would be
+// unnecessary here — arming a barrier on ResolveAnomaly's post-lock re-read
+// never distinguishes it from the first, pre-lock existence Get either
+// goroutine reaches immediately, so a Get gate alone would let both
+// goroutines meet there regardless of whether the lock later works.
+// resolveBarrier alone already gates the WRITE itself — the same shape
 // TestConcurrentRunsAreSerializedByTheLockNotByLuck uses, for the same
 // reason (a read-only gate lets Go's scheduler run the never-blocked
 // goroutine's whole check-then-act to completion before the other resumes)
 // — and is sufficient: removing ResolveAnomaly's own lock, or removing its
-// locked re-read, each independently makes this deterministically red at
-// -count=10 (both calls succeed instead of one being a conflict).
+// locked re-read, each independently makes both calls succeed instead of
+// one being a conflict.
 func TestConcurrentResolvesAreSerializedByTheAnomalysOwnLock(t *testing.T) {
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -1149,15 +1140,12 @@ func TestConcurrentResolvesAreSerializedByTheAnomalysOwnLock(t *testing.T) {
 	require.Equal(t, 1, conflicts, "the other must see ErrConflict, never silently overwrite the first")
 }
 
-// TestResolveAnomalyReReadAndResolveHappenInsideTheLock is m2-1's own proof,
-// replacing the deleted production test hook (resolveAnomalyLockedReadContextKey /
-// withLockedAnomalyRead / consumption.IsLockedAnomalyRead): a single,
-// sequential ResolveAnomaly call, with a recorder shared between the
-// fakeLocker (refresh_test.go) and fakeAnomalies. The recorder's event order
-// proves the locked re-read Get and the Resolve call both happen strictly
-// between the lock's own acquire and release — the ordering the deleted
-// context tag used to single out for a barrier, now shown directly from a
-// behavioural fake instead of an exported hook.
+// TestResolveAnomalyReReadAndResolveHappenInsideTheLock uses a recorder
+// shared between the fakeLocker (refresh_test.go) and fakeAnomalies, for a
+// single, sequential ResolveAnomaly call. The recorder's event order proves
+// the locked re-read Get and the Resolve call both happen strictly between
+// the lock's own acquire and release, observed from a behavioural fake
+// rather than an exported test-only hook.
 func TestResolveAnomalyReReadAndResolveHappenInsideTheLock(t *testing.T) {
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -1209,10 +1197,10 @@ func TestResolveAnomalyReReadAndResolveHappenInsideTheLock(t *testing.T) {
 	require.Less(t, resolveIdx, releaseIdx, "Resolve must happen before the lock is released: %v", events)
 }
 
-// TestNilLockerFailsClosedBeforeConsumptionRuns is I-1's own fix: a nil
-// Locker fails ConsumptionAndRecord immediately, even for a request whose
-// period turns out not to be suspect at all — never silently succeeding
-// until the first suspect period happens to appear.
+// TestNilLockerFailsClosedBeforeConsumptionRuns proves a nil Locker fails
+// ConsumptionAndRecord immediately, even for a request whose period turns
+// out not to be suspect at all — never silently succeeding until the first
+// suspect period happens to appear.
 func TestNilLockerFailsClosedBeforeConsumptionRuns(t *testing.T) {
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -1240,12 +1228,12 @@ func TestNilLockerFailsClosedBeforeConsumptionRuns(t *testing.T) {
 	require.Error(t, err, "a nil Locker must fail ConsumptionAndRecord before Consumption ever runs")
 }
 
-// --- RI-3: BillingDeps.Users is required, checked before any read/write ----
+// --- BillingDeps.Users is required, checked before any read/write ---------
 
-// TestResolveAnomalyRequiresUsers is RI-3: a Billing constructed without
-// Users must fail EVERY ResolveAnomaly call, before any read or write —
-// pinned with noAnomalies/noReadings/noOps, each of which panics on any
-// call, so a panic here would mean the nil check ran too late.
+// TestResolveAnomalyRequiresUsers proves a Billing constructed without
+// Users must fail EVERY ResolveAnomaly call, before any read or write — the
+// test uses noAnomalies/noReadings/noOps, each of which panics on any call,
+// so a panic here would mean the nil check ran too late.
 func TestResolveAnomalyRequiresUsers(t *testing.T) {
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -1262,9 +1250,8 @@ func TestResolveAnomalyRequiresUsers(t *testing.T) {
 	require.Error(t, err, "a nil Users must fail ResolveAnomaly before any read or write")
 }
 
-// TestResolvedByMustBeAUserOfTheCompany is P6/RI-3: a resolvedBy who is not
-// a user of sc.CompanyID is refused BEFORE the reset reading is written —
-// the failure the prior round's P6 probe reproduced whenever Users was nil.
+// TestResolvedByMustBeAUserOfTheCompany proves a resolvedBy who is not a
+// user of sc.CompanyID is refused BEFORE the reset reading is written.
 // Users is now required, so this is the ordinary (always-wired) path.
 func TestResolvedByMustBeAUserOfTheCompany(t *testing.T) {
 	ctx := context.Background()
@@ -1310,10 +1297,11 @@ func TestResolvedByMustBeAUserOfTheCompany(t *testing.T) {
 	require.Nil(t, got.ResolvedAt)
 }
 
-// --- I2: the F2 cascade runs BEFORE the F3 row is marked resolved ---------
+// --- The F2 cascade runs BEFORE the F3 row is marked resolved -------------
 
-// TestF2CascadeFailureLeavesTheF3RowUnresolved is I-2: if the F2 cascade's
-// own Resolve call fails, the F3 row's own Resolve must never be reached.
+// TestF2CascadeFailureLeavesTheF3RowUnresolved proves that if the F2
+// cascade's own Resolve call fails, the F3 row's own Resolve must never be
+// reached.
 func TestF2CascadeFailureLeavesTheF3RowUnresolved(t *testing.T) {
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -1342,9 +1330,9 @@ func TestF2CascadeFailureLeavesTheF3RowUnresolved(t *testing.T) {
 	require.Nil(t, got.ResolvedAt, "the F3 row must never be marked resolved when the F2 cascade fails")
 }
 
-// --- I3: re-resolving an already-resolved anomaly is a conflict -----------
+// --- Re-resolving an already-resolved anomaly is a conflict ---------------
 
-// TestReResolvingAnAlreadyResolvedAnomalyIsAConflict is I-3/P10: a second
+// TestReResolvingAnAlreadyResolvedAnomalyIsAConflict proves a second
 // resolve attempt must fail with a conflict, never silently overwrite the
 // resolver/resolution/timestamp.
 func TestReResolvingAnAlreadyResolvedAnomalyIsAConflict(t *testing.T) {
@@ -1379,9 +1367,9 @@ func TestReResolvingAnAlreadyResolvedAnomalyIsAConflict(t *testing.T) {
 	require.Equal(t, "accepted", *got.Resolution)
 }
 
-// --- I6: an override recomputes the row's reactive ratios ------------------
+// --- An override recomputes the row's reactive ratios -----------------------
 
-// TestOverrideRecomputesRatios is I-6: after a manual_override of
+// TestOverrideRecomputesRatios proves that after a manual_override of
 // active_import, InductiveRatio/CapacitiveRatio must be computed from the
 // override, never left nil from before the substitution.
 func TestOverrideRecomputesRatios(t *testing.T) {
@@ -1425,10 +1413,10 @@ func TestOverrideRecomputesRatios(t *testing.T) {
 	require.True(t, rows[0].CapacitiveRatio.Equal(decimal.RequireFromString("0.3")), "got %s", rows[0].CapacitiveRatio.String())
 }
 
-// --- I7: BulkInsert's upsert must never silently overwrite a provider reset
+// --- BulkInsert's upsert must never silently overwrite a provider reset ---
 
-// TestRegisteringAResetAtAnExistingTimestampConflictsOnDifferentValues is
-// I-7: an operator reset at a ts a PROVIDER reset already occupies, with
+// TestRegisteringAResetAtAnExistingTimestampConflictsOnDifferentValues
+// proves an operator reset at a ts a PROVIDER reset already occupies, with
 // DIFFERENT values, must be refused as a conflict — never silently
 // overwritten by BulkInsert's own upsert semantics.
 func TestRegisteringAResetAtAnExistingTimestampConflictsOnDifferentValues(t *testing.T) {
@@ -1470,9 +1458,9 @@ func TestRegisteringAResetAtAnExistingTimestampConflictsOnDifferentValues(t *tes
 	require.Nil(t, got.ResolvedAt)
 }
 
-// TestRegisteringAResetAtAnExistingTimestampIsIdempotentOnIdenticalValues is
-// I-7's other half: identical values at the same ts are a harmless retry,
-// not a conflict.
+// TestRegisteringAResetAtAnExistingTimestampIsIdempotentOnIdenticalValues
+// proves identical values at the same ts are a harmless retry, not a
+// conflict.
 func TestRegisteringAResetAtAnExistingTimestampIsIdempotentOnIdenticalValues(t *testing.T) {
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -1507,15 +1495,15 @@ func TestRegisteringAResetAtAnExistingTimestampIsIdempotentOnIdenticalValues(t *
 	require.NotNil(t, resolved.ResolvedAt)
 }
 
-// --- I4: an F2 row at exactly a bucket's bounds neither blocks F3 nor ------
+// --- An F2 row at exactly a bucket's bounds neither blocks F3 nor ----------
 // --- accepts an override ---------------------------------------------------
 
-// TestF2RowAtBucketBoundsNeitherBlocksF3NorAcceptsOverride is I-4/P7: an F2
-// row whose own (period_start, period_end) happen to equal an Hourly
-// bucket's exactly must not suppress the F3 row's own creation (C3's exact
-// period_end check already covers this), and resolving the F2 row itself
-// with manual_override must still fail — F2's detail has no registers map
-// to validate against.
+// TestF2RowAtBucketBoundsNeitherBlocksF3NorAcceptsOverride proves an F2 row
+// whose own (period_start, period_end) happen to equal an Hourly bucket's
+// exactly must not suppress the F3 row's own creation (the dedup key's
+// exact period_end check already covers this), and resolving the F2 row
+// itself with manual_override must still fail — F2's detail has no
+// registers map to validate against.
 func TestF2RowAtBucketBoundsNeitherBlocksF3NorAcceptsOverride(t *testing.T) {
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}

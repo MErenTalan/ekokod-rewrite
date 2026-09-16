@@ -14,17 +14,16 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
 )
 
-// TestMaxDemandInWindowExcludesDisallowedKindsPerLevel is m-4's own
-// compensating white-box test (final fix X review): loadAnalyzerBoundaryData
-// no longer fetches daily-kind readings for MaxDemand at Hourly, nor
-// billing-kind readings for MaxDemand at Hourly or Daily, since
-// energy.MaxDemandKindsFor already excludes them there (m-4: those Range
-// calls were dead code, R101 having already made their result unreachable
-// through the kind filter below). That means the black-box
+// TestMaxDemandInWindowExcludesDisallowedKindsPerLevel is a compensating
+// white-box test: loadAnalyzerBoundaryData no longer fetches daily-kind
+// readings for MaxDemand at Hourly, nor billing-kind readings for MaxDemand
+// at Hourly or Daily, since energy.MaxDemandKindsFor already excludes them
+// there — those Range calls are dead code once R101 makes their result
+// unreachable through the kind filter below. That means the black-box
 // billing_test.go fixtures that used to prove the EXCLUSION by loading a
 // decoy reading through the real query path can no longer reach
-// maxDemandInWindow with that decoy at all — m-4 skips the fetch before the
-// decoy is ever loaded, so a regression in maxDemandInWindow's own kind
+// maxDemandInWindow with that decoy at all — the fetch is skipped before
+// the decoy is ever loaded, so a regression in maxDemandInWindow's own kind
 // filter (e.g. reverting to the unqualified energy.MaxDemandKinds) would no
 // longer be provable from outside the package. This white-box test calls
 // maxDemandInWindow directly, passing the disallowed-kind reading straight
@@ -84,14 +83,13 @@ func (s stubAnomaliesForGapOverrideTest) Resolve(context.Context, store.Scope, u
 	panic("not used by this test")
 }
 
-// TestApplyResolvedGapOverridesMaxDemandRespectsRequestLevel is m-2 (final
-// fix X review): the gap-override emission call site
+// TestApplyResolvedGapOverridesMaxDemandRespectsRequestLevel proves the
+// gap-override emission call site
 // (applyResolvedGapOverrides, billing.go) computes MaxDemandKw with the
-// REQUEST's own level, never a hardcoded one. Mutation M4 from the review
-// (hardcoding energy.Monthly at that one call site) stayed GREEN in the
-// existing suite, because no test built a Daily gap override with a
+// REQUEST's own level, never a hardcoded one. No black-box test builds a
+// Daily gap override with a
 // billing-kind reading actually present in data.maxDemandBilling —
-// after m-4, loadAnalyzerBoundaryData never even fetches billing-kind
+// loadAnalyzerBoundaryData never even fetches billing-kind
 // readings for MaxDemand at Daily (there is nowhere left in production for
 // one to come from), so this white-box test builds the
 // analyzerBoundaryData directly, planting a billing-kind reading in

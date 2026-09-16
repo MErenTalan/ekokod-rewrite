@@ -28,7 +28,7 @@ type BillingDeps struct {
 	Log       *slog.Logger
 
 	// Locker serialises Task 8's ConsumptionAndRecord check-then-create per
-	// (analyzer, period_start) (C-6): consumption_anomalies' own partial
+	// (analyzer, period_start): consumption_anomalies' own partial
 	// index claims no database-level uniqueness, so this lock is what
 	// actually prevents two concurrent runs from creating two rows for the
 	// same period. Required only by ConsumptionAndRecord; left nil, this
@@ -40,11 +40,11 @@ type BillingDeps struct {
 	// reset reading. Required only by ResolveAnomaly.
 	Analyzers store.AnalyzerRepository
 	// Users validates that ResolveAnomaly's resolvedBy is a real user of
-	// sc.CompanyID BEFORE any write (review I2/P6: a resolvedBy rejected only
-	// by AnomalyRepository.Resolve's own SQL check let the reset reading get
-	// written first, unresolved). Optional like Analyzers: left nil, this
+	// sc.CompanyID BEFORE any write: a resolvedBy rejected only by
+	// AnomalyRepository.Resolve's own SQL check would let the reset reading
+	// get written first, unresolved. Optional like Analyzers: left nil, this
 	// pre-check is skipped and AnomalyRepository.Resolve's own check is the
-	// only guard, exactly as before this fix round.
+	// only guard.
 	Users store.UserRepository
 }
 
@@ -124,7 +124,7 @@ func (b *Billing) consumptionWithGaps(ctx context.Context, sc store.Scope, req S
 	var rows []Row
 	gapsByAnalyzer := make(map[uuid.UUID][]bucketGap, len(req.AnalyzerIDs))
 	for _, analyzerID := range req.AnalyzerIDs {
-		// R97 rule 7 / Minor m-3: applyResolvedGapOverrides runs INSIDE
+		// R97 rule 7: applyResolvedGapOverrides runs INSIDE
 		// consumptionForAnalyzer now, reusing the SAME analyzerBoundaryData
 		// already loaded for this analyzer's whole request — never a second
 		// query set per overridden gap.
@@ -137,7 +137,7 @@ func (b *Billing) consumptionWithGaps(ctx context.Context, sc store.Scope, req S
 			gapsByAnalyzer[analyzerID] = gaps
 		}
 	}
-	// C-6: a resolved manual_override/accepted anomaly must be reflected by
+	// A resolved manual_override/accepted anomaly must be reflected by
 	// Consumption itself, not only by Task 8's ConsumptionAndRecord wrapper
 	// — applyResolvedAnomalies (anomalies.go) post-processes rows in place.
 	if err := b.applyResolvedAnomalies(ctx, sc, rows); err != nil {
@@ -146,25 +146,25 @@ func (b *Billing) consumptionWithGaps(ctx context.Context, sc store.Scope, req S
 	return rows, gapsByAnalyzer, nil
 }
 
-// consumptionForAnalyzer implements I-17's query shape for one analyzer:
-// each kind Billing needs is read ONCE over the whole request, then every
-// bucket's boundaries are selected in memory with energy.SelectBoundary.
+// consumptionForAnalyzer reads each kind Billing needs ONCE over the whole
+// request, then selects every bucket's boundaries in memory with
+// energy.SelectBoundary.
 //
-// C1: load_profile itself, reset evidence, and priors all load from the
+// load_profile itself, reset evidence, and priors all load from the
 // EARLIEST look-back of every boundary kind this request may use — never
 // just load_profile's own. A billing-kind (Monthly, R63) or daily-kind
 // (R95) start boundary can sit further back in time than load_profile's own
 // look-back, and a reset row can fall inside that earlier evidence window:
 // loading resets only from load_profile's look-back silently drops it, and
-// the derived number comes out wrong instead of suspect (the review's P1
-// probe: 4150 instead of the true 5150, unflagged).
+// the derived number comes out wrong instead of suspect (4150 instead of
+// the true 5150, unflagged).
 func (b *Billing) consumptionForAnalyzer(ctx context.Context, sc store.Scope, analyzerID uuid.UUID, level energy.Level, buckets []energy.Window) ([]Row, []bucketGap, error) {
 	data, err := b.loadAnalyzerBoundaryData(ctx, sc, analyzerID, level, buckets)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	// R103 point 2 (RC-1): "the analyzer has readings" and "pre-installation"
+	// R103 point 2: "the analyzer has readings" and "pre-installation"
 	// are decided from data.hasPriorReading — an UNCLAMPED existence check
 	// (firstBoundaryLookback's own BoundaryReadings call, before
 	// clampLookback ever runs) — never from the clamped look-back pool
@@ -232,10 +232,10 @@ func (b *Billing) consumptionForAnalyzer(ctx context.Context, sc store.Scope, an
 	}
 
 	if len(gaps) > 0 {
-		// R97 rule 7 / RC-1 point 2 (m2-2): the gap-override lookup runs
+		// R97 rule 7: the gap-override lookup runs
 		// only over `gaps` — the buckets that already passed the
-		// anyReadings/pre-install/now filters above. That is fine because,
-		// as of RC-1, those filters are themselves range-independent
+		// anyReadings/pre-install/now filters above. That is fine because
+		// those filters are themselves range-independent
 		// (hasPriorReading and earliest are computed from every kind's own
 		// unclamped look-back, not from the loaded/clamped slices), so a
 		// bucket that is a recorded gap today can never later fail them —
@@ -261,7 +261,7 @@ func (b *Billing) consumptionForAnalyzer(ctx context.Context, sc store.Scope, an
 // slice ALREADY LOADED for this request (R97 spec point 3's own phrasing —
 // never a fresh, unbounded query): the minimum of each loaded kind's own
 // first element, since every slice is sorted ascending by ts. Only called
-// when data.hasPriorReading is false — RC-1: whenever an unclamped look-back
+// when data.hasPriorReading is false: whenever an unclamped look-back
 // found a reading before this request's own first bucket, that reading is
 // the analyzer's true earliest, and the pre-install skip is disabled
 // entirely rather than substituting a within-window reading that would
@@ -296,7 +296,7 @@ func earliestBoundaryReading(data analyzerBoundaryData) *time.Time {
 // synthesized rows and the gaps that did NOT resolve to an override (still
 // genuine gaps, for the caller to write a missing_readings anomaly for).
 //
-// Minor m-3: data is the SAME analyzerBoundaryData the caller already loaded
+// data is the SAME analyzerBoundaryData the caller already loaded
 // for the whole request — data.resolved already covers every bucket's own
 // boundary instant (R96), so this never re-queries ReadingRepository per
 // overridden gap.
@@ -346,7 +346,7 @@ func (b *Billing) applyResolvedGapOverrides(ctx context.Context, sc store.Scope,
 		if derr != nil {
 			return nil, gaps, derr
 		}
-		// Minor m-3: end comes straight from the caller's own already-loaded
+		// end comes straight from the caller's own already-loaded
 		// data.resolved (R96 resolves every bucket instant for the whole
 		// request up front) — never a second loadAnalyzerBoundaryData call
 		// per overridden gap.
@@ -366,7 +366,7 @@ func (b *Billing) applyResolvedGapOverrides(ctx context.Context, sc store.Scope,
 			MaxDemandKw: maxDemandInWindow(level, g.Window, data.loadProfile, data.daily, data.maxDemandBilling),
 			Resolution:  resolution,
 		}
-		// R97 rule 7 / Minor m-2: Indexes is the end reading's own values
+		// R97 rule 7: Indexes is the end reading's own values
 		// when one exists, else nil — never a map of nil entries.
 		if end != nil {
 			row.Source = end.Kind
@@ -383,14 +383,14 @@ func (b *Billing) applyResolvedGapOverrides(ctx context.Context, sc store.Scope,
 // closed exactly when now is at or after its own To PLUS level's own
 // SettleDelay — never a strict-after, since a bucket whose settle window
 // ends at exactly this instant has fully settled. The plain R98 clock-only
-// rule (closed the instant To passes) let a bucket bill a stale end
+// rule (closed the instant To passes) would let a bucket bill a stale end
 // boundary as complete during the ordinary ingestion-lag window right after
-// it closed — final review X's I-A probe: a daily-only meter's January
-// billed as 300 (from a Jan 30 22:00 snapshot, still inside R96's own
-// tolerance) instead of the true 310, when queried at Feb 1 06:00, before
-// the Feb 1 00:00 snapshot had arrived — and, for the same reason, wrote a
-// false missing_readings anomaly for a Daily bucket in the few hours right
-// after its own midnight. This is the ONE predicate consumptionForAnalyzer's
+// it closed: a daily-only meter's January would bill as 300 (from a Jan 30
+// 22:00 snapshot, still inside R96's own tolerance) instead of the true
+// 310, when queried at Feb 1 06:00, before the Feb 1 00:00 snapshot has
+// arrived — and, for the same reason, would write a false missing_readings
+// anomaly for a Daily bucket in the few hours right after its own midnight.
+// This is the ONE predicate consumptionForAnalyzer's
 // loop uses both to decide whether a derived row may be emitted at all and
 // whether a missed bucket may be recorded as a gap (R97 ruling (i)) or a
 // resolved gap override may be emitted for it, so none of the three can
@@ -429,17 +429,16 @@ func classifyGap(w energy.Window, resolved map[int64]*energy.Reading) ([]string,
 
 // analyzerBoundaryData is everything loadAnalyzerBoundaryData loads once per
 // (analyzer, request) and resolveBoundaries resolves once per boundary
-// instant — extracted so C2's in-memory reset re-derivation
+// instant — extracted so the in-memory reset re-derivation
 // (rederiveBucketWithReset, resolve.go) can reuse the EXACT same loads and
 // the EXACT same per-instant boundary resolution deriveRow uses, rather than
-// duplicating either (the copied selection logic R96 made stale is exactly
-// what this fix round deletes).
+// duplicating either.
 type analyzerBoundaryData struct {
 	loadProfile, billing, daily, resets, priors []energy.Reading
 	maxDemandBilling                            []energy.Reading
 	useBilling, useDaily                        bool
 	resolved                                    map[int64]*energy.Reading
-	// hasPriorReading is R103's own field (RC-1): true when ANY boundary
+	// hasPriorReading is R103's own field: true when ANY boundary
 	// kind this request may use has a reading at or before the request's
 	// own first bucket start — from firstBoundaryLookback's UNCLAMPED
 	// BoundaryReadings call, before clampLookback ever runs. It answers
@@ -451,7 +450,7 @@ type analyzerBoundaryData struct {
 }
 
 // deriveRow derives ONE bucket's Row from already-loaded data, optionally
-// with extraResets merged in (C2: an operator's proposed reset, checked in
+// with extraResets merged in (an operator's proposed reset, checked in
 // memory before anything is written). It returns ok=false exactly when
 // energy.Derive did not emit (see classifyGap's doc for the exhaustive
 // list) — the caller decides what "no row" means for its own purpose
@@ -462,7 +461,7 @@ func deriveRow(analyzerID uuid.UUID, w energy.Window, data analyzerBoundaryData,
 
 	resets := data.resets
 	if len(extraResets) > 0 {
-		// C2/I7: an injected reset SUPERSEDES any existing reset at the same
+		// An injected reset SUPERSEDES any existing reset at the same
 		// instant, matching what ReadingRepository.BulkInsert's own upsert
 		// would actually produce in the database afterward — never a
 		// duplicate reading at one ts, which would make deriveRegister's own
@@ -495,14 +494,14 @@ func deriveRow(analyzerID uuid.UUID, w energy.Window, data analyzerBoundaryData,
 		Window:     w,
 		Values:     derivation.Values,
 		Indexes:    endIndexes(end),
-		// I-9: only the bucket's own sub-range of each already-sorted
+		// Only the bucket's own sub-range of each already-sorted
 		// source is ever scanned, never the whole loaded set per bucket.
 		// R101: kinds are scoped to level (energy.MaxDemandKindsFor), so a
 		// coarser kind's peak (daily at Hourly, billing at Hourly/Daily)
 		// can never land inside a finer window.
 		MaxDemandKw: maxDemandInWindow(level, w, data.loadProfile, data.daily, data.maxDemandBilling),
 		// Source is exactly derivation.Source: the END boundary's own
-		// Kind (R96), or start.Kind when end is a reset row (M-4). Under
+		// Kind (R96), or start.Kind when end is a reset row. Under
 		// R96 a period's start and end boundary can resolve to DIFFERENT
 		// kinds — resolveBoundaries chose each independently — so Source
 		// always names the END kind specifically, never "the period's
@@ -514,18 +513,18 @@ func deriveRow(analyzerID uuid.UUID, w energy.Window, data analyzerBoundaryData,
 	return row, true
 }
 
-// loadAnalyzerBoundaryData implements I-17's query shape for one analyzer:
-// each kind Billing needs is read ONCE over the whole request, then every
-// bucket's boundaries are selected in memory with energy.SelectBoundary.
+// loadAnalyzerBoundaryData reads each kind Billing needs ONCE over the
+// whole request, then selects every bucket's boundaries in memory with
+// energy.SelectBoundary.
 //
-// C1: load_profile itself, reset evidence, and priors all load from the
+// load_profile itself, reset evidence, and priors all load from the
 // EARLIEST look-back of every boundary kind this request may use — never
 // just load_profile's own. A billing-kind (Monthly, R63) or daily-kind
 // (R95) start boundary can sit further back in time than load_profile's own
 // look-back, and a reset row can fall inside that earlier evidence window:
 // loading resets only from load_profile's look-back silently drops it, and
-// the derived number comes out wrong instead of suspect (the review's P1
-// probe: 4150 instead of the true 5150, unflagged).
+// the derived number comes out wrong instead of suspect (4150 instead of
+// the true 5150, unflagged).
 func (b *Billing) loadAnalyzerBoundaryData(ctx context.Context, sc store.Scope, analyzerID uuid.UUID, level energy.Level, buckets []energy.Window) (analyzerBoundaryData, error) {
 	first := buckets[0]
 	rangeTo := buckets[len(buckets)-1].To
@@ -534,7 +533,7 @@ func (b *Billing) loadAnalyzerBoundaryData(ctx context.Context, sc store.Scope, 
 	if err != nil {
 		return analyzerBoundaryData{}, err
 	}
-	// R103 point 2 (RC-1): hasPriorReading is the OR of every kind's own
+	// R103 point 2: hasPriorReading is the OR of every kind's own
 	// unclamped existence check, computed here — BEFORE any clampLookback
 	// call below ever runs — so a kind's reading older than this request's
 	// own clamp still counts.
@@ -569,7 +568,7 @@ func (b *Billing) loadAnalyzerBoundaryData(ctx context.Context, sc store.Scope, 
 	}
 
 	// R95/R96: daily is a fallback boundary kind at Daily/Monthly/Yearly,
-	// never Hourly. Its own look-back feeds the shared minimum too (C1), on
+	// never Hourly. Its own look-back feeds the shared minimum too, on
 	// the same reasoning as billing's.
 	useDaily := level != energy.Hourly
 	var dailyLookback time.Time
@@ -614,7 +613,7 @@ func (b *Billing) loadAnalyzerBoundaryData(ctx context.Context, sc store.Scope, 
 	}
 	loadProfile := toEnergyReadings(loadProfileRows)
 
-	// Reset evidence (I-18): fetched once over the same shared minimum
+	// Reset evidence: fetched once over the same shared minimum
 	// look-back as load_profile, since no bucket's evidence window
 	// (start.TS, end.TS] can begin before the earliest boundary reading any
 	// kind in this request could select.
@@ -624,7 +623,7 @@ func (b *Billing) loadAnalyzerBoundaryData(ctx context.Context, sc store.Scope, 
 	}
 	resets := toEnergyReadings(resetRows)
 
-	// R55/I-1: priors are load_profile readings regardless of the window's
+	// R55: priors are load_profile readings regardless of the window's
 	// own boundary kind — a billing- or daily-kind derivation still looks
 	// for load_profile priors, because those are the readings dense enough
 	// to have one. loadProfile is already sorted ascending by ts (the SQL
@@ -646,7 +645,7 @@ func (b *Billing) loadAnalyzerBoundaryData(ctx context.Context, sc store.Scope, 
 	// kind. At Hourly, daily is never a boundary candidate, AND (R101,
 	// amending R65) energy.MaxDemandKindsFor(Hourly) excludes daily-kind
 	// readings too — there is no purpose left for daily at Hourly, so
-	// (m-4) it is never fetched there at all: `daily` stays nil.
+	// it is never fetched there at all: `daily` stays nil.
 	var daily []energy.Reading
 	if useDaily {
 		dailyRows, dailyErr := b.deps.Readings.Range(ctx, sc, analyzerID, store.TimeRange{From: dailyLookback, To: rangeTo.Add(time.Microsecond)}, model.ReadingKindDaily)
@@ -662,7 +661,7 @@ func (b *Billing) loadAnalyzerBoundaryData(ctx context.Context, sc store.Scope, 
 	// never a boundary candidate but IS still a MaxDemand source, so it is
 	// fetched here, over the plain window, for MaxDemand alone. At Hourly
 	// and Daily, energy.MaxDemandKindsFor excludes billing-kind readings
-	// entirely, so (final fix X review's m-4) they are never fetched there: maxDemandBilling
+	// entirely, so they are never fetched there: maxDemandBilling
 	// stays nil (== billing, itself nil at those levels).
 	maxDemandBilling := billing
 	if !useBilling && level == energy.Yearly {
@@ -825,8 +824,8 @@ func clampLookback(lookback, firstFrom time.Time, kindTolerance time.Duration) t
 // suspect or not.
 //
 // Blanking a suspect register's own index happens ONE layer up, at export
-// time, not here (final review A M-4, resolved consistently across both
-// callers): soundIndex (sound.go) — which exportRow (export.go) and
+// time, not here — resolved consistently across both callers:
+// soundIndex (sound.go) — which exportRow (export.go) and
 // filterSoundIndexes (generation.go, GenerationRows) both call — nils a
 // suspect register's index in the RENDERED output, while this function's
 // own Row.Indexes stays the operator-visible measured value an anomaly
@@ -843,19 +842,19 @@ func endIndexes(end *energy.Reading) map[energy.Register]*decimal.Decimal {
 	return out
 }
 
-// firstBoundaryLookback implements I-17's query shape for computing where a
+// firstBoundaryLookback computes where a
 // single kind's look-back should begin: it reads the FIRST bucket's own
 // start boundary reading of kind, and returns that reading's ts, or
 // first.From when no such reading exists (matching a caller that has never
 // reported that kind at all). The caller decides separately how to load the
-// kind's Range (C1: sometimes from an earlier, shared minimum across every
+// kind's Range (sometimes from an earlier, shared minimum across every
 // kind the request may use, never blindly from this one kind's own
 // look-back).
 //
-// The second return, hasPrior (R103/RC-1), is this SAME BoundaryReadings
+// The second return, hasPrior (R103), is this SAME BoundaryReadings
 // call's own UNCLAMPED signal: true exactly when a reading of kind exists at
 // or before first.From, before the caller's own clampLookback ever runs.
-// This is the "cheapest existing call" RC-1 asks for — no extra query is
+// This reuses the cheapest existing call — no extra query is
 // added, the boolean is simply read off the call loadAnalyzerBoundaryData
 // already makes.
 func (b *Billing) firstBoundaryLookback(ctx context.Context, sc store.Scope, analyzerID uuid.UUID, kind model.ReadingKind, first energy.Window) (lookback time.Time, hasPrior bool, err error) {
@@ -869,7 +868,7 @@ func (b *Billing) firstBoundaryLookback(ctx context.Context, sc store.Scope, ana
 	return first.From, false, nil
 }
 
-// maxDemandInWindow implements I-9: each source slice is already sorted
+// maxDemandInWindow relies on each source slice already being sorted
 // ascending by ts, so the bucket's own sub-range within each is found with
 // sort.Search — O(log n) per source per bucket — instead of rescanning the
 // whole loaded set on every bucket (O(buckets x readings), the shape that
@@ -879,7 +878,7 @@ func (b *Billing) firstBoundaryLookback(ctx context.Context, sc store.Scope, ana
 // R101: the kind allowlist is energy.MaxDemandKindsFor(level), not the
 // unqualified energy.MaxDemandKinds — a daily row's own day-peak must not
 // win inside a single Hourly bucket, and a billing row's own month-peak
-// must not win inside a single Hourly or Daily bucket (final review A M-2).
+// must not win inside a single Hourly or Daily bucket.
 func maxDemandInWindow(level energy.Level, w energy.Window, sources ...[]energy.Reading) *decimal.Decimal {
 	kinds := energy.MaxDemandKindsFor(level)
 	var max *decimal.Decimal
@@ -898,8 +897,8 @@ func maxDemandInWindow(level energy.Level, w energy.Window, sources ...[]energy.
 }
 
 // toEnergyReadings converts a slice of stored readings, preserving order —
-// it never sorts and never merges with another slice (I-2's precondition
-// stays the caller's single query's own SQL ordering).
+// it never sorts and never merges with another slice, so the caller's
+// single query's own SQL ordering is preserved.
 func toEnergyReadings(rows []model.MeterReading) []energy.Reading {
 	out := make([]energy.Reading, 0, len(rows))
 	for _, r := range rows {
