@@ -245,7 +245,11 @@ func TestFetchEnqueuesExactlyOneRefreshForTheAffectedRange(t *testing.T) {
 	calls := refreshEnq.enqueued()
 	require.Len(t, calls, 1)
 	require.True(t, calls[0].From.Equal(firstAt), "want enqueued From == affected range start, got %s", calls[0].From)
-	require.True(t, calls[0].To.Equal(secondAt), "want enqueued To == affected range end (not the requested window's bound), got %s", calls[0].To)
+	// Fix round 1 (C1/I1, task-11b-review.md): the enqueued To is the
+	// affected range's end WIDENED by one microsecond via refreshRangeFor —
+	// acc.affectedTo is the inclusive last-reading timestamp, but the
+	// payload's To is an exclusive bound.
+	require.True(t, calls[0].To.Equal(secondAt.Add(time.Microsecond)), "want enqueued To == affected range end + 1us (not the requested window's bound, and not the bare inclusive timestamp), got %s", calls[0].To)
 	require.Equal(t, fx.tenant.Company.ID, calls[0].CompanyID)
 	require.Equal(t, fx.analyzer.ID, calls[0].AnalyzerID)
 }
@@ -410,7 +414,9 @@ func TestFailFetchRunStillEnqueuesWhenSomeRowsWerePersistedBeforeTheFailure(t *t
 	calls := refreshEnq.enqueued()
 	require.Len(t, calls, 1, "a partial run that persisted rows before failing must still enqueue for what it actually persisted")
 	require.True(t, calls[0].From.Equal(page1From))
-	require.True(t, calls[0].To.Equal(page1To))
+	// Fix round 1 (C1/I1): widened by one microsecond, same reasoning as
+	// TestFetchEnqueuesExactlyOneRefreshForTheAffectedRange above.
+	require.True(t, calls[0].To.Equal(page1To.Add(time.Microsecond)))
 }
 
 // TestFailFetchRunDoesNotEnqueueWhenNothingWasEverPersisted: the run fails
@@ -531,4 +537,223 @@ func TestFetchUsesTheDepsClockNotWallClockForTheEnqueueThreshold(t *testing.T) {
 	require.NoError(t, svc.FetchReadings(ctx, payload))
 
 	require.Empty(t, refreshEnq.enqueued(), "the threshold must be evaluated against the FAKE clock's now, not time.Now()")
+}
+
+// ---------------------------------------------------------------------------
+// Fix round 1 (task-11b-review.md): C1's exclusive upper bound and I1's
+// single-instant run.
+// ---------------------------------------------------------------------------
+
+// TestFetchEnqueuesTheHourlyBucketWhenTheLastReadingLandsOnAnHourBoundary is
+// C1's real-bug proof. A run's LAST persisted reading sits exactly on an
+// hour boundary, below consumption_hourly's real-time watermark (moved
+// forward first, exactly like aggregates_integration_test.go's
+// TestRefreshMaterialisesAnHourBelowTheWatermark), and drives the REAL
+// enqueue -> REAL refresher. Before refreshRangeFor widened the payload's
+// To by one microsecond, RefreshConsumption's own
+// energy.Bucket(Hourly, p.To.Add(-time.Nanosecond), loc).To trick would land
+// back in the PREVIOUS hour, and the bucket that starts at the boundary
+// reading's own hour — the one containing it as its first reading — would
+// never be refreshed.
+func TestFetchEnqueuesTheHourlyBucketWhenTheLastReadingLandsOnAnHourBoundary(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	fx := fetchRefreshTestSetup(t, 9142)
+
+	analyticsRepo := postgres.NewAnalyticsRepository(fx.pool)
+	aggregateRepo := admin.NewAggregateRepository(fx.pool)
+
+	now := time.Now().UTC()
+	clk := clock.NewFake(now)
+
+	// Move consumption_hourly's real-time watermark forward, exactly like
+	// TestRefreshMaterialisesAnHourBelowTheWatermark: one recent reading,
+	// then an explicit refresh reaching to ~now-1h.
+	recentAt := now.Add(-2 * time.Hour)
+	_, _, err := fx.repos.readings.BulkInsert(ctx, fx.tenant.Scope, []model.MeterReading{
+		readingFor(fx.analyzer.ID, recentAt.Format(time.RFC3339), model.ReadingKindLoadProfile, map[string]string{"active_import": "1"}),
+	})
+	require.NoError(t, err)
+	require.NoError(t, aggregateRepo.Refresh(ctx, store.ViewConsumptionHourly,
+		store.TimeRange{From: now.Add(-400 * 24 * time.Hour), To: now.Add(-time.Hour)}))
+
+	// A backfill ~200 days back whose run-ending reading sits exactly on an
+	// hour boundary.
+	base := now.Add(-200 * 24 * time.Hour).Truncate(time.Hour)
+	firstAt := base.Add(-30 * time.Minute)
+
+	src := newFakeAdapter(integration.ProviderOSOS, 40*24*time.Hour, model.ReadingKindLoadProfile)
+	refreshEnq := newRecordingConsumptionRefreshEnqueuer()
+	svc := fetchRefreshTestService(t, fx.repos, fx.creds, src, refreshEnq, clk, ingest.Options{ConsumptionRefreshEnabled: true})
+
+	rows := []model.MeterReading{
+		readingFor(fx.analyzer.ID, firstAt.Format(time.RFC3339), model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}),
+		readingFor(fx.analyzer.ID, base.Format(time.RFC3339), model.ReadingKindLoadProfile, map[string]string{"active_import": "1012.5"}),
+	}
+	src.setSteps(fetchStep{result: integration.FetchResult{Readings: rows}})
+
+	window := &job.Window{From: firstAt.Add(-time.Hour), To: base.Add(time.Hour)}
+	payload := job.FetchReadingsPayload{CompanyID: fx.tenant.Company.ID, CredentialID: fx.creds.CredentialID, AnalyzerID: fx.analyzer.ID, Kind: model.ReadingKindLoadProfile, Window: window}
+	require.NoError(t, svc.FetchReadings(ctx, payload))
+
+	calls := refreshEnq.enqueued()
+	require.Len(t, calls, 1)
+	require.True(t, calls[0].To.Equal(base.Add(time.Microsecond)),
+		"enqueued To must be affectedTo (the boundary reading) widened by exactly one microsecond, got %s", calls[0].To)
+
+	hourWindow := store.TimeRange{From: base, To: base.Add(time.Hour)}
+	before, err := analyticsRepo.ConsumptionHourly(ctx, fx.tenant.AdminScope, []uuid.UUID{fx.analyzer.ID}, hourWindow)
+	require.NoError(t, err)
+	require.Empty(t, before, "the hour starting at the boundary reading is below the watermark and absent until refreshed")
+
+	refresher, err := consumption.NewRefresher(consumption.RefreshDeps{
+		Aggregates: aggregateRepo,
+		Locker:     fetchRefreshTestRedisLocker(t),
+		LockTTL:    2 * time.Minute,
+		Location:   normalize.Istanbul,
+		Log:        testfixtures.DiscardLogger(),
+	})
+	require.NoError(t, err)
+	require.NoError(t, refresher.RefreshConsumption(ctx, calls[0]))
+
+	after, err := analyticsRepo.ConsumptionHourly(ctx, fx.tenant.AdminScope, []uuid.UUID{fx.analyzer.ID}, hourWindow)
+	require.NoError(t, err)
+	require.Len(t, after, 1, "the hour bucket containing the boundary reading as its first reading must be materialised after the refresh")
+}
+
+// TestFetchEnqueuesExactlyOneRefreshForASingleReadingRun is I1's fix proof: a
+// run whose only persisted reading makes affectedFrom == affectedTo must
+// still enqueue a valid job.ConsumptionRefreshPayload (From < To) — not
+// silently swallow the enqueue via job.NewConsumptionRefreshTask's own
+// "From must be before To" rejection, which an enqueue failure only ever
+// logs as a warning. It also runs the real refresher against the enqueued
+// payload and confirms the reading's (closed) month is materialised —
+// cheap to add alongside the unit-level assertion since this file already
+// drives the real pipeline.
+func TestFetchEnqueuesExactlyOneRefreshForASingleReadingRun(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	fx := fetchRefreshTestSetup(t, 9143)
+
+	analyticsRepo := postgres.NewAnalyticsRepository(fx.pool)
+	aggregateRepo := admin.NewAggregateRepository(fx.pool)
+
+	clk := clock.NewFake(fetchRefreshTestNow)
+	src := newFakeAdapter(integration.ProviderOSOS, 20*24*time.Hour, model.ReadingKindLoadProfile)
+	refreshEnq := newRecordingConsumptionRefreshEnqueuer()
+	svc := fetchRefreshTestService(t, fx.repos, fx.creds, src, refreshEnq, clk, ingest.Options{ConsumptionRefreshEnabled: true})
+
+	// fetchRefreshTestNow is June 2026; 40 days back lands in May 2026 — a
+	// month unambiguously closed relative to the real wall clock this test
+	// actually runs under, same reasoning
+	// TestABackfillTwoHundredDaysOldEntersTheAggregateAfterTheJobRuns uses
+	// for February.
+	at := fetchRefreshTestNow.Add(-40 * 24 * time.Hour)
+	window := ingestTestWindow(at.Add(-time.Hour), 2*time.Hour)
+	rows := []model.MeterReading{readingFor(fx.analyzer.ID, at.Format(time.RFC3339), model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"})}
+	src.setSteps(fetchStep{result: integration.FetchResult{Readings: rows}})
+
+	payload := job.FetchReadingsPayload{CompanyID: fx.tenant.Company.ID, CredentialID: fx.creds.CredentialID, AnalyzerID: fx.analyzer.ID, Kind: model.ReadingKindLoadProfile, Window: window}
+	require.NoError(t, svc.FetchReadings(ctx, payload))
+
+	calls := refreshEnq.enqueued()
+	require.Len(t, calls, 1, "a single-reading run must still enqueue exactly one valid refresh")
+	require.True(t, calls[0].From.Equal(at))
+	require.True(t, calls[0].To.Equal(at.Add(time.Microsecond)), "want To == From + 1 microsecond, got %s", calls[0].To)
+	require.True(t, calls[0].From.Before(calls[0].To), "the enqueued payload must satisfy From < To")
+
+	monthStart := time.Date(at.Year(), at.Month(), 1, 0, 0, 0, 0, normalize.Istanbul)
+	monthWindow := store.TimeRange{From: monthStart.Add(-24 * time.Hour), To: monthStart.AddDate(0, 1, 0).Add(24 * time.Hour)}
+
+	before, err := analyticsRepo.ConsumptionMonthly(ctx, fx.tenant.AdminScope, []uuid.UUID{fx.analyzer.ID}, monthWindow)
+	require.NoError(t, err)
+	require.Empty(t, before, "the closed month is absent until consumption.refresh actually runs")
+
+	refresher, err := consumption.NewRefresher(consumption.RefreshDeps{
+		Aggregates: aggregateRepo,
+		Locker:     fetchRefreshTestRedisLocker(t),
+		LockTTL:    2 * time.Minute,
+		Location:   normalize.Istanbul,
+		Log:        testfixtures.DiscardLogger(),
+	})
+	require.NoError(t, err)
+	require.NoError(t, refresher.RefreshConsumption(ctx, calls[0]))
+
+	after, err := analyticsRepo.ConsumptionMonthly(ctx, fx.tenant.AdminScope, []uuid.UUID{fx.analyzer.ID}, monthWindow)
+	require.NoError(t, err)
+	require.Len(t, after, 1, "the single reading's month must be materialised after the refresh")
+}
+
+// ---------------------------------------------------------------------------
+// Fix round 1 (task-11b-review.md I2): failFetchRun on a cancelled context.
+// ---------------------------------------------------------------------------
+
+// cancelSensitiveConsumptionRefreshEnqueuer is I2's fixture:
+// recordingConsumptionRefreshEnqueuer ignores ctx entirely, which cannot
+// tell "enqueued with a live context" apart from "enqueued with the run's
+// own, already-cancelled context" — exactly the distinction I2's fix makes.
+// This records each call's ctx.Err() at call time alongside its payload.
+type cancelSensitiveConsumptionRefreshEnqueuer struct {
+	mu      sync.Mutex
+	calls   []job.ConsumptionRefreshPayload
+	ctxErrs []error
+}
+
+func (e *cancelSensitiveConsumptionRefreshEnqueuer) EnqueueConsumptionRefresh(ctx context.Context, p job.ConsumptionRefreshPayload) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.calls = append(e.calls, p)
+	e.ctxErrs = append(e.ctxErrs, ctx.Err())
+	return nil
+}
+
+var _ ingest.ConsumptionRefreshEnqueuer = (*cancelSensitiveConsumptionRefreshEnqueuer)(nil)
+
+// TestFailFetchRunEnqueuesWithAnUncancelledContextAfterCancellation is I2's
+// fix proof. The run's own ctx is cancelled right as page 2 is requested —
+// after page 1 has already persisted rows past the threshold — forcing
+// failFetchRun down the partial-failure path. It must still enqueue exactly
+// one refresh for what page 1 persisted, and it must NOT be given the run's
+// own (now cancelled) context: task-11b-review.md I2 is exactly that
+// "enqueueing with the cancelled ctx fails". A mutant that skips the enqueue
+// when ctx.Err() != nil, or that passes ctx straight through instead of a
+// context.WithoutCancel-derived one, turns this red.
+func TestFailFetchRunEnqueuesWithAnUncancelledContextAfterCancellation(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	fx := fetchRefreshTestSetup(t, 9144)
+
+	clk := clock.NewFake(fetchRefreshTestNow)
+	src := newFakeAdapter(integration.ProviderOSOS, 41*24*time.Hour, model.ReadingKindLoadProfile)
+	refreshEnq := &cancelSensitiveConsumptionRefreshEnqueuer{}
+	svc := fetchRefreshTestService(t, fx.repos, fx.creds, src, refreshEnq, clk, ingest.Options{ConsumptionRefreshEnabled: true})
+
+	chunkFrom := fetchRefreshTestNow.Add(-90 * 24 * time.Hour)
+	chunkTo := fetchRefreshTestNow.Add(-50 * 24 * time.Hour)
+	page1From := chunkFrom.Add(24 * time.Hour)
+	page1To := page1From.Add(time.Hour)
+	nextCursor := page1To.Add(time.Hour)
+
+	page1Rows := []model.MeterReading{
+		readingFor(fx.analyzer.ID, page1From.Format(time.RFC3339), model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}),
+		readingFor(fx.analyzer.ID, page1To.Format(time.RFC3339), model.ReadingKindLoadProfile, map[string]string{"active_import": "1005"}),
+	}
+	src.setSteps(
+		fetchStep{result: integration.FetchResult{Readings: page1Rows, NextCursor: &nextCursor}},
+		// before fires exactly when page 2 is requested — after page 1's
+		// rows are already fully persisted under a still-live ctx.
+		fetchStep{
+			before: cancel,
+			err:    &integration.Error{Kind: integration.ErrUpstreamUnavailable, Provider: integration.ProviderOSOS, Op: "load_profiles"},
+		},
+	)
+
+	window := &job.Window{From: chunkFrom, To: chunkTo}
+	payload := job.FetchReadingsPayload{CompanyID: fx.tenant.Company.ID, CredentialID: fx.creds.CredentialID, AnalyzerID: fx.analyzer.ID, Kind: model.ReadingKindLoadProfile, Window: window}
+	require.Error(t, svc.FetchReadings(ctx, payload), "the run must still report the page-2 failure")
+
+	require.Len(t, refreshEnq.calls, 1, "a run cancelled mid-way must still enqueue for what it already persisted")
+	require.True(t, refreshEnq.calls[0].From.Equal(page1From))
+	require.True(t, refreshEnq.calls[0].To.Equal(page1To.Add(time.Microsecond)))
+	require.NoError(t, refreshEnq.ctxErrs[0], "the enqueue must not be given the run's own cancelled context")
 }

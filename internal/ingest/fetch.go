@@ -39,6 +39,17 @@ type fetchAccumulator struct {
 // of time.Time.Before, never Before-or-equal).
 const consumptionRefreshThreshold = 30 * 24 * time.Hour
 
+// consumptionRefreshEnqueueTimeout bounds the context the enqueue call
+// itself runs under (I2, task-11b-review.md): failFetchRun may be reporting
+// a run whose OWN ctx was already cancelled (e.g. the caller gave up mid-
+// fetch), but rows already persisted before that point still need
+// refreshing, so the enqueue must not be allowed to fail purely because the
+// run's ctx is done. maybeEnqueueConsumptionRefresh derives its own bounded,
+// uncancellable context from ctx via context.WithoutCancel rather than using
+// ctx directly, so this timeout is what keeps that detached context from
+// being able to hang forever instead.
+const consumptionRefreshEnqueueTimeout = 10 * time.Second
+
 func newFetchAccumulator() *fetchAccumulator {
 	return &fetchAccumulator{rejections: map[RejectReason]int32{}, warnings: map[string]int32{}}
 }
@@ -448,6 +459,35 @@ func shouldEnqueueConsumptionRefresh(hasEnqueuer, enabled bool, affectedFrom *ti
 	return affectedFrom.Before(now.Add(-consumptionRefreshThreshold))
 }
 
+// refreshRangeFor converts acc's affected range into the [From, To) window
+// job.NewConsumptionRefreshTask and consumption.Refresher actually expect
+// (task-11b-review.md C1/I1). acc.affectedTo is the INCLUSIVE timestamp of
+// the run's last persisted reading (touchAffected stores the reading's own
+// Ts, never a bucket bound), but RefreshConsumption
+// (internal/service/consumption/refresh.go) treats p.To as EXCLUSIVE — it
+// widens every view's window via
+// energy.Bucket(level, p.To.Add(-time.Nanosecond), loc).To, which assumes
+// p.To already sits one instant past the last reading it must cover. Left
+// unconverted:
+//   - C1: an affectedTo landing exactly on an hour boundary (the normal case
+//     for interval-meter data) has its own hour's bucket silently skipped —
+//     the reading that made affectedTo what it is never gets refreshed.
+//   - I1: a single-instant run (affectedFrom == affectedTo) fails
+//     job.NewConsumptionRefreshTask's `From must be before To` check
+//     entirely, and — because an enqueue failure is only ever a warning —
+//     silently never refreshes at all.
+//
+// The epsilon is a MICROSECOND, not a nanosecond: pgx/Postgres timestamptz
+// columns are microsecond precision (see fetch.go's M1 comment on the same
+// trap for reset-suppression ranges), and a sibling task already hit a
+// nanosecond widening being silently rounded away on the round trip through
+// the database. A microsecond survives that round trip and, added to any
+// affectedTo, always makes From strictly before To — including when
+// affectedFrom == affectedTo.
+func refreshRangeFor(acc *fetchAccumulator) (from, to time.Time) {
+	return *acc.affectedFrom, acc.affectedTo.Add(time.Microsecond)
+}
+
 // maybeEnqueueConsumptionRefresh is R73/I-12/I-13's single enqueue call
 // site, shared by FetchReadings' success path and failFetchRun's partial
 // path so the threshold and gating logic live in exactly one place. now MUST
@@ -463,11 +503,19 @@ func (s *Service) maybeEnqueueConsumptionRefresh(ctx context.Context, sc store.S
 	if !shouldEnqueueConsumptionRefresh(s.deps.ConsumptionRefresh != nil, s.opts.ConsumptionRefreshEnabled, acc.affectedFrom, now) {
 		return
 	}
-	err := s.deps.ConsumptionRefresh.EnqueueConsumptionRefresh(ctx, job.ConsumptionRefreshPayload{
+	from, to := refreshRangeFor(acc)
+	// I2 (task-11b-review.md): this call site is reached from failFetchRun
+	// for a run whose ctx may already be cancelled — rows it persisted
+	// before failing still need refreshing, so the enqueue itself is given a
+	// detached, but still bounded, context rather than inheriting ctx's own
+	// cancellation.
+	enqCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), consumptionRefreshEnqueueTimeout)
+	defer cancel()
+	err := s.deps.ConsumptionRefresh.EnqueueConsumptionRefresh(enqCtx, job.ConsumptionRefreshPayload{
 		CompanyID:  companyID,
 		AnalyzerID: analyzerID,
-		From:       *acc.affectedFrom,
-		To:         *acc.affectedTo,
+		From:       from,
+		To:         to,
 	})
 	if err == nil {
 		return

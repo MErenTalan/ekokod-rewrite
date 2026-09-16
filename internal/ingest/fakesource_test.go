@@ -97,10 +97,15 @@ func resetAt(tsStr string) model.MeterReading {
 }
 
 // fetchStep is one scripted response fakeAdapter.FetchReadings returns, in
-// order, to successive calls.
+// order, to successive calls. before, when set, runs immediately before the
+// step's result/err is returned — TestFailFetchRunOnAContextCancellationCause
+// (fetch_refresh_test.go, I2) uses it to cancel the run's own ctx at the
+// exact moment between "page 1 already persisted" and "page 2's call
+// returns", which no other trigger in this fake can express.
 type fetchStep struct {
 	result integration.FetchResult
 	err    error
+	before func()
 }
 
 // ingestTestSpyHook is an ingest.PostPersistHook that records every call's
@@ -219,6 +224,9 @@ func (a *fakeAdapter) FetchReadings(_ context.Context, _ integration.Credentials
 		}
 		step := steps[0]
 		a.perAnalyzer[req.AnalyzerID] = steps[1:]
+		if step.before != nil {
+			step.before()
+		}
 		return step.result, step.err
 	}
 
@@ -227,6 +235,9 @@ func (a *fakeAdapter) FetchReadings(_ context.Context, _ integration.Credentials
 	}
 	step := a.steps[0]
 	a.steps = a.steps[1:]
+	if step.before != nil {
+		step.before()
+	}
 	return step.result, step.err
 }
 
