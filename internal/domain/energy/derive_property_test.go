@@ -261,7 +261,87 @@ func (sc propertyScenario) dump(start, end *energy.Reading, resets []energy.Read
 	return s
 }
 
+// deterministicNegativeAndStartPriorEdgeCases anchors three of item 7's
+// required mutations that pure random generation structurally cannot reach:
+// this model's true consumption is always non-negative by construction (real
+// increments never go backward), and R90/R92's boundary-instant equality
+// checks intercept a mismatched swap reading before its arithmetic ever
+// reaches a segment-delta computation — so a genuine negative segment delta,
+// and a same-instant start-side prior whose exclusion actually changes the
+// answer (as opposed to one masked by the zero-gap construction, since using
+// the boundary's own value as before-reset evidence always gives a zero
+// delta there), essentially never arise from the random scenarios above.
+// These three fixed fixtures close that gap; the two R90/R92 mutations
+// listed alongside them ARE reached by the random generation above (proven
+// in the fix-round-3 report).
+func deterministicNegativeAndStartPriorEdgeCases(t *testing.T) {
+	cases := []struct {
+		name       string
+		start, end *energy.Reading
+		resets     []energy.Reading
+		priors     []energy.Reading
+		wantReason energy.Reason
+		wantDelta  bool // require a non-nil, negative Suspicion.Delta
+	}{
+		{
+			// A reset AT start.TS matching start's own value (so R92(2)
+			// passes silently) forces Derive into deriveRegister's
+			// len(windowResets)==0 plain-difference branch instead of the
+			// outer Derive-level fast path (which calls the separate,
+			// unmutated Difference function directly and would not
+			// exercise this mutation at all).
+			name:       "plain-difference-negative-delta",
+			start:      &energy.Reading{TS: t0, Kind: energy.KindLoadProfile, Values: map[energy.Register]*decimal.Decimal{energy.ActiveImport: decPtr(900)}},
+			end:        &energy.Reading{TS: t0.Add(time.Hour), Kind: energy.KindLoadProfile, Values: map[energy.Register]*decimal.Decimal{energy.ActiveImport: decPtr(12)}},
+			resets:     []energy.Reading{{TS: t0, Kind: energy.KindReset, Values: map[energy.Register]*decimal.Decimal{energy.ActiveImport: decPtr(900)}}},
+			wantReason: energy.ReasonNegativeDelta,
+			wantDelta:  true,
+		},
+		{
+			name:       "reset-path-segment-negative-delta",
+			start:      &energy.Reading{TS: t0, Kind: energy.KindLoadProfile, Values: map[energy.Register]*decimal.Decimal{energy.ActiveImport: decPtr(900)}},
+			end:        &energy.Reading{TS: t0.Add(time.Hour), Kind: energy.KindLoadProfile, Values: map[energy.Register]*decimal.Decimal{energy.ActiveImport: decPtr(40)}},
+			resets:     []energy.Reading{{TS: t0.Add(40 * time.Minute), Kind: energy.KindReset, Values: map[energy.Register]*decimal.Decimal{energy.ActiveImport: decPtr(0)}}},
+			priors:     []energy.Reading{{TS: t0.Add(30 * time.Minute), Kind: energy.KindLoadProfile, Values: map[energy.Register]*decimal.Decimal{energy.ActiveImport: decPtr(800)}}}, // 800-900 = -100
+			wantReason: energy.ReasonNegativeDelta,
+			wantDelta:  true,
+		},
+		{
+			name:   "prior-duplicate-of-start-excluded",
+			start:  &energy.Reading{TS: t0, Kind: energy.KindLoadProfile, Values: map[energy.Register]*decimal.Decimal{energy.ActiveImport: decPtr(900)}},
+			end:    &energy.Reading{TS: t0.Add(time.Hour), Kind: energy.KindLoadProfile, Values: map[energy.Register]*decimal.Decimal{energy.ActiveImport: decPtr(40)}},
+			resets: []energy.Reading{{TS: t0.Add(40 * time.Minute), Kind: energy.KindReset, Values: map[energy.Register]*decimal.Decimal{energy.ActiveImport: decPtr(0)}}},
+			// priors duplicates start itself (Task 7 always includes the
+			// boundary reading in priors) with NO other reading between
+			// start.TS and the reset — R91 must exclude it (strict TS >
+			// start.TS), never use it as before-reset evidence.
+			wantReason: energy.ReasonMeterReset,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if c.priors == nil && c.name == "prior-duplicate-of-start-excluded" {
+				c.priors = []energy.Reading{*c.start}
+			}
+			d := energy.Derive(energy.Window{From: t0, To: t0.Add(time.Hour)}, c.start, c.end, c.resets, c.priors)
+			val := d.Values[energy.ActiveImport]
+			susp, hasSusp := d.Suspect[energy.ActiveImport]
+			if val != nil {
+				t.Fatalf("COUNTEREXAMPLE %s: Derive=%s, want suspect (%s)", c.name, val.String(), c.wantReason)
+			}
+			if !hasSusp || susp.Reason != c.wantReason {
+				t.Fatalf("%s: want reason=%s, got %+v", c.name, c.wantReason, susp)
+			}
+			if c.wantDelta && (susp.Delta == nil || !susp.Delta.IsNegative()) {
+				t.Fatalf("%s: want a non-nil negative Suspicion.Delta, got %v", c.name, susp.Delta)
+			}
+		})
+	}
+}
+
 func TestDerivePropertyNeverBillsAWrongNumber(t *testing.T) {
+	deterministicNegativeAndStartPriorEdgeCases(t)
+
 	n := propertyScenarioCount()
 	const windowsPerScenario = 5
 	checked := 0
