@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
+	"github.com/MErenTalan/ekokod-rewrite/internal/service/consumption"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 )
@@ -454,12 +455,37 @@ type fakeAnomalies struct {
 	// reproduces the review's P4/P5 cutoff exactly.
 	defaultLimit int32
 
-	// listBarrier, when non-nil, is invoked at the START of every List call,
-	// before the read — I1's deterministic race test uses it to hold two
-	// concurrent ConsumptionAndRecord calls at the check step until both
-	// have arrived, so removing the dedup lock is guaranteed (not merely
-	// likely) to let both callers see "no existing row" and both create one.
-	listBarrier func()
+	// listBarrier, when non-nil, is invoked at the START of every List call
+	// with that call's own filter, before the read — RI-1: the caller
+	// arms it only for the SHAPE of List call that actually matters (the
+	// dedup check's own exact-microsecond Range), never every List call —
+	// arming it unconditionally would fire on applyResolvedAnomalies' own
+	// unlocked List first (outside recordSuspectPeriod's lock), which both
+	// goroutines always reach at the same point regardless of whether the
+	// lock later works, making the race test pass even with the lock
+	// removed (RI-1's own finding).
+	listBarrier func(filt store.AnomalyFilter)
+
+	// getBarrier, when non-nil, is invoked at the START of every Get call
+	// tagged consumption.IsLockedAnomalyRead — RI-2's deterministic race
+	// test for ResolveAnomaly's own lock: arming it on every Get call would
+	// also fire on the FIRST, pre-lock existence Get both goroutines always
+	// reach immediately (the same shape-blindness RI-1 found for List).
+	getBarrier func()
+
+	// createBarrier and resolveBarrier, when non-nil, are invoked at the
+	// START of Create/Resolve, BEFORE the write. A List- or Get-only
+	// barrier proves both callers reached the CHECK together, but Go's
+	// scheduler can still let the goroutine that never had to block run its
+	// entire remaining check-then-act to completion before the other,
+	// just-woken goroutine is scheduled again — which would make even a
+	// REMOVED lock look race-free by scheduling luck. Gating the WRITE
+	// itself forces both callers' independent "nothing exists yet" / "not
+	// yet resolved" decisions to have already been made before either is
+	// allowed to act on them, which is what actually reproduces the
+	// two-rows / double-resolve outcome deterministically.
+	createBarrier  func()
+	resolveBarrier func()
 
 	// resolveErr, when set, makes Resolve fail for exactly the ids it
 	// names — I2's ordering test uses this to fail the F2 cascade's own
@@ -488,7 +514,10 @@ func (f *fakeAnomalies) get(id uuid.UUID) (model.ConsumptionAnomaly, bool) {
 	return model.ConsumptionAnomaly{}, false
 }
 
-func (f *fakeAnomalies) Get(_ context.Context, _ store.Scope, id uuid.UUID) (model.ConsumptionAnomaly, error) {
+func (f *fakeAnomalies) Get(ctx context.Context, _ store.Scope, id uuid.UUID) (model.ConsumptionAnomaly, error) {
+	if f.getBarrier != nil && consumption.IsLockedAnomalyRead(ctx) {
+		f.getBarrier()
+	}
 	a, ok := f.get(id)
 	if !ok {
 		return model.ConsumptionAnomaly{}, store.ErrNotFound
@@ -498,7 +527,7 @@ func (f *fakeAnomalies) Get(_ context.Context, _ store.Scope, id uuid.UUID) (mod
 
 func (f *fakeAnomalies) List(_ context.Context, _ store.Scope, filt store.AnomalyFilter) ([]model.ConsumptionAnomaly, error) {
 	if f.listBarrier != nil {
-		f.listBarrier()
+		f.listBarrier(filt)
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -545,6 +574,9 @@ func (f *fakeAnomalies) List(_ context.Context, _ store.Scope, filt store.Anomal
 }
 
 func (f *fakeAnomalies) Create(_ context.Context, _ store.Scope, a model.ConsumptionAnomaly) (model.ConsumptionAnomaly, error) {
+	if f.createBarrier != nil {
+		f.createBarrier()
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.err != nil {
@@ -560,6 +592,9 @@ func (f *fakeAnomalies) Create(_ context.Context, _ store.Scope, a model.Consump
 // id — I2's ordering test uses this to make the F2 cascade's own Resolve
 // call fail and asserts the F3 row's own Resolve is never reached.
 func (f *fakeAnomalies) Resolve(_ context.Context, _ store.Scope, id, resolvedBy uuid.UUID, resolution string, overrides []byte, at time.Time) (model.ConsumptionAnomaly, error) {
+	if f.resolveBarrier != nil {
+		f.resolveBarrier()
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for i := range f.rows {
@@ -679,10 +714,16 @@ func (f fakeAnalyzers) TouchLastReading(context.Context, store.Scope, uuid.UUID,
 // user outside the caller's own company.
 type fakeUsers struct {
 	validIDs map[uuid.UUID]bool
+	// allowAll, when true, makes Get succeed for ANY id — R103 made
+	// BillingDeps.Users required for every ResolveAnomaly call, so tests
+	// that only care about some OTHER behaviour (most of this fix round's
+	// pre-existing suite) wire this rather than enumerating every
+	// uuid.New() resolvedBy they happen to pass.
+	allowAll bool
 }
 
 func (f fakeUsers) Get(_ context.Context, _ store.Scope, id uuid.UUID) (model.User, error) {
-	if f.validIDs[id] {
+	if f.allowAll || f.validIDs[id] {
 		return model.User{ID: id}, nil
 	}
 	return model.User{}, store.ErrNotFound

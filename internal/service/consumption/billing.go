@@ -120,25 +120,13 @@ func (b *Billing) consumptionWithGaps(ctx context.Context, sc store.Scope, req S
 	var rows []Row
 	gapsByAnalyzer := make(map[uuid.UUID][]bucketGap, len(req.AnalyzerIDs))
 	for _, analyzerID := range req.AnalyzerIDs {
+		// R97 rule 7 / Minor m-3: applyResolvedGapOverrides runs INSIDE
+		// consumptionForAnalyzer now, reusing the SAME analyzerBoundaryData
+		// already loaded for this analyzer's whole request — never a second
+		// query set per overridden gap.
 		analyzerRows, gaps, err := b.consumptionForAnalyzer(ctx, sc, analyzerID, req.Level, buckets)
 		if err != nil {
 			return nil, nil, err
-		}
-		if len(gaps) > 0 {
-			// R97 rule 7: a gap bucket with a resolved manual_override
-			// missing_readings anomaly emits a row from the override
-			// values, IN BUCKET ORDER — never appended after the analyzer's
-			// other rows. A bucket that gets a row this way is removed from
-			// gaps: it is either a row or a gap, never both.
-			overrideRows, remaining, err := b.applyResolvedGapOverrides(ctx, sc, req.Level, analyzerID, gaps)
-			if err != nil {
-				return nil, nil, err
-			}
-			if len(overrideRows) > 0 {
-				analyzerRows = append(analyzerRows, overrideRows...)
-				sort.Slice(analyzerRows, func(i, j int) bool { return analyzerRows[i].Window.From.Before(analyzerRows[j].Window.From) })
-			}
-			gaps = remaining
 		}
 		rows = append(rows, analyzerRows...)
 		if len(gaps) > 0 {
@@ -172,15 +160,25 @@ func (b *Billing) consumptionForAnalyzer(ctx context.Context, sc store.Scope, an
 		return nil, nil, err
 	}
 
-	// R97 spec point 3: "no readings at all" — every boundary-kind slice
-	// already loaded for the analyzer at this level is empty — means nothing
-	// to bill and nothing missing, so no gap is ever recorded for this
-	// analyzer's request, regardless of how many buckets produced no row.
-	anyReadings := len(data.loadProfile) > 0 ||
+	// R103 point 2 (RC-1): "the analyzer has readings" and "pre-installation"
+	// are decided from data.hasPriorReading — an UNCLAMPED existence check
+	// (firstBoundaryLookback's own BoundaryReadings call, before
+	// clampLookback ever runs) — never from the clamped look-back pool
+	// (data.loadProfile/billing/daily) alone. A kind whose earliest reading
+	// sits further back than this request's own clamp still counts as "the
+	// analyzer has readings", and its existence disables the pre-install
+	// skip entirely (earliest stays nil below): a reading further back than
+	// the request's own window proves every bucket in THIS request is real
+	// service, never before the meter was installed.
+	anyReadings := data.hasPriorReading ||
+		len(data.loadProfile) > 0 ||
 		(data.useBilling && len(data.billing) > 0) ||
 		(data.useDaily && len(data.daily) > 0)
 	now := b.deps.Clock.Now()
-	earliest := earliestBoundaryReading(data)
+	var earliest *time.Time
+	if !data.hasPriorReading {
+		earliest = earliestBoundaryReading(data)
+	}
 
 	rows := make([]Row, 0, len(buckets))
 	var gaps []bucketGap
@@ -195,6 +193,14 @@ func (b *Billing) consumptionForAnalyzer(ctx context.Context, sc store.Scope, an
 		// ConsumptionAndRecord, only for a specifically requested billing
 		// period, and only when the analyzer has readings at all (above).
 		if !anyReadings {
+			continue
+		}
+		// R103 point 1: at Hourly, §3.1 absorbs a missing hour into the
+		// NEXT emitted row (the hour's own end boundary simply carries
+		// forward to whichever later reading resolves it) — nothing is
+		// actually unbillable, so no gap anomaly is ever written and no
+		// Hourly missing_readings row can exist after this change.
+		if level == energy.Hourly {
 			continue
 		}
 		// R97 ruling (i): a bucket still open or in the future never gets a
@@ -214,13 +220,37 @@ func (b *Billing) consumptionForAnalyzer(ctx context.Context, sc store.Scope, an
 		}
 		gaps = append(gaps, bucketGap{Window: w, Boundaries: boundaries})
 	}
+
+	if len(gaps) > 0 {
+		// R97 rule 7 / RC-1 point 2: the gap-override lookup runs over
+		// EVERY gap this request found — independent of the clamped
+		// anyReadings/pre-install/now filters above, which only decide
+		// whether a bucket is a gap AT ALL, never whether an already-
+		// resolved override for that gap applies. A bucket that gets a row
+		// this way is removed from gaps: it is either a row or a gap, never
+		// both.
+		overrideRows, remaining, oerr := b.applyResolvedGapOverrides(ctx, sc, analyzerID, gaps, data)
+		if oerr != nil {
+			return nil, nil, oerr
+		}
+		if len(overrideRows) > 0 {
+			rows = append(rows, overrideRows...)
+			sort.Slice(rows, func(i, j int) bool { return rows[i].Window.From.Before(rows[j].Window.From) })
+		}
+		gaps = remaining
+	}
 	return rows, gaps, nil
 }
 
 // earliestBoundaryReading returns the earliest ts among every boundary-kind
 // slice ALREADY LOADED for this request (R97 spec point 3's own phrasing —
 // never a fresh, unbounded query): the minimum of each loaded kind's own
-// first element, since every slice is sorted ascending by ts.
+// first element, since every slice is sorted ascending by ts. Only called
+// when data.hasPriorReading is false — RC-1: whenever an unclamped look-back
+// found a reading before this request's own first bucket, that reading is
+// the analyzer's true earliest, and the pre-install skip is disabled
+// entirely rather than substituting a within-window reading that would
+// wrongly mark real outage days as "before installation".
 func earliestBoundaryReading(data analyzerBoundaryData) *time.Time {
 	var earliest *time.Time
 	consider := func(readings []energy.Reading) {
@@ -250,7 +280,12 @@ func earliestBoundaryReading(data analyzerBoundaryData) *time.Time {
 // every other row uses, ratios from the overridden values. It returns the
 // synthesized rows and the gaps that did NOT resolve to an override (still
 // genuine gaps, for the caller to write a missing_readings anomaly for).
-func (b *Billing) applyResolvedGapOverrides(ctx context.Context, sc store.Scope, level energy.Level, analyzerID uuid.UUID, gaps []bucketGap) ([]Row, []bucketGap, error) {
+//
+// Minor m-3: data is the SAME analyzerBoundaryData the caller already loaded
+// for the whole request — data.resolved already covers every bucket's own
+// boundary instant (R96), so this never re-queries ReadingRepository per
+// overridden gap.
+func (b *Billing) applyResolvedGapOverrides(ctx context.Context, sc store.Scope, analyzerID uuid.UUID, gaps []bucketGap, data analyzerBoundaryData) ([]Row, []bucketGap, error) {
 	from, to := gaps[0].Window.From, gaps[0].Window.To
 	for _, g := range gaps[1:] {
 		if g.Window.From.Before(from) {
@@ -296,13 +331,10 @@ func (b *Billing) applyResolvedGapOverrides(ctx context.Context, sc store.Scope,
 		if derr != nil {
 			return nil, gaps, derr
 		}
-		// The same one-bucket load C2's rederiveBucketWithReset uses, only
-		// to read the end boundary and the MaxDemand sources — no boundary
-		// selection is duplicated, this reuses loadAnalyzerBoundaryData.
-		data, lerr := b.loadAnalyzerBoundaryData(ctx, sc, analyzerID, level, []energy.Window{g.Window})
-		if lerr != nil {
-			return nil, gaps, lerr
-		}
+		// Minor m-3: end comes straight from the caller's own already-loaded
+		// data.resolved (R96 resolves every bucket instant for the whole
+		// request up front) — never a second loadAnalyzerBoundaryData call
+		// per overridden gap.
 		end := data.resolved[g.Window.To.UnixNano()]
 
 		values := make(map[energy.Register]*decimal.Decimal, len(overrides))
@@ -316,12 +348,14 @@ func (b *Billing) applyResolvedGapOverrides(ctx context.Context, sc store.Scope,
 			AnalyzerID:  analyzerID,
 			Window:      g.Window,
 			Values:      values,
-			Indexes:     endIndexes(end),
 			MaxDemandKw: maxDemandInWindow(g.Window, data.loadProfile, data.daily, data.maxDemandBilling),
 			Resolution:  resolution,
 		}
+		// R97 rule 7 / Minor m-2: Indexes is the end reading's own values
+		// when one exists, else nil — never a map of nil entries.
 		if end != nil {
 			row.Source = end.Kind
+			row.Indexes = endIndexes(end)
 		}
 		row.InductiveRatio = energy.Ratio(values[energy.ReactiveInductiveImport], values[energy.ActiveImport])
 		row.CapacitiveRatio = energy.Ratio(values[energy.ReactiveCapacitiveImport], values[energy.ActiveImport])
@@ -370,6 +404,15 @@ type analyzerBoundaryData struct {
 	maxDemandBilling                            []energy.Reading
 	useBilling, useDaily                        bool
 	resolved                                    map[int64]*energy.Reading
+	// hasPriorReading is R103's own field (RC-1): true when ANY boundary
+	// kind this request may use has a reading at or before the request's
+	// own first bucket start — from firstBoundaryLookback's UNCLAMPED
+	// BoundaryReadings call, before clampLookback ever runs. It answers
+	// "does the analyzer have readings" and "is this pre-installation"
+	// range-independently: a reading far enough back to be clamped out of
+	// the loaded slices still proves the analyzer was in service before
+	// this request's window, which the clamped slices alone cannot tell.
+	hasPriorReading bool
 }
 
 // deriveRow derives ONE bucket's Row from already-loaded data, optionally
@@ -449,10 +492,15 @@ func (b *Billing) loadAnalyzerBoundaryData(ctx context.Context, sc store.Scope, 
 	first := buckets[0]
 	rangeTo := buckets[len(buckets)-1].To
 
-	lpLookback, err := b.firstBoundaryLookback(ctx, sc, analyzerID, model.ReadingKindLoadProfile, first)
+	lpLookback, lpHasPrior, err := b.firstBoundaryLookback(ctx, sc, analyzerID, model.ReadingKindLoadProfile, first)
 	if err != nil {
 		return analyzerBoundaryData{}, err
 	}
+	// R103 point 2 (RC-1): hasPriorReading is the OR of every kind's own
+	// unclamped existence check, computed here — BEFORE any clampLookback
+	// call below ever runs — so a kind's reading older than this request's
+	// own clamp still counts.
+	hasPriorReading := lpHasPrior
 	// R96/Minor M-c: at Daily/Monthly/Yearly, load_profile now carries its
 	// own tolerance (LoadProfileBoundaryTolerance) — a load_profile reading
 	// older than that relative to first.From could never resolve ANY
@@ -470,10 +518,12 @@ func (b *Billing) loadAnalyzerBoundaryData(ctx context.Context, sc store.Scope, 
 	useBilling := level == energy.Monthly
 	var billingLookback time.Time
 	if useBilling {
-		billingLookback, err = b.firstBoundaryLookback(ctx, sc, analyzerID, model.ReadingKindBilling, first)
+		var billingHasPrior bool
+		billingLookback, billingHasPrior, err = b.firstBoundaryLookback(ctx, sc, analyzerID, model.ReadingKindBilling, first)
 		if err != nil {
 			return analyzerBoundaryData{}, err
 		}
+		hasPriorReading = hasPriorReading || billingHasPrior
 		billingLookback = clampLookback(billingLookback, first.From, BillingSnapshotTolerance)
 		if billingLookback.Before(minLookback) {
 			minLookback = billingLookback
@@ -486,10 +536,12 @@ func (b *Billing) loadAnalyzerBoundaryData(ctx context.Context, sc store.Scope, 
 	useDaily := level != energy.Hourly
 	var dailyLookback time.Time
 	if useDaily {
-		dailyLookback, err = b.firstBoundaryLookback(ctx, sc, analyzerID, model.ReadingKindDaily, first)
+		var dailyHasPrior bool
+		dailyLookback, dailyHasPrior, err = b.firstBoundaryLookback(ctx, sc, analyzerID, model.ReadingKindDaily, first)
 		if err != nil {
 			return analyzerBoundaryData{}, err
 		}
+		hasPriorReading = hasPriorReading || dailyHasPrior
 		dailyLookback = clampLookback(dailyLookback, first.From, DailySnapshotTolerance)
 		if dailyLookback.Before(minLookback) {
 			minLookback = dailyLookback
@@ -603,6 +655,7 @@ func (b *Billing) loadAnalyzerBoundaryData(ctx context.Context, sc store.Scope, 
 		useBilling:       useBilling,
 		useDaily:         useDaily,
 		resolved:         resolved,
+		hasPriorReading:  hasPriorReading,
 	}, nil
 }
 
@@ -747,15 +800,22 @@ func endIndexes(end *energy.Reading) map[energy.Register]*decimal.Decimal {
 // kind's Range (C1: sometimes from an earlier, shared minimum across every
 // kind the request may use, never blindly from this one kind's own
 // look-back).
-func (b *Billing) firstBoundaryLookback(ctx context.Context, sc store.Scope, analyzerID uuid.UUID, kind model.ReadingKind, first energy.Window) (time.Time, error) {
+//
+// The second return, hasPrior (R103/RC-1), is this SAME BoundaryReadings
+// call's own UNCLAMPED signal: true exactly when a reading of kind exists at
+// or before first.From, before the caller's own clampLookback ever runs.
+// This is the "cheapest existing call" RC-1 asks for — no extra query is
+// added, the boolean is simply read off the call loadAnalyzerBoundaryData
+// already makes.
+func (b *Billing) firstBoundaryLookback(ctx context.Context, sc store.Scope, analyzerID uuid.UUID, kind model.ReadingKind, first energy.Window) (lookback time.Time, hasPrior bool, err error) {
 	startReading, _, err := b.deps.Readings.BoundaryReadings(ctx, sc, analyzerID, kind, first.From, first.To)
 	if err != nil {
-		return time.Time{}, err
+		return time.Time{}, false, err
 	}
 	if startReading != nil {
-		return startReading.Ts, nil
+		return startReading.Ts, true, nil
 	}
-	return first.From, nil
+	return first.From, false, nil
 }
 
 // maxDemandInWindow implements I-9: each source slice is already sorted

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
@@ -29,11 +30,12 @@ import (
 var anomaliesEpoch = time.Date(2026, 5, 1, 8, 0, 0, 0, time.UTC)
 
 // anomaliesNewBilling builds a *consumption.Billing wired with every Task 8
-// dependency (Locker, Analyzers) against real Postgres repositories.
-// lock.NewMemory is used rather than a Redis container: Memory is a real,
-// mutex-backed Locker (not a fake) and proves the same serialisation
-// contract without adding a second container under memory pressure.
-func anomaliesNewBilling(t *testing.T, readingRepo store.ReadingRepository, anomalyRepo store.AnomalyRepository, opsRepo store.OpsRepository, analyzerRepo store.AnalyzerRepository, locker lock.Locker, now time.Time) *consumption.Billing {
+// dependency (Locker, Analyzers, and — R103 — Users, required for
+// ResolveAnomaly) against real Postgres repositories. lock.NewMemory is used
+// rather than a Redis container: Memory is a real, mutex-backed Locker (not
+// a fake) and proves the same serialisation contract without adding a
+// second container under memory pressure.
+func anomaliesNewBilling(t *testing.T, pool *pgxpool.Pool, readingRepo store.ReadingRepository, anomalyRepo store.AnomalyRepository, opsRepo store.OpsRepository, analyzerRepo store.AnalyzerRepository, locker lock.Locker, now time.Time) *consumption.Billing {
 	t.Helper()
 	b, err := consumption.NewBilling(consumption.BillingDeps{
 		Readings:  readingRepo,
@@ -43,6 +45,7 @@ func anomaliesNewBilling(t *testing.T, readingRepo store.ReadingRepository, anom
 		Log:       testfixtures.DiscardLogger(),
 		Locker:    locker,
 		Analyzers: analyzerRepo,
+		Users:     postgres.NewUserRepository(pool),
 	})
 	require.NoError(t, err)
 	return b
@@ -67,7 +70,7 @@ func TestASuspectPeriodWritesAnAnomalyAndAnOperatorMessage(t *testing.T) {
 	pathsSeedReading(t, ctx, readingRepo, tenant.Scope, readingRow(id, h, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}))
 	pathsSeedReading(t, ctx, readingRepo, tenant.Scope, readingRow(id, h.Add(time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "900"}))
 
-	billing := anomaliesNewBilling(t, readingRepo, anomalyRepo, opsRepo, analyzerRepo, lock.NewMemory(nil), h.Add(time.Hour))
+	billing := anomaliesNewBilling(t, pool, readingRepo, anomalyRepo, opsRepo, analyzerRepo, lock.NewMemory(nil), h.Add(time.Hour))
 
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{id}, Level: energy.Hourly, Range: store.TimeRange{From: h, To: h.Add(time.Hour)}}
 	rows, err := billing.ConsumptionAndRecord(ctx, tenant.Scope, req)
@@ -121,7 +124,7 @@ func TestRerunningTheSamePeriodDoesNotCreateASecondAnomaly(t *testing.T) {
 	pathsSeedReading(t, ctx, readingRepo, tenant.Scope, readingRow(id, h, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}))
 	pathsSeedReading(t, ctx, readingRepo, tenant.Scope, readingRow(id, h.Add(time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "900"}))
 
-	billing := anomaliesNewBilling(t, readingRepo, anomalyRepo, opsRepo, analyzerRepo, lock.NewMemory(nil), h.Add(time.Hour))
+	billing := anomaliesNewBilling(t, pool, readingRepo, anomalyRepo, opsRepo, analyzerRepo, lock.NewMemory(nil), h.Add(time.Hour))
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{id}, Level: energy.Hourly, Range: store.TimeRange{From: h, To: h.Add(time.Hour)}}
 
 	_, err := billing.ConsumptionAndRecord(ctx, tenant.Scope, req)
@@ -154,7 +157,7 @@ func TestConcurrentRunsForTheSamePeriodStillCreateOnlyOneAnomaly(t *testing.T) {
 	pathsSeedReading(t, ctx, readingRepo, tenant.Scope, readingRow(id, h, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}))
 	pathsSeedReading(t, ctx, readingRepo, tenant.Scope, readingRow(id, h.Add(time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "900"}))
 
-	billing := anomaliesNewBilling(t, readingRepo, anomalyRepo, opsRepo, analyzerRepo, lock.NewMemory(nil), h.Add(time.Hour))
+	billing := anomaliesNewBilling(t, pool, readingRepo, anomalyRepo, opsRepo, analyzerRepo, lock.NewMemory(nil), h.Add(time.Hour))
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{id}, Level: energy.Hourly, Range: store.TimeRange{From: h, To: h.Add(time.Hour)}}
 
 	const n = 4
@@ -203,7 +206,7 @@ func TestRegisteringAResetMakesTheNextDerivationSound(t *testing.T) {
 	pathsSeedReading(t, ctx, readingRepo, tenant.Scope, readingRow(id, h.Add(20*time.Minute), model.ReadingKindLoadProfile, map[string]string{"active_import": "1040"}))
 	pathsSeedReading(t, ctx, readingRepo, tenant.Scope, readingRow(id, h.Add(time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "190"}))
 
-	billing := anomaliesNewBilling(t, readingRepo, anomalyRepo, opsRepo, analyzerRepo, lock.NewMemory(nil), h.Add(time.Hour))
+	billing := anomaliesNewBilling(t, pool, readingRepo, anomalyRepo, opsRepo, analyzerRepo, lock.NewMemory(nil), h.Add(time.Hour))
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{id}, Level: energy.Hourly, Range: store.TimeRange{From: h, To: h.Add(time.Hour)}}
 
 	before, err := billing.ConsumptionAndRecord(ctx, tenant.Scope, req)
@@ -258,7 +261,7 @@ func TestResolvingAResetMissingARequiredRegisterFailsValidation(t *testing.T) {
 	pathsSeedReading(t, ctx, readingRepo, tenant.Scope, readingRow(id, h, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000", "t1_import": "500"}))
 	pathsSeedReading(t, ctx, readingRepo, tenant.Scope, readingRow(id, h.Add(time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "900", "t1_import": "600"}))
 
-	billing := anomaliesNewBilling(t, readingRepo, anomalyRepo, opsRepo, analyzerRepo, lock.NewMemory(nil), h.Add(time.Hour))
+	billing := anomaliesNewBilling(t, pool, readingRepo, anomalyRepo, opsRepo, analyzerRepo, lock.NewMemory(nil), h.Add(time.Hour))
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{id}, Level: energy.Hourly, Range: store.TimeRange{From: h, To: h.Add(time.Hour)}}
 
 	_, err := billing.ConsumptionAndRecord(ctx, tenant.Scope, req)
@@ -311,7 +314,7 @@ func TestAnOverrideMustNameASuspectRegister(t *testing.T) {
 	pathsSeedReading(t, ctx, readingRepo, tenant.Scope, readingRow(id, h, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}))
 	pathsSeedReading(t, ctx, readingRepo, tenant.Scope, readingRow(id, h.Add(time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "900"}))
 
-	billing := anomaliesNewBilling(t, readingRepo, anomalyRepo, opsRepo, analyzerRepo, lock.NewMemory(nil), h.Add(time.Hour))
+	billing := anomaliesNewBilling(t, pool, readingRepo, anomalyRepo, opsRepo, analyzerRepo, lock.NewMemory(nil), h.Add(time.Hour))
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{id}, Level: energy.Hourly, Range: store.TimeRange{From: h, To: h.Add(time.Hour)}}
 
 	_, err := billing.ConsumptionAndRecord(ctx, tenant.Scope, req)
@@ -355,7 +358,7 @@ func TestResolvingAnotherTenantsAnomalyIsNotFound(t *testing.T) {
 	pathsSeedReading(t, ctx, readingRepo, tenantB.Scope, readingRow(id, h, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}))
 	pathsSeedReading(t, ctx, readingRepo, tenantB.Scope, readingRow(id, h.Add(time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "900"}))
 
-	billing := anomaliesNewBilling(t, readingRepo, anomalyRepo, opsRepo, analyzerRepo, lock.NewMemory(nil), h.Add(time.Hour))
+	billing := anomaliesNewBilling(t, pool, readingRepo, anomalyRepo, opsRepo, analyzerRepo, lock.NewMemory(nil), h.Add(time.Hour))
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{id}, Level: energy.Hourly, Range: store.TimeRange{From: h, To: h.Add(time.Hour)}}
 
 	_, err := billing.ConsumptionAndRecord(ctx, tenantB.Scope, req)
@@ -403,7 +406,7 @@ func TestAcceptedLeavesTheValueNullButClearsTheBlock(t *testing.T) {
 	pathsSeedReading(t, ctx, readingRepo, tenant.Scope, readingRow(id, h, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}))
 	pathsSeedReading(t, ctx, readingRepo, tenant.Scope, readingRow(id, h.Add(time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "900"}))
 
-	billing := anomaliesNewBilling(t, readingRepo, anomalyRepo, opsRepo, analyzerRepo, lock.NewMemory(nil), h.Add(time.Hour))
+	billing := anomaliesNewBilling(t, pool, readingRepo, anomalyRepo, opsRepo, analyzerRepo, lock.NewMemory(nil), h.Add(time.Hour))
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{id}, Level: energy.Hourly, Range: store.TimeRange{From: h, To: h.Add(time.Hour)}}
 
 	_, err := billing.ConsumptionAndRecord(ctx, tenant.Scope, req)
@@ -453,7 +456,7 @@ func TestConsumptionSubstitutesAResolvedManualOverride(t *testing.T) {
 	pathsSeedReading(t, ctx, readingRepo, tenant.Scope, readingRow(id, h, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}))
 	pathsSeedReading(t, ctx, readingRepo, tenant.Scope, readingRow(id, h.Add(time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "900"}))
 
-	billing := anomaliesNewBilling(t, readingRepo, anomalyRepo, opsRepo, analyzerRepo, lock.NewMemory(nil), h.Add(time.Hour))
+	billing := anomaliesNewBilling(t, pool, readingRepo, anomalyRepo, opsRepo, analyzerRepo, lock.NewMemory(nil), h.Add(time.Hour))
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{id}, Level: energy.Hourly, Range: store.TimeRange{From: h, To: h.Add(time.Hour)}}
 
 	_, err := billing.ConsumptionAndRecord(ctx, tenant.Scope, req)
@@ -498,7 +501,7 @@ func TestResolvingAnF3PeriodAlsoResolvesTheOverlappingF2IngestionAnomaly(t *test
 	pathsSeedReading(t, ctx, readingRepo, tenant.Scope, readingRow(id, h.Add(20*time.Minute), model.ReadingKindLoadProfile, map[string]string{"active_import": "1040"}))
 	pathsSeedReading(t, ctx, readingRepo, tenant.Scope, readingRow(id, h.Add(time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "190"}))
 
-	billing := anomaliesNewBilling(t, readingRepo, anomalyRepo, opsRepo, analyzerRepo, lock.NewMemory(nil), h.Add(time.Hour))
+	billing := anomaliesNewBilling(t, pool, readingRepo, anomalyRepo, opsRepo, analyzerRepo, lock.NewMemory(nil), h.Add(time.Hour))
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{id}, Level: energy.Hourly, Range: store.TimeRange{From: h, To: h.Add(time.Hour)}}
 
 	_, err := billing.ConsumptionAndRecord(ctx, tenant.Scope, req)
@@ -573,7 +576,7 @@ func TestTwoRegistersSuspectForTheSameReasonWriteOneAnomalyRow(t *testing.T) {
 	pathsSeedReading(t, ctx, readingRepo, tenant.Scope, readingRow(id, h, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000", "t1_import": "500"}))
 	pathsSeedReading(t, ctx, readingRepo, tenant.Scope, readingRow(id, h.Add(time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "900", "t1_import": "400"}))
 
-	billing := anomaliesNewBilling(t, readingRepo, anomalyRepo, opsRepo, analyzerRepo, lock.NewMemory(nil), h.Add(time.Hour))
+	billing := anomaliesNewBilling(t, pool, readingRepo, anomalyRepo, opsRepo, analyzerRepo, lock.NewMemory(nil), h.Add(time.Hour))
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{id}, Level: energy.Hourly, Range: store.TimeRange{From: h, To: h.Add(time.Hour)}}
 
 	rows, err := billing.ConsumptionAndRecord(ctx, tenant.Scope, req)
@@ -616,7 +619,7 @@ func TestNarrowScopeResolvesAnAnomalyOfAnAnalyzerInItsOwnBuilding(t *testing.T) 
 	pathsSeedReading(t, ctx, readingRepo, tenant.AdminScope, readingRow(id, h, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}))
 	pathsSeedReading(t, ctx, readingRepo, tenant.AdminScope, readingRow(id, h.Add(time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "900"}))
 
-	billing := anomaliesNewBilling(t, readingRepo, anomalyRepo, opsRepo, analyzerRepo, lock.NewMemory(nil), h.Add(time.Hour))
+	billing := anomaliesNewBilling(t, pool, readingRepo, anomalyRepo, opsRepo, analyzerRepo, lock.NewMemory(nil), h.Add(time.Hour))
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{id}, Level: energy.Hourly, Range: store.TimeRange{From: h, To: h.Add(time.Hour)}}
 
 	_, err := billing.ConsumptionAndRecord(ctx, tenant.Scope, req)
@@ -652,7 +655,7 @@ func TestNarrowScopeCannotResolveAnAnomalyOfAnAnalyzerInAnotherBuilding(t *testi
 	pathsSeedReading(t, ctx, readingRepo, tenant.AdminScope, readingRow(id, h, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}))
 	pathsSeedReading(t, ctx, readingRepo, tenant.AdminScope, readingRow(id, h.Add(time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "900"}))
 
-	billing := anomaliesNewBilling(t, readingRepo, anomalyRepo, opsRepo, analyzerRepo, lock.NewMemory(nil), h.Add(time.Hour))
+	billing := anomaliesNewBilling(t, pool, readingRepo, anomalyRepo, opsRepo, analyzerRepo, lock.NewMemory(nil), h.Add(time.Hour))
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{id}, Level: energy.Hourly, Range: store.TimeRange{From: h, To: h.Add(time.Hour)}}
 
 	_, err := billing.ConsumptionAndRecord(ctx, tenant.AdminScope, req)
@@ -683,7 +686,7 @@ func TestListAnomaliesWithEmptyAnalyzerIDsFailsClosed(t *testing.T) {
 	anomalyRepo := postgres.NewAnomalyRepository(pool)
 	opsRepo := postgres.NewOpsRepository(pool)
 	analyzerRepo := postgres.NewAnalyzerRepository(pool)
-	billing := anomaliesNewBilling(t, readingRepo, anomalyRepo, opsRepo, analyzerRepo, lock.NewMemory(nil), anomaliesEpoch)
+	billing := anomaliesNewBilling(t, pool, readingRepo, anomalyRepo, opsRepo, analyzerRepo, lock.NewMemory(nil), anomaliesEpoch)
 
 	_, err := billing.ListAnomalies(ctx, tenant.AdminScope, consumption.AnomalyListRequest{})
 	require.ErrorIs(t, err, consumption.ErrInvalidRequest)

@@ -564,6 +564,20 @@ func (b *Billing) applyResolvedAnomalies(ctx context.Context, sc store.Scope, ro
 			if a.ResolvedAt == nil || a.Resolution == nil || !hasSuspectPeriodCode(a.Detail) {
 				continue
 			}
+			// RI-5: a resolved missing_readings anomaly is applied ONLY
+			// through applyResolvedGapOverrides (billing.go), which runs
+			// exclusively on buckets that still produce NO row from real
+			// readings. This loop instead post-processes rows Consumption
+			// already DERIVED from real boundaries — applying a stale gap
+			// override here would overwrite a real (possibly newly suspect)
+			// derivation and delete its Suspect, hiding a fresh negative
+			// delta a backfill just introduced. Once real boundaries resolve
+			// a bucket, the real derivation wins; if it comes back suspect,
+			// ConsumptionAndRecord (anomalies.go) records it as an ordinary
+			// suspect period, exactly like any other reason.
+			if a.Reason == string(energy.ReasonMissingReadings) {
+				continue
+			}
 			key := anomalyPeriodKey{a.PeriodStart.UnixNano(), a.PeriodEnd.UnixNano()}
 			byPeriod[key] = append(byPeriod[key], a)
 		}

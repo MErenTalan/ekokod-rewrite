@@ -47,6 +47,13 @@ func resolveBilling(t *testing.T, readings fakeReadings, anomalies *fakeAnomalie
 		Log:       testLog(t),
 		Locker:    locker,
 		Analyzers: analyzers,
+		// R103: Users is required for ResolveAnomaly. This file's tests
+		// exercise other behaviour, so allowAll accepts whichever
+		// uuid.New() resolvedBy each test happens to pass — the tests that
+		// specifically cover Users' own membership check build their own
+		// BillingDeps directly (TestResolvedByMustBeAUserOfTheCompany and
+		// friends).
+		Users: fakeUsers{allowAll: true},
 	})
 	require.NoError(t, err)
 	return b
@@ -485,6 +492,58 @@ func TestPeriodThatIsNotABucketRejected(t *testing.T) {
 	require.ErrorIs(t, err, consumption.ErrInvalidRequest)
 }
 
+// TestPeriodThatIsNotABucketRejectedEvenWithRealBoundaryReadings pins RI-6's
+// own "!ok -> Hourly fallback" mutation directly: a non-bucket 2-hour period
+// with REAL load_profile readings exactly at its own start/end would derive
+// a perfectly plausible (and sound) value if inferLevel silently fell back
+// to treating it as Hourly — the empty-readings TestPeriodThatIsNotABucketRejected
+// above would pass under that mutation too, since deriveRow fails anyway
+// with no data at all; this test fails unless inferLevel's own !ok is what
+// rejects the request.
+func TestPeriodThatIsNotABucketRejectedEvenWithRealBoundaryReadings(t *testing.T) {
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+	analyzerID := uuid.New()
+	h := resolveT0
+	period := energy.Window{From: h, To: h.Add(2 * time.Hour)} // not a bucket at any level
+
+	// A reading strictly between h and the proposed reset (h+1h) supplies
+	// the "prior" R91 needs, so a re-derivation that (bug) silently treated
+	// this 2-hour period as Hourly would come back perfectly SOUND
+	// (20 + 50 = 70, no suspicion) — the exact silent-acceptance the
+	// "!ok -> Hourly fallback" mutation must be caught by, never merely a
+	// derivation that happens to fail for an unrelated reason (R91/no-prior)
+	// the way the empty-readings TestPeriodThatIsNotABucketRejected above
+	// would under the same mutation.
+	readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
+		model.ReadingKindLoadProfile: {
+			readingRow(analyzerID, period.From, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}),
+			readingRow(analyzerID, period.From.Add(45*time.Minute), model.ReadingKindLoadProfile, map[string]string{"active_import": "1020"}),
+			readingRow(analyzerID, period.To, model.ReadingKindLoadProfile, map[string]string{"active_import": "1100"}),
+		},
+		model.ReadingKindReset: {},
+	}}
+	anomalies := &fakeAnomalies{}
+	an := anomalies.seed(model.ConsumptionAnomaly{
+		AnalyzerID: analyzerID, PeriodStart: period.From, PeriodEnd: period.To,
+		Reason: "negative_delta", Detail: f3Detail(t, period, "negative_delta", "active_import"),
+	})
+
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{analyzer: model.Analyzer{Provider: model.IntegrationProviderOSOS}}, lock.NewMemory(nil), period.To.Add(time.Hour))
+
+	resetTS := period.From.Add(time.Hour)
+	_, err := b.ResolveAnomaly(ctx, scope, an.ID, uuid.New(), consumption.Resolution{
+		Mode:       consumption.ResolveByRegisteringReset,
+		ResetTS:    &resetTS,
+		ResetAfter: map[energy.Register]decimal.Decimal{energy.ActiveImport: decimal.RequireFromString("1050")},
+	})
+	require.ErrorIs(t, err, consumption.ErrInvalidRequest)
+
+	got, ok := anomalies.get(an.ID)
+	require.True(t, ok)
+	require.Nil(t, got.ResolvedAt)
+}
+
 // TestRegisteringAValidResetSucceeds is C2's positive control: a reset that
 // fully covers every register both boundaries report is accepted, written,
 // and the anomaly resolved.
@@ -523,6 +582,155 @@ func TestRegisteringAValidResetSucceeds(t *testing.T) {
 
 	rows, err := b.Consumption(ctx, scope, consumption.SeriesRequest{
 		AnalyzerIDs: []uuid.UUID{analyzerID}, Level: energy.Hourly, Range: store.TimeRange{From: h, To: h.Add(time.Hour)},
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Empty(t, rows[0].Suspect)
+	require.Equal(t, "130", rows[0].Values[energy.ActiveImport].String())
+}
+
+// --- RI-6/I5: inferLevel must be exercised above Hourly, and on a DST day -
+
+// TestRegisteringAValidResetSucceedsAtDailyLevel is RI-6's own fix: no test
+// in the prior round resolved a Daily anomaly, so mutation (e2) (inferLevel
+// always Hourly) and the "!ok -> Hourly fallback" mutation both survived.
+// The SAME numeric relationship TestRegisteringAValidResetSucceeds proves at
+// Hourly (1000 start, 1040 prior, 190 end, reset-after 100 -> 130 sound) is
+// reproduced over a whole Daily bucket.
+func TestRegisteringAValidResetSucceedsAtDailyLevel(t *testing.T) {
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+	analyzerID := uuid.New()
+	loc, err := time.LoadLocation("Europe/Istanbul")
+	require.NoError(t, err)
+	day := energy.Bucket(energy.Daily, resolveT0, loc)
+
+	readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
+		model.ReadingKindLoadProfile: {
+			readingRow(analyzerID, day.From, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}),
+			readingRow(analyzerID, day.From.Add(20*time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "1040"}),
+			readingRow(analyzerID, day.To, model.ReadingKindLoadProfile, map[string]string{"active_import": "190"}),
+		},
+		model.ReadingKindDaily:   {},
+		model.ReadingKindBilling: {},
+		model.ReadingKindReset:   {},
+	}}
+	anomalies := &fakeAnomalies{}
+	an := anomalies.seed(model.ConsumptionAnomaly{
+		AnalyzerID: analyzerID, PeriodStart: day.From, PeriodEnd: day.To,
+		Reason: "negative_delta", Detail: f3Detail(t, day, "negative_delta", "active_import"),
+	})
+
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{analyzer: model.Analyzer{Provider: model.IntegrationProviderOSOS}}, lock.NewMemory(nil), day.To.Add(time.Hour))
+
+	resetTS := day.From.Add(21 * time.Hour)
+	resolved, err := b.ResolveAnomaly(ctx, scope, an.ID, uuid.New(), consumption.Resolution{
+		Mode:       consumption.ResolveByRegisteringReset,
+		ResetTS:    &resetTS,
+		ResetAfter: map[energy.Register]decimal.Decimal{energy.ActiveImport: decimal.RequireFromString("100")},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resolved.ResolvedAt)
+
+	rows, err := b.Consumption(ctx, scope, consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{analyzerID}, Level: energy.Daily, Range: store.TimeRange{From: day.From, To: day.To},
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Empty(t, rows[0].Suspect)
+	require.Equal(t, "130", rows[0].Values[energy.ActiveImport].String())
+}
+
+// TestRegisteringAValidResetSucceedsAtMonthlyLevel is RI-6's own fix for
+// Monthly: the SAME numeric relationship, over a whole Monthly bucket.
+func TestRegisteringAValidResetSucceedsAtMonthlyLevel(t *testing.T) {
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+	analyzerID := uuid.New()
+	loc, err := time.LoadLocation("Europe/Istanbul")
+	require.NoError(t, err)
+	month := energy.Bucket(energy.Monthly, resolveT0, loc)
+
+	readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
+		model.ReadingKindLoadProfile: {
+			readingRow(analyzerID, month.From, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}),
+			readingRow(analyzerID, month.From.AddDate(0, 0, 20), model.ReadingKindLoadProfile, map[string]string{"active_import": "1040"}),
+			readingRow(analyzerID, month.To, model.ReadingKindLoadProfile, map[string]string{"active_import": "190"}),
+		},
+		model.ReadingKindDaily:   {},
+		model.ReadingKindBilling: {},
+		model.ReadingKindReset:   {},
+	}}
+	anomalies := &fakeAnomalies{}
+	an := anomalies.seed(model.ConsumptionAnomaly{
+		AnalyzerID: analyzerID, PeriodStart: month.From, PeriodEnd: month.To,
+		Reason: "negative_delta", Detail: f3Detail(t, month, "negative_delta", "active_import"),
+	})
+
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{analyzer: model.Analyzer{Provider: model.IntegrationProviderOSOS}}, lock.NewMemory(nil), month.To.Add(time.Hour))
+
+	resetTS := month.From.AddDate(0, 0, 21)
+	resolved, err := b.ResolveAnomaly(ctx, scope, an.ID, uuid.New(), consumption.Resolution{
+		Mode:       consumption.ResolveByRegisteringReset,
+		ResetTS:    &resetTS,
+		ResetAfter: map[energy.Register]decimal.Decimal{energy.ActiveImport: decimal.RequireFromString("100")},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resolved.ResolvedAt)
+
+	rows, err := b.Consumption(ctx, scope, consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{analyzerID}, Level: energy.Monthly, Range: store.TimeRange{From: month.From, To: month.To},
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Empty(t, rows[0].Suspect)
+	require.Equal(t, "130", rows[0].Values[energy.ActiveImport].String())
+}
+
+// TestRegisteringAValidResetSucceedsOnADSTDay is RI-6's own fix for mutation
+// (e) (inferLevel/Daily not matched on a non-24h day): 2015-03-29 is
+// Istanbul's spring-forward day, a 23-hour Daily bucket. inferLevel must
+// still recognise it as exactly one Daily bucket (energy.Bucket itself
+// already handles the DST arithmetic; this pins that rederiveBucketWithReset
+// actually reaches it).
+func TestRegisteringAValidResetSucceedsOnADSTDay(t *testing.T) {
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+	analyzerID := uuid.New()
+	loc, err := time.LoadLocation("Europe/Istanbul")
+	require.NoError(t, err)
+	dstDay := energy.Bucket(energy.Daily, time.Date(2015, 3, 29, 12, 0, 0, 0, loc), loc)
+	require.Equal(t, 23*time.Hour, dstDay.To.Sub(dstDay.From), "2015-03-29 Istanbul must be a 23-hour day")
+
+	readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
+		model.ReadingKindLoadProfile: {
+			readingRow(analyzerID, dstDay.From, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}),
+			readingRow(analyzerID, dstDay.From.Add(10*time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "1040"}),
+			readingRow(analyzerID, dstDay.To, model.ReadingKindLoadProfile, map[string]string{"active_import": "190"}),
+		},
+		model.ReadingKindDaily:   {},
+		model.ReadingKindBilling: {},
+		model.ReadingKindReset:   {},
+	}}
+	anomalies := &fakeAnomalies{}
+	an := anomalies.seed(model.ConsumptionAnomaly{
+		AnalyzerID: analyzerID, PeriodStart: dstDay.From, PeriodEnd: dstDay.To,
+		Reason: "negative_delta", Detail: f3Detail(t, dstDay, "negative_delta", "active_import"),
+	})
+
+	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{analyzer: model.Analyzer{Provider: model.IntegrationProviderOSOS}}, lock.NewMemory(nil), dstDay.To.Add(time.Hour))
+
+	resetTS := dstDay.From.Add(11 * time.Hour)
+	resolved, err := b.ResolveAnomaly(ctx, scope, an.ID, uuid.New(), consumption.Resolution{
+		Mode:       consumption.ResolveByRegisteringReset,
+		ResetTS:    &resetTS,
+		ResetAfter: map[energy.Register]decimal.Decimal{energy.ActiveImport: decimal.RequireFromString("100")},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resolved.ResolvedAt)
+
+	rows, err := b.Consumption(ctx, scope, consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{analyzerID}, Level: energy.Daily, Range: store.TimeRange{From: dstDay.From, To: dstDay.To},
 	})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
@@ -762,20 +970,55 @@ func raceBarrier(want int, timeout time.Duration) func() {
 		mu.Unlock()
 		if n >= want {
 			once.Do(func() { close(release) })
-			return
+		} else {
+			select {
+			case <-release:
+			case <-time.After(timeout):
+			}
 		}
-		select {
-		case <-release:
-		case <-time.After(timeout):
+		// A short, UNCONDITIONAL sleep for every caller, winner and waiter
+		// alike: without it, the caller whose own arrival satisfied `want`
+		// never blocks at all and Go's scheduler reliably lets it run its
+		// ENTIRE dedup-then-create to completion before the other,
+		// just-woken caller is scheduled again — which would make even a
+		// REMOVED lock look race-free by sheer scheduling luck rather than
+		// by correctness. Sleeping here, inside the barrier itself (before
+		// either caller's own mutex-protected read), forces both to reach
+		// that read at genuinely the same time.
+		time.Sleep(2 * time.Millisecond)
+	}
+}
+
+// dedupRangeBarrier wraps raceBarrier for fakeAnomalies.listBarrier (RI-1):
+// it only engages for the EXACT shape dedupAndCreateAnomaly's own dedup
+// check uses — a Range exactly one microsecond wide — never for
+// applyResolvedAnomalies' own wider, unlocked List call. Arming the barrier
+// unconditionally (on every List call) would fire on that unlocked read
+// first, which both goroutines always reach at the same point regardless of
+// whether recordSuspectPeriod's own lock later works — RI-1's own finding
+// about the prior round's race test.
+func dedupRangeBarrier(want int, timeout time.Duration) func(store.AnomalyFilter) {
+	inner := raceBarrier(want, timeout)
+	return func(filt store.AnomalyFilter) {
+		if filt.Range != nil && filt.Range.To.Sub(filt.Range.From) == time.Microsecond {
+			inner()
 		}
 	}
 }
 
 // TestConcurrentRunsAreSerializedByTheLockNotByLuck is I-1: two goroutines
-// are held at the dedup check (fakeAnomalies.listBarrier) until both have
-// arrived, which can only happen if the lock failed to serialize them —
-// removing acquireAnomalyLock's own call makes this deterministically red,
-// never merely flaky.
+// are held at the dedup check (fakeAnomalies.listBarrier, armed only on the
+// dedup query's own exact-microsecond shape, RI-1) AND at the write itself
+// (createBarrier) until both have arrived at each gate, which can only
+// happen if the lock failed to serialize them — removing
+// acquireAnomalyLock's own call makes this deterministically red, never
+// merely flaky. createBarrier is what actually forces the double-create: a
+// List-only gate proves both callers reached the CHECK together, but Go's
+// scheduler can still let the goroutine that never had to block run its
+// entire remaining check-then-act to completion before the other, just-woken
+// goroutine resumes — gating the WRITE itself is what makes both callers'
+// independent "nothing exists yet" decisions already final before either
+// acts on them.
 func TestConcurrentRunsAreSerializedByTheLockNotByLuck(t *testing.T) {
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -788,7 +1031,10 @@ func TestConcurrentRunsAreSerializedByTheLockNotByLuck(t *testing.T) {
 			readingRow(analyzerID, h.Add(time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "900"}),
 		},
 	}}
-	anomalies := &fakeAnomalies{listBarrier: raceBarrier(2, 150*time.Millisecond)}
+	anomalies := &fakeAnomalies{
+		listBarrier:   dedupRangeBarrier(2, 150*time.Millisecond),
+		createBarrier: raceBarrier(2, 150*time.Millisecond),
+	}
 	b := resolveBilling(t, readings, anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), h.Add(time.Hour))
 
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{analyzerID}, Level: energy.Hourly, Range: store.TimeRange{From: h, To: h.Add(time.Hour)}}
@@ -815,6 +1061,89 @@ func TestConcurrentRunsAreSerializedByTheLockNotByLuck(t *testing.T) {
 		}
 	}
 	require.Equal(t, 1, count, "the dedup lock must serialize concurrent creation, never create two rows for the same period")
+}
+
+// TestConcurrentResolvesAreSerializedByTheAnomalysOwnLock is RI-2/I3: two
+// goroutines call ResolveAnomaly for the SAME anomaly at the same time
+// (accepted vs manual_override). getBarrier arms ONLY on ResolveAnomaly's
+// own post-lock re-read (consumption.IsLockedAnomalyRead, never the
+// first, pre-lock existence Get both goroutines always reach immediately),
+// and resolveBarrier additionally gates the write itself — the same
+// two-gate shape TestConcurrentRunsAreSerializedByTheLockNotByLuck uses,
+// for the same reason (a read-only gate lets Go's scheduler run the
+// never-blocked goroutine's whole check-then-act to completion before the
+// other resumes). Removing ResolveAnomaly's own lock/re-read makes this
+// deterministically red: both calls succeed instead of one being a
+// conflict.
+func TestConcurrentResolvesAreSerializedByTheAnomalysOwnLock(t *testing.T) {
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+	analyzerID := uuid.New()
+	hour := energy.Window{From: resolveT0, To: resolveT0.Add(time.Hour)}
+
+	anomalies := &fakeAnomalies{
+		getBarrier:     raceBarrier(2, 150*time.Millisecond),
+		resolveBarrier: raceBarrier(2, 150*time.Millisecond),
+	}
+	an := anomalies.seed(model.ConsumptionAnomaly{
+		AnalyzerID: analyzerID, PeriodStart: hour.From, PeriodEnd: hour.To,
+		Reason: "negative_delta", Detail: f3Detail(t, hour, "negative_delta", "active_import"),
+	})
+
+	b, err := consumption.NewBilling(consumption.BillingDeps{
+		Readings: fakeReadings{}, Anomalies: anomalies, Ops: &fakeOps{},
+		Clock: clock.NewFake(resolveT0), Log: testLog(t),
+		Locker: lock.NewMemory(nil), Analyzers: fakeAnalyzers{},
+		Users: fakeUsers{allowAll: true},
+	})
+	require.NoError(t, err)
+
+	const n = 2
+	var wg sync.WaitGroup
+	results := make([]string, n)
+	wg.Add(n)
+	go func() {
+		defer wg.Done()
+		_, rerr := b.ResolveAnomaly(ctx, scope, an.ID, uuid.New(), consumption.Resolution{Mode: consumption.ResolveByAccepting})
+		switch {
+		case rerr == nil:
+			results[0] = "ok"
+		case errors.Is(rerr, consumption.ErrConflict):
+			results[0] = "conflict"
+		default:
+			results[0] = "error:" + rerr.Error()
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		_, rerr := b.ResolveAnomaly(ctx, scope, an.ID, uuid.New(), consumption.Resolution{
+			Mode:      consumption.ResolveByOverride,
+			Overrides: map[energy.Register]decimal.Decimal{energy.ActiveImport: decimal.RequireFromString("42")},
+		})
+		switch {
+		case rerr == nil:
+			results[1] = "ok"
+		case errors.Is(rerr, consumption.ErrConflict):
+			results[1] = "conflict"
+		default:
+			results[1] = "error:" + rerr.Error()
+		}
+	}()
+	wg.Wait()
+
+	oks, conflicts := 0, 0
+	for _, r := range results {
+		switch r {
+		case "ok":
+			oks++
+		case "conflict":
+			conflicts++
+		default:
+			t.Fatalf("unexpected ResolveAnomaly result: %s", r)
+		}
+	}
+	require.Equal(t, 1, oks, "exactly one of two genuinely concurrent resolves must succeed")
+	require.Equal(t, 1, conflicts, "the other must see ErrConflict, never silently overwrite the first")
 }
 
 // TestNilLockerFailsClosedBeforeConsumptionRuns is I-1's own fix: a nil
@@ -846,6 +1175,76 @@ func TestNilLockerFailsClosedBeforeConsumptionRuns(t *testing.T) {
 	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{analyzerID}, Level: energy.Hourly, Range: store.TimeRange{From: h, To: h.Add(time.Hour)}}
 	_, err = b.ConsumptionAndRecord(ctx, scope, req)
 	require.Error(t, err, "a nil Locker must fail ConsumptionAndRecord before Consumption ever runs")
+}
+
+// --- RI-3: BillingDeps.Users is required, checked before any read/write ----
+
+// TestResolveAnomalyRequiresUsers is RI-3: a Billing constructed without
+// Users must fail EVERY ResolveAnomaly call, before any read or write —
+// pinned with noAnomalies/noReadings/noOps, each of which panics on any
+// call, so a panic here would mean the nil check ran too late.
+func TestResolveAnomalyRequiresUsers(t *testing.T) {
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+
+	b, err := consumption.NewBilling(consumption.BillingDeps{
+		Readings: noReadings{}, Anomalies: noAnomalies{}, Ops: noOps{},
+		Clock: clock.NewFake(resolveT0), Log: testLog(t),
+		Locker: lock.NewMemory(nil), Analyzers: fakeAnalyzers{},
+		// Users deliberately left nil.
+	})
+	require.NoError(t, err)
+
+	_, err = b.ResolveAnomaly(ctx, scope, uuid.New(), uuid.New(), consumption.Resolution{Mode: consumption.ResolveByAccepting})
+	require.Error(t, err, "a nil Users must fail ResolveAnomaly before any read or write")
+}
+
+// TestResolvedByMustBeAUserOfTheCompany is P6/RI-3: a resolvedBy who is not
+// a user of sc.CompanyID is refused BEFORE the reset reading is written —
+// the failure the prior round's P6 probe reproduced whenever Users was nil.
+// Users is now required, so this is the ordinary (always-wired) path.
+func TestResolvedByMustBeAUserOfTheCompany(t *testing.T) {
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+	analyzerID := uuid.New()
+	h := resolveT0
+	period := energy.Window{From: h, To: h.Add(time.Hour)}
+
+	readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
+		model.ReadingKindLoadProfile: {
+			readingRow(analyzerID, h, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}),
+			readingRow(analyzerID, h.Add(20*time.Minute), model.ReadingKindLoadProfile, map[string]string{"active_import": "1040"}),
+			readingRow(analyzerID, h.Add(time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "190"}),
+		},
+		model.ReadingKindReset: {},
+	}}
+	anomalies := &fakeAnomalies{}
+	an := anomalies.seed(model.ConsumptionAnomaly{
+		AnalyzerID: analyzerID, PeriodStart: period.From, PeriodEnd: period.To,
+		Reason: "negative_delta", Detail: f3Detail(t, period, "negative_delta", "active_import"),
+	})
+
+	notACompanyUser := uuid.New()
+	b, err := consumption.NewBilling(consumption.BillingDeps{
+		Readings: readings, Anomalies: anomalies, Ops: &fakeOps{},
+		Clock: clock.NewFake(h.Add(time.Hour)), Log: testLog(t),
+		Locker: lock.NewMemory(nil), Analyzers: fakeAnalyzers{analyzer: model.Analyzer{Provider: model.IntegrationProviderOSOS}},
+		Users: fakeUsers{validIDs: map[uuid.UUID]bool{}}, // notACompanyUser is NOT in this set
+	})
+	require.NoError(t, err)
+
+	resetTS := h.Add(30 * time.Minute)
+	_, err = b.ResolveAnomaly(ctx, scope, an.ID, notACompanyUser, consumption.Resolution{
+		Mode:       consumption.ResolveByRegisteringReset,
+		ResetTS:    &resetTS,
+		ResetAfter: map[energy.Register]decimal.Decimal{energy.ActiveImport: decimal.RequireFromString("100")},
+	})
+	require.Error(t, err)
+	require.Empty(t, readings.byKind[model.ReadingKindReset], "the reset reading must never be written for a resolver outside the company")
+
+	got, ok := anomalies.get(an.ID)
+	require.True(t, ok)
+	require.Nil(t, got.ResolvedAt)
 }
 
 // --- I2: the F2 cascade runs BEFORE the F3 row is marked resolved ---------
