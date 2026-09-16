@@ -112,3 +112,21 @@ func columnIndex(header []string) map[field]int {
 	}
 	return out
 }
+
+// HeaderScore counts the cells of row that name a known column, so a caller
+// can find the header row of a sheet with preamble rows.
+func HeaderScore(row []string) int {
+	known := map[string]bool{}
+	for _, a := range aliases {
+		for _, name := range a.names {
+			known[NormaliseHeader(name)] = true
+		}
+	}
+	n := 0
+	for _, cell := range row {
+		if known[NormaliseHeader(cell)] {
+			n++
+		}
+	}
+	return n
+}
