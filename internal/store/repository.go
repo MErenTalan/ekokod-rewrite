@@ -825,6 +825,24 @@ type TariffRepository interface {
 	// tariffs. A tariff not visible to the Scope returns ErrNotFound and
 	// nothing is replaced.
 	ReplaceManualYekdem(ctx context.Context, s Scope, tariffID uuid.UUID, values []model.TariffManualYekdem) ([]model.TariffManualYekdem, error)
+
+	// ExtraCharges — Isolation: tariff_extra_charges has no company_id — join
+	// through tariffs. A tariff not visible to the Scope returns ErrNotFound.
+	ExtraCharges(ctx context.Context, s Scope, tariffID uuid.UUID) ([]model.TariffExtraCharge, error)
+
+	// ReplaceExtraCharges — Isolation: join through tariffs. A tariff not
+	// visible to the Scope returns ErrNotFound and nothing is replaced.
+	ReplaceExtraCharges(ctx context.Context, s Scope, tariffID uuid.UUID, charges []model.TariffExtraCharge) ([]model.TariffExtraCharge, error)
+}
+
+// BillingParameterRepository reads the dated, platform-wide billing
+// parameters (R106). The Scope is validated and narrows nothing; writes are
+// AdminCatalogueRepository.UpsertBillingParameters.
+type BillingParameterRepository interface {
+	// Effective returns the row with the greatest effective_from not after
+	// on's Europe/Istanbul calendar date, or ErrNotFound.
+	Effective(ctx context.Context, s Scope, on time.Time) (model.BillingParameters, error)
+	List(ctx context.Context, s Scope) ([]model.BillingParameters, error)
 }
 
 // TariffTemplateFilter narrows a template listing.
@@ -1618,6 +1636,23 @@ type AdminCatalogueRepository interface {
 	// UpsertIntegrationDefinitions writes integration_definitions, keyed on
 	// its unique (provider, subtype), and returns the number of rows written.
 	UpsertIntegrationDefinitions(ctx context.Context, defs []model.IntegrationDefinition) (int64, error)
+
+	// UpsertBillingParameters writes one dated billing_parameters row keyed on
+	// effective_from (R106).
+	UpsertBillingParameters(ctx context.Context, p model.BillingParameters) (model.BillingParameters, error)
+}
+
+// BillableBuilding is one building the billing dispatcher invoices.
+type BillableBuilding struct {
+	CompanyID, BuildingID uuid.UUID
+	CutoffDay             int
+}
+
+// AdminBillingRepository is the billing dispatcher's cross-tenant discovery.
+type AdminBillingRepository interface {
+	// BillableBuildings is every non-deleted building of a non-deleted company
+	// with at least one non-deleted analyzer.
+	BillableBuildings(ctx context.Context) ([]BillableBuilding, error)
 }
 
 // AdminJournalRepository records platform jobs — work that runs for no tenant,

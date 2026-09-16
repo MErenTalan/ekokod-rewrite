@@ -11,6 +11,7 @@ import (
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
+	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/internal/pgbilling"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/internal/pgerr"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/internal/pgnum"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/sqlcgen"
@@ -294,4 +295,20 @@ func (r *CatalogueRepository) UpsertIntegrationDefinitions(ctx context.Context, 
 		return 0, pgerr.Translate(r.pool, "upsert integration definitions", err)
 	}
 	return n, nil
+}
+
+// --- UpsertBillingParameters --------------------------------------------
+
+// UpsertBillingParameters writes one dated billing_parameters row, keyed on
+// effective_from's Istanbul date; a second call for the same date replaces it.
+func (r *CatalogueRepository) UpsertBillingParameters(ctx context.Context, p model.BillingParameters) (model.BillingParameters, error) {
+	params, err := pgbilling.Encode(p, pgbilling.IstanbulDate(p.EffectiveFrom))
+	if err != nil {
+		return model.BillingParameters{}, fmt.Errorf("encode billing parameters: %w", err)
+	}
+	row, err := r.q.AdminUpsertBillingParameters(ctx, params)
+	if err != nil {
+		return model.BillingParameters{}, pgerr.Translate(r.pool, "upsert billing parameters", err)
+	}
+	return pgbilling.Decode(pgbilling.Row(row))
 }

@@ -113,3 +113,41 @@ from jsonb_array_elements(sqlc.arg(defs)::jsonb) as elem
 on conflict (provider, subtype) do update set
     endpoints = excluded.endpoints,
     updated_at = now();
+
+-- billing_parameters is platform-wide and dated (R106); keyed on effective_from.
+-- name: AdminUpsertBillingParameters :one
+insert into billing_parameters (
+  effective_from, reactive_penalty_basis, reactive_exempt_below_kw, reactive_exempt_terms,
+  reactive_exempt_user_groups, reactive_generation_exempt_kwh, reactive_bands, tiering_groups,
+  tiering_mode, tiering_voltage_levels, tiering_supply_companies, ptf_missing_hour_tolerance,
+  demand_overrun_multiplier, money_rounding_mode
+) values (
+  sqlc.arg(effective_from), sqlc.arg(reactive_penalty_basis), sqlc.narg(reactive_exempt_below_kw),
+  sqlc.arg(reactive_exempt_terms)::text[]::tariff_term[],
+  sqlc.arg(reactive_exempt_user_groups)::text[]::distribution_user_group[],
+  sqlc.arg(reactive_generation_exempt_kwh), sqlc.arg(reactive_bands), sqlc.arg(tiering_groups),
+  sqlc.arg(tiering_mode), sqlc.arg(tiering_voltage_levels)::text[]::voltage_level[],
+  sqlc.arg(tiering_supply_companies)::text[]::supply_company[],
+  sqlc.arg(ptf_missing_hour_tolerance), sqlc.arg(demand_overrun_multiplier), sqlc.arg(money_rounding_mode)
+)
+on conflict (effective_from) do update set
+  reactive_penalty_basis = excluded.reactive_penalty_basis,
+  reactive_exempt_below_kw = excluded.reactive_exempt_below_kw,
+  reactive_exempt_terms = excluded.reactive_exempt_terms,
+  reactive_exempt_user_groups = excluded.reactive_exempt_user_groups,
+  reactive_generation_exempt_kwh = excluded.reactive_generation_exempt_kwh,
+  reactive_bands = excluded.reactive_bands,
+  tiering_groups = excluded.tiering_groups,
+  tiering_mode = excluded.tiering_mode,
+  tiering_voltage_levels = excluded.tiering_voltage_levels,
+  tiering_supply_companies = excluded.tiering_supply_companies,
+  ptf_missing_hour_tolerance = excluded.ptf_missing_hour_tolerance,
+  demand_overrun_multiplier = excluded.demand_overrun_multiplier,
+  money_rounding_mode = excluded.money_rounding_mode
+returning effective_from, reactive_penalty_basis, reactive_exempt_below_kw,
+  reactive_exempt_terms::text[] as reactive_exempt_terms,
+  reactive_exempt_user_groups::text[] as reactive_exempt_user_groups,
+  reactive_generation_exempt_kwh, reactive_bands, tiering_groups, tiering_mode,
+  tiering_voltage_levels::text[] as tiering_voltage_levels,
+  tiering_supply_companies::text[] as tiering_supply_companies,
+  ptf_missing_hour_tolerance, demand_overrun_multiplier, money_rounding_mode, created_at;

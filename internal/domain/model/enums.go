@@ -472,3 +472,93 @@ func contains[T comparable](haystack []T, needle T) bool {
 	}
 	return false
 }
+
+// ReactivePenaltyBasis mirrors the SQL enum reactive_penalty_basis
+// (migration 00014): which reactive quantity a penalty is charged on.
+type ReactivePenaltyBasis string
+
+// The values of reactive_penalty_basis.
+const (
+	ReactivePenaltyBasisWholeQuantity   ReactivePenaltyBasis = "whole_quantity"
+	ReactivePenaltyBasisExcessOverLimit ReactivePenaltyBasis = "excess_over_limit"
+)
+
+// ReactivePenaltyBases is every value of reactive_penalty_basis.
+func ReactivePenaltyBases() []ReactivePenaltyBasis {
+	return []ReactivePenaltyBasis{ReactivePenaltyBasisWholeQuantity, ReactivePenaltyBasisExcessOverLimit}
+}
+
+// Valid reports whether b is one of the declared bases.
+func (b ReactivePenaltyBasis) Valid() bool { return contains(ReactivePenaltyBases(), b) }
+
+// TieringMode mirrors the SQL enum tiering_mode (migration 00014, R121).
+type TieringMode string
+
+// The values of tiering_mode.
+const (
+	TieringModeSplitAtThreshold       TieringMode = "split_at_threshold"
+	TieringModeWholeConsumptionSwitch TieringMode = "whole_consumption_switch"
+)
+
+// TieringModes is every value of tiering_mode.
+func TieringModes() []TieringMode {
+	return []TieringMode{TieringModeSplitAtThreshold, TieringModeWholeConsumptionSwitch}
+}
+
+// Valid reports whether m is one of the declared modes.
+func (m TieringMode) Valid() bool { return contains(TieringModes(), m) }
+
+// PriceSource mirrors the SQL enum price_source (migration 00014, R119).
+type PriceSource string
+
+// The values of price_source.
+const (
+	PriceSourceKbk   PriceSource = "kbk"
+	PriceSourceFixed PriceSource = "fixed"
+)
+
+// PriceSources is every value of price_source.
+func PriceSources() []PriceSource { return []PriceSource{PriceSourceKbk, PriceSourceFixed} }
+
+// Valid reports whether p is one of the declared sources.
+func (p PriceSource) Valid() bool { return contains(PriceSources(), p) }
+
+// ExtraChargeBasis mirrors the SQL enum extra_charge_basis (migration 00014, R126).
+type ExtraChargeBasis string
+
+// The values of extra_charge_basis.
+const (
+	ExtraChargeBasisPerKwh          ExtraChargeBasis = "per_kwh"
+	ExtraChargeBasisPerContractedKw ExtraChargeBasis = "per_contracted_kw"
+	ExtraChargeBasisPerMaxDemandKw  ExtraChargeBasis = "per_max_demand_kw"
+	ExtraChargeBasisFixedPerPeriod  ExtraChargeBasis = "fixed_per_period"
+	ExtraChargeBasisPctOfEnergy     ExtraChargeBasis = "pct_of_energy"
+)
+
+// ExtraChargeBases is every value of extra_charge_basis.
+func ExtraChargeBases() []ExtraChargeBasis {
+	return []ExtraChargeBasis{
+		ExtraChargeBasisPerKwh, ExtraChargeBasisPerContractedKw, ExtraChargeBasisPerMaxDemandKw,
+		ExtraChargeBasisFixedPerPeriod, ExtraChargeBasisPctOfEnergy,
+	}
+}
+
+// Valid reports whether b is one of the declared bases.
+func (b ExtraChargeBasis) Valid() bool { return contains(ExtraChargeBases(), b) }
+
+// MoneyRoundingMode mirrors the SQL enum money_rounding_mode (migration 00014, R112).
+type MoneyRoundingMode string
+
+// The values of money_rounding_mode.
+const (
+	MoneyRoundingHalfUp   MoneyRoundingMode = "half_up"
+	MoneyRoundingHalfEven MoneyRoundingMode = "half_even"
+)
+
+// MoneyRoundingModes is every value of money_rounding_mode.
+func MoneyRoundingModes() []MoneyRoundingMode {
+	return []MoneyRoundingMode{MoneyRoundingHalfUp, MoneyRoundingHalfEven}
+}
+
+// Valid reports whether m is one of the declared modes.
+func (m MoneyRoundingMode) Valid() bool { return contains(MoneyRoundingModes(), m) }
