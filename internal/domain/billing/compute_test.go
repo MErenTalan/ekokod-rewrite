@@ -283,12 +283,11 @@ func TestNamedTaxesAreRoundedPercentOfRoundedEnergy(t *testing.T) {
 
 func TestVatOnRoundedBase(t *testing.T) {
 	in := baseInput(t)
-	in.Quantities.ActiveImport = dp("77.77")
+	in.Quantities.ActiveImport = dp("33.33")
 	in.Tariff.SingleTimePrice = dp("2.345")
-	in.Taxes = []model.TariffTax{{Name: "BTV", Rate: d("5")}}
 	inv := compute(t, in)
-	require.Equal(t, "230.38", inv.VatBase.StringFixed(2))
-	require.Equal(t, "46.08", inv.VatCost.StringFixed(2), "the unrounded base would give 46.07")
+	require.Equal(t, "94.83", inv.VatBase.StringFixed(2), "78.16 + 16.67")
+	require.Equal(t, "18.97", inv.VatCost.StringFixed(2), "the unrounded base 94.82385 would give 18.96")
 }
 
 func TestTotalEqualsVatBasePlusVatMinusCredit(t *testing.T) {
