@@ -8,6 +8,7 @@ package consumption_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -663,6 +664,133 @@ func TestOutageResumingMidRequestDoesNotTreatEarlierDaysAsPreInstallation(t *tes
 		}
 	}
 	require.Equal(t, 6, gapCount, "no outage day may be silently skipped as pre-installation")
+}
+
+// TestMonthlyGapUsesBillingKindPriorRangeIndependently is RI2-1's own test:
+// R103(2)'s "earliest reading of any boundary kind" (billing.go's
+// hasPriorReading, computed from lpHasPrior || billingHasPrior ||
+// dailyHasPrior) must be pinned by billing-kind history too, never only
+// load_profile's own. This analyzer's ONLY history anywhere is two
+// billing-kind snapshots (Jan 1, Feb 1) — no load_profile, no daily, and
+// nothing at all inside or after April. April must get the SAME gap,
+// ["start","end"], whether Consumption is asked for the whole [Jan,May) or
+// for April alone.
+//
+// Dropping `|| billingHasPrior` (billing.go ~526) makes ONLY the
+// April-alone request silently drop the gap: April's own clamp (its first
+// bucket minus BillingSnapshotTolerance) excludes Jan 1 and Feb 1, so
+// anyReadings depends entirely on the dropped term. The wide request still
+// finds it "by accident", because Jan 1 and Feb 1 sit inside THAT request's
+// own clamp (its first bucket is January) and so are loaded into
+// data.billing regardless of hasPriorReading — the exact range dependence
+// R103(2) exists to rule out.
+func TestMonthlyGapUsesBillingKindPriorRangeIndependently(t *testing.T) {
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+	analyzerID := uuid.New()
+	loc := missingReadingsIstanbul(t)
+	jan := energy.Bucket(energy.Monthly, time.Date(2026, 1, 1, 0, 0, 0, 0, loc), loc)
+	feb1 := jan.To
+	apr := energy.Bucket(energy.Monthly, time.Date(2026, 4, 1, 0, 0, 0, 0, loc), loc)
+	now := time.Date(2026, 6, 1, 0, 0, 0, 0, loc)
+
+	newReadings := func() fakeReadings {
+		return fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
+			model.ReadingKindBilling: {
+				readingRow(analyzerID, jan.From, model.ReadingKindBilling, map[string]string{"active_import": "1000"}),
+				readingRow(analyzerID, feb1, model.ReadingKindBilling, map[string]string{"active_import": "1050"}),
+			},
+			model.ReadingKindLoadProfile: {},
+			model.ReadingKindDaily:       {},
+		}}
+	}
+
+	aprilGapBoundaries := func(req consumption.SeriesRequest) []any {
+		anomalies := &fakeAnomalies{}
+		b := resolveBilling(t, newReadings(), anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), now)
+		_, err := b.ConsumptionAndRecord(ctx, scope, req)
+		require.NoError(t, err)
+		got := findMissingReadingsAnomaly(t, anomalies, analyzerID, apr.From, apr.To)
+		var detail map[string]any
+		require.NoError(t, json.Unmarshal(got.Detail, &detail))
+		return detail["boundaries"].([]any)
+	}
+
+	narrow := aprilGapBoundaries(consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{analyzerID}, Level: energy.Monthly,
+		Range: store.TimeRange{From: apr.From, To: apr.To},
+	})
+	wide := aprilGapBoundaries(consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{analyzerID}, Level: energy.Monthly,
+		Range: store.TimeRange{From: jan.From, To: apr.To},
+	})
+
+	require.Equal(t, []any{"start", "end"}, narrow, "April requested alone must still get its own gap")
+	require.Equal(t, []any{"start", "end"}, wide, "April's gap must be identical inside a wider request")
+	require.Equal(t, wide, narrow, "the gap decision must not depend on which other months share the request")
+}
+
+// TestDailyGapUsesDailyKindPriorRangeIndependently is RI2-1's second test,
+// the same pinning for the daily-kind fallback boundary (dailyHasPrior,
+// billing.go ~544). This analyzer's ONLY history anywhere is ten daily-kind
+// snapshots (Jan 1-10) — no load_profile, no billing, and nothing at all
+// inside or after the request. April 1 must get the SAME gap,
+// ["start","end"], whether Consumption is asked for the whole
+// [Jan 1, Apr 2) or for April 1 alone.
+//
+// Dropping `|| dailyHasPrior` (billing.go ~544) makes ONLY the day-alone
+// request silently drop the gap: its own clamp (its first bucket minus
+// DailySnapshotTolerance) excludes every one of Jan 1-10. The wide request
+// still finds it, because Jan 1-10 sit inside THAT request's own clamp
+// (its first bucket is January 1) and so are loaded into data.daily
+// regardless of hasPriorReading.
+func TestDailyGapUsesDailyKindPriorRangeIndependently(t *testing.T) {
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+	analyzerID := uuid.New()
+	loc := missingReadingsIstanbul(t)
+	jan1 := energy.Bucket(energy.Daily, time.Date(2026, 1, 1, 0, 0, 0, 0, loc), loc)
+	apr1 := energy.Bucket(energy.Daily, time.Date(2026, 4, 1, 0, 0, 0, 0, loc), loc)
+	now := apr1.To.Add(24 * time.Hour)
+
+	newReadings := func() fakeReadings {
+		daily := make([]model.MeterReading, 0, 10)
+		for i := 0; i < 10; i++ {
+			ts := jan1.From.AddDate(0, 0, i)
+			daily = append(daily, readingRow(analyzerID, ts, model.ReadingKindDaily, map[string]string{
+				"active_import": fmt.Sprintf("%d", 1000+i*10),
+			}))
+		}
+		return fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
+			model.ReadingKindDaily:       daily,
+			model.ReadingKindLoadProfile: {},
+			model.ReadingKindBilling:     {},
+		}}
+	}
+
+	april1GapBoundaries := func(req consumption.SeriesRequest) []any {
+		anomalies := &fakeAnomalies{}
+		b := resolveBilling(t, newReadings(), anomalies, &fakeOps{}, fakeAnalyzers{}, lock.NewMemory(nil), now)
+		_, err := b.ConsumptionAndRecord(ctx, scope, req)
+		require.NoError(t, err)
+		got := findMissingReadingsAnomaly(t, anomalies, analyzerID, apr1.From, apr1.To)
+		var detail map[string]any
+		require.NoError(t, json.Unmarshal(got.Detail, &detail))
+		return detail["boundaries"].([]any)
+	}
+
+	narrow := april1GapBoundaries(consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{analyzerID}, Level: energy.Daily,
+		Range: store.TimeRange{From: apr1.From, To: apr1.To},
+	})
+	wide := april1GapBoundaries(consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{analyzerID}, Level: energy.Daily,
+		Range: store.TimeRange{From: jan1.From, To: apr1.To},
+	})
+
+	require.Equal(t, []any{"start", "end"}, narrow, "April 1 requested alone must still get its own gap")
+	require.Equal(t, []any{"start", "end"}, wide, "April 1's gap must be identical inside a wider request")
+	require.Equal(t, wide, narrow, "the gap decision must not depend on which other days share the request")
 }
 
 // TestResolvedGapOverrideGivesSameRowForNarrowAndWideRequest is RC-1's third

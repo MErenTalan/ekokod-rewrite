@@ -27,7 +27,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
-	"github.com/MErenTalan/ekokod-rewrite/internal/service/consumption"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 )
@@ -466,13 +465,6 @@ type fakeAnomalies struct {
 	// removed (RI-1's own finding).
 	listBarrier func(filt store.AnomalyFilter)
 
-	// getBarrier, when non-nil, is invoked at the START of every Get call
-	// tagged consumption.IsLockedAnomalyRead — RI-2's deterministic race
-	// test for ResolveAnomaly's own lock: arming it on every Get call would
-	// also fire on the FIRST, pre-lock existence Get both goroutines always
-	// reach immediately (the same shape-blindness RI-1 found for List).
-	getBarrier func()
-
 	// createBarrier and resolveBarrier, when non-nil, are invoked at the
 	// START of Create/Resolve, BEFORE the write. A List- or Get-only
 	// barrier proves both callers reached the CHECK together, but Go's
@@ -491,6 +483,15 @@ type fakeAnomalies struct {
 	// names — I2's ordering test uses this to fail the F2 cascade's own
 	// Resolve call and assert the F3 row's own Resolve is never reached.
 	resolveErr map[uuid.UUID]error
+
+	// rec, when non-nil, is appended to on every Get ("get") and Resolve
+	// ("resolve") call — m2-1: this is the replacement for the deleted
+	// production test hook (resolveAnomalyLockedReadContextKey,
+	// withLockedAnomalyRead, consumption.IsLockedAnomalyRead). A test shares
+	// this recorder with a fakeLocker (refresh_test.go) so it can assert
+	// ordering ("get"/"resolve" fall strictly between "acquire:"/
+	// "release:") instead of tagging a context value only a test recognises.
+	rec *recorder
 }
 
 func (f *fakeAnomalies) seed(a model.ConsumptionAnomaly) model.ConsumptionAnomaly {
@@ -514,9 +515,9 @@ func (f *fakeAnomalies) get(id uuid.UUID) (model.ConsumptionAnomaly, bool) {
 	return model.ConsumptionAnomaly{}, false
 }
 
-func (f *fakeAnomalies) Get(ctx context.Context, _ store.Scope, id uuid.UUID) (model.ConsumptionAnomaly, error) {
-	if f.getBarrier != nil && consumption.IsLockedAnomalyRead(ctx) {
-		f.getBarrier()
+func (f *fakeAnomalies) Get(_ context.Context, _ store.Scope, id uuid.UUID) (model.ConsumptionAnomaly, error) {
+	if f.rec != nil {
+		f.rec.add("get")
 	}
 	a, ok := f.get(id)
 	if !ok {
@@ -592,6 +593,9 @@ func (f *fakeAnomalies) Create(_ context.Context, _ store.Scope, a model.Consump
 // id — I2's ordering test uses this to make the F2 cascade's own Resolve
 // call fail and asserts the F3 row's own Resolve is never reached.
 func (f *fakeAnomalies) Resolve(_ context.Context, _ store.Scope, id, resolvedBy uuid.UUID, resolution string, overrides []byte, at time.Time) (model.ConsumptionAnomaly, error) {
+	if f.rec != nil {
+		f.rec.add("resolve")
+	}
 	if f.resolveBarrier != nil {
 		f.resolveBarrier()
 	}

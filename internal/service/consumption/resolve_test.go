@@ -16,6 +16,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -1065,16 +1066,19 @@ func TestConcurrentRunsAreSerializedByTheLockNotByLuck(t *testing.T) {
 
 // TestConcurrentResolvesAreSerializedByTheAnomalysOwnLock is RI-2/I3: two
 // goroutines call ResolveAnomaly for the SAME anomaly at the same time
-// (accepted vs manual_override). getBarrier arms ONLY on ResolveAnomaly's
-// own post-lock re-read (consumption.IsLockedAnomalyRead, never the
-// first, pre-lock existence Get both goroutines always reach immediately),
-// and resolveBarrier additionally gates the write itself — the same
-// two-gate shape TestConcurrentRunsAreSerializedByTheLockNotByLuck uses,
-// for the same reason (a read-only gate lets Go's scheduler run the
-// never-blocked goroutine's whole check-then-act to completion before the
-// other resumes). Removing ResolveAnomaly's own lock/re-read makes this
-// deterministically red: both calls succeed instead of one being a
-// conflict.
+// (accepted vs manual_override). Only resolveBarrier gates: m2-1 found that
+// a Get-only gate is unnecessary here — arming a barrier on ResolveAnomaly's
+// post-lock re-read never distinguishes it from the first, pre-lock
+// existence Get either goroutine reaches immediately, so a Get gate alone
+// would (like RI-1's List finding) let both goroutines meet there
+// regardless of whether the lock later works. resolveBarrier alone already
+// gates the WRITE itself — the same shape
+// TestConcurrentRunsAreSerializedByTheLockNotByLuck uses, for the same
+// reason (a read-only gate lets Go's scheduler run the never-blocked
+// goroutine's whole check-then-act to completion before the other resumes)
+// — and is sufficient: removing ResolveAnomaly's own lock, or removing its
+// locked re-read, each independently makes this deterministically red at
+// -count=10 (both calls succeed instead of one being a conflict).
 func TestConcurrentResolvesAreSerializedByTheAnomalysOwnLock(t *testing.T) {
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -1082,7 +1086,6 @@ func TestConcurrentResolvesAreSerializedByTheAnomalysOwnLock(t *testing.T) {
 	hour := energy.Window{From: resolveT0, To: resolveT0.Add(time.Hour)}
 
 	anomalies := &fakeAnomalies{
-		getBarrier:     raceBarrier(2, 150*time.Millisecond),
 		resolveBarrier: raceBarrier(2, 150*time.Millisecond),
 	}
 	an := anomalies.seed(model.ConsumptionAnomaly{
@@ -1144,6 +1147,66 @@ func TestConcurrentResolvesAreSerializedByTheAnomalysOwnLock(t *testing.T) {
 	}
 	require.Equal(t, 1, oks, "exactly one of two genuinely concurrent resolves must succeed")
 	require.Equal(t, 1, conflicts, "the other must see ErrConflict, never silently overwrite the first")
+}
+
+// TestResolveAnomalyReReadAndResolveHappenInsideTheLock is m2-1's own proof,
+// replacing the deleted production test hook (resolveAnomalyLockedReadContextKey /
+// withLockedAnomalyRead / consumption.IsLockedAnomalyRead): a single,
+// sequential ResolveAnomaly call, with a recorder shared between the
+// fakeLocker (refresh_test.go) and fakeAnomalies. The recorder's event order
+// proves the locked re-read Get and the Resolve call both happen strictly
+// between the lock's own acquire and release — the ordering the deleted
+// context tag used to single out for a barrier, now shown directly from a
+// behavioural fake instead of an exported hook.
+func TestResolveAnomalyReReadAndResolveHappenInsideTheLock(t *testing.T) {
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+	analyzerID := uuid.New()
+	hour := energy.Window{From: resolveT0, To: resolveT0.Add(time.Hour)}
+
+	rec := &recorder{}
+	anomalies := &fakeAnomalies{rec: rec}
+	an := anomalies.seed(model.ConsumptionAnomaly{
+		AnalyzerID: analyzerID, PeriodStart: hour.From, PeriodEnd: hour.To,
+		Reason: "negative_delta", Detail: f3Detail(t, hour, "negative_delta", "active_import"),
+	})
+
+	b, err := consumption.NewBilling(consumption.BillingDeps{
+		Readings: fakeReadings{}, Anomalies: anomalies, Ops: &fakeOps{},
+		Clock: clock.NewFake(resolveT0), Log: testLog(t),
+		Locker: &fakeLocker{rec: rec}, Analyzers: fakeAnalyzers{},
+		Users: fakeUsers{allowAll: true},
+	})
+	require.NoError(t, err)
+
+	_, err = b.ResolveAnomaly(ctx, scope, an.ID, uuid.New(), consumption.Resolution{Mode: consumption.ResolveByAccepting})
+	require.NoError(t, err)
+
+	events := rec.all()
+	acquireIdx, releaseIdx := -1, -1
+	var getIdxs []int
+	resolveIdx := -1
+	for i, e := range events {
+		switch {
+		case strings.HasPrefix(e, "acquire:"):
+			acquireIdx = i
+		case strings.HasPrefix(e, "release:"):
+			releaseIdx = i
+		case e == "get":
+			getIdxs = append(getIdxs, i)
+		case e == "resolve":
+			resolveIdx = i
+		}
+	}
+
+	require.GreaterOrEqual(t, acquireIdx, 0, "the lock must be acquired: %v", events)
+	require.Greater(t, releaseIdx, acquireIdx, "the lock must be released after it is acquired: %v", events)
+	require.Len(t, getIdxs, 2, "expected exactly two Get calls (pre-lock existence, locked re-read): %v", events)
+	require.Less(t, getIdxs[0], acquireIdx, "the first, pre-lock existence Get must happen before the lock is acquired: %v", events)
+	require.Greater(t, getIdxs[1], acquireIdx, "the locked re-read Get must happen after the lock is acquired: %v", events)
+	require.Less(t, getIdxs[1], releaseIdx, "the locked re-read Get must happen before the lock is released: %v", events)
+	require.Greater(t, resolveIdx, acquireIdx, "Resolve must happen after the lock is acquired: %v", events)
+	require.Less(t, resolveIdx, releaseIdx, "Resolve must happen before the lock is released: %v", events)
 }
 
 // TestNilLockerFailsClosedBeforeConsumptionRuns is I-1's own fix: a nil

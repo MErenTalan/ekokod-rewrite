@@ -222,13 +222,18 @@ func (b *Billing) consumptionForAnalyzer(ctx context.Context, sc store.Scope, an
 	}
 
 	if len(gaps) > 0 {
-		// R97 rule 7 / RC-1 point 2: the gap-override lookup runs over
-		// EVERY gap this request found — independent of the clamped
-		// anyReadings/pre-install/now filters above, which only decide
-		// whether a bucket is a gap AT ALL, never whether an already-
-		// resolved override for that gap applies. A bucket that gets a row
-		// this way is removed from gaps: it is either a row or a gap, never
-		// both.
+		// R97 rule 7 / RC-1 point 2 (m2-2): the gap-override lookup runs
+		// only over `gaps` — the buckets that already passed the
+		// anyReadings/pre-install/now filters above. That is fine because,
+		// as of RC-1, those filters are themselves range-independent
+		// (hasPriorReading and earliest are computed from every kind's own
+		// unclamped look-back, not from the loaded/clamped slices), so a
+		// bucket that is a recorded gap today can never later fail them —
+		// earliest only moves earlier and hasPrior only turns true as more
+		// readings are backfilled. The lookup inherits that range
+		// independence rather than needing its own separate, wider query.
+		// A bucket that gets a row this way is removed from gaps: it is
+		// either a row or a gap, never both.
 		overrideRows, remaining, oerr := b.applyResolvedGapOverrides(ctx, sc, analyzerID, gaps, data)
 		if oerr != nil {
 			return nil, nil, oerr

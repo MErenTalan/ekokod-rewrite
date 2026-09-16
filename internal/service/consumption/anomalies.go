@@ -121,6 +121,12 @@ func buildAnomalyDetail(period energy.Window, regs map[energy.Register]energy.Su
 // buildMissingReadingsDetail renders R97's own detail shape: R60's code,
 // period bounds, and "boundaries" naming the unresolved side(s) — no
 // "registers" key at all (there is no derived value to attribute to one).
+// m2-4: boundaries reflects classifyGap's decision AT RECORDING TIME only —
+// a dedup hit on an already-unresolved row (createAnomalyForReason above)
+// keeps this original detail as-is, so a later partial backfill that
+// narrows the live gap (e.g. "start","end" down to just "end") is not
+// reflected here until the row resolves and a fresh gap, if any, is
+// recorded.
 func buildMissingReadingsDetail(period energy.Window, boundaries []string) ([]byte, error) {
 	out := anomalyDetail{
 		Code:        anomalyDetailCode,

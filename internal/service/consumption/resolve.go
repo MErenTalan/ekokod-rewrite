@@ -15,31 +15,6 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
 )
 
-// resolveAnomalyLockedReadContextKey tags, via context, EXACTLY
-// ResolveAnomaly's SECOND AnomalyRepository.Get call — the re-read taken
-// INSIDE the anomaly's own lock (RI-2) — as distinct from the FIRST,
-// pre-lock existence Get. A real AnomalyRepository.Get ignores context
-// values it does not recognise, so this has no production effect; it exists
-// solely so this fix round's own deterministic race test can arm a barrier
-// on exactly this call, the same distinguish-by-shape principle C-6's dedup
-// lock test uses on List's own exact-microsecond Range (dedupAndCreateAnomaly,
-// anomalies.go) rather than on every List/Get call.
-type resolveAnomalyLockedReadContextKey struct{}
-
-// withLockedAnomalyRead tags ctx for the locked re-read above.
-func withLockedAnomalyRead(ctx context.Context) context.Context {
-	return context.WithValue(ctx, resolveAnomalyLockedReadContextKey{}, true)
-}
-
-// IsLockedAnomalyRead reports whether ctx was tagged by
-// withLockedAnomalyRead. Exported ONLY for this fix round's own test
-// (resolve_test.go, RI-2): production AnomalyRepository implementations
-// never call it.
-func IsLockedAnomalyRead(ctx context.Context) bool {
-	v, _ := ctx.Value(resolveAnomalyLockedReadContextKey{}).(bool)
-	return v
-}
-
 // ResolutionMode is 04 §4.4's closed set.
 type ResolutionMode string
 
@@ -150,7 +125,7 @@ func (b *Billing) ResolveAnomaly(ctx context.Context, sc store.Scope, id, resolv
 	}
 	defer b.releaseAnomalyLock(ctx, lease)
 
-	anomaly, err = b.deps.Anomalies.Get(withLockedAnomalyRead(ctx), sc, id)
+	anomaly, err = b.deps.Anomalies.Get(ctx, sc, id)
 	if err != nil {
 		return model.ConsumptionAnomaly{}, err
 	}
@@ -167,10 +142,17 @@ func (b *Billing) ResolveAnomaly(ctx context.Context, sc store.Scope, id, resolv
 	}
 
 	// R103 point 1: an Hourly missing_readings ("gap") row can no longer be
-	// created at all, but this assertion closes the door on one reaching
-	// ResolveAnomaly some other way (a stale row from before this change, a
-	// direct repository write) — resolving it by override or acceptance is
-	// refused outright, matching "no Hourly gap row can exist".
+	// created at all (createMissingReadingsAnomaly only ever runs at
+	// Daily/Monthly/Yearly), so no such row can exist here today. This
+	// assertion is defence in depth, not a live case: it closes the door on
+	// one reaching ResolveAnomaly some other way (a stale row from before
+	// R103, a direct repository write, a future regression in the writer)
+	// — resolving it by override OR acceptance is refused outright, which
+	// is stricter than R103(1) itself needs to say, since the ruling only
+	// has to rule out a row that cannot yet exist. m2-3: this is a
+	// deliberate choice to refuse `accepted` too, not an oversight — a row
+	// this defence ever catches is itself a bug, so there is no legitimate
+	// path that needs `accepted` to close it.
 	if anomaly.Reason == string(energy.ReasonMissingReadings) && r.Mode != ResolveByRegisteringReset {
 		if lvl, ok := inferLevel(energy.Window{From: anomaly.PeriodStart, To: anomaly.PeriodEnd}, istanbul); ok && lvl == energy.Hourly {
 			return model.ConsumptionAnomaly{}, ErrInvalidRequest
