@@ -5,6 +5,7 @@ go 1.27.1
 require (
 	github.com/go-chi/chi/v5 v5.3.2
 	github.com/go-chi/cors v1.2.2
+	github.com/go-pdf/fpdf v0.9.0
 	github.com/google/uuid v1.6.0
 	github.com/hibiken/asynq v0.26.0
 	github.com/jackc/pgx/v5 v5.11.0
@@ -19,6 +20,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/redis v0.44.0
 	github.com/xuri/excelize/v2 v2.10.1
+	golang.org/x/image v0.46.0
 	golang.org/x/time v0.16.0
 	golang.org/x/tools v0.50.0
 )
