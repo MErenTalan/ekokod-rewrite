@@ -16,7 +16,7 @@
 // cross-tenant hole that no test at the request layer will ever catch, because
 // the method itself is exactly as capable as it looks: nothing narrows it.
 //
-// The six interfaces, and why each one cannot take a Scope:
+// The seven interfaces, and why each one cannot take a Scope:
 //
 //   - AdminAuthRepository resolves the two credentials a request presents
 //     BEFORE it has a Scope: a login carries only an email, and a refresh
@@ -57,6 +57,12 @@
 //     credentials, which is backwards — this method is what tells it. It is
 //     a genuine sixth member of this closed list, not an exception to it:
 //     implemented by F2 Task 5.
+//
+//   - AdminAggregateRepository refreshes TimescaleDB continuous aggregates.
+//     refresh_continuous_aggregate takes a time range and nothing else, so a
+//     refresh necessarily covers every tenant's buckets in that range, and a
+//     Scope parameter would be a lie about what the call actually does. It is
+//     a genuine seventh member of this closed list: implemented by F3 Task 6.
 //
 // THE LIST OF METHODS IS CLOSED. A method is added here only when its caller
 // cannot hold a Scope, never because holding one is inconvenient: see each
