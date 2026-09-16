@@ -56,7 +56,7 @@ func Stats(p Profile) Statistics {
 	// Precision, not presentation (R79): DivRound's scale bounds how many
 	// fractional digits this mean keeps internally; it is not display
 	// rounding.
-	mean := sum.DivRound(n, precisionScale)
+	mean := sum.DivRound(n, DivisionScale)
 
 	// R67: population variance — divisor n over the 24 hourly means
 	// themselves (or however many are non-nil), not n-1. These means are
@@ -67,9 +67,9 @@ func Stats(p Profile) Statistics {
 		diff := v.Sub(mean)
 		varianceSum = varianceSum.Add(diff.Mul(diff))
 	}
-	variance := varianceSum.DivRound(n, precisionScale)
+	variance := varianceSum.DivRound(n, DivisionScale)
 
-	stdDev, err := variance.PowWithPrecision(oneHalf, precisionScale)
+	stdDev, err := variance.PowWithPrecision(oneHalf, DivisionScale)
 	if err != nil {
 		// variance is a sum of squares divided by a positive count, so it is
 		// never negative; PowWithPrecision's documented failures (0**0,
@@ -89,7 +89,7 @@ func Stats(p Profile) Statistics {
 		// on an undefined denominator instead of zero.
 		loadFactor = decimal.Zero
 	} else {
-		loadFactor = mean.DivRound(max, precisionScale)
+		loadFactor = mean.DivRound(max, DivisionScale)
 	}
 
 	return Statistics{

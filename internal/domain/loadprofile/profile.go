@@ -6,12 +6,11 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// precisionScale is the decimal.DivRound scale used throughout this
-// package: at least 20 fractional digits of PRECISION, not presentation
-// (R79) — nothing computed here is ever rounded for display; that happens
-// once, elsewhere, when a figure is written to an invoice line or shown to a
-// user.
-const precisionScale = 20
+// DivisionScale is the scale every division in this package is carried to —
+// precision, not presentation (R79) — nothing computed here is ever rounded
+// for display; that happens once, elsewhere, when a figure is written to an
+// invoice line or shown to a user.
+const DivisionScale int32 = 20
 
 // HourValue is one hourly consumption figure. Day is the Istanbul-local
 // calendar date the hour belongs to; Hour is 0-23 (R83).
@@ -74,7 +73,7 @@ func Build(values []HourValue, cfg Config) map[Key]Profile {
 			// Precision, not presentation (R79): DivRound's scale bounds
 			// how many fractional digits are kept, it does not round the
 			// figure for display.
-			mean := acc.sums[h].DivRound(decimal.NewFromInt(int64(acc.counts[h])), precisionScale)
+			mean := acc.sums[h].DivRound(decimal.NewFromInt(int64(acc.counts[h])), DivisionScale)
 			p.Hours[h] = &mean
 		}
 		profiles[key] = p
