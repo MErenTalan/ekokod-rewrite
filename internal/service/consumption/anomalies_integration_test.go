@@ -366,7 +366,13 @@ func TestResolvingAnotherTenantsAnomalyIsNotFound(t *testing.T) {
 	require.Len(t, an, 1)
 
 	// Cross-tenant: tenant A's AdminScope must never resolve tenant B's row.
-	_, err = billing.ResolveAnomaly(ctx, tenantA.AdminScope, an[0].ID, uuid.New(), consumption.Resolution{Mode: consumption.ResolveByAccepting})
+	// I-8: resolvedBy is tenant A's OWN real admin id (never uuid.New()) —
+	// that user WOULD pass AnomalyRepository.Resolve's own resolvedBy check
+	// (it belongs to sc.CompanyID = tenant A), so this only stays
+	// ErrNotFound if Get itself is properly scoped, never because the
+	// resolver id happened to be invalid too.
+	operatorA := tenantA.Users[model.UserRoleCompanyAdmin]
+	_, err = billing.ResolveAnomaly(ctx, tenantA.AdminScope, an[0].ID, operatorA.ID, consumption.Resolution{Mode: consumption.ResolveByAccepting})
 	require.ErrorIs(t, err, store.ErrNotFound)
 
 	// Positive control: the SAME anomaly is real and tenant B can resolve it.
@@ -586,4 +592,99 @@ func TestTwoRegistersSuspectForTheSameReasonWriteOneAnomalyRow(t *testing.T) {
 	regs := detail["registers"].(map[string]any)
 	require.Contains(t, regs, "active_import")
 	require.Contains(t, regs, "t1_import")
+}
+
+// TestNarrowScopeResolvesAnAnomalyOfAnAnalyzerInItsOwnBuilding is I-8/P8: a
+// narrow Scope (Buildings[0] only) can resolve an anomaly for an analyzer
+// under its OWN building; AdminScope is the positive control proving the
+// anomaly is real regardless of which scope reaches it.
+func TestNarrowScopeResolvesAnAnomalyOfAnAnalyzerInItsOwnBuilding(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
+	// tenant.Scope grants Buildings[0] only; Analyzers[0] is under
+	// Buildings[0] (testfixtures' own documented layout).
+	id := tenant.Analyzers[0].ID
+	h := anomaliesEpoch
+
+	readingRepo := pathsNewReadingRepo(pool)
+	anomalyRepo := postgres.NewAnomalyRepository(pool)
+	opsRepo := postgres.NewOpsRepository(pool)
+	analyzerRepo := postgres.NewAnalyzerRepository(pool)
+
+	pathsSeedReading(t, ctx, readingRepo, tenant.AdminScope, readingRow(id, h, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}))
+	pathsSeedReading(t, ctx, readingRepo, tenant.AdminScope, readingRow(id, h.Add(time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "900"}))
+
+	billing := anomaliesNewBilling(t, readingRepo, anomalyRepo, opsRepo, analyzerRepo, lock.NewMemory(nil), h.Add(time.Hour))
+	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{id}, Level: energy.Hourly, Range: store.TimeRange{From: h, To: h.Add(time.Hour)}}
+
+	_, err := billing.ConsumptionAndRecord(ctx, tenant.Scope, req)
+	require.NoError(t, err)
+	an, err := billing.ListAnomalies(ctx, tenant.Scope, consumption.AnomalyListRequest{AnalyzerIDs: []uuid.UUID{id}, Unresolved: true})
+	require.NoError(t, err)
+	require.Len(t, an, 1)
+
+	operator := tenant.Users[model.UserRoleCompanyAdmin]
+	resolved, err := billing.ResolveAnomaly(ctx, tenant.Scope, an[0].ID, operator.ID, consumption.Resolution{Mode: consumption.ResolveByAccepting})
+	require.NoError(t, err, "a narrow Scope must resolve an anomaly for an analyzer in its own building")
+	require.NotNil(t, resolved.ResolvedAt)
+}
+
+// TestNarrowScopeCannotResolveAnAnomalyOfAnAnalyzerInAnotherBuilding is the
+// negative half of P8: tenant.Scope grants Buildings[0] only, and
+// Analyzers[2] is under Buildings[1] — resolving that anomaly through the
+// narrow Scope must be ErrNotFound, while AdminScope succeeds.
+func TestNarrowScopeCannotResolveAnAnomalyOfAnAnalyzerInAnotherBuilding(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
+	require.True(t, len(tenant.Analyzers) > 2, "fixture must have an analyzer outside Buildings[0]")
+	id := tenant.Analyzers[2].ID
+	h := anomaliesEpoch
+
+	readingRepo := pathsNewReadingRepo(pool)
+	anomalyRepo := postgres.NewAnomalyRepository(pool)
+	opsRepo := postgres.NewOpsRepository(pool)
+	analyzerRepo := postgres.NewAnalyzerRepository(pool)
+
+	pathsSeedReading(t, ctx, readingRepo, tenant.AdminScope, readingRow(id, h, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}))
+	pathsSeedReading(t, ctx, readingRepo, tenant.AdminScope, readingRow(id, h.Add(time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "900"}))
+
+	billing := anomaliesNewBilling(t, readingRepo, anomalyRepo, opsRepo, analyzerRepo, lock.NewMemory(nil), h.Add(time.Hour))
+	req := consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{id}, Level: energy.Hourly, Range: store.TimeRange{From: h, To: h.Add(time.Hour)}}
+
+	_, err := billing.ConsumptionAndRecord(ctx, tenant.AdminScope, req)
+	require.NoError(t, err)
+	an, err := billing.ListAnomalies(ctx, tenant.AdminScope, consumption.AnomalyListRequest{AnalyzerIDs: []uuid.UUID{id}, Unresolved: true})
+	require.NoError(t, err)
+	require.Len(t, an, 1)
+
+	operator := tenant.Users[model.UserRoleCompanyAdmin]
+	_, err = billing.ResolveAnomaly(ctx, tenant.Scope, an[0].ID, operator.ID, consumption.Resolution{Mode: consumption.ResolveByAccepting})
+	require.ErrorIs(t, err, store.ErrNotFound, "a narrow Scope must never resolve an anomaly outside its own buildings")
+
+	resolved, err := billing.ResolveAnomaly(ctx, tenant.AdminScope, an[0].ID, operator.ID, consumption.Resolution{Mode: consumption.ResolveByAccepting})
+	require.NoError(t, err, "positive control: AdminScope resolves the same, real anomaly")
+	require.NotNil(t, resolved.ResolvedAt)
+}
+
+// TestListAnomaliesWithEmptyAnalyzerIDsFailsClosed is I-8's mutation (g)
+// pinned directly against the real repository: an empty AnalyzerIDs must
+// never widen to "every analyzer visible to scope".
+func TestListAnomaliesWithEmptyAnalyzerIDsFailsClosed(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
+
+	readingRepo := pathsNewReadingRepo(pool)
+	anomalyRepo := postgres.NewAnomalyRepository(pool)
+	opsRepo := postgres.NewOpsRepository(pool)
+	analyzerRepo := postgres.NewAnalyzerRepository(pool)
+	billing := anomaliesNewBilling(t, readingRepo, anomalyRepo, opsRepo, analyzerRepo, lock.NewMemory(nil), anomaliesEpoch)
+
+	_, err := billing.ListAnomalies(ctx, tenant.AdminScope, consumption.AnomalyListRequest{})
+	require.ErrorIs(t, err, consumption.ErrInvalidRequest)
 }

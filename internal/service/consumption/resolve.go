@@ -34,21 +34,25 @@ const (
 type Resolution struct {
 	Mode ResolutionMode
 	// ResetTS is required for ResolveByRegisteringReset: the instant the
-	// meter was actually reset.
+	// meter was actually reset. C2: period.From < ResetTS <= period.To is
+	// required before any write — R90's equality rule governs ResetTS ==
+	// period.To (handled by energy.Derive itself once the proposed reset is
+	// merged in for re-derivation, not by a separate check here).
 	ResetTS *time.Time
 	// ResetAfter is the meter's values after the reset (required for
 	// ResolveByRegisteringReset).
 	//
-	// R93 (supersedes an earlier I-16 draft; R93 reverses I-16 in the
-	// domain layer too — see energy.Derive's doc comment): ResetAfter MUST
-	// contain a value for EVERY register that the anomaly period's own
-	// boundary readings report (read via the billing path's own boundary
-	// selection for that period, boundaryReadingsForReset below). A reset
-	// row that omits a register both boundaries report makes that register
-	// meter_reset-suspect under R93, so an incomplete operator reset would
-	// turn previously sound registers suspect. A register missing from
-	// ResetAfter here is consumption.ErrInvalidRequest, checked BEFORE any
-	// write — never silently accepted as "no reset evidence for it".
+	// C2 (supersedes R93's own explicit completeness check, which this fix
+	// round deletes as a duplicate of boundary selection): ResetAfter is
+	// never checked against a separately-computed "required registers" set.
+	// Instead the proposed reset is merged into the anomaly's own resets and
+	// the WHOLE period is re-derived, in memory, through Billing's own R96
+	// boundary resolution (rederiveBucketWithReset, billing.go's deriveRow).
+	// A register ResetAfter omits, when both the period's boundaries report
+	// it, comes back meter_reset-suspect from that re-derivation exactly as
+	// R93 requires — and ResolveAnomaly then refuses the whole request
+	// because the re-derivation left ANY register suspect (never only the
+	// ones this anomaly originally named).
 	ResetAfter map[energy.Register]decimal.Decimal
 	// Overrides is required for ResolveByOverride: every key must be one of
 	// the anomaly's own suspect registers (validateOverrideRegisters).
@@ -57,56 +61,81 @@ type Resolution struct {
 
 // ResolveAnomaly resolves one consumption_anomalies row (04 §4.4). It also
 // resolves any F2 ingestion negative_delta anomaly for the SAME analyzer
-// whose [period_start, period_end] lies within this F3 period, applying the
-// SAME resolution to both (I-5) — an operator registering a reset for a
+// whose [period_start, period_end] lies WITHIN this F3 period, applying the
+// SAME resolution to both (I-5, C1) — an operator registering a reset for a
 // billing period should not separately have to clear the ingestion-time row
-// F2 wrote for the same event.
+// F2 wrote for the same event. C1 restricts this cascade to F2-SHAPED rows
+// only (resolveOverlappingIngestionAnomalies below); it never touches
+// another F3 row and never copies override_values onto a cascaded row.
 //
 // Resolution is scoped: sc is forwarded, unmodified, to every repository
 // call. AnomalyRepository.Get/Resolve already return store.ErrNotFound for
 // an anomaly id not visible to sc — resolving another tenant's anomaly is
 // therefore ErrNotFound, never a permission error that would reveal the
 // anomaly's existence.
+//
+// Ordering (I2, I3, M8): every validation and authorization check runs
+// BEFORE any write, in this order — Analyzers dependency presence (only
+// when the mode needs it), the anomaly's own existence/scope (Get),
+// already-resolved conflict (I3), resolvedBy's own company membership
+// (P6), then the mode-specific checks. Writes happen in this order: (1) the
+// reset reading, if any; (2) the F2 cascade (I2: so a resolved F3 row below
+// always means the cascade already finished); (3) the F3 row's own Resolve
+// call, last.
 func (b *Billing) ResolveAnomaly(ctx context.Context, sc store.Scope, id, resolvedBy uuid.UUID, r Resolution) (model.ConsumptionAnomaly, error) {
 	if !sc.Valid() || id == uuid.Nil || resolvedBy == uuid.Nil {
 		return model.ConsumptionAnomaly{}, ErrInvalidRequest
+	}
+	// M8: BillingDeps.Analyzers is checked at the top, before any read, when
+	// the mode will need it — never discovered deep inside buildResetReading
+	// after several reads have already happened.
+	if r.Mode == ResolveByRegisteringReset && b.deps.Analyzers == nil {
+		return model.ConsumptionAnomaly{}, errRequired("BillingDeps.Analyzers")
 	}
 
 	anomaly, err := b.deps.Anomalies.Get(ctx, sc, id)
 	if err != nil {
 		return model.ConsumptionAnomaly{}, err
 	}
+	// I3: re-resolving an already-resolved anomaly is a conflict, never a
+	// silent overwrite of its resolver/resolution/timestamp.
+	if anomaly.ResolvedAt != nil {
+		return model.ConsumptionAnomaly{}, ErrConflict
+	}
+	// P6/I2: resolvedBy's own company membership is validated BEFORE any
+	// write, not discovered only by AnomalyRepository.Resolve's own SQL
+	// check after a reset reading has already been written. Optional: left
+	// nil, this pre-check is skipped and Resolve's own check is the only
+	// guard (unchanged behaviour).
+	if b.deps.Users != nil {
+		if _, err := b.deps.Users.Get(ctx, sc, resolvedBy); err != nil {
+			return model.ConsumptionAnomaly{}, err
+		}
+	}
 
 	var overridesJSON []byte
 	switch r.Mode {
 	case ResolveByRegisteringReset:
-		if r.ResetTS == nil || len(r.ResetAfter) == 0 {
+		// R97 rule 6: a missing_readings anomaly has no meter to reset —
+		// there is no boundary reading to be wrong, only readings that never
+		// arrived.
+		if anomaly.Reason == string(energy.ReasonMissingReadings) {
 			return model.ConsumptionAnomaly{}, ErrInvalidRequest
 		}
-		required, rerr := b.requiredResetRegisters(ctx, sc, anomaly)
-		if rerr != nil {
-			return model.ConsumptionAnomaly{}, rerr
-		}
-		for reg := range required {
-			if _, ok := r.ResetAfter[reg]; !ok {
-				// R93: an incomplete reset row would make a previously
-				// sound register suspect — refused before any write.
-				return model.ConsumptionAnomaly{}, ErrInvalidRequest
-			}
-		}
-
-		reading, berr := b.buildResetReading(ctx, sc, anomaly.AnalyzerID, *r.ResetTS, r.ResetAfter)
-		if berr != nil {
-			return model.ConsumptionAnomaly{}, berr
-		}
-		// If this insert fails, the anomaly is NOT marked resolved (this
-		// return happens before AnomalyRepository.Resolve is ever called).
-		if _, _, ierr := b.deps.Readings.BulkInsert(ctx, sc, []model.MeterReading{reading}); ierr != nil {
-			return model.ConsumptionAnomaly{}, ierr
+		if err := b.validateAndPrepareReset(ctx, sc, anomaly, r); err != nil {
+			return model.ConsumptionAnomaly{}, err
 		}
 
 	case ResolveByOverride:
-		if verr := validateOverrideRegisters(anomaly, r.Overrides); verr != nil {
+		if anomaly.Reason == string(energy.ReasonMissingReadings) {
+			// R97 rule 6: manual_override accepts ANY register — there is
+			// no suspect-register set to validate against, since a
+			// missing_readings anomaly's own detail carries no registers.
+			// M4: every key must still be a real register.
+			if len(r.Overrides) == 0 || !allRegistersValid(r.Overrides) {
+				return model.ConsumptionAnomaly{}, ErrInvalidRequest
+			}
+		} else if verr := validateOverrideRegisters(anomaly, r.Overrides); verr != nil {
 			return model.ConsumptionAnomaly{}, verr
 		}
 		overridesJSON, err = encodeOverrideValues(r.Overrides)
@@ -123,17 +152,150 @@ func (b *Billing) ResolveAnomaly(ctx context.Context, sc store.Scope, id, resolv
 		return model.ConsumptionAnomaly{}, ErrInvalidRequest
 	}
 
+	// I2: the F2 cascade runs BEFORE the F3 row itself is marked resolved,
+	// so a resolved F3 row is proof the cascade already finished — never the
+	// other way around (C4 mutation (b)).
 	at := b.deps.Clock.Now()
+	if anomaly.Reason != string(energy.ReasonMissingReadings) {
+		// R97 rule 6: no F2 cascade for a missing_readings resolution.
+		if err := b.resolveOverlappingIngestionAnomalies(ctx, sc, anomaly, resolvedBy, string(r.Mode), at); err != nil {
+			return model.ConsumptionAnomaly{}, err
+		}
+	}
+
 	resolved, err := b.deps.Anomalies.Resolve(ctx, sc, id, resolvedBy, string(r.Mode), overridesJSON, at)
 	if err != nil {
 		return model.ConsumptionAnomaly{}, err
 	}
+	return resolved, nil
+}
 
-	if err := b.resolveOverlappingIngestionAnomalies(ctx, sc, anomaly, resolvedBy, string(r.Mode), overridesJSON, at); err != nil {
-		return model.ConsumptionAnomaly{}, err
+// validateAndPrepareReset implements C2: before any write, it rebuilds the
+// period's own boundaries and re-derives the WHOLE window in memory, through
+// Billing's own R96 resolver, with the proposed reset merged into the
+// resets slice — never a second, independently-maintained boundary
+// selection. It then inserts the actual reset reading once that
+// re-derivation comes back clean. Nothing is written if any check fails.
+func (b *Billing) validateAndPrepareReset(ctx context.Context, sc store.Scope, anomaly model.ConsumptionAnomaly, r Resolution) error {
+	if r.ResetTS == nil || len(r.ResetAfter) == 0 {
+		return ErrInvalidRequest
+	}
+	// M4: every key must be a real register — setRegisterOnReading silently
+	// drops an unrecognised one, which would otherwise let a typo'd key
+	// through as if it carried no reset evidence at all.
+	if !allRegistersValid(r.ResetAfter) {
+		return ErrInvalidRequest
+	}
+	period := energy.Window{From: anomaly.PeriodStart, To: anomaly.PeriodEnd}
+	// C2: period.From < ResetTS <= period.To.
+	if !r.ResetTS.After(period.From) || r.ResetTS.After(period.To) {
+		return ErrInvalidRequest
 	}
 
-	return resolved, nil
+	proposed := energy.Reading{TS: *r.ResetTS, Kind: energy.KindReset, Values: make(map[energy.Register]*decimal.Decimal, len(r.ResetAfter))}
+	for reg, v := range r.ResetAfter {
+		val := v
+		proposed.Values[reg] = &val
+	}
+
+	row, ok, err := b.rederiveBucketWithReset(ctx, sc, anomaly.AnalyzerID, period, proposed)
+	if err != nil {
+		return err
+	}
+	// C2: the re-derivation must emit a row with NO suspect register — a
+	// partial or misplaced reset leaves at least one register suspect and
+	// is rejected outright, never partially applied.
+	if !ok || len(row.Suspect) != 0 {
+		return ErrInvalidRequest
+	}
+
+	// I7: BulkInsert is an upsert on (analyzer_id, ts, kind) — an operator
+	// reset at a ts a provider reset already occupies must never silently
+	// overwrite it. Identical values are an idempotent retry (allowed);
+	// different values are a conflict.
+	existingRows, err := b.deps.Readings.Range(ctx, sc, anomaly.AnalyzerID, store.TimeRange{From: *r.ResetTS, To: r.ResetTS.Add(time.Microsecond)}, model.ReadingKindReset)
+	if err != nil {
+		return err
+	}
+	for _, ex := range existingRows {
+		if ex.Ts.Equal(*r.ResetTS) && !resetValuesEqual(ex, r.ResetAfter) {
+			return ErrConflict
+		}
+	}
+
+	reading, berr := b.buildResetReading(ctx, sc, anomaly.AnalyzerID, *r.ResetTS, r.ResetAfter)
+	if berr != nil {
+		return berr
+	}
+	// If this insert fails, the anomaly is NOT marked resolved: this
+	// function returns before ResolveAnomaly ever calls
+	// AnomalyRepository.Resolve.
+	if _, _, ierr := b.deps.Readings.BulkInsert(ctx, sc, []model.MeterReading{reading}); ierr != nil {
+		return ierr
+	}
+	return nil
+}
+
+// resetValuesEqual implements I7's "identical values" check: every register
+// in after must equal existing's own value for that register exactly
+// (decimal.Equal), and existing must report no OTHER register beyond after
+// — anything else is a genuine conflict, not an idempotent retry.
+func resetValuesEqual(existing model.MeterReading, after map[energy.Register]decimal.Decimal) bool {
+	ex := toEnergyReading(existing)
+	seen := make(map[energy.Register]bool, len(after))
+	for reg, v := range after {
+		seen[reg] = true
+		ev := ex.Value(reg)
+		if ev == nil || !ev.Equal(v) {
+			return false
+		}
+	}
+	for _, reg := range energy.AllRegisters() {
+		if seen[reg] {
+			continue
+		}
+		if ex.Value(reg) != nil {
+			return false
+		}
+	}
+	return true
+}
+
+// rederiveBucketWithReset implements C2's in-memory re-derivation: it loads
+// the SAME data loadAnalyzerBoundaryData would load for a one-bucket request
+// over period, then derives that one bucket with proposed merged into the
+// resets slice — reusing deriveRow (billing.go), never a second boundary
+// selection. inferLevel recovers the level a period this package itself
+// created was originally bucketed at (I5): a period that is not exactly one
+// whole bucket at any level is ErrInvalidRequest.
+func (b *Billing) rederiveBucketWithReset(ctx context.Context, sc store.Scope, analyzerID uuid.UUID, period energy.Window, proposed energy.Reading) (Row, bool, error) {
+	level, ok := inferLevel(period, istanbul)
+	if !ok {
+		return Row{}, false, ErrInvalidRequest
+	}
+	data, err := b.loadAnalyzerBoundaryData(ctx, sc, analyzerID, level, []energy.Window{period})
+	if err != nil {
+		return Row{}, false, err
+	}
+	row, ok := deriveRow(analyzerID, period, data, []energy.Reading{proposed})
+	return row, ok, nil
+}
+
+// allRegistersValid implements M4: every key of m must be one of
+// energy.AllRegisters() — setRegisterOnReading (below) silently drops any
+// other key, which would otherwise let a typo'd register name through as if
+// it simply carried no evidence at all.
+func allRegistersValid[V any](m map[energy.Register]V) bool {
+	valid := make(map[energy.Register]bool, len(energy.AllRegisters()))
+	for _, reg := range energy.AllRegisters() {
+		valid[reg] = true
+	}
+	for reg := range m {
+		if !valid[reg] {
+			return false
+		}
+	}
+	return true
 }
 
 // validateOverrideRegisters implements "an unknown register is
@@ -166,41 +328,16 @@ func encodeOverrideValues(overrides map[energy.Register]decimal.Decimal) ([]byte
 	return json.Marshal(m)
 }
 
-// requiredResetRegisters implements R93: the set of registers the anomaly
-// period's OWN boundary readings both report, via the billing path's own
-// boundary selection (boundaryReadingsForReset) — never a plain "every
-// register that ever appears anywhere".
-func (b *Billing) requiredResetRegisters(ctx context.Context, sc store.Scope, anomaly model.ConsumptionAnomaly) (map[energy.Register]bool, error) {
-	period := energy.Window{From: anomaly.PeriodStart, To: anomaly.PeriodEnd}
-	start, end, err := b.boundaryReadingsForReset(ctx, sc, anomaly.AnalyzerID, period)
-	if err != nil {
-		return nil, err
-	}
-	return registersReportedByBoth(start, end), nil
-}
-
-// registersReportedByBoth returns the registers BOTH start and end report a
-// non-nil value for (R93's "every register that the anomaly period's
-// boundary readings report").
-func registersReportedByBoth(start, end *energy.Reading) map[energy.Register]bool {
-	out := make(map[energy.Register]bool)
-	if start == nil || end == nil {
-		return out
-	}
-	for _, reg := range energy.AllRegisters() {
-		if start.Value(reg) != nil && end.Value(reg) != nil {
-			out[reg] = true
-		}
-	}
-	return out
-}
-
 // inferLevel recovers the energy.Level a (start, end) period was originally
 // bucketed at: every period this package ever creates an anomaly for is
 // exactly one energy.Buckets() window, so trying each of the four levels'
 // own whole-bucket window at period.From and matching it against period
 // exactly recovers the level with no ambiguity — ConsumptionAnomaly has no
-// Level column to read it back from directly (04 §4.4 defines none).
+// Level column to read it back from directly (04 §4.4 defines none). A
+// period that is not exactly one whole bucket at any level is I5's own
+// "not a bucket" case: the caller treats !ok as ErrInvalidRequest rather
+// than silently guessing Hourly (the guess that let mutations (e)/(e2)
+// through in the prior round).
 func inferLevel(period energy.Window, loc *time.Location) (energy.Level, bool) {
 	for _, lvl := range []energy.Level{energy.Hourly, energy.Daily, energy.Monthly, energy.Yearly} {
 		b := energy.Bucket(lvl, period.From, loc)
@@ -209,82 +346,6 @@ func inferLevel(period energy.Window, loc *time.Location) (energy.Level, bool) {
 		}
 	}
 	return "", false
-}
-
-// boundaryReadingsForReset determines the two boundary readings the billing
-// path's own selection (selectBoundarySource, billing.go — same package,
-// reused rather than duplicated) would use for period, for R93's
-// completeness check. It mirrors consumptionForAnalyzer's per-window
-// selection but loads readings for exactly the one window an operator is
-// resolving, not a whole request.
-func (b *Billing) boundaryReadingsForReset(ctx context.Context, sc store.Scope, analyzerID uuid.UUID, period energy.Window) (start, end *energy.Reading, err error) {
-	level, ok := inferLevel(period, istanbul)
-	if !ok {
-		// Should not happen for a period this package itself created —
-		// fall back to the narrowest, safest source rather than fail.
-		level = energy.Hourly
-	}
-
-	lpLookback, err := b.firstBoundaryLookback(ctx, sc, analyzerID, model.ReadingKindLoadProfile, period)
-	if err != nil {
-		return nil, nil, err
-	}
-	minLookback := lpLookback
-
-	useBilling := level == energy.Monthly
-	var billingLookback time.Time
-	if useBilling {
-		billingLookback, err = b.firstBoundaryLookback(ctx, sc, analyzerID, model.ReadingKindBilling, period)
-		if err != nil {
-			return nil, nil, err
-		}
-		if billingLookback.Before(minLookback) {
-			minLookback = billingLookback
-		}
-	}
-
-	useDaily := level != energy.Hourly
-	var dailyLookback time.Time
-	if useDaily {
-		dailyLookback, err = b.firstBoundaryLookback(ctx, sc, analyzerID, model.ReadingKindDaily, period)
-		if err != nil {
-			return nil, nil, err
-		}
-		if dailyLookback.Before(minLookback) {
-			minLookback = dailyLookback
-		}
-	}
-
-	rangeTo := period.To.Add(time.Microsecond)
-
-	lpRows, err := b.deps.Readings.Range(ctx, sc, analyzerID, store.TimeRange{From: minLookback, To: rangeTo}, model.ReadingKindLoadProfile)
-	if err != nil {
-		return nil, nil, err
-	}
-	loadProfile := toEnergyReadings(lpRows)
-
-	var billing []energy.Reading
-	if useBilling {
-		billingRows, berr := b.deps.Readings.Range(ctx, sc, analyzerID, store.TimeRange{From: billingLookback, To: rangeTo}, model.ReadingKindBilling)
-		if berr != nil {
-			return nil, nil, berr
-		}
-		billing = toEnergyReadings(billingRows)
-	}
-
-	var daily []energy.Reading
-	if useDaily {
-		dailyRows, derr := b.deps.Readings.Range(ctx, sc, analyzerID, store.TimeRange{From: dailyLookback, To: rangeTo}, model.ReadingKindDaily)
-		if derr != nil {
-			return nil, nil, derr
-		}
-		daily = toEnergyReadings(dailyRows)
-	}
-
-	boundaryReadings := selectBoundarySource(level, period, loadProfile, billing, daily)
-	start = energy.SelectBoundary(boundaryReadings, period.From)
-	end = energy.SelectBoundary(boundaryReadings, period.To)
-	return start, end, nil
 }
 
 // buildResetReading builds the kind=reset row ResolveByRegisteringReset
@@ -348,15 +409,22 @@ func setRegisterOnReading(r *model.MeterReading, reg energy.Register, v *decimal
 	}
 }
 
-// resolveOverlappingIngestionAnomalies implements I-5: every UNRESOLVED
-// negative_delta anomaly for the SAME analyzer (never another one) whose
-// period lies within [anomaly.PeriodStart, anomaly.PeriodEnd] is resolved
-// with the SAME resolution, resolver and timestamp as the F3 row just
-// resolved above. It never touches another reason's rows (the Reason filter)
-// or the F3 row itself (the id check).
-func (b *Billing) resolveOverlappingIngestionAnomalies(ctx context.Context, sc store.Scope, anomaly model.ConsumptionAnomaly, resolvedBy uuid.UUID, resolution string, overrides []byte, at time.Time) error {
+// resolveOverlappingIngestionAnomalies implements C1 (amending I-5): every
+// UNRESOLVED F2-SHAPED negative_delta anomaly for the SAME analyzer whose
+// period lies FULLY WITHIN [anomaly.PeriodStart, anomaly.PeriodEnd] is
+// resolved with the SAME resolution and resolver as the F3 row being
+// resolved — but NEVER with override_values copied onto it (C1(b): the
+// cascaded row's own OverrideValues column is always nil, whatever the F3
+// resolution carries). It is F2-shaped exactly when: reason ==
+// negative_delta AND the detail decodes to F2's own shape
+// ({"register","kind"}, no "code" field) — never an F3 row (reason
+// negative_delta but detail.code == "consumption.suspect_period") and never
+// a row of any other reason. It never touches another reason's rows (the
+// Reason filter), another analyzer's rows (the AnalyzerIDs filter), or the
+// F3 row itself (the id check).
+func (b *Billing) resolveOverlappingIngestionAnomalies(ctx context.Context, sc store.Scope, anomaly model.ConsumptionAnomaly, resolvedBy uuid.UUID, resolution string, at time.Time) error {
 	reason := string(energy.ReasonNegativeDelta)
-	candidates, err := b.deps.Anomalies.List(ctx, sc, store.AnomalyFilter{
+	candidates, err := b.listAllAnomalies(ctx, sc, store.AnomalyFilter{
 		AnalyzerIDs: []uuid.UUID{anomaly.AnalyzerID},
 		Reason:      &reason,
 		Unresolved:  true,
@@ -370,12 +438,42 @@ func (b *Billing) resolveOverlappingIngestionAnomalies(ctx context.Context, sc s
 		if c.ID == anomaly.ID {
 			continue
 		}
+		// C1: FULL containment, never mere overlap (C4 mutation (d)).
 		if c.PeriodStart.Before(anomaly.PeriodStart) || c.PeriodEnd.After(anomaly.PeriodEnd) {
 			continue
 		}
-		if _, err := b.deps.Anomalies.Resolve(ctx, sc, c.ID, resolvedBy, resolution, overrides, at); err != nil {
+		if !isF2ShapedDetail(c.Detail) {
+			continue
+		}
+		// C1(b): override_values is NEVER copied onto a cascaded row,
+		// whatever the F3 resolution's own overrides carry.
+		if _, err := b.deps.Anomalies.Resolve(ctx, sc, c.ID, resolvedBy, resolution, nil, at); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// f2AnomalyDetail is F2's own detail shape (internal/ingest/anomaly.go,
+// R59): one row per affected register, {"register":"active_import",
+// "kind":"load_profile"} — no "code" field, unlike F3's anomalyDetail
+// (anomalies.go). isF2ShapedDetail distinguishes the two so C1's cascade
+// never touches an F3 row (Hourly/Daily/Monthly/Yearly rows sharing the
+// negative_delta reason and, on occasion, a bucket-aligned (start,end)
+// pair with an F2 row).
+type f2AnomalyDetail struct {
+	Register string `json:"register"`
+	Kind     string `json:"kind"`
+	Code     string `json:"code,omitempty"`
+}
+
+// isF2ShapedDetail reports whether detail decodes to F2's own shape: both
+// "register" and "kind" present, and NO "code" field (F3's own detail
+// always carries "code":"consumption.suspect_period" — R60/C1(a)).
+func isF2ShapedDetail(detail json.RawMessage) bool {
+	var d f2AnomalyDetail
+	if err := json.Unmarshal(detail, &d); err != nil {
+		return false
+	}
+	return d.Register != "" && d.Kind != "" && d.Code == ""
 }

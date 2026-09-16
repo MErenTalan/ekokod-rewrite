@@ -2,6 +2,7 @@ package consumption
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sort"
 	"time"
@@ -38,6 +39,13 @@ type BillingDeps struct {
 	// ResolveAnomaly (ResolveByRegisteringReset) writes an operator-entered
 	// reset reading. Required only by ResolveAnomaly.
 	Analyzers store.AnalyzerRepository
+	// Users validates that ResolveAnomaly's resolvedBy is a real user of
+	// sc.CompanyID BEFORE any write (review I2/P6: a resolvedBy rejected only
+	// by AnomalyRepository.Resolve's own SQL check let the reset reading get
+	// written first, unresolved). Optional like Analyzers: left nil, this
+	// pre-check is skipped and AnomalyRepository.Resolve's own check is the
+	// only guard, exactly as before this fix round.
+	Users store.UserRepository
 }
 
 // Billing is the exact, hypertable-only consumption path. There is no
@@ -77,31 +85,73 @@ func NewBilling(d BillingDeps) (*Billing, error) {
 // anomaly row and the operator message is Task 8's ConsumptionAndRecord
 // wrapper, on the same type.
 func (b *Billing) Consumption(ctx context.Context, sc store.Scope, req SeriesRequest) ([]Row, error) {
+	rows, _, err := b.consumptionWithGaps(ctx, sc, req)
+	return rows, err
+}
+
+// bucketGap is R97's own type: one requested bucket that produced no row,
+// and which of its two boundary instants (in "start", "end" order) R96's
+// per-instant resolver could not resolve. Window is req.Level's own whole
+// bucket, never a clipped one.
+type bucketGap struct {
+	Window     energy.Window
+	Boundaries []string
+}
+
+// consumptionWithGaps is Consumption's own implementation, extended (R97) to
+// also return each analyzer's gaps: the requested buckets that produced no
+// row, alongside which boundary side(s) R96 could not resolve. Consumption
+// itself (above) discards the second return value — only
+// ConsumptionAndRecord (anomalies.go) needs it, to write one
+// missing_readings anomaly per gap. Splitting this way, rather than
+// recomputing gaps with a second pass, means ConsumptionAndRecord never
+// re-derives a bucket Consumption already derived (R97 spec point 1).
+func (b *Billing) consumptionWithGaps(ctx context.Context, sc store.Scope, req SeriesRequest) ([]Row, map[uuid.UUID][]bucketGap, error) {
 	if err := validateRequest(sc, req); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	window := energy.Window{From: req.Range.From, To: req.Range.To}
 	buckets := energy.Buckets(req.Level, window, istanbul)
 	if len(buckets) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	var rows []Row
+	gapsByAnalyzer := make(map[uuid.UUID][]bucketGap, len(req.AnalyzerIDs))
 	for _, analyzerID := range req.AnalyzerIDs {
-		analyzerRows, err := b.consumptionForAnalyzer(ctx, sc, analyzerID, req.Level, buckets)
+		analyzerRows, gaps, err := b.consumptionForAnalyzer(ctx, sc, analyzerID, req.Level, buckets)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
+		}
+		if len(gaps) > 0 {
+			// R97 rule 7: a gap bucket with a resolved manual_override
+			// missing_readings anomaly emits a row from the override
+			// values, IN BUCKET ORDER — never appended after the analyzer's
+			// other rows. A bucket that gets a row this way is removed from
+			// gaps: it is either a row or a gap, never both.
+			overrideRows, remaining, err := b.applyResolvedGapOverrides(ctx, sc, req.Level, analyzerID, gaps)
+			if err != nil {
+				return nil, nil, err
+			}
+			if len(overrideRows) > 0 {
+				analyzerRows = append(analyzerRows, overrideRows...)
+				sort.Slice(analyzerRows, func(i, j int) bool { return analyzerRows[i].Window.From.Before(analyzerRows[j].Window.From) })
+			}
+			gaps = remaining
 		}
 		rows = append(rows, analyzerRows...)
+		if len(gaps) > 0 {
+			gapsByAnalyzer[analyzerID] = gaps
+		}
 	}
 	// C-6: a resolved manual_override/accepted anomaly must be reflected by
 	// Consumption itself, not only by Task 8's ConsumptionAndRecord wrapper
 	// — applyResolvedAnomalies (anomalies.go) post-processes rows in place.
 	if err := b.applyResolvedAnomalies(ctx, sc, rows); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return rows, nil
+	return rows, gapsByAnalyzer, nil
 }
 
 // consumptionForAnalyzer implements I-17's query shape for one analyzer:
@@ -116,13 +166,292 @@ func (b *Billing) Consumption(ctx context.Context, sc store.Scope, req SeriesReq
 // loading resets only from load_profile's look-back silently drops it, and
 // the derived number comes out wrong instead of suspect (the review's P1
 // probe: 4150 instead of the true 5150, unflagged).
-func (b *Billing) consumptionForAnalyzer(ctx context.Context, sc store.Scope, analyzerID uuid.UUID, level energy.Level, buckets []energy.Window) ([]Row, error) {
+func (b *Billing) consumptionForAnalyzer(ctx context.Context, sc store.Scope, analyzerID uuid.UUID, level energy.Level, buckets []energy.Window) ([]Row, []bucketGap, error) {
+	data, err := b.loadAnalyzerBoundaryData(ctx, sc, analyzerID, level, buckets)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// R97 spec point 3: "no readings at all" — every boundary-kind slice
+	// already loaded for the analyzer at this level is empty — means nothing
+	// to bill and nothing missing, so no gap is ever recorded for this
+	// analyzer's request, regardless of how many buckets produced no row.
+	anyReadings := len(data.loadProfile) > 0 ||
+		(data.useBilling && len(data.billing) > 0) ||
+		(data.useDaily && len(data.daily) > 0)
+	now := b.deps.Clock.Now()
+	earliest := earliestBoundaryReading(data)
+
+	rows := make([]Row, 0, len(buckets))
+	var gaps []bucketGap
+	for _, w := range buckets {
+		row, ok := deriveRow(analyzerID, w, data, nil)
+		if ok {
+			rows = append(rows, row)
+			continue
+		}
+		// 02 §3.1: no row, never a zero row. Task 7's plain Consumption
+		// never writes missing_readings — that is Task 8's
+		// ConsumptionAndRecord, only for a specifically requested billing
+		// period, and only when the analyzer has readings at all (above).
+		if !anyReadings {
+			continue
+		}
+		// R97 ruling (i): a bucket still open or in the future never gets a
+		// gap — otherwise every run over the current, still-accruing period
+		// would write one.
+		if w.To.After(now) {
+			continue
+		}
+		// R97 ruling (ii): a bucket that ends at or before the analyzer's
+		// first-ever boundary reading is pre-installation, not missing.
+		if earliest != nil && !w.To.After(*earliest) {
+			continue
+		}
+		boundaries, gapErr := classifyGap(w, data.resolved)
+		if gapErr != nil {
+			return nil, nil, gapErr
+		}
+		gaps = append(gaps, bucketGap{Window: w, Boundaries: boundaries})
+	}
+	return rows, gaps, nil
+}
+
+// earliestBoundaryReading returns the earliest ts among every boundary-kind
+// slice ALREADY LOADED for this request (R97 spec point 3's own phrasing —
+// never a fresh, unbounded query): the minimum of each loaded kind's own
+// first element, since every slice is sorted ascending by ts.
+func earliestBoundaryReading(data analyzerBoundaryData) *time.Time {
+	var earliest *time.Time
+	consider := func(readings []energy.Reading) {
+		if len(readings) == 0 {
+			return
+		}
+		t := readings[0].TS
+		if earliest == nil || t.Before(*earliest) {
+			earliest = &t
+		}
+	}
+	consider(data.loadProfile)
+	if data.useBilling {
+		consider(data.billing)
+	}
+	if data.useDaily {
+		consider(data.daily)
+	}
+	return earliest
+}
+
+// applyResolvedGapOverrides implements R97 rule 7: for each of analyzerID's
+// gaps, look up a resolved manual_override missing_readings anomaly for
+// EXACTLY that bucket and, when one exists, synthesize the row it describes
+// — Values from the overrides, Indexes from the end boundary reading (nil
+// when there is none), MaxDemandKw from the same maxDemandInWindow helper
+// every other row uses, ratios from the overridden values. It returns the
+// synthesized rows and the gaps that did NOT resolve to an override (still
+// genuine gaps, for the caller to write a missing_readings anomaly for).
+func (b *Billing) applyResolvedGapOverrides(ctx context.Context, sc store.Scope, level energy.Level, analyzerID uuid.UUID, gaps []bucketGap) ([]Row, []bucketGap, error) {
+	from, to := gaps[0].Window.From, gaps[0].Window.To
+	for _, g := range gaps[1:] {
+		if g.Window.From.Before(from) {
+			from = g.Window.From
+		}
+		if g.Window.To.After(to) {
+			to = g.Window.To
+		}
+	}
+
+	reason := string(energy.ReasonMissingReadings)
+	anomalies, err := b.listAllAnomalies(ctx, sc, store.AnomalyFilter{
+		AnalyzerIDs: []uuid.UUID{analyzerID},
+		Reason:      &reason,
+		Range:       &store.TimeRange{From: from, To: to.Add(time.Microsecond)},
+	})
+	if err != nil {
+		return nil, gaps, err
+	}
+
+	byPeriod := make(map[anomalyPeriodKey]model.ConsumptionAnomaly, len(anomalies))
+	for _, a := range anomalies {
+		if a.ResolvedAt == nil || a.Resolution == nil || *a.Resolution != string(ResolveByOverride) {
+			continue
+		}
+		byPeriod[anomalyPeriodKey{a.PeriodStart.UnixNano(), a.PeriodEnd.UnixNano()}] = a
+	}
+	if len(byPeriod) == 0 {
+		return nil, gaps, nil
+	}
+
+	var overrideRows []Row
+	remaining := make([]bucketGap, 0, len(gaps))
+	for _, g := range gaps {
+		key := anomalyPeriodKey{g.Window.From.UnixNano(), g.Window.To.UnixNano()}
+		a, ok := byPeriod[key]
+		if !ok {
+			remaining = append(remaining, g)
+			continue
+		}
+
+		overrides, derr := decodeOverrideValues(a.OverrideValues)
+		if derr != nil {
+			return nil, gaps, derr
+		}
+		// The same one-bucket load C2's rederiveBucketWithReset uses, only
+		// to read the end boundary and the MaxDemand sources — no boundary
+		// selection is duplicated, this reuses loadAnalyzerBoundaryData.
+		data, lerr := b.loadAnalyzerBoundaryData(ctx, sc, analyzerID, level, []energy.Window{g.Window})
+		if lerr != nil {
+			return nil, gaps, lerr
+		}
+		end := data.resolved[g.Window.To.UnixNano()]
+
+		values := make(map[energy.Register]*decimal.Decimal, len(overrides))
+		resolution := make(map[energy.Register]string, len(overrides))
+		for reg, v := range overrides {
+			val := v
+			values[reg] = &val
+			resolution[reg] = string(ResolveByOverride)
+		}
+		row := Row{
+			AnalyzerID:  analyzerID,
+			Window:      g.Window,
+			Values:      values,
+			Indexes:     endIndexes(end),
+			MaxDemandKw: maxDemandInWindow(g.Window, data.loadProfile, data.daily, data.maxDemandBilling),
+			Resolution:  resolution,
+		}
+		if end != nil {
+			row.Source = end.Kind
+		}
+		row.InductiveRatio = energy.Ratio(values[energy.ReactiveInductiveImport], values[energy.ActiveImport])
+		row.CapacitiveRatio = energy.Ratio(values[energy.ReactiveCapacitiveImport], values[energy.ActiveImport])
+		overrideRows = append(overrideRows, row)
+	}
+	return overrideRows, remaining, nil
+}
+
+// classifyGap implements R97 spec point 2: with start/end the resolved
+// readings at w's own two boundary instants, names which side(s) a bucket
+// that produced no row is missing, in "start" then "end" order. When both
+// are non-nil but landed on the exact same reading (R92: a zero-width pair
+// never emits), the gap is reported as the end side only — the bucket
+// AFTER this one starts fresh from that same reading, so from this bucket's
+// own point of view it is the end that never arrived. Any other combination
+// that still failed to emit is an internal invariant violation (Derive's
+// only "no row" causes are a nil boundary, equal-instant boundaries, or
+// reversed boundaries — the last never occurs for a real bucket) and is
+// reported as an error rather than silently skipped.
+func classifyGap(w energy.Window, resolved map[int64]*energy.Reading) ([]string, error) {
+	start := resolved[w.From.UnixNano()]
+	end := resolved[w.To.UnixNano()]
+	switch {
+	case start == nil && end == nil:
+		return []string{"start", "end"}, nil
+	case start == nil:
+		return []string{"start"}, nil
+	case end == nil:
+		return []string{"end"}, nil
+	case start.TS.Equal(end.TS):
+		return []string{"end"}, nil
+	default:
+		return nil, fmt.Errorf("consumption: bucket %s-%s produced no row despite distinct resolved boundaries", w.From, w.To)
+	}
+}
+
+// analyzerBoundaryData is everything loadAnalyzerBoundaryData loads once per
+// (analyzer, request) and resolveBoundaries resolves once per boundary
+// instant — extracted so C2's in-memory reset re-derivation
+// (rederiveBucketWithReset, resolve.go) can reuse the EXACT same loads and
+// the EXACT same per-instant boundary resolution deriveRow uses, rather than
+// duplicating either (the copied selection logic R96 made stale is exactly
+// what this fix round deletes).
+type analyzerBoundaryData struct {
+	loadProfile, billing, daily, resets, priors []energy.Reading
+	maxDemandBilling                            []energy.Reading
+	useBilling, useDaily                        bool
+	resolved                                    map[int64]*energy.Reading
+}
+
+// deriveRow derives ONE bucket's Row from already-loaded data, optionally
+// with extraResets merged in (C2: an operator's proposed reset, checked in
+// memory before anything is written). It returns ok=false exactly when
+// energy.Derive did not emit (see classifyGap's doc for the exhaustive
+// list) — the caller decides what "no row" means for its own purpose
+// (Consumption: omit; ConsumptionAndRecord: a gap; ResolveAnomaly: reject).
+func deriveRow(analyzerID uuid.UUID, w energy.Window, data analyzerBoundaryData, extraResets []energy.Reading) (Row, bool) {
+	start := data.resolved[w.From.UnixNano()]
+	end := data.resolved[w.To.UnixNano()]
+
+	resets := data.resets
+	if len(extraResets) > 0 {
+		// C2/I7: an injected reset SUPERSEDES any existing reset at the same
+		// instant, matching what ReadingRepository.BulkInsert's own upsert
+		// would actually produce in the database afterward — never a
+		// duplicate reading at one ts, which would make deriveRegister's own
+		// before-reset lookup between two same-instant segments
+		// unsatisfiable (a spurious meter_reset suspicion with nothing
+		// actually wrong).
+		extraTS := make(map[int64]bool, len(extraResets))
+		for _, e := range extraResets {
+			extraTS[e.TS.UnixNano()] = true
+		}
+		merged := make([]energy.Reading, 0, len(data.resets)+len(extraResets))
+		for _, r := range data.resets {
+			if extraTS[r.TS.UnixNano()] {
+				continue
+			}
+			merged = append(merged, r)
+		}
+		merged = append(merged, extraResets...)
+		sort.Slice(merged, func(i, j int) bool { return merged[i].TS.Before(merged[j].TS) })
+		resets = merged
+	}
+
+	derivation := energy.Derive(w, start, end, resets, data.priors)
+	if !derivation.Emitted {
+		return Row{}, false
+	}
+
+	row := Row{
+		AnalyzerID: analyzerID,
+		Window:     w,
+		Values:     derivation.Values,
+		Indexes:    endIndexes(end),
+		// I-9: only the bucket's own sub-range of each already-sorted
+		// source is ever scanned, never the whole loaded set per bucket.
+		MaxDemandKw: maxDemandInWindow(w, data.loadProfile, data.daily, data.maxDemandBilling),
+		// Source is exactly derivation.Source: the END boundary's own
+		// Kind (R96), or start.Kind when end is a reset row (M-4). Under
+		// R96 a period's start and end boundary can resolve to DIFFERENT
+		// kinds — resolveBoundaries chose each independently — so Source
+		// always names the END kind specifically, never "the period's
+		// kind" (there no longer is one).
+		Source:  derivation.Source,
+		Suspect: derivation.Suspect,
+	}
+	row.InductiveRatio, row.CapacitiveRatio = energy.Ratios(derivation)
+	return row, true
+}
+
+// loadAnalyzerBoundaryData implements I-17's query shape for one analyzer:
+// each kind Billing needs is read ONCE over the whole request, then every
+// bucket's boundaries are selected in memory with energy.SelectBoundary.
+//
+// C1: load_profile itself, reset evidence, and priors all load from the
+// EARLIEST look-back of every boundary kind this request may use — never
+// just load_profile's own. A billing-kind (Monthly, R63) or daily-kind
+// (R95) start boundary can sit further back in time than load_profile's own
+// look-back, and a reset row can fall inside that earlier evidence window:
+// loading resets only from load_profile's look-back silently drops it, and
+// the derived number comes out wrong instead of suspect (the review's P1
+// probe: 4150 instead of the true 5150, unflagged).
+func (b *Billing) loadAnalyzerBoundaryData(ctx context.Context, sc store.Scope, analyzerID uuid.UUID, level energy.Level, buckets []energy.Window) (analyzerBoundaryData, error) {
 	first := buckets[0]
 	rangeTo := buckets[len(buckets)-1].To
 
 	lpLookback, err := b.firstBoundaryLookback(ctx, sc, analyzerID, model.ReadingKindLoadProfile, first)
 	if err != nil {
-		return nil, err
+		return analyzerBoundaryData{}, err
 	}
 	// R96/Minor M-c: at Daily/Monthly/Yearly, load_profile now carries its
 	// own tolerance (LoadProfileBoundaryTolerance) — a load_profile reading
@@ -143,7 +472,7 @@ func (b *Billing) consumptionForAnalyzer(ctx context.Context, sc store.Scope, an
 	if useBilling {
 		billingLookback, err = b.firstBoundaryLookback(ctx, sc, analyzerID, model.ReadingKindBilling, first)
 		if err != nil {
-			return nil, err
+			return analyzerBoundaryData{}, err
 		}
 		billingLookback = clampLookback(billingLookback, first.From, BillingSnapshotTolerance)
 		if billingLookback.Before(minLookback) {
@@ -159,7 +488,7 @@ func (b *Billing) consumptionForAnalyzer(ctx context.Context, sc store.Scope, an
 	if useDaily {
 		dailyLookback, err = b.firstBoundaryLookback(ctx, sc, analyzerID, model.ReadingKindDaily, first)
 		if err != nil {
-			return nil, err
+			return analyzerBoundaryData{}, err
 		}
 		dailyLookback = clampLookback(dailyLookback, first.From, DailySnapshotTolerance)
 		if dailyLookback.Before(minLookback) {
@@ -191,7 +520,7 @@ func (b *Billing) consumptionForAnalyzer(ctx context.Context, sc store.Scope, an
 	// rangeTo uses the same +1µs widening.
 	loadProfileRows, err := b.deps.Readings.Range(ctx, sc, analyzerID, store.TimeRange{From: minLookback, To: rangeTo.Add(time.Microsecond)}, model.ReadingKindLoadProfile)
 	if err != nil {
-		return nil, err
+		return analyzerBoundaryData{}, err
 	}
 	loadProfile := toEnergyReadings(loadProfileRows)
 
@@ -201,7 +530,7 @@ func (b *Billing) consumptionForAnalyzer(ctx context.Context, sc store.Scope, an
 	// kind in this request could select.
 	resetRows, err := b.deps.Readings.Range(ctx, sc, analyzerID, store.TimeRange{From: minLookback, To: rangeTo.Add(time.Microsecond)}, model.ReadingKindReset)
 	if err != nil {
-		return nil, err
+		return analyzerBoundaryData{}, err
 	}
 	resets := toEnergyReadings(resetRows)
 
@@ -218,7 +547,7 @@ func (b *Billing) consumptionForAnalyzer(ctx context.Context, sc store.Scope, an
 	if useBilling {
 		billingRows, billingErr := b.deps.Readings.Range(ctx, sc, analyzerID, store.TimeRange{From: billingLookback, To: rangeTo.Add(time.Microsecond)}, model.ReadingKindBilling)
 		if billingErr != nil {
-			return nil, billingErr
+			return analyzerBoundaryData{}, billingErr
 		}
 		billing = toEnergyReadings(billingRows)
 	}
@@ -231,13 +560,13 @@ func (b *Billing) consumptionForAnalyzer(ctx context.Context, sc store.Scope, an
 	if useDaily {
 		dailyRows, dailyErr := b.deps.Readings.Range(ctx, sc, analyzerID, store.TimeRange{From: dailyLookback, To: rangeTo.Add(time.Microsecond)}, model.ReadingKindDaily)
 		if dailyErr != nil {
-			return nil, dailyErr
+			return analyzerBoundaryData{}, dailyErr
 		}
 		daily = toEnergyReadings(dailyRows)
 	} else {
 		dailyRows, dailyErr := b.deps.Readings.Range(ctx, sc, analyzerID, store.TimeRange{From: first.From, To: rangeTo}, model.ReadingKindDaily)
 		if dailyErr != nil {
-			return nil, dailyErr
+			return analyzerBoundaryData{}, dailyErr
 		}
 		daily = toEnergyReadings(dailyRows)
 	}
@@ -250,7 +579,7 @@ func (b *Billing) consumptionForAnalyzer(ctx context.Context, sc store.Scope, an
 	if !useBilling {
 		billingRows, billingErr := b.deps.Readings.Range(ctx, sc, analyzerID, store.TimeRange{From: first.From, To: rangeTo}, model.ReadingKindBilling)
 		if billingErr != nil {
-			return nil, billingErr
+			return analyzerBoundaryData{}, billingErr
 		}
 		maxDemandBilling = toEnergyReadings(billingRows)
 	}
@@ -264,41 +593,17 @@ func (b *Billing) consumptionForAnalyzer(ctx context.Context, sc store.Scope, an
 	// neighbour.
 	resolved := resolveBoundaries(level, buckets, loadProfile, billing, daily, useBilling, useDaily)
 
-	rows := make([]Row, 0, len(buckets))
-	for _, w := range buckets {
-		start := resolved[w.From.UnixNano()]
-		end := resolved[w.To.UnixNano()]
-
-		derivation := energy.Derive(w, start, end, resets, priors)
-		if !derivation.Emitted {
-			// 02 §3.1: no row, never a zero row. Task 7's plain Consumption
-			// never writes missing_readings — that is Task 8's
-			// ConsumptionAndRecord, only for a specifically requested
-			// billing period.
-			continue
-		}
-
-		row := Row{
-			AnalyzerID: analyzerID,
-			Window:     w,
-			Values:     derivation.Values,
-			Indexes:    endIndexes(end),
-			// I-9: only the bucket's own sub-range of each already-sorted
-			// source is ever scanned, never the whole loaded set per bucket.
-			MaxDemandKw: maxDemandInWindow(w, loadProfile, daily, maxDemandBilling),
-			// Source is exactly derivation.Source: the END boundary's own
-			// Kind (R96), or start.Kind when end is a reset row (M-4). Under
-			// R96 a period's start and end boundary can resolve to DIFFERENT
-			// kinds — resolveBoundaries chose each independently — so Source
-			// always names the END kind specifically, never "the period's
-			// kind" (there no longer is one).
-			Source:  derivation.Source,
-			Suspect: derivation.Suspect,
-		}
-		row.InductiveRatio, row.CapacitiveRatio = energy.Ratios(derivation)
-		rows = append(rows, row)
-	}
-	return rows, nil
+	return analyzerBoundaryData{
+		loadProfile:      loadProfile,
+		billing:          billing,
+		daily:            daily,
+		resets:           resets,
+		priors:           priors,
+		maxDemandBilling: maxDemandBilling,
+		useBilling:       useBilling,
+		useDaily:         useDaily,
+		resolved:         resolved,
+	}, nil
 }
 
 // resolveBoundaries implements R96: resolves EVERY distinct boundary instant

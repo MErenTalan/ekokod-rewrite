@@ -16,6 +16,8 @@ package consumption_test
 import (
 	"context"
 	"log/slog"
+	"sort"
+	"sync"
 	"testing"
 	"time"
 
@@ -179,6 +181,15 @@ type fakeReadings struct {
 	byKind map[model.ReadingKind][]model.MeterReading
 	err    error
 
+	// bulkInsertErr, when set, makes BulkInsert fail without writing
+	// anything — this fix round's C4/I2 tests use it to prove a failed
+	// insert never marks the anomaly resolved.
+	bulkInsertErr error
+	// inserted, when non-nil, records every row BulkInsert is called with,
+	// in call order — a test can inspect it without needing byKind
+	// round-tripping.
+	inserted *[]model.MeterReading
+
 	// t and wantScope, when both set, fail the test immediately (I-7) if
 	// any method is called with a Scope other than wantScope — a mutation
 	// that substitutes a different (even if still valid) Scope on one
@@ -196,8 +207,30 @@ func (f fakeReadings) checkScope(s store.Scope) {
 	require.Equal(f.t, *f.wantScope, s, "called with a different Scope than the caller's own")
 }
 
-func (f fakeReadings) BulkInsert(context.Context, store.Scope, []model.MeterReading) (int, int, error) {
-	return 0, 0, nil
+// BulkInsert writes rows into byKind (re-sorted ascending by ts afterward,
+// matching the real repository's own ORDER BY precondition), so a test can
+// register a reset through ResolveAnomaly and then observe it via Range —
+// byKind must already be a non-nil map (even if empty for a kind) for this
+// round-trip to be visible: assigning into a nil map from a value-receiver
+// copy would only mutate that copy's own reference, never the caller's.
+func (f fakeReadings) BulkInsert(_ context.Context, s store.Scope, rows []model.MeterReading) (int, int, error) {
+	f.checkScope(s)
+	if f.bulkInsertErr != nil {
+		return 0, 0, f.bulkInsertErr
+	}
+	if f.inserted != nil {
+		*f.inserted = append(*f.inserted, rows...)
+	}
+	if f.byKind != nil {
+		for _, r := range rows {
+			f.byKind[r.Kind] = append(f.byKind[r.Kind], r)
+		}
+		for kind := range f.byKind {
+			kind := kind
+			sort.Slice(f.byKind[kind], func(i, j int) bool { return f.byKind[kind][i].Ts.Before(f.byKind[kind][j].Ts) })
+		}
+	}
+	return len(rows), 0, nil
 }
 
 func (f fakeReadings) Range(_ context.Context, s store.Scope, _ uuid.UUID, r store.TimeRange, kind model.ReadingKind) ([]model.MeterReading, error) {
@@ -381,4 +414,297 @@ func pathsNewReadingRepo(pool *pgxpool.Pool) store.ReadingRepository {
 }
 func pathsNewAnalyticsRepo(pool *pgxpool.Pool) store.AnalyticsRepository {
 	return postgres.NewAnalyticsRepository(pool)
+}
+
+// --- fakeAnomalies: store.AnomalyRepository ---------------------------------
+
+// containsUUID reports whether id is one of ids.
+var (
+	_ store.AnomalyRepository  = (*fakeAnomalies)(nil)
+	_ store.OpsRepository      = (*fakeOps)(nil)
+	_ store.AnalyzerRepository = fakeAnalyzers{}
+	_ store.UserRepository     = fakeUsers{}
+)
+
+func containsUUID(ids []uuid.UUID, id uuid.UUID) bool {
+	for _, x := range ids {
+		if x == id {
+			return true
+		}
+	}
+	return false
+}
+
+// fakeAnomalies is an in-memory, configurable store.AnomalyRepository used
+// by this fix round's unit tests (C1-C4, I1-I3, R97): it reproduces the real
+// repository's own pagination contract — a default page limit (100,
+// matching postgres's own anomalyDefaultPageLimit unless a test overrides
+// it), rows ordered by period_start desc — so a test can prove C3's full
+// paging fix and C4's dedup-key fix without a real database. Safe for
+// concurrent use (I1's deterministic race test needs that).
+type fakeAnomalies struct {
+	mu sync.Mutex
+
+	rows []model.ConsumptionAnomaly
+	err  error
+
+	// defaultLimit mimics AnomalyRepository's own "a zero Limit means the
+	// repository's default" contract; 0 here defaults to 100, matching
+	// production, so a caller that (bug) never sets an explicit Page.Limit
+	// reproduces the review's P4/P5 cutoff exactly.
+	defaultLimit int32
+
+	// listBarrier, when non-nil, is invoked at the START of every List call,
+	// before the read — I1's deterministic race test uses it to hold two
+	// concurrent ConsumptionAndRecord calls at the check step until both
+	// have arrived, so removing the dedup lock is guaranteed (not merely
+	// likely) to let both callers see "no existing row" and both create one.
+	listBarrier func()
+
+	// resolveErr, when set, makes Resolve fail for exactly the ids it
+	// names — I2's ordering test uses this to fail the F2 cascade's own
+	// Resolve call and assert the F3 row's own Resolve is never reached.
+	resolveErr map[uuid.UUID]error
+}
+
+func (f *fakeAnomalies) seed(a model.ConsumptionAnomaly) model.ConsumptionAnomaly {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if a.ID == uuid.Nil {
+		a.ID = uuid.New()
+	}
+	f.rows = append(f.rows, a)
+	return a
+}
+
+func (f *fakeAnomalies) get(id uuid.UUID) (model.ConsumptionAnomaly, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, a := range f.rows {
+		if a.ID == id {
+			return a, true
+		}
+	}
+	return model.ConsumptionAnomaly{}, false
+}
+
+func (f *fakeAnomalies) Get(_ context.Context, _ store.Scope, id uuid.UUID) (model.ConsumptionAnomaly, error) {
+	a, ok := f.get(id)
+	if !ok {
+		return model.ConsumptionAnomaly{}, store.ErrNotFound
+	}
+	return a, nil
+}
+
+func (f *fakeAnomalies) List(_ context.Context, _ store.Scope, filt store.AnomalyFilter) ([]model.ConsumptionAnomaly, error) {
+	if f.listBarrier != nil {
+		f.listBarrier()
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.err != nil {
+		return nil, f.err
+	}
+
+	var matched []model.ConsumptionAnomaly
+	for _, a := range f.rows {
+		if len(filt.AnalyzerIDs) > 0 && !containsUUID(filt.AnalyzerIDs, a.AnalyzerID) {
+			continue
+		}
+		if filt.Reason != nil && a.Reason != *filt.Reason {
+			continue
+		}
+		if filt.Unresolved && a.ResolvedAt != nil {
+			continue
+		}
+		if filt.Range != nil {
+			if a.PeriodStart.Before(filt.Range.From) || !a.PeriodStart.Before(filt.Range.To) {
+				continue
+			}
+		}
+		matched = append(matched, a)
+	}
+	sort.SliceStable(matched, func(i, j int) bool { return matched[i].PeriodStart.After(matched[j].PeriodStart) })
+
+	limit := filt.Page.Limit
+	if limit <= 0 {
+		limit = f.defaultLimit
+		if limit <= 0 {
+			limit = 100
+		}
+	}
+	offset := int(filt.Page.Offset)
+	if offset >= len(matched) {
+		return nil, nil
+	}
+	end := offset + int(limit)
+	if end > len(matched) {
+		end = len(matched)
+	}
+	return append([]model.ConsumptionAnomaly(nil), matched[offset:end]...), nil
+}
+
+func (f *fakeAnomalies) Create(_ context.Context, _ store.Scope, a model.ConsumptionAnomaly) (model.ConsumptionAnomaly, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.err != nil {
+		return model.ConsumptionAnomaly{}, f.err
+	}
+	a.ID = uuid.New()
+	a.CreatedAt = time.Now()
+	f.rows = append(f.rows, a)
+	return a, nil
+}
+
+// resolveErrIDs, when an id is present, makes Resolve fail for exactly that
+// id — I2's ordering test uses this to make the F2 cascade's own Resolve
+// call fail and asserts the F3 row's own Resolve is never reached.
+func (f *fakeAnomalies) Resolve(_ context.Context, _ store.Scope, id, resolvedBy uuid.UUID, resolution string, overrides []byte, at time.Time) (model.ConsumptionAnomaly, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i := range f.rows {
+		if f.rows[i].ID != id {
+			continue
+		}
+		if f.resolveErr != nil {
+			if err, ok := f.resolveErr[id]; ok {
+				return model.ConsumptionAnomaly{}, err
+			}
+		}
+		t := at
+		rb := resolvedBy
+		res := resolution
+		f.rows[i].ResolvedAt = &t
+		f.rows[i].ResolvedBy = &rb
+		f.rows[i].Resolution = &res
+		f.rows[i].OverrideValues = overrides
+		return f.rows[i], nil
+	}
+	return model.ConsumptionAnomaly{}, store.ErrNotFound
+}
+
+// --- fakeOps: store.OpsRepository --------------------------------------------
+
+// fakeOps is an in-memory store.OpsRepository fake for this fix round's
+// message-related tests (M1: a dedup hit against an unresolved row backfills
+// a missing message).
+type fakeOps struct {
+	mu       sync.Mutex
+	messages []model.OperationalMessage
+	nextID   int64
+	err      error
+}
+
+func (f *fakeOps) StartRun(context.Context, store.Scope, model.JobRun) (model.JobRun, error) {
+	panic("fakeOps: StartRun unused by this fix round's tests")
+}
+func (f *fakeOps) FinishRun(context.Context, store.Scope, uuid.UUID, string, int32, int32, int32, *string, []byte, time.Time) (model.JobRun, error) {
+	panic("fakeOps: FinishRun unused by this fix round's tests")
+}
+func (f *fakeOps) GetRun(context.Context, store.Scope, uuid.UUID) (model.JobRun, error) {
+	panic("fakeOps: GetRun unused by this fix round's tests")
+}
+func (f *fakeOps) ListRuns(context.Context, store.Scope, store.JobRunFilter) ([]model.JobRun, error) {
+	panic("fakeOps: ListRuns unused by this fix round's tests")
+}
+
+func (f *fakeOps) AppendMessage(_ context.Context, _ store.Scope, m model.OperationalMessage) (model.OperationalMessage, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.err != nil {
+		return model.OperationalMessage{}, f.err
+	}
+	f.nextID++
+	m.ID = f.nextID
+	m.CreatedAt = time.Now()
+	f.messages = append(f.messages, m)
+	return m, nil
+}
+
+func (f *fakeOps) ListMessages(_ context.Context, _ store.Scope, filt store.MessageFilter) ([]model.OperationalMessage, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []model.OperationalMessage
+	for _, m := range f.messages {
+		if filt.RelatedID != nil && (m.RelatedID == nil || *m.RelatedID != *filt.RelatedID) {
+			continue
+		}
+		out = append(out, m)
+	}
+	return out, nil
+}
+
+// --- fakeAnalyzers: store.AnalyzerRepository --------------------------------
+
+// fakeAnalyzers is a fixed-provider store.AnalyzerRepository fake:
+// buildResetReading (resolve.go) only ever calls Get, for the analyzer's
+// own Provider.
+type fakeAnalyzers struct {
+	analyzer model.Analyzer
+	err      error
+}
+
+func (f fakeAnalyzers) Get(_ context.Context, _ store.Scope, id uuid.UUID) (model.Analyzer, error) {
+	if f.err != nil {
+		return model.Analyzer{}, f.err
+	}
+	a := f.analyzer
+	a.ID = id
+	return a, nil
+}
+func (f fakeAnalyzers) GetByInstallation(context.Context, store.Scope, model.IntegrationProvider, string, string) (model.Analyzer, error) {
+	panic("fakeAnalyzers: GetByInstallation unused by this fix round's tests")
+}
+func (f fakeAnalyzers) List(context.Context, store.Scope, store.AnalyzerFilter) ([]model.Analyzer, error) {
+	panic("fakeAnalyzers: List unused by this fix round's tests")
+}
+func (f fakeAnalyzers) Create(context.Context, store.Scope, model.Analyzer) (model.Analyzer, error) {
+	panic("fakeAnalyzers: Create unused by this fix round's tests")
+}
+func (f fakeAnalyzers) Update(context.Context, store.Scope, model.Analyzer) (model.Analyzer, error) {
+	panic("fakeAnalyzers: Update unused by this fix round's tests")
+}
+func (f fakeAnalyzers) SoftDelete(context.Context, store.Scope, uuid.UUID, time.Time) error {
+	panic("fakeAnalyzers: SoftDelete unused by this fix round's tests")
+}
+func (f fakeAnalyzers) TouchLastReading(context.Context, store.Scope, uuid.UUID, time.Time) error {
+	panic("fakeAnalyzers: TouchLastReading unused by this fix round's tests")
+}
+
+// --- fakeUsers: store.UserRepository -----------------------------------------
+
+// fakeUsers is a configurable store.UserRepository fake for I2/P6's
+// resolvedBy-validated-before-any-write test: Get returns ErrNotFound for
+// any id not in validIDs, exactly like a real, scoped repository would for a
+// user outside the caller's own company.
+type fakeUsers struct {
+	validIDs map[uuid.UUID]bool
+}
+
+func (f fakeUsers) Get(_ context.Context, _ store.Scope, id uuid.UUID) (model.User, error) {
+	if f.validIDs[id] {
+		return model.User{ID: id}, nil
+	}
+	return model.User{}, store.ErrNotFound
+}
+func (f fakeUsers) List(context.Context, store.Scope, store.UserFilter) ([]model.User, error) {
+	panic("fakeUsers: List unused by this fix round's tests")
+}
+func (f fakeUsers) Create(context.Context, store.Scope, model.User) (model.User, error) {
+	panic("fakeUsers: Create unused by this fix round's tests")
+}
+func (f fakeUsers) Update(context.Context, store.Scope, model.User) (model.User, error) {
+	panic("fakeUsers: Update unused by this fix round's tests")
+}
+func (f fakeUsers) SoftDelete(context.Context, store.Scope, uuid.UUID, time.Time) error {
+	panic("fakeUsers: SoftDelete unused by this fix round's tests")
+}
+func (f fakeUsers) SetPassword(context.Context, store.Scope, uuid.UUID, string, time.Time) error {
+	panic("fakeUsers: SetPassword unused by this fix round's tests")
+}
+func (f fakeUsers) PasswordHistory(context.Context, store.Scope, uuid.UUID, int32) ([]model.PasswordHistoryEntry, error) {
+	panic("fakeUsers: PasswordHistory unused by this fix round's tests")
+}
+func (f fakeUsers) RecordLogin(context.Context, store.Scope, uuid.UUID, time.Time) error {
+	panic("fakeUsers: RecordLogin unused by this fix round's tests")
 }
