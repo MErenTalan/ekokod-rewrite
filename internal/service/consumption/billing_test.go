@@ -2,6 +2,7 @@ package consumption_test
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
@@ -46,13 +47,24 @@ func newBillingAt(t *testing.T, readings fakeReadings, now time.Time) *consumpti
 	return b
 }
 
-// TestBillingPathCannotReachAnAggregate is R61's symmetric guard: Billing
-// has no AnalyticsRepository field at all. fakeReadings{} has no data, so
-// every boundary lookup comes back nil and no row is emitted — proving only
-// fakeReadings was ever consulted (noAnomalies/noOps would panic if
-// Consumption touched either, and there is no aggregate dependency present
-// to have reached in the first place).
+// TestBillingPathCannotReachAnAggregate is R61's symmetric guard, named in
+// the plan's own guard list: Billing has no AnalyticsRepository field at
+// all. fakeReadings{} has no data, so every boundary lookup comes back nil
+// and no row is emitted — proving only fakeReadings was ever consulted
+// (noAnomalies/noOps would panic if Consumption touched either, and there
+// is no aggregate dependency present to have reached in the first place).
+//
+// I-4 (final review B): this behavioural probe alone is vacuous against a
+// FIELD-level bypass (a poisoned field nobody's code path ever calls, or a
+// narrower consumer-defined interface a real aggregate repository could
+// still satisfy — guard_test.go's own I-4 fix). It now delegates to
+// guard_test.go's reflection walk (the same one
+// TestBillingDepsHasNoAnalyticsRepositoryField calls) FIRST, so the plan's
+// own named guard also catches what the structural guard catches.
 func TestBillingPathCannotReachAnAggregate(t *testing.T) {
+	analyticsRepo := reflect.TypeOf((*store.AnalyticsRepository)(nil)).Elem()
+	assertNoForbiddenField(t, reflect.TypeOf(consumption.BillingDeps{}), analyticsRepo)
+
 	b := newBilling(t, fakeReadings{})
 
 	ctx := context.Background()
@@ -194,11 +206,21 @@ func TestMonthlyPrefersBillingKindReadingsWhenPresent(t *testing.T) {
 }
 
 // TestMonthlyFallsBackToLoadProfileWhenBillingReadingsDoNotCoverTheMonth is
-// R63: only ONE billing-kind reading exists (at January's start), so
-// SelectBoundary resolves BOTH the start and end boundary to that same
-// reading — the end boundary (dated a full month before February's own
-// bound) is far outside BillingSnapshotTolerance, so the month is not
-// covered and falls back to load_profile: 1200 - 1000 = 200.
+// R63/R96: only ONE billing-kind reading exists, exactly at January's own
+// start (distance 0, well within BillingSnapshotTolerance) — so under R96's
+// per-INSTANT resolution the START boundary DOES resolve to billing (990),
+// while the END boundary has no billing candidate anywhere near it (the
+// same January reading is a full month away, far outside tolerance) and
+// falls back to load_profile (1200). Source is load_profile — R96 always
+// names the END boundary's own kind — but the VALUE, 210 (1200-990), proves
+// the START actually used billing's own 990, not load_profile's 1000: M-3
+// (final review B) found the original fixture used the SAME value (1000)
+// on both kinds at January's start, so this test passed even under a
+// mutation that fell back to load_profile on BOTH sides (the pre-R96
+// whole-period rule this test's old name and doc described), because 1000
+// and 1000 are indistinguishable in the result. Mutation "resolveBoundary
+// never tries billing" (or the pre-R96 whole-period fallback) now gives
+// 200, not 210.
 func TestMonthlyFallsBackToLoadProfileWhenBillingReadingsDoNotCoverTheMonth(t *testing.T) {
 	loc := istanbulLoc(t)
 	jan1 := time.Date(2026, 1, 1, 0, 0, 0, 0, loc)
@@ -207,7 +229,7 @@ func TestMonthlyFallsBackToLoadProfileWhenBillingReadingsDoNotCoverTheMonth(t *t
 
 	readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
 		model.ReadingKindBilling: {
-			readingRow(analyzerID, jan1, model.ReadingKindBilling, map[string]string{"active_import": "1000"}),
+			readingRow(analyzerID, jan1, model.ReadingKindBilling, map[string]string{"active_import": "990"}),
 		},
 		model.ReadingKindLoadProfile: {
 			readingRow(analyzerID, jan1, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}),
@@ -228,9 +250,9 @@ func TestMonthlyFallsBackToLoadProfileWhenBillingReadingsDoNotCoverTheMonth(t *t
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	row := rows[0]
-	require.Equal(t, energy.KindLoadProfile, row.Source)
+	require.Equal(t, energy.KindLoadProfile, row.Source, "R96 names the END boundary's own kind, even though the START resolved to billing")
 	require.NotNil(t, row.Values[energy.ActiveImport])
-	require.Equal(t, "200", row.Values[energy.ActiveImport].String())
+	require.Equal(t, "210", row.Values[energy.ActiveImport].String(), "1200 (load_profile end) - 990 (billing start, NOT load_profile's own 1000)")
 }
 
 // TestMonthlyMixesBillingStartWithLoadProfileEndWhenOnlyTheEndSnapshotIsStale
@@ -757,33 +779,52 @@ func TestBillingPrefersLoadProfileOverDailyWhenBothPresent(t *testing.T) {
 	require.Equal(t, "250", rows[0].Values[energy.ActiveImport].String(), "load_profile must win over daily when both are present")
 }
 
-// TestBillingStaleDailySnapshotYieldsNoRow: the only daily boundary reading
-// available for the start of the window is 37h before it — one hour over
-// DailySnapshotTolerance (36h) — so daily does not cover it either, and (with
-// no load_profile at all) the bucket is skipped rather than billed from a
-// stale snapshot.
-func TestBillingStaleDailySnapshotYieldsNoRow(t *testing.T) {
+// TestBillingDailyBoundaryToleranceCapsAtTwelveHoursOnANormalDay is R96's
+// K1 fix, pinned on an ORDINARY (non-DST) 24h day: DailySnapshotTolerance
+// is 36h, but boundaryTolerance caps every kind's tolerance at HALF the
+// width of the bucket(s) meeting at the boundary — 12h for a normal 24h
+// Daily bucket — so a daily-kind reading up to 12h before its own bound
+// still counts as covering, but one any older does not.
+//
+// M-3 (final review B): the test this replaces used a fixed 37h-old
+// reading — "one hour over the raw 36h tolerance" — but at Daily level the
+// 12h half-bucket cap ALREADY binds well before 36h, so that fixture passed
+// for ANY tolerance >= 12h (36h, 20h, 13h, ...) and never actually pinned
+// Daily's own binding edge. This exact-edge pair does: 12h must still
+// cover; 13h must not.
+func TestBillingDailyBoundaryToleranceCapsAtTwelveHoursOnANormalDay(t *testing.T) {
 	loc := istanbulLoc(t)
 	day := time.Date(2026, 3, 10, 0, 0, 0, 0, loc)
 	analyzerID := uuid.New()
 
-	readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
-		model.ReadingKindDaily: {
-			readingRow(analyzerID, day.Add(-37*time.Hour), model.ReadingKindDaily, map[string]string{"active_import": "1000"}),
-			readingRow(analyzerID, day.Add(24*time.Hour), model.ReadingKindDaily, map[string]string{"active_import": "1300"}),
-		},
-	}}
-	b := newBilling(t, readings)
-	ctx := context.Background()
-	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+	run := func(t *testing.T, offset time.Duration, wantRow bool) {
+		readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
+			model.ReadingKindDaily: {
+				readingRow(analyzerID, day.Add(-offset), model.ReadingKindDaily, map[string]string{"active_import": "1000"}),
+				readingRow(analyzerID, day.Add(24*time.Hour), model.ReadingKindDaily, map[string]string{"active_import": "1300"}),
+			},
+		}}
+		// R98: the fixture window closes at day+24h, after billingT0.
+		b := newBillingAt(t, readings, day.Add(24*time.Hour))
+		ctx := context.Background()
+		scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
 
-	rows, err := b.Consumption(ctx, scope, consumption.SeriesRequest{
-		AnalyzerIDs: []uuid.UUID{analyzerID},
-		Level:       energy.Daily,
-		Range:       store.TimeRange{From: day, To: day.Add(24 * time.Hour)},
-	})
-	require.NoError(t, err)
-	require.Empty(t, rows, "a daily boundary older than DailySnapshotTolerance must not count as covering")
+		rows, err := b.Consumption(ctx, scope, consumption.SeriesRequest{
+			AnalyzerIDs: []uuid.UUID{analyzerID},
+			Level:       energy.Daily,
+			Range:       store.TimeRange{From: day, To: day.Add(24 * time.Hour)},
+		})
+		require.NoError(t, err)
+		if wantRow {
+			require.Len(t, rows, 1, "12h before the bound is exactly half of the 24h bucket — within the capped tolerance")
+			require.Equal(t, "300", rows[0].Values[energy.ActiveImport].String())
+		} else {
+			require.Empty(t, rows, "13h before the bound exceeds half of the 24h bucket — outside the capped tolerance")
+		}
+	}
+
+	t.Run("12h before the bound yields a row", func(t *testing.T) { run(t, 12*time.Hour, true) })
+	t.Run("13h before the bound yields no row", func(t *testing.T) { run(t, 13*time.Hour, false) })
 }
 
 // TestHourlyNeverUsesDailyAsABoundary: daily-kind readings cover the hour

@@ -2,6 +2,7 @@ package consumption_test
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
@@ -24,14 +25,27 @@ func istanbulLoc(t *testing.T) *time.Location {
 	return loc
 }
 
-// TestAnalyticsPathCannotReachTheHypertable is R61's structural guard:
-// AnalyticsDeps has no ReadingRepository field at all, so there is nothing
-// to poison and no fallback path to accidentally take. fakeAnalytics{rows:
-// nil} deliberately returns NO rows (I-8) — the one condition under which a
-// "fall back to Readings when the aggregate is empty" mutation would
-// actually have somewhere to fall back TO, which is what makes this fixture
-// prove the mutation's absence rather than merely fail to exercise it.
+// TestAnalyticsPathCannotReachTheHypertable is R61's structural guard, named
+// in the plan's own guard list: AnalyticsDeps has no ReadingRepository field
+// at all, so there is nothing to poison and no fallback path to
+// accidentally take. fakeAnalytics{rows: nil} deliberately returns NO rows
+// (I-8) — the one condition under which a "fall back to Readings when the
+// aggregate is empty" mutation would actually have somewhere to fall back
+// TO, which is what makes this fixture prove the mutation's absence rather
+// than merely fail to exercise it.
+//
+// I-4 (final review B): this behavioural probe alone is vacuous against a
+// FIELD-level bypass — adding a poisoned field nobody's code path ever
+// calls (or a narrower consumer-defined interface a real repository could
+// still satisfy, guard_test.go's own I-4 fix) leaves it green. It now
+// delegates to guard_test.go's reflection walk (the same one
+// TestAnalyticsDepsHasNoReadingOrAnomalyRepositoryField calls) FIRST, so the
+// plan's own named guard also catches what the structural guard catches,
+// not only what this call happens to exercise at runtime.
 func TestAnalyticsPathCannotReachTheHypertable(t *testing.T) {
+	readingRepo := reflect.TypeOf((*store.ReadingRepository)(nil)).Elem()
+	assertNoForbiddenField(t, reflect.TypeOf(consumption.AnalyticsDeps{}), readingRepo)
+
 	a, err := consumption.NewAnalytics(consumption.AnalyticsDeps{Analytics: fakeAnalytics{rows: nil}, Log: testLog(t)})
 	require.NoError(t, err)
 

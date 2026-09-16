@@ -1,12 +1,15 @@
 package consumption_test
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/consumption"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
 )
@@ -90,6 +93,26 @@ func TestFindForbiddenFieldCatchesAMapKeyTypedField(t *testing.T) {
 	require.Contains(t, path, "ByRepo")
 }
 
+// TestFindForbiddenFieldCatchesANarrowerConsumerDefinedInterface is I-4
+// (final review B): a field typed as a NARROWER interface naming only one
+// of store.ReadingRepository's own methods must still be caught, because
+// postgres.ReadingRepository (or any other real implementation) satisfies
+// this narrower shape too — R61 forbids storing a live reading repository
+// on the Analytics side by ANY name, not only by the exact interface name.
+// Mirrors TestFindForbiddenFieldCatchesAFuncTypedField's shape.
+func TestFindForbiddenFieldCatchesANarrowerConsumerDefinedInterface(t *testing.T) {
+	readingRepo := reflect.TypeOf((*store.ReadingRepository)(nil)).Elem()
+	type narrowReadingAccess interface {
+		Range(ctx context.Context, s store.Scope, analyzerID uuid.UUID, r store.TimeRange, kind model.ReadingKind) ([]model.MeterReading, error)
+	}
+	type poisoned struct {
+		Fallback narrowReadingAccess
+	}
+	path, found := findForbiddenField(reflect.TypeOf(poisoned{}), readingRepo)
+	require.True(t, found, "a field typed as a narrower interface subset of store.ReadingRepository must be caught, not silently skipped")
+	require.Contains(t, path, "Fallback")
+}
+
 // assertNoForbiddenField fails the test immediately if findForbiddenField
 // finds a match — the reporting half of the guard every real R61 guard test
 // above calls.
@@ -117,6 +140,22 @@ func assertNoForbiddenField(t *testing.T, typ reflect.Type, forbidden ...reflect
 // typed `map[store.ReadingRepository]T` (the forbidden repository used as
 // the map's KEY rather than its value) stayed invisible. Both Key() and
 // Elem() are now walked for reflect.Map.
+//
+// I-4 (final review B): `cur == iface || cur.Implements(iface)` only ever
+// caught a field typed as the FULL forbidden interface (or something wider
+// still implementing it). It never caught a field typed as a NARROWER,
+// consumer-defined interface — e.g. `interface{ Range(...) ... }` naming
+// only ONE of store.ReadingRepository's methods — because a narrower
+// interface does not itself implement the wider one. But Go's assignability
+// runs the other way too: any concrete type implementing the FULL
+// store.ReadingRepository (postgres.ReadingRepository, a test fake, …) also
+// implements that narrower interface, since its method set is a superset —
+// so the narrower field is exactly as capable of holding a live repository
+// as the field R61 already forbids, and the guard must forbid it too. The
+// second forbidden-check below catches this: cur is itself a
+// (non-empty-method-set) interface, and one of forbidden's own interfaces
+// implements cur — i.e. forbidden's method set is a superset of cur's, so
+// anything satisfying forbidden also satisfies cur.
 func findForbiddenField(typ reflect.Type, forbidden ...reflect.Type) (string, bool) {
 	seen := make(map[reflect.Type]bool)
 	var path string
@@ -131,6 +170,14 @@ func findForbiddenField(typ reflect.Type, forbidden ...reflect.Type) (string, bo
 		for _, iface := range forbidden {
 			if cur == iface || cur.Implements(iface) {
 				path = fmt.Sprintf("%s has type %s, which is or implements %s", p, cur, iface)
+				found = true
+				return
+			}
+			// I-4: a narrower interface a forbidden repository could still
+			// be stored in — cur's own method set is a SUBSET of iface's, so
+			// iface (not cur) is the one that "implements" the other here.
+			if cur.Kind() == reflect.Interface && cur.NumMethod() > 0 && iface.Implements(cur) {
+				path = fmt.Sprintf("%s has type %s, a narrower interface whose method set %s (which R61 forbids) could satisfy — a live repository could be stored here", p, cur, iface)
 				found = true
 				return
 			}
