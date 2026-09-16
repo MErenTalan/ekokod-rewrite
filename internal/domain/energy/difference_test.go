@@ -86,7 +86,7 @@ func TestDifferenceSubtractsPerRegisterAndKeepsNilNil(t *testing.T) {
 	require.True(t, w.To.Equal(d.Window.To), "got %s", d.Window.To)
 	require.Equal(t, energy.KindBilling, d.Source, "Source is the end reading's kind")
 
-	require.Equal(t, "12.2525", d.Values[energy.ActiveImport].String())
+	requireValue(t, d, energy.ActiveImport, "12.2525")
 	require.Nil(t, d.Values[energy.T1Import], "an unreported register at the end is nil, never zero")
 	require.Nil(t, d.Values[energy.T2Import], "an unreported register at the start is nil, never the full end value")
 	require.Nil(t, d.Values[energy.ActiveExport], "a register absent on both sides is nil")
@@ -101,5 +101,21 @@ func TestDifferenceLeavesANegativeDeltaSuspectAndNeverReturnsTheEndValue(t *test
 	require.True(t, d.Emitted)
 	require.Nil(t, d.Values[energy.ActiveImport], "removed-behaviour 1: never the end register value")
 	require.Equal(t, energy.ReasonNegativeDelta, d.Suspect[energy.ActiveImport].Reason)
-	require.Equal(t, "-998987.5", d.Suspect[energy.ActiveImport].Delta.String())
+	requireDelta(t, d.Suspect[energy.ActiveImport], "-998987.5")
+}
+
+// R92(1): amends the identical-boundary rule — a same-instant pair never
+// emits even when the two readings are different kinds (a zero-width
+// window measures nothing regardless of what produced each reading).
+func TestDifferenceEmitsNothingWhenBoundariesShareAnInstantOfDifferentKinds(t *testing.T) {
+	w := win(t0, time.Hour)
+	start := readingAt(t0, "1010")
+	end := &energy.Reading{
+		TS: t0, Kind: energy.KindReset,
+		Values: map[energy.Register]*decimal.Decimal{energy.ActiveImport: dec("5000")},
+	}
+	d := energy.Difference(w, start, end)
+	require.False(t, d.Emitted, "R92(1): a same-instant pair never emits, whatever the kinds")
+	require.Nil(t, d.Values)
+	require.Nil(t, d.Suspect)
 }

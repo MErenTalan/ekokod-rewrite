@@ -101,9 +101,19 @@ func (w Window) Contains(ts time.Time) bool {
 
 // Suspicion records why a register could not be derived (02 §3.2, R58-R60).
 type Suspicion struct {
-	Reason    Reason
-	Delta     *decimal.Decimal // the negative difference that triggered it, when known
-	ResetRows int              // reset rows found inside the window
+	Reason Reason
+	// Delta is the negative difference that triggered ReasonNegativeDelta,
+	// or nil for ReasonMeterReset (M-2). On Derive's reset path it is the
+	// FIRST FAILING SEGMENT's own difference, in time order — never the
+	// whole period's difference — since that is what points an operator at
+	// the specific bad segment.
+	Delta *decimal.Decimal
+	// ResetRows is the count of resets inside Derive's segmentation window
+	// (start.TS, end.TS], regardless of whether they carried evidence for
+	// this register, plus one more (R92) when a reset row sitting exactly
+	// at start.TS carried a value for this register and was inspected by
+	// R92(2)'s start-side check.
+	ResetRows int
 }
 
 // Reason names why a register's difference could not be derived (02 §3.2).
@@ -118,15 +128,19 @@ const (
 
 // Derivation is the result for one window.
 //
-// Emitted is false for §3.1's "no row" cases: a missing boundary reading, a
-// start and end that are the same reading, or boundaries passed in reversed
-// order. A caller must not turn !Emitted into a zero row. When Emitted is
+// Emitted is false for §3.1's "no row" cases: a missing boundary reading,
+// boundaries sharing the same instant — whatever their kinds (R92(1)) —
+// or boundaries passed in reversed order. A caller must not turn !Emitted
+// into a zero row. When Emitted is
 // false, Values and Suspect are always nil — never a non-nil empty map — so
 // a caller can distinguish "no row" from "a row with nothing suspect" from
 // the maps alone.
 type Derivation struct {
 	Window  Window
 	Emitted bool
+	// Source is end.Kind, or start.Kind when end.Kind is KindReset (M-4):
+	// a reset row is evidence of a physical meter event, not a boundary a
+	// caller should attribute the derived row to.
 	Source  Kind
 	Values  map[Register]*decimal.Decimal // nil entry = suspect or unreported
 	Suspect map[Register]Suspicion
