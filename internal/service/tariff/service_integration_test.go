@@ -259,9 +259,10 @@ func TestApplyImportRequiresConfirmationAndEffectiveFrom(t *testing.T) {
 	res, err := e.svc.Import(e.ctx, e.tenant.AdminScope, e.tenant.Users[model.UserRoleCompanyAdmin].ID, "icmal.csv", content)
 	require.NoError(t, err)
 	b0 := e.tenant.Buildings[0].ID
+	base := fixedInput(&b0)
 	for name, confs := range map[string][]tariffsvc.ApplyConfirmation{
 		"none":              nil,
-		"no effective_from": {{BuildingID: b0, EtsoCode: "40ZTEST000000030"}},
+		"no effective_from": {{BuildingID: b0, EtsoCode: "40ZTEST000000030", Base: &base}},
 		"unknown ETSO":      {{BuildingID: b0, EtsoCode: "NOPE", EffectiveFrom: time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)}},
 	} {
 		_, err := e.svc.ApplyImport(e.ctx, e.tenant.AdminScope, res.Import.ID, confs)
@@ -272,6 +273,13 @@ func TestApplyImportRequiresConfirmationAndEffectiveFrom(t *testing.T) {
 func TestApplyImportCreatesNewVersionWithSources(t *testing.T) {
 	t.Parallel()
 	e, content := icmalEnv(t, 8009)
+	// The base carries a KBK power coefficient, so only an explicit fixed source keeps the derived flat price.
+	tariffs := postgres.NewTariffRepository(e.pool)
+	baseTariff, err := tariffs.Get(e.ctx, e.tenant.AdminScope, e.tenant.Tariffs[0].ID)
+	require.NoError(t, err)
+	baseTariff.KbkPowerPrice = dp("2")
+	_, err = tariffs.Update(e.ctx, e.tenant.AdminScope, baseTariff)
+	require.NoError(t, err)
 	res, err := e.svc.Import(e.ctx, e.tenant.AdminScope, e.tenant.Users[model.UserRoleCompanyAdmin].ID, "icmal.csv", content)
 	require.NoError(t, err)
 	b0 := e.tenant.Buildings[0].ID
