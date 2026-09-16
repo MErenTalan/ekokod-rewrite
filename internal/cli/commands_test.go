@@ -20,7 +20,7 @@ func TestEverySubcommandIsRegistered(t *testing.T) {
 		registered[cmd.Name()] = true
 	}
 
-	for _, name := range []string{"api", "worker", "scheduler", "migrate", "seed", "config:check", "version"} {
+	for _, name := range []string{"api", "worker", "scheduler", "migrate", "seed", "config:check", "version", "tool"} {
 		require.True(t, registered[name], "subcommand %q must be registered", name)
 	}
 }
