@@ -257,7 +257,10 @@ func composeOpenPeriodRow(analyzerID uuid.UUID, w energy.Window, dailyBuckets []
 			continue
 		}
 		v := inside.Sub(*before)
-		values[reg] = &v
+		// R102: a composed figure can go negative across a meter swap
+		// exactly as a materialised bucket's own delta column can
+		// (bucketValues above) — nonNegative applies the same rule here.
+		values[reg] = nonNegative(&v)
 	}
 
 	return &Row{
@@ -298,22 +301,40 @@ func bucketToRow(b model.ConsumptionBucket, w energy.Window) Row {
 
 // bucketValues maps a ConsumptionBucket's per-register consumption (delta)
 // columns onto energy.Register. Every one of the twelve registers has an
-// entry, nil where the aggregate's own column is nil.
+// entry, nil where the aggregate's own column is nil OR negative (R102: a
+// meter swap or other index discontinuity can make last-first inside a
+// bucket negative; Analytics has no suspicion channel, so a negative figure
+// comes back as an ordinary "no data" nil rather than a number nobody
+// flagged as wrong).
 func bucketValues(b model.ConsumptionBucket) map[energy.Register]*decimal.Decimal {
 	return map[energy.Register]*decimal.Decimal{
-		energy.ActiveImport:             b.ActiveConsumption,
-		energy.ReactiveInductiveImport:  b.InductiveConsumption,
-		energy.ReactiveCapacitiveImport: b.CapacitiveConsumption,
-		energy.T1Import:                 b.T1Consumption,
-		energy.T2Import:                 b.T2Consumption,
-		energy.T3Import:                 b.T3Consumption,
-		energy.ActiveExport:             b.ActiveGeneration,
-		energy.ReactiveInductiveExport:  b.InductiveGeneration,
-		energy.ReactiveCapacitiveExport: b.CapacitiveGeneration,
-		energy.T1Export:                 b.T1Generation,
-		energy.T2Export:                 b.T2Generation,
-		energy.T3Export:                 b.T3Generation,
+		energy.ActiveImport:             nonNegative(b.ActiveConsumption),
+		energy.ReactiveInductiveImport:  nonNegative(b.InductiveConsumption),
+		energy.ReactiveCapacitiveImport: nonNegative(b.CapacitiveConsumption),
+		energy.T1Import:                 nonNegative(b.T1Consumption),
+		energy.T2Import:                 nonNegative(b.T2Consumption),
+		energy.T3Import:                 nonNegative(b.T3Consumption),
+		energy.ActiveExport:             nonNegative(b.ActiveGeneration),
+		energy.ReactiveInductiveExport:  nonNegative(b.InductiveGeneration),
+		energy.ReactiveCapacitiveExport: nonNegative(b.CapacitiveGeneration),
+		energy.T1Export:                 nonNegative(b.T1Generation),
+		energy.T2Export:                 nonNegative(b.T2Generation),
+		energy.T3Export:                 nonNegative(b.T3Generation),
 	}
+}
+
+// nonNegative returns d unchanged, or nil when d is itself nil or negative
+// (R102, final review A M-1): the Analytics path never returns a negative
+// consumption for a register — a materialised bucket's own delta column or a
+// composed row's closing-index subtraction can go negative across a meter
+// swap, and since Analytics has no suspicion channel (only Billing records
+// suspect periods), the only sound thing to surface is "unavailable", never
+// the negative number itself.
+func nonNegative(d *decimal.Decimal) *decimal.Decimal {
+	if d == nil || d.IsNegative() {
+		return nil
+	}
+	return d
 }
 
 // bucketIndexes maps a ConsumptionBucket's closing-index columns onto

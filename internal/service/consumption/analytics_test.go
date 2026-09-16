@@ -284,6 +284,9 @@ func TestAnalyticsValidatesBeforeAnyIO(t *testing.T) {
 		{"empty analyzer ids", validScope, consumption.SeriesRequest{AnalyzerIDs: nil, Level: energy.Hourly, Range: validRange}},
 		{"invalid range", validScope, consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{uuid.New()}, Level: energy.Hourly, Range: store.TimeRange{From: from, To: from}}},
 		{"over MaxBuckets", validScope, consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{uuid.New()}, Level: energy.Hourly, Range: store.TimeRange{From: from, To: from.Add(time.Duration(consumption.MaxBuckets+1) * time.Hour)}}},
+		{"duplicate analyzer id (I-5's probe)", validScope, consumption.SeriesRequest{AnalyzerIDs: duplicateAnalyzerID(), Level: energy.Hourly, Range: validRange}},
+		{"51 analyzer ids", validScope, consumption.SeriesRequest{AnalyzerIDs: newUUIDs(consumption.MaxAnalyzersPerRequest + 1), Level: energy.Hourly, Range: validRange}},
+		{"401-day span", validScope, consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{uuid.New()}, Level: energy.Yearly, Range: store.TimeRange{From: from, To: from.Add(401 * 24 * time.Hour)}}},
 	}
 
 	for _, tc := range cases {
@@ -296,9 +299,18 @@ func TestAnalyticsValidatesBeforeAnyIO(t *testing.T) {
 	}
 }
 
-// TestAnalyticsAcceptsExactlyMaxBuckets is I-6's positive control.
-func TestAnalyticsAcceptsExactlyMaxBuckets(t *testing.T) {
-	a, err := consumption.NewAnalytics(consumption.AnalyticsDeps{Analytics: fakeAnalytics{}, Log: testLog(t)})
+// TestExactlyMaxBucketsAtHourlyNowHitsMaxRequestSpanFirst documents R99's
+// interaction with I-6's original MaxBuckets positive control: MaxBuckets
+// (10000) hourly buckets is a 10000h span, which is now WIDER than
+// MaxRequestSpan (400d = 9600h) — the tightest of the two checks always
+// wins. So a request that used to be I-6's accepted boundary case is now
+// refused by the span cap before bucketCountExceeds is even reached; the
+// real positive control for what a caller can actually request is
+// TestAnalyticsAcceptsExactlyMaxRequestSpan below. MaxBuckets stays in
+// force as defence-in-depth (R99 does not remove it), it is just no longer
+// reachable at any level within MaxRequestSpan.
+func TestExactlyMaxBucketsAtHourlyNowHitsMaxRequestSpanFirst(t *testing.T) {
+	a, err := consumption.NewAnalytics(consumption.AnalyticsDeps{Analytics: noAnalytics{}, Log: testLog(t)})
 	require.NoError(t, err)
 	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
@@ -308,9 +320,60 @@ func TestAnalyticsAcceptsExactlyMaxBuckets(t *testing.T) {
 		Level:       energy.Hourly,
 		Range:       store.TimeRange{From: from, To: from.Add(time.Duration(consumption.MaxBuckets) * time.Hour)},
 	}
-	rows, err := a.Consumption(ctx, scope, req)
+	_, err = a.Consumption(ctx, scope, req)
+	require.ErrorIs(t, err, consumption.ErrInvalidRequest, "10000h > MaxRequestSpan's 9600h: refused before any AnalyticsRepository call")
+}
+
+// duplicateAnalyzerID reproduces final review A's I-5 probe verbatim: the
+// same id listed twice.
+func duplicateAnalyzerID() []uuid.UUID {
+	id := uuid.New()
+	return []uuid.UUID{id, id}
+}
+
+// newUUIDs returns n distinct uuid.UUIDs, for R99's MaxAnalyzersPerRequest
+// boundary tests.
+func newUUIDs(n int) []uuid.UUID {
+	ids := make([]uuid.UUID, n)
+	for i := range ids {
+		ids[i] = uuid.New()
+	}
+	return ids
+}
+
+// TestAnalyticsAcceptsExactlyMaxAnalyzersPerRequest is R99's positive
+// control for the analyzer-count cap: exactly MaxAnalyzersPerRequest,
+// all distinct, must not be refused.
+func TestAnalyticsAcceptsExactlyMaxAnalyzersPerRequest(t *testing.T) {
+	a, err := consumption.NewAnalytics(consumption.AnalyticsDeps{Analytics: fakeAnalytics{}, Log: testLog(t)})
 	require.NoError(t, err)
-	require.Empty(t, rows)
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+	from := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+	req := consumption.SeriesRequest{
+		AnalyzerIDs: newUUIDs(consumption.MaxAnalyzersPerRequest),
+		Level:       energy.Hourly,
+		Range:       store.TimeRange{From: from, To: from.Add(time.Hour)},
+	}
+	_, err = a.Consumption(ctx, scope, req)
+	require.NoError(t, err)
+}
+
+// TestAnalyticsAcceptsExactlyMaxRequestSpan is R99's positive control for the
+// span cap: exactly 400 days must not be refused.
+func TestAnalyticsAcceptsExactlyMaxRequestSpan(t *testing.T) {
+	a, err := consumption.NewAnalytics(consumption.AnalyticsDeps{Analytics: fakeAnalytics{}, Log: testLog(t)})
+	require.NoError(t, err)
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+	from := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	req := consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{uuid.New()},
+		Level:       energy.Yearly,
+		Range:       store.TimeRange{From: from, To: from.Add(consumption.MaxRequestSpan)},
+	}
+	_, err = a.Consumption(ctx, scope, req)
+	require.NoError(t, err)
 }
 
 // TestAnalyticsRefusesAnUnrecognisedLevel is M-1: an unknown Level must be
@@ -465,4 +528,81 @@ func TestComposedRowIsOmittedWhenNoDailyBucketPrecedesThePeriod(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Empty(t, rows, "nothing to subtract from: no row, never an all-nil-values row")
+}
+
+// --- R102: a negative consumption is nil, never a suspicious number --------
+
+// TestMaterialisedNegativeConsumptionIsNilNotNegative reproduces final
+// review A's meter-swap probe (M-1): a materialised bucket whose own delta
+// column has gone negative (index 50000, then 120 after a physical meter
+// swap) must surface as nil, never as -49880 — Analytics has no suspicion
+// channel, so a negative number here would silently double-count into
+// Summarise/Balance with no signal at all.
+func TestMaterialisedNegativeConsumptionIsNilNotNegative(t *testing.T) {
+	loc := istanbulLoc(t)
+	analyzerID := uuid.New()
+	dayStart := time.Date(2026, 3, 10, 0, 0, 0, 0, loc)
+
+	analytics := fakeAnalytics{
+		dailyRows: []model.ConsumptionBucket{
+			{
+				AnalyzerID:        analyzerID,
+				Bucket:            dayStart,
+				ActiveConsumption: dec("-49880"),
+				ActiveIndex:       dec("120"),
+			},
+		},
+	}
+	a, err := consumption.NewAnalytics(consumption.AnalyticsDeps{Analytics: analytics, Log: testLog(t)})
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+	rows, err := a.Consumption(ctx, scope, consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{analyzerID},
+		Level:       energy.Daily,
+		Range:       store.TimeRange{From: dayStart, To: dayStart.Add(24 * time.Hour)},
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Nil(t, rows[0].Values[energy.ActiveImport], "a negative materialised consumption must come back nil, never -49880")
+}
+
+// TestComposedNegativeConsumptionIsNilNotNegative is
+// TestMaterialisedNegativeConsumptionIsNilNotNegative's counterpart for a
+// COMPOSED row (R94): the last consumption_daily closing index before the
+// missing month (50000) is higher than the last one inside it (120) — the
+// same meter-swap shape as the review's probe — so the composed
+// inside-minus-before subtraction goes negative and must come back nil, not
+// -49880.
+func TestComposedNegativeConsumptionIsNilNotNegative(t *testing.T) {
+	loc := istanbulLoc(t)
+	analyzerID := uuid.New()
+	jan1 := time.Date(2026, 1, 1, 0, 0, 0, 0, loc)
+	jan31 := time.Date(2026, 1, 31, 0, 0, 0, 0, loc)
+	feb10 := time.Date(2026, 2, 10, 0, 0, 0, 0, loc)
+	midFeb := time.Date(2026, 2, 15, 0, 0, 0, 0, loc)
+
+	analytics := fakeAnalytics{
+		dailyRows: []model.ConsumptionBucket{
+			{AnalyzerID: analyzerID, Bucket: jan31, ActiveIndex: dec("50000")},
+			{AnalyzerID: analyzerID, Bucket: feb10, ActiveIndex: dec("120")},
+		},
+	}
+	a, err := consumption.NewAnalytics(consumption.AnalyticsDeps{Analytics: analytics, Log: testLog(t)})
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+	rows, err := a.Consumption(ctx, scope, consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{analyzerID},
+		Level:       energy.Monthly,
+		Range:       store.TimeRange{From: jan1, To: midFeb},
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "January has no monthly materialised row either, but only February is under test here")
+
+	feb := rows[0]
+	require.True(t, feb.Partial)
+	require.Nil(t, feb.Values[energy.ActiveImport], "a negative composed consumption (120 - 50000) must come back nil, never -49880")
 }

@@ -30,7 +30,10 @@ var exportRegisters = []energy.Register{
 // never corrupt rows. A suspect export register's Values entry comes back
 // nil (soundValue, sound.go) even if the input row's own Values[reg] is
 // itself non-nil — the same guard Balance and ExportRows apply
-// (task-9-review.md).
+// (task-9-review.md). A suspect export register's Indexes entry comes back
+// nil too (soundIndex, sound.go), exactly as ExportRows blanks a suspect
+// register's closing index (final review A M-4: the two helpers must not
+// diverge on this rule).
 func GenerationRows(rows []Row) []Row {
 	out := make([]Row, len(rows))
 	for i := range rows {
@@ -39,7 +42,7 @@ func GenerationRows(rows []Row) []Row {
 			AnalyzerID:      r.AnalyzerID,
 			Window:          r.Window,
 			Values:          filterSoundValues(r, exportRegisters),
-			Indexes:         filterRegisters(r.Indexes, exportRegisters),
+			Indexes:         filterSoundIndexes(r, exportRegisters),
 			InductiveRatio:  nil,
 			CapacitiveRatio: nil,
 			MaxDemandKw:     r.MaxDemandKw,
@@ -52,25 +55,28 @@ func GenerationRows(rows []Row) []Row {
 	return out
 }
 
-// filterRegisters builds a fresh map holding only keep's keys, each mapped
-// to m's own value for that key (nil when m is nil or does not have it) —
-// never the input map m itself.
-func filterRegisters(m map[energy.Register]*decimal.Decimal, keep []energy.Register) map[energy.Register]*decimal.Decimal {
-	out := make(map[energy.Register]*decimal.Decimal, len(keep))
-	for _, reg := range keep {
-		out[reg] = m[reg]
-	}
-	return out
-}
-
-// filterSoundValues is filterRegisters for r.Values specifically: each kept
-// register goes through soundValue (sound.go) rather than a bare map read,
-// so a register in r.Suspect comes back nil even when r.Values itself still
-// holds a number for it.
+// filterSoundValues builds a fresh map holding only keep's keys (never the
+// input row's own map), each kept register going through soundValue
+// (sound.go) rather than a bare map read, so a register in r.Suspect comes
+// back nil even when r.Values itself still holds a number for it.
 func filterSoundValues(r Row, keep []energy.Register) map[energy.Register]*decimal.Decimal {
 	out := make(map[energy.Register]*decimal.Decimal, len(keep))
 	for _, reg := range keep {
 		out[reg] = soundValue(r, reg)
+	}
+	return out
+}
+
+// filterSoundIndexes is filterSoundValues' sibling for r.Indexes (final
+// review A M-4): each kept register goes through soundIndex (sound.go)
+// rather than a bare map read, so a suspect register's closing index is
+// blanked here exactly as ExportRows already blanks it (sound.go's
+// soundIndex is the ONE place both callers derive that rule from, so they
+// cannot drift apart again).
+func filterSoundIndexes(r Row, keep []energy.Register) map[energy.Register]*decimal.Decimal {
+	out := make(map[energy.Register]*decimal.Decimal, len(keep))
+	for _, reg := range keep {
+		out[reg] = soundIndex(r, reg)
 	}
 	return out
 }

@@ -55,6 +55,23 @@ var ErrInvalidRequest = errors.New("consumption: invalid request")
 // error, not a slow query.
 const MaxBuckets = 10000
 
+// MaxAnalyzersPerRequest bounds AnalyzerIDs (R99, final review A I-4/I-5): a
+// request naming more than this many analyzers fails ErrInvalidRequest
+// before any I/O. Combined with MaxRequestSpan below, this bounds the
+// len(AnalyzerIDs) * buckets cell count Analytics and Billing both
+// preallocate, so neither can be driven to the multi-GB allocation the
+// review's I-4 finding demonstrated.
+const MaxAnalyzersPerRequest = 50
+
+// MaxRequestSpan bounds Range.To - Range.From at every Level (R99, final
+// review A I-4): a request whose raw wall-clock span exceeds this fails
+// ErrInvalidRequest before any I/O, regardless of how few buckets that span
+// would expand to at Level — this is what actually bounds Billing's
+// meter_readings load, which is proportional to the span, not to
+// MaxBuckets' bucket COUNT (a 10-year Yearly request is only 10 buckets but
+// loads a decade of readings). F6 pages a longer report by year.
+const MaxRequestSpan = 400 * 24 * time.Hour
+
 // BillingSnapshotTolerance bounds R63's "covering": a billing-kind boundary
 // reading older than this relative to its own bound does not count as
 // covering the month (I-3).
@@ -159,13 +176,22 @@ func mustLoadIstanbul() *time.Location {
 }
 
 // validateRequest applies the shared fail-closed checks both Analytics and
-// Billing run before any I/O: a valid Scope, a non-empty AnalyzerIDs, a
-// valid Level, a valid Range, and a bucket count at Level within MaxBuckets.
+// Billing run before any I/O: a valid Scope, a non-empty, duplicate-free
+// AnalyzerIDs no longer than MaxAnalyzersPerRequest, a valid Level, a valid
+// Range no wider than MaxRequestSpan, and a bucket count at Level within
+// MaxBuckets (R99: every check below runs before either path makes a single
+// repository call).
 func validateRequest(sc store.Scope, req SeriesRequest) error {
 	if !sc.Valid() {
 		return ErrInvalidRequest
 	}
 	if len(req.AnalyzerIDs) == 0 {
+		return ErrInvalidRequest
+	}
+	if len(req.AnalyzerIDs) > MaxAnalyzersPerRequest {
+		return ErrInvalidRequest
+	}
+	if hasDuplicateAnalyzerID(req.AnalyzerIDs) {
 		return ErrInvalidRequest
 	}
 	if !validLevel(req.Level) {
@@ -174,11 +200,29 @@ func validateRequest(sc store.Scope, req SeriesRequest) error {
 	if !req.Range.Valid() {
 		return ErrInvalidRequest
 	}
+	if req.Range.To.Sub(req.Range.From) > MaxRequestSpan {
+		return ErrInvalidRequest
+	}
 	w := energy.Window{From: req.Range.From, To: req.Range.To}
 	if bucketCountExceeds(req.Level, w, istanbul, MaxBuckets) {
 		return ErrInvalidRequest
 	}
 	return nil
+}
+
+// hasDuplicateAnalyzerID reports whether ids contains the same uuid.UUID
+// twice (R99, final review A I-5): a repeated id would otherwise silently
+// double every total both paths compute for it, since neither path
+// deduplicates AnalyzerIDs itself.
+func hasDuplicateAnalyzerID(ids []uuid.UUID) bool {
+	seen := make(map[uuid.UUID]bool, len(ids))
+	for _, id := range ids {
+		if seen[id] {
+			return true
+		}
+		seen[id] = true
+	}
+	return false
 }
 
 // validLevel reports whether l is one of the four levels 02 §3.4 defines
