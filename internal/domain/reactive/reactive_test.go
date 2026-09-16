@@ -122,10 +122,11 @@ func TestReactiveBandsAt30kW(t *testing.T) {
 func TestReactiveZeroNetWithReactiveIsExceeded(t *testing.T) {
 	in := base()
 	in.NetConsumption = d("0")
+	in.Inductive = dp("0.1") // below the 0.20 limit: exceeded only under the ε form, never under ratio 1
 	in.Capacitive = dp("0")
 	r := reactive.Evaluate(in)
 	require.Nil(t, r.InductiveRatio, "R117: ratio stays nil")
-	require.Equal(t, "500", r.InductiveKvarhCharged.String())
+	require.Equal(t, "0.1", r.InductiveKvarhCharged.String())
 	require.Nil(t, r.CapacitiveKvarhCharged, "net 0 and reactive 0 is not exceeded")
 }
 
