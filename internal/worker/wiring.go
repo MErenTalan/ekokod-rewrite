@@ -11,11 +11,13 @@
 // hook, internal/ingest.Service (Handlers.Ingestion),
 // internal/ingest/backfill.Backfiller (Handlers.Backfill) and
 // internal/service/consumption.Refresher (Handlers.ConsumptionRefresh, F3
-// Task 11a — the per-view-locked consumption.refresh handler). F3 Task 11b
-// wires ingestDeps.ConsumptionRefresh to a small adapter over the same
-// *job.Client (consumptionRefreshEnqueuer below) and threads
+// Task 11a — the globally-locked consumption.refresh handler, R100). F3
+// Task 11b wires ingestDeps.ConsumptionRefresh to a small adapter over the
+// same *job.Client (consumptionRefreshEnqueuer below) and threads
 // cfg.ConsumptionRefreshEnabled / cfg.ConsumptionRefreshLockTTL through, so
-// the enqueue seam F2 left nil is now live. Every resource
+// the enqueue seam F2 left nil is now live; the same adapter also backs
+// consumption.RefreshDeps.Enqueuer, so lock contention re-enqueues through
+// the identical path (R100(4)). Every resource
 // Build opens before a later step fails is closed on that step's error
 // path (see closers/closeAll below), and again, idempotently, by
 // Built.Close on the success path — TestWorkerBuildClosesEarlierResourcesOnLateFailure
@@ -27,11 +29,13 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
 
+	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/credentials"
@@ -156,22 +160,39 @@ func (v verifierResolver) Verifier(p integration.Provider) (credentials.Verifier
 	return v.registry.Source(p)
 }
 
-// consumptionRefreshEnqueuer adapts *job.Client to
-// ingest.ConsumptionRefreshEnqueuer (F3 Task 11b): it builds a
-// consumption.refresh task via job.NewConsumptionRefreshTask and enqueues it
-// on the SAME job client every other integration task in this graph uses —
-// no separate connection, no separate retry policy source.
+// consumptionRefreshEnqueuer adapts *job.Client to BOTH
+// ingest.ConsumptionRefreshEnqueuer (F3 Task 11b) and
+// consumption.Enqueuer (R100(4)) — the two interfaces share the identical
+// EnqueueConsumptionRefresh method shape by design, so this one adapter
+// satisfies both with no glue: it is the enqueue seam a fetch run uses to
+// start the FIRST consumption.refresh, and the seam RefreshConsumption
+// itself uses to re-enqueue on lock contention. It builds a
+// consumption.refresh task via job.NewConsumptionRefreshTask — using its
+// OWN clock reading as "now" (R100(2): the enqueuing side's clock, not the
+// handler's) — and enqueues it on the SAME job client every other
+// integration task in this graph uses — no separate connection, no separate
+// retry policy source.
+//
+// R100(2): asynq.ErrTaskIDConflict is mapped to nil here, never surfaced as
+// an error. A conflict means another enqueue already reserved this exact
+// one-minute debounce slot for this exact window — the designed burst-
+// collapse case, not a failure — so the caller (internal/ingest's
+// maybeEnqueueConsumptionRefresh) must see success and write no warning.
 type consumptionRefreshEnqueuer struct {
 	client   *job.Client
 	maxRetry int
+	clock    clock.Clock
 }
 
 func (e consumptionRefreshEnqueuer) EnqueueConsumptionRefresh(ctx context.Context, p job.ConsumptionRefreshPayload) error {
-	task, err := job.NewConsumptionRefreshTask(p, job.TaskOptions{MaxRetry: e.maxRetry})
+	task, err := job.NewConsumptionRefreshTask(p, e.clock.Now(), job.TaskOptions{MaxRetry: e.maxRetry})
 	if err != nil {
 		return err
 	}
 	_, err = e.client.Enqueue(ctx, task)
+	if err != nil && errors.Is(err, asynq.ErrTaskIDConflict) {
+		return nil
+	}
 	return err
 }
 
@@ -322,6 +343,14 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		return graph{}, fmt.Errorf("worker: build credential service: %w", err)
 	}
 
+	// consumptionRefreshEnq is the ONE consumptionRefreshEnqueuer instance
+	// this graph builds (R100(4)): ingestDeps.ConsumptionRefresh below uses
+	// it to enqueue the FIRST consumption.refresh from a fetch run, and
+	// consumption.RefreshDeps.Enqueuer (built further down) uses the exact
+	// same value to re-enqueue on lock contention — one clock, one MaxRetry
+	// source, no risk of the two adapters drifting apart.
+	consumptionRefreshEnq := consumptionRefreshEnqueuer{client: jobClient, maxRetry: cfg.Worker.MaxRetries, clock: clock.System()}
+
 	// I1: the PM5340 hook list is built once here as ingestDeps, the exact
 	// literal passed to ingest.New — a same-package test asserts it holds
 	// exactly one *generation.Accumulator (see wiring_internal_test.go).
@@ -350,7 +379,7 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		// F3 Task 11b: the enqueue seam F2 left nil is now wired to the same
 		// jobClient every other integration task in this graph enqueues
 		// through, gated by cfg.ConsumptionRefreshEnabled below.
-		ConsumptionRefresh: consumptionRefreshEnqueuer{client: jobClient, maxRetry: cfg.Worker.MaxRetries},
+		ConsumptionRefresh: consumptionRefreshEnq,
 		Clock:              clock.System(),
 		Log:                log,
 	}
@@ -376,15 +405,21 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		MaxRetry:    cfg.Worker.MaxRetries,
 	})
 
-	// R71/R72 (Task 11a) / Task 11b: the refresher reuses the SAME redisLock
-	// every other Locker consumer in this graph does, and is bounded by
-	// cfg.ConsumptionRefreshLockTTL (EKOKOD_CONSUMPTION_REFRESH_LOCK_TTL,
-	// default 10m). Location is Europe/Istanbul, loaded through the same
+	// R71/R72 (Task 11a) / Task 11b / R100: the refresher reuses the SAME
+	// redisLock every other Locker consumer in this graph does — now under
+	// R100(4)'s single global key rather than one key per view — and is
+	// bounded by cfg.ConsumptionRefreshLockTTL (EKOKOD_CONSUMPTION_REFRESH_LOCK_TTL,
+	// default 30m, R100(5)). Enqueuer is the SAME consumptionRefreshEnq
+	// ingestDeps.ConsumptionRefresh above uses, so a lock-contention
+	// re-enqueue (R100(4)) goes through the identical adapter. Location is
+	// Europe/Istanbul, loaded through the same
 	// internal/integration/normalize.Istanbul every other timestamp
 	// normalisation in this worker uses.
 	consumptionRefresher, err := consumption.NewRefresher(consumption.RefreshDeps{
 		Aggregates: adminAggregateRepo,
 		Locker:     redisLock,
+		Enqueuer:   consumptionRefreshEnq,
+		Clock:      clock.System(),
 		LockTTL:    cfg.ConsumptionRefreshLockTTL,
 		Location:   normalize.Istanbul,
 		Log:        log,

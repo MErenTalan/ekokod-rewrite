@@ -83,8 +83,10 @@ type SyncPricesPayload struct{ Window *Window }
 // ConsumptionRefreshPayload is R17's payload shape, declared in F2 so the
 // wire format was stable ahead of its handler. F3 Task 11a adds its
 // constructor (NewConsumptionRefreshTask), decoder (DecodeConsumptionRefresh)
-// and handler seam (Refresher) in consumption.go. Nothing enqueues this task
-// yet — internal/ingest wiring the enqueue call is Task 11b.
+// and handler seam (Refresher) in consumption.go; Task 11b wires
+// internal/ingest's enqueue call site to it (worker/wiring.go's
+// consumptionRefreshEnqueuer), so this task is enqueued on every qualifying
+// fetch run.
 type ConsumptionRefreshPayload struct {
 	CompanyID, AnalyzerID uuid.UUID
 	From, To              time.Time

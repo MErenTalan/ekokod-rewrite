@@ -285,14 +285,15 @@ func TestJobMaxRetriesRejectsNegative(t *testing.T) {
 	require.Contains(t, err.Error(), "zero or greater")
 }
 
-// TestConsumptionRefreshDefaults pins Task 11b's defaults: enabled by
+// TestConsumptionRefreshDefaults pins R100(5)'s defaults: enabled by
 // default (an operator who never heard of this knob still gets the R73
-// promise), and a 10-minute lock TTL.
+// promise), and a 30-minute lock TTL (long enough for a platform-wide
+// yearly recompute, final review A I-3(d)).
 func TestConsumptionRefreshDefaults(t *testing.T) {
 	cfg, err := config.Load(lookupFrom(valid()))
 	require.NoError(t, err)
 	require.True(t, cfg.ConsumptionRefreshEnabled)
-	require.Equal(t, 10*time.Minute, cfg.ConsumptionRefreshLockTTL)
+	require.Equal(t, 30*time.Minute, cfg.ConsumptionRefreshLockTTL)
 }
 
 // TestConsumptionRefreshEnabledCanBeDisabled pins the operator escape hatch

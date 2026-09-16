@@ -17,27 +17,32 @@ import (
 var (
 	consumptionFrom = time.Date(2026, 3, 14, 10, 0, 0, 0, time.UTC)
 	consumptionTo   = consumptionFrom.Add(time.Hour)
+	// consumptionNow is the shared "enqueue-side clock" fixture (R100(2)):
+	// a fixed point comfortably inside the consumptionFrom/To hour's own
+	// wall-clock day, so ConsumptionRefreshTaskID's minute-truncated
+	// suffix is deterministic across every test that reuses it.
+	consumptionNow = time.Date(2026, 3, 14, 10, 5, 30, 0, time.UTC)
 )
 
 // TestConsumptionRefreshTaskIDIsDeterministic proves ConsumptionRefreshTaskID
-// is a pure, repeatable function of (From, To) alone.
+// is a pure, repeatable function of (From, To, now) alone.
 func TestConsumptionRefreshTaskIDIsDeterministic(t *testing.T) {
-	a := ConsumptionRefreshTaskID(consumptionFrom, consumptionTo)
-	b := ConsumptionRefreshTaskID(consumptionFrom, consumptionTo)
+	a := ConsumptionRefreshTaskID(consumptionFrom, consumptionTo, consumptionNow)
+	b := ConsumptionRefreshTaskID(consumptionFrom, consumptionTo, consumptionNow)
 	require.Equal(t, a, b)
 	require.NotEmpty(t, a)
 }
 
 // TestConsumptionRefreshTaskIDIgnoresAnalyzerAndCompany proves
 // ConsumptionRefreshTaskID — the exact formula NewConsumptionRefreshTask
-// feeds asynq.TaskID — takes only (From, To): it has no CompanyID or
+// feeds asynq.TaskID — takes only (From, To, now): it has no CompanyID or
 // AnalyzerID parameter at all, so two payloads differing only in one of
-// those fields necessarily compute the identical id (R71/R72). The
-// end-to-end proof that the ACTUAL enqueued task collides — a second
-// asynq.ErrTaskIDConflict for a different analyzer's payload over the same
-// window — lives in consumption_integration_test.go, since asynq.Task
-// exposes no accessor for the id it was built with outside a real broker
-// round trip.
+// those fields necessarily compute the identical id (R71/R72) when enqueued
+// at the same now. The end-to-end proof that the ACTUAL enqueued task
+// collides — a second asynq.ErrTaskIDConflict for a different analyzer's
+// payload over the same window and the same debounce minute — lives in
+// consumption_integration_test.go, since asynq.Task exposes no accessor for
+// the id it was built with outside a real broker round trip.
 func TestConsumptionRefreshTaskIDIgnoresAnalyzerAndCompany(t *testing.T) {
 	company1, company2 := uuid.New(), uuid.New()
 	analyzer1, analyzer2 := uuid.New(), uuid.New()
@@ -48,35 +53,35 @@ func TestConsumptionRefreshTaskIDIgnoresAnalyzerAndCompany(t *testing.T) {
 	differentCompany := base
 	differentCompany.CompanyID = company2
 
-	want := ConsumptionRefreshTaskID(base.From, base.To)
-	require.Equal(t, want, ConsumptionRefreshTaskID(differentAnalyzer.From, differentAnalyzer.To))
-	require.Equal(t, want, ConsumptionRefreshTaskID(differentCompany.From, differentCompany.To))
+	want := ConsumptionRefreshTaskID(base.From, base.To, consumptionNow)
+	require.Equal(t, want, ConsumptionRefreshTaskID(differentAnalyzer.From, differentAnalyzer.To, consumptionNow))
+	require.Equal(t, want, ConsumptionRefreshTaskID(differentCompany.From, differentCompany.To, consumptionNow))
 
 	// And every one of these must still build successfully.
 	for _, p := range []ConsumptionRefreshPayload{base, differentAnalyzer, differentCompany} {
-		_, err := NewConsumptionRefreshTask(p, TaskOptions{})
+		_, err := NewConsumptionRefreshTask(p, consumptionNow, TaskOptions{})
 		require.NoError(t, err)
 	}
 }
 
 // TestConsumptionRefreshTaskIDDiffersByWindow proves different windows
-// produce different ids.
+// produce different ids, holding now fixed.
 func TestConsumptionRefreshTaskIDDiffersByWindow(t *testing.T) {
-	a := ConsumptionRefreshTaskID(consumptionFrom, consumptionTo)
-	b := ConsumptionRefreshTaskID(consumptionFrom, consumptionTo.Add(time.Hour))
+	a := ConsumptionRefreshTaskID(consumptionFrom, consumptionTo, consumptionNow)
+	b := ConsumptionRefreshTaskID(consumptionFrom, consumptionTo.Add(time.Hour), consumptionNow)
 	require.NotEqual(t, a, b)
 
-	c := ConsumptionRefreshTaskID(consumptionFrom.Add(-time.Hour), consumptionTo)
+	c := ConsumptionRefreshTaskID(consumptionFrom.Add(-time.Hour), consumptionTo, consumptionNow)
 	require.NotEqual(t, a, c)
 }
 
 // TestConsumptionRefreshTaskIDCollapsesWithinTheSameHour proves From values
 // 10:15 and 10:45 (both inside the 10:00-11:00 hour) map to the same id,
-// given the same To.
+// given the same To and now.
 func TestConsumptionRefreshTaskIDCollapsesWithinTheSameHour(t *testing.T) {
 	to := time.Date(2026, 3, 14, 12, 0, 0, 0, time.UTC)
-	a := ConsumptionRefreshTaskID(time.Date(2026, 3, 14, 10, 15, 0, 0, time.UTC), to)
-	b := ConsumptionRefreshTaskID(time.Date(2026, 3, 14, 10, 45, 0, 0, time.UTC), to)
+	a := ConsumptionRefreshTaskID(time.Date(2026, 3, 14, 10, 15, 0, 0, time.UTC), to, consumptionNow)
+	b := ConsumptionRefreshTaskID(time.Date(2026, 3, 14, 10, 45, 0, 0, time.UTC), to, consumptionNow)
 	require.Equal(t, a, b)
 }
 
@@ -88,22 +93,43 @@ func TestConsumptionRefreshTaskIDCollapsesWithinTheSameHour(t *testing.T) {
 // equality-with-itself.
 func TestConsumptionRefreshTaskIDCeilsExactHourToOnLiteral(t *testing.T) {
 	from := time.Date(2026, 3, 14, 10, 15, 0, 0, time.UTC)
+	now := time.Date(2026, 3, 14, 10, 20, 0, 0, time.UTC)
 
 	t.Run("to exactly on the hour is not ceiled further", func(t *testing.T) {
 		to := time.Date(2026, 3, 14, 11, 0, 0, 0, time.UTC)
-		got := ConsumptionRefreshTaskID(from, to)
-		require.Equal(t, "consumption.refresh:2026-03-14T10:00:00Z/2026-03-14T11:00:00Z", got)
+		got := ConsumptionRefreshTaskID(from, to, now)
+		require.Equal(t, "consumption.refresh:2026-03-14T10:00:00Z/2026-03-14T11:00:00Z:2026-03-14T10:20:00Z", got)
 	})
 
 	t.Run("to one nanosecond past the hour ceils to the next hour", func(t *testing.T) {
 		to := time.Date(2026, 3, 14, 11, 0, 0, 1, time.UTC)
-		got := ConsumptionRefreshTaskID(from, to)
-		require.Equal(t, "consumption.refresh:2026-03-14T10:00:00Z/2026-03-14T12:00:00Z", got)
+		got := ConsumptionRefreshTaskID(from, to, now)
+		require.Equal(t, "consumption.refresh:2026-03-14T10:00:00Z/2026-03-14T12:00:00Z:2026-03-14T10:20:00Z", got)
 	})
 }
 
+// TestConsumptionRefreshTaskIDTruncatesNowToTheMinute proves R100(2)'s
+// debounce slot floors now down to the minute: two enqueues in the same
+// wall-clock minute (differing only in seconds) compute the SAME id, while
+// one a minute later computes a DIFFERENT one. The mutation that uses now
+// verbatim (no Truncate) would make this test's first assertion fail, since
+// :05 and :45 within the same minute would otherwise still differ.
+func TestConsumptionRefreshTaskIDTruncatesNowToTheMinute(t *testing.T) {
+	nowA := time.Date(2026, 3, 14, 10, 5, 5, 0, time.UTC)
+	nowB := time.Date(2026, 3, 14, 10, 5, 45, 0, time.UTC)
+	nowC := time.Date(2026, 3, 14, 10, 6, 0, 0, time.UTC)
+
+	a := ConsumptionRefreshTaskID(consumptionFrom, consumptionTo, nowA)
+	b := ConsumptionRefreshTaskID(consumptionFrom, consumptionTo, nowB)
+	c := ConsumptionRefreshTaskID(consumptionFrom, consumptionTo, nowC)
+
+	require.Equal(t, a, b, "two enqueues within the same wall-clock minute must collapse to the same id")
+	require.NotEqual(t, a, c, "an enqueue a minute later must get its own id")
+}
+
 // TestConsumptionRefreshPayloadRoundTrips proves encode/decode is
-// byte-for-byte faithful.
+// byte-for-byte faithful, and that now (which feeds only the TaskID and
+// ProcessIn, never the payload) is absent from the decoded shape.
 func TestConsumptionRefreshPayloadRoundTrips(t *testing.T) {
 	want := ConsumptionRefreshPayload{
 		CompanyID:  uuid.New(),
@@ -111,7 +137,7 @@ func TestConsumptionRefreshPayloadRoundTrips(t *testing.T) {
 		From:       consumptionFrom,
 		To:         consumptionTo,
 	}
-	task, err := NewConsumptionRefreshTask(want, TaskOptions{})
+	task, err := NewConsumptionRefreshTask(want, consumptionNow, TaskOptions{})
 	require.NoError(t, err)
 	got, err := DecodeConsumptionRefresh(task)
 	require.NoError(t, err)
@@ -129,35 +155,40 @@ func TestNewConsumptionRefreshTaskRejectsInvalidPayloads(t *testing.T) {
 	t.Run("nil company", func(t *testing.T) {
 		p := valid
 		p.CompanyID = uuid.Nil
-		_, err := NewConsumptionRefreshTask(p, TaskOptions{})
+		_, err := NewConsumptionRefreshTask(p, consumptionNow, TaskOptions{})
 		require.Error(t, err)
 	})
 
 	t.Run("zero From", func(t *testing.T) {
 		p := valid
 		p.From = time.Time{}
-		_, err := NewConsumptionRefreshTask(p, TaskOptions{})
+		_, err := NewConsumptionRefreshTask(p, consumptionNow, TaskOptions{})
 		require.Error(t, err)
 	})
 
 	t.Run("zero To", func(t *testing.T) {
 		p := valid
 		p.To = time.Time{}
-		_, err := NewConsumptionRefreshTask(p, TaskOptions{})
+		_, err := NewConsumptionRefreshTask(p, consumptionNow, TaskOptions{})
 		require.Error(t, err)
 	})
 
 	t.Run("From equal To", func(t *testing.T) {
 		p := valid
 		p.To = p.From
-		_, err := NewConsumptionRefreshTask(p, TaskOptions{})
+		_, err := NewConsumptionRefreshTask(p, consumptionNow, TaskOptions{})
 		require.Error(t, err)
 	})
 
 	t.Run("From after To", func(t *testing.T) {
 		p := valid
 		p.From, p.To = p.To, p.From
-		_, err := NewConsumptionRefreshTask(p, TaskOptions{})
+		_, err := NewConsumptionRefreshTask(p, consumptionNow, TaskOptions{})
+		require.Error(t, err)
+	})
+
+	t.Run("zero now", func(t *testing.T) {
+		_, err := NewConsumptionRefreshTask(valid, time.Time{}, TaskOptions{})
 		require.Error(t, err)
 	})
 }
@@ -185,7 +216,7 @@ func TestRegisterRoutesConsumptionRefresh(t *testing.T) {
 	Register(mux, &Handlers{Log: slog.New(slog.NewTextHandler(io.Discard, nil)), ConsumptionRefresh: fake})
 
 	want := ConsumptionRefreshPayload{CompanyID: uuid.New(), AnalyzerID: uuid.New(), From: consumptionFrom, To: consumptionTo}
-	task, err := NewConsumptionRefreshTask(want, TaskOptions{})
+	task, err := NewConsumptionRefreshTask(want, consumptionNow, TaskOptions{})
 	require.NoError(t, err)
 
 	handler, pattern := mux.Handler(task)
