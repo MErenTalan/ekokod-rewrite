@@ -223,6 +223,44 @@ func TestMonthlyFallsBackWhenTheOnlyBillingSnapshotIsOlderThanTheTolerance(t *te
 	require.Equal(t, "200", row.Values[energy.ActiveImport].String())
 }
 
+// TestBillingNeverUsesCurrentIndexReadingsAsBoundaries is R64: current_index
+// never participates in §3.1 differencing. A current_index reading sits AT
+// the exact end boundary (10:00), with a wildly different value (9999) that
+// would corrupt the result if it were ever merged into the boundary
+// candidate pool and won the end-boundary tie against the real 10:00
+// load_profile reading. Since it must be ignored, the derived value is
+// exactly 1040 - 1000 = 40, unaffected by its presence.
+func TestBillingNeverUsesCurrentIndexReadingsAsBoundaries(t *testing.T) {
+	hourStart := billingT0
+	analyzerID := uuid.New()
+
+	readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
+		model.ReadingKindLoadProfile: {
+			readingRow(analyzerID, hourStart, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}),
+			readingRow(analyzerID, hourStart.Add(time.Hour), model.ReadingKindLoadProfile, map[string]string{"active_import": "1040"}),
+		},
+		model.ReadingKindCurrentIndex: {
+			readingRow(analyzerID, hourStart.Add(time.Hour), model.ReadingKindCurrentIndex, map[string]string{"active_import": "9999"}),
+		},
+	}}
+	b := newBilling(t, readings)
+
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+	req := consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{analyzerID},
+		Level:       energy.Hourly,
+		Range:       store.TimeRange{From: hourStart, To: hourStart.Add(time.Hour)},
+	}
+
+	rows, err := b.Consumption(ctx, scope, req)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.NotNil(t, rows[0].Values[energy.ActiveImport])
+	require.Equal(t, "40", rows[0].Values[energy.ActiveImport].String(),
+		"the current_index reading at the end boundary must never be considered a boundary candidate")
+}
+
 // dailyFixtureReadings builds the 25 hourly load_profile readings (00:00
 // through 24:00) TestDailyDoesNotEqualTheSumOfItsHoursWhenOneHourIsSuspect
 // hand-computes against, anchored at dayStart.
