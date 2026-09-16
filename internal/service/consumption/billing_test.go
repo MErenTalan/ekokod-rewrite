@@ -2,6 +2,7 @@ package consumption_test
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -711,6 +712,63 @@ func TestMonthlyBillingCoversWhenTheEndSnapshotIsExactlyAtTolerance(t *testing.T
 	require.Len(t, rows, 1)
 	require.Equal(t, energy.KindBilling, rows[0].Source, "exactly at tolerance must still count as covering")
 	require.Equal(t, "5000", rows[0].Values[energy.ActiveImport].String())
+}
+
+// TestMonthlyLoadProfileCoversExactlyAtToleranceButNotOneMicrosecondOver is
+// R96's LoadProfileBoundaryTolerance (36h) exact-edge pin at Monthly level
+// (final review B I-2: this parameter was unpinned by any test — mutating
+// 36h to 13h, 60h or even 168h left the whole package green, because every
+// existing user of it either had a fresher reading nearby or a
+// billing/daily fallback that happened to give the same numeric answer
+// either way). No billing or daily data exists anywhere near the END
+// boundary here, so the END boundary resolves ONLY through load_profile's
+// own tolerance check, with no fallback kind able to mask a wrong answer.
+//
+// The offsets below are the literal 36h, NOT consumption.LoadProfileBoundaryTolerance
+// itself: using the constant as the offset would make this test
+// self-referential (a mutation to the constant moves the fixture and the
+// production check together, so nothing could ever fail). The first
+// assertion below separately pins the constant's own value.
+func TestMonthlyLoadProfileCoversExactlyAtToleranceButNotOneMicrosecondOver(t *testing.T) {
+	require.Equal(t, 36*time.Hour, consumption.LoadProfileBoundaryTolerance, "R96's own ruled value")
+
+	loc := istanbulLoc(t)
+	jan1 := time.Date(2026, 1, 1, 0, 0, 0, 0, loc)
+	feb1 := time.Date(2026, 2, 1, 0, 0, 0, 0, loc)
+	analyzerID := uuid.New()
+
+	run := func(t *testing.T, offset time.Duration, wantRow bool) {
+		readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
+			model.ReadingKindLoadProfile: {
+				readingRow(analyzerID, jan1, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}),
+				readingRow(analyzerID, feb1.Add(-offset), model.ReadingKindLoadProfile, map[string]string{"active_import": "1200"}),
+			},
+		}}
+		b := newBilling(t, readings)
+		ctx := context.Background()
+		scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+
+		rows, err := b.Consumption(ctx, scope, consumption.SeriesRequest{
+			AnalyzerIDs: []uuid.UUID{analyzerID},
+			Level:       energy.Monthly,
+			Range:       store.TimeRange{From: jan1, To: feb1},
+		})
+		require.NoError(t, err)
+		if wantRow {
+			require.Len(t, rows, 1, "exactly at LoadProfileBoundaryTolerance must still cover")
+			require.Equal(t, energy.KindLoadProfile, rows[0].Source)
+			require.Equal(t, "200", rows[0].Values[energy.ActiveImport].String())
+		} else {
+			require.Empty(t, rows, "one microsecond over LoadProfileBoundaryTolerance must not cover, with no billing/daily fallback present")
+		}
+	}
+
+	t.Run("exactly at tolerance yields a row", func(t *testing.T) {
+		run(t, 36*time.Hour, true)
+	})
+	t.Run("one microsecond over tolerance yields no row", func(t *testing.T) {
+		run(t, 36*time.Hour+time.Microsecond, false)
+	})
 }
 
 // --- R95: daily is a fallback boundary kind, never at Hourly ---------------
@@ -1675,4 +1733,73 @@ func TestMaxDemandIncludesAReadingExactlyAtTheBucketStartButExcludesWTo(t *testi
 	require.Equal(t, "50", rows[0].MaxDemandKw.String(), "the reading exactly at the first bucket's w.From must be included")
 	require.NotNil(t, rows[1].MaxDemandKw)
 	require.Equal(t, "70", rows[1].MaxDemandKw.String(), "the reading exactly at the shared boundary belongs to the SECOND bucket, and 99 at the final w.To is excluded from both")
+}
+
+// --- 09 §F3 criterion 3: Yearly derives from its own boundaries too -------
+
+// TestYearlyDoesNotEqualTheSumOfItsMonthsWhenOneMonthBucketIsMissing is 09
+// §F3's criterion 3, Yearly's own leg (final review B I-1: no test in this
+// package ever requested energy.Yearly at all, so a mutation replacing the
+// yearly figure with the sum of 12 monthly Derive calls left the entire
+// package green, unit and integration).
+//
+// One load_profile reading at every month's own 00:00 boundary,
+// value(m) = 1000 + 100*m for m = 0..12 (January 1 of year 1 through
+// January 1 of year 2), EXCEPT month 6's reading (July 1) is never
+// written. Under R96 neither the June bucket (whose own END is July 1) nor
+// the July bucket (whose own START is July 1) can resolve: both are
+// silently absent. The other 10 monthly buckets survive and sum to 1200
+// (the true Jan1->Jan1 total) - 100 (June's own missing delta) - 100
+// (July's own missing delta) = 1000. The yearly row derives directly from
+// ITS OWN two boundaries (Jan 1 year 1 = 1000, Jan 1 year 2 = 2200):
+// 2200 - 1000 = 1200. 1200 != 1000 is the assertion that the yearly figure
+// is never produced by summing its 12 months.
+func TestYearlyDoesNotEqualTheSumOfItsMonthsWhenOneMonthBucketIsMissing(t *testing.T) {
+	loc := istanbulLoc(t)
+	jan1 := time.Date(2026, 1, 1, 0, 0, 0, 0, loc)
+	nextJan1 := jan1.AddDate(1, 0, 0)
+	analyzerID := uuid.New()
+
+	var lp []model.MeterReading
+	for m := 0; m <= 12; m++ {
+		if m == 6 {
+			continue // July 1's own reading is deliberately missing.
+		}
+		ts := jan1.AddDate(0, m, 0)
+		val := fmt.Sprintf("%d", 1000+100*m)
+		lp = append(lp, readingRow(analyzerID, ts, model.ReadingKindLoadProfile, map[string]string{"active_import": val}))
+	}
+	readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
+		model.ReadingKindLoadProfile: lp,
+	}}
+	// R98: the fixture window closes at nextJan1, after billingT0.
+	b := newBillingAt(t, readings, nextJan1)
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+
+	monthlyRows, err := b.Consumption(ctx, scope, consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{analyzerID},
+		Level:       energy.Monthly,
+		Range:       store.TimeRange{From: jan1, To: nextJan1},
+	})
+	require.NoError(t, err)
+	require.Len(t, monthlyRows, 10, "12 months minus June and July, both touching the missing July-1 boundary")
+
+	monthlySum := decimal.Zero
+	for _, r := range monthlyRows {
+		require.NotNil(t, r.Values[energy.ActiveImport])
+		monthlySum = monthlySum.Add(*r.Values[energy.ActiveImport])
+	}
+	require.Equal(t, "1000", monthlySum.String())
+
+	yearlyRows, err := b.Consumption(ctx, scope, consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{analyzerID},
+		Level:       energy.Yearly,
+		Range:       store.TimeRange{From: jan1, To: nextJan1},
+	})
+	require.NoError(t, err)
+	require.Len(t, yearlyRows, 1)
+	require.NotNil(t, yearlyRows[0].Values[energy.ActiveImport])
+	require.Equal(t, "1200", yearlyRows[0].Values[energy.ActiveImport].String(), "the yearly row derives from its own two boundaries")
+	require.NotEqual(t, "1200", monthlySum.String(), "summing the monthly rows is not how the yearly figure is produced")
 }

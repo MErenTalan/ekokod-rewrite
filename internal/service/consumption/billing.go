@@ -810,8 +810,22 @@ func clampLookback(lookback, firstFrom time.Time, kindTolerance time.Duration) t
 // endIndexes returns the closing index of every register directly from the
 // end boundary reading's own values (05 §5 "every index field"): the
 // billing path's closing index is never derived, it is simply what the end
-// reading itself reported, independent of whether that register's
-// consumption came out suspect.
+// reading itself reported. Row.Indexes itself is UNCONDITIONAL here — this
+// function does not consult Suspect at all, so a Row built by this package
+// always carries the real measured closing index for every register,
+// suspect or not.
+//
+// Blanking a suspect register's own index happens ONE layer up, at export
+// time, not here (final review A M-4, resolved consistently across both
+// callers): soundIndex (sound.go) — which exportRow (export.go) and
+// filterSoundIndexes (generation.go, GenerationRows) both call — nils a
+// suspect register's index in the RENDERED output, while this function's
+// own Row.Indexes stays the operator-visible measured value an anomaly
+// resolution needs to see. The two are deliberately different views of the
+// same data for different consumers: an operator resolving an anomaly
+// needs the real closing index to diagnose what happened; an export or
+// generation report, which has no suspect-aware reader, must not show a
+// suspect register's index as if it were sound.
 func endIndexes(end *energy.Reading) map[energy.Register]*decimal.Decimal {
 	out := make(map[energy.Register]*decimal.Decimal, len(energy.AllRegisters()))
 	for _, reg := range energy.AllRegisters() {

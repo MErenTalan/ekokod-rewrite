@@ -111,6 +111,17 @@ func f3NewAnalytics(t *testing.T, analyticsRepo store.AnalyticsRepository) *cons
 //     monthly/daily pair: the two missing daily buckets (worth exactly
 //     value(Jan 16) - value(Jan 14) = 200) are invisible to a sum of the
 //     level below, but not to the monthly row's own boundary derivation.
+//
+//  3. Yearly vs. Monthly (final review B I-1: no test in this package ever
+//     requested energy.Yearly at all, so a mutation replacing the yearly
+//     figure with the sum of 12 monthly Derive calls left the whole package
+//     green). One reading at every month's own 00:00 boundary,
+//     value(m) = 1000 + 100*m for m = 0..12, EXCEPT July 1's (m=6) is never
+//     written: neither June (own END is July 1) nor July (own START is
+//     July 1) can resolve, so 10 of the 12 monthly rows survive, and their
+//     values sum to one thousand. The yearly row derives from its own two
+//     boundaries alone (1000 -> 2200 = 1200). 1200 != 1000 is the same
+//     assertion at the yearly/monthly pair.
 func TestF3LevelsDeriveFromTheirOwnBoundaries(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -201,6 +212,62 @@ func TestF3LevelsDeriveFromTheirOwnBoundaries(t *testing.T) {
 	require.Equal(t, "2900", dailySum.String())
 	require.NotEqual(t, monthlyRows[0].Values[energy.ActiveImport].String(), dailySum.String(),
 		"summing the daily rows is not how the monthly figure is produced")
+
+	// --- Part 3: Yearly vs. Monthly (final review B I-1) ---------------
+	//
+	// One load_profile reading at every month's own 00:00 boundary,
+	// value(m) = 1000 + 100*m for m = 0..12 (Jan 1 year 1 through Jan 1
+	// year 2), EXCEPT month 6's reading (July 1) is never written. Neither
+	// the June bucket (own END is July 1) nor the July bucket (own START is
+	// July 1) can resolve, so 10 of the 12 monthly buckets survive, summing
+	// to 1200 (the true year total) - 100 (June's missing delta) - 100
+	// (July's missing delta) = 1000. The yearly row derives directly from
+	// its own two boundaries (1000 -> 2200): 2200 - 1000 = 1200.
+	yearlyAnalyzerID := tenant.Analyzers[2].ID
+	yearJan1 := time.Date(2026, 1, 1, 0, 0, 0, 0, loc)
+	yearNextJan1 := yearJan1.AddDate(1, 0, 0)
+
+	var yearRows []model.MeterReading
+	for m := 0; m <= 12; m++ {
+		if m == 6 {
+			continue // July 1's own reading is deliberately missing.
+		}
+		ts := yearJan1.AddDate(0, m, 0)
+		val := fmt.Sprintf("%d", 1000+100*m)
+		yearRows = append(yearRows, readingRow(yearlyAnalyzerID, ts, model.ReadingKindLoadProfile, map[string]string{"active_import": val}))
+	}
+	// tenant.Scope covers Buildings[0] only; Analyzers[2] is under
+	// Buildings[1] (Analyzers[0] and [1] are already used by Parts 1 and 2
+	// above, over an overlapping date range), so this part uses AdminScope.
+	_, _, err = readingRepo.BulkInsert(ctx, tenant.AdminScope, yearRows)
+	require.NoError(t, err)
+
+	yearBilling := f3NewBilling(t, readingRepo, yearNextJan1)
+
+	yearlyMonthlyRows, err := yearBilling.Consumption(ctx, tenant.AdminScope, consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{yearlyAnalyzerID},
+		Level:       energy.Monthly,
+		Range:       store.TimeRange{From: yearJan1, To: yearNextJan1},
+	})
+	require.NoError(t, err)
+	require.Len(t, yearlyMonthlyRows, 10, "12 months minus June and July, both touching the missing July-1 boundary")
+
+	monthlySumOfYear := decimal.Zero
+	for _, r := range yearlyMonthlyRows {
+		monthlySumOfYear = monthlySumOfYear.Add(*r.Values[energy.ActiveImport])
+	}
+	require.Equal(t, "1000", monthlySumOfYear.String())
+
+	yearlyRows, err := yearBilling.Consumption(ctx, tenant.AdminScope, consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{yearlyAnalyzerID},
+		Level:       energy.Yearly,
+		Range:       store.TimeRange{From: yearJan1, To: yearNextJan1},
+	})
+	require.NoError(t, err)
+	require.Len(t, yearlyRows, 1)
+	require.NotNil(t, yearlyRows[0].Values[energy.ActiveImport])
+	require.Equal(t, "1200", yearlyRows[0].Values[energy.ActiveImport].String(), "the yearly row derives from its own two boundaries")
+	require.NotEqual(t, "1200", monthlySumOfYear.String(), "summing the monthly rows is not how the yearly figure is produced")
 }
 
 // TestF3BillingAndAnalyticsDifferByTheBoundaryStep is 09 §F3's criterion:
