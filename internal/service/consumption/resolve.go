@@ -327,13 +327,12 @@ func (b *Billing) rederiveBucketWithReset(ctx context.Context, sc store.Scope, a
 }
 
 // resetRederivationMode is inferLevel's calendar bucket, else explicit-window
-// semantics for a cut-off period (R107). Cut-off periods run between Istanbul
-// midnights, so any other non-bucket period stays rejected.
+// semantics for a valid cut-off period (R107); anything else is rejected.
 func resetRederivationMode(period energy.Window) (windowMode, bool) {
 	if level, ok := inferLevel(period, istanbul); ok {
 		return windowMode{level: level}, true
 	}
-	if !isDayStart(period.From) || !isDayStart(period.To) || validPeriodWindow(period) != nil {
+	if validPeriodWindow(period) != nil {
 		return windowMode{}, false
 	}
 	return windowMode{level: energy.Monthly, explicit: true}, true

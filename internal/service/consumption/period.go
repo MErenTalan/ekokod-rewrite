@@ -2,7 +2,6 @@ package consumption
 
 import (
 	"context"
-	"time"
 
 	"github.com/google/uuid"
 
@@ -14,15 +13,12 @@ import (
 // plus one.
 const MaxPeriodWindows = 13
 
-// MinPeriodWindowWidth is the narrowest explicit window PeriodRequest accepts.
-const MinPeriodWindowWidth = time.Hour
-
 // PeriodRequest asks for invoice-grade consumption over explicit contiguous
 // windows (R107).
 type PeriodRequest struct {
 	AnalyzerIDs []uuid.UUID
 	// Windows are sorted and contiguous (Windows[i].To == Windows[i+1].From),
-	// 1..MaxPeriodWindows of them, each at least MinPeriodWindowWidth wide.
+	// 1..MaxPeriodWindows of them, every bound an Istanbul midnight.
 	Windows []energy.Window
 }
 
@@ -91,9 +87,10 @@ func validatePeriodRequest(sc store.Scope, req PeriodRequest) error {
 	return nil
 }
 
-// validPeriodWindow rejects a reversed, empty, sub-hour or over-span window.
+// validPeriodWindow rejects a reversed, empty, over-span window or one whose
+// bounds are not Istanbul midnights (cut-off periods run day to day).
 func validPeriodWindow(w energy.Window) error {
-	if !w.Valid() || w.To.Sub(w.From) < MinPeriodWindowWidth || w.To.Sub(w.From) > MaxRequestSpan {
+	if !w.Valid() || !isDayStart(w.From) || !isDayStart(w.To) || w.To.Sub(w.From) > MaxRequestSpan {
 		return ErrInvalidRequest
 	}
 	return nil
