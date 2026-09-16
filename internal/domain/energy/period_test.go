@@ -67,7 +67,7 @@ func TestBucketDailyCrossesAHistoricalDSTTransition(t *testing.T) {
 	require.Equal(t, 23*time.Hour, w.To.Sub(w.From))
 }
 
-// TestBucketHourlyAcrossTheHistoricalFallBack pins I-1: every instant across
+// TestBucketHourlyAcrossTheHistoricalFallBack proves every instant across
 // the 2015-11-08 fall-back (when the local hour 00:00-01:00+02 repeats)
 // must lie inside its own bucket, and every bucket must be exactly 1 hour
 // wide. Rebuilding the hour from loc's wall-clock fields, as every other
@@ -85,7 +85,7 @@ func TestBucketHourlyAcrossTheHistoricalFallBack(t *testing.T) {
 	}
 }
 
-// TestBucketsRejectsAnUnknownLevel pins I-2: Bucket returns the zero Window
+// TestBucketsRejectsAnUnknownLevel proves Bucket returns the zero Window
 // for an unrecognised level, and Buckets must not turn that into an
 // infinite loop (the zero Window's From is always before any real w.To, and
 // Bucket of the same unknown level is the zero Window again on every
@@ -101,7 +101,7 @@ func TestBucketsRejectsAnInvalidWindow(t *testing.T) {
 	require.Nil(t, energy.Buckets(energy.Daily, energy.Window{From: t0.Add(time.Hour), To: t0}, loc), "inverted window")
 }
 
-// TestBucketsFromMidBucketToAnExactBoundary pins I-9: a range starting
+// TestBucketsFromMidBucketToAnExactBoundary proves a range starting
 // mid-bucket and ending exactly on a bucket boundary must include the
 // bucket the range starts inside of (even though its own From precedes
 // w.From) and must exclude the bucket that would start exactly at w.To.
@@ -125,8 +125,8 @@ func TestBucketsFromMidBucketToAnExactBoundary(t *testing.T) {
 	require.True(t, buckets[1].To.Equal(w.To), "the range ends exactly on the April/May boundary")
 }
 
-// TestBucketsAcrossAMonthBoundaryAtDailyLevel pins the third I-9 scenario:
-// a Daily range spanning a calendar month boundary.
+// TestBucketsAcrossAMonthBoundaryAtDailyLevel proves a Daily range spanning
+// a calendar month boundary produces contiguous, correctly split day buckets.
 func TestBucketsAcrossAMonthBoundaryAtDailyLevel(t *testing.T) {
 	loc := istanbul(t)
 	w := energy.Window{

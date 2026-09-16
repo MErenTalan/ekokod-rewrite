@@ -132,8 +132,8 @@ func TestNewConsumptionRefreshTaskDelaysProcessingByOneMinute(t *testing.T) {
 // NewConsumptionRefreshTask actually applies integMaxRetryOptions(o) to the
 // built task: asynq.Task exposes no accessor for its options outside a real
 // broker round trip (see TestConsumptionRefreshTaskIDIgnoresAnalyzerAndCompany
-// above), so — per the review's last resort — this enqueues for real and
-// reads the persisted MaxRetry back via asynq.Inspector. The mutation that
+// above), so this enqueues for real and reads the persisted MaxRetry back
+// via asynq.Inspector. The mutation that
 // drops integMaxRetryOptions(o)... from the option slice would silently fall
 // back to asynq's default MaxRetry (25), which this asserts against.
 func TestNewConsumptionRefreshTaskAppliesConfiguredMaxRetry(t *testing.T) {
@@ -172,15 +172,13 @@ func TestNewConsumptionRefreshTaskAppliesConfiguredMaxRetry(t *testing.T) {
 // retention keeping the id "taken" long after completion) must not recur
 // here.
 //
-// I-5 (final review B): this used to wait out the real ProcessIn(1m) delay
-// before the worker could even pick up task1 (measured 62.6s — the only
-// phase test that waited in real time). NextProcessAt itself is already
-// proven by TestNewConsumptionRefreshTaskDelaysProcessingByOneMinute
-// (no-server, GetTaskInfo, zero wait), so this test's own job is only the
-// completion-then-re-enqueue half: it now calls asynq.Inspector.RunTask
-// right after enqueueing, which moves task1 from scheduled straight to
-// pending so the running server executes it immediately — proving exactly
-// the same "no Retention" fact, without spending the debounce minute idle.
+// NextProcessAt itself is already proven by
+// TestNewConsumptionRefreshTaskDelaysProcessingByOneMinute (no-server,
+// GetTaskInfo, zero wait), so this test's own job is only the
+// completion-then-re-enqueue half: it calls asynq.Inspector.RunTask right
+// after enqueueing, which moves task1 from scheduled straight to pending so
+// the running server executes it immediately — proving the same "no
+// Retention" fact without spending the debounce minute idle.
 func TestConsumptionRefreshTaskIDIsFreeAgainAfterCompletion(t *testing.T) {
 	cfg := testfixtures.RedisConfig(t)
 	log := testfixtures.DiscardLogger()

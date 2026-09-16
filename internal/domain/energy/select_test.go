@@ -10,7 +10,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/energy"
 )
 
-// I-17: SelectBoundary is "the last reading with ts <= bound", over a slice
+// SelectBoundary is "the last reading with ts <= bound", over a slice
 // already sorted ascending and already filtered to the kind(s) the caller
 // wants. These tests probe the three offsets around a shared bound plus the
 // two empty-result shapes.
@@ -60,7 +60,7 @@ func TestSelectBoundaryDoesNotMutateOrReorderInput(t *testing.T) {
 	require.Equal(t, cp, readings)
 }
 
-// I-2: ties. Two readings share the same TS <= bound; SelectBoundary must
+// Ties: two readings share the same TS <= bound; SelectBoundary must
 // return the LAST of them in the slice, same as the linear scan it
 // replaces.
 func TestSelectBoundaryReturnsTheLastOfDuplicateTimestamps(t *testing.T) {
@@ -73,8 +73,8 @@ func TestSelectBoundaryReturnsTheLastOfDuplicateTimestamps(t *testing.T) {
 	requireReadingValue(t, got, energy.ActiveImport, "20", "ties: the last of equal timestamps <= bound wins")
 }
 
-// linearSelectBoundary is the pre-I-2 reference behavior: scan ascending,
-// keep the last reading with TS <= bound. TestSelectBoundaryMatches...
+// linearSelectBoundary is a reference behavior: scan ascending, keep the
+// last reading with TS <= bound. TestSelectBoundaryMatches...
 // below checks the binary-search implementation agrees with it exactly,
 // including on duplicate timestamps.
 func linearSelectBoundary(readings []energy.Reading, bound time.Time) *energy.Reading {
@@ -88,12 +88,12 @@ func linearSelectBoundary(readings []energy.Reading, bound time.Time) *energy.Re
 	return out
 }
 
-// I-2: SelectBoundary's binary search must agree with a linear reference
+// SelectBoundary's binary search must agree with a linear reference
 // scan over randomized sorted input, including duplicate timestamps, for
 // bounds before, between, on and after every reading. Fixed seed so a
 // failure is reproducible.
 //
-// M-9: every reading carries the value "1", so a TS-only comparison cannot
+// Every reading carries the value "1", so a TS-only comparison cannot
 // tell which of several equal-timestamp readings was picked — a mutation
 // that walked back to the FIRST of a run of duplicates instead of the LAST
 // stayed green under that comparison. require.Same asserts pointer
@@ -139,8 +139,9 @@ func TestSelectBoundaryMatchesALinearScanOverRandomizedSortedInput(t *testing.T)
 
 // BenchmarkBillingYearHourly measures SelectBoundary's cost over a billing
 // year: 35,040 fifteen-minute readings (365 days) against 8,760 hourly
-// bounds (365 days) — the shape the review's linear-scan benchmark used to
-// show ~1.75s of CPU for one request.
+// bounds (365 days) — the shape that makes a linear scan per bound cost
+// about 1.75s of CPU for one request, which is why SelectBoundary uses a
+// binary search instead.
 func BenchmarkBillingYearHourly(b *testing.B) {
 	const readingsPerYear = 35040 // 15-minute intervals, 365 days
 	const boundsPerYear = 8760    // hourly bounds, 365 days

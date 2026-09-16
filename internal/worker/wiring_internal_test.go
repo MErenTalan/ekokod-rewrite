@@ -75,11 +75,11 @@ func buildGraph(t *testing.T, pool *pgxpool.Pool, redisCfg config.Redis) graph {
 	return g
 }
 
-// TestBuildGraphKeySourcesArePinned is the fix-round-1 C1 test: it proves
-// credentials.Deps.StateKey is derived from cfg.Security.JWTSigningKey, not
-// cfg.Security.EncryptionKey — a mistake that would have stayed green under
-// the acceptance test alone, because both keys are 32+ bytes and StateKey
-// never surfaces in any handler-registration assertion.
+// TestBuildGraphKeySourcesArePinned proves credentials.Deps.StateKey is
+// derived from cfg.Security.JWTSigningKey, not cfg.Security.EncryptionKey —
+// a mistake that would have stayed green under the acceptance test alone,
+// because both keys are 32+ bytes and StateKey never surfaces in any
+// handler-registration assertion.
 func TestBuildGraphKeySourcesArePinned(t *testing.T) {
 	pool := testfixtures.NewIsolatedDB(t)
 	redisCfg := testfixtures.RedisConfig(t)
@@ -92,11 +92,10 @@ func TestBuildGraphKeySourcesArePinned(t *testing.T) {
 		"credentials.Deps.StateKey must never be derived from the encryption key")
 }
 
-// TestBuildGraphIntegrationRepoCipherComesFromEncryptionKey is the
-// fix-round-1 C2 test: it proves build()'s integration repository seals
-// with a cipher built from cfg.Security.EncryptionKey, not (as the
-// reviewer's proof (c2) reproduces below) cfg.Security.JWTSigningKey[:32]
-// — a second, independently correct-looking 32-byte key that would also
+// TestBuildGraphIntegrationRepoCipherComesFromEncryptionKey proves build()'s
+// integration repository seals with a cipher built from
+// cfg.Security.EncryptionKey, not cfg.Security.JWTSigningKey[:32] — a
+// second, independently correct-looking 32-byte key that would also
 // satisfy crypto.NewCipher without erroring, so nothing before this test
 // would ever notice the swap.
 //
@@ -133,10 +132,10 @@ func TestBuildGraphIntegrationRepoCipherComesFromEncryptionKey(t *testing.T) {
 	require.Equal(t, plainSecret, string(secret))
 }
 
-// TestBuildGraphRegistersOnePM5340GenerationHook is the fix-round-1 I1
-// test: it proves ingest.Deps.Hooks[model.IntegrationProviderPM5340] holds
-// exactly one *generation.Accumulator, not an empty hook list that would
-// silently stop PM5340 readings from ever updating cumulative generation.
+// TestBuildGraphRegistersOnePM5340GenerationHook proves
+// ingest.Deps.Hooks[model.IntegrationProviderPM5340] holds exactly one
+// *generation.Accumulator, not an empty hook list that would silently stop
+// PM5340 readings from ever updating cumulative generation.
 func TestBuildGraphRegistersOnePM5340GenerationHook(t *testing.T) {
 	pool := testfixtures.NewIsolatedDB(t)
 	redisCfg := testfixtures.RedisConfig(t)
@@ -148,12 +147,11 @@ func TestBuildGraphRegistersOnePM5340GenerationHook(t *testing.T) {
 	require.True(t, ok, "the PM5340 hook must be a *generation.Accumulator")
 }
 
-// TestBuildGraphGenerationHookUsesRedisLockAndConfiguredFutureTolerance is
-// the final-review-A R52/M12 test: it proves the PM5340 generation hook
-// build() wires is NOT built with a nil lock or a hard-coded tolerance —
-// I3's finding was exactly that no lock was wired at all, and M12's was
-// that hook.go used its own package default instead of
-// cfg.Ingest.FutureTolerance.
+// TestBuildGraphGenerationHookUsesRedisLockAndConfiguredFutureTolerance
+// proves the PM5340 generation hook build() wires is NOT built with a nil
+// lock or a hard-coded tolerance: per R52 the hook must share the graph's
+// one redis lock, and its recompute upper bound must come from
+// cfg.Ingest.FutureTolerance rather than hook.go's own package default.
 //
 // g.credentialsDeps.Locker is the SAME redisLock variable build() passes to
 // every other Locker consumer in the graph (httpx's pool, the EPİAŞ
@@ -179,10 +177,10 @@ func TestBuildGraphGenerationHookUsesRedisLockAndConfiguredFutureTolerance(t *te
 		"the generation hook's recompute upper bound must come from cfg.Ingest.FutureTolerance, not its own package default (M12)")
 }
 
-// TestBuildGraphOpensNamedClosersForRedisAndJobClient is the fix-round-1 I4
-// test: it proves build() actually attaches a closer for the job client
-// (not only the redis client the connected-clients metric can observe), by
-// asserting the closers slice's names directly, in open order.
+// TestBuildGraphOpensNamedClosersForRedisAndJobClient proves build()
+// actually attaches a closer for the job client (not only the redis client
+// the connected-clients metric can observe), by asserting the closers
+// slice's names directly, in open order.
 func TestBuildGraphOpensNamedClosersForRedisAndJobClient(t *testing.T) {
 	pool := testfixtures.NewIsolatedDB(t)
 	redisCfg := testfixtures.RedisConfig(t)
@@ -195,9 +193,9 @@ func TestBuildGraphOpensNamedClosersForRedisAndJobClient(t *testing.T) {
 	require.Equal(t, []string{"redis", "job-client"}, names)
 }
 
-// TestConsumptionRefreshEnqueuerAppliesConfiguredMaxRetry is the fix-round-1
-// I3 test (task-11b-review.md): it proves consumptionRefreshEnqueuer
-// actually threads its own maxRetry field into the asynq task it builds via
+// TestConsumptionRefreshEnqueuerAppliesConfiguredMaxRetry proves
+// consumptionRefreshEnqueuer actually threads its own maxRetry field into
+// the asynq task it builds via
 // job.NewConsumptionRefreshTask's TaskOptions, rather than the adapter
 // silently dropping it with job.TaskOptions{} (which would leave every
 // consumption.refresh task at asynq's own zero-value default retry count).

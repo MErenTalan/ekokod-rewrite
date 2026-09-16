@@ -55,7 +55,7 @@ func (l *loader) required(name string) string {
 	return v
 }
 
-// httpsURL (M3, final review B) reads an optional URL that defaults to def
+// httpsURL reads an optional URL that defaults to def
 // when unset, and fails when the resolved value's scheme is not https —
 // TLS verification is never disabled anywhere in this codebase (06 §1 rule
 // 7), and a provider base URL is exactly the kind of value an operator
@@ -511,7 +511,7 @@ func Load(lookup func(string) (string, bool)) (*Config, error) {
 		l.fail("EKOKOD_INGEST_SANITY_MULTIPLE", errors.New("must be greater than 1"))
 	}
 
-	// R73/Task 11b: the ingest enqueue gate and consumption.Refresher's
+	// R73: the ingest enqueue gate and consumption.Refresher's
 	// single global lock TTL (wired into RefreshDeps.LockTTL by
 	// worker/wiring.go). R100(5): 30m default.
 	c.ConsumptionRefreshEnabled = l.boolVal("EKOKOD_CONSUMPTION_REFRESH_ENABLED", true)

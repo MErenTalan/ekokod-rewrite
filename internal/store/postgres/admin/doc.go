@@ -55,14 +55,13 @@
 //     the work every company has waiting. A Scope would have to name a
 //     company before the dispatcher even knows which companies have active
 //     credentials, which is backwards — this method is what tells it. It is
-//     a genuine sixth member of this closed list, not an exception to it:
-//     implemented by F2 Task 5.
+//     a genuine sixth member of this closed list, not an exception to it.
 //
 //   - AdminAggregateRepository refreshes TimescaleDB continuous aggregates.
 //     refresh_continuous_aggregate takes a time range and nothing else, so a
 //     refresh necessarily covers every tenant's buckets in that range, and a
 //     Scope parameter would be a lie about what the call actually does. It is
-//     a genuine seventh member of this closed list: implemented by F3 Task 6.
+//     a genuine seventh member of this closed list.
 //
 // THE LIST OF METHODS IS CLOSED. A method is added here only when its caller
 // cannot hold a Scope, never because holding one is inconvenient: see each

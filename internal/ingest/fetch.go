@@ -30,8 +30,8 @@ type fetchAccumulator struct {
 	// `kind = 'load_profile'` (migration 00005), so a run of any other kind
 	// — daily, billing, reset, current_index — touches rows the aggregates
 	// never read; enqueueing consumption.refresh for it would be pure,
-	// platform-wide load for no materialisation benefit (final review A
-	// I-3(b)). See noteLoadProfilePersisted.
+	// platform-wide load for no materialisation benefit. See
+	// noteLoadProfilePersisted.
 	hasLoadProfile bool
 }
 
@@ -47,8 +47,8 @@ func (a *fetchAccumulator) noteLoadProfilePersisted(kind model.ReadingKind, n in
 	}
 }
 
-// consumptionRefreshThreshold is R73's threshold, amended by R100(6) (final
-// review A M-3): consumption_hourly's start_offset (migration 00005,
+// consumptionRefreshThreshold is R73's threshold, amended by R100(6):
+// consumption_hourly's start_offset (migration 00005,
 // `start_offset => interval '30 days'`), the smallest of the four
 // consumption continuous aggregates' refresh-policy windows, MINUS one day
 // of margin. The hourly policy itself only advances every
@@ -67,14 +67,14 @@ func (a *fetchAccumulator) noteLoadProfilePersisted(kind model.ReadingKind, n in
 const consumptionRefreshThreshold = 29 * 24 * time.Hour
 
 // consumptionRefreshEnqueueTimeout bounds the context the enqueue call
-// itself runs under (I2, task-11b-review.md): failFetchRun may be reporting
-// a run whose OWN ctx was already cancelled (e.g. the caller gave up mid-
-// fetch), but rows already persisted before that point still need
-// refreshing, so the enqueue must not be allowed to fail purely because the
-// run's ctx is done. maybeEnqueueConsumptionRefresh derives its own bounded,
-// uncancellable context from ctx via context.WithoutCancel rather than using
-// ctx directly, so this timeout is what keeps that detached context from
-// being able to hang forever instead.
+// itself runs under: failFetchRun may be reporting a run whose OWN ctx was
+// already cancelled (e.g. the caller gave up mid-fetch), but rows already
+// persisted before that point still need refreshing, so the enqueue must not
+// be allowed to fail purely because the run's ctx is done.
+// maybeEnqueueConsumptionRefresh derives its own bounded, uncancellable
+// context from ctx via context.WithoutCancel rather than using ctx directly,
+// so this timeout is what keeps that detached context from being able to
+// hang forever instead.
 const consumptionRefreshEnqueueTimeout = 10 * time.Second
 
 func newFetchAccumulator() *fetchAccumulator {
@@ -151,7 +151,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 		return classifyStoreErr(err) // M14
 	}
 
-	// X-M3, final review B: an operator-deactivated credential must stop
+	// An operator-deactivated credential must stop
 	// ingestion here, before any network call, non-retryably (ErrConfig ->
 	// job.ClassifyForRetry -> asynq.SkipRetry) and with a clear operational
 	// message — never silently skipped like an inactive ANALYZER above
@@ -180,7 +180,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 		return wrapRedacted(errText, mismatch)
 	}
 
-	// M3: the analyzer's own stored ProviderSubtype must match the
+	// The analyzer's own stored ProviderSubtype must match the
 	// credential actually being opened — same provider, but a different
 	// subtype means a different distributor/meter family's endpoints
 	// (06 §1's per-subtype Endpoints), which could otherwise silently
@@ -202,7 +202,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 		return err
 	}
 
-	// C1/R13: the sanity-jump streak is scoped to this ONE run (this
+	// R13: the sanity-jump streak is scoped to this ONE run (this
 	// analyzer, this kind) and must survive every chunk and page of it —
 	// see SanityStreak's doc. runOpts is s.opts with a fresh streak
 	// attached; every Validate call below uses runOpts, never s.opts
@@ -261,7 +261,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 			}
 
 			kept, dedupeRejected := Dedupe(res.Readings)
-			// I2: an adapter's page is trusted to be about THIS analyzer
+			// An adapter's page is trusted to be about THIS analyzer
 			// and to carry only p.Kind (the requested kind) or a reset
 			// reading (the one other kind the negative-delta check below
 			// consumes) only after this filter — a row stamped with
@@ -287,7 +287,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 				}
 				acc.processed += int32(inserted + updated)
 
-				// M2: hooks receive the range actually persisted THIS PAGE
+				// Hooks receive the range actually persisted THIS PAGE
 				// (every kind mixed into valid, reset rows included), not
 				// the outer chunk bound — a hook reconciling against what
 				// it can see must be told what really landed, not what the
@@ -301,7 +301,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 					}
 				}
 
-				// I2: the cursor, TouchLastReading, DetectNegativeDeltas'
+				// The cursor, TouchLastReading, DetectNegativeDeltas'
 				// sequence and the next page's "effective previous
 				// reading" must only ever see this analyzer's own p.Kind
 				// rows — a reset row sitting between two p.Kind rows in
@@ -316,7 +316,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 					kindMinTs, kindMaxTs := readingTsBounds(kindRows)
 
 					resets := readingsOfKind(valid, model.ReadingKindReset)
-					// M1: time.Microsecond, not time.Nanosecond — pgx/
+					// time.Microsecond, not time.Nanosecond — pgx/
 					// Postgres timestamptz columns are microsecond
 					// precision, so a 1-nanosecond upper bound round-trips
 					// back down to exactly kindMaxTs on the wire and
@@ -351,10 +351,10 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 						acc.anomaliesCreated++
 					}
 
-					// R19/I1: the cursor and last-reading watermark advance
+					// R19: the cursor and last-reading watermark advance
 					// only when at least one p.Kind row was persisted this
 					// page AND this run is allowed to move the live cursor
-					// at all (I1: an explicit window that starts after a
+					// at all (an explicit window that starts after a
 					// gap the cursor has not covered yet must never move
 					// it — see resolveFetchWindow's doc).
 					if allowCursorAdvance {
@@ -376,7 +376,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 					}
 				}
 
-				// R51/I2: a multiplier update is persisted ONLY when the
+				// R51: a multiplier update is persisted ONLY when the
 				// adapter reports ProviderResolved — the value actually
 				// came from the provider THIS call (e.g. GridBox's
 				// last_endex.Multiplier or its load_profile ratio). A
@@ -390,7 +390,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 				// against whatever the concurrently-run load_profile kind
 				// last derived.
 				if res.ResolvedMultiplier != nil && res.ResolvedMultiplier.ProviderResolved && !res.ResolvedMultiplier.Value.Equal(analyzer.MeterMultiplier) {
-					// M1: re-load the analyzer immediately before the
+					// Re-load the analyzer immediately before the
 					// update, so a concurrent operator edit to any OTHER
 					// field (Update takes the whole row) made since this
 					// run loaded `analyzer` at the top survives. On
@@ -436,7 +436,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 		s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "warning",
 			fmt.Sprintf("%d readings rejected", acc.skipped), mustJSON(acc.rejections))
 	}
-	// M5: a fixed, sorted order — acc.warnings is a map, and iterating it
+	// A fixed, sorted order — acc.warnings is a map, and iterating it
 	// directly would emit these messages in an unpredictable order from one
 	// run to the next.
 	for _, code := range sortedWarningCodes(acc.warnings) {
@@ -444,8 +444,8 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 			mustJSON(map[string]int32{"count": acc.warnings[code]}))
 	}
 
-	// R73/I-12: the affected range, not the requested window — a backfill of
-	// old data refreshes exactly the buckets it touched.
+	// R73: enqueue the affected range, not the requested window — a backfill
+	// of old data refreshes exactly the buckets it touched.
 	s.maybeEnqueueConsumptionRefresh(ctx, sc, p.CompanyID, analyzer.ID, acc, now)
 
 	return nil
@@ -453,7 +453,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 
 // failFetchRun records the failure on the cursor, finishes the job_runs row
 // (partial if anything was persisted before the failure, else failed), and
-// returns cause wrapped (I3) so the caller can `return s.failFetchRun(...)`
+// returns cause wrapped so the caller can `return s.failFetchRun(...)`
 // without handing the job layer cause's own, possibly credential-bearing,
 // text — the wrapper's Error() is exactly errText below; its Unwrap()
 // still reaches cause.
@@ -465,14 +465,14 @@ func (s *Service) failFetchRun(ctx context.Context, sc store.Scope, runID, analy
 	status := fetchRunStatus(1, acc.processed > 0)
 	s.finishRun(ctx, sc, runID, status, acc.processed, acc.skipped, 1, &errText, acc.detail(), at)
 	s.appendMessage(ctx, sc, sc.CompanyID, "job", "analyzer-refresh", "error", errText, nil)
-	// I-12: a partial run that persisted some rows before failing still
-	// touched real buckets that need refreshing — this call site is
-	// evaluated on acc.affectedFrom exactly like the success path below.
+	// A partial run that persisted some rows before failing still touched
+	// real buckets that need refreshing — this call site is evaluated on
+	// acc.affectedFrom exactly like the success path below.
 	s.maybeEnqueueConsumptionRefresh(ctx, sc, sc.CompanyID, analyzerID, acc, at)
 	return wrapRedacted(errText, cause)
 }
 
-// shouldEnqueueConsumptionRefresh implements R73/I-13's threshold, amended
+// shouldEnqueueConsumptionRefresh implements R73's threshold, amended
 // by R100(1), as a pure decision, independent of I/O, so the boundary
 // itself is trivial to pin with a table test: enqueue only when the seam is
 // wired (hasEnqueuer), enabled (config.ConsumptionRefreshEnabled, threaded
@@ -490,8 +490,8 @@ func shouldEnqueueConsumptionRefresh(hasEnqueuer, enabled, hasLoadProfile bool, 
 }
 
 // refreshRangeFor converts acc's affected range into the [From, To) window
-// job.NewConsumptionRefreshTask and consumption.Refresher actually expect
-// (task-11b-review.md C1/I1). acc.affectedTo is the INCLUSIVE timestamp of
+// job.NewConsumptionRefreshTask and consumption.Refresher actually expect.
+// acc.affectedTo is the INCLUSIVE timestamp of
 // the run's last persisted reading (touchAffected stores the reading's own
 // Ts, never a bucket bound), but RefreshConsumption
 // (internal/service/consumption/refresh.go) treats p.To as EXCLUSIVE — it
@@ -499,17 +499,17 @@ func shouldEnqueueConsumptionRefresh(hasEnqueuer, enabled, hasLoadProfile bool, 
 // energy.Bucket(level, p.To.Add(-time.Nanosecond), loc).To, which assumes
 // p.To already sits one instant past the last reading it must cover. Left
 // unconverted:
-//   - C1: an affectedTo landing exactly on an hour boundary (the normal case
+//   - an affectedTo landing exactly on an hour boundary (the normal case
 //     for interval-meter data) has its own hour's bucket silently skipped —
 //     the reading that made affectedTo what it is never gets refreshed.
-//   - I1: a single-instant run (affectedFrom == affectedTo) fails
+//   - a single-instant run (affectedFrom == affectedTo) fails
 //     job.NewConsumptionRefreshTask's `From must be before To` check
 //     entirely, and — because an enqueue failure is only ever a warning —
 //     silently never refreshes at all.
 //
 // The epsilon is a MICROSECOND, not a nanosecond: pgx/Postgres timestamptz
-// columns are microsecond precision (see fetch.go's M1 comment on the same
-// trap for reset-suppression ranges), and a sibling task already hit a
+// columns are microsecond precision (see the same trap noted above for
+// reset-suppression ranges), and a sibling task already hit a
 // nanosecond widening being silently rounded away on the round trip through
 // the database. A microsecond survives that round trip and, added to any
 // affectedTo, always makes From strictly before To — including when
@@ -518,7 +518,7 @@ func refreshRangeFor(acc *fetchAccumulator) (from, to time.Time) {
 	return *acc.affectedFrom, acc.affectedTo.Add(time.Microsecond)
 }
 
-// maybeEnqueueConsumptionRefresh is R73/I-12/I-13's single enqueue call
+// maybeEnqueueConsumptionRefresh is R73's single enqueue call
 // site, shared by FetchReadings' success path and failFetchRun's partial
 // path so the threshold and gating logic live in exactly one place. now MUST
 // come from s.deps.Clock (never time.Now()): both call sites pass the same
@@ -534,7 +534,7 @@ func (s *Service) maybeEnqueueConsumptionRefresh(ctx context.Context, sc store.S
 		return
 	}
 	from, to := refreshRangeFor(acc)
-	// I2 (task-11b-review.md): this call site is reached from failFetchRun
+	// This call site is reached from failFetchRun
 	// for a run whose ctx may already be cancelled — rows it persisted
 	// before failing still need refreshing, so the enqueue itself is given a
 	// detached, but still bounded, context rather than inheriting ctx's own
@@ -561,7 +561,7 @@ func (s *Service) maybeEnqueueConsumptionRefresh(ctx context.Context, sc store.S
 // one before any success) — falls back to R18's 30-day lookback. To is
 // always now for the cursor-driven form.
 //
-// allowCursorAdvance is I1/M2: an explicit p.Window may move the LIVE
+// allowCursorAdvance: an explicit p.Window may move the LIVE
 // cursor forward only when doing so does not skip data the cursor has not
 // covered yet — i.e. the window is contiguous with (starts at or before)
 // what the cursor already reflects. A window that starts AFTER the stored
@@ -570,10 +570,9 @@ func (s *Service) maybeEnqueueConsumptionRefresh(ctx context.Context, sc store.S
 // advancing it would make the next cursor-driven run skip straight past
 // the gap instead of requesting it.
 //
-// M2: when there is NO stored cursor at all yet (ErrNotFound, or a row
-// with no LastTs), an explicit window must ALSO leave the cursor untouched
-// — round 1 returned allowCursorAdvance=true here, which let an explicit
-// window (e.g. a backfill) CREATE the live cursor from nothing. A backfill
+// When there is NO stored cursor at all yet (ErrNotFound, or a row
+// with no LastTs), an explicit window must ALSO leave the cursor untouched,
+// never CREATE the live cursor from nothing. A backfill
 // controller has no ordering guarantee: a RECENT window processed before
 // an OLDER one would set the cursor to the recent window's own bound, and
 // the first CURSOR-DRIVEN run would then resume from there instead of
@@ -664,7 +663,7 @@ func meteringPointFromAnalyzer(a model.Analyzer) integration.MeteringPoint {
 	}
 }
 
-// filterAttribution implements I2: a row is trusted to belong to this fetch
+// filterAttribution: a row is trusted to belong to this fetch
 // (persisted, counted toward this analyzer's cursor, compared against this
 // analyzer's prev/history) only after it passes here. An adapter bug, or a
 // misconfigured/malicious upstream, that stamps a returned row with another

@@ -85,11 +85,11 @@ var domainAllowedImports = map[string]bool{
 	// time.LoadLocation("Europe/Istanbul") resolves even in a scratch
 	// container with no system tzdata installed. It performs no I/O itself —
 	// it exists precisely so a LATER call to time.LoadLocation does not need
-	// to read a file — and adds no callable API of its own. F3 Task 1's
-	// internal/domain/energy/period.go is the first domain package to need
-	// it, for 02 §1's rule that DST-era Istanbul buckets go through the tz
-	// database, never a fixed offset. This entry (and .golangci.yml's
-	// matching domain-is-pure allow entry) is Task 1's own addition.
+	// to read a file — and adds no callable API of its own.
+	// internal/domain/energy/period.go needs it for 02 §1's rule that
+	// DST-era Istanbul buckets go through the tz database, never a fixed
+	// offset; .golangci.yml's domain-is-pure allow list has a matching
+	// entry.
 	"time/tzdata": true,
 
 	// third-party: exactly what the domain layer is built on.
@@ -162,33 +162,18 @@ func TestOnlyTheCLIImportsTheAPIPackage(t *testing.T) {
 	}
 }
 
-// TestStoreAndIntegrationDoNotImportAPIOrService is widened for F2: its name
-// has always claimed to cover internal/integration, but until this guard
-// gained an ./internal/integration/... pattern it only ever loaded
-// ./internal/store/.... internal/integration is the other package this
-// codebase requires to stay free of the HTTP layer (06 §1 rule 2: adapters
-// are pure clients, and an import of internal/api would let one reach for
-// an HTTP request/response type instead of its own).
-//
-// F3 Task 1 widens it again (I-4, plan-fix R76): its name has also always
-// claimed "Service", but until now nothing here checked it — the direction
-// lived, duplicated, in TestServiceLayerImportBoundaries instead, where a
-// store/integration -> service violation left THIS test green despite its
-// name promising to cover it (a mutation making internal/store import
-// internal/service proved exactly that: this test stayed green). The two
-// directions of the api/service/store layering now live where their names
-// say they do: this test owns store/integration -> api and store/
-// integration -> service; TestServiceLayerImportBoundaries owns
-// service -> api and service -> ingest.
-//
-// Final review B (M-5): this used to check direct imports only, while its
-// sibling TestServiceLayerImportBoundaries already walked the full
-// transitive graph — an asymmetry with no justification, since a
+// TestStoreAndIntegrationDoNotImportAPIOrService covers both
+// internal/store and internal/integration: 06 §1 rule 2 requires adapters
+// to stay pure clients, with no access to internal/api's HTTP
+// request/response types, and store must stay free of the HTTP layer for
+// the same reason. This test owns the store/integration -> api and
+// store/integration -> service directions; TestServiceLayerImportBoundaries
+// owns service -> api and service -> ingest, so the two never duplicate a
+// check. Both guards walk the full transitive import graph
+// (f2guardLoadPackagesWithDeps/f2guardTransitiveOffender): a
 // store/integration file reaching internal/api or internal/service through
 // an intermediate package is exactly as much a violation as importing it
-// by name. It now reuses f2guardLoadPackagesWithDeps/
-// f2guardTransitiveOffender, the same helpers TestServiceLayerImportBoundaries
-// uses, so both directions are symmetric.
+// by name.
 var f3guardStoreForbidden = []string{
 	modulePath + "/internal/api",
 	modulePath + "/internal/service",
@@ -561,6 +546,9 @@ func methodSetOf(named *types.Named) *types.MethodSet {
 // the same file was correctly flagged. A free function is the most natural
 // shape for a future worker or ingest helper ("load every analyzer for
 // polling"), which is precisely the surface F2 is about to add.
+// MigrateDownN rolls back the N most recent migrations; it is migration
+// infrastructure like MigrateUp/MigrateDownAll, not a repository read or
+// write.
 var storeScopeAllowlist = map[string]bool{
 	"NewPool":           true, // internal/store/postgres/pool.go
 	"Ping":              true, // internal/store/postgres/pool.go
@@ -622,7 +610,7 @@ func inspectContextTakingSignature(t *testing.T, sig *types.Signature, pkgPath, 
 // Nothing here will ever catch that, and no amount of widening the predicate
 // would change it.
 //
-// That half is covered behaviourally by Task 13's TestScopeIsolation, which
+// That half is covered behaviourally by TestScopeIsolation, which
 // walks every repository with tenant A's scope and tenant B's ids and
 // requires that nothing comes back. The division of labour is deliberate:
 // GUARD FOR THE SIGNATURE HERE, TEST FOR THE BEHAVIOUR THERE. Neither is
@@ -630,13 +618,14 @@ func inspectContextTakingSignature(t *testing.T, sig *types.Signature, pkgPath, 
 // test only covers the repositories someone remembered to enumerate, which is
 // exactly what this guard makes impossible to forget.
 //
-// The inspected-method count is asserted positive, not merely logged: Task 9
-// introduces the first repositories under internal/store/postgres, so an
-// empty walk is no longer legitimate. Before Task 9, the guard legitimately
-// inspected zero methods and a narrowing bug in the predicate above looked
-// identical to "there is nothing to check" — the same failure mode this
-// require now closes for good, since a future narrowing bug that walked zero
-// packages or zero methods would fail this line rather than pass silently.
+// The inspected-method count is asserted positive, not merely logged: now
+// that repositories exist under internal/store/postgres, an empty walk is
+// no longer legitimate. Before any repository existed there, the guard
+// legitimately inspected zero methods and a narrowing bug in the predicate
+// above looked identical to "there is nothing to check" — the same failure
+// mode this require now closes for good, since a future narrowing bug that
+// walked zero packages or zero methods would fail this line rather than
+// pass silently.
 func TestEveryStoreMethodIsScoped(t *testing.T) {
 	const (
 		adminPkg   = modulePath + "/internal/store/postgres/admin"
@@ -747,19 +736,19 @@ var f3guardServiceForbidden = []string{
 }
 
 // TestServiceLayerImportBoundaries enforces 03 §2.1, §2.2's
-// "api ──▶ service ──▶ domain" layering for the internal/service tree F3
-// Task 1 introduces (R76): internal/service/... may not import
-// internal/api/... or internal/ingest/... — TRANSITIVELY, not just
-// directly (I-5): a service file importing internal/worker, which itself
-// imports internal/ingest, is exactly as much a violation as importing
-// internal/ingest by name, the same reasoning TestAdaptersDoNotImportTheStore
-// applies one layer down. A direct-imports-only version of this check
-// stayed green against exactly that mutation.
+// "api ──▶ service ──▶ domain" layering (R76) for the internal/service
+// tree: internal/service/... may not import internal/api/... or
+// internal/ingest/... — TRANSITIVELY, not just directly: a service file
+// importing internal/worker, which itself imports internal/ingest, is
+// exactly as much a violation as importing internal/ingest by name, the
+// same reasoning TestAdaptersDoNotImportTheStore applies one layer down. A
+// direct-imports-only version of this check stayed green against exactly
+// that mutation.
 //
 // The reverse direction — internal/store/... and internal/integration/...
 // must not import internal/service/... — lives in
-// TestStoreAndIntegrationDoNotImportAPIOrService (I-4, plan-fix R76), whose
-// name has always promised to cover it.
+// TestStoreAndIntegrationDoNotImportAPIOrService (R76), whose name has
+// always promised to cover it.
 func TestServiceLayerImportBoundaries(t *testing.T) {
 	pkgs := f2guardLoadPackagesWithDeps(t, "./internal/service/...")
 	require.NotEmpty(t, pkgs, "the guard walked zero packages: it would pass whatever the code said")
@@ -811,14 +800,14 @@ func TestTheJobPackageDoesNotImportTheStore(t *testing.T) {
 // pattern added before its package exists would fail the guard for the
 // wrong reason (a broken load, not a real violation).
 //
-// ./internal/service/... was added by F3 Task 1 (R76): the new service
-// layer introduced by this phase computes and holds the same energy and
-// money values internal/domain does, one layer up, so a float there is
-// exactly as much a wrong invoice as a float in internal/domain/energy
-// itself. internal/service/doc.go exists, ahead of any real service
-// package, for the same non-empty-match reason the F2 trees needed their
-// placeholder doc.go files. .golangci.yml's no-float-money depguard rule
-// gains the matching tree. Change both or neither.
+// ./internal/service/... covers the service layer (R76): it computes and
+// holds the same energy and money values internal/domain does, one layer
+// up, so a float there is exactly as much a wrong invoice as a float in
+// internal/domain/energy itself. internal/service/doc.go exists, ahead of
+// any real service package, for the same non-empty-match reason the F2
+// trees needed their placeholder doc.go files. .golangci.yml's
+// no-float-money depguard rule gains the matching tree. Change both or
+// neither.
 var floatGuardPatterns = []string{
 	"./internal/domain/...",
 	"./internal/store/...",
@@ -1061,8 +1050,7 @@ func floatGuardDescendsInto(t *types.Named) bool {
 // f2guardCallFloatSkip names source files, relative to the module root and
 // slash-separated, that TestIntegrationTreesDoNotParseFloats does not walk.
 //
-// internal/integration/httpx/ratelimit.go (added by Task 2, in Wave B —
-// this file does not exist yet when Task 1 runs) legitimately converts a
+// internal/integration/httpx/ratelimit.go legitimately converts a
 // time.Duration to golang.org/x/time/rate.Limit, a float64-based type
 // required by that library's own rate-limiter API. That is the only float
 // in the file, it is not money, energy or anything this guard exists to
@@ -1070,8 +1058,8 @@ func floatGuardDescendsInto(t *types.Named) bool {
 // else is" other than exempting the one file where it appears. No other
 // file is, or should ever be, exempt.
 //
-// internal/integration/fake/sanitise.go (added by Task 4; integration
-// commit ruling) is the fixture-fake's log/response scanner: it decodes an
+// internal/integration/fake/sanitise.go is the fixture-fake's log/response
+// scanner: it decodes an
 // arbitrary, unknown-shaped JSON body with json.Decoder.UseNumber() into
 // `any` purely to walk the resulting tree looking for PII-shaped keys —
 // UseNumber means any JSON number in that tree is held as json.Number, not
@@ -1238,9 +1226,8 @@ func f2guardCheckFmtScanFloatArgs(t *testing.T, pkg *packages.Package, args []as
 // spelling "float"). It walks every non-test file of five trees: the four
 // F2 trees that carry provider numbers — internal/integration,
 // internal/ingest, internal/marketdata and internal/credentials — plus
-// internal/service (F3 Task 1, R76): the service layer decodes nothing from
-// a wire format
-// itself, but it is exactly as much a route for a stray ParseFloat or a
+// internal/service (R76): the service layer decodes nothing from a wire
+// format itself, but it is exactly as much a route for a stray ParseFloat or a
 // float-shaped decode target as the domain layer it sits above, and this
 // guard's other half (floatGuardPatterns) already covers it for the
 // struct-field case.
@@ -1269,20 +1256,19 @@ func TestIntegrationTreesDoNotParseFloats(t *testing.T) {
 				ast.Inspect(file, func(n ast.Node) bool {
 					switch node := n.(type) {
 					case *ast.SelectorExpr:
-						// M2: matching on the *types.Func a bare
-						// SelectorExpr resolves to — not only when it is
-						// immediately called — catches strconv.ParseFloat
-						// and json.Number.Float64 used as a METHOD VALUE,
-						// e.g. `pf := strconv.ParseFloat; pf(s, 64)`: at
-						// the call site `pf(s, 64)`, call.Fun is a bare
-						// *ast.Ident with no static link back to
-						// strconv.ParseFloat, but the assignment
-						// `strconv.ParseFloat` itself is a SelectorExpr
-						// whose Uses[Sel] already resolves to the same
-						// *types.Func regardless of whether it is being
-						// called or merely referenced — closing the
-						// method-value gap the previous CallExpr-only walk
-						// left open (carried from Task 1, closed here).
+						// Matching on the *types.Func a bare SelectorExpr
+						// resolves to — not only when it is immediately
+						// called — catches strconv.ParseFloat and
+						// json.Number.Float64 used as a METHOD VALUE, e.g.
+						// `pf := strconv.ParseFloat; pf(s, 64)`: at the call
+						// site `pf(s, 64)`, call.Fun is a bare *ast.Ident
+						// with no static link back to strconv.ParseFloat,
+						// but the assignment `strconv.ParseFloat` itself is
+						// a SelectorExpr whose Uses[Sel] already resolves to
+						// the same *types.Func regardless of whether it is
+						// being called or merely referenced — closing the
+						// method-value gap a CallExpr-only walk would leave
+						// open.
 						fn, ok := pkg.TypesInfo.Uses[node.Sel].(*types.Func)
 						if !ok || fn.Pkg() == nil {
 							return true

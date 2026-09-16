@@ -29,7 +29,7 @@ func TestMaxDemandBillingRowCounts(t *testing.T) {
 }
 
 // TestMaxDemandDailyRowCounts proves KindDaily is honored by
-// MaxDemandKinds's allowlist (C-3): a daily row must be able to win the
+// MaxDemandKinds's allowlist: a daily row must be able to win the
 // maximum, not just load_profile and billing rows.
 func TestMaxDemandDailyRowCounts(t *testing.T) {
 	rs := []energy.Reading{
@@ -40,9 +40,9 @@ func TestMaxDemandDailyRowCounts(t *testing.T) {
 }
 
 func TestMaxDemandIgnoresCurrentIndexEvenWhenHigher(t *testing.T) {
-	// R65 re-ruled (C-3): current_index is stamped at ProfileDate by ARIL and
-	// can carry the previous month's peak, so it must never win over a
-	// counted kind even when its value is larger.
+	// R65: current_index is stamped at ProfileDate by ARIL and can carry the
+	// previous month's peak, so it must never win over a counted kind even
+	// when its value is larger.
 	rs := []energy.Reading{
 		demandAt(t0, "12.5"),
 		demandAtKind(t0.Add(15*time.Minute), energy.KindCurrentIndex, "999"),

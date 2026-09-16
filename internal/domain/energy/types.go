@@ -103,18 +103,18 @@ func (w Window) Contains(ts time.Time) bool {
 type Suspicion struct {
 	Reason Reason
 	// Delta is the negative difference that triggered ReasonNegativeDelta,
-	// or nil for ReasonMeterReset (M-2). On Derive's reset path it is the
-	// FIRST FAILING SEGMENT's own difference, in time order — never the
-	// whole period's difference — since that is what points an operator at
-	// the specific bad segment.
+	// or nil for ReasonMeterReset. On Derive's reset path it is the FIRST
+	// FAILING SEGMENT's own difference, in time order — never the whole
+	// period's difference — since that is what points an operator at the
+	// specific bad segment.
 	Delta *decimal.Decimal
 	// ResetRows is the count of resets inside Derive's segmentation window
 	// (start.TS, end.TS], regardless of whether they carried evidence for
 	// this register, plus one more (R92/R93) when a reset row sitting
 	// exactly at start.TS was inspected by R92(2)'s start-side check —
-	// whether or not that row carried a value for this register (M-16): a
-	// partial start-side row is unusable evidence (R93), not silent
-	// non-evidence, so it still counts.
+	// whether or not that row carried a value for this register: a partial
+	// start-side row is unusable evidence (R93), not silent non-evidence,
+	// so it still counts.
 	ResetRows int
 }
 
@@ -140,8 +140,8 @@ const (
 type Derivation struct {
 	Window  Window
 	Emitted bool
-	// Source is end.Kind, or start.Kind when end.Kind is KindReset (M-4):
-	// a reset row is evidence of a physical meter event, not a boundary a
+	// Source is end.Kind, or start.Kind when end.Kind is KindReset: a
+	// reset row is evidence of a physical meter event, not a boundary a
 	// caller should attribute the derived row to.
 	Source  Kind
 	Values  map[Register]*decimal.Decimal // nil entry = suspect or unreported

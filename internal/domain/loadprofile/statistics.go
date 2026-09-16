@@ -72,14 +72,11 @@ func Stats(p Profile) Statistics {
 	stdDev, err := variance.PowWithPrecision(oneHalf, DivisionScale)
 	var stdDevPtr *decimal.Decimal
 	if err != nil {
-		// Unreachable today (M-8, final review A): variance is a sum of
-		// squares divided by a positive count, so it is never negative, and
-		// PowWithPrecision's documented failures (0**0, a negative base with
-		// a non-integer exponent) cannot occur here. The branch is kept —
-		// for a future decimal upgrade that DID make it reachable — but it
-		// must not turn into a silently wrong 0: StdDev is a pointer
-		// specifically so "unavailable" (nil) is representable, so an
-		// unreachable-today error returns nil, never a fabricated zero.
+		// Unreachable: variance is a sum of squares divided by a positive
+		// count, so it is never negative, and PowWithPrecision's documented
+		// failures (0**0, a negative base with a non-integer exponent) cannot
+		// occur here. The branch returns nil ("unavailable"), never a
+		// fabricated zero, in case a future decimal version makes it reachable.
 		stdDevPtr = nil
 	} else {
 		stdDevPtr = &stdDev

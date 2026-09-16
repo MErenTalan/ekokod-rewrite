@@ -1,22 +1,19 @@
 //go:build integration
 
-// This file is Task 13's acceptance suite for 09-implementation-plan.md
-// §F3: one test per acceptance criterion, named after it, with a comment
-// quoting the criterion verbatim (M-5: it lives in-package, next to the code
-// it exercises).
+// This file is the acceptance suite for 09-implementation-plan.md §F3: one
+// test per acceptance criterion, named after it, with a comment quoting the
+// criterion verbatim. It lives in-package, next to the code it exercises.
 //
-// Wiring note (clarification binding this dispatch): loadprofile.Service is
-// NOT constructed by worker.Build — its only consumer through F5 is the HTTP
-// layer, which does not exist until F6 — so the plan's "drive worker.Build"
-// rule cannot apply here. Both tests below instead construct *Service
-// directly with REAL repositories (postgres.NewCalendarRepository,
-// postgres.NewAnalyticsRepository, postgres.NewReadingRepository) over
-// testfixtures.NewIsolatedDB and a real tenant from testfixtures.NewTenant —
-// exactly the pattern service_integration_test.go already uses for this
-// package's other real-database tests (newTestService, istanbulAt, decPtr
-// and istanbul below are that file's shared helpers, reused here rather than
-// redefined, per this package's helpers_test.go convention referenced from
-// the consumption package's own file).
+// Wiring note: loadprofile.Service is NOT constructed by worker.Build — its
+// only consumer through F5 is the HTTP layer, which does not exist until F6
+// — so the plan's "drive worker.Build" rule cannot apply here. Both tests
+// below instead construct *Service directly with REAL repositories
+// (postgres.NewCalendarRepository, postgres.NewAnalyticsRepository,
+// postgres.NewReadingRepository) over testfixtures.NewIsolatedDB and a real
+// tenant from testfixtures.NewTenant — exactly the pattern
+// service_integration_test.go already uses for this package's other
+// real-database tests (newTestService, istanbulAt, decPtr and istanbul below
+// are that file's shared helpers, reused here rather than redefined).
 package loadprofile_test
 
 import (
@@ -37,10 +34,8 @@ import (
 )
 
 // f3Reading builds one load_profile meter reading at ts with active_import
-// = v, for f3_acceptance_test.go's own fixtures (f3-prefixed per this
-// dispatch's collision-avoidance convention: helpers_test.go documents that
-// a name shared with another task's own helper must be either avoided or
-// given a distinct, clearly scoped prefix).
+// = v, for this file's own fixtures (f3-prefixed to avoid colliding with
+// another file's identically-scoped helper, per helpers_test.go).
 func f3Reading(analyzerID uuid.UUID, ts time.Time, v string) model.MeterReading {
 	return model.MeterReading{
 		AnalyzerID: analyzerID, Ts: ts, Kind: model.ReadingKindLoadProfile,

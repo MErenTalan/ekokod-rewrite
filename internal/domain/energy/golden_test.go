@@ -19,11 +19,10 @@ import (
 // TestGolden is 09-implementation-plan.md §F3 acceptance criterion 1: a
 // golden-file test for each of the six consumption-derivation cases named
 // there (R80). Every file under testdata/golden holds `input` (raw
-// readings and resets — never pre-selected boundaries, I-14) and a `want`
-// block computed by hand from the spec, not by running the code under
-// test. -update rewrites only `want`; it never touches `input`, and it
-// never produces the first `want` for a new fixture (Step 3 of the plan's
-// Task 4).
+// readings and resets — never pre-selected boundaries) and a `want` block
+// computed by hand from the spec, not by running the code under test.
+// -update rewrites only `want`; it never touches `input`, and it never
+// produces the first `want` for a new fixture.
 var update = flag.Bool("update", false, "rewrite the want block of each golden file")
 
 // goldenWindow is the JSON shape of a Window: a half-open [From, To).
@@ -33,8 +32,8 @@ type goldenWindow struct {
 }
 
 // goldenReading is the JSON shape of one raw meter reading or reset row.
-// Values only carries the registers the meter actually reported (I-14: an
-// absent key means "not reported", exactly like energy.Reading).
+// Values only carries the registers the meter actually reported (an absent
+// key means "not reported", exactly like energy.Reading).
 type goldenReading struct {
 	TS          time.Time                            `json:"ts"`
 	Kind        energy.Kind                          `json:"kind"`
@@ -48,7 +47,7 @@ func (r goldenReading) toEnergy() energy.Reading {
 
 // goldenInput is the raw fixture input: a window, the boundary-and-priors
 // pool (`readings`), and the reset evidence (`resets`), fetched and passed
-// to Derive exactly as Task 7's Billing.Consumption does (I-17).
+// to Derive exactly as Billing.Consumption does.
 type goldenInput struct {
 	Window   goldenWindow    `json:"window"`
 	Readings []goldenReading `json:"readings"`
@@ -65,8 +64,8 @@ type goldenSuspicion struct {
 }
 
 // goldenValues is a Derivation.Values map with a custom JSON encoding that
-// always lists every register in energy.AllRegisters() order (I-14) —
-// whether the file is hand-authored or rewritten by -update — rather than
+// always lists every register in energy.AllRegisters() order — whether the
+// file is hand-authored or rewritten by -update — rather than
 // encoding/json's default alphabetical map-key order. A nil map marshals to
 // JSON null, matching Derivation's documented !Emitted invariant (Values is
 // nil, never a non-nil empty map).
@@ -158,8 +157,8 @@ func TestGolden(t *testing.T) {
 }
 
 // runCase is the ONE place selection meets derivation, mirroring
-// Billing.Consumption's query shape (I-17): select boundaries from the same
-// pool that also serves as Derive's priors. The harness sorts nothing —
+// Billing.Consumption's query shape: select boundaries from the same pool
+// that also serves as Derive's priors. The harness sorts nothing —
 // requireSortedAscending fails the test outright on an unsorted fixture,
 // since Derive and SelectBoundary both document unsorted input as an
 // unspecified-result precondition violation, not something to silently fix
@@ -199,8 +198,8 @@ func toEnergyReadings(in []goldenReading) []energy.Reading {
 
 // requireSortedAscending fails the test when readings is not sorted
 // ascending by TS — Derive and SelectBoundary both document this as a
-// caller precondition they do not enforce themselves (I-2), so a fixture
-// that violates it must fail the harness rather than silently produce an
+// caller precondition they do not enforce themselves, so a fixture that
+// violates it must fail the harness rather than silently produce an
 // unspecified result.
 func requireSortedAscending(t *testing.T, readings []energy.Reading, label string) {
 	t.Helper()
@@ -212,8 +211,8 @@ func requireSortedAscending(t *testing.T, readings []energy.Reading, label strin
 }
 
 // valuesInAllRegistersOrder defensively rebuilds a Values map with every
-// register in energy.AllRegisters() explicit (I-14) — Derive and
-// Difference already guarantee this shape when Emitted, but the harness
+// register in energy.AllRegisters() explicit — Derive and Difference
+// already guarantee this shape when Emitted, but the harness
 // does not trust that invariant blindly. A nil map (the !Emitted case)
 // stays nil, matching Derivation's documented invariant.
 func valuesInAllRegistersOrder(values map[energy.Register]*decimal.Decimal) goldenValues {

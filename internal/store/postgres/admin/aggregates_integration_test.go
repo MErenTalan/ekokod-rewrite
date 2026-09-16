@@ -85,10 +85,10 @@ func TestRefreshMaterialisesAClosedMonth(t *testing.T) {
 // TestRefreshMaterialisesAnHourBelowTheWatermark is the refresh proof for a
 // real-time (materialized_only = false) view. consumption_hourly's real-time
 // union serves raw rows for everything ABOVE its materialisation watermark,
-// which in a fresh database with no refresh yet is effectively every row —
-// exactly why the plan's original single-test design does not hold for this
-// view (see the task's override notes). To exercise the actual production
-// scenario — a late backfill landing BELOW an already-advanced watermark —
+// which in a fresh database with no refresh yet is effectively every row, so
+// a single before/after refresh assertion (as for a materialized_only view)
+// would prove nothing here. To exercise the actual production scenario — a
+// late backfill landing BELOW an already-advanced watermark —
 // this test seeds one recent reading (the ongoing ingestion a live company
 // already has), refreshes a window that reaches to one hour ago so the
 // watermark advances past it, and only THEN inserts the backfilled readings
@@ -190,9 +190,8 @@ func TestRefreshReturnsTheDatabaseError(t *testing.T) {
 }
 
 // TestRefreshWalksTheFourViewsFinestFirst pins store.ConsumptionViews' order:
-// a caller (Task 11's handler) that refreshes in this order never has a
-// coarser view appear to lag a finer one it depends on for its own story
-// about the data (R71).
+// a caller that refreshes in this order never has a coarser view appear to
+// lag a finer one it depends on for its own story about the data (R71).
 func TestRefreshWalksTheFourViewsFinestFirst(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, []store.AggregateView{

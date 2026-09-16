@@ -1,6 +1,6 @@
 // Package service is the root of the service layer F3 introduces above
-// internal/domain: internal/service/consumption (Tasks 7-9, 11a, 11b) and
-// internal/service/loadprofile (Task 10). It sits between internal/api and
+// internal/domain: internal/service/consumption and
+// internal/service/loadprofile. It sits between internal/api and
 // internal/domain (03 §2.1, §2.2; R75, R76):
 //
 //	api ──▶ service ──▶ domain
@@ -17,8 +17,7 @@
 // store.Scope second, validated with Scope.Valid() before any I/O — the same
 // rule internal/store/postgres already enforces one layer down.
 //
-// This file exists so the tree is a non-empty Go package the moment the
-// layer's guards land (Task 1), before any service package has real code —
-// the same reason internal/integration/doc.go and its siblings were added
-// ahead of F2's adapters.
+// This file documents the layer's import boundary; the concrete rules and
+// their rationale live in internal/service/consumption/doc.go and
+// internal/service/loadprofile/doc.go.
 package service

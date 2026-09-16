@@ -38,10 +38,8 @@ func readingAt(ts time.Time, activeImport string) *energy.Reading {
 
 // resetAt builds a meter-reset reading at ts (02 §3.2, KindReset) carrying
 // only active_import — a reset row is evidence of a physical register
-// reset, never a full multi-register reading, so later tasks that consume
-// this helper should not expect other registers to be populated. Every
-// later task that needs a reset fixture (Task 2's Derive, in particular)
-// must use this instead of redefining it.
+// reset, never a full multi-register reading, so callers must not expect
+// other registers to be populated.
 func resetAt(ts time.Time, value string) *energy.Reading {
 	return &energy.Reading{
 		TS:   ts,
@@ -54,9 +52,7 @@ func resetAt(ts time.Time, value string) *energy.Reading {
 
 // demandAt builds a load-profile reading at ts carrying only MaxDemandKw —
 // max_demand is not a cumulative register (02 §3.5) and is never part of
-// Reading.Values, so this helper is the one later tasks (load-profile
-// summarisation, in particular) should use for a demand-only fixture
-// instead of redefining it.
+// Reading.Values.
 func demandAt(ts time.Time, kw string) energy.Reading {
 	return energy.Reading{
 		TS:          ts,
@@ -67,9 +63,8 @@ func demandAt(ts time.Time, kw string) energy.Reading {
 
 // demandAtKind builds a reading at ts of the given kind carrying only
 // MaxDemandKw, for tests that need a demand-only fixture of a kind other
-// than load_profile (demandAt's fixed kind). Task 3's MaxDemand tests use
-// this to exercise MaxDemandKinds's allowlist against billing,
-// current_index and reset rows.
+// than load_profile (demandAt's fixed kind) — used to exercise
+// MaxDemandKinds's allowlist against billing, current_index and reset rows.
 func demandAtKind(ts time.Time, kind energy.Kind, kw string) energy.Reading {
 	return energy.Reading{
 		TS:          ts,
@@ -94,8 +89,8 @@ func vals(active, t1 string) map[energy.Register]*decimal.Decimal {
 }
 
 // requireDecimal fails the test cleanly if got is nil (rather than letting a
-// later got.String() panic with a nil pointer dereference — see task-3-review
-// I1), then compares got's value against want by value.
+// later got.String() panic with a nil pointer dereference), then compares
+// got's value against want by value.
 func requireDecimal(t *testing.T, got *decimal.Decimal, want string) {
 	t.Helper()
 	require.NotNil(t, got)
@@ -103,7 +98,7 @@ func requireDecimal(t *testing.T, got *decimal.Decimal, want string) {
 }
 
 // requireValue asserts that reg's derived value on d is non-nil and equals
-// want, then returns nothing further to dereference (I-4). Without this, a
+// want, then returns nothing further to dereference. Without this, a
 // mutation that wrongly makes a register suspect surfaces as a nil-pointer
 // panic that aborts the whole test binary — every later test in the binary
 // then runs (or fails) with no signal at all, rather than this one
@@ -115,8 +110,8 @@ func requireValue(t *testing.T, d energy.Derivation, reg energy.Register, want s
 	require.Equal(t, want, v.String())
 }
 
-// requireDelta asserts that s.Delta is non-nil and equals want (I-4), the
-// same nil-safety requireValue gives Values entries.
+// requireDelta asserts that s.Delta is non-nil and equals want, the same
+// nil-safety requireValue gives Values entries.
 func requireDelta(t *testing.T, s energy.Suspicion, want string) {
 	t.Helper()
 	require.NotNil(t, s.Delta, "expected a non-nil Suspicion.Delta")
@@ -124,7 +119,7 @@ func requireDelta(t *testing.T, s energy.Suspicion, want string) {
 }
 
 // requireReadingValue asserts that r is non-nil and its value for reg is
-// non-nil and equals want (M-10), the same nil-safety requireValue gives a
+// non-nil and equals want, the same nil-safety requireValue gives a
 // Derivation's Values entries — for a *Reading returned from SelectBoundary.
 func requireReadingValue(t *testing.T, r *energy.Reading, reg energy.Register, want string, msgAndArgs ...interface{}) {
 	t.Helper()
@@ -146,10 +141,10 @@ func istanbul(t *testing.T) *time.Location {
 	return loc
 }
 
-// TestHelperResetAtAndDemandAtShapes pins resetAt and demandAt's shapes for
-// the later tasks that will reuse them (Task 2's Derive for resetAt, load-
-// profile summarisation for demandAt), since neither is exercised by this
-// task's own tests otherwise.
+// TestHelperResetAtAndDemandAtShapes pins resetAt and demandAt's shapes
+// (resetAt: reset kind carrying only active_import; demandAt: load_profile
+// kind carrying only MaxDemandKw), since neither is exercised elsewhere in
+// this package's own tests.
 func TestHelperResetAtAndDemandAtShapes(t *testing.T) {
 	r := resetAt(t0, "0.0000")
 	require.Equal(t, energy.KindReset, r.Kind)

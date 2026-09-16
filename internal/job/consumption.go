@@ -29,9 +29,9 @@ func hourCeil(t time.Time) time.Time {
 // both UTC, PLUS now truncated down to the minute. Neither a company nor an
 // analyzer feeds the id — a refresh is platform work that covers every
 // tenant's buckets in the window (R72) — but unlike the original R71
-// formula, `now` DOES feed it: final review A I-2 found that asynq's
-// EXISTS check for a TaskID conflict matches a task that is pending,
-// retrying, OR ACTIVE, so a window-only id could silently drop rows
+// formula, `now` DOES feed it: asynq's EXISTS check for a TaskID conflict
+// matches a task that is pending, retrying, OR ACTIVE, so a window-only id
+// could silently drop rows
 // committed after an active task for the same window had already passed the
 // view that would have covered them. Folding in a one-minute debounce slot
 // means the id only ever collapses a BURST of enqueues arriving within the
@@ -101,7 +101,7 @@ func DecodeConsumptionRefresh(t *asynq.Task) (ConsumptionRefreshPayload, error) 
 
 // Refresher handles consumption.refresh. internal/service/consumption
 // implements it; internal/job still imports nothing from internal/store —
-// this interface is the seam that keeps that true (Task 11a).
+// this interface is the seam that keeps that true.
 type Refresher interface {
 	RefreshConsumption(ctx context.Context, p ConsumptionRefreshPayload) error
 }
