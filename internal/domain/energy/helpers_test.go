@@ -80,6 +80,27 @@ func vals(active, t1 string) map[energy.Register]*decimal.Decimal {
 	}
 }
 
+// requireValue asserts that reg's derived value on d is non-nil and equals
+// want, then returns nothing further to dereference (I-4). Without this, a
+// mutation that wrongly makes a register suspect surfaces as a nil-pointer
+// panic that aborts the whole test binary — every later test in the binary
+// then runs (or fails) with no signal at all, rather than this one
+// assertion failing cleanly.
+func requireValue(t *testing.T, d energy.Derivation, reg energy.Register, want string) {
+	t.Helper()
+	v := d.Values[reg]
+	require.NotNil(t, v, "expected a derived value for %s, got nil (suspect: %+v)", reg, d.Suspect[reg])
+	require.Equal(t, want, v.String())
+}
+
+// requireDelta asserts that s.Delta is non-nil and equals want (I-4), the
+// same nil-safety requireValue gives Values entries.
+func requireDelta(t *testing.T, s energy.Suspicion, want string) {
+	t.Helper()
+	require.NotNil(t, s.Delta, "expected a non-nil Suspicion.Delta")
+	require.Equal(t, want, s.Delta.String())
+}
+
 // istanbul loads the Europe/Istanbul location, failing the test immediately
 // if it cannot be resolved (it always can: internal/domain/energy blank-
 // imports time/tzdata precisely so this never depends on the host's system
