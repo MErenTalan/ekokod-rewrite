@@ -16,6 +16,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/ingest/generation"
 	"github.com/MErenTalan/ekokod-rewrite/internal/job"
+	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/crypto"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
@@ -202,8 +203,9 @@ func TestBuildGraphOpensNamedClosersForRedisAndJobClient(t *testing.T) {
 // consumption.refresh task at asynq's own zero-value default retry count).
 // Mirrors internal/job/consumption_integration_test.go's enqueue-then-
 // asynq.Inspector.GetTaskInfo pattern (also used by
-// wiring_integration_test.go's TestAuthFailureIsNotRetried) at the worker
-// adapter's own level, against a real Redis. MaxRetry is a non-default 7 so
+// internal/job/ingestion_integration_test.go's TestAuthFailureIsNotRetried)
+// at the worker adapter's own level, against a real Redis. MaxRetry is a
+// non-default 7 so
 // a mutant hard-coding job.TaskOptions{} (retry 0, asynq's default 25, or
 // any other incidental value) cannot coincidentally match.
 func TestConsumptionRefreshEnqueuerAppliesConfiguredMaxRetry(t *testing.T) {
@@ -212,7 +214,8 @@ func TestConsumptionRefreshEnqueuerAppliesConfiguredMaxRetry(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = jobClient.Close() })
 
-	enq := consumptionRefreshEnqueuer{client: jobClient, maxRetry: 7}
+	fixedNow := time.Date(2026, 5, 1, 9, 30, 0, 0, time.UTC)
+	enq := consumptionRefreshEnqueuer{client: jobClient, maxRetry: 7, clock: clock.NewFake(fixedNow)}
 
 	from := time.Date(2026, 5, 1, 8, 0, 0, 0, time.UTC)
 	to := from.Add(time.Hour)
@@ -224,7 +227,33 @@ func TestConsumptionRefreshEnqueuerAppliesConfiguredMaxRetry(t *testing.T) {
 	insp := asynq.NewInspector(redisOpt)
 	defer func() { _ = insp.Close() }()
 
-	ti, err := insp.GetTaskInfo(job.QueueDefault, job.ConsumptionRefreshTaskID(from, to))
+	ti, err := insp.GetTaskInfo(job.QueueDefault, job.ConsumptionRefreshTaskID(from, to, fixedNow))
 	require.NoError(t, err)
 	require.Equal(t, 7, ti.MaxRetry, "the worker adapter must pass its configured MaxRetry through to the enqueued task, not job.TaskOptions{}")
+}
+
+// TestConsumptionRefreshEnqueuerMapsTaskIDConflictToSuccess is R100(2)'s
+// proof: a second EnqueueConsumptionRefresh call that collides with the
+// first (same window, same debounce minute — the designed burst-collapse
+// case) must return nil, not asynq.ErrTaskIDConflict. A mutant that drops
+// the errors.Is(err, asynq.ErrTaskIDConflict) check in
+// consumptionRefreshEnqueuer.EnqueueConsumptionRefresh turns this red.
+func TestConsumptionRefreshEnqueuerMapsTaskIDConflictToSuccess(t *testing.T) {
+	redisCfg := testfixtures.RedisConfig(t)
+	jobClient, err := job.NewClient(redisCfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = jobClient.Close() })
+
+	fixedNow := time.Date(2026, 5, 1, 9, 30, 0, 0, time.UTC)
+	enq := consumptionRefreshEnqueuer{client: jobClient, maxRetry: 3, clock: clock.NewFake(fixedNow)}
+
+	from := time.Date(2026, 5, 2, 8, 0, 0, 0, time.UTC)
+	to := from.Add(time.Hour)
+
+	require.NoError(t, enq.EnqueueConsumptionRefresh(context.Background(), job.ConsumptionRefreshPayload{
+		CompanyID: uuid.New(), AnalyzerID: uuid.New(), From: from, To: to,
+	}))
+	require.NoError(t, enq.EnqueueConsumptionRefresh(context.Background(), job.ConsumptionRefreshPayload{
+		CompanyID: uuid.New(), AnalyzerID: uuid.New(), From: from, To: to,
+	}), "a colliding enqueue (asynq.ErrTaskIDConflict) must be mapped to success, never surfaced as an error")
 }

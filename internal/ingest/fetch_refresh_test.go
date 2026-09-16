@@ -196,9 +196,20 @@ func TestABackfillTwoHundredDaysOldEntersTheAggregateAfterTheJobRuns(t *testing.
 	require.NoError(t, err)
 	require.Empty(t, before, "the closed month is absent until consumption.refresh actually runs — enqueueing alone must not materialise it")
 
+	// R100(3): consumption_monthly's own policy start_offset is 1 year, and
+	// February 2026 is only ~4 months before fetchRefreshTestNow (June
+	// 2026) — comfortably INSIDE that policy's own live window, so a
+	// refresher clocked at fetchRefreshTestNow would legitimately SKIP the
+	// monthly view (the scheduled policy already covers it). This test's
+	// whole point is proving the MANUAL refresh materialises a window the
+	// policy has stopped touching, so the refresher here is clocked more
+	// than a year past the window instead — independent of clk, which only
+	// drives the ingest side's enqueue threshold above and is unaffected.
 	refresher, err := consumption.NewRefresher(consumption.RefreshDeps{
 		Aggregates: aggregateRepo,
 		Locker:     fetchRefreshTestRedisLocker(t),
+		Enqueuer:   newRecordingConsumptionRefreshEnqueuer(),
+		Clock:      clock.NewFake(fetchRefreshTestNow.AddDate(2, 0, 0)),
 		LockTTL:    2 * time.Minute,
 		Location:   normalize.Istanbul,
 		Log:        testfixtures.DiscardLogger(),
@@ -279,9 +290,9 @@ func TestFetchDoesNotEnqueueWhenNothingWasPersisted(t *testing.T) {
 // R73/I-13: the threshold's two sides and its exact boundary.
 // ---------------------------------------------------------------------------
 
-// TestFetchDoesNotEnqueueWhenTheAffectedRangeIsEntirelyWithinTheLastThirtyDays
+// TestFetchDoesNotEnqueueWhenTheAffectedRangeIsEntirelyWithinTheLastTwentyNineDays
 // is live data consumption_hourly's own real-time union already covers.
-func TestFetchDoesNotEnqueueWhenTheAffectedRangeIsEntirelyWithinTheLastThirtyDays(t *testing.T) {
+func TestFetchDoesNotEnqueueWhenTheAffectedRangeIsEntirelyWithinTheLastTwentyNineDays(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	fx := fetchRefreshTestSetup(t, 9133)
@@ -299,43 +310,15 @@ func TestFetchDoesNotEnqueueWhenTheAffectedRangeIsEntirelyWithinTheLastThirtyDay
 	payload := job.FetchReadingsPayload{CompanyID: fx.tenant.Company.ID, CredentialID: fx.creds.CredentialID, AnalyzerID: fx.analyzer.ID, Kind: model.ReadingKindLoadProfile, Window: window}
 	require.NoError(t, svc.FetchReadings(ctx, payload))
 
-	require.Empty(t, refreshEnq.enqueued(), "an affected range entirely within the last 30 days needs no refresh")
+	require.Empty(t, refreshEnq.enqueued(), "an affected range entirely within the last 29 days needs no refresh")
 }
 
-// TestFetchEnqueuesWhenTheAffectedRangeStartsBeforeThirtyDaysAgo crosses the
-// threshold and must enqueue.
-func TestFetchEnqueuesWhenTheAffectedRangeStartsBeforeThirtyDaysAgo(t *testing.T) {
+// TestFetchEnqueuesWhenTheAffectedRangeStartsBeforeTwentyNineDaysAgo crosses
+// the threshold and must enqueue.
+func TestFetchEnqueuesWhenTheAffectedRangeStartsBeforeTwentyNineDaysAgo(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	fx := fetchRefreshTestSetup(t, 9134)
-
-	clk := clock.NewFake(fetchRefreshTestNow)
-	src := newFakeAdapter(integration.ProviderOSOS, 20*24*time.Hour, model.ReadingKindLoadProfile)
-	refreshEnq := newRecordingConsumptionRefreshEnqueuer()
-	svc := fetchRefreshTestService(t, fx.repos, fx.creds, src, refreshEnq, clk, ingest.Options{ConsumptionRefreshEnabled: true})
-
-	at := fetchRefreshTestNow.Add(-31 * 24 * time.Hour)
-	window := ingestTestWindow(at.Add(-time.Hour), 2*time.Hour)
-	rows := []model.MeterReading{readingFor(fx.analyzer.ID, at.Format(time.RFC3339), model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"})}
-	src.setSteps(fetchStep{result: integration.FetchResult{Readings: rows}})
-
-	payload := job.FetchReadingsPayload{CompanyID: fx.tenant.Company.ID, CredentialID: fx.creds.CredentialID, AnalyzerID: fx.analyzer.ID, Kind: model.ReadingKindLoadProfile, Window: window}
-	require.NoError(t, svc.FetchReadings(ctx, payload))
-
-	require.Len(t, refreshEnq.enqueued(), 1)
-}
-
-// TestFetchDoesNotEnqueueAtExactlyThirtyDaysBoundary and
-// TestFetchEnqueuesJustPastTheThirtyDayBoundary pin the exact boundary: an
-// affected range starting EXACTLY 30 days before now is still "within" the
-// policy window (the comparison is strict Before, not Before-or-equal) and
-// does not enqueue; one microsecond earlier does. Microsecond, not
-// nanosecond, because pgx/Postgres timestamptz columns are microsecond
-// precision (see fetch.go's M1 comment on the same trap).
-func TestFetchDoesNotEnqueueAtExactlyThirtyDaysBoundary(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	fx := fetchRefreshTestSetup(t, 9135)
 
 	clk := clock.NewFake(fetchRefreshTestNow)
 	src := newFakeAdapter(integration.ProviderOSOS, 20*24*time.Hour, model.ReadingKindLoadProfile)
@@ -350,10 +333,40 @@ func TestFetchDoesNotEnqueueAtExactlyThirtyDaysBoundary(t *testing.T) {
 	payload := job.FetchReadingsPayload{CompanyID: fx.tenant.Company.ID, CredentialID: fx.creds.CredentialID, AnalyzerID: fx.analyzer.ID, Kind: model.ReadingKindLoadProfile, Window: window}
 	require.NoError(t, svc.FetchReadings(ctx, payload))
 
-	require.Empty(t, refreshEnq.enqueued(), "exactly 30 days ago is still within the policy window — the boundary is exclusive")
+	require.Len(t, refreshEnq.enqueued(), 1)
 }
 
-func TestFetchEnqueuesJustPastTheThirtyDayBoundary(t *testing.T) {
+// TestFetchDoesNotEnqueueAtExactlyTwentyNineDaysBoundary and
+// TestFetchEnqueuesJustPastTheTwentyNineDayBoundary pin the exact boundary
+// (R100(6), amending R73/I-13's 30-day threshold down to 29 — one day of
+// margin inside consumption_hourly's own 30-day policy window, final
+// review A M-3): an affected range starting EXACTLY 29 days before now is
+// still "within" the policy window (the comparison is strict Before, not
+// Before-or-equal) and does not enqueue; one microsecond earlier does.
+// Microsecond, not nanosecond, because pgx/Postgres timestamptz columns are
+// microsecond precision (see fetch.go's M1 comment on the same trap).
+func TestFetchDoesNotEnqueueAtExactlyTwentyNineDaysBoundary(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	fx := fetchRefreshTestSetup(t, 9135)
+
+	clk := clock.NewFake(fetchRefreshTestNow)
+	src := newFakeAdapter(integration.ProviderOSOS, 20*24*time.Hour, model.ReadingKindLoadProfile)
+	refreshEnq := newRecordingConsumptionRefreshEnqueuer()
+	svc := fetchRefreshTestService(t, fx.repos, fx.creds, src, refreshEnq, clk, ingest.Options{ConsumptionRefreshEnabled: true})
+
+	at := fetchRefreshTestNow.Add(-29 * 24 * time.Hour)
+	window := ingestTestWindow(at.Add(-time.Hour), 2*time.Hour)
+	rows := []model.MeterReading{readingFor(fx.analyzer.ID, at.Format(time.RFC3339), model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"})}
+	src.setSteps(fetchStep{result: integration.FetchResult{Readings: rows}})
+
+	payload := job.FetchReadingsPayload{CompanyID: fx.tenant.Company.ID, CredentialID: fx.creds.CredentialID, AnalyzerID: fx.analyzer.ID, Kind: model.ReadingKindLoadProfile, Window: window}
+	require.NoError(t, svc.FetchReadings(ctx, payload))
+
+	require.Empty(t, refreshEnq.enqueued(), "exactly 29 days ago is still within the policy window — the boundary is exclusive")
+}
+
+func TestFetchEnqueuesJustPastTheTwentyNineDayBoundary(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	fx := fetchRefreshTestSetup(t, 9136)
@@ -363,7 +376,7 @@ func TestFetchEnqueuesJustPastTheThirtyDayBoundary(t *testing.T) {
 	refreshEnq := newRecordingConsumptionRefreshEnqueuer()
 	svc := fetchRefreshTestService(t, fx.repos, fx.creds, src, refreshEnq, clk, ingest.Options{ConsumptionRefreshEnabled: true})
 
-	at := fetchRefreshTestNow.Add(-30 * 24 * time.Hour).Add(-time.Microsecond)
+	at := fetchRefreshTestNow.Add(-29 * 24 * time.Hour).Add(-time.Microsecond)
 	window := ingestTestWindow(at.Add(-time.Hour), 2*time.Hour)
 	rows := []model.MeterReading{readingFor(fx.analyzer.ID, at.Format(time.RFC3339Nano), model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"})}
 	src.setSteps(fetchStep{result: integration.FetchResult{Readings: rows}})
@@ -372,6 +385,39 @@ func TestFetchEnqueuesJustPastTheThirtyDayBoundary(t *testing.T) {
 	require.NoError(t, svc.FetchReadings(ctx, payload))
 
 	require.Len(t, refreshEnq.enqueued(), 1, "one microsecond past the boundary must enqueue")
+}
+
+// ---------------------------------------------------------------------------
+// R100(1): a run that persisted no load_profile rows never enqueues — every
+// consumption continuous aggregate filters kind = 'load_profile' (migration
+// 00005), so a run of any other kind touches rows the aggregates never
+// read.
+// ---------------------------------------------------------------------------
+
+// TestFetchDoesNotEnqueueWhenTheRunPersistedNoLoadProfileRows drives a
+// REAL "daily"-kind fetch run — not load_profile — well past the enqueue
+// threshold, and proves it never enqueues a refresh even though rows were
+// persisted and the affected range easily crosses the threshold: kind alone
+// must gate the enqueue.
+func TestFetchDoesNotEnqueueWhenTheRunPersistedNoLoadProfileRows(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	fx := fetchRefreshTestSetup(t, 9145)
+
+	clk := clock.NewFake(fetchRefreshTestNow)
+	src := newFakeAdapter(integration.ProviderOSOS, 20*24*time.Hour, model.ReadingKindDaily)
+	refreshEnq := newRecordingConsumptionRefreshEnqueuer()
+	svc := fetchRefreshTestService(t, fx.repos, fx.creds, src, refreshEnq, clk, ingest.Options{ConsumptionRefreshEnabled: true})
+
+	at := fetchRefreshTestNow.Add(-40 * 24 * time.Hour)
+	window := ingestTestWindow(at.Add(-time.Hour), 2*time.Hour)
+	rows := []model.MeterReading{readingFor(fx.analyzer.ID, at.Format(time.RFC3339), model.ReadingKindDaily, map[string]string{"active_import": "1000"})}
+	src.setSteps(fetchStep{result: integration.FetchResult{Readings: rows}})
+
+	payload := job.FetchReadingsPayload{CompanyID: fx.tenant.Company.ID, CredentialID: fx.creds.CredentialID, AnalyzerID: fx.analyzer.ID, Kind: model.ReadingKindDaily, Window: window}
+	require.NoError(t, svc.FetchReadings(ctx, payload))
+
+	require.Empty(t, refreshEnq.enqueued(), "a run that persisted only daily rows must never enqueue consumption.refresh")
 }
 
 // ---------------------------------------------------------------------------
@@ -606,9 +652,16 @@ func TestFetchEnqueuesTheHourlyBucketWhenTheLastReadingLandsOnAnHourBoundary(t *
 	require.NoError(t, err)
 	require.Empty(t, before, "the hour starting at the boundary reading is below the watermark and absent until refreshed")
 
+	// R100(3): 200 days is comfortably past consumption_hourly's own 30-day
+	// policy horizon regardless of exactly which "now" is used, so reusing
+	// clk here (the same fake clock the ingest side above is wired to) is
+	// safe — unlike the monthly-view tests in this file, no separate,
+	// further-future clock is needed for this assertion to hold.
 	refresher, err := consumption.NewRefresher(consumption.RefreshDeps{
 		Aggregates: aggregateRepo,
 		Locker:     fetchRefreshTestRedisLocker(t),
+		Enqueuer:   newRecordingConsumptionRefreshEnqueuer(),
+		Clock:      clk,
 		LockTTL:    2 * time.Minute,
 		Location:   normalize.Istanbul,
 		Log:        testfixtures.DiscardLogger(),
@@ -669,9 +722,17 @@ func TestFetchEnqueuesExactlyOneRefreshForASingleReadingRun(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, before, "the closed month is absent until consumption.refresh actually runs")
 
+	// R100(3): same reasoning as
+	// TestABackfillTwoHundredDaysOldEntersTheAggregateAfterTheJobRuns above
+	// — `at` is only 40 days before fetchRefreshTestNow, well inside
+	// consumption_monthly's own 1-year policy window, so the refresher here
+	// needs a clock more than a year past `at` for the manual refresh to
+	// actually touch the monthly view.
 	refresher, err := consumption.NewRefresher(consumption.RefreshDeps{
 		Aggregates: aggregateRepo,
 		Locker:     fetchRefreshTestRedisLocker(t),
+		Enqueuer:   newRecordingConsumptionRefreshEnqueuer(),
+		Clock:      clock.NewFake(fetchRefreshTestNow.AddDate(2, 0, 0)),
 		LockTTL:    2 * time.Minute,
 		Location:   normalize.Istanbul,
 		Log:        testfixtures.DiscardLogger(),

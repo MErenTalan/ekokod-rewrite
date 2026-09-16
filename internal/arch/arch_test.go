@@ -180,14 +180,28 @@ func TestOnlyTheCLIImportsTheAPIPackage(t *testing.T) {
 // say they do: this test owns store/integration -> api and store/
 // integration -> service; TestServiceLayerImportBoundaries owns
 // service -> api and service -> ingest.
+//
+// Final review B (M-5): this used to check direct imports only, while its
+// sibling TestServiceLayerImportBoundaries already walked the full
+// transitive graph — an asymmetry with no justification, since a
+// store/integration file reaching internal/api or internal/service through
+// an intermediate package is exactly as much a violation as importing it
+// by name. It now reuses f2guardLoadPackagesWithDeps/
+// f2guardTransitiveOffender, the same helpers TestServiceLayerImportBoundaries
+// uses, so both directions are symmetric.
+var f3guardStoreForbidden = []string{
+	modulePath + "/internal/api",
+	modulePath + "/internal/service",
+}
+
 func TestStoreAndIntegrationDoNotImportAPIOrService(t *testing.T) {
 	for _, pattern := range []string{"./internal/store/...", "./internal/integration/..."} {
-		for _, pkg := range loadPackages(t, pattern) {
-			for imported := range pkg.Imports {
-				require.False(t, underPackage(imported, modulePath+"/internal/api"),
-					"%s must not import the HTTP layer", pkg.PkgPath)
-				require.False(t, underPackage(imported, modulePath+"/internal/service"),
-					"%s imports %s: internal/store and internal/integration sit below internal/service and must not import it", pkg.PkgPath, imported)
+		pkgs := f2guardLoadPackagesWithDeps(t, pattern)
+		require.NotEmpty(t, pkgs, "the guard walked zero packages: it would pass whatever the code said")
+		for _, pkg := range pkgs {
+			if chain := f2guardTransitiveOffender(pkg, f3guardStoreForbidden, map[string]bool{pkg.PkgPath: true}); chain != nil {
+				t.Errorf("%s transitively imports a forbidden package via %s: internal/store and internal/integration must not import the HTTP layer or internal/service, directly or transitively",
+					pkg.PkgPath, strings.Join(chain, " -> "))
 			}
 		}
 	}

@@ -1,6 +1,6 @@
 {
   "name": "reset_with_event",
-  "doc": "02 §3.2/R55/R91/R93: a meter reset with a covering reset row supplying both boundary-reported registers segments consumption at the reset instant; the reset row's own (excluded, kind=reset) max_demand_kw proves MaxDemandKinds' kind filter, not just its value comparison.",
+  "doc": "02 §3.2/R55/R91/R93: a meter reset with a covering reset row supplying both boundary-reported registers segments consumption at the reset instant. The reset row's max_demand_kw (999) is irrelevant to the max_demand_kw want below: runCase calls energy.MaxDemand(window, readings) exactly as production's maxDemandInWindow does (billing.go) and never passes resets at all, so 40 is simply the one load_profile reading's own value — this fixture does NOT exercise MaxDemandKinds' kind filter (see max_demand_kind_filter.json for that).",
   "input": {
     "window": {
       "from": "2025-04-01T00:00:00+03:00",

@@ -49,6 +49,13 @@ import (
 // own, here, because Analytics and Billing both validate before any I/O.
 var ErrInvalidRequest = errors.New("consumption: invalid request")
 
+// ErrConflict is returned when a write would repeat an already-settled fact
+// rather than a new one: re-resolving an already-resolved anomaly (I3), or
+// registering a reset at a timestamp a reset reading with DIFFERENT values
+// already occupies (I7). errors.Is(err, store.ErrConflict) is true, so a
+// caller that only checks the store-level sentinel still recognises it.
+var ErrConflict = fmt.Errorf("consumption: %w", store.ErrConflict)
+
 // MaxBuckets bounds a single request's bucket count at its Level: a request
 // whose [Range.From, Range.To) would expand past this many buckets fails
 // ErrInvalidRequest before any I/O (I-17) — a runaway range is a client
