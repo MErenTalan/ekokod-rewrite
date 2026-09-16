@@ -65,6 +65,19 @@ func demandAt(ts time.Time, kw string) energy.Reading {
 	}
 }
 
+// demandAtKind builds a reading at ts of the given kind carrying only
+// MaxDemandKw, for tests that need a demand-only fixture of a kind other
+// than load_profile (demandAt's fixed kind). Task 3's MaxDemand tests use
+// this to exercise MaxDemandKinds's allowlist against billing,
+// current_index and reset rows.
+func demandAtKind(ts time.Time, kind energy.Kind, kw string) energy.Reading {
+	return energy.Reading{
+		TS:          ts,
+		Kind:        kind,
+		MaxDemandKw: dec(kw),
+	}
+}
+
 // win builds a half-open Window of length d starting at from.
 func win(from time.Time, d time.Duration) energy.Window {
 	return energy.Window{From: from, To: from.Add(d)}
@@ -78,6 +91,15 @@ func vals(active, t1 string) map[energy.Register]*decimal.Decimal {
 		energy.ActiveImport: dec(active),
 		energy.T1Import:     dec(t1),
 	}
+}
+
+// requireDecimal fails the test cleanly if got is nil (rather than letting a
+// later got.String() panic with a nil pointer dereference — see task-3-review
+// I1), then compares got's value against want by value.
+func requireDecimal(t *testing.T, got *decimal.Decimal, want string) {
+	t.Helper()
+	require.NotNil(t, got)
+	require.Equal(t, want, got.String())
 }
 
 // istanbul loads the Europe/Istanbul location, failing the test immediately
