@@ -76,9 +76,11 @@ import (
 // segmentation is attempted for the register (mirroring R90's ordering
 // relative to finalDelta) and before the no-reset fast path below, because
 // inEvidenceWindow's open lower bound would otherwise hide this reset from
-// Derive entirely. R92(3): when more than one reset row shares an instant,
-// both this check and R90's use the LAST such row (lastResetAt), the same
-// tie-break SelectBoundary documents for readings.
+// Derive entirely. R92(3): both this check and R90's use the LAST reset row
+// at a shared instant (lastResetAt), the same tie-break SelectBoundary
+// documents for readings — the primary key (analyzer_id, ts, kind) makes it
+// impossible for more than one reset row to actually share an instant, but
+// the tie-break exists so the rule is well defined regardless (M-17).
 //
 // I-2 fast path: when no reset falls anywhere in the segmentation window
 // AND no reset sits exactly at start.TS (so R92(2) has nothing to check
@@ -270,10 +272,12 @@ func inEvidenceWindow(resets []Reading, startTS, endTS time.Time) []Reading {
 // lastResetAt returns a pointer aliasing the LAST element of resets (sorted
 // ascending by TS) whose TS exactly equals ts, or nil when none does.
 // R92(3): both the start-side (R92(2)) and end-side (R90) checks use the
-// last reset row at a shared instant, in the rare case more than one reset
-// row lands on it — the same tie-break rule SelectBoundary uses for
-// readings, implemented the same way (binary search for the first TS after
-// ts, then step back one and confirm the exact match).
+// last reset row at a shared instant — the same tie-break rule
+// SelectBoundary uses for readings, implemented the same way (binary
+// search for the first TS after ts, then step back one and confirm the
+// exact match). The primary key (analyzer_id, ts, kind) makes it
+// impossible for more than one reset row to actually share an instant, but
+// the tie-break exists so the rule is well defined regardless (M-17).
 func lastResetAt(resets []Reading, ts time.Time) *Reading {
 	i := sort.Search(len(resets), func(i int) bool { return resets[i].TS.After(ts) })
 	if i == 0 {
