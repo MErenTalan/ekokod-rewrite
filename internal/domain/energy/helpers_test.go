@@ -101,6 +101,17 @@ func requireDelta(t *testing.T, s energy.Suspicion, want string) {
 	require.Equal(t, want, s.Delta.String())
 }
 
+// requireReadingValue asserts that r is non-nil and its value for reg is
+// non-nil and equals want (M-10), the same nil-safety requireValue gives a
+// Derivation's Values entries — for a *Reading returned from SelectBoundary.
+func requireReadingValue(t *testing.T, r *energy.Reading, reg energy.Register, want string, msgAndArgs ...interface{}) {
+	t.Helper()
+	require.NotNil(t, r, "expected a non-nil reading")
+	v := r.Value(reg)
+	require.NotNil(t, v, "expected a value for %s, got nil", reg)
+	require.Equal(t, want, v.String(), msgAndArgs...)
+}
+
 // istanbul loads the Europe/Istanbul location, failing the test immediately
 // if it cannot be resolved (it always can: internal/domain/energy blank-
 // imports time/tzdata precisely so this never depends on the host's system

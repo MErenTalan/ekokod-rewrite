@@ -107,8 +107,13 @@ type Suspicion struct {
 	// FIRST FAILING SEGMENT's own difference, in time order — never the
 	// whole period's difference — since that is what points an operator at
 	// the specific bad segment.
-	Delta     *decimal.Decimal
-	ResetRows int // reset rows found inside the window
+	Delta *decimal.Decimal
+	// ResetRows is the count of resets inside Derive's segmentation window
+	// (start.TS, end.TS], regardless of whether they carried evidence for
+	// this register, plus one more (R92) when a reset row sitting exactly
+	// at start.TS carried a value for this register and was inspected by
+	// R92(2)'s start-side check.
+	ResetRows int
 }
 
 // Reason names why a register's difference could not be derived (02 §3.2).

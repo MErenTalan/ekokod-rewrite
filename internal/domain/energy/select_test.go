@@ -20,8 +20,7 @@ func TestSelectBoundaryOneNanosecondBeforeTheBound(t *testing.T) {
 		*readingAt(t0.Add(time.Hour), "20"),
 	}
 	got := energy.SelectBoundary(readings, t0.Add(time.Hour).Add(-time.Nanosecond))
-	require.NotNil(t, got)
-	require.Equal(t, "10", got.Value(energy.ActiveImport).String())
+	requireReadingValue(t, got, energy.ActiveImport, "10")
 }
 
 func TestSelectBoundaryExactlyAtTheBound(t *testing.T) {
@@ -30,8 +29,7 @@ func TestSelectBoundaryExactlyAtTheBound(t *testing.T) {
 		*readingAt(t0.Add(time.Hour), "20"),
 	}
 	got := energy.SelectBoundary(readings, t0.Add(time.Hour))
-	require.NotNil(t, got)
-	require.Equal(t, "20", got.Value(energy.ActiveImport).String(), "the reading AT the bound must be selected, not skipped")
+	requireReadingValue(t, got, energy.ActiveImport, "20", "the reading AT the bound must be selected, not skipped")
 }
 
 func TestSelectBoundaryOneNanosecondAfterTheBound(t *testing.T) {
@@ -41,8 +39,7 @@ func TestSelectBoundaryOneNanosecondAfterTheBound(t *testing.T) {
 		*readingAt(t0.Add(2*time.Hour), "30"),
 	}
 	got := energy.SelectBoundary(readings, t0.Add(time.Hour).Add(time.Nanosecond))
-	require.NotNil(t, got)
-	require.Equal(t, "20", got.Value(energy.ActiveImport).String(), "the next reading must not be pulled in one ns early")
+	requireReadingValue(t, got, energy.ActiveImport, "20", "the next reading must not be pulled in one ns early")
 }
 
 func TestSelectBoundaryOnEmptyInput(t *testing.T) {
@@ -73,8 +70,7 @@ func TestSelectBoundaryReturnsTheLastOfDuplicateTimestamps(t *testing.T) {
 		*readingAt(t0.Add(time.Hour), "30"),
 	}
 	got := energy.SelectBoundary(readings, t0)
-	require.NotNil(t, got)
-	require.Equal(t, "20", got.Value(energy.ActiveImport).String(), "ties: the last of equal timestamps <= bound wins")
+	requireReadingValue(t, got, energy.ActiveImport, "20", "ties: the last of equal timestamps <= bound wins")
 }
 
 // linearSelectBoundary is the pre-I-2 reference behavior: scan ascending,
@@ -96,6 +92,13 @@ func linearSelectBoundary(readings []energy.Reading, bound time.Time) *energy.Re
 // scan over randomized sorted input, including duplicate timestamps, for
 // bounds before, between, on and after every reading. Fixed seed so a
 // failure is reproducible.
+//
+// M-9: every reading carries the value "1", so a TS-only comparison cannot
+// tell which of several equal-timestamp readings was picked — a mutation
+// that walked back to the FIRST of a run of duplicates instead of the LAST
+// stayed green under that comparison. require.Same asserts pointer
+// identity into the shared readings slice instead, which does distinguish
+// them.
 func TestSelectBoundaryMatchesALinearScanOverRandomizedSortedInput(t *testing.T) {
 	rng := rand.New(rand.NewSource(20260916))
 
@@ -129,7 +132,7 @@ func TestSelectBoundaryMatchesALinearScanOverRandomizedSortedInput(t *testing.T)
 				continue
 			}
 			require.NotNil(t, got, "trial %d bound %v", trial, bound)
-			require.True(t, want.TS.Equal(got.TS), "trial %d bound %v: want TS %v got %v", trial, bound, want.TS, got.TS)
+			require.Same(t, want, got, "trial %d bound %v: want reading at %v got %v (M-9: pointer identity, not just TS)", trial, bound, want.TS, got.TS)
 		}
 	}
 }
