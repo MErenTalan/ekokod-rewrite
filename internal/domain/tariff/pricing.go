@@ -145,6 +145,9 @@ func Price(t model.Tariff, period energy.Window, hours []HourConsumption, hourly
 		}
 	}
 
+	if !hourly {
+		out.HoursMatched, out.HoursMissingPrice = priced, out.HoursExpected-priced
+	}
 	expected := decimal.NewFromInt(int64(out.HoursExpected))
 	if priced > 0 {
 		avg := ptfSum.DivRound(decimal.NewFromInt(int64(priced)), DivisionScale)
@@ -159,10 +162,7 @@ func Price(t model.Tariff, period energy.Window, hours []HourConsumption, hourly
 		out.BasePrice = &base
 	}
 
-	missing := out.HoursExpected - priced
-	if hourly {
-		missing = out.HoursExpected - out.HoursMatched
-	}
+	missing := out.HoursExpected - out.HoursMatched
 	switch {
 	case yekdemMissing:
 		out.Reason = ReasonYekdemMissing
