@@ -80,6 +80,28 @@ func TestConsumptionRefreshTaskIDCollapsesWithinTheSameHour(t *testing.T) {
 	require.Equal(t, a, b)
 }
 
+// TestConsumptionRefreshTaskIDCeilsExactHourToOnLiteral proves hourCeil does
+// NOT over-ceil a To that already sits exactly on an hour boundary — the
+// mutation that unconditionally does floor.Add(time.Hour) (dropping the
+// floor.Equal(t.UTC()) guard) must turn case "to exactly on the hour" red
+// here, by asserting the literal formatted id string rather than mere
+// equality-with-itself.
+func TestConsumptionRefreshTaskIDCeilsExactHourToOnLiteral(t *testing.T) {
+	from := time.Date(2026, 3, 14, 10, 15, 0, 0, time.UTC)
+
+	t.Run("to exactly on the hour is not ceiled further", func(t *testing.T) {
+		to := time.Date(2026, 3, 14, 11, 0, 0, 0, time.UTC)
+		got := ConsumptionRefreshTaskID(from, to)
+		require.Equal(t, "consumption.refresh:2026-03-14T10:00:00Z/2026-03-14T11:00:00Z", got)
+	})
+
+	t.Run("to one nanosecond past the hour ceils to the next hour", func(t *testing.T) {
+		to := time.Date(2026, 3, 14, 11, 0, 0, 1, time.UTC)
+		got := ConsumptionRefreshTaskID(from, to)
+		require.Equal(t, "consumption.refresh:2026-03-14T10:00:00Z/2026-03-14T12:00:00Z", got)
+	})
+}
+
 // TestConsumptionRefreshPayloadRoundTrips proves encode/decode is
 // byte-for-byte faithful.
 func TestConsumptionRefreshPayloadRoundTrips(t *testing.T) {

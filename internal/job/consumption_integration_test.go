@@ -56,6 +56,42 @@ func TestConsumptionRefreshTaskIDConflictsAcrossAnalyzersWhilePending(t *testing
 		"a second refresh for the same window, from a different analyzer/company, must collide with the first while it is pending")
 }
 
+// TestNewConsumptionRefreshTaskAppliesConfiguredMaxRetry proves
+// NewConsumptionRefreshTask actually applies integMaxRetryOptions(o) to the
+// built task: asynq.Task exposes no accessor for its options outside a real
+// broker round trip (see TestConsumptionRefreshTaskIDIgnoresAnalyzerAndCompany
+// above), so — per the review's last resort — this enqueues for real and
+// reads the persisted MaxRetry back via asynq.Inspector. The mutation that
+// drops integMaxRetryOptions(o)... from the option slice would silently fall
+// back to asynq's default MaxRetry (25), which this asserts against.
+func TestNewConsumptionRefreshTaskAppliesConfiguredMaxRetry(t *testing.T) {
+	cfg := testfixtures.RedisConfig(t)
+	client, err := job.NewClient(cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client.Close() })
+
+	from, to := consumptionIntegrationWindow()
+	const wantMaxRetry = 7 // deliberately far from asynq's default of 25
+
+	task, err := job.NewConsumptionRefreshTask(job.ConsumptionRefreshPayload{
+		CompanyID: uuid.New(), AnalyzerID: uuid.New(), From: from, To: to,
+	}, job.TaskOptions{MaxRetry: wantMaxRetry})
+	require.NoError(t, err)
+
+	info, err := client.Enqueue(context.Background(), task)
+	require.NoError(t, err)
+
+	redisOpt, err := job.RedisOpt(cfg)
+	require.NoError(t, err)
+	insp := asynq.NewInspector(redisOpt)
+	t.Cleanup(func() { _ = insp.Close() })
+
+	taskInfo, err := insp.GetTaskInfo(info.Queue, info.ID)
+	require.NoError(t, err)
+	require.Equal(t, wantMaxRetry, taskInfo.MaxRetry,
+		"NewConsumptionRefreshTask must apply the configured TaskOptions.MaxRetry to the built task")
+}
+
 // TestConsumptionRefreshTaskIDIsFreeAgainAfterCompletion proves
 // NewConsumptionRefreshTask sets NO asynq.Retention: once the first task for
 // a window COMPLETES, a later refresh of the exact same window must be able
