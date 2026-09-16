@@ -124,6 +124,17 @@ func (b *Billing) consumptionForAnalyzer(ctx context.Context, sc store.Scope, an
 	if err != nil {
 		return nil, err
 	}
+	// R96/Minor M-c: at Daily/Monthly/Yearly, load_profile now carries its
+	// own tolerance (LoadProfileBoundaryTolerance) — a load_profile reading
+	// older than that relative to first.From could never resolve ANY
+	// boundary this request will ever ask for, so clamping the look-back to
+	// first.From-tolerance is safe (never drops evidence a real boundary
+	// resolution could use) and bounds how far back a very old, permanently
+	// stale kind can force this request's Range calls to reach. At Hourly,
+	// §3.1's look-back stays deliberately unbounded (Q7) — never clamped.
+	if level != energy.Hourly {
+		lpLookback = clampLookback(lpLookback, first.From, LoadProfileBoundaryTolerance)
+	}
 	minLookback := lpLookback
 
 	// Monthly-only: billing-kind readings, for R62/R63's preference.
@@ -134,14 +145,15 @@ func (b *Billing) consumptionForAnalyzer(ctx context.Context, sc store.Scope, an
 		if err != nil {
 			return nil, err
 		}
+		billingLookback = clampLookback(billingLookback, first.From, BillingSnapshotTolerance)
 		if billingLookback.Before(minLookback) {
 			minLookback = billingLookback
 		}
 	}
 
-	// R95: daily is a fallback boundary kind at Daily/Monthly/Yearly, never
-	// Hourly. Its own look-back feeds the shared minimum too (C1), on the
-	// same reasoning as billing's.
+	// R95/R96: daily is a fallback boundary kind at Daily/Monthly/Yearly,
+	// never Hourly. Its own look-back feeds the shared minimum too (C1), on
+	// the same reasoning as billing's.
 	useDaily := level != energy.Hourly
 	var dailyLookback time.Time
 	if useDaily {
@@ -149,6 +161,7 @@ func (b *Billing) consumptionForAnalyzer(ctx context.Context, sc store.Scope, an
 		if err != nil {
 			return nil, err
 		}
+		dailyLookback = clampLookback(dailyLookback, first.From, DailySnapshotTolerance)
 		if dailyLookback.Before(minLookback) {
 			minLookback = dailyLookback
 		}
@@ -242,12 +255,19 @@ func (b *Billing) consumptionForAnalyzer(ctx context.Context, sc store.Scope, an
 		maxDemandBilling = toEnergyReadings(billingRows)
 	}
 
+	// R96: every distinct boundary instant this request touches (len(buckets)+1
+	// of them) is resolved to at most ONE reading exactly once, keyed by its
+	// own instant — never once per period. This is what makes period N's end
+	// and period N+1's start look up the SAME reading, so consumption
+	// telescopes exactly within a level (K2): there is no per-period
+	// re-derivation of a shared boundary that could disagree with its
+	// neighbour.
+	resolved := resolveBoundaries(level, buckets, loadProfile, billing, daily, useBilling, useDaily)
+
 	rows := make([]Row, 0, len(buckets))
 	for _, w := range buckets {
-		boundaryReadings := selectBoundarySource(level, w, loadProfile, billing, daily)
-
-		start := energy.SelectBoundary(boundaryReadings, w.From)
-		end := energy.SelectBoundary(boundaryReadings, w.To)
+		start := resolved[w.From.UnixNano()]
+		end := resolved[w.To.UnixNano()]
 
 		derivation := energy.Derive(w, start, end, resets, priors)
 		if !derivation.Emitted {
@@ -266,11 +286,12 @@ func (b *Billing) consumptionForAnalyzer(ctx context.Context, sc store.Scope, an
 			// I-9: only the bucket's own sub-range of each already-sorted
 			// source is ever scanned, never the whole loaded set per bucket.
 			MaxDemandKw: maxDemandInWindow(w, loadProfile, daily, maxDemandBilling),
-			// Source is exactly derivation.Source (end.Kind, or start.Kind
-			// when end is a reset row — M-4): the readings' own .Kind field
-			// already carries the winning kind correctly, because
-			// boundaryReadings was loaded from the one Range call scoped to
-			// that specific kind.
+			// Source is exactly derivation.Source: the END boundary's own
+			// Kind (R96), or start.Kind when end is a reset row (M-4). Under
+			// R96 a period's start and end boundary can resolve to DIFFERENT
+			// kinds — resolveBoundaries chose each independently — so Source
+			// always names the END kind specifically, never "the period's
+			// kind" (there no longer is one).
 			Source:  derivation.Source,
 			Suspect: derivation.Suspect,
 		}
@@ -280,84 +301,124 @@ func (b *Billing) consumptionForAnalyzer(ctx context.Context, sc store.Scope, an
 	return rows, nil
 }
 
-// selectBoundarySource picks which loaded kind's readings a bucket's
-// boundaries are selected from (R62/R63/R95). A period never mixes kinds:
-// the returned slice is used for BOTH start and end, or is empty/nil when
-// nothing qualifies (SelectBoundary then resolves both boundaries to nil and
-// the bucket is skipped downstream).
-//
-// Precedence, never mixing within one period:
-//   - Monthly:        billing (R63, staleness-bounded) -> load_profile -> daily
-//   - Daily / Yearly:  load_profile -> daily
-//   - Hourly:          load_profile only — daily is NEVER a boundary kind here
-//
-// The load_profile step falls back only when load_profile itself does not
-// emit a usable pair for this window (a nil boundary, or the same reading
-// selected for both ends). The daily step falls back only when the daily
-// pair additionally lies within DailySnapshotTolerance of its own bounds.
-func selectBoundarySource(level energy.Level, w energy.Window, loadProfile, billing, daily []energy.Reading) []energy.Reading {
-	if level == energy.Monthly && monthCoveredByBilling(w, billing) {
-		return billing
+// resolveBoundaries implements R96: resolves EVERY distinct boundary instant
+// buckets touches — buckets[0].From plus every bucket's own To, len(buckets)+1
+// instants in total — to at most one reading, exactly ONCE per instant,
+// keyed by that instant's UnixNano. Because resolution depends only on the
+// instant itself (never on which period is asking, nor on which side of a
+// period it falls), looking the same instant up for period N's end and
+// period N+1's start always yields the identical *energy.Reading pointer —
+// this is what makes a level's consumption telescope exactly (R96/K2): there
+// is no possibility of two different, per-period re-derivations of a shared
+// boundary disagreeing with each other.
+func resolveBoundaries(level energy.Level, buckets []energy.Window, loadProfile, billing, daily []energy.Reading, useBilling, useDaily bool) map[int64]*energy.Reading {
+	out := make(map[int64]*energy.Reading, len(buckets)+1)
+	resolve := func(bound time.Time) {
+		key := bound.UnixNano()
+		if _, ok := out[key]; ok {
+			return
+		}
+		out[key] = resolveBoundary(level, bound, loadProfile, billing, daily, useBilling, useDaily)
 	}
-	if boundaryPairEmits(loadProfile, w) {
-		return loadProfile
+	resolve(buckets[0].From)
+	for _, w := range buckets {
+		resolve(w.To)
 	}
-	if level != energy.Hourly && dailyBoundaryCovers(w, daily) {
-		return daily
+	return out
+}
+
+// resolveBoundary implements R96's per-instant kind precedence:
+//
+//	Monthly:        billing (BillingSnapshotTolerance) -> load_profile (LoadProfileBoundaryTolerance) -> daily (DailySnapshotTolerance)
+//	Daily / Yearly: load_profile (LoadProfileBoundaryTolerance) -> daily (DailySnapshotTolerance)
+//	Hourly:         load_profile only, §3.1 unchanged — NO tolerance, SelectBoundary's plain look-back rule
+//
+// A later-precedence kind is tried only when an earlier one has no candidate
+// AT ALL within its own tolerance (boundaryTolerance, below) for THIS bound —
+// never because the two together failed to form a usable pair. A boundary
+// with no candidate in any tried kind resolves to nil, and Derive already
+// turns a nil boundary into "no row" for the periods on both sides of it.
+func resolveBoundary(level energy.Level, bound time.Time, loadProfile, billing, daily []energy.Reading, useBilling, useDaily bool) *energy.Reading {
+	if level == energy.Hourly {
+		// §3.1 unchanged: load_profile only, unbounded look-back (Q7), no
+		// tolerance check at all.
+		return energy.SelectBoundary(loadProfile, bound)
+	}
+	if useBilling {
+		if r := boundaryCandidate(billing, bound, boundaryTolerance(level, bound, BillingSnapshotTolerance)); r != nil {
+			return r
+		}
+	}
+	if r := boundaryCandidate(loadProfile, bound, boundaryTolerance(level, bound, LoadProfileBoundaryTolerance)); r != nil {
+		return r
+	}
+	if useDaily {
+		if r := boundaryCandidate(daily, bound, boundaryTolerance(level, bound, DailySnapshotTolerance)); r != nil {
+			return r
+		}
 	}
 	return nil
 }
 
-// boundaryPairEmits reports whether readings resolves to two distinct,
-// usable boundary readings for w: both non-nil and not the same instant.
-// This is the "does load_profile emit" test R95's fallback chain steps past
-// only when it is false.
-func boundaryPairEmits(readings []energy.Reading, w energy.Window) bool {
-	start := energy.SelectBoundary(readings, w.From)
-	end := energy.SelectBoundary(readings, w.To)
-	return start != nil && end != nil && !start.TS.Equal(end.TS)
+// boundaryCandidate returns readings' own SelectBoundary(bound) reading only
+// when it lies within [bound-tol, bound] — SelectBoundary's own contract
+// already guarantees TS <= bound, so only the lower bound needs checking
+// here — nil otherwise (no candidate of this kind for this instant).
+func boundaryCandidate(readings []energy.Reading, bound time.Time, tol time.Duration) *energy.Reading {
+	r := energy.SelectBoundary(readings, bound)
+	if r == nil || r.TS.Before(bound.Add(-tol)) {
+		return nil
+	}
+	return r
 }
 
-// dailyBoundaryCovers implements R95's daily-fallback staleness bound: a
-// daily boundary reading counts only when BOTH the start and end candidate
-// lie within DailySnapshotTolerance of their own bound — the same
-// bound-minus-tolerance shape monthCoveredByBilling uses for R63, at 36h
-// instead of 72h. SelectBoundary already guarantees reading.TS <= bound by
-// construction, so only the lower bound is checked here.
-func dailyBoundaryCovers(w energy.Window, daily []energy.Reading) bool {
-	start := energy.SelectBoundary(daily, w.From)
-	end := energy.SelectBoundary(daily, w.To)
-	if start == nil || end == nil {
-		return false
+// boundaryTolerance implements R96's K1 fix: a kind's own snapshot tolerance
+// is capped at HALF the width of the bucket(s) that meet at bound, so a
+// tolerance wider than a bucket can never let one candidate answer for two
+// neighbouring buckets at once (K1: an uncapped 36h daily tolerance at Daily
+// level could move two entire days into one row around a single missing
+// snapshot). Both the bucket ending at bound and the bucket beginning at
+// bound are consulted — their widths can differ across a DST transition, in
+// either direction — and the SMALLER of the two governs, so a boundary
+// touching a short bucket (a Daily bucket on a 23h fall day caps every kind
+// at 11.5h) is never treated as more forgiving than that short bucket
+// allows. energy.Bucket is called with bound and bound-1ns rather than
+// anything from the caller's own buckets slice, so this is exactly the
+// calendar-correct bucket width regardless of where bound sits in the
+// request (the first or last instant of the whole request still gets its
+// true neighbouring bucket's width, even though that neighbour itself may
+// fall outside the request).
+func boundaryTolerance(level energy.Level, bound time.Time, kindTolerance time.Duration) time.Duration {
+	prev := energy.Bucket(level, bound.Add(-time.Nanosecond), istanbul)
+	next := energy.Bucket(level, bound, istanbul)
+	width := prev.To.Sub(prev.From)
+	if w := next.To.Sub(next.From); w < width {
+		width = w
 	}
-	if start.TS.Before(w.From.Add(-DailySnapshotTolerance)) {
-		return false
+	if half := width / 2; half < kindTolerance {
+		return half
 	}
-	if end.TS.Before(w.To.Add(-DailySnapshotTolerance)) {
-		return false
-	}
-	return true
+	return kindTolerance
 }
 
-// monthCoveredByBilling implements R63: a month counts as covered by
-// billing-kind readings only when BOTH the start and end boundary readings
-// are non-nil AND each lies within BillingSnapshotTolerance of its own
-// bound — bound - 72h <= reading.TS <= bound. SelectBoundary already
-// guarantees reading.TS <= bound by construction, so only the lower bound
-// is checked here.
-func monthCoveredByBilling(w energy.Window, billing []energy.Reading) bool {
-	start := energy.SelectBoundary(billing, w.From)
-	end := energy.SelectBoundary(billing, w.To)
-	if start == nil || end == nil {
-		return false
+// clampLookback implements Minor M-c (performance, no correctness impact): a
+// kind's look-back returned by firstBoundaryLookback can be an arbitrarily
+// old reading's own ts — for example a `daily` reading from a year ago, when
+// that is the only one BoundaryReadings finds at or before first.From. Such
+// a reading can never actually resolve any boundary this request will ever
+// ask for: R96 caps every kind's tolerance at boundaryTolerance, which is at
+// most kindTolerance itself, so a reading older than first.From-kindTolerance
+// is already too stale to qualify at first.From, and every LATER bucket's
+// own bound is even further from it. Clamping the look-back up to
+// first.From-kindTolerance therefore never drops evidence a real boundary
+// resolution could have used, while bounding how far back a single very old
+// reading can force this request's Range calls (load_profile, reset, and the
+// kind's own Range) to reach.
+func clampLookback(lookback, firstFrom time.Time, kindTolerance time.Duration) time.Time {
+	if floor := firstFrom.Add(-kindTolerance); lookback.Before(floor) {
+		return floor
 	}
-	if start.TS.Before(w.From.Add(-BillingSnapshotTolerance)) {
-		return false
-	}
-	if end.TS.Before(w.To.Add(-BillingSnapshotTolerance)) {
-		return false
-	}
-	return true
+	return lookback
 }
 
 // endIndexes returns the closing index of every register directly from the

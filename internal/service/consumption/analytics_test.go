@@ -354,6 +354,86 @@ func TestAnalyticsCallsUseTheCallersScope(t *testing.T) {
 	require.NoError(t, err, "every AnalyticsRepository call must use the caller's own Scope")
 }
 
+// TestComposedRowRatioComesFromConsumptionValuesNotClosingIndexes is Minor
+// M-b: composeOpenPeriodRow computes InductiveRatio/CapacitiveRatio from the
+// composed VALUES (the inside-minus-before deltas), never from the raw
+// closing indexes — a mutation that used insideIdx directly (analytics.go:
+// 268-269) stayed green because no test asserted a composed row's ratio at
+// all. The indexes and the values are deliberately different numbers here.
+func TestComposedRowRatioComesFromConsumptionValuesNotClosingIndexes(t *testing.T) {
+	loc := istanbulLoc(t)
+	analyzerID := uuid.New()
+	jan1 := time.Date(2026, 1, 1, 0, 0, 0, 0, loc)
+	jan15 := time.Date(2026, 1, 15, 0, 0, 0, 0, loc)
+	dec31 := time.Date(2025, 12, 31, 0, 0, 0, 0, loc)
+	feb1 := time.Date(2026, 2, 1, 0, 0, 0, 0, loc)
+
+	analytics := fakeAnalytics{
+		dailyRows: []model.ConsumptionBucket{
+			{AnalyzerID: analyzerID, Bucket: dec31, ActiveIndex: dec("1000"), InductiveIndex: dec("50"), CapacitiveIndex: dec("20")},
+			{AnalyzerID: analyzerID, Bucket: jan15, ActiveIndex: dec("1100"), InductiveIndex: dec("80"), CapacitiveIndex: dec("32")},
+		},
+	}
+	a, err := consumption.NewAnalytics(consumption.AnalyticsDeps{Analytics: analytics, Log: testLog(t)})
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
+	rows, err := a.Consumption(ctx, scope, consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{analyzerID},
+		Level:       energy.Monthly,
+		Range:       store.TimeRange{From: jan1, To: feb1},
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.True(t, rows[0].Partial)
+
+	// Values: active 1100-1000=100, inductive 80-50=30 (ratio 0.3), capacitive
+	// 32-20=12 (ratio 0.12) — NOT the ratio of the raw closing indexes
+	// (80/1100 = 0.0727..., 32/1100 = 0.029...).
+	require.NotNil(t, rows[0].InductiveRatio)
+	require.Equal(t, "0.3", rows[0].InductiveRatio.String())
+	require.NotNil(t, rows[0].CapacitiveRatio)
+	require.Equal(t, "0.12", rows[0].CapacitiveRatio.String())
+}
+
+// TestAnalyticsCallsUseTheCallersScopeAtMonthlyComposition is I-7's
+// remainder: the re-review found TestAnalyticsCallsUseTheCallersScope ran at
+// Hourly only, so composeMissingPeriods' own ConsumptionDaily call
+// (analytics.go:185) was never exercised by any scope-checking test — a
+// mutation substituting store.SystemScope(sc.CompanyID) there stayed green.
+// monthlyRows is empty (no materialised row at all), forcing composition to
+// run; dailyRows supplies enough for composeOpenPeriodRow to emit a row.
+func TestAnalyticsCallsUseTheCallersScopeAtMonthlyComposition(t *testing.T) {
+	loc := istanbulLoc(t)
+	analyzerID := uuid.New()
+	sc := store.Scope{CompanyID: uuid.New(), BuildingIDs: []uuid.UUID{uuid.New()}}
+	jan1 := time.Date(2026, 1, 1, 0, 0, 0, 0, loc)
+	jan15 := time.Date(2026, 1, 15, 0, 0, 0, 0, loc)
+	dec31 := time.Date(2025, 12, 31, 0, 0, 0, 0, loc)
+	feb1 := time.Date(2026, 2, 1, 0, 0, 0, 0, loc)
+
+	analytics := fakeAnalytics{
+		t: t, wantScope: &sc,
+		monthlyRows: []model.ConsumptionBucket{}, // empty, never nil: forces composition, never a fallback to `rows`.
+		dailyRows: []model.ConsumptionBucket{
+			{AnalyzerID: analyzerID, Bucket: dec31, ActiveIndex: dec("1000")},
+			{AnalyzerID: analyzerID, Bucket: jan15, ActiveIndex: dec("1100")},
+		},
+	}
+	a, err := consumption.NewAnalytics(consumption.AnalyticsDeps{Analytics: analytics, Log: testLog(t)})
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	rows, err := a.Consumption(ctx, sc, consumption.SeriesRequest{
+		AnalyzerIDs: []uuid.UUID{analyzerID},
+		Level:       energy.Monthly,
+		Range:       store.TimeRange{From: jan1, To: feb1},
+	})
+	require.NoError(t, err, "every AnalyticsRepository call, including composeMissingPeriods' ConsumptionDaily, must use the caller's own Scope")
+	require.Len(t, rows, 1, "sanity: composition actually ran and produced a row")
+}
+
 // --- M-2: a composed row with nothing before it is omitted, not all-nil ---
 
 // TestComposedRowIsOmittedWhenNoDailyBucketPrecedesThePeriod is M-2: when

@@ -1,8 +1,11 @@
 package consumption_test
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/consumption"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
@@ -34,38 +37,102 @@ func TestBillingDepsHasNoAnalyticsRepositoryField(t *testing.T) {
 	assertNoForbiddenField(t, reflect.TypeOf(consumption.BillingDeps{}), analyticsRepo)
 }
 
-// assertNoForbiddenField walks typ's fields recursively — into structs,
-// pointers, slices, arrays and maps — and fails the test if any field's own
-// type equals or implements one of forbidden. seen guards against revisiting
-// the same type twice (both for efficiency and to tolerate any accidental
-// type cycle).
+// TestAnalyticsStructItselfHasNoForbiddenField and
+// TestBillingStructItselfHasNoForbiddenField are Minor M-a: the original
+// guard walked only the *Deps structs, so an unexported field of a forbidden
+// type added directly on Analytics or Billing (bypassing *Deps entirely)
+// stayed green. The reflection walk is the same; only the root type differs
+// (unexported fields are still visible to reflect.Type.Field, unlike
+// reflect.Value — no instance is ever created, so there is nothing to fail
+// to read).
+func TestAnalyticsStructItselfHasNoForbiddenField(t *testing.T) {
+	readingRepo := reflect.TypeOf((*store.ReadingRepository)(nil)).Elem()
+	anomalyRepo := reflect.TypeOf((*store.AnomalyRepository)(nil)).Elem()
+	assertNoForbiddenField(t, reflect.TypeOf(consumption.Analytics{}), readingRepo, anomalyRepo)
+}
+
+func TestBillingStructItselfHasNoForbiddenField(t *testing.T) {
+	analyticsRepo := reflect.TypeOf((*store.AnalyticsRepository)(nil)).Elem()
+	assertNoForbiddenField(t, reflect.TypeOf(consumption.Billing{}), analyticsRepo)
+}
+
+// TestFindForbiddenFieldCatchesAFuncTypedField is Minor M-a: a field typed
+// as a function that RETURNS the forbidden interface (a lazy accessor a
+// defensive fallback could call instead of storing the repository directly)
+// must be caught. The original walk had no reflect.Func case at all, so
+// this stayed invisible. findForbiddenField (below) is the pure,
+// non-t.Fatalf-calling half of the guard, so this test can assert the
+// mutation IS detected without ever failing this test itself.
+func TestFindForbiddenFieldCatchesAFuncTypedField(t *testing.T) {
+	readingRepo := reflect.TypeOf((*store.ReadingRepository)(nil)).Elem()
+	type poisoned struct {
+		Get func() store.ReadingRepository
+	}
+	path, found := findForbiddenField(reflect.TypeOf(poisoned{}), readingRepo)
+	require.True(t, found, "a field typed func() store.ReadingRepository must be caught, not silently skipped")
+	require.Contains(t, path, "Get")
+}
+
+// assertNoForbiddenField fails the test immediately if findForbiddenField
+// finds a match — the reporting half of the guard every real R61 guard test
+// above calls.
 func assertNoForbiddenField(t *testing.T, typ reflect.Type, forbidden ...reflect.Type) {
 	t.Helper()
+	if path, found := findForbiddenField(typ, forbidden...); found {
+		t.Fatalf("%s — R61 forbids this on this side of the path split", path)
+	}
+}
+
+// findForbiddenField walks typ's fields recursively — into structs,
+// pointers, slices, arrays, maps and (Minor M-a) function signatures — and
+// returns the first field path whose own type equals or implements one of
+// forbidden, and whether one was found at all. seen guards against
+// revisiting the same type twice (both for efficiency and to tolerate any
+// accidental type cycle).
+//
+// M-a: the original walk skipped reflect.Func entirely, so a field typed
+// `func() store.ReadingRepository` (a lazy accessor a defensive fallback
+// could call instead of storing the repository directly) stayed invisible
+// to this guard. Every parameter and every return type of a Func field is
+// now walked exactly like any other field's type.
+func findForbiddenField(typ reflect.Type, forbidden ...reflect.Type) (string, bool) {
 	seen := make(map[reflect.Type]bool)
-	var walk func(cur reflect.Type, path string)
-	walk = func(cur reflect.Type, path string) {
-		if cur == nil || seen[cur] {
+	var path string
+	var found bool
+	var walk func(cur reflect.Type, p string)
+	walk = func(cur reflect.Type, p string) {
+		if found || cur == nil || seen[cur] {
 			return
 		}
 		seen[cur] = true
 
 		for _, iface := range forbidden {
 			if cur == iface || cur.Implements(iface) {
-				t.Fatalf("%s has type %s, which is or implements %s — R61 forbids this on this side of the path split", path, cur, iface)
+				path = fmt.Sprintf("%s has type %s, which is or implements %s", p, cur, iface)
+				found = true
+				return
 			}
 		}
 
 		switch cur.Kind() {
 		case reflect.Pointer, reflect.Slice, reflect.Array:
-			walk(cur.Elem(), path+"[]")
+			walk(cur.Elem(), p+"[]")
 		case reflect.Map:
-			walk(cur.Elem(), path+"[]")
+			walk(cur.Elem(), p+"[]")
 		case reflect.Struct:
 			for i := 0; i < cur.NumField(); i++ {
 				f := cur.Field(i)
-				walk(f.Type, path+"."+f.Name)
+				walk(f.Type, p+"."+f.Name)
+			}
+		case reflect.Func:
+			for i := 0; i < cur.NumIn(); i++ {
+				walk(cur.In(i), fmt.Sprintf("%s(in %d)", p, i))
+			}
+			for i := 0; i < cur.NumOut(); i++ {
+				walk(cur.Out(i), fmt.Sprintf("%s(out %d)", p, i))
 			}
 		}
 	}
 	walk(typ, typ.Name())
+	return path, found
 }
