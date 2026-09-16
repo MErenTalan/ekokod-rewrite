@@ -49,6 +49,10 @@ type Handlers struct {
 	Backfill           Backfiller
 	Prices             PriceSyncer
 	ConsumptionRefresh Refresher
+
+	BillingDispatch BillingDispatcher
+	BillingGenerate BillingGenerator
+	BillingRender   BillingRenderer
 }
 
 // Register attaches every handler to the mux. TypeNoop is always
@@ -75,5 +79,14 @@ func Register(mux *asynq.ServeMux, h *Handlers) {
 	}
 	if h.ConsumptionRefresh != nil {
 		mux.HandleFunc(TypeConsumptionRefresh, h.integHandleConsumptionRefresh)
+	}
+	if h.BillingDispatch != nil {
+		mux.HandleFunc(TypeBillingDispatch, h.handleBillingDispatch)
+	}
+	if h.BillingGenerate != nil {
+		mux.HandleFunc(TypeBillingGenerate, h.handleBillingGenerate)
+	}
+	if h.BillingRender != nil {
+		mux.HandleFunc(TypeBillingRenderPDF, h.handleBillingRender)
 	}
 }
