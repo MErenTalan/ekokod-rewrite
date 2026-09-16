@@ -27,6 +27,18 @@ type fetchAccumulator struct {
 	affectedFrom, affectedTo *time.Time
 }
 
+// consumptionRefreshThreshold is R73's threshold: consumption_hourly's
+// start_offset (migration 00005, `start_offset => interval '30 days'`), the
+// smallest of the four consumption continuous aggregates' refresh-policy
+// windows. An affected range that starts within this many days of "now"
+// is live data consumption_hourly's own real-time union already covers, so
+// enqueueing a refresh for it would be pointless. The boundary is
+// exclusive: a range starting EXACTLY consumptionRefreshThreshold before now
+// is still "within" the policy window and does not enqueue — only a range
+// starting strictly earlier does (see maybeEnqueueConsumptionRefresh's use
+// of time.Time.Before, never Before-or-equal).
+const consumptionRefreshThreshold = 30 * 24 * time.Hour
+
 func newFetchAccumulator() *fetchAccumulator {
 	return &fetchAccumulator{rejections: map[RejectReason]int32{}, warnings: map[string]int32{}}
 }
@@ -393,6 +405,10 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 			mustJSON(map[string]int32{"count": acc.warnings[code]}))
 	}
 
+	// R73/I-12: the affected range, not the requested window — a backfill of
+	// old data refreshes exactly the buckets it touched.
+	s.maybeEnqueueConsumptionRefresh(ctx, sc, p.CompanyID, analyzer.ID, acc, now)
+
 	return nil
 }
 
@@ -410,7 +426,55 @@ func (s *Service) failFetchRun(ctx context.Context, sc store.Scope, runID, analy
 	status := fetchRunStatus(1, acc.processed > 0)
 	s.finishRun(ctx, sc, runID, status, acc.processed, acc.skipped, 1, &errText, acc.detail(), at)
 	s.appendMessage(ctx, sc, sc.CompanyID, "job", "analyzer-refresh", "error", errText, nil)
+	// I-12: a partial run that persisted some rows before failing still
+	// touched real buckets that need refreshing — this call site is
+	// evaluated on acc.affectedFrom exactly like the success path below.
+	s.maybeEnqueueConsumptionRefresh(ctx, sc, sc.CompanyID, analyzerID, acc, at)
 	return wrapRedacted(errText, cause)
+}
+
+// shouldEnqueueConsumptionRefresh implements R73/I-13's threshold as a pure
+// decision, independent of I/O, so the boundary itself is trivial to pin
+// with a table test: enqueue only when the seam is wired (hasEnqueuer),
+// enabled (config.ConsumptionRefreshEnabled, threaded in as enabled), the
+// affected range is non-empty (affectedFrom != nil — an empty range never
+// enqueues, on either finish path), AND affectedFrom is STRICTLY earlier
+// than now-consumptionRefreshThreshold (see the constant's doc for why the
+// boundary itself is excluded).
+func shouldEnqueueConsumptionRefresh(hasEnqueuer, enabled bool, affectedFrom *time.Time, now time.Time) bool {
+	if !hasEnqueuer || !enabled || affectedFrom == nil {
+		return false
+	}
+	return affectedFrom.Before(now.Add(-consumptionRefreshThreshold))
+}
+
+// maybeEnqueueConsumptionRefresh is R73/I-12/I-13's single enqueue call
+// site, shared by FetchReadings' success path and failFetchRun's partial
+// path so the threshold and gating logic live in exactly one place. now MUST
+// come from s.deps.Clock (never time.Now()): both call sites pass the same
+// `now` the run itself resolved its window against, so the threshold is
+// evaluated against the same clock as everything else in the run.
+//
+// An enqueue failure is logged and recorded as a warning operational
+// message; it never turns a run that has already succeeded (or already
+// failed for its own reason) into a different outcome — this is called
+// strictly after finishRun/failFetchRun have recorded the run's own status.
+func (s *Service) maybeEnqueueConsumptionRefresh(ctx context.Context, sc store.Scope, companyID, analyzerID uuid.UUID, acc *fetchAccumulator, now time.Time) {
+	if !shouldEnqueueConsumptionRefresh(s.deps.ConsumptionRefresh != nil, s.opts.ConsumptionRefreshEnabled, acc.affectedFrom, now) {
+		return
+	}
+	err := s.deps.ConsumptionRefresh.EnqueueConsumptionRefresh(ctx, job.ConsumptionRefreshPayload{
+		CompanyID:  companyID,
+		AnalyzerID: analyzerID,
+		From:       *acc.affectedFrom,
+		To:         *acc.affectedTo,
+	})
+	if err == nil {
+		return
+	}
+	s.deps.Log.WarnContext(ctx, "ingest: enqueue consumption.refresh failed", "analyzer_id", analyzerID, "error", err)
+	s.appendMessage(ctx, sc, companyID, "job", "analyzer-refresh", "warning", "consumption.refresh enqueue failed",
+		mustJSON(map[string]string{"error": err.Error()}))
 }
 
 // resolveFetchWindow implements the brief's step 4: an explicit p.Window

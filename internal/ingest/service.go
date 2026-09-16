@@ -21,8 +21,8 @@ var _ job.Ingestion = (*Service)(nil)
 // New builds a Service. A nil required dependency returns an error naming
 // the field; Hooks and ConsumptionRefresh are the only fields allowed to be
 // nil (see Deps' doc). Zero-valued Options fields are filled with their
-// documented defaults except MaxRetry, which is never defaulted (see
-// Options' doc).
+// documented defaults except MaxRetry and ConsumptionRefreshEnabled, which
+// are never defaulted (see Options' doc).
 func New(d Deps, o Options) (*Service, error) {
 	type namedDep struct {
 		name string

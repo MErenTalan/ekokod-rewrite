@@ -11,9 +11,11 @@
 // hook, internal/ingest.Service (Handlers.Ingestion),
 // internal/ingest/backfill.Backfiller (Handlers.Backfill) and
 // internal/service/consumption.Refresher (Handlers.ConsumptionRefresh, F3
-// Task 11a — the per-view-locked consumption.refresh handler; nothing
-// enqueues this task yet, ingestDeps.ConsumptionRefresh stays nil until
-// Task 11b). Every resource
+// Task 11a — the per-view-locked consumption.refresh handler). F3 Task 11b
+// wires ingestDeps.ConsumptionRefresh to a small adapter over the same
+// *job.Client (consumptionRefreshEnqueuer below) and threads
+// cfg.ConsumptionRefreshEnabled / cfg.ConsumptionRefreshLockTTL through, so
+// the enqueue seam F2 left nil is now live. Every resource
 // Build opens before a later step fails is closed on that step's error
 // path (see closers/closeAll below), and again, idempotently, by
 // Built.Close on the success path — TestWorkerBuildClosesEarlierResourcesOnLateFailure
@@ -29,7 +31,6 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -58,14 +59,6 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/admin"
 	platformredis "github.com/MErenTalan/ekokod-rewrite/internal/store/redis"
 )
-
-// consumptionRefreshLockTTL bounds how long the per-view lock
-// consumption.Refresher holds for a single view's refresh is allowed to run
-// before another worker could, in principle, acquire the same key (there is
-// no lease renewal — see internal/service/consumption's doc comment). F3
-// Task 11b turns this into a config knob; until then it is a named
-// constant so the choice is visible and grep-able in one place.
-const consumptionRefreshLockTTL = 10 * time.Minute
 
 // isolarStateKeyInfo domain-separates the isolar OAuth state signing key
 // (StateKey) from the raw JWT signing key it is derived from, so the two
@@ -161,6 +154,25 @@ func (v verifierResolver) Verifier(p integration.Provider) (credentials.Verifier
 		return v.isolar, nil
 	}
 	return v.registry.Source(p)
+}
+
+// consumptionRefreshEnqueuer adapts *job.Client to
+// ingest.ConsumptionRefreshEnqueuer (F3 Task 11b): it builds a
+// consumption.refresh task via job.NewConsumptionRefreshTask and enqueues it
+// on the SAME job client every other integration task in this graph uses —
+// no separate connection, no separate retry policy source.
+type consumptionRefreshEnqueuer struct {
+	client   *job.Client
+	maxRetry int
+}
+
+func (e consumptionRefreshEnqueuer) EnqueueConsumptionRefresh(ctx context.Context, p job.ConsumptionRefreshPayload) error {
+	task, err := job.NewConsumptionRefreshTask(p, job.TaskOptions{MaxRetry: e.maxRetry})
+	if err != nil {
+		return err
+	}
+	_, err = e.client.Enqueue(ctx, task)
+	return err
 }
 
 // Build constructs every F2 dependency from configuration: it is the
@@ -335,15 +347,19 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 			// pins both.
 			model.IntegrationProviderPM5340: {generation.New(readingRepo, generationRepo, clock.System(), redisLock, cfg.Ingest.FutureTolerance)},
 		},
-		ConsumptionRefresh: nil, // R17: consumption.refresh is declared, never enqueued, in F2
+		// F3 Task 11b: the enqueue seam F2 left nil is now wired to the same
+		// jobClient every other integration task in this graph enqueues
+		// through, gated by cfg.ConsumptionRefreshEnabled below.
+		ConsumptionRefresh: consumptionRefreshEnqueuer{client: jobClient, maxRetry: cfg.Worker.MaxRetries},
 		Clock:              clock.System(),
 		Log:                log,
 	}
 	ingestSvc, err := ingest.New(ingestDeps, ingest.Options{
-		FutureTolerance: cfg.Ingest.FutureTolerance,
-		SanityMultiple:  cfg.Ingest.SanityMultiple,
-		InitialLookback: cfg.Ingest.InitialLookback,
-		MaxRetry:        cfg.Worker.MaxRetries,
+		FutureTolerance:           cfg.Ingest.FutureTolerance,
+		SanityMultiple:            cfg.Ingest.SanityMultiple,
+		InitialLookback:           cfg.Ingest.InitialLookback,
+		MaxRetry:                  cfg.Worker.MaxRetries,
+		ConsumptionRefreshEnabled: cfg.ConsumptionRefreshEnabled,
 	})
 	if err != nil {
 		closeAll()
@@ -360,16 +376,16 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		MaxRetry:    cfg.Worker.MaxRetries,
 	})
 
-	// R71/R72 (Task 11a): the refresher reuses the SAME redisLock every
-	// other Locker consumer in this graph does, and is bounded by
-	// consumptionRefreshLockTTL (a named constant until Task 11b turns it
-	// into a config knob). Location is Europe/Istanbul, loaded through the
-	// same internal/integration/normalize.Istanbul every other timestamp
+	// R71/R72 (Task 11a) / Task 11b: the refresher reuses the SAME redisLock
+	// every other Locker consumer in this graph does, and is bounded by
+	// cfg.ConsumptionRefreshLockTTL (EKOKOD_CONSUMPTION_REFRESH_LOCK_TTL,
+	// default 10m). Location is Europe/Istanbul, loaded through the same
+	// internal/integration/normalize.Istanbul every other timestamp
 	// normalisation in this worker uses.
 	consumptionRefresher, err := consumption.NewRefresher(consumption.RefreshDeps{
 		Aggregates: adminAggregateRepo,
 		Locker:     redisLock,
-		LockTTL:    consumptionRefreshLockTTL,
+		LockTTL:    cfg.ConsumptionRefreshLockTTL,
 		Location:   normalize.Istanbul,
 		Log:        log,
 	})

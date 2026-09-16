@@ -45,11 +45,17 @@ type PostPersistHook interface {
 	AfterPersist(ctx context.Context, s store.Scope, a model.Analyzer, kind model.ReadingKind, from, to time.Time) error
 }
 
-// ConsumptionRefreshEnqueuer would enqueue consumption.refresh for an
-// affected range. It is declared for wire-format stability but is never
-// wired up in F2: R17 says the task is declared, not enqueued, so
-// Deps.ConsumptionRefresh is nil throughout this phase and Service never
-// calls it.
+// ConsumptionRefreshEnqueuer enqueues consumption.refresh for an affected
+// range. F2 declared it for wire-format stability without ever calling it
+// (R17: the task was declared, not enqueued). F3 Task 11b is the enqueue
+// call site (FetchReadings' finishRun and failFetchRun paths, R73): when
+// Deps.ConsumptionRefresh is non-nil, Options.ConsumptionRefreshEnabled is
+// true, and the run's affected range reaches back further than
+// consumptionRefreshThreshold, Service calls it with the affected range —
+// never the requested window. worker/wiring.go's adapter wraps *job.Client
+// with job.NewConsumptionRefreshTask. A nil Deps.ConsumptionRefresh (as in
+// every F2-era caller that has not been updated) simply disables the seam,
+// exactly as before.
 type ConsumptionRefreshEnqueuer interface {
 	EnqueueConsumptionRefresh(ctx context.Context, p job.ConsumptionRefreshPayload) error
 }
@@ -72,7 +78,9 @@ type Deps struct {
 	// Hooks is keyed by the provider whose pages should run it. A provider
 	// with no entry (including a nil map) simply runs no hook.
 	Hooks map[model.IntegrationProvider][]PostPersistHook
-	// ConsumptionRefresh is nil in F2 (R17) — see ConsumptionRefreshEnqueuer.
+	// ConsumptionRefresh enqueues consumption.refresh (Task 11b) — see
+	// ConsumptionRefreshEnqueuer. nil disables the enqueue seam entirely,
+	// exactly as F2 left it (R17).
 	ConsumptionRefresh ConsumptionRefreshEnqueuer
 	Clock              clock.Clock
 	Log                *slog.Logger
@@ -110,6 +118,13 @@ type Options struct {
 	// directly (every unit test) leaves it nil and gets Validate's
 	// single-call-scoped fallback instead.
 	SanityStreak *SanityStreak
+	// ConsumptionRefreshEnabled gates the consumption.refresh enqueue call
+	// site (R73, Task 11b): EKOKOD_CONSUMPTION_REFRESH_ENABLED, default
+	// true, resolved by internal/platform/config and wired here by
+	// worker/wiring.go. Deliberately EXCLUDED from New's zero-value
+	// defaulting — like MaxRetry above, false is a legitimate, deliberate
+	// "do not enqueue" that New must never silently replace with true.
+	ConsumptionRefreshEnabled bool
 }
 
 // Default values for the Options fields New fills in when left zero.
