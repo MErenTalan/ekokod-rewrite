@@ -191,6 +191,15 @@ func TestAnalyseExcludesSupplementaryAndZeroKwhRows(t *testing.T) {
 		require.Len(t, w[icmal.WarnZeroKwhExcluded], 1, etso)
 	}
 	require.Equal(t, []int{35}, codes(byEtso(as, "40ZTEST000000001").Warnings)[icmal.WarnSupplementaryExcluded])
+
+	// An (Ek) group row is excluded on its label alone, even with positive kWh.
+	ek := synthRow("EK", "202511", "100", "250", "80")
+	ek.Raw = json.RawMessage(`{"Fatura Abone Grubu":"Sanayi Tarifesi (Ek)","Ek Tüketim T0 Kwh":"0.00"}`)
+	sup := byEtso(icmal.Analyse([]model.IcmalRow{ek}, synthBase, nil, d("2")), "EK")
+	require.Equal(t, map[string][]int{icmal.WarnSupplementaryExcluded: {1}}, codes(sup.Warnings))
+	ek.Raw = json.RawMessage(`{"Fatura Abone Grubu":"Sanayi Tarifesi","Ek Tüketim T0 Kwh":"12.50"}`)
+	sup = byEtso(icmal.Analyse([]model.IcmalRow{ek}, synthBase, nil, d("2")), "EK")
+	require.Equal(t, map[string][]int{icmal.WarnSupplementaryExcluded: {1}}, codes(sup.Warnings), "supplementary kWh alone")
 }
 
 func synthRow(etso, period string, kwh, energy, distribution string) model.IcmalRow {
