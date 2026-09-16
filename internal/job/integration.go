@@ -12,10 +12,10 @@ import (
 	"github.com/hibiken/asynq"
 )
 
-// Integration task type names. TypeConsumptionRefresh (R17) is declared
-// here so job payloads and the queue names are stable, but F2 registers no
-// handler for it: Register never wires a handler for it regardless of
-// Handlers' fields, because no Handlers field names a consumer for it yet.
+// Integration task type names. TypeConsumptionRefresh (R17) was declared
+// here in F2 so job payloads and the queue names were stable ahead of its
+// handler; F3 Task 11a adds that handler (see consumption.go) and
+// Register now wires it whenever Handlers.ConsumptionRefresh is non-nil.
 const (
 	TypeIntegrationSyncDispatch  = "integration.sync_dispatch" // R16, platform
 	TypeIntegrationSyncAnalyzers = "integration.sync_analyzers"
@@ -80,9 +80,11 @@ type BackfillPayload struct {
 // the handler, not this payload).
 type SyncPricesPayload struct{ Window *Window }
 
-// ConsumptionRefreshPayload is R17's payload shape, declared now so the
-// wire format is stable when a later phase adds its handler. No
-// constructor or decoder exists yet: nothing in F2 enqueues this task.
+// ConsumptionRefreshPayload is R17's payload shape, declared in F2 so the
+// wire format was stable ahead of its handler. F3 Task 11a adds its
+// constructor (NewConsumptionRefreshTask), decoder (DecodeConsumptionRefresh)
+// and handler seam (Refresher) in consumption.go. Nothing enqueues this task
+// yet — internal/ingest wiring the enqueue call is Task 11b.
 type ConsumptionRefreshPayload struct {
 	CompanyID, AnalyzerID uuid.UUID
 	From, To              time.Time
