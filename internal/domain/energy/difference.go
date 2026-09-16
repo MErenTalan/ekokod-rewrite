@@ -7,6 +7,15 @@ import "github.com/shopspring/decimal"
 // ts <= bound". Either may be nil. A negative difference is left suspect
 // with ReasonNegativeDelta; applying reset evidence is Derive's job (Task 2).
 //
+// R92(1), amending the original identical-boundary rule: a same-instant
+// pair (start.TS.Equal(end.TS)) never emits, whatever the kinds. The
+// original rule only treated this as "no row" when the kinds also matched,
+// so a same-instant pair of different kinds (e.g. a load_profile start and
+// a reset row landing on the same instant) fell through and derived a
+// plain difference across zero elapsed time — I-6's zero-width defect. A
+// zero-width window measures nothing, so it is never emitted regardless of
+// what produced each reading.
+//
 // Precondition: !end.TS.Before(start.TS). A caller must select start and end
 // in chronological order; Difference does not infer intent from a reversed
 // pair, and treats one as "no row" (Emitted: false) rather than emitting a
@@ -27,8 +36,10 @@ func Difference(w Window, start, end *Reading) Derivation {
 		// must not turn this into a zero row.
 		return d
 	}
-	if start.TS.Equal(end.TS) && start.Kind == end.Kind {
-		// The same reading was selected for both bounds: still no row.
+	if start.TS.Equal(end.TS) {
+		// R92(1): a zero-width pair never emits, whatever the kinds — see
+		// the doc above for why the original kind-sensitive check let a
+		// same-instant reset/reading pair through.
 		return d
 	}
 	if end.TS.Before(start.TS) {
