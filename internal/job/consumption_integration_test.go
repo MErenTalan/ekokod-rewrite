@@ -170,9 +170,17 @@ func TestNewConsumptionRefreshTaskAppliesConfiguredMaxRetry(t *testing.T) {
 // SAME (payload, now) pair — reproducing the identical id — must be able to
 // enqueue again, cleanly. F2's R53 trap (a deterministic id plus a long
 // retention keeping the id "taken" long after completion) must not recur
-// here. R100(2)'s ProcessIn(1m) means the first task sits pending for a
-// full minute before the worker can even pick it up, so this test's
-// timeouts are sized in minutes, not seconds.
+// here.
+//
+// I-5 (final review B): this used to wait out the real ProcessIn(1m) delay
+// before the worker could even pick up task1 (measured 62.6s — the only
+// phase test that waited in real time). NextProcessAt itself is already
+// proven by TestNewConsumptionRefreshTaskDelaysProcessingByOneMinute
+// (no-server, GetTaskInfo, zero wait), so this test's own job is only the
+// completion-then-re-enqueue half: it now calls asynq.Inspector.RunTask
+// right after enqueueing, which moves task1 from scheduled straight to
+// pending so the running server executes it immediately — proving exactly
+// the same "no Retention" fact, without spending the debounce minute idle.
 func TestConsumptionRefreshTaskIDIsFreeAgainAfterCompletion(t *testing.T) {
 	cfg := testfixtures.RedisConfig(t)
 	log := testfixtures.DiscardLogger()
@@ -199,13 +207,23 @@ func TestConsumptionRefreshTaskIDIsFreeAgainAfterCompletion(t *testing.T) {
 
 	task1, err := job.NewConsumptionRefreshTask(payload, now, job.TaskOptions{})
 	require.NoError(t, err)
-	_, err = client.Enqueue(context.Background(), task1)
+	info, err := client.Enqueue(context.Background(), task1)
 	require.NoError(t, err)
+
+	redisOpt, err := job.RedisOpt(cfg)
+	require.NoError(t, err)
+	insp := asynq.NewInspector(redisOpt)
+	t.Cleanup(func() { _ = insp.Close() })
+
+	// Skip the debounce minute: move task1 straight from scheduled to
+	// pending so the running server picks it up at once, instead of
+	// waiting out its ProcessIn(1m).
+	require.NoError(t, insp.RunTask(info.Queue, info.ID))
 
 	select {
 	case <-done:
-	case <-time.After(90 * time.Second):
-		t.Fatal("worker did not execute the first enqueued consumption.refresh task within its ProcessIn(1m) delay")
+	case <-time.After(10 * time.Second):
+		t.Fatal("worker did not execute the first enqueued consumption.refresh task after Inspector.RunTask")
 	}
 
 	// asynq marks a task's completion asynchronously after the handler
@@ -222,6 +240,6 @@ func TestConsumptionRefreshTaskIDIsFreeAgainAfterCompletion(t *testing.T) {
 		}
 		_, enqueueErr := client.Enqueue(context.Background(), task2)
 		return enqueueErr == nil
-	}, 30*time.Second, 200*time.Millisecond,
+	}, 10*time.Second, 200*time.Millisecond,
 		"the SAME window+debounce-minute task id must become enqueueable again once the first run completed — no Retention must be set")
 }

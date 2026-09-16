@@ -203,8 +203,9 @@ func TestBuildGraphOpensNamedClosersForRedisAndJobClient(t *testing.T) {
 // consumption.refresh task at asynq's own zero-value default retry count).
 // Mirrors internal/job/consumption_integration_test.go's enqueue-then-
 // asynq.Inspector.GetTaskInfo pattern (also used by
-// wiring_integration_test.go's TestAuthFailureIsNotRetried) at the worker
-// adapter's own level, against a real Redis. MaxRetry is a non-default 7 so
+// internal/job/ingestion_integration_test.go's TestAuthFailureIsNotRetried)
+// at the worker adapter's own level, against a real Redis. MaxRetry is a
+// non-default 7 so
 // a mutant hard-coding job.TaskOptions{} (retry 0, asynq's default 25, or
 // any other incidental value) cannot coincidentally match.
 func TestConsumptionRefreshEnqueuerAppliesConfiguredMaxRetry(t *testing.T) {
