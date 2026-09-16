@@ -12,6 +12,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/energy"
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
+	"github.com/MErenTalan/ekokod-rewrite/internal/platform/lock"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
 )
 
@@ -24,6 +25,19 @@ type BillingDeps struct {
 	Ops       store.OpsRepository
 	Clock     clock.Clock
 	Log       *slog.Logger
+
+	// Locker serialises Task 8's ConsumptionAndRecord check-then-create per
+	// (analyzer, period_start) (C-6): consumption_anomalies' own partial
+	// index claims no database-level uniqueness, so this lock is what
+	// actually prevents two concurrent runs from creating two rows for the
+	// same period. Required only by ConsumptionAndRecord; left nil, this
+	// type still constructs and Consumption still works exactly as Task 7
+	// built it.
+	Locker lock.Locker
+	// Analyzers resolves the analyzer's own provider when Task 8's
+	// ResolveAnomaly (ResolveByRegisteringReset) writes an operator-entered
+	// reset reading. Required only by ResolveAnomaly.
+	Analyzers store.AnalyzerRepository
 }
 
 // Billing is the exact, hypertable-only consumption path. There is no
@@ -80,6 +94,12 @@ func (b *Billing) Consumption(ctx context.Context, sc store.Scope, req SeriesReq
 			return nil, err
 		}
 		rows = append(rows, analyzerRows...)
+	}
+	// C-6: a resolved manual_override/accepted anomaly must be reflected by
+	// Consumption itself, not only by Task 8's ConsumptionAndRecord wrapper
+	// — applyResolvedAnomalies (anomalies.go) post-processes rows in place.
+	if err := b.applyResolvedAnomalies(ctx, sc, rows); err != nil {
+		return nil, err
 	}
 	return rows, nil
 }

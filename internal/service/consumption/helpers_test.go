@@ -262,10 +262,19 @@ func (noReadings) Latest(context.Context, store.Scope, uuid.UUID, store.TimeRang
 
 // --- no-op AnomalyRepository / OpsRepository --------------------------------
 
-// noAnomalies panics on every method: Task 7's Billing.Consumption must
-// never touch AnomalyRepository (that is Task 8's ConsumptionAndRecord, on
-// the same type, added later) — a panic surfaces that violation immediately
-// rather than letting a nil-ish fake silently return zero values.
+// noAnomalies panics on every WRITE method: Billing.Consumption must never
+// create, fetch-by-id or resolve an anomaly (that is Task 8's
+// ConsumptionAndRecord/ResolveAnomaly, on the same type) — a panic surfaces
+// that violation immediately rather than letting a nil-ish fake silently
+// return zero values.
+//
+// List is the one exception (Task 8, C-6): Consumption itself now reads
+// resolved manual_override/accepted anomalies to substitute their values
+// (applyResolvedAnomalies, anomalies.go) — a read Task 7 never needed but
+// R61 never forbade (R61 only ever forbids Billing reaching an
+// AnalyticsRepository). Returning (nil, nil) here matches "no anomalies
+// exist" exactly like a real repository would for a period with none, so
+// every Task 7 test that never seeds a resolved anomaly is unaffected.
 type noAnomalies struct{}
 
 func (noAnomalies) Get(context.Context, store.Scope, uuid.UUID) (model.ConsumptionAnomaly, error) {
@@ -273,7 +282,7 @@ func (noAnomalies) Get(context.Context, store.Scope, uuid.UUID) (model.Consumpti
 }
 
 func (noAnomalies) List(context.Context, store.Scope, store.AnomalyFilter) ([]model.ConsumptionAnomaly, error) {
-	panic("consumption: Task 7's Billing.Consumption must never call AnomalyRepository.List")
+	return nil, nil
 }
 
 func (noAnomalies) Create(context.Context, store.Scope, model.ConsumptionAnomaly) (model.ConsumptionAnomaly, error) {
