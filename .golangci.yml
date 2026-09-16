@@ -41,6 +41,15 @@ linters:
         domain-is-pure:
           files:
             - "**/internal/domain/**"
+            # F3 Task 1: internal/domain/energy is the tree's first package
+            # with its own tests, and a domain test file legitimately needs
+            # "testing" and testify — neither is production arithmetic code,
+            # and the equivalent Go-level guard (TestDomainHasNoIOImports's
+            # loadPackages, internal/arch/arch_test.go) already excludes
+            # test files by never passing packages.Config.Tests: true. This
+            # exclusion keeps the lint rule and the Go guard checking the
+            # same set of files.
+            - "!**/internal/domain/**/*_test.go"
           list-mode: strict
           allow:
             # the domain layer's own tree — subpackages import each other.
@@ -63,6 +72,11 @@ linters:
             - time$
             - unicode$
             - unicode/utf8$
+            # F3 Task 1: a blank import that embeds the IANA zone database
+            # and does no I/O of its own (see arch_test.go's
+            # domainAllowedImports comment on the same entry). Paired with
+            # that map — change both or neither.
+            - time/tzdata$
             # third-party: exactly what the domain layer is built on.
             - github.com/google/uuid
             - github.com/shopspring/decimal
@@ -119,6 +133,11 @@ linters:
             - "**/internal/ingest/**"
             - "**/internal/marketdata/**"
             - "**/internal/credentials/**"
+            # F3 Task 1 (R76): the new service layer computes and holds the
+            # same energy and money values internal/domain does, one layer
+            # up. Paired with arch_test.go's floatGuardPatterns — change
+            # both or neither.
+            - "**/internal/service/**"
           deny:
             - pkg: "math/big"
               desc: "use github.com/shopspring/decimal for monetary arithmetic"
