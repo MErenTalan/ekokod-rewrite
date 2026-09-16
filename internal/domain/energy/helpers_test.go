@@ -65,6 +65,19 @@ func demandAt(ts time.Time, kw string) energy.Reading {
 	}
 }
 
+// demandAtKind builds a reading at ts of the given kind carrying only
+// MaxDemandKw, for tests that need a demand-only fixture of a kind other
+// than load_profile (demandAt's fixed kind). Task 3's MaxDemand tests use
+// this to exercise MaxDemandKinds's allowlist against billing,
+// current_index and reset rows.
+func demandAtKind(ts time.Time, kind energy.Kind, kw string) energy.Reading {
+	return energy.Reading{
+		TS:          ts,
+		Kind:        kind,
+		MaxDemandKw: dec(kw),
+	}
+}
+
 // win builds a half-open Window of length d starting at from.
 func win(from time.Time, d time.Duration) energy.Window {
 	return energy.Window{From: from, To: from.Add(d)}
