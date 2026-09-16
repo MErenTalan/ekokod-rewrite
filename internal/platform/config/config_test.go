@@ -285,6 +285,60 @@ func TestJobMaxRetriesRejectsNegative(t *testing.T) {
 	require.Contains(t, err.Error(), "zero or greater")
 }
 
+// TestConsumptionRefreshDefaults pins Task 11b's defaults: enabled by
+// default (an operator who never heard of this knob still gets the R73
+// promise), and a 10-minute lock TTL.
+func TestConsumptionRefreshDefaults(t *testing.T) {
+	cfg, err := config.Load(lookupFrom(valid()))
+	require.NoError(t, err)
+	require.True(t, cfg.ConsumptionRefreshEnabled)
+	require.Equal(t, 10*time.Minute, cfg.ConsumptionRefreshLockTTL)
+}
+
+// TestConsumptionRefreshEnabledCanBeDisabled pins the operator escape hatch
+// the ingest enqueue gate reads.
+func TestConsumptionRefreshEnabledCanBeDisabled(t *testing.T) {
+	env := valid()
+	env["EKOKOD_CONSUMPTION_REFRESH_ENABLED"] = "false"
+	cfg, err := config.Load(lookupFrom(env))
+	require.NoError(t, err)
+	require.False(t, cfg.ConsumptionRefreshEnabled)
+}
+
+// TestConsumptionRefreshLockTTLRejectsNonPositive guards the same hazard
+// EKOKOD_DB_MAX_CONN_LIFETIME's positiveDuration protects against: a zero or
+// negative lock TTL is not a real lease.
+func TestConsumptionRefreshLockTTLRejectsNonPositive(t *testing.T) {
+	for _, v := range []string{"0", "-1m"} {
+		t.Run(v, func(t *testing.T) {
+			env := valid()
+			env["EKOKOD_CONSUMPTION_REFRESH_LOCK_TTL"] = v
+			_, err := config.Load(lookupFrom(env))
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "EKOKOD_CONSUMPTION_REFRESH_LOCK_TTL")
+		})
+	}
+}
+
+// TestConfigCheckListsConsumptionRefreshVariables guards `ekokod
+// config:check`'s coverage of the two Task 11b knobs, exactly like
+// TestConfigCheckListsIngestVariables does for EKOKOD_INGEST_*.
+func TestConfigCheckListsConsumptionRefreshVariables(t *testing.T) {
+	cfg, err := config.Load(lookupFrom(valid()))
+	require.NoError(t, err)
+
+	seen := map[string]bool{}
+	for _, r := range cfg.Resolved() {
+		seen[r.Name] = true
+	}
+	for _, name := range []string{
+		"EKOKOD_CONSUMPTION_REFRESH_ENABLED",
+		"EKOKOD_CONSUMPTION_REFRESH_LOCK_TTL",
+	} {
+		require.True(t, seen[name], "%s must be listed by config:check", name)
+	}
+}
+
 // TestConfigCheckListsIngestVariables guards `ekokod config:check`'s
 // coverage: every EKOKOD_INGEST_* knob must appear in Resolved() so an
 // operator can see it (and its masked/unmasked value) without reading

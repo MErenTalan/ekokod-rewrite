@@ -8,8 +8,14 @@
 // (Handlers.Prices), the encryption cipher, every tenant repository, the
 // meter-adapter registry (osos/gridbox/aril/pm5340), the iSolarCloud
 // client, internal/credentials.Service, the PM5340 generation accumulator
-// hook, internal/ingest.Service (Handlers.Ingestion) and
-// internal/ingest/backfill.Backfiller (Handlers.Backfill). Every resource
+// hook, internal/ingest.Service (Handlers.Ingestion),
+// internal/ingest/backfill.Backfiller (Handlers.Backfill) and
+// internal/service/consumption.Refresher (Handlers.ConsumptionRefresh, F3
+// Task 11a — the per-view-locked consumption.refresh handler). F3 Task 11b
+// wires ingestDeps.ConsumptionRefresh to a small adapter over the same
+// *job.Client (consumptionRefreshEnqueuer below) and threads
+// cfg.ConsumptionRefreshEnabled / cfg.ConsumptionRefreshLockTTL through, so
+// the enqueue seam F2 left nil is now live. Every resource
 // Build opens before a later step fails is closed on that step's error
 // path (see closers/closeAll below), and again, idempotently, by
 // Built.Close on the success path — TestWorkerBuildClosesEarlierResourcesOnLateFailure
@@ -39,6 +45,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/gridbox"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/httpx"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/isolar"
+	"github.com/MErenTalan/ekokod-rewrite/internal/integration/normalize"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/osos"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/pm5340"
 	"github.com/MErenTalan/ekokod-rewrite/internal/job"
@@ -47,6 +54,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/crypto"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/lock"
+	"github.com/MErenTalan/ekokod-rewrite/internal/service/consumption"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/admin"
 	platformredis "github.com/MErenTalan/ekokod-rewrite/internal/store/redis"
@@ -148,6 +156,25 @@ func (v verifierResolver) Verifier(p integration.Provider) (credentials.Verifier
 	return v.registry.Source(p)
 }
 
+// consumptionRefreshEnqueuer adapts *job.Client to
+// ingest.ConsumptionRefreshEnqueuer (F3 Task 11b): it builds a
+// consumption.refresh task via job.NewConsumptionRefreshTask and enqueues it
+// on the SAME job client every other integration task in this graph uses —
+// no separate connection, no separate retry policy source.
+type consumptionRefreshEnqueuer struct {
+	client   *job.Client
+	maxRetry int
+}
+
+func (e consumptionRefreshEnqueuer) EnqueueConsumptionRefresh(ctx context.Context, p job.ConsumptionRefreshPayload) error {
+	task, err := job.NewConsumptionRefreshTask(p, job.TaskOptions{MaxRetry: e.maxRetry})
+	if err != nil {
+		return err
+	}
+	_, err = e.client.Enqueue(ctx, task)
+	return err
+}
+
 // Build constructs every F2 dependency from configuration: it is the
 // single wiring point; internal/cli/worker.go calls it and Task 17's
 // acceptance test calls it. It is a thin wrapper over build() (below),
@@ -180,6 +207,7 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slog.Logger) (graph, error) {
 	adminMarketDataRepo := admin.NewMarketDataRepository(pool)
 	adminJournalRepo := admin.NewJournalRepository(pool)
+	adminAggregateRepo := admin.NewAggregateRepository(pool)
 
 	// closers accumulates a namedCloser for every long-lived resource
 	// build opens, in open order; closeAll runs them in reverse-open order
@@ -319,15 +347,19 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 			// pins both.
 			model.IntegrationProviderPM5340: {generation.New(readingRepo, generationRepo, clock.System(), redisLock, cfg.Ingest.FutureTolerance)},
 		},
-		ConsumptionRefresh: nil, // R17: consumption.refresh is declared, never enqueued, in F2
+		// F3 Task 11b: the enqueue seam F2 left nil is now wired to the same
+		// jobClient every other integration task in this graph enqueues
+		// through, gated by cfg.ConsumptionRefreshEnabled below.
+		ConsumptionRefresh: consumptionRefreshEnqueuer{client: jobClient, maxRetry: cfg.Worker.MaxRetries},
 		Clock:              clock.System(),
 		Log:                log,
 	}
 	ingestSvc, err := ingest.New(ingestDeps, ingest.Options{
-		FutureTolerance: cfg.Ingest.FutureTolerance,
-		SanityMultiple:  cfg.Ingest.SanityMultiple,
-		InitialLookback: cfg.Ingest.InitialLookback,
-		MaxRetry:        cfg.Worker.MaxRetries,
+		FutureTolerance:           cfg.Ingest.FutureTolerance,
+		SanityMultiple:            cfg.Ingest.SanityMultiple,
+		InitialLookback:           cfg.Ingest.InitialLookback,
+		MaxRetry:                  cfg.Worker.MaxRetries,
+		ConsumptionRefreshEnabled: cfg.ConsumptionRefreshEnabled,
 	})
 	if err != nil {
 		closeAll()
@@ -344,13 +376,37 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		MaxRetry:    cfg.Worker.MaxRetries,
 	})
 
+	// R71/R72 (Task 11a) / Task 11b: the refresher reuses the SAME redisLock
+	// every other Locker consumer in this graph does, and is bounded by
+	// cfg.ConsumptionRefreshLockTTL (EKOKOD_CONSUMPTION_REFRESH_LOCK_TTL,
+	// default 10m). Location is Europe/Istanbul, loaded through the same
+	// internal/integration/normalize.Istanbul every other timestamp
+	// normalisation in this worker uses.
+	consumptionRefresher, err := consumption.NewRefresher(consumption.RefreshDeps{
+		Aggregates: adminAggregateRepo,
+		Locker:     redisLock,
+		LockTTL:    cfg.ConsumptionRefreshLockTTL,
+		Location:   normalize.Istanbul,
+		Log:        log,
+	})
+	if err != nil {
+		closeAll()
+		return graph{}, fmt.Errorf("worker: build consumption refresher: %w", err)
+	}
+
 	return graph{
 		cipher:          cipher,
 		integrationRepo: integrationRepo,
 		verifiers:       verifiers,
 		credentialsDeps: credDeps,
 		ingestDeps:      ingestDeps,
-		handlers:        &job.Handlers{Log: log, Ingestion: ingestSvc, Backfill: backfiller, Prices: syncer},
-		closers:         closers,
+		handlers: &job.Handlers{
+			Log:                log,
+			Ingestion:          ingestSvc,
+			Backfill:           backfiller,
+			Prices:             syncer,
+			ConsumptionRefresh: consumptionRefresher,
+		},
+		closers: closers,
 	}, nil
 }
