@@ -277,6 +277,34 @@ func TestDeriveWithAnUnusableResetRowIsSuspectEvenWhenThePlainDifferenceWouldBeP
 	require.Equal(t, energy.ReasonMeterReset, d.Suspect[energy.T1Import].Reason, "never 4610, unflagged")
 }
 
+// R93 (I-10): the start-side mirror of the fixture above. A reset row
+// sitting exactly at start.TS that omits a register both boundaries report
+// is unusable evidence for that register on the START side too
+// (reset.go:345-347) — never a plain difference across it, and never
+// treated as though the register were simply untouched by the reset.
+// active_import (which the reset does cover) still derives cleanly through
+// the fast path once t1_import's suspicion is set aside; t1_import (which
+// it does not) must be meter_reset-suspect, never 4030 (5040 - 1010, the
+// plain difference the old start-side code would have silently billed).
+func TestDeriveIsSuspectWhenAStartSideResetRowOmitsARegisterBothBoundariesReport(t *testing.T) {
+	start := &energy.Reading{TS: t0, Kind: energy.KindBilling, Values: vals("5000", "1010")}
+	reset := &energy.Reading{ // ResetAfter omitted t1_import
+		TS: t0, Kind: energy.KindReset,
+		Values: map[energy.Register]*decimal.Decimal{energy.ActiveImport: dec("5000")},
+	}
+	end := &energy.Reading{TS: t0.Add(time.Hour), Kind: energy.KindBilling, Values: vals("5040", "5040")}
+
+	d := energy.Derive(win(t0, time.Hour), start, end, []energy.Reading{*reset}, nil)
+
+	requireValue(t, d, energy.ActiveImport, "40")
+	require.Empty(t, d.Suspect[energy.ActiveImport].Reason, "a sound register still derives through the start-side reset")
+
+	require.Nil(t, d.Values[energy.T1Import], "never 4030")
+	require.Equal(t, energy.ReasonMeterReset, d.Suspect[energy.T1Import].Reason, "R93 start side: an unusable reset row is meter_reset")
+	require.Nil(t, d.Suspect[energy.T1Import].Delta, "meter_reset never carries a Delta (M-2)")
+	require.Equal(t, 1, d.Suspect[energy.T1Import].ResetRows)
+}
+
 // R93: a register that NEITHER boundary reports is simply unreported — a
 // reset row omitting a register nobody asked about must not manufacture
 // suspicion for it. This is unaffected by R93 because the up-front

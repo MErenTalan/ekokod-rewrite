@@ -110,9 +110,11 @@ type Suspicion struct {
 	Delta *decimal.Decimal
 	// ResetRows is the count of resets inside Derive's segmentation window
 	// (start.TS, end.TS], regardless of whether they carried evidence for
-	// this register, plus one more (R92) when a reset row sitting exactly
-	// at start.TS carried a value for this register and was inspected by
-	// R92(2)'s start-side check.
+	// this register, plus one more (R92/R93) when a reset row sitting
+	// exactly at start.TS was inspected by R92(2)'s start-side check —
+	// whether or not that row carried a value for this register (M-16): a
+	// partial start-side row is unusable evidence (R93), not silent
+	// non-evidence, so it still counts.
 	ResetRows int
 }
 
