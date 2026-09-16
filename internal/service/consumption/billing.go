@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sort"
 	"time"
 
@@ -120,15 +121,28 @@ func (b *Billing) consumptionWithGaps(ctx context.Context, sc store.Scope, req S
 	if len(buckets) == 0 {
 		return nil, nil, nil
 	}
+	return b.consumptionOverWindows(ctx, sc, req.AnalyzerIDs, windowMode{level: req.Level}, buckets)
+}
 
+// windowMode selects how windows are bucketed and their boundaries resolved:
+// calendar buckets at level, or explicit contiguous windows at Monthly
+// semantics (R107).
+type windowMode struct {
+	level    energy.Level
+	explicit bool
+}
+
+// consumptionOverWindows is the shared body of Consumption and
+// PeriodConsumption once each has validated and built its windows.
+func (b *Billing) consumptionOverWindows(ctx context.Context, sc store.Scope, analyzerIDs []uuid.UUID, mode windowMode, buckets []energy.Window) ([]Row, map[uuid.UUID][]bucketGap, error) {
 	var rows []Row
-	gapsByAnalyzer := make(map[uuid.UUID][]bucketGap, len(req.AnalyzerIDs))
-	for _, analyzerID := range req.AnalyzerIDs {
+	gapsByAnalyzer := make(map[uuid.UUID][]bucketGap, len(analyzerIDs))
+	for _, analyzerID := range analyzerIDs {
 		// R97 rule 7: applyResolvedGapOverrides runs INSIDE
 		// consumptionForAnalyzer now, reusing the SAME analyzerBoundaryData
 		// already loaded for this analyzer's whole request — never a second
 		// query set per overridden gap.
-		analyzerRows, gaps, err := b.consumptionForAnalyzer(ctx, sc, analyzerID, req.Level, buckets)
+		analyzerRows, gaps, err := b.consumptionForAnalyzer(ctx, sc, analyzerID, mode, buckets)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -158,8 +172,9 @@ func (b *Billing) consumptionWithGaps(ctx context.Context, sc store.Scope, req S
 // loading resets only from load_profile's look-back silently drops it, and
 // the derived number comes out wrong instead of suspect (4150 instead of
 // the true 5150, unflagged).
-func (b *Billing) consumptionForAnalyzer(ctx context.Context, sc store.Scope, analyzerID uuid.UUID, level energy.Level, buckets []energy.Window) ([]Row, []bucketGap, error) {
-	data, err := b.loadAnalyzerBoundaryData(ctx, sc, analyzerID, level, buckets)
+func (b *Billing) consumptionForAnalyzer(ctx context.Context, sc store.Scope, analyzerID uuid.UUID, mode windowMode, buckets []energy.Window) ([]Row, []bucketGap, error) {
+	level := mode.level
+	data, err := b.loadAnalyzerBoundaryData(ctx, sc, analyzerID, mode, buckets)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -350,6 +365,7 @@ func (b *Billing) applyResolvedGapOverrides(ctx context.Context, sc store.Scope,
 		// data.resolved (R96 resolves every bucket instant for the whole
 		// request up front) — never a second loadAnalyzerBoundaryData call
 		// per overridden gap.
+		start := data.resolved[g.Window.From.UnixNano()]
 		end := data.resolved[g.Window.To.UnixNano()]
 
 		values := make(map[energy.Register]*decimal.Decimal, len(overrides))
@@ -363,14 +379,17 @@ func (b *Billing) applyResolvedGapOverrides(ctx context.Context, sc store.Scope,
 			AnalyzerID:  analyzerID,
 			Window:      g.Window,
 			Values:      values,
-			MaxDemandKw: maxDemandInWindow(level, g.Window, data.loadProfile, data.daily, data.maxDemandBilling),
+			MaxDemandKw: data.maxDemandIn(level, g.Window),
 			Resolution:  resolution,
+		}
+		if start != nil {
+			row.StartIndexes = readingIndexes(start)
 		}
 		// R97 rule 7: Indexes is the end reading's own values
 		// when one exists, else nil — never a map of nil entries.
 		if end != nil {
 			row.Source = end.Kind
-			row.Indexes = endIndexes(end)
+			row.Indexes = readingIndexes(end)
 		}
 		row.InductiveRatio = energy.Ratio(values[energy.ReactiveInductiveImport], values[energy.ActiveImport])
 		row.CapacitiveRatio = energy.Ratio(values[energy.ReactiveCapacitiveImport], values[energy.ActiveImport])
@@ -447,6 +466,9 @@ type analyzerBoundaryData struct {
 	// the loaded slices still proves the analyzer was in service before
 	// this request's window, which the clamped slices alone cannot tell.
 	hasPriorReading bool
+	// explicit marks R107 explicit windows, whose max demand drops billing-kind
+	// peaks off the calendar month (R111).
+	explicit bool
 }
 
 // deriveRow derives ONE bucket's Row from already-loaded data, optionally
@@ -493,13 +515,18 @@ func deriveRow(analyzerID uuid.UUID, w energy.Window, data analyzerBoundaryData,
 		AnalyzerID: analyzerID,
 		Window:     w,
 		Values:     derivation.Values,
-		Indexes:    endIndexes(end),
+		Indexes:    readingIndexes(end),
+		// The invoice needs the opening index and the true span, which at
+		// Hourly can exceed Window when §3.1 absorbed missing hours.
+		StartIndexes: readingIndexes(start),
+		SpanFrom:     start.TS,
+		SpanTo:       end.TS,
 		// Only the bucket's own sub-range of each already-sorted
 		// source is ever scanned, never the whole loaded set per bucket.
 		// R101: kinds are scoped to level (energy.MaxDemandKindsFor), so a
 		// coarser kind's peak (daily at Hourly, billing at Hourly/Daily)
 		// can never land inside a finer window.
-		MaxDemandKw: maxDemandInWindow(level, w, data.loadProfile, data.daily, data.maxDemandBilling),
+		MaxDemandKw: data.maxDemandIn(level, w),
 		// Source is exactly derivation.Source: the END boundary's own
 		// Kind (R96), or start.Kind when end is a reset row. Under
 		// R96 a period's start and end boundary can resolve to DIFFERENT
@@ -525,7 +552,8 @@ func deriveRow(analyzerID uuid.UUID, w energy.Window, data analyzerBoundaryData,
 // loading resets only from load_profile's look-back silently drops it, and
 // the derived number comes out wrong instead of suspect (4150 instead of
 // the true 5150, unflagged).
-func (b *Billing) loadAnalyzerBoundaryData(ctx context.Context, sc store.Scope, analyzerID uuid.UUID, level energy.Level, buckets []energy.Window) (analyzerBoundaryData, error) {
+func (b *Billing) loadAnalyzerBoundaryData(ctx context.Context, sc store.Scope, analyzerID uuid.UUID, mode windowMode, buckets []energy.Window) (analyzerBoundaryData, error) {
+	level := mode.level
 	first := buckets[0]
 	rangeTo := buckets[len(buckets)-1].To
 
@@ -679,7 +707,7 @@ func (b *Billing) loadAnalyzerBoundaryData(ctx context.Context, sc store.Scope, 
 	// telescopes exactly within a level (K2): there is no per-period
 	// re-derivation of a shared boundary that could disagree with its
 	// neighbour.
-	resolved := resolveBoundaries(level, buckets, loadProfile, billing, daily, useBilling, useDaily)
+	resolved := resolveBoundaries(mode, buckets, loadProfile, billing, daily, useBilling, useDaily)
 
 	return analyzerBoundaryData{
 		loadProfile:      loadProfile,
@@ -692,6 +720,7 @@ func (b *Billing) loadAnalyzerBoundaryData(ctx context.Context, sc store.Scope, 
 		useDaily:         useDaily,
 		resolved:         resolved,
 		hasPriorReading:  hasPriorReading,
+		explicit:         mode.explicit,
 	}, nil
 }
 
@@ -705,14 +734,27 @@ func (b *Billing) loadAnalyzerBoundaryData(ctx context.Context, sc store.Scope, 
 // this is what makes a level's consumption telescope exactly (R96/K2): there
 // is no possibility of two different, per-period re-derivations of a shared
 // boundary disagreeing with each other.
-func resolveBoundaries(level energy.Level, buckets []energy.Window, loadProfile, billing, daily []energy.Reading, useBilling, useDaily bool) map[int64]*energy.Reading {
+func resolveBoundaries(mode windowMode, buckets []energy.Window, loadProfile, billing, daily []energy.Reading, useBilling, useDaily bool) map[int64]*energy.Reading {
 	out := make(map[int64]*energy.Reading, len(buckets)+1)
+	var halfWidths map[int64]time.Duration
+	if mode.explicit {
+		halfWidths = explicitHalfWidths(buckets)
+	}
 	resolve := func(bound time.Time) {
 		key := bound.UnixNano()
 		if _, ok := out[key]; ok {
 			return
 		}
-		out[key] = resolveBoundary(level, bound, loadProfile, billing, daily, useBilling, useDaily)
+		tolerance := func(kind time.Duration) time.Duration { return boundaryTolerance(mode.level, bound, kind) }
+		billingHere := useBilling
+		if mode.explicit {
+			// R107: the cap comes from the explicit windows meeting here.
+			tolerance = func(kind time.Duration) time.Duration { return min(kind, halfWidths[key]) }
+			// R107: a billing snapshot marks a calendar month start; at any
+			// other cut-off instant it would bill calendar-month kWh.
+			billingHere = useBilling && isMonthStart(bound)
+		}
+		out[key] = resolveBoundary(mode.level, bound, tolerance, loadProfile, billing, daily, billingHere, useDaily)
 	}
 	resolve(buckets[0].From)
 	for _, w := range buckets {
@@ -732,22 +774,22 @@ func resolveBoundaries(level energy.Level, buckets []energy.Window, loadProfile,
 // never because the two together failed to form a usable pair. A boundary
 // with no candidate in any tried kind resolves to nil, and Derive already
 // turns a nil boundary into "no row" for the periods on both sides of it.
-func resolveBoundary(level energy.Level, bound time.Time, loadProfile, billing, daily []energy.Reading, useBilling, useDaily bool) *energy.Reading {
+func resolveBoundary(level energy.Level, bound time.Time, tolerance func(kind time.Duration) time.Duration, loadProfile, billing, daily []energy.Reading, useBilling, useDaily bool) *energy.Reading {
 	if level == energy.Hourly {
 		// §3.1 unchanged: load_profile only, unbounded look-back (Q7), no
 		// tolerance check at all.
 		return energy.SelectBoundary(loadProfile, bound)
 	}
 	if useBilling {
-		if r := boundaryCandidate(billing, bound, boundaryTolerance(level, bound, BillingSnapshotTolerance)); r != nil {
+		if r := boundaryCandidate(billing, bound, tolerance(BillingSnapshotTolerance)); r != nil {
 			return r
 		}
 	}
-	if r := boundaryCandidate(loadProfile, bound, boundaryTolerance(level, bound, LoadProfileBoundaryTolerance)); r != nil {
+	if r := boundaryCandidate(loadProfile, bound, tolerance(LoadProfileBoundaryTolerance)); r != nil {
 		return r
 	}
 	if useDaily {
-		if r := boundaryCandidate(daily, bound, boundaryTolerance(level, bound, DailySnapshotTolerance)); r != nil {
+		if r := boundaryCandidate(daily, bound, tolerance(DailySnapshotTolerance)); r != nil {
 			return r
 		}
 	}
@@ -795,6 +837,35 @@ func boundaryTolerance(level energy.Level, bound time.Time, kindTolerance time.D
 	return kindTolerance
 }
 
+// explicitHalfWidths maps each explicit window boundary to half the smaller
+// width of the windows meeting there (R107); the outer two use their own window.
+func explicitHalfWidths(windows []energy.Window) map[int64]time.Duration {
+	out := make(map[int64]time.Duration, len(windows)+1)
+	set := func(bound time.Time, half time.Duration) {
+		key := bound.UnixNano()
+		if cur, ok := out[key]; !ok || half < cur {
+			out[key] = half
+		}
+	}
+	for _, w := range windows {
+		half := w.To.Sub(w.From) / 2
+		set(w.From, half)
+		set(w.To, half)
+	}
+	return out
+}
+
+// isMonthStart reports whether ts is an Istanbul calendar-month start.
+func isMonthStart(ts time.Time) bool {
+	return energy.Bucket(energy.Monthly, ts, istanbul).From.Equal(ts)
+}
+
+// isCalendarMonth reports whether w is exactly one Istanbul calendar month.
+func isCalendarMonth(w energy.Window) bool {
+	m := energy.Bucket(energy.Monthly, w.From, istanbul)
+	return m.From.Equal(w.From) && m.To.Equal(w.To)
+}
+
 // clampLookback implements Minor M-c (performance, no correctness impact): a
 // kind's look-back returned by firstBoundaryLookback can be an arbitrarily
 // old reading's own ts — for example a `daily` reading from a year ago, when
@@ -815,8 +886,9 @@ func clampLookback(lookback, firstFrom time.Time, kindTolerance time.Duration) t
 	return lookback
 }
 
-// endIndexes returns the closing index of every register directly from the
-// end boundary reading's own values (05 §5 "every index field"): the
+// readingIndexes returns every register's index directly from a boundary
+// reading's own values (05 §5 "every index field"): Row.Indexes from the end
+// reading, Row.StartIndexes from the start reading. The
 // billing path's closing index is never derived, it is simply what the end
 // reading itself reported. Row.Indexes itself is UNCONDITIONAL here — this
 // function does not consult Suspect at all, so a Row built by this package
@@ -834,10 +906,10 @@ func clampLookback(lookback, firstFrom time.Time, kindTolerance time.Duration) t
 // needs the real closing index to diagnose what happened; an export or
 // generation report, which has no suspect-aware reader, must not show a
 // suspect register's index as if it were sound.
-func endIndexes(end *energy.Reading) map[energy.Register]*decimal.Decimal {
+func readingIndexes(r *energy.Reading) map[energy.Register]*decimal.Decimal {
 	out := make(map[energy.Register]*decimal.Decimal, len(energy.AllRegisters()))
 	for _, reg := range energy.AllRegisters() {
-		out[reg] = end.Value(reg)
+		out[reg] = r.Value(reg)
 	}
 	return out
 }
@@ -880,7 +952,21 @@ func (b *Billing) firstBoundaryLookback(ctx context.Context, sc store.Scope, ana
 // win inside a single Hourly bucket, and a billing row's own month-peak
 // must not win inside a single Hourly or Daily bucket.
 func maxDemandInWindow(level energy.Level, w energy.Window, sources ...[]energy.Reading) *decimal.Decimal {
+	return maxDemandOfKinds(energy.MaxDemandKindsFor(level), w, sources...)
+}
+
+// maxDemandIn is maxDemandInWindow over d's loaded sources; an explicit
+// window counts billing-kind peaks only when it is a calendar month (R111).
+func (d analyzerBoundaryData) maxDemandIn(level energy.Level, w energy.Window) *decimal.Decimal {
 	kinds := energy.MaxDemandKindsFor(level)
+	if d.explicit && !isCalendarMonth(w) {
+		kinds = slices.DeleteFunc(slices.Clone(kinds), func(k energy.Kind) bool { return k == energy.KindBilling })
+	}
+	return maxDemandOfKinds(kinds, w, d.loadProfile, d.daily, d.maxDemandBilling)
+}
+
+// maxDemandOfKinds is maxDemandInWindow with an explicit kind allowlist.
+func maxDemandOfKinds(kinds []energy.Kind, w energy.Window, sources ...[]energy.Reading) *decimal.Decimal {
 	var max *decimal.Decimal
 	for _, src := range sources {
 		lo := sort.Search(len(src), func(i int) bool { return !src[i].TS.Before(w.From) })
