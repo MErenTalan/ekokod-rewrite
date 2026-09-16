@@ -31,6 +31,35 @@ func TestBalanceDerivesFromRegistersOnly(t *testing.T) {
 	require.Equal(t, "3.2", b[0].GridExport.String(), "grid_export is identically generation until F9")
 }
 
+// TestBalanceNeverRendersASuspectRegisterAsANumber is task-9-review.md
+// finding (b): a hand-built Row whose Values entry is non-nil for a suspect
+// register — something the real pipeline (Difference/Derive) never
+// produces, but nothing about Row's shape prevents a caller from building —
+// must still come back nil from Balance, never the raw 999. Removing
+// Balance's soundValue check (reverting to a bare r.Values[reg] read) must
+// turn this red.
+func TestBalanceNeverRendersASuspectRegisterAsANumber(t *testing.T) {
+	w := energy.Window{From: summaryT0, To: summaryT0.Add(time.Hour)}
+	rows := []consumption.Row{
+		{
+			Window: w,
+			Values: map[energy.Register]*decimal.Decimal{
+				energy.ActiveImport: dec("999"),
+				energy.ActiveExport: dec("999"),
+			},
+			Suspect: map[energy.Register]energy.Suspicion{
+				energy.ActiveImport: {Reason: energy.ReasonNegativeDelta},
+				energy.ActiveExport: {Reason: energy.ReasonNegativeDelta},
+			},
+		},
+	}
+	b := consumption.Balance(rows)
+	require.Nil(t, b[0].Consumption, "active_import is suspect: must never render as 999")
+	require.Nil(t, b[0].GridImport, "grid_import mirrors consumption")
+	require.Nil(t, b[0].Generation, "active_export is suspect: must never render as 999")
+	require.Nil(t, b[0].GridExport, "grid_export mirrors generation")
+}
+
 func TestBalanceIsNilWhenARegisterIsUnavailable(t *testing.T) {
 	w := energy.Window{From: summaryT0, To: summaryT0.Add(time.Hour)}
 	rows := []consumption.Row{

@@ -22,13 +22,17 @@ type BalanceRow struct {
 // Balance derives one BalanceRow per input Row — active_import and
 // active_export are already both present in Row.Values, so this needs no
 // second fetch either. A nil register value (unreported or suspect) stays
-// nil, never a substituted zero.
+// nil, never a substituted zero. Consumption/GridImport and
+// Generation/GridExport go through soundValue (sound.go), which
+// independently re-checks r.Suspect rather than trusting Values[reg] to
+// already be nil for a suspect register — the same "never trust the
+// caller's Row" guard Summarise and ExportRows apply (task-9-review.md).
 func Balance(rows []Row) []BalanceRow {
 	out := make([]BalanceRow, len(rows))
 	for i := range rows {
-		r := &rows[i]
-		consumption := r.Values[energy.ActiveImport]
-		generation := r.Values[energy.ActiveExport]
+		r := rows[i]
+		consumption := soundValue(r, energy.ActiveImport)
+		generation := soundValue(r, energy.ActiveExport)
 		out[i] = BalanceRow{
 			Window:      r.Window,
 			Consumption: consumption,

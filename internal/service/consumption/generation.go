@@ -27,15 +27,18 @@ var exportRegisters = []energy.Register{
 // the caller already has the rows from Task 7's Analytics.Consumption or
 // Billing.Consumption. The returned Values and Indexes maps are new maps —
 // never the input row's own maps — so a caller mutating a returned row can
-// never corrupt rows.
+// never corrupt rows. A suspect export register's Values entry comes back
+// nil (soundValue, sound.go) even if the input row's own Values[reg] is
+// itself non-nil — the same guard Balance and ExportRows apply
+// (task-9-review.md).
 func GenerationRows(rows []Row) []Row {
 	out := make([]Row, len(rows))
 	for i := range rows {
-		r := &rows[i]
+		r := rows[i]
 		out[i] = Row{
 			AnalyzerID:      r.AnalyzerID,
 			Window:          r.Window,
-			Values:          filterRegisters(r.Values, exportRegisters),
+			Values:          filterSoundValues(r, exportRegisters),
 			Indexes:         filterRegisters(r.Indexes, exportRegisters),
 			InductiveRatio:  nil,
 			CapacitiveRatio: nil,
@@ -56,6 +59,18 @@ func filterRegisters(m map[energy.Register]*decimal.Decimal, keep []energy.Regis
 	out := make(map[energy.Register]*decimal.Decimal, len(keep))
 	for _, reg := range keep {
 		out[reg] = m[reg]
+	}
+	return out
+}
+
+// filterSoundValues is filterRegisters for r.Values specifically: each kept
+// register goes through soundValue (sound.go) rather than a bare map read,
+// so a register in r.Suspect comes back nil even when r.Values itself still
+// holds a number for it.
+func filterSoundValues(r Row, keep []energy.Register) map[energy.Register]*decimal.Decimal {
+	out := make(map[energy.Register]*decimal.Decimal, len(keep))
+	for _, reg := range keep {
+		out[reg] = soundValue(r, reg)
 	}
 	return out
 }

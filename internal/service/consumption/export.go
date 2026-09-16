@@ -26,7 +26,10 @@ type Export struct {
 // Timestamps are RFC3339 in UTC. Every decimal cell is its unrounded
 // String() — no presentation rounding here, that is F6's. A nil value is ""
 // — never "0". suspect_registers is a ";"-joined list of the row's suspect
-// registers in AllRegisters() order.
+// registers in AllRegisters() order. A register listed in a row's Suspect
+// map renders "" in BOTH its consumption column and its <register>_index
+// column, even if Values[reg] or Indexes[reg] is itself non-nil (soundValue/
+// soundIndex in sound.go re-check Suspect independently — task-9-review.md).
 func ExportRows(rows []Row) Export {
 	e := Export{
 		Columns: exportColumns(),
@@ -63,10 +66,10 @@ func exportRow(r *Row) []string {
 		strconv.FormatBool(r.Partial),
 	)
 	for _, reg := range registers {
-		row = append(row, decimalCell(r.Values[reg]))
+		row = append(row, decimalCell(soundValue(*r, reg)))
 	}
 	for _, reg := range registers {
-		row = append(row, decimalCell(r.Indexes[reg]))
+		row = append(row, decimalCell(soundIndex(*r, reg)))
 	}
 	row = append(row,
 		decimalCell(r.InductiveRatio),

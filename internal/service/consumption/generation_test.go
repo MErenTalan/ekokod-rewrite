@@ -77,6 +77,21 @@ func TestGenerationRowsRatiosAreNilAndEverythingElseIsCopied(t *testing.T) {
 	require.Contains(t, got.Resolution, energy.ActiveImport)
 }
 
+// TestGenerationRowsNeverRendersASuspectExportRegisterAsANumber is
+// task-9-review.md finding (b)/(c)'s counterpart for GenerationRows: a
+// hand-built Row whose Values entry is non-nil for a suspect export
+// register must come back nil, never the raw 999. Removing
+// GenerationRows' soundValue check (reverting filterSoundValues to a bare
+// filterRegisters call) must turn this red.
+func TestGenerationRowsNeverRendersASuspectExportRegisterAsANumber(t *testing.T) {
+	in := generationRow()
+	in.Values[energy.ActiveExport] = dec("999")
+	in.Suspect = map[energy.Register]energy.Suspicion{energy.ActiveExport: {Reason: energy.ReasonNegativeDelta}}
+
+	out := consumption.GenerationRows([]consumption.Row{in})
+	require.Nil(t, out[0].Values[energy.ActiveExport], "active_export is suspect: must never render as 999")
+}
+
 // TestGenerationRowsDoesNotAliasInputValuesMap is guard (c) from the task
 // brief: GenerationRows must never share the input row's Values (or Indexes)
 // map. Mutating the returned map must not change the input row's own map.

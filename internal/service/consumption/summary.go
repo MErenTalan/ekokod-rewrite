@@ -34,6 +34,11 @@ type Summary struct {
 //
 // MaxDemandKw is the maximum over every row's non-nil MaxDemandKw field
 // (MaxDemandKw is not a register and is never marked suspect).
+//
+// A Partial row (a composed Analytics figure, R88/R94) is summed into
+// Totals/Averages, and is an ordinary Peak/Valley candidate, exactly like
+// any other row: Row.Partial marks a best-effort closing-to-closing figure,
+// not a fabricated one, so there is no reason to exclude it here.
 func Summarise(rows []Row) Summary {
 	registers := energy.AllRegisters()
 
@@ -53,11 +58,8 @@ func Summarise(rows []Row) Summary {
 		}
 
 		for _, reg := range registers {
-			v := row.Values[reg]
+			v := soundValue(*row, reg)
 			if v == nil {
-				continue
-			}
-			if _, suspect := row.Suspect[reg]; suspect {
 				continue
 			}
 			if carried[reg] {
@@ -74,11 +76,8 @@ func Summarise(rows []Row) Summary {
 			maxDemand = &v
 		}
 
-		active := row.Values[energy.ActiveImport]
+		active := soundValue(*row, energy.ActiveImport)
 		if active == nil {
-			continue
-		}
-		if _, suspect := row.Suspect[energy.ActiveImport]; suspect {
 			continue
 		}
 		if isNewExtreme(peak, active, row, true) {

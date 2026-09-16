@@ -136,6 +136,21 @@ func TestPeakAndValleyIgnoreSuspectRows(t *testing.T) {
 	require.Equal(t, "5", s.Valley.Values[energy.ActiveImport].String())
 }
 
+// TestValleyIncludesAZeroConsumptionRow is task-9-review.md's minor
+// finding: a measured zero is a valid Valley candidate, not "no data" (Global
+// Constraints: "zero means measured zero"). Row 1's active_import of 0 must
+// win Valley over row 0's 5, not be treated as absent/suspect.
+func TestValleyIncludesAZeroConsumptionRow(t *testing.T) {
+	rows := []consumption.Row{
+		{Window: summaryWindow(0), Values: map[energy.Register]*decimal.Decimal{energy.ActiveImport: dec("5")}},
+		{Window: summaryWindow(1), Values: map[energy.Register]*decimal.Decimal{energy.ActiveImport: dec("0")}},
+	}
+	s := consumption.Summarise(rows)
+	require.NotNil(t, s.Valley)
+	require.True(t, s.Valley.Values[energy.ActiveImport].IsZero(), "the measured-zero row must win Valley, not be skipped as if it were nil")
+	require.True(t, s.Valley.Window.From.Equal(summaryWindow(1).From))
+}
+
 func TestPeakAndValleyTieBreaksOnEarliestWindow(t *testing.T) {
 	rows := []consumption.Row{
 		{Window: summaryWindow(2), Values: map[energy.Register]*decimal.Decimal{energy.ActiveImport: dec("10")}},
