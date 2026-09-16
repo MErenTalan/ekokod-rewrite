@@ -162,6 +162,9 @@ func (r *TariffRepository) Create(ctx context.Context, s store.Scope, t model.Ta
 		KbkDistributionCostTlPerKwh: decimalPtrToNumeric(t.KbkDistributionCostTlPerKwh),
 		UseManualYekdem:             t.UseManualYekdem,
 		CreatedBy:                   t.CreatedBy,
+		PowerPriceSource:            tariffPriceSource(t.PowerPriceSource),
+		ReactivePriceSource:         tariffPriceSource(t.ReactivePriceSource),
+		DistributionPriceSource:     tariffPriceSource(t.DistributionPriceSource),
 		CreatedAt:                   tariffTimestamptz(t.CreatedAt),
 	})
 	if err != nil {
@@ -216,6 +219,9 @@ func (r *TariffRepository) Update(ctx context.Context, s store.Scope, t model.Ta
 		KbkDistributionCostTlPerKwh: decimalPtrToNumeric(t.KbkDistributionCostTlPerKwh),
 		UseManualYekdem:             t.UseManualYekdem,
 		UpdatedAt:                   tariffTimestamptz(t.UpdatedAt),
+		PowerPriceSource:            tariffPriceSource(t.PowerPriceSource),
+		ReactivePriceSource:         tariffPriceSource(t.ReactivePriceSource),
+		DistributionPriceSource:     tariffPriceSource(t.DistributionPriceSource),
 	})
 	if err != nil {
 		return model.Tariff{}, pgerr.Translate(r.pool, "update tariff", err)
@@ -432,6 +438,97 @@ func (r *TariffRepository) ReplaceManualYekdem(ctx context.Context, s store.Scop
 	return out, nil
 }
 
+// ExtraCharges — Isolation: tariff_extra_charges has no company_id — join
+// through tariffs.
+func (r *TariffRepository) ExtraCharges(ctx context.Context, s store.Scope, tariffID uuid.UUID) ([]model.TariffExtraCharge, error) {
+	if !s.Valid() {
+		return nil, store.ErrInvalidScope
+	}
+	if err := r.requireVisible(ctx, s, tariffID); err != nil {
+		return nil, err
+	}
+	ids, all := s.BuildingFilter()
+	rows, err := r.q.TariffExtraChargeList(ctx, sqlcgen.TariffExtraChargeListParams{
+		TariffID: tariffID, CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: ids,
+	})
+	if err != nil {
+		return nil, pgerr.Translate(r.pool, "list tariff extra charges", err)
+	}
+	out := make([]model.TariffExtraCharge, 0, len(rows))
+	for _, row := range rows {
+		c, err := tariffExtraChargeFromRow(row)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, nil
+}
+
+// ReplaceExtraCharges swaps tariff_extra_charges in one transaction; every
+// statement re-validates the tariff against the Scope.
+func (r *TariffRepository) ReplaceExtraCharges(ctx context.Context, s store.Scope, tariffID uuid.UUID, charges []model.TariffExtraCharge) ([]model.TariffExtraCharge, error) {
+	if !s.Valid() {
+		return nil, store.ErrInvalidScope
+	}
+	if err := r.requireVisible(ctx, s, tariffID); err != nil {
+		return nil, err
+	}
+	ids, all := s.BuildingFilter()
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, pgerr.Translate(r.pool, "begin replace tariff extra charges", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := r.q.WithTx(tx)
+
+	if err := q.TariffExtraChargeDeleteForTariff(ctx, sqlcgen.TariffExtraChargeDeleteForTariffParams{
+		TariffID: tariffID, CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: ids,
+	}); err != nil {
+		return nil, pgerr.Translate(r.pool, "clear tariff extra charges", err)
+	}
+	out := make([]model.TariffExtraCharge, 0, len(charges))
+	for _, c := range charges {
+		row, err := q.TariffExtraChargeInsert(ctx, sqlcgen.TariffExtraChargeInsertParams{
+			TariffID: tariffID, Name: c.Name, Basis: sqlcgen.ExtraChargeBasis(c.Basis),
+			Amount: decimalToNumeric(c.Amount), SortOrder: c.SortOrder,
+			CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: ids,
+		})
+		if err != nil {
+			return nil, pgerr.Translate(r.pool, "insert tariff extra charge", err)
+		}
+		saved, err := tariffExtraChargeFromRow(row)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, saved)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, pgerr.Translate(r.pool, "commit replace tariff extra charges", err)
+	}
+	return out, nil
+}
+
+func tariffExtraChargeFromRow(row sqlcgen.TariffExtraCharge) (model.TariffExtraCharge, error) {
+	amount, err := numericToDecimal(row.Amount)
+	if err != nil {
+		return model.TariffExtraCharge{}, fmt.Errorf("tariff_extra_charges.amount: %w", err)
+	}
+	return model.TariffExtraCharge{
+		ID: row.ID, TariffID: row.TariffID, Name: row.Name, Basis: model.ExtraChargeBasis(row.Basis),
+		Amount: amount, SortOrder: row.SortOrder,
+	}, nil
+}
+
+// tariffPriceSource maps an unset source to the column default kbk (R119),
+// so a caller that predates price sources keeps the spec behaviour.
+func tariffPriceSource(p model.PriceSource) sqlcgen.PriceSource {
+	if p == "" {
+		return sqlcgen.PriceSourceKbk
+	}
+	return sqlcgen.PriceSource(p)
+}
+
 // requireVisible is the shared isolation check for every tariff_taxes and
 // tariff_manual_yekdem method: the tariff itself must be visible to the
 // Scope, or the child is treated as belonging to no one.
@@ -506,6 +603,10 @@ func tariffFromRow(row sqlcgen.Tariff) (model.Tariff, error) {
 		GenerationUsage: model.GenerationUsage(row.GenerationUsage),
 		UsePtfYekdem:    row.UsePtfYekdem,
 		UseManualYekdem: row.UseManualYekdem,
+
+		PowerPriceSource:        model.PriceSource(row.PowerPriceSource),
+		ReactivePriceSource:     model.PriceSource(row.ReactivePriceSource),
+		DistributionPriceSource: model.PriceSource(row.DistributionPriceSource),
 
 		CreatedBy: row.CreatedBy,
 		CreatedAt: row.CreatedAt.Time,

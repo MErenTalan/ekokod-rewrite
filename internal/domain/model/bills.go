@@ -59,6 +59,9 @@ type Bill struct {
 	HighTierKwh     decimal.Decimal
 	MaxDemandKw     *decimal.Decimal
 	TieredApplied   bool
+	// DemandDataAvailable is false when no max demand was known, so no
+	// overrun could be billed (R111).
+	DemandDataAvailable bool
 
 	// IndexStart and IndexEnd are the register readings at the period
 	// boundaries, as jsonb. They are NOT NULL: a bill that cannot name the
@@ -82,7 +85,10 @@ type Bill struct {
 	VatBase           decimal.Decimal
 	VatCost           decimal.Decimal
 	GenerationCredit  decimal.Decimal
+	ExtraChargesCost  decimal.Decimal
 	TotalCost         decimal.Decimal
+	// Currency is the tariff's own; there is no FX (R127).
+	Currency CurrencyCode
 
 	// Reactive detail: the ratios computed, the thresholds they were compared
 	// against, and whether a penalty resulted.
@@ -102,8 +108,12 @@ type Bill struct {
 	PtfYekdemUsed   bool
 	PtfHoursMatched *int32
 	PtfHoursMissing *int32
-	PtfAverage      *decimal.Decimal
-	YekdemUsed      *decimal.Decimal
+	// PtfHoursExpected and ConsumptionHoursMissing split the missing hours
+	// into price-missing and consumption-missing (R108).
+	PtfHoursExpected        *int32
+	ConsumptionHoursMissing *int32
+	PtfAverage              *decimal.Decimal
+	YekdemUsed              *decimal.Decimal
 
 	Status BillStatus
 	// FlagReason is set when Status is BillStatusFlagged.
@@ -113,6 +123,34 @@ type Bill struct {
 	ComputedAt time.Time
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
+}
+
+// Bill line codes, shared by the billing engine and the renderer.
+const (
+	BillLineEnergy             = "energy"
+	BillLineEnergyLowTier      = "energy_low_tier"
+	BillLineEnergyHighTier     = "energy_high_tier"
+	BillLineEnergyT1           = "energy_t1"
+	BillLineEnergyT2           = "energy_t2"
+	BillLineEnergyT3           = "energy_t3"
+	BillLineDistribution       = "distribution"
+	BillLineGreenEnergy        = "green_energy"
+	BillLinePower              = "power"
+	BillLineDemandOverrun      = "demand_overrun"
+	BillLineReactiveInductive  = "reactive_inductive"
+	BillLineReactiveCapacitive = "reactive_capacitive"
+	BillLineVat                = "vat"
+	BillLineGenerationCredit   = "generation_credit"
+	BillLineExtraPrefix        = "extra:"
+	BillLineTaxPrefix          = "tax:"
+)
+
+// BillLineCodes is every fixed line code; BillLineExtraPrefix and
+// BillLineTaxPrefix cover the dynamic extra:<name> and tax:<name> codes.
+var BillLineCodes = []string{
+	BillLineEnergy, BillLineEnergyLowTier, BillLineEnergyHighTier, BillLineEnergyT1, BillLineEnergyT2, BillLineEnergyT3,
+	BillLineDistribution, BillLineGreenEnergy, BillLinePower, BillLineDemandOverrun, BillLineReactiveInductive,
+	BillLineReactiveCapacitive, BillLineVat, BillLineGenerationCredit,
 }
 
 // BillLine is one printed line of a bill. Mirrors table `bill_lines`

@@ -116,37 +116,38 @@ import (
 // this map has but the scan does not find is STALE (renamed or removed
 // repository, forgotten cleanup). Both directions are asserted.
 var scopeIsoRegisteredRepositories = map[string]bool{
-	"NewCompanyRepository":        true,
-	"NewUserRepository":           true,
-	"NewSessionRepository":        true,
-	"NewAuditRepository":          true,
-	"NewBuildingRepository":       true,
-	"NewAnalyzerRepository":       true,
-	"NewPlantRepository":          true,
-	"NewReadingRepository":        true,
-	"NewCursorRepository":         true,
-	"NewAnomalyRepository":        true,
-	"NewProductionRepository":     true,
-	"NewAnalyticsRepository":      true,
-	"NewPriceRepository":          true,
-	"NewForecastRepository":       true,
-	"NewTariffRepository":         true,
-	"NewTariffTemplateRepository": true,
-	"NewSolarTariffRepository":    true,
-	"NewNationalTariffRepository": true,
-	"NewIcmalRepository":          true,
-	"NewBillRepository":           true,
-	"NewReportRepository":         true,
-	"NewAlarmRepository":          true,
-	"NewCarbonRepository":         true,
-	"NewISO50001Repository":       true,
-	"NewFileRepository":           true,
-	"NewIntegrationRepository":    true,
-	"NewSMTPRepository":           true,
-	"NewCalendarRepository":       true,
-	"NewOpsRepository":            true,
-	"NewGenerationRepository":     true,
-	"NewProviderSeriesRepository": true,
+	"NewCompanyRepository":          true,
+	"NewUserRepository":             true,
+	"NewSessionRepository":          true,
+	"NewAuditRepository":            true,
+	"NewBuildingRepository":         true,
+	"NewAnalyzerRepository":         true,
+	"NewPlantRepository":            true,
+	"NewReadingRepository":          true,
+	"NewCursorRepository":           true,
+	"NewAnomalyRepository":          true,
+	"NewProductionRepository":       true,
+	"NewAnalyticsRepository":        true,
+	"NewPriceRepository":            true,
+	"NewBillingParameterRepository": true,
+	"NewForecastRepository":         true,
+	"NewTariffRepository":           true,
+	"NewTariffTemplateRepository":   true,
+	"NewSolarTariffRepository":      true,
+	"NewNationalTariffRepository":   true,
+	"NewIcmalRepository":            true,
+	"NewBillRepository":             true,
+	"NewReportRepository":           true,
+	"NewAlarmRepository":            true,
+	"NewCarbonRepository":           true,
+	"NewISO50001Repository":         true,
+	"NewFileRepository":             true,
+	"NewIntegrationRepository":      true,
+	"NewSMTPRepository":             true,
+	"NewCalendarRepository":         true,
+	"NewOpsRepository":              true,
+	"NewGenerationRepository":       true,
+	"NewProviderSeriesRepository":   true,
 }
 
 // scopeIsoCtorPattern matches an exported repository constructor: New,
@@ -784,6 +785,10 @@ func seedScopeIsoFixtures(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	require.NoError(t, err)
 	_, err = tariffRepo.ReplaceManualYekdem(ctx, adminScope, f.tariffID, []model.TariffManualYekdem{
 		{Year: 2026, Month: 1, Value: scopeIsoDec("100.0000")},
+	})
+	require.NoError(t, err)
+	_, err = tariffRepo.ReplaceExtraCharges(ctx, adminScope, f.tariffID, []model.TariffExtraCharge{
+		{Name: "scope-iso-extra", Basis: model.ExtraChargeBasisFixedPerPeriod, Amount: scopeIsoDec("1.000")},
 	})
 	require.NoError(t, err)
 
@@ -1469,6 +1474,27 @@ func TestScopeIsolation(t *testing.T) {
 		require.True(t, yekA.FetchedAt.Equal(yekB.FetchedAt))
 	})
 
+	// --- BillingParameterRepository (platform-wide: Scope narrows nothing) ------
+	t.Run("BillingParameterRepository", func(t *testing.T) {
+		repo := postgres.NewBillingParameterRepository(pool)
+		_, err := repo.Effective(ctx, invalidScope, scopeIsoEpoch)
+		require.ErrorIs(t, err, store.ErrInvalidScope)
+		_, err = repo.List(ctx, invalidScope)
+		require.ErrorIs(t, err, store.ErrInvalidScope)
+
+		pA, err := repo.Effective(ctx, tenantA.Scope, scopeIsoEpoch)
+		require.NoError(t, err)
+		pB, err := repo.Effective(ctx, tenantB.Scope, scopeIsoEpoch)
+		require.NoError(t, err)
+		require.True(t, pA.EffectiveFrom.Equal(pB.EffectiveFrom), "a platform table must return the identical row under either tenant's Scope")
+		listA, err := repo.List(ctx, tenantA.Scope)
+		require.NoError(t, err)
+		listB, err := repo.List(ctx, tenantB.Scope)
+		require.NoError(t, err)
+		require.NotEmpty(t, listA)
+		require.Equal(t, len(listA), len(listB))
+	})
+
 	// --- ForecastRepository (building-scoped via analyzers) -----------------------
 	t.Run("ForecastRepository", func(t *testing.T) {
 		repo := postgres.NewForecastRepository(pool)
@@ -1532,6 +1558,9 @@ func TestScopeIsolation(t *testing.T) {
 		scopeIsoAssertGetNotFound(t,
 			func(s store.Scope) ([]model.TariffManualYekdem, error) { return repo.ManualYekdem(ctx, s, bf.tariffID) },
 			tenantA.AdminScope, tenantB.AdminScope, "TariffRepository.ManualYekdem cross-tenant")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) ([]model.TariffExtraCharge, error) { return repo.ExtraCharges(ctx, s, bf.tariffID) },
+			tenantA.AdminScope, tenantB.AdminScope, "TariffRepository.ExtraCharges cross-tenant")
 		// Important Finding 4: tenant B's company-wide tariff must be
 		// invisible even to tenant A's AdminScope — company_id, not the
 		// building branch, is what protects it here.
@@ -1557,6 +1586,9 @@ func TestScopeIsolation(t *testing.T) {
 		scopeIsoAssertGetNotFound(t,
 			func(s store.Scope) ([]model.TariffManualYekdem, error) { return repo.ManualYekdem(ctx, s, af.tariffID) },
 			tenantA.Scope, tenantA.AdminScope, "TariffRepository.ManualYekdem narrow-scope")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) ([]model.TariffExtraCharge, error) { return repo.ExtraCharges(ctx, s, af.tariffID) },
+			tenantA.Scope, tenantA.AdminScope, "TariffRepository.ExtraCharges narrow-scope")
 
 		// Important Finding 4 / HANDOFF ruling 7: a company-wide tariff
 		// (building_id nil) is visible only to AllBuildings; Effective still

@@ -52,6 +52,118 @@ func (q *Queries) AdminPlatformFactorOwnerForShare(ctx context.Context, id uuid.
 	return id, err
 }
 
+const adminUpsertBillingParameters = `-- name: AdminUpsertBillingParameters :one
+insert into billing_parameters (
+  effective_from, reactive_penalty_basis, reactive_exempt_below_kw, reactive_exempt_terms,
+  reactive_exempt_user_groups, reactive_generation_exempt_kwh, reactive_bands, tiering_groups,
+  tiering_mode, tiering_voltage_levels, tiering_supply_companies, ptf_missing_hour_tolerance,
+  demand_overrun_multiplier, money_rounding_mode
+) values (
+  $1, $2, $3,
+  $4::text[]::tariff_term[],
+  $5::text[]::distribution_user_group[],
+  $6, $7, $8,
+  $9, $10::text[]::voltage_level[],
+  $11::text[]::supply_company[],
+  $12, $13, $14
+)
+on conflict (effective_from) do update set
+  reactive_penalty_basis = excluded.reactive_penalty_basis,
+  reactive_exempt_below_kw = excluded.reactive_exempt_below_kw,
+  reactive_exempt_terms = excluded.reactive_exempt_terms,
+  reactive_exempt_user_groups = excluded.reactive_exempt_user_groups,
+  reactive_generation_exempt_kwh = excluded.reactive_generation_exempt_kwh,
+  reactive_bands = excluded.reactive_bands,
+  tiering_groups = excluded.tiering_groups,
+  tiering_mode = excluded.tiering_mode,
+  tiering_voltage_levels = excluded.tiering_voltage_levels,
+  tiering_supply_companies = excluded.tiering_supply_companies,
+  ptf_missing_hour_tolerance = excluded.ptf_missing_hour_tolerance,
+  demand_overrun_multiplier = excluded.demand_overrun_multiplier,
+  money_rounding_mode = excluded.money_rounding_mode
+returning effective_from, reactive_penalty_basis, reactive_exempt_below_kw,
+  reactive_exempt_terms::text[] as reactive_exempt_terms,
+  reactive_exempt_user_groups::text[] as reactive_exempt_user_groups,
+  reactive_generation_exempt_kwh, reactive_bands, tiering_groups, tiering_mode,
+  tiering_voltage_levels::text[] as tiering_voltage_levels,
+  tiering_supply_companies::text[] as tiering_supply_companies,
+  ptf_missing_hour_tolerance, demand_overrun_multiplier, money_rounding_mode, created_at
+`
+
+type AdminUpsertBillingParametersParams struct {
+	EffectiveFrom               pgtype.Date
+	ReactivePenaltyBasis        ReactivePenaltyBasis
+	ReactiveExemptBelowKw       pgtype.Numeric
+	ReactiveExemptTerms         []string
+	ReactiveExemptUserGroups    []string
+	ReactiveGenerationExemptKwh pgtype.Numeric
+	ReactiveBands               []byte
+	TieringGroups               []byte
+	TieringMode                 TieringMode
+	TieringVoltageLevels        []string
+	TieringSupplyCompanies      []string
+	PtfMissingHourTolerance     pgtype.Numeric
+	DemandOverrunMultiplier     pgtype.Numeric
+	MoneyRoundingMode           MoneyRoundingMode
+}
+
+type AdminUpsertBillingParametersRow struct {
+	EffectiveFrom               pgtype.Date
+	ReactivePenaltyBasis        ReactivePenaltyBasis
+	ReactiveExemptBelowKw       pgtype.Numeric
+	ReactiveExemptTerms         []string
+	ReactiveExemptUserGroups    []string
+	ReactiveGenerationExemptKwh pgtype.Numeric
+	ReactiveBands               []byte
+	TieringGroups               []byte
+	TieringMode                 TieringMode
+	TieringVoltageLevels        []string
+	TieringSupplyCompanies      []string
+	PtfMissingHourTolerance     pgtype.Numeric
+	DemandOverrunMultiplier     pgtype.Numeric
+	MoneyRoundingMode           MoneyRoundingMode
+	CreatedAt                   pgtype.Timestamptz
+}
+
+// billing_parameters is platform-wide and dated (R106); keyed on effective_from.
+func (q *Queries) AdminUpsertBillingParameters(ctx context.Context, arg AdminUpsertBillingParametersParams) (AdminUpsertBillingParametersRow, error) {
+	row := q.db.QueryRow(ctx, adminUpsertBillingParameters,
+		arg.EffectiveFrom,
+		arg.ReactivePenaltyBasis,
+		arg.ReactiveExemptBelowKw,
+		arg.ReactiveExemptTerms,
+		arg.ReactiveExemptUserGroups,
+		arg.ReactiveGenerationExemptKwh,
+		arg.ReactiveBands,
+		arg.TieringGroups,
+		arg.TieringMode,
+		arg.TieringVoltageLevels,
+		arg.TieringSupplyCompanies,
+		arg.PtfMissingHourTolerance,
+		arg.DemandOverrunMultiplier,
+		arg.MoneyRoundingMode,
+	)
+	var i AdminUpsertBillingParametersRow
+	err := row.Scan(
+		&i.EffectiveFrom,
+		&i.ReactivePenaltyBasis,
+		&i.ReactiveExemptBelowKw,
+		&i.ReactiveExemptTerms,
+		&i.ReactiveExemptUserGroups,
+		&i.ReactiveGenerationExemptKwh,
+		&i.ReactiveBands,
+		&i.TieringGroups,
+		&i.TieringMode,
+		&i.TieringVoltageLevels,
+		&i.TieringSupplyCompanies,
+		&i.PtfMissingHourTolerance,
+		&i.DemandOverrunMultiplier,
+		&i.MoneyRoundingMode,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const adminUpsertIntegrationDefinitions = `-- name: AdminUpsertIntegrationDefinitions :execrows
 insert into integration_definitions (id, provider, subtype, endpoints)
 select coalesce(nullif((elem->>'id')::uuid, '00000000-0000-0000-0000-000000000000'::uuid), gen_random_uuid()),

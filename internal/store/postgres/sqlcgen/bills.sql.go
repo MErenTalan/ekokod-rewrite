@@ -53,7 +53,8 @@ insert into bills (
   total_cost, inductive_ratio, capacitive_ratio, inductive_threshold, capacitive_threshold,
   reactive_penalty_applied, reactive_power_price, generation_usage, generation_price_per_kwh,
   ptf_yekdem_used, ptf_hours_matched, ptf_hours_missing, ptf_average, yekdem_used, status,
-  flag_reason, pdf_path, computed_at, created_at, updated_at
+  flag_reason, pdf_path, computed_at, created_at, updated_at,
+  currency, extra_charges_cost, demand_data_available, ptf_hours_expected, consumption_hours_missing
 )
 select
   gen_random_uuid(), $1, $2, $3,
@@ -72,85 +73,92 @@ select
   $44, $45, $46,
   $47, $48, $49,
   $50, $51, $52, $53,
-  $54, $55, $56, $56
+  $54, $55, $56, $56,
+  $57, $58, $59,
+  $60, $61
 where
   ($2::uuid is null or exists (
     select 1 from buildings b
     where b.id = $2 and b.company_id = $1 and b.deleted_at is null
-      and ($57::boolean or b.id = any($58::uuid[]))
+      and ($62::boolean or b.id = any($63::uuid[]))
   ))
   and ($9::uuid is null or exists (
     select 1 from tariffs t
     where t.id = $9 and t.company_id = $1 and t.deleted_at is null
-      and ($57::boolean or t.building_id is null or t.building_id = any($58::uuid[]))
+      and ($62::boolean or t.building_id is null or t.building_id = any($63::uuid[]))
   ))
   and ($3::uuid is null or exists (
     select 1 from analyzers an
     where an.id = $3 and an.company_id = $1 and an.deleted_at is null
-      and ($57::boolean or an.building_id = any($58::uuid[]))
+      and ($62::boolean or an.building_id = any($63::uuid[]))
   ))
-returning id, company_id, building_id, analyzer_id, scope, period_key, period_start, period_end, days_in_period, tariff_id, tariff_effective_from, active_import, t1_kwh, t2_kwh, t3_kwh, inductive_kvarh, capacitive_kvarh, active_export, net_consumption, low_tier_kwh, high_tier_kwh, max_demand_kw, tiered_applied, index_start, index_end, effective_energy_price, low_tier_price, high_tier_price, energy_cost, distribution_cost, green_energy_cost, power_cost, demand_overrun_cost, reactive_penalty, other_taxes_cost, vat_base, vat_cost, generation_credit, total_cost, inductive_ratio, capacitive_ratio, inductive_threshold, capacitive_threshold, reactive_penalty_applied, reactive_power_price, generation_usage, generation_price_per_kwh, ptf_yekdem_used, ptf_hours_matched, ptf_hours_missing, ptf_average, yekdem_used, status, flag_reason, pdf_path, computed_at, created_at, updated_at
+returning id, company_id, building_id, analyzer_id, scope, period_key, period_start, period_end, days_in_period, tariff_id, tariff_effective_from, active_import, t1_kwh, t2_kwh, t3_kwh, inductive_kvarh, capacitive_kvarh, active_export, net_consumption, low_tier_kwh, high_tier_kwh, max_demand_kw, tiered_applied, index_start, index_end, effective_energy_price, low_tier_price, high_tier_price, energy_cost, distribution_cost, green_energy_cost, power_cost, demand_overrun_cost, reactive_penalty, other_taxes_cost, vat_base, vat_cost, generation_credit, total_cost, inductive_ratio, capacitive_ratio, inductive_threshold, capacitive_threshold, reactive_penalty_applied, reactive_power_price, generation_usage, generation_price_per_kwh, ptf_yekdem_used, ptf_hours_matched, ptf_hours_missing, ptf_average, yekdem_used, status, flag_reason, pdf_path, computed_at, created_at, updated_at, currency, extra_charges_cost, demand_data_available, ptf_hours_expected, consumption_hours_missing
 `
 
 type BillCreateParams struct {
-	CompanyID              uuid.UUID
-	BuildingID             *uuid.UUID
-	AnalyzerID             *uuid.UUID
-	BillScope              BillScope
-	PeriodKey              string
-	PeriodStart            pgtype.Timestamptz
-	PeriodEnd              pgtype.Timestamptz
-	DaysInPeriod           int32
-	TariffID               *uuid.UUID
-	TariffEffectiveFrom    pgtype.Date
-	ActiveImport           pgtype.Numeric
-	T1Kwh                  pgtype.Numeric
-	T2Kwh                  pgtype.Numeric
-	T3Kwh                  pgtype.Numeric
-	InductiveKvarh         pgtype.Numeric
-	CapacitiveKvarh        pgtype.Numeric
-	ActiveExport           pgtype.Numeric
-	NetConsumption         pgtype.Numeric
-	LowTierKwh             pgtype.Numeric
-	HighTierKwh            pgtype.Numeric
-	MaxDemandKw            pgtype.Numeric
-	TieredApplied          bool
-	IndexStart             []byte
-	IndexEnd               []byte
-	EffectiveEnergyPrice   pgtype.Numeric
-	LowTierPrice           pgtype.Numeric
-	HighTierPrice          pgtype.Numeric
-	EnergyCost             pgtype.Numeric
-	DistributionCost       pgtype.Numeric
-	GreenEnergyCost        pgtype.Numeric
-	PowerCost              pgtype.Numeric
-	DemandOverrunCost      pgtype.Numeric
-	ReactivePenalty        pgtype.Numeric
-	OtherTaxesCost         pgtype.Numeric
-	VatBase                pgtype.Numeric
-	VatCost                pgtype.Numeric
-	GenerationCredit       pgtype.Numeric
-	TotalCost              pgtype.Numeric
-	InductiveRatio         pgtype.Numeric
-	CapacitiveRatio        pgtype.Numeric
-	InductiveThreshold     pgtype.Numeric
-	CapacitiveThreshold    pgtype.Numeric
-	ReactivePenaltyApplied bool
-	ReactivePowerPrice     pgtype.Numeric
-	GenerationUsage        GenerationUsage
-	GenerationPricePerKwh  pgtype.Numeric
-	PtfYekdemUsed          bool
-	PtfHoursMatched        *int32
-	PtfHoursMissing        *int32
-	PtfAverage             pgtype.Numeric
-	YekdemUsed             pgtype.Numeric
-	Status                 BillStatus
-	FlagReason             *string
-	PdfPath                *string
-	ComputedAt             pgtype.Timestamptz
-	CreatedAt              pgtype.Timestamptz
-	AllBuildings           bool
-	BuildingIds            []uuid.UUID
+	CompanyID               uuid.UUID
+	BuildingID              *uuid.UUID
+	AnalyzerID              *uuid.UUID
+	BillScope               BillScope
+	PeriodKey               string
+	PeriodStart             pgtype.Timestamptz
+	PeriodEnd               pgtype.Timestamptz
+	DaysInPeriod            int32
+	TariffID                *uuid.UUID
+	TariffEffectiveFrom     pgtype.Date
+	ActiveImport            pgtype.Numeric
+	T1Kwh                   pgtype.Numeric
+	T2Kwh                   pgtype.Numeric
+	T3Kwh                   pgtype.Numeric
+	InductiveKvarh          pgtype.Numeric
+	CapacitiveKvarh         pgtype.Numeric
+	ActiveExport            pgtype.Numeric
+	NetConsumption          pgtype.Numeric
+	LowTierKwh              pgtype.Numeric
+	HighTierKwh             pgtype.Numeric
+	MaxDemandKw             pgtype.Numeric
+	TieredApplied           bool
+	IndexStart              []byte
+	IndexEnd                []byte
+	EffectiveEnergyPrice    pgtype.Numeric
+	LowTierPrice            pgtype.Numeric
+	HighTierPrice           pgtype.Numeric
+	EnergyCost              pgtype.Numeric
+	DistributionCost        pgtype.Numeric
+	GreenEnergyCost         pgtype.Numeric
+	PowerCost               pgtype.Numeric
+	DemandOverrunCost       pgtype.Numeric
+	ReactivePenalty         pgtype.Numeric
+	OtherTaxesCost          pgtype.Numeric
+	VatBase                 pgtype.Numeric
+	VatCost                 pgtype.Numeric
+	GenerationCredit        pgtype.Numeric
+	TotalCost               pgtype.Numeric
+	InductiveRatio          pgtype.Numeric
+	CapacitiveRatio         pgtype.Numeric
+	InductiveThreshold      pgtype.Numeric
+	CapacitiveThreshold     pgtype.Numeric
+	ReactivePenaltyApplied  bool
+	ReactivePowerPrice      pgtype.Numeric
+	GenerationUsage         GenerationUsage
+	GenerationPricePerKwh   pgtype.Numeric
+	PtfYekdemUsed           bool
+	PtfHoursMatched         *int32
+	PtfHoursMissing         *int32
+	PtfAverage              pgtype.Numeric
+	YekdemUsed              pgtype.Numeric
+	Status                  BillStatus
+	FlagReason              *string
+	PdfPath                 *string
+	ComputedAt              pgtype.Timestamptz
+	CreatedAt               pgtype.Timestamptz
+	Currency                CurrencyCode
+	ExtraChargesCost        pgtype.Numeric
+	DemandDataAvailable     bool
+	PtfHoursExpected        *int32
+	ConsumptionHoursMissing *int32
+	AllBuildings            bool
+	BuildingIds             []uuid.UUID
 }
 
 // Critical Finding 1 (task-11a fix round 1): building_id is a stored foreign
@@ -229,6 +237,11 @@ func (q *Queries) BillCreate(ctx context.Context, arg BillCreateParams) (Bill, e
 		arg.PdfPath,
 		arg.ComputedAt,
 		arg.CreatedAt,
+		arg.Currency,
+		arg.ExtraChargesCost,
+		arg.DemandDataAvailable,
+		arg.PtfHoursExpected,
+		arg.ConsumptionHoursMissing,
 		arg.AllBuildings,
 		arg.BuildingIds,
 	)
@@ -292,12 +305,17 @@ func (q *Queries) BillCreate(ctx context.Context, arg BillCreateParams) (Bill, e
 		&i.ComputedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Currency,
+		&i.ExtraChargesCost,
+		&i.DemandDataAvailable,
+		&i.PtfHoursExpected,
+		&i.ConsumptionHoursMissing,
 	)
 	return i, err
 }
 
 const billCurrent = `-- name: BillCurrent :one
-select id, company_id, building_id, analyzer_id, scope, period_key, period_start, period_end, days_in_period, tariff_id, tariff_effective_from, active_import, t1_kwh, t2_kwh, t3_kwh, inductive_kvarh, capacitive_kvarh, active_export, net_consumption, low_tier_kwh, high_tier_kwh, max_demand_kw, tiered_applied, index_start, index_end, effective_energy_price, low_tier_price, high_tier_price, energy_cost, distribution_cost, green_energy_cost, power_cost, demand_overrun_cost, reactive_penalty, other_taxes_cost, vat_base, vat_cost, generation_credit, total_cost, inductive_ratio, capacitive_ratio, inductive_threshold, capacitive_threshold, reactive_penalty_applied, reactive_power_price, generation_usage, generation_price_per_kwh, ptf_yekdem_used, ptf_hours_matched, ptf_hours_missing, ptf_average, yekdem_used, status, flag_reason, pdf_path, computed_at, created_at, updated_at from bills
+select id, company_id, building_id, analyzer_id, scope, period_key, period_start, period_end, days_in_period, tariff_id, tariff_effective_from, active_import, t1_kwh, t2_kwh, t3_kwh, inductive_kvarh, capacitive_kvarh, active_export, net_consumption, low_tier_kwh, high_tier_kwh, max_demand_kw, tiered_applied, index_start, index_end, effective_energy_price, low_tier_price, high_tier_price, energy_cost, distribution_cost, green_energy_cost, power_cost, demand_overrun_cost, reactive_penalty, other_taxes_cost, vat_base, vat_cost, generation_credit, total_cost, inductive_ratio, capacitive_ratio, inductive_threshold, capacitive_threshold, reactive_penalty_applied, reactive_power_price, generation_usage, generation_price_per_kwh, ptf_yekdem_used, ptf_hours_matched, ptf_hours_missing, ptf_average, yekdem_used, status, flag_reason, pdf_path, computed_at, created_at, updated_at, currency, extra_charges_cost, demand_data_available, ptf_hours_expected, consumption_hours_missing from bills
 where bills.company_id = $1
   and ($2::boolean or bills.building_id = any($3::uuid[]))
   and bills.scope = $4
@@ -385,13 +403,18 @@ func (q *Queries) BillCurrent(ctx context.Context, arg BillCurrentParams) (Bill,
 		&i.ComputedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Currency,
+		&i.ExtraChargesCost,
+		&i.DemandDataAvailable,
+		&i.PtfHoursExpected,
+		&i.ConsumptionHoursMissing,
 	)
 	return i, err
 }
 
 const billGet = `-- name: BillGet :one
 
-select id, company_id, building_id, analyzer_id, scope, period_key, period_start, period_end, days_in_period, tariff_id, tariff_effective_from, active_import, t1_kwh, t2_kwh, t3_kwh, inductive_kvarh, capacitive_kvarh, active_export, net_consumption, low_tier_kwh, high_tier_kwh, max_demand_kw, tiered_applied, index_start, index_end, effective_energy_price, low_tier_price, high_tier_price, energy_cost, distribution_cost, green_energy_cost, power_cost, demand_overrun_cost, reactive_penalty, other_taxes_cost, vat_base, vat_cost, generation_credit, total_cost, inductive_ratio, capacitive_ratio, inductive_threshold, capacitive_threshold, reactive_penalty_applied, reactive_power_price, generation_usage, generation_price_per_kwh, ptf_yekdem_used, ptf_hours_matched, ptf_hours_missing, ptf_average, yekdem_used, status, flag_reason, pdf_path, computed_at, created_at, updated_at from bills
+select id, company_id, building_id, analyzer_id, scope, period_key, period_start, period_end, days_in_period, tariff_id, tariff_effective_from, active_import, t1_kwh, t2_kwh, t3_kwh, inductive_kvarh, capacitive_kvarh, active_export, net_consumption, low_tier_kwh, high_tier_kwh, max_demand_kw, tiered_applied, index_start, index_end, effective_energy_price, low_tier_price, high_tier_price, energy_cost, distribution_cost, green_energy_cost, power_cost, demand_overrun_cost, reactive_penalty, other_taxes_cost, vat_base, vat_cost, generation_credit, total_cost, inductive_ratio, capacitive_ratio, inductive_threshold, capacitive_threshold, reactive_penalty_applied, reactive_power_price, generation_usage, generation_price_per_kwh, ptf_yekdem_used, ptf_hours_matched, ptf_hours_missing, ptf_average, yekdem_used, status, flag_reason, pdf_path, computed_at, created_at, updated_at, currency, extra_charges_cost, demand_data_available, ptf_hours_expected, consumption_hours_missing from bills
 where bills.id = $1 and bills.company_id = $2
   and ($3::boolean or bills.building_id = any($4::uuid[]))
   and (bills.building_id is null or exists (select 1 from buildings b where b.id = bills.building_id and b.deleted_at is null))
@@ -475,6 +498,11 @@ func (q *Queries) BillGet(ctx context.Context, arg BillGetParams) (Bill, error) 
 		&i.ComputedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Currency,
+		&i.ExtraChargesCost,
+		&i.DemandDataAvailable,
+		&i.PtfHoursExpected,
+		&i.ConsumptionHoursMissing,
 	)
 	return i, err
 }
@@ -724,7 +752,7 @@ func (q *Queries) BillLineList(ctx context.Context, arg BillLineListParams) ([]B
 }
 
 const billList = `-- name: BillList :many
-select id, company_id, building_id, analyzer_id, scope, period_key, period_start, period_end, days_in_period, tariff_id, tariff_effective_from, active_import, t1_kwh, t2_kwh, t3_kwh, inductive_kvarh, capacitive_kvarh, active_export, net_consumption, low_tier_kwh, high_tier_kwh, max_demand_kw, tiered_applied, index_start, index_end, effective_energy_price, low_tier_price, high_tier_price, energy_cost, distribution_cost, green_energy_cost, power_cost, demand_overrun_cost, reactive_penalty, other_taxes_cost, vat_base, vat_cost, generation_credit, total_cost, inductive_ratio, capacitive_ratio, inductive_threshold, capacitive_threshold, reactive_penalty_applied, reactive_power_price, generation_usage, generation_price_per_kwh, ptf_yekdem_used, ptf_hours_matched, ptf_hours_missing, ptf_average, yekdem_used, status, flag_reason, pdf_path, computed_at, created_at, updated_at from bills
+select id, company_id, building_id, analyzer_id, scope, period_key, period_start, period_end, days_in_period, tariff_id, tariff_effective_from, active_import, t1_kwh, t2_kwh, t3_kwh, inductive_kvarh, capacitive_kvarh, active_export, net_consumption, low_tier_kwh, high_tier_kwh, max_demand_kw, tiered_applied, index_start, index_end, effective_energy_price, low_tier_price, high_tier_price, energy_cost, distribution_cost, green_energy_cost, power_cost, demand_overrun_cost, reactive_penalty, other_taxes_cost, vat_base, vat_cost, generation_credit, total_cost, inductive_ratio, capacitive_ratio, inductive_threshold, capacitive_threshold, reactive_penalty_applied, reactive_power_price, generation_usage, generation_price_per_kwh, ptf_yekdem_used, ptf_hours_matched, ptf_hours_missing, ptf_average, yekdem_used, status, flag_reason, pdf_path, computed_at, created_at, updated_at, currency, extra_charges_cost, demand_data_available, ptf_hours_expected, consumption_hours_missing from bills
 where bills.company_id = $1
   and ($2::boolean or bills.building_id = any($3::uuid[]))
   and (cardinality($4::uuid[]) = 0 or bills.id = any($4::uuid[]))
@@ -837,6 +865,11 @@ func (q *Queries) BillList(ctx context.Context, arg BillListParams) ([]Bill, err
 			&i.ComputedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Currency,
+			&i.ExtraChargesCost,
+			&i.DemandDataAvailable,
+			&i.PtfHoursExpected,
+			&i.ConsumptionHoursMissing,
 		); err != nil {
 			return nil, err
 		}
@@ -1008,7 +1041,7 @@ update bills set status = $1, flag_reason = $2, updated_at = $3
 where id = $4 and company_id = $5
   and ($6::boolean or building_id = any($7::uuid[]))
   and status <> 'superseded'
-returning id, company_id, building_id, analyzer_id, scope, period_key, period_start, period_end, days_in_period, tariff_id, tariff_effective_from, active_import, t1_kwh, t2_kwh, t3_kwh, inductive_kvarh, capacitive_kvarh, active_export, net_consumption, low_tier_kwh, high_tier_kwh, max_demand_kw, tiered_applied, index_start, index_end, effective_energy_price, low_tier_price, high_tier_price, energy_cost, distribution_cost, green_energy_cost, power_cost, demand_overrun_cost, reactive_penalty, other_taxes_cost, vat_base, vat_cost, generation_credit, total_cost, inductive_ratio, capacitive_ratio, inductive_threshold, capacitive_threshold, reactive_penalty_applied, reactive_power_price, generation_usage, generation_price_per_kwh, ptf_yekdem_used, ptf_hours_matched, ptf_hours_missing, ptf_average, yekdem_used, status, flag_reason, pdf_path, computed_at, created_at, updated_at
+returning id, company_id, building_id, analyzer_id, scope, period_key, period_start, period_end, days_in_period, tariff_id, tariff_effective_from, active_import, t1_kwh, t2_kwh, t3_kwh, inductive_kvarh, capacitive_kvarh, active_export, net_consumption, low_tier_kwh, high_tier_kwh, max_demand_kw, tiered_applied, index_start, index_end, effective_energy_price, low_tier_price, high_tier_price, energy_cost, distribution_cost, green_energy_cost, power_cost, demand_overrun_cost, reactive_penalty, other_taxes_cost, vat_base, vat_cost, generation_credit, total_cost, inductive_ratio, capacitive_ratio, inductive_threshold, capacitive_threshold, reactive_penalty_applied, reactive_power_price, generation_usage, generation_price_per_kwh, ptf_yekdem_used, ptf_hours_matched, ptf_hours_missing, ptf_average, yekdem_used, status, flag_reason, pdf_path, computed_at, created_at, updated_at, currency, extra_charges_cost, demand_data_available, ptf_hours_expected, consumption_hours_missing
 `
 
 type BillUpdateStatusParams struct {
@@ -1094,6 +1127,11 @@ func (q *Queries) BillUpdateStatus(ctx context.Context, arg BillUpdateStatusPara
 		&i.ComputedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Currency,
+		&i.ExtraChargesCost,
+		&i.DemandDataAvailable,
+		&i.PtfHoursExpected,
+		&i.ConsumptionHoursMissing,
 	)
 	return i, err
 }
