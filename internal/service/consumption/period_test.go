@@ -309,8 +309,11 @@ func TestBillingRowCarriesStartIndexesAndSpan(t *testing.T) {
 
 	monthly, err := b.Consumption(ctx, periodScope(), consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{id}, Level: energy.Monthly, Range: store.TimeRange{From: jan1, To: feb1}})
 	require.NoError(t, err)
-	period, err := b.PeriodConsumption(ctx, periodScope(), consumption.PeriodRequest{AnalyzerIDs: []uuid.UUID{id}, Windows: []energy.Window{win(jan1, feb1)}})
+	// UTC-located windows still come back as the Istanbul Monthly window.
+	period, err := b.PeriodConsumption(ctx, periodScope(), consumption.PeriodRequest{AnalyzerIDs: []uuid.UUID{id}, Windows: []energy.Window{win(jan1.UTC(), feb1.UTC())}})
 	require.NoError(t, err)
+	require.Len(t, period, 1)
+	require.Equal(t, monthly[0].Window, period[0].Window)
 
 	for name, rows := range map[string][]consumption.Row{"Consumption": monthly, "PeriodConsumption": period} {
 		require.Len(t, rows, 1, name)
@@ -448,7 +451,7 @@ func recordedAnomalies(a *fakeAnomalies) []string {
 // histories, cut-off-day-1 windows give exactly Monthly's rows and exactly
 // the anomalies ConsumptionAndRecord writes.
 func TestPeriodConsumptionCutoffOneMatchesMonthlyBruteForce(t *testing.T) {
-	const scenarios = 200
+	const scenarios = 1000
 	loc := istanbulLoc(t)
 	rng := rand.New(rand.NewPCG(20260917, 107))
 	ctx := context.Background()
