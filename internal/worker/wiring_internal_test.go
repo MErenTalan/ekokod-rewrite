@@ -6,13 +6,16 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/ingest/generation"
+	"github.com/MErenTalan/ekokod-rewrite/internal/job"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/crypto"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
@@ -189,4 +192,39 @@ func TestBuildGraphOpensNamedClosersForRedisAndJobClient(t *testing.T) {
 		names[i] = c.name
 	}
 	require.Equal(t, []string{"redis", "job-client"}, names)
+}
+
+// TestConsumptionRefreshEnqueuerAppliesConfiguredMaxRetry is the fix-round-1
+// I3 test (task-11b-review.md): it proves consumptionRefreshEnqueuer
+// actually threads its own maxRetry field into the asynq task it builds via
+// job.NewConsumptionRefreshTask's TaskOptions, rather than the adapter
+// silently dropping it with job.TaskOptions{} (which would leave every
+// consumption.refresh task at asynq's own zero-value default retry count).
+// Mirrors internal/job/consumption_integration_test.go's enqueue-then-
+// asynq.Inspector.GetTaskInfo pattern (also used by
+// wiring_integration_test.go's TestAuthFailureIsNotRetried) at the worker
+// adapter's own level, against a real Redis. MaxRetry is a non-default 7 so
+// a mutant hard-coding job.TaskOptions{} (retry 0, asynq's default 25, or
+// any other incidental value) cannot coincidentally match.
+func TestConsumptionRefreshEnqueuerAppliesConfiguredMaxRetry(t *testing.T) {
+	redisCfg := testfixtures.RedisConfig(t)
+	jobClient, err := job.NewClient(redisCfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = jobClient.Close() })
+
+	enq := consumptionRefreshEnqueuer{client: jobClient, maxRetry: 7}
+
+	from := time.Date(2026, 5, 1, 8, 0, 0, 0, time.UTC)
+	to := from.Add(time.Hour)
+	payload := job.ConsumptionRefreshPayload{CompanyID: uuid.New(), AnalyzerID: uuid.New(), From: from, To: to}
+	require.NoError(t, enq.EnqueueConsumptionRefresh(context.Background(), payload))
+
+	redisOpt, err := job.RedisOpt(redisCfg)
+	require.NoError(t, err)
+	insp := asynq.NewInspector(redisOpt)
+	defer func() { _ = insp.Close() }()
+
+	ti, err := insp.GetTaskInfo(job.QueueDefault, job.ConsumptionRefreshTaskID(from, to))
+	require.NoError(t, err)
+	require.Equal(t, 7, ti.MaxRetry, "the worker adapter must pass its configured MaxRetry through to the enqueued task, not job.TaskOptions{}")
 }
