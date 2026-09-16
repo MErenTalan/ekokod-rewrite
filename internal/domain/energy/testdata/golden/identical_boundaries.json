@@ -1,0 +1,28 @@
+{
+  "name": "identical_boundaries",
+  "doc": "R92(1): both bounds select the same reading (the only reading in the pool precedes both) — a zero-width pair measures nothing and never emits, whatever the kinds.",
+  "input": {
+    "window": {
+      "from": "2025-03-15T00:30:00+03:00",
+      "to": "2025-03-15T01:00:00+03:00"
+    },
+    "readings": [
+      {
+        "ts": "2025-03-15T00:00:00+03:00",
+        "kind": "load_profile",
+        "values": {
+          "active_import": "200"
+        }
+      }
+    ],
+    "resets": []
+  },
+  "want": {
+    "emitted": false,
+    "values": null,
+    "suspect": null,
+    "inductive_ratio": null,
+    "capacitive_ratio": null,
+    "max_demand_kw": null
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "missing_readings",
+  "doc": "02 §3.1: the start boundary has no reading at or before it (the only reading is strictly inside the window) — §3.1 says the period yields no row, so it is not emitted as a zero-consumption row.",
+  "input": {
+    "window": {
+      "from": "2025-03-15T00:00:00+03:00",
+      "to": "2025-03-15T01:00:00+03:00"
+    },
+    "readings": [
+      {
+        "ts": "2025-03-15T00:30:00+03:00",
+        "kind": "load_profile",
+        "values": {
+          "active_import": "100"
+        }
+      }
+    ],
+    "resets": []
+  },
+  "want": {
+    "emitted": false,
+    "values": null,
+    "suspect": null,
+    "inductive_ratio": null,
+    "capacitive_ratio": null,
+    "max_demand_kw": null
+  }
+}
