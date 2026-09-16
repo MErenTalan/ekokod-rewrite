@@ -80,6 +80,17 @@ var domainAllowedImports = map[string]bool{
 	"time":          true,
 	"unicode":       true,
 	"unicode/utf8":  true,
+	// time/tzdata is a blank import: it embeds the IANA zone database into
+	// the binary and registers it with the "time" package's own lookup, so
+	// time.LoadLocation("Europe/Istanbul") resolves even in a scratch
+	// container with no system tzdata installed. It performs no I/O itself —
+	// it exists precisely so a LATER call to time.LoadLocation does not need
+	// to read a file — and adds no callable API of its own. F3 Task 1's
+	// internal/domain/energy/period.go is the first domain package to need
+	// it, for 02 §1's rule that DST-era Istanbul buckets go through the tz
+	// database, never a fixed offset. This entry (and .golangci.yml's
+	// matching domain-is-pure allow entry) is Task 1's own addition.
+	"time/tzdata": true,
 
 	// third-party: exactly what the domain layer is built on.
 	"github.com/google/uuid":        true,
@@ -158,12 +169,25 @@ func TestOnlyTheCLIImportsTheAPIPackage(t *testing.T) {
 // codebase requires to stay free of the HTTP layer (06 §1 rule 2: adapters
 // are pure clients, and an import of internal/api would let one reach for
 // an HTTP request/response type instead of its own).
+//
+// F3 Task 1 widens it again (I-4, plan-fix R76): its name has also always
+// claimed "Service", but until now nothing here checked it — the direction
+// lived, duplicated, in TestServiceLayerImportBoundaries instead, where a
+// store/integration -> service violation left THIS test green despite its
+// name promising to cover it (a mutation making internal/store import
+// internal/service proved exactly that: this test stayed green). The two
+// directions of the api/service/store layering now live where their names
+// say they do: this test owns store/integration -> api and store/
+// integration -> service; TestServiceLayerImportBoundaries owns
+// service -> api and service -> ingest.
 func TestStoreAndIntegrationDoNotImportAPIOrService(t *testing.T) {
 	for _, pattern := range []string{"./internal/store/...", "./internal/integration/..."} {
 		for _, pkg := range loadPackages(t, pattern) {
 			for imported := range pkg.Imports {
 				require.False(t, underPackage(imported, modulePath+"/internal/api"),
 					"%s must not import the HTTP layer", pkg.PkgPath)
+				require.False(t, underPackage(imported, modulePath+"/internal/service"),
+					"%s imports %s: internal/store and internal/integration sit below internal/service and must not import it", pkg.PkgPath, imported)
 			}
 		}
 	}
@@ -695,6 +719,44 @@ func TestEveryStoreMethodIsScoped(t *testing.T) {
 		inspected, storeScopeGuardMinInspected)
 }
 
+// f3guardServiceForbidden are the packages TestServiceLayerImportBoundaries
+// forbids internal/service/... from importing, transitively: internal/api
+// (services are called BY the HTTP layer, never the other way — the same
+// rule TestOnlyTheCLIImportsTheAPIPackage enforces for everything else) and
+// internal/ingest (ingestion is F2's own pipeline; a service reaching into
+// it would be the service layer doing ingestion's job instead of the
+// reverse, which is what F3's plan actually wires: internal/ingest enqueues
+// consumption.refresh, service handles it).
+var f3guardServiceForbidden = []string{
+	modulePath + "/internal/api",
+	modulePath + "/internal/ingest",
+}
+
+// TestServiceLayerImportBoundaries enforces 03 §2.1, §2.2's
+// "api ──▶ service ──▶ domain" layering for the internal/service tree F3
+// Task 1 introduces (R76): internal/service/... may not import
+// internal/api/... or internal/ingest/... — TRANSITIVELY, not just
+// directly (I-5): a service file importing internal/worker, which itself
+// imports internal/ingest, is exactly as much a violation as importing
+// internal/ingest by name, the same reasoning TestAdaptersDoNotImportTheStore
+// applies one layer down. A direct-imports-only version of this check
+// stayed green against exactly that mutation.
+//
+// The reverse direction — internal/store/... and internal/integration/...
+// must not import internal/service/... — lives in
+// TestStoreAndIntegrationDoNotImportAPIOrService (I-4, plan-fix R76), whose
+// name has always promised to cover it.
+func TestServiceLayerImportBoundaries(t *testing.T) {
+	pkgs := f2guardLoadPackagesWithDeps(t, "./internal/service/...")
+	require.NotEmpty(t, pkgs, "the guard walked zero packages: it would pass whatever the code said")
+	for _, pkg := range pkgs {
+		if chain := f2guardTransitiveOffender(pkg, f3guardServiceForbidden, map[string]bool{pkg.PkgPath: true}); chain != nil {
+			t.Errorf("%s transitively imports a forbidden package via %s: internal/service must not import the HTTP layer or internal/ingest, directly or transitively",
+				pkg.PkgPath, strings.Join(chain, " -> "))
+		}
+	}
+}
+
 // TestTheJobPackageDoesNotImportTheStore pins the layering that
 // internal/platform/secret's existence depends on: scrubParseErr lived in
 // both internal/job and internal/store/redis as identical copies precisely
@@ -723,16 +785,26 @@ func TestTheJobPackageDoesNotImportTheStore(t *testing.T) {
 // internal/domain/billing package passed while .golangci.yml claimed the two
 // halves covered the same trees.
 //
-// .golangci.yml's no-float-money depguard rule lists exactly these six trees
-// (**/internal/domain/**, **/internal/store/**, **/internal/integration/**,
-// **/internal/ingest/**, **/internal/marketdata/** and
-// **/internal/credentials/**). Change both or neither.
+// .golangci.yml's no-float-money depguard rule lists exactly these seven
+// trees (**/internal/domain/**, **/internal/store/**,
+// **/internal/integration/**, **/internal/ingest/**,
+// **/internal/marketdata/**, **/internal/credentials/** and
+// **/internal/service/**). Change both or neither.
 //
 // The four F2 trees were added once internal/integration/doc.go and the
 // three placeholder doc.go files existed to give each pattern something
 // non-empty to match — loadTypedPackages requires a non-empty match, so a
 // pattern added before its package exists would fail the guard for the
 // wrong reason (a broken load, not a real violation).
+//
+// ./internal/service/... was added by F3 Task 1 (R76): the new service
+// layer introduced by this phase computes and holds the same energy and
+// money values internal/domain does, one layer up, so a float there is
+// exactly as much a wrong invoice as a float in internal/domain/energy
+// itself. internal/service/doc.go exists, ahead of any real service
+// package, for the same non-empty-match reason the F2 trees needed their
+// placeholder doc.go files. .golangci.yml's no-float-money depguard rule
+// gains the matching tree. Change both or neither.
 var floatGuardPatterns = []string{
 	"./internal/domain/...",
 	"./internal/store/...",
@@ -740,6 +812,7 @@ var floatGuardPatterns = []string{
 	"./internal/ingest/...",
 	"./internal/marketdata/...",
 	"./internal/credentials/...",
+	"./internal/service/...",
 }
 
 // floatCarrierPackages are the FOREIGN packages whose struct types the float
@@ -1148,15 +1221,22 @@ func f2guardCheckFmtScanFloatArgs(t *testing.T, pkg *packages.Package, args []as
 // field: strconv.ParseFloat, and decoding JSON into a target whose type is,
 // or contains, float32/float64 or an untyped interface (which lets
 // encoding/json decode a JSON number as float64 with no static type ever
-// spelling "float"). It walks every non-test file of the four F2 trees that
-// carry provider numbers: internal/integration, internal/ingest,
-// internal/marketdata and internal/credentials.
+// spelling "float"). It walks every non-test file of five trees: the four
+// F2 trees that carry provider numbers — internal/integration,
+// internal/ingest, internal/marketdata and internal/credentials — plus
+// internal/service (F3 Task 1, R76): the service layer decodes nothing from
+// a wire format
+// itself, but it is exactly as much a route for a stray ParseFloat or a
+// float-shaped decode target as the domain layer it sits above, and this
+// guard's other half (floatGuardPatterns) already covers it for the
+// struct-field case.
 func TestIntegrationTreesDoNotParseFloats(t *testing.T) {
 	patterns := []string{
 		"./internal/integration/...",
 		"./internal/ingest/...",
 		"./internal/marketdata/...",
 		"./internal/credentials/...",
+		"./internal/service/...",
 	}
 
 	filesInspected := 0
@@ -1236,7 +1316,7 @@ func TestIntegrationTreesDoNotParseFloats(t *testing.T) {
 	}
 
 	require.Positive(t, filesInspected,
-		"the guard walked zero non-test files across the F2 trees: it would pass whatever the code said")
+		"the guard walked zero non-test files across these trees: it would pass whatever the code said")
 }
 
 // f2guardTLSDangerousFields are the crypto/tls.Config fields that, set in a

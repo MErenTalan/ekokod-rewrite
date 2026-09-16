@@ -688,6 +688,36 @@ type AnalyticsRepository interface {
 	ProductionMonthly(ctx context.Context, s Scope, plantIDs []uuid.UUID, r TimeRange) ([]model.PlantProductionBucket, error)
 }
 
+// AggregateView names one continuous aggregate built by migration 00005. It
+// is a closed set: a caller can never pass an arbitrary view name, so the
+// refresh statement AdminAggregateRepository issues is never assembled from
+// caller input (R72).
+type AggregateView string
+
+// The four consumption aggregates migration 00005 built. plant_production_*
+// is out of scope for F3's refresh seam (R71/R72/R73 name only the
+// consumption path F2's ingestion pipeline backfills).
+const (
+	ViewConsumptionHourly  AggregateView = "consumption_hourly"
+	ViewConsumptionDaily   AggregateView = "consumption_daily"
+	ViewConsumptionMonthly AggregateView = "consumption_monthly"
+	ViewConsumptionYearly  AggregateView = "consumption_yearly"
+)
+
+// ConsumptionViews returns the four consumption aggregates, finest first. A
+// refresh walks them in this order so that a coarser view is never expected
+// to reflect a finer one that has not been refreshed yet (R71) — even though,
+// per migration 00005's operator note, each view is in fact defined directly
+// over meter_readings and refreshing one never depends on another having run.
+func ConsumptionViews() []AggregateView {
+	return []AggregateView{
+		ViewConsumptionHourly,
+		ViewConsumptionDaily,
+		ViewConsumptionMonthly,
+		ViewConsumptionYearly,
+	}
+}
+
 // PriceRepository is a tenant's READ access to the market price series and the
 // YEKDEM table.
 //
@@ -1477,7 +1507,7 @@ type ProviderSeriesRepository interface {
 // The interfaces are grouped by the task that implements them, one interface
 // per group, so that parallel work never edits the same declaration. Keep each
 // group in its own file under internal/store/postgres/admin (auth.go, audit.go,
-// marketdata.go, catalogue.go, journal.go).
+// marketdata.go, catalogue.go, journal.go, ingestion.go, aggregates.go).
 //
 // THE LIST IS CLOSED. A method is added here only when its caller cannot hold
 // a Scope, never because holding one is inconvenient; every method added is a
@@ -1627,4 +1657,22 @@ type AdminIngestionRepository interface {
 	// (secret_enc, extra_enc) is selected — model.CredentialRef has no field
 	// to carry one.
 	ActiveCredentials(ctx context.Context) ([]model.CredentialRef, error)
+}
+
+// AdminAggregateRepository refreshes continuous aggregates. Implemented by
+// Task 6.
+//
+// This is platform work, not tenant work: refresh_continuous_aggregate takes
+// a time range and nothing else, so the call necessarily covers every
+// tenant's buckets in that range. A Scope parameter would be a lie, so this
+// lives here rather than on AnalyticsRepository (R72).
+type AdminAggregateRepository interface {
+	// Refresh materialises [r.From, r.To) of view. view is validated against
+	// the closed AggregateView set and r against Valid, both BEFORE any
+	// database round trip: an unknown view returns ErrUnknownView, an invalid
+	// r returns ErrInvalidRange.
+	//
+	// It must not run inside a transaction: refresh_continuous_aggregate
+	// commits its own work (SQLSTATE 25001 otherwise).
+	Refresh(ctx context.Context, view AggregateView, r TimeRange) error
 }

@@ -27,4 +27,11 @@ var (
 	// query over a hypertable is a bug (04-data-model.md §14), and a
 	// forgotten assignment must not be the way to write one.
 	ErrInvalidRange = errors.New("invalid time range")
+
+	// ErrUnknownView is returned by AdminAggregateRepository.Refresh when
+	// handed an AggregateView outside the closed set the type declares. It is
+	// returned before any database round trip: the view name is never
+	// string-formatted into the refresh statement, so an unknown name must
+	// never reach it.
+	ErrUnknownView = errors.New("unknown aggregate view")
 )
