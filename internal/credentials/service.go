@@ -116,6 +116,9 @@ func releaseLease(ctx context.Context, lease lock.Lease) {
 // mis-typed ErrInvalidState or ErrNotFound.
 var errNotIsolar = errors.New("credentials: not an isolar credential")
 
+// ErrNotIsolar lets callers tell a non-iSolar credential apart (F6a).
+var ErrNotIsolar = errNotIsolar
+
 // isolarRefreshWindow is 06 §6 step 4's "refreshes when expiring within
 // 5 min".
 const isolarRefreshWindow = 5 * time.Minute

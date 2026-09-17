@@ -312,3 +312,56 @@ func (r *CatalogueRepository) UpsertBillingParameters(ctx context.Context, p mod
 	}
 	return pgbilling.Decode(pgbilling.Row(row))
 }
+
+func definitionFromRow(row sqlcgen.IntegrationDefinition) model.IntegrationDefinition {
+	return model.IntegrationDefinition{
+		ID: row.ID, Provider: model.IntegrationProvider(row.Provider), Subtype: row.Subtype,
+		Endpoints: json.RawMessage(row.Endpoints), CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time,
+	}
+}
+
+// CreateIntegrationDefinition inserts one provider/subtype; a duplicate is ErrConflict.
+func (r *CatalogueRepository) CreateIntegrationDefinition(ctx context.Context, d model.IntegrationDefinition) (model.IntegrationDefinition, error) {
+	id := d.ID
+	if id == uuid.Nil {
+		id = uuid.New()
+	}
+	row, err := r.q.AdminIntegrationDefinitionCreate(ctx, sqlcgen.AdminIntegrationDefinitionCreateParams{
+		ID: id, Provider: sqlcgen.IntegrationProvider(d.Provider), Subtype: d.Subtype, Endpoints: d.Endpoints,
+	})
+	if err != nil {
+		return model.IntegrationDefinition{}, pgerr.Translate(r.pool, "admin create integration definition", err)
+	}
+	return definitionFromRow(row), nil
+}
+
+// UpdateIntegrationDefinition replaces a definition's subtype and endpoints.
+func (r *CatalogueRepository) UpdateIntegrationDefinition(ctx context.Context, d model.IntegrationDefinition) (model.IntegrationDefinition, error) {
+	row, err := r.q.AdminIntegrationDefinitionUpdate(ctx, sqlcgen.AdminIntegrationDefinitionUpdateParams{
+		ID: d.ID, Subtype: d.Subtype, Endpoints: d.Endpoints,
+	})
+	if err != nil {
+		return model.IntegrationDefinition{}, pgerr.Translate(r.pool, "admin update integration definition", err)
+	}
+	return definitionFromRow(row), nil
+}
+
+// DeleteIntegrationDefinition removes an unreferenced definition: missing is
+// ErrNotFound, still referenced by a credential is ErrConflict.
+func (r *CatalogueRepository) DeleteIntegrationDefinition(ctx context.Context, id uuid.UUID) error {
+	n, err := r.q.AdminIntegrationDefinitionDeleteUnused(ctx, id)
+	if err != nil {
+		return pgerr.Translate(r.pool, "admin delete integration definition", err)
+	}
+	if n > 0 {
+		return nil
+	}
+	exists, err := r.q.AdminIntegrationDefinitionExists(ctx, id)
+	if err != nil {
+		return pgerr.Translate(r.pool, "admin check integration definition", err)
+	}
+	if exists {
+		return store.ErrConflict
+	}
+	return store.ErrNotFound
+}

@@ -17,6 +17,14 @@ import (
 	v1 "github.com/MErenTalan/ekokod-rewrite/internal/api/v1"
 	"github.com/MErenTalan/ekokod-rewrite/internal/api/v1/mw"
 	"github.com/MErenTalan/ekokod-rewrite/internal/auth"
+	"github.com/MErenTalan/ekokod-rewrite/internal/credentials"
+	"github.com/MErenTalan/ekokod-rewrite/internal/integration"
+	"github.com/MErenTalan/ekokod-rewrite/internal/integration/aril"
+	"github.com/MErenTalan/ekokod-rewrite/internal/integration/gridbox"
+	"github.com/MErenTalan/ekokod-rewrite/internal/integration/httpx"
+	"github.com/MErenTalan/ekokod-rewrite/internal/integration/isolar"
+	"github.com/MErenTalan/ekokod-rewrite/internal/integration/osos"
+	"github.com/MErenTalan/ekokod-rewrite/internal/integration/pm5340"
 	"github.com/MErenTalan/ekokod-rewrite/internal/job"
 	"github.com/MErenTalan/ekokod-rewrite/internal/mail"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
@@ -27,13 +35,16 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/assets"
 	authsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/auth"
 	billingsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/billing"
+	"github.com/MErenTalan/ekokod-rewrite/internal/service/calendar"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/consumption"
+	"github.com/MErenTalan/ekokod-rewrite/internal/service/integrations"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/loadprofile"
 	tariffsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/tariff"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/tenancy"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/admin"
 	platformredis "github.com/MErenTalan/ekokod-rewrite/internal/store/redis"
+	"github.com/MErenTalan/ekokod-rewrite/internal/worker"
 )
 
 // Options are test seams; production passes none.
@@ -46,6 +57,9 @@ type Options struct {
 	Async func(func())
 	// Enqueuer replaces the asynq client.
 	Enqueuer Enqueuer
+	// Verifiers and ISolar replace the provider clients the credential service drives.
+	Verifiers credentials.VerifierResolver
+	ISolar    credentials.ISolarTokens
 }
 
 // Enqueuer is the job client the services enqueue through.
@@ -171,8 +185,21 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 			Buildings: postgres.NewBuildingRepository(pool), Analyzers: postgres.NewAnalyzerRepository(pool), Root: cfg.Storage.Root},
 	}
 
+	calendarService, err := calendar.New(postgres.NewCalendarRepository(pool), opts.Clock)
+	if err != nil {
+		closeAll()
+		return Built{}, err
+	}
+	credentialService, err := buildCredentials(cfg, pool, cipher, redisClient, enqueuer, opts)
+	if err != nil {
+		closeAll()
+		return Built{}, err
+	}
+
 	clientIP := middleware.ClientIP(cfg.HTTP.TrustedProxies)
-	handlers := &v1.Handlers{Auth: authService, Tenancy: tenancyService, Assets: assetService, Analysis: analysisService,
+	handlers := &v1.Handlers{
+		Calendar: calendarService, Credentials: credentialService,
+		Definitions: integrations.Definitions{Integrations: postgres.NewIntegrationRepository(pool, cipher), Catalogue: admin.NewCatalogueRepository(pool)}, Auth: authService, Tenancy: tenancyService, Assets: assetService, Analysis: analysisService,
 		Tariffs: tariffService, Billing: billingService, BillRequests: billRequests, Clock: opts.Clock, Log: log, ClientIP: clientIP}
 	router := v1.NewRouter(handlers, middlewareFor(cfg, redisClient, authService, auditRepo, admin.NewAuditRepository(pool), clientIP, opts.RedisPrefix, log), log)
 	var once sync.Once
@@ -223,3 +250,51 @@ var istanbul = func() *time.Location {
 	}
 	return loc
 }()
+
+// providerVerifiers mirrors the worker's resolver: meter adapters from the
+// registry, iSolar from its own client.
+type providerVerifiers struct {
+	registry *integration.Registry
+	isolar   *isolar.Client
+}
+
+func (v providerVerifiers) Verifier(p integration.Provider) (credentials.Verifier, error) {
+	if p == integration.ProviderISolar {
+		return v.isolar, nil
+	}
+	return v.registry.Source(p)
+}
+
+func buildCredentials(cfg *config.Config, pool *pgxpool.Pool, cipher *crypto.Cipher, rc *goredis.Client, enq Enqueuer, opts Options) (*credentials.Service, error) {
+	redisLock := lock.NewRedis(rc)
+	verifiers, isolarTokens := opts.Verifiers, opts.ISolar
+	if verifiers == nil || isolarTokens == nil {
+		httpxPool, err := httpx.NewPool(httpx.PoolOptions{PinnedCerts: cfg.External.PinnedCerts, Locker: redisLock})
+		if err != nil {
+			return nil, fmt.Errorf("apiwire: build httpx pool: %w", err)
+		}
+		registry, err := integration.NewRegistry(
+			osos.New(httpxPool, osos.Options{}), gridbox.New(httpxPool, gridbox.Options{}),
+			aril.New(httpxPool, aril.Options{}), pm5340.New(httpxPool, pm5340.Options{}),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("apiwire: build provider registry: %w", err)
+		}
+		client := isolar.New(httpxPool, isolar.Options{})
+		if verifiers == nil {
+			verifiers = providerVerifiers{registry: registry, isolar: client}
+		}
+		if isolarTokens == nil {
+			isolarTokens = client
+		}
+	}
+	svc, err := credentials.New(credentials.Deps{
+		Integrations: postgres.NewIntegrationRepository(pool, cipher), Analyzers: postgres.NewAnalyzerRepository(pool),
+		Verifiers: verifiers, ISolar: isolarTokens, Enqueuer: enq, Locker: redisLock, Nonces: redisLock, Clock: opts.Clock,
+		StateKey: worker.StateKey(cfg.Security.JWTSigningKey), RedirectURI: worker.RedirectURI(cfg), MaxRetry: cfg.Worker.MaxRetries,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("apiwire: build credential service: %w", err)
+	}
+	return svc, nil
+}

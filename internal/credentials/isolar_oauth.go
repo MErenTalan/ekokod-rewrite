@@ -17,29 +17,37 @@ import (
 // §6 step 1), with an R22 HMAC-signed state naming (sc.CompanyID, id,
 // expiry, a fresh nonce) appended to the redirect URI as ?state=....
 func (s *Service) ISolarAuthorizeURL(ctx context.Context, sc store.Scope, id uuid.UUID) (string, error) {
+	u, _, err := s.ISolarAuthorize(ctx, sc, id)
+	return u, err
+}
+
+// ISolarAuthorize is ISolarAuthorizeURL that also returns the signed state, so
+// the HTTP layer can bind it to the browser that started the flow (F6a R187).
+func (s *Service) ISolarAuthorize(ctx context.Context, sc store.Scope, id uuid.UUID) (authURL, state string, err error) {
 	if !sc.Valid() {
-		return "", store.ErrInvalidScope
+		return "", "", store.ErrInvalidScope
 	}
 	cred, def, err := s.getCredential(ctx, sc, id)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	if def.Provider != model.IntegrationProviderISolar {
-		return "", errNotIsolar
+		return "", "", errNotIsolar
 	}
 
 	creds, err := s.buildCredentials(ctx, sc, cred, def)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
-	state, err := signState(s.deps.StateKey, sc.CompanyID, id, s.deps.Clock.Now())
+	state, err = signState(s.deps.StateKey, sc.CompanyID, id, s.deps.Clock.Now())
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	redirect := s.deps.RedirectURI + "?state=" + url.QueryEscape(state)
 
-	return s.deps.ISolar.AuthorizeURL(creds, redirect)
+	authURL, err = s.deps.ISolar.AuthorizeURL(creds, redirect)
+	return authURL, state, err
 }
 
 // ISolarCallback completes 06 §6's authorisation flow (step 3): verify the
