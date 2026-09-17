@@ -10336,10 +10336,7 @@
             "items": {
               "$ref": "#/components/schemas/Contact"
             },
-            "type": [
-              "null",
-              "array"
-            ]
+            "type": "array"
           },
           "floors": {
             "type": [
@@ -10502,10 +10499,7 @@
             "items": {
               "$ref": "#/components/schemas/Contact"
             },
-            "type": [
-              "null",
-              "array"
-            ]
+            "type": "array"
           },
           "floors": {
             "type": [
@@ -11703,10 +11697,7 @@
           "tr",
           "en"
         ],
-        "type": [
-          "null",
-          "string"
-        ]
+        "type": "string"
       },
       "LoginRequest": {
         "properties": {
@@ -12000,10 +11991,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "null",
-              "array"
-            ]
+            "type": "array"
           },
           "installation_date": {
             "$ref": "#/components/schemas/Date"
@@ -12024,10 +12012,7 @@
             "items": {
               "$ref": "#/components/schemas/Decimal"
             },
-            "type": [
-              "null",
-              "array"
-            ]
+            "type": "array"
           },
           "name": {
             "type": "string"
@@ -12293,10 +12278,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "null",
-              "array"
-            ]
+            "type": "array"
           },
           "installation_date": {
             "$ref": "#/components/schemas/Date"
@@ -12317,10 +12299,7 @@
             "items": {
               "$ref": "#/components/schemas/Decimal"
             },
-            "type": [
-              "null",
-              "array"
-            ]
+            "type": "array"
           },
           "name": {
             "type": [
@@ -12608,10 +12587,7 @@
           "building_readonly_admin",
           "demo"
         ],
-        "type": [
-          "null",
-          "string"
-        ]
+        "type": "string"
       },
       "SMTPPutRequest": {
         "properties": {
