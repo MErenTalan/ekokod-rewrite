@@ -5,6 +5,510 @@
     "version": "1"
   },
   "paths": {
+    "/api/v1/analyzers": {
+      "get": {
+        "tags": [
+          "analyzers"
+        ],
+        "summary": "Analyzers in scope.",
+        "operationId": "analyzers.list",
+        "parameters": [
+          {
+            "name": "building_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "unassigned",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "name": "is_active",
+            "in": "query",
+            "schema": {
+              "type": [
+                "null",
+                "boolean"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "maximum": 500,
+              "minimum": 1,
+              "type": [
+                "null",
+                "integer"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GithubComMErenTalanEkokodRewriteInternalApiV1DtoAnalyzerPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/analyzers/{id}": {
+      "get": {
+        "tags": [
+          "analyzers"
+        ],
+        "summary": "One analyzer.",
+        "operationId": "analyzers.get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Analyzer"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "analyzers"
+        ],
+        "summary": "Update an analyzer's building, multiplier, installed power or coordinates.",
+        "operationId": "analyzers.update",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalyzerUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Analyzer"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/analyzers/{id}/refresh": {
+      "post": {
+        "tags": [
+          "analyzers"
+        ],
+        "summary": "Enqueue an on-demand pull of hourly or energy values.",
+        "operationId": "analyzers.refresh",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalyzerRefreshRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobAccepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/v1/auth/change-password": {
       "post": {
         "tags": [
@@ -771,6 +1275,595 @@
           },
           "401": {
             "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/buildings": {
+      "get": {
+        "tags": [
+          "buildings"
+        ],
+        "summary": "Buildings in scope; include=analyzer_count,active_status.",
+        "operationId": "buildings.list",
+        "parameters": [
+          {
+            "name": "include",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "analyzer_count",
+                "active_status"
+              ],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sector",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "maximum": 500,
+              "minimum": 1,
+              "type": [
+                "null",
+                "integer"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GithubComMErenTalanEkokodRewriteInternalApiV1DtoBuildingPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "buildings"
+        ],
+        "summary": "Create a building.",
+        "operationId": "buildings.create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BuildingCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildingDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/buildings/{id}": {
+      "get": {
+        "tags": [
+          "buildings"
+        ],
+        "summary": "A building with contacts and tariff history.",
+        "operationId": "buildings.get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildingDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "buildings"
+        ],
+        "summary": "Soft-delete a building with no analyzers.",
+        "operationId": "buildings.delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "buildings"
+        ],
+        "summary": "Update a building.",
+        "operationId": "buildings.update",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BuildingUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildingDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -1686,6 +2779,567 @@
             }
           }
         }
+      }
+    },
+    "/api/v1/power-plants": {
+      "get": {
+        "tags": [
+          "power-plants"
+        ],
+        "summary": "Power plants of the company in scope.",
+        "operationId": "plants.list",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "maximum": 500,
+              "minimum": 1,
+              "type": [
+                "null",
+                "integer"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GithubComMErenTalanEkokodRewriteInternalApiV1DtoPlantPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "power-plants"
+        ],
+        "summary": "Create a power plant.",
+        "operationId": "plants.create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlantCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlantDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/power-plants/{id}": {
+      "get": {
+        "tags": [
+          "power-plants"
+        ],
+        "summary": "A power plant with devices, monthly targets and alarm recipients.",
+        "operationId": "plants.get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlantDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "power-plants"
+        ],
+        "summary": "Soft-delete a power plant.",
+        "operationId": "plants.delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "power-plants"
+        ],
+        "summary": "Update a power plant.",
+        "operationId": "plants.update",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlantUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlantDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
       }
     },
     "/api/v1/profile": {
@@ -2693,6 +4347,113 @@
   },
   "components": {
     "schemas": {
+      "Analyzer": {
+        "properties": {
+          "activity_status": {
+            "enum": [
+              "active",
+              "passive"
+            ],
+            "type": "string"
+          },
+          "address": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "building_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "customer_name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "district": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "installation_number": {
+            "type": "string"
+          },
+          "installed_power_kw": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "last_reading_at": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "latitude": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "longitude": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "meter_model": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "meter_multiplier": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "meter_number": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "provider": {
+            "enum": [
+              "osos",
+              "gridbox",
+              "aril",
+              "pm5340",
+              "isolar"
+            ],
+            "type": "string"
+          },
+          "provider_subtype": {
+            "type": "string"
+          },
+          "province": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tariff_type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "provider_subtype",
+          "installation_number",
+          "meter_multiplier",
+          "is_active",
+          "activity_status"
+        ],
+        "type": "object"
+      },
       "AnalyzerCount": {
         "properties": {
           "count": {
@@ -2710,6 +4471,362 @@
           "subtype",
           "count"
         ],
+        "type": "object"
+      },
+      "AnalyzerRefreshRequest": {
+        "properties": {
+          "mode": {
+            "enum": [
+              "hourly",
+              "energy"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "type": "object"
+      },
+      "AnalyzerUpdateRequest": {
+        "properties": {
+          "building_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "installed_power_kw": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "latitude": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "longitude": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "meter_multiplier": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "unassign_building": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "Building": {
+        "properties": {
+          "active_analyzer_count": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "activity_status": {
+            "enum": [
+              "active",
+              "passive"
+            ],
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "address": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "analyzer_count": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "bill_cutoff_day": {
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "floors": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "latitude": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "longitude": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "name": {
+            "type": "string"
+          },
+          "personnel_count": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "responsible_user_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "sector": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "total_area_m2": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "bill_cutoff_day",
+          "created_at",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "BuildingCreateRequest": {
+        "properties": {
+          "address": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "bill_cutoff_day": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "clear_responsible_user": {
+            "type": "boolean"
+          },
+          "contacts": {
+            "items": {
+              "$ref": "#/components/schemas/Contact"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "floors": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "latitude": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "longitude": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "name": {
+            "type": "string"
+          },
+          "personnel_count": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "responsible_user_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "sector": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "total_area_m2": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "BuildingDetail": {
+        "properties": {
+          "active_analyzer_count": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "activity_status": {
+            "enum": [
+              "active",
+              "passive"
+            ],
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "address": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "analyzer_count": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "bill_cutoff_day": {
+            "type": "integer"
+          },
+          "contacts": {
+            "items": {
+              "$ref": "#/components/schemas/Contact"
+            },
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "floors": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "latitude": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "longitude": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "name": {
+            "type": "string"
+          },
+          "personnel_count": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "responsible_user_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "sector": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tariff_history": {
+            "items": {
+              "$ref": "#/components/schemas/TariffSummary"
+            },
+            "type": "array"
+          },
+          "total_area_m2": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "bill_cutoff_day",
+          "created_at",
+          "updated_at",
+          "contacts",
+          "tariff_history"
+        ],
+        "type": "object"
+      },
+      "BuildingUpdateRequest": {
+        "properties": {
+          "address": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "bill_cutoff_day": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "clear_responsible_user": {
+            "type": "boolean"
+          },
+          "contacts": {
+            "items": {
+              "$ref": "#/components/schemas/Contact"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "floors": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "latitude": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "longitude": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "personnel_count": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "responsible_user_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "sector": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "total_area_m2": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
         "type": "object"
       },
       "ChangePasswordRequest": {
@@ -2953,6 +5070,27 @@
         },
         "type": "object"
       },
+      "Contact": {
+        "properties": {
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "phone": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "Date": {
+        "format": "date",
+        "type": "string"
+      },
       "Decimal": {
         "examples": [
           "1234.567890"
@@ -3005,11 +5143,71 @@
         ],
         "type": "object"
       },
+      "GithubComMErenTalanEkokodRewriteInternalApiV1DtoAnalyzerPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Analyzer"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "GithubComMErenTalanEkokodRewriteInternalApiV1DtoBuildingPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Building"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
       "GithubComMErenTalanEkokodRewriteInternalApiV1DtoCompanyPage": {
         "properties": {
           "items": {
             "items": {
               "$ref": "#/components/schemas/Company"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "GithubComMErenTalanEkokodRewriteInternalApiV1DtoPlantPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Plant"
             },
             "type": "array"
           },
@@ -3042,6 +5240,17 @@
         },
         "required": [
           "items"
+        ],
+        "type": "object"
+      },
+      "JobAccepted": {
+        "properties": {
+          "job_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id"
         ],
         "type": "object"
       },
@@ -3207,6 +5416,519 @@
           "write"
         ],
         "type": "string"
+      },
+      "Plant": {
+        "properties": {
+          "address": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "installation_date": {
+            "$ref": "#/components/schemas/Date"
+          },
+          "installation_number": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isolar_linked_at": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isolar_ps_name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "latitude": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "longitude": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "name": {
+            "type": "string"
+          },
+          "orientation": {
+            "enum": [
+              "n",
+              "s",
+              "e",
+              "w",
+              "ne",
+              "se",
+              "nw",
+              "sw"
+            ],
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "panel_count": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "panel_efficiency_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "panel_power_w": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "plant_kind": {
+            "enum": [
+              "rooftop",
+              "grid"
+            ],
+            "type": "string"
+          },
+          "pv_brand_model": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "string_count": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "tilt_angle_deg": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "total_capacity_kw": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "yearly_target_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "plant_kind",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "PlantCreateRequest": {
+        "properties": {
+          "address": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "alarm_recipients": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "installation_date": {
+            "$ref": "#/components/schemas/Date"
+          },
+          "installation_number": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "latitude": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "longitude": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "monthly_targets": {
+            "items": {
+              "$ref": "#/components/schemas/Decimal"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "orientation": {
+            "enum": [
+              "n",
+              "s",
+              "e",
+              "w",
+              "ne",
+              "se",
+              "nw",
+              "sw"
+            ],
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "panel_count": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "panel_efficiency_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "panel_power_w": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "plant_kind": {
+            "enum": [
+              "rooftop",
+              "grid"
+            ],
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "pv_brand_model": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "string_count": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "tilt_angle_deg": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "total_capacity_kw": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "yearly_target_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "PlantDetail": {
+        "properties": {
+          "address": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "alarm_recipients": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "devices": {
+            "items": {
+              "$ref": "#/components/schemas/PlantDevice"
+            },
+            "type": "array"
+          },
+          "id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "installation_date": {
+            "$ref": "#/components/schemas/Date"
+          },
+          "installation_number": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isolar_linked_at": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isolar_ps_name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "latitude": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "longitude": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "monthly_targets": {
+            "items": {
+              "$ref": "#/components/schemas/Decimal"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "orientation": {
+            "enum": [
+              "n",
+              "s",
+              "e",
+              "w",
+              "ne",
+              "se",
+              "nw",
+              "sw"
+            ],
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "panel_count": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "panel_efficiency_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "panel_power_w": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "plant_kind": {
+            "enum": [
+              "rooftop",
+              "grid"
+            ],
+            "type": "string"
+          },
+          "pv_brand_model": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "string_count": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "tilt_angle_deg": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "total_capacity_kw": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "yearly_target_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "plant_kind",
+          "created_at",
+          "monthly_targets",
+          "devices",
+          "alarm_recipients"
+        ],
+        "type": "object"
+      },
+      "PlantDevice": {
+        "properties": {
+          "brand": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "device_name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "device_sn": {
+            "type": "string"
+          },
+          "efficiency_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "last_seen_at": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "model": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "rated_power_kw": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "status": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "device_sn"
+        ],
+        "type": "object"
+      },
+      "PlantUpdateRequest": {
+        "properties": {
+          "address": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "alarm_recipients": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "installation_date": {
+            "$ref": "#/components/schemas/Date"
+          },
+          "installation_number": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "latitude": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "longitude": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "monthly_targets": {
+            "items": {
+              "$ref": "#/components/schemas/Decimal"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "orientation": {
+            "enum": [
+              "n",
+              "s",
+              "e",
+              "w",
+              "ne",
+              "se",
+              "nw",
+              "sw"
+            ],
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "panel_count": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "panel_efficiency_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "panel_power_w": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "plant_kind": {
+            "enum": [
+              "rooftop",
+              "grid"
+            ],
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "pv_brand_model": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "string_count": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "tilt_angle_deg": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "total_capacity_kw": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "yearly_target_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "type": "object"
       },
       "ProfileUpdateRequest": {
         "properties": {
@@ -3415,6 +6137,27 @@
         ],
         "type": "object"
       },
+      "TariffSummary": {
+        "properties": {
+          "effective_from": {
+            "$ref": "#/components/schemas/Date"
+          },
+          "id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "effective_from"
+        ],
+        "type": "object"
+      },
       "User": {
         "properties": {
           "created_at": {
@@ -3538,7 +6281,10 @@
           "248df4b7-aa70-47b8-a036-33ac447e668d"
         ],
         "format": "uuid",
-        "type": "string"
+        "type": [
+          "null",
+          "string"
+        ]
       }
     },
     "securitySchemes": {
