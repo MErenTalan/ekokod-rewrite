@@ -27,9 +27,9 @@ for (const story of stories) {
         .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
         .exclude('#storybook-docs');
       if (!story.title.startsWith('Shell/')) axe = axe.disableRules(['region', 'landmark-one-main', 'page-has-heading-one']);
-      // Radix Select traps focus in its listbox and aria-hides the page; axe only recognises that for dialogs.
+      // Radix Select and DropdownMenu trap focus and aria-hide the page; axe only recognises that for dialogs.
       // keyboard.spec proves focus starts inside and Escape restores it.
-      if (story.tags.includes('modal-listbox')) axe = axe.disableRules(['aria-hidden-focus']);
+      if (story.tags.includes('modal-popup')) axe = axe.disableRules(['aria-hidden-focus']);
       const { violations } = await axe.analyze();
       expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
       await expectNoHorizontalScroll(page);

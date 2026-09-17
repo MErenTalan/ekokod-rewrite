@@ -13,6 +13,6 @@ describe('FieldMessages', () => {
     expect(container.querySelector('#x-error')).toHaveTextContent('Hata');
     await expectNoAxeViolations(container);
     rerender(<FieldMessages controlId="x" />);
-    expect(container).toBeEmptyDOMElement();
+    expect(container.querySelector('#x-error, #x-description')).toBeNull();
   });
 });

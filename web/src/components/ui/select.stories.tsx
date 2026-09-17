@@ -25,7 +25,7 @@ export const Error: Story = { render: () => <Stateful value={null} error="Çöz�
 export const Disabled: Story = { render: () => <Stateful disabled /> };
 export const LongTurkishLabel: Story = { render: () => <Stateful label="Reaktif Endüktif Tüketim Oranı Eşik Değeri" /> };
 export const Open: Story = {
-  tags: ['open', 'modal-listbox'],
+  tags: ['open', 'modal-popup'],
   render: () => <Stateful />,
   play: async ({ canvasElement }) => {
     await userEvent.click(within(canvasElement).getByRole('combobox'));

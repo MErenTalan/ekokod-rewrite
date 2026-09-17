@@ -105,6 +105,8 @@ export async function tabbables(page: Page, scope?: Locator | string): Promise<s
           const style = getComputedStyle(el);
           if (el.closest('[inert], [aria-hidden="true"]') || style.visibility === 'hidden' || style.display === 'none') continue;
           if (rect.width === 0 && rect.height === 0 && !el.hasAttribute('data-skip-link')) continue;
+          // Radix focus proxies (toast viewport edges) are 1×1, text-less redirects, not tab stops of their own.
+          if (rect.width <= 1 && rect.height <= 1 && !el.textContent?.trim() && !el.getAttribute('aria-label')) continue;
           if (el.tabIndex < 0) continue;
           // Radix roving-focus containers are tabbable only to forward focus to their active item.
           if (el.matches('[role="radiogroup"], [role="tablist"], [role="toolbar"], [role="menubar"]')) continue;

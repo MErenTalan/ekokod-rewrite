@@ -13,7 +13,8 @@ for (const story of loadStories()) {
     for (const kb of ids) {
       const box = await page.evaluate((kb) => {
         const el = document.querySelector<HTMLElement>(`[data-kb="${kb}"]`);
-        if (!el) return null;
+        // Tab panels and scroll regions are keyboard stops, not tap targets.
+        if (!el || el.matches('[role="tabpanel"], [role="region"]')) return null;
         el.focus(); // reveals focus-only elements such as the skip link (M-6)
         const target = el.closest<HTMLElement>('[data-touch-target], label') ?? el;
         const r = target.getBoundingClientRect();

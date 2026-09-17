@@ -21,6 +21,8 @@ const mustError: [string, string, string][] = [
   ['palette behind a variant', 'export const A = () => <div className="hover:text-neutral-900" />;', 'Tailwind default palette'],
   ['energy colour as text', 'export const A = () => <div className="text-consumption" />;', 'graphics only'],
   ['outline-none', 'export const A = () => <button className="outline-none" />;', 'outline-none / dark:'],
+  ['outline-0 behind a variant', 'export const A = () => <button className="focus-visible:outline-0" />;', 'outline-none / dark:'],
+  ['arbitrary outline none', 'export const A = () => <button className="[outline:none]" />;', 'outline-none / dark:'],
   ['dark variant', 'export const A = () => <div className="dark:bg-surface" />;', 'outline-none / dark:'],
   ['recharts outside charts', "import { LineChart } from 'recharts';\nexport const x = LineChart;", 'src/components/charts'],
 ];

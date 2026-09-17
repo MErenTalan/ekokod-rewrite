@@ -18,6 +18,12 @@ describe('IconButton', () => {
     expect(await findByRole('tooltip')).toHaveTextContent('Bildirimler');
   });
 
+  it('tooltip can be turned off', async () => {
+    const { queryByRole, user } = renderWithProviders(<IconButton label="Kapat" icon={Bell} tooltip={false} />);
+    await user.tab();
+    expect(queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
   it('has no axe violations', async () => {
     const { container } = renderWithProviders(<IconButton label="Bildirimler" icon={Bell} />);
     await expectNoAxeViolations(container);

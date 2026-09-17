@@ -16,19 +16,15 @@ export type IconButtonProps = Omit<ComponentPropsWithRef<'button'>, 'children'> 
     /** Accessible name and tooltip text (07 §9: icon-only buttons are always labelled). */
     label: string;
     icon: LucideIcon;
+    /** Off for close buttons in overlays: a focus tooltip there would swallow the first Escape. */
+    tooltip?: boolean;
   };
 
-export function IconButton({ label, icon: Icon, variant = 'ghost', size = 'md', className, type = 'button', ...props }: IconButtonProps) {
-  return (
-    <Tooltip content={label}>
-      <button
-        type={type}
-        aria-label={label}
-        className={cn(buttonVariants({ variant, size }), square[size ?? 'md'], className)}
-        {...props}
-      >
-        <Icon aria-hidden className={size === 'lg' ? 'size-5' : 'size-4'} />
-      </button>
-    </Tooltip>
+export function IconButton({ label, icon: Icon, variant = 'ghost', size = 'md', tooltip = true, className, type = 'button', ...props }: IconButtonProps) {
+  const button = (
+    <button type={type} aria-label={label} className={cn(buttonVariants({ variant, size }), square[size ?? 'md'], className)} {...props}>
+      <Icon aria-hidden className={size === 'lg' ? 'size-5' : 'size-4'} />
+    </button>
   );
+  return tooltip ? <Tooltip content={label}>{button}</Tooltip> : button;
 }
