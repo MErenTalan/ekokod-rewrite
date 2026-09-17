@@ -33,9 +33,10 @@ func (h *harness) seedAnalysis() uuid.UUID {
 	h.clock.Set(time.Date(2026, 9, 17, 10, 0, 0, 0, time.UTC))
 	from, to := time.Date(2026, 7, 25, 0, 0, 0, 0, ist), time.Date(2026, 9, 17, 0, 0, 0, 0, ist)
 	buildingID := h.fx.BuildingA1
+	power := decimal.RequireFromString("120")
 	second, err := postgres.NewAnalyzerRepository(h.pool).Create(ctx, store.SystemScope(h.fx.CompanyA), model.Analyzer{
 		CompanyID: h.fx.CompanyA, BuildingID: &buildingID, Provider: model.IntegrationProviderOSOS, ProviderSubtype: "Baskent",
-		InstallationNumber: "E2E-A1-2", MeterMultiplier: decimal.NewFromInt(1), IsActive: true,
+		InstallationNumber: "E2E-A1-2", MeterMultiplier: decimal.NewFromInt(1), IsActive: true, InstalledPowerKw: &power,
 	})
 	require.NoError(h.t, err)
 	testfixtures.InsertReadings(h.t, ctx, h.pool, h.fx.CompanyA, testfixtures.HourlyReadingsReactive(h.fx.AnalyzerA1, from, to, testfixtures.Constant("10"), "0.35", "0.05"))
@@ -191,6 +192,8 @@ func TestReactiveStatusThresholds(t *testing.T) {
 	a2 := byID[h.fx.AnalyzerA2]
 	require.Equal(t, "below_kw", *a2.ExemptReason)
 	require.False(t, a2.PenaltyApplies)
+	require.Equal(t, "0.2", byID[second].InductiveRatio.String())
+	require.Equal(t, "0.2", byID[second].InductiveLimit.String())
 	require.False(t, byID[second].PenaltyApplies, "0.20 does not exceed 0.20")
 	require.Equal(t, h.fx.AnalyzerA1, status.HighestInductive.AnalyzerID)
 	require.Equal(t, "0.35", status.HighestInductive.Ratio.String())
