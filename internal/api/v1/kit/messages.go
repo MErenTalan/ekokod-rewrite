@@ -41,6 +41,7 @@ var messages = map[string][2]string{ // code → {tr, en}
 	"integration_not_configured": {"Bu analizör için entegrasyon tanımlanmamış.", "No integration is configured for this analyzer."},
 	"refresh_in_progress":        {"Bu analizör için yenileme zaten sırada.", "A refresh for this analyzer is already queued."},
 	"building_sector_missing":    {"Karşılaştırma için binanın sektörü tanımlı olmalıdır.", "The building needs a sector to be compared."},
+	"billing_parameters_missing": {"Fatura parametreleri tanımlı değil; operatöre başvurun.", "Billing parameters are not configured; contact the operator."},
 	"reset_token_invalid":        {"Şifre sıfırlama bağlantısı geçersiz veya süresi dolmuş.", "The password reset link is invalid or has expired."},
 }
 

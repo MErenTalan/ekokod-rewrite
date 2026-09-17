@@ -11,6 +11,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/api/v1/mw"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
 	perr "github.com/MErenTalan/ekokod-rewrite/internal/platform/errors"
+	"github.com/MErenTalan/ekokod-rewrite/internal/service/analysis"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/assets"
 	authsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/auth"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/tenancy"
@@ -32,6 +33,7 @@ type Handlers struct {
 	Auth     *authsvc.Service
 	Tenancy  *tenancy.Service
 	Assets   *assets.Service
+	Analysis *analysis.Service
 	Clock    clock.Clock
 	Log      *slog.Logger
 	ClientIP func(*http.Request) string
