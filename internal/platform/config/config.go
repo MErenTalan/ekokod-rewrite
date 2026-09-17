@@ -110,6 +110,9 @@ type Security struct {
 	DeviceFingerprintSecret []byte
 	AccessTokenTTL          time.Duration
 	RefreshTokenTTL         time.Duration
+	// RefreshTokenRememberTTL is the "remember this device" and mobile
+	// session lifetime (R141); never shorter than RefreshTokenTTL.
+	RefreshTokenRememberTTL time.Duration
 	BcryptCost              int
 	PasswordHistorySize     int
 	LegacyEncryptionKey     []byte // migration only; may be empty
@@ -137,6 +140,8 @@ type Schedule struct {
 	Carbon         string
 	ReportsMonthly string
 	ReportsYearly  string
+	// Demo extends the synthetic demo company's readings (R186).
+	Demo string
 }
 
 // Storage configures where and how uploaded files are stored.

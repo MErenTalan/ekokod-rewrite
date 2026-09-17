@@ -418,9 +418,13 @@ func Load(lookup func(string) (string, bool)) (*Config, error) {
 		DeviceFingerprintSecret: l.secret("EKOKOD_DEVICE_FINGERPRINT_SECRET", 32),
 		AccessTokenTTL:          l.positiveDuration("EKOKOD_ACCESS_TOKEN_TTL", 15*time.Minute),
 		RefreshTokenTTL:         l.positiveDuration("EKOKOD_REFRESH_TOKEN_TTL", 24*time.Hour),
+		RefreshTokenRememberTTL: l.positiveDuration("EKOKOD_REFRESH_TOKEN_REMEMBER_TTL", 720*time.Hour),
 		BcryptCost:              l.intVal("EKOKOD_BCRYPT_COST", 12),
 		PasswordHistorySize:     l.intVal("EKOKOD_PASSWORD_HISTORY_SIZE", 5),
 		LegacyEncryptionKey:     l.optionalSecret("EKOKOD_LEGACY_ENCRYPTION_KEY"),
+	}
+	if c.Security.RefreshTokenRememberTTL < c.Security.RefreshTokenTTL {
+		l.fail("EKOKOD_REFRESH_TOKEN_REMEMBER_TTL", errors.New("must not be shorter than EKOKOD_REFRESH_TOKEN_TTL"))
 	}
 	if c.Security.BcryptCost < 12 {
 		l.fail("EKOKOD_BCRYPT_COST", errors.New("must be at least 12"))
@@ -450,6 +454,7 @@ func Load(lookup func(string) (string, bool)) (*Config, error) {
 		Carbon:         l.cronExpr("EKOKOD_SCHEDULE_CARBON", "30 4 * * *"),
 		ReportsMonthly: l.cronExpr("EKOKOD_SCHEDULE_REPORTS_MONTHLY", "0 6 2 * *"),
 		ReportsYearly:  l.cronExpr("EKOKOD_SCHEDULE_REPORTS_YEARLY", "0 7 3 1 *"),
+		Demo:           l.cronExpr("EKOKOD_SCHEDULE_DEMO", "15 * * * *"),
 	}
 
 	c.Storage = Storage{

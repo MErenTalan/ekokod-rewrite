@@ -360,3 +360,16 @@ func TestConfigCheckListsIngestVariables(t *testing.T) {
 		require.True(t, seen[name], "%s must be listed by config:check", name)
 	}
 }
+
+func TestSessionLifetimeDefaultsAndOrdering(t *testing.T) {
+	cfg, err := config.Load(lookupFrom(valid()))
+	require.NoError(t, err)
+	require.Equal(t, 24*time.Hour, cfg.Security.RefreshTokenTTL)
+	require.Equal(t, 720*time.Hour, cfg.Security.RefreshTokenRememberTTL)
+	require.Equal(t, "15 * * * *", cfg.Schedule.Demo)
+
+	env := valid()
+	env["EKOKOD_REFRESH_TOKEN_REMEMBER_TTL"] = "12h"
+	_, err = config.Load(lookupFrom(env))
+	require.ErrorContains(t, err, "EKOKOD_REFRESH_TOKEN_REMEMBER_TTL")
+}

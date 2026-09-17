@@ -33,6 +33,7 @@ var (
 // Claims is what an access token proves.
 type Claims struct {
 	UserID, SessionID   uuid.UUID
+	CompanyID           uuid.UUID
 	Audience            string
 	IssuedAt, ExpiresAt time.Time
 }
@@ -46,16 +47,20 @@ type Tokens struct {
 
 type accessClaims struct {
 	SessionID string `json:"sid"`
+	CompanyID string `json:"cid"`
 	Type      string `json:"typ"`
 	jwt.RegisteredClaims
 }
 
 // Issue signs an access token for one session.
-func (t Tokens) Issue(userID, sessionID uuid.UUID, audience string) (string, time.Time, error) {
+// companyID only lets the server build the Scope that loads the session; role
+// and company attributes are always re-read from the database (R140).
+func (t Tokens) Issue(userID, sessionID, companyID uuid.UUID, audience string) (string, time.Time, error) {
 	now := t.Now().Truncate(time.Second)
 	exp := now.Add(t.TTL)
 	c := accessClaims{
 		SessionID: sessionID.String(),
+		CompanyID: companyID.String(),
 		Type:      accessTokenType,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    issuer,
@@ -91,10 +96,11 @@ func (t Tokens) Parse(token string) (Claims, error) {
 	}
 	user, uerr := uuid.Parse(c.Subject)
 	session, serr := uuid.Parse(c.SessionID)
-	if uerr != nil || serr != nil || c.IssuedAt == nil {
+	company, cerr := uuid.Parse(c.CompanyID)
+	if uerr != nil || serr != nil || cerr != nil || c.IssuedAt == nil {
 		return Claims{}, ErrTokenInvalid
 	}
-	return Claims{UserID: user, SessionID: session, Audience: aud, IssuedAt: c.IssuedAt.Time, ExpiresAt: c.ExpiresAt.Time}, nil
+	return Claims{UserID: user, SessionID: session, CompanyID: company, Audience: aud, IssuedAt: c.IssuedAt.Time, ExpiresAt: c.ExpiresAt.Time}, nil
 }
 
 // NewRefreshToken returns an opaque refresh token and the hash stored for it (R141).
