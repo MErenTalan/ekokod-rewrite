@@ -4,7 +4,7 @@ import { cache } from 'react';
 
 import { LOCALE_COOKIE } from '@/i18n/locale';
 
-import type { MeResponse } from './errors';
+import { errorCode, type MeResponse } from './errors';
 import type { paths } from './schema';
 
 const FORWARDED_HEADERS = ['cookie', 'user-agent', 'x-forwarded-for'] as const;
@@ -31,12 +31,17 @@ export async function serverApi(): Promise<Client<paths>> {
   });
 }
 
-/** The signed-in user for this request, or null (deduplicated per render). */
-export const getMe = cache(async (): Promise<MeResponse | null> => {
+/** The signed-in user for this request, or the API's refusal code (deduplicated per render). */
+export const getSession = cache(async (): Promise<{ me: MeResponse } | { me: null; code: string }> => {
   try {
-    const { data } = await (await serverApi()).GET('/api/v1/auth/me');
-    return data ?? null;
+    const { data, error } = await (await serverApi()).GET('/api/v1/auth/me');
+    return data ? { me: data } : { me: null, code: errorCode(error) ?? 'unauthorized' };
   } catch {
-    return null;
+    return { me: null, code: 'api_unreachable' };
   }
 });
+
+/** The signed-in user for this request, or null. */
+export async function getMe(): Promise<MeResponse | null> {
+  return (await getSession()).me;
+}

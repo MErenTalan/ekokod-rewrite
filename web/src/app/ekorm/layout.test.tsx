@@ -5,8 +5,8 @@ import fixture from '@/lib/session/permissions.fixture.json';
 import { mockPathname, mockRouter } from '@/test/navigation';
 import { renderWithProviders } from '@/test/render';
 
-const getMe = vi.hoisted(() => vi.fn<() => Promise<MeResponse | null>>());
-vi.mock('@/lib/api/server', () => ({ getMe }));
+const getSession = vi.hoisted(() => vi.fn<() => Promise<{ me: MeResponse } | { me: null; code: string }>>());
+vi.mock('@/lib/api/server', () => ({ getSession }));
 const redirect = vi.hoisted(() =>
   vi.fn((href: string) => {
     throw new Error(`NEXT_REDIRECT ${href}`);
@@ -33,18 +33,23 @@ const me = (role: keyof typeof fixture): MeResponse => ({
 });
 
 afterEach(() => {
-  getMe.mockReset();
+  getSession.mockReset();
   vi.unstubAllGlobals();
 });
 
 describe('/ekorm layout', () => {
   it('sends a user without a session to login', async () => {
-    getMe.mockResolvedValue(null);
+    getSession.mockResolvedValue({ me: null, code: 'session_revoked' });
     await expect(EkormLayout({ children: null })).rejects.toThrow('NEXT_REDIRECT /auth/login');
   });
 
+  it('explains a device mismatch on the way to login', async () => {
+    getSession.mockResolvedValue({ me: null, code: 'device_mismatch' });
+    await expect(EkormLayout({ children: null })).rejects.toThrow('NEXT_REDIRECT /auth/login?reason=device_mismatch');
+  });
+
   it('renders the signed-in user with the role label', async () => {
-    getMe.mockResolvedValue(me('company_admin'));
+    getSession.mockResolvedValue({ me: me('company_admin') });
     const r = renderWithProviders(await EkormLayout({ children: <p>İçerik</p> }));
     await r.user.click(r.getByRole('button', { name: 'Kullanıcı menüsü: Ayşe Yılmaz' }));
     expect(await r.findByRole('menu')).toHaveTextContent('Şirket Yöneticisi · ayse@ornek.com.tr');
@@ -52,7 +57,7 @@ describe('/ekorm layout', () => {
   });
 
   it('filters the navigation by permission', async () => {
-    getMe.mockResolvedValue(me('building_admin'));
+    getSession.mockResolvedValue({ me: me('building_admin') });
     const r = renderWithProviders(await EkormLayout({ children: null }));
     await r.user.click(r.getAllByRole('button', { name: 'Veri Analizi' })[0]);
     expect(r.getAllByRole('link', { name: 'Tüketim' }).length).toBeGreaterThan(0);
@@ -62,7 +67,7 @@ describe('/ekorm layout', () => {
 
   it('gives an admin the company switcher', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => Response.json({ items: [] })));
-    getMe.mockResolvedValue(me('admin'));
+    getSession.mockResolvedValue({ me: me('admin') });
     const r = renderWithProviders(await EkormLayout({ children: null }));
     expect(r.getByRole('combobox', { name: 'Şirket' })).toBeInTheDocument();
   });
