@@ -26,9 +26,11 @@ limit sqlc.arg(page_limit) offset sqlc.arg(page_offset);
 -- coalesce(sqlc.narg(at)::timestamptz, now()): a caller that leaves CreatedAt at its zero
 -- value gets the database's own now() rather than writing 0001-01-01.
 insert into users
-    (id, company_id, name, email, phone, password_hash, role, is_active, created_at, updated_at)
+    (id, company_id, name, email, phone, password_hash, role, is_active, ui_preferences, locale, created_at, updated_at)
 values (sqlc.arg(id), sqlc.arg(company_id), sqlc.arg(name), sqlc.arg(email), sqlc.arg(phone),
-        sqlc.arg(password_hash), sqlc.arg(role), sqlc.arg(is_active), coalesce(sqlc.narg(at)::timestamptz, now()), coalesce(sqlc.narg(at)::timestamptz, now()))
+        sqlc.arg(password_hash), sqlc.arg(role), sqlc.arg(is_active), sqlc.narg(ui_preferences),
+        coalesce(nullif(sqlc.arg(locale)::text, ''), 'tr'),
+        coalesce(sqlc.narg(at)::timestamptz, now()), coalesce(sqlc.narg(at)::timestamptz, now()))
 returning *;
 
 -- name: UserUpdate :one
@@ -38,6 +40,9 @@ set name = sqlc.arg(name),
     phone = sqlc.arg(phone),
     role = sqlc.arg(role),
     is_active = sqlc.arg(is_active),
+    ui_preferences = sqlc.narg(ui_preferences),
+    -- an unset (empty) locale keeps the stored one, so pre-F6 callers stay valid
+    locale = coalesce(nullif(sqlc.arg(locale)::text, ''), locale),
     updated_at = sqlc.arg(updated_at)
 where id = sqlc.arg(id) and company_id = sqlc.arg(company_id) and deleted_at is null
 returning *;

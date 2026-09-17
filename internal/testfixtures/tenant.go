@@ -140,6 +140,7 @@ func NewTenant(t *testing.T, ctx context.Context, pool *pgxpool.Pool, seed int64
 			PasswordHash: "$2a$10$fixturehashfixturehashfixturehashfixturehashfixtureha",
 			Role:         role,
 			IsActive:     true,
+			Locale:       "tr",
 			CreatedAt:    fixtureEpoch,
 			UpdatedAt:    fixtureEpoch,
 		}

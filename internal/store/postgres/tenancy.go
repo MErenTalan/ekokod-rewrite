@@ -206,6 +206,8 @@ func userFromRow(row sqlcgen.User) model.User {
 		Role:              model.UserRole(row.Role),
 		IsActive:          row.IsActive,
 		LastLoginAt:       tsPtr(row.LastLoginAt),
+		UIPreferences:     row.UiPreferences,
+		Locale:            row.Locale,
 		CreatedAt:         row.CreatedAt.Time,
 		UpdatedAt:         row.UpdatedAt.Time,
 		DeletedAt:         tsPtr(row.DeletedAt),
@@ -265,15 +267,17 @@ func (r *UserRepository) Create(ctx context.Context, s store.Scope, u model.User
 		id = uuid.New()
 	}
 	row, err := r.q.UserCreate(ctx, sqlcgen.UserCreateParams{
-		ID:           id,
-		CompanyID:    s.CompanyID,
-		Name:         u.Name,
-		Email:        u.Email,
-		Phone:        u.Phone,
-		PasswordHash: u.PasswordHash,
-		Role:         sqlcgen.UserRole(u.Role),
-		IsActive:     u.IsActive,
-		At:           tsOrNow(u.CreatedAt),
+		ID:            id,
+		CompanyID:     s.CompanyID,
+		Name:          u.Name,
+		Email:         u.Email,
+		Phone:         u.Phone,
+		PasswordHash:  u.PasswordHash,
+		Role:          sqlcgen.UserRole(u.Role),
+		IsActive:      u.IsActive,
+		UiPreferences: u.UIPreferences,
+		Locale:        u.Locale,
+		At:            tsOrNow(u.CreatedAt),
 	})
 	if err != nil {
 		return model.User{}, pgerr.Translate(r.pool, "create user", err)
@@ -290,14 +294,16 @@ func (r *UserRepository) Update(ctx context.Context, s store.Scope, u model.User
 		return model.User{}, store.ErrNotFound
 	}
 	row, err := r.q.UserUpdate(ctx, sqlcgen.UserUpdateParams{
-		ID:        u.ID,
-		CompanyID: s.CompanyID,
-		Name:      u.Name,
-		Email:     u.Email,
-		Phone:     u.Phone,
-		Role:      sqlcgen.UserRole(u.Role),
-		IsActive:  u.IsActive,
-		UpdatedAt: ts(u.UpdatedAt),
+		ID:            u.ID,
+		CompanyID:     s.CompanyID,
+		Name:          u.Name,
+		Email:         u.Email,
+		Phone:         u.Phone,
+		Role:          sqlcgen.UserRole(u.Role),
+		IsActive:      u.IsActive,
+		UiPreferences: u.UIPreferences,
+		Locale:        u.Locale,
+		UpdatedAt:     ts(u.UpdatedAt),
 	})
 	if err != nil {
 		return model.User{}, pgerr.Translate(r.pool, "update user", err)
@@ -444,6 +450,11 @@ func sessionFromRow(row sqlcgen.Session) model.Session {
 		ExpiresAt:         row.ExpiresAt.Time,
 		RevokedAt:         tsPtr(row.RevokedAt),
 		CreatedAt:         row.CreatedAt.Time,
+		Client:            row.Client,
+		Remember:          row.Remember,
+		LastUsedAt:        tsPtr(row.LastUsedAt),
+		RevokedReason:     row.RevokedReason,
+		RotatedFrom:       row.RotatedFrom,
 	}
 }
 
@@ -500,7 +511,19 @@ func (r *SessionRepository) Create(ctx context.Context, s store.Scope, sess mode
 	if sess.RevokedAt != nil {
 		revokedAt = ts(*sess.RevokedAt)
 	}
-	row, err := r.q.SessionCreate(ctx, sqlcgen.SessionCreateParams{
+	row, err := r.q.SessionCreate(ctx, sessionCreateParams(s, id, sess, revokedAt))
+	if err != nil {
+		return model.Session{}, pgerr.Translate(r.pool, "create session", err)
+	}
+	return sessionFromRow(row), nil
+}
+
+func sessionCreateParams(s store.Scope, id uuid.UUID, sess model.Session, revokedAt pgtype.Timestamptz) sqlcgen.SessionCreateParams {
+	client := sess.Client
+	if client == "" {
+		client = "web"
+	}
+	return sqlcgen.SessionCreateParams{
 		ID:                id,
 		UserID:            sess.UserID,
 		RefreshTokenHash:  sess.RefreshTokenHash,
@@ -510,12 +533,118 @@ func (r *SessionRepository) Create(ctx context.Context, s store.Scope, sess mode
 		ExpiresAt:         ts(sess.ExpiresAt),
 		RevokedAt:         revokedAt,
 		At:                tsOrNow(sess.CreatedAt),
+		Client:            client,
+		Remember:          sess.Remember,
+		RotatedFrom:       sess.RotatedFrom,
 		CompanyID:         s.CompanyID,
-	})
+	}
+}
+
+// Rotate — Isolation: join sessions through users. The old row is locked,
+// revoked as 'rotated' and replaced in one transaction (R141); an old session
+// that is already revoked returns ErrConflict and inserts nothing.
+func (r *SessionRepository) Rotate(ctx context.Context, s store.Scope, oldID uuid.UUID, next model.Session, at time.Time) (model.Session, error) {
+	if !s.Valid() {
+		return model.Session{}, store.ErrInvalidScope
+	}
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return model.Session{}, pgerr.Translate(r.pool, "create session", err)
+		return model.Session{}, pgerr.Translate(r.pool, "begin rotate session", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := sqlcgen.New(tx)
+
+	old, err := q.SessionGetForUpdate(ctx, sqlcgen.SessionGetForUpdateParams{ID: oldID, CompanyID: s.CompanyID})
+	if err != nil {
+		return model.Session{}, pgerr.Translate(r.pool, "lock session for rotation", err)
+	}
+	if old.RevokedAt.Valid {
+		return model.Session{}, store.ErrConflict
+	}
+	reason := "rotated"
+	if _, err := q.SessionRevokeLiveWithReason(ctx, sqlcgen.SessionRevokeLiveWithReasonParams{
+		At: ts(at), Reason: &reason, ID: oldID, CompanyID: s.CompanyID,
+	}); err != nil {
+		return model.Session{}, pgerr.Translate(r.pool, "revoke rotated session", err)
+	}
+	next.UserID = old.UserID
+	next.RotatedFrom = &oldID
+	if next.CreatedAt.IsZero() {
+		next.CreatedAt = at
+	}
+	id := next.ID
+	if id == uuid.Nil {
+		id = uuid.New()
+	}
+	row, err := q.SessionCreate(ctx, sessionCreateParams(s, id, next, pgtype.Timestamptz{}))
+	if err != nil {
+		return model.Session{}, pgerr.Translate(r.pool, "insert rotated session", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return model.Session{}, pgerr.Translate(r.pool, "commit rotate session", err)
 	}
 	return sessionFromRow(row), nil
+}
+
+// RevokeWithReason revokes a live session and records why. Isolation: join
+// through users. An already revoked but visible session keeps its first
+// reason and returns nil.
+func (r *SessionRepository) RevokeWithReason(ctx context.Context, s store.Scope, id uuid.UUID, reason string, at time.Time) error {
+	if !s.Valid() {
+		return store.ErrInvalidScope
+	}
+	visible, err := r.q.SessionVisible(ctx, sqlcgen.SessionVisibleParams{ID: id, CompanyID: s.CompanyID})
+	if err != nil {
+		return pgerr.Translate(r.pool, "check session visibility", err)
+	}
+	if !visible {
+		return store.ErrNotFound
+	}
+	if _, err := r.q.SessionRevokeLiveWithReason(ctx, sqlcgen.SessionRevokeLiveWithReasonParams{
+		At: ts(at), Reason: &reason, ID: id, CompanyID: s.CompanyID,
+	}); err != nil {
+		return pgerr.Translate(r.pool, "revoke session with reason", err)
+	}
+	return nil
+}
+
+// RevokeAllForUserWithReason revokes every live session of a user except
+// `except`. Isolation: join through users; another tenant's userID returns
+// ErrNotFound.
+func (r *SessionRepository) RevokeAllForUserWithReason(ctx context.Context, s store.Scope, userID uuid.UUID, reason string, except *uuid.UUID, at time.Time) (int64, error) {
+	if !s.Valid() {
+		return 0, store.ErrInvalidScope
+	}
+	visible, err := r.q.SessionUserVisible(ctx, sqlcgen.SessionUserVisibleParams{UserID: userID, CompanyID: s.CompanyID})
+	if err != nil {
+		return 0, pgerr.Translate(r.pool, "check user visibility", err)
+	}
+	if !visible {
+		return 0, store.ErrNotFound
+	}
+	n, err := r.q.SessionRevokeAllForUserWithReason(ctx, sqlcgen.SessionRevokeAllForUserWithReasonParams{
+		At: ts(at), Reason: &reason, UserID: userID, ExceptID: except, CompanyID: s.CompanyID,
+	})
+	if err != nil {
+		return 0, pgerr.Translate(r.pool, "revoke all sessions with reason", err)
+	}
+	return n, nil
+}
+
+// Touch stamps last_used_at, at most every five minutes. Isolation: join
+// through users.
+func (r *SessionRepository) Touch(ctx context.Context, s store.Scope, id uuid.UUID, at time.Time) error {
+	if !s.Valid() {
+		return store.ErrInvalidScope
+	}
+	n, err := r.q.SessionTouch(ctx, sqlcgen.SessionTouchParams{At: ts(at), ID: id, CompanyID: s.CompanyID})
+	if err != nil {
+		return pgerr.Translate(r.pool, "touch session", err)
+	}
+	if n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
 }
 
 // Revoke implements store.SessionRepository.Revoke.

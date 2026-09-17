@@ -58,6 +58,11 @@ type User struct {
 	IsActive    bool
 	LastLoginAt *time.Time
 
+	// UIPreferences is the opaque ekokod_ui cookie value the web app syncs
+	// (R169); Locale is 'tr' or 'en'.
+	UIPreferences *string
+	Locale        string
+
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	DeletedAt *time.Time
@@ -90,6 +95,27 @@ type Session struct {
 
 	ExpiresAt time.Time
 	RevokedAt *time.Time
+	CreatedAt time.Time
+
+	// Client is 'web' or 'mobile'; Remember selects the long lifetime (R141).
+	Client   string
+	Remember bool
+	// LastUsedAt is stamped at most every five minutes by Touch.
+	LastUsedAt *time.Time
+	// RevokedReason says why RevokedAt was set; 'rotated' is what lets a
+	// refresh tell a concurrent tab from a replayed token (R141).
+	RevokedReason *string
+	RotatedFrom   *uuid.UUID
+}
+
+// PasswordReset is one single-use password-reset token (R148). Mirrors table
+// `password_reset_tokens` (migration 00015); TokenHash is SHA-256 hex.
+type PasswordReset struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	TokenHash string
+	ExpiresAt time.Time
+	UsedAt    *time.Time
 	CreatedAt time.Time
 }
 

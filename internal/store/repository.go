@@ -273,12 +273,55 @@ type SessionRepository interface {
 	// returns ErrNotFound.
 	RevokeAllForUser(ctx context.Context, s Scope, userID uuid.UUID, at time.Time) (int64, error)
 
+	// Rotate replaces a refresh session in one transaction (R141): it locks
+	// oldID, revokes it with reason 'rotated' and inserts next with
+	// rotated_from = oldID and next.UserID forced to the old session's user.
+	// An old session already revoked returns ErrConflict and inserts nothing.
+	//
+	// Isolation: join sessions through users; another tenant's oldID returns
+	// ErrNotFound.
+	Rotate(ctx context.Context, s Scope, oldID uuid.UUID, next model.Session, at time.Time) (model.Session, error)
+
+	// RevokeWithReason revokes a live session and records why; a visible but
+	// already revoked session keeps its first reason and returns nil.
+	//
+	// Isolation: join sessions through users.
+	RevokeWithReason(ctx context.Context, s Scope, id uuid.UUID, reason string, at time.Time) error
+
+	// RevokeAllForUserWithReason revokes every live session of the user except
+	// `except` (nil = none) and returns how many it revoked.
+	//
+	// Isolation: join sessions through users; another tenant's userID returns
+	// ErrNotFound.
+	RevokeAllForUserWithReason(ctx context.Context, s Scope, userID uuid.UUID, reason string, except *uuid.UUID, at time.Time) (int64, error)
+
+	// Touch stamps last_used_at = at when it is unset or older than five
+	// minutes, so authenticated requests do not write on every call.
+	//
+	// Isolation: join sessions through users.
+	Touch(ctx context.Context, s Scope, id uuid.UUID, at time.Time) error
+
 	// DeleteExpired is housekeeping: it removes sessions that expired before
 	// before, and returns how many rows went.
 	//
 	// Isolation: join sessions through users; it deletes only the expired
 	// sessions of s.CompanyID's users, so a sweep runs once per tenant.
 	DeleteExpired(ctx context.Context, s Scope, before time.Time) (int64, error)
+}
+
+// PasswordResetRepository writes single-use password reset tokens (R148).
+//
+// Isolation, for EVERY method: password_reset_tokens has no company_id — join
+// through users. There is no lookup by token hash here: a reset request
+// carries only the token, so resolving it is
+// AdminAuthRepository.PasswordResetByTokenHash.
+type PasswordResetRepository interface {
+	// Create invalidates the user's unused tokens and inserts p, in one
+	// transaction. A user not visible to the Scope returns ErrNotFound.
+	Create(ctx context.Context, s Scope, p model.PasswordReset) (model.PasswordReset, error)
+
+	// MarkUsed stamps used_at; an already used token returns ErrConflict.
+	MarkUsed(ctx context.Context, s Scope, id uuid.UUID, at time.Time) error
 }
 
 // AuditFilter narrows an audit listing.
@@ -1563,6 +1606,19 @@ type AdminAuthRepository interface {
 	// session whose user or whose user's company is soft-deleted returns
 	// ErrNotFound.
 	SessionByRefreshTokenHash(ctx context.Context, hash string) (model.Session, model.User, error)
+
+	// PasswordResetByTokenHash resolves a password reset, which carries only
+	// the token (R148). Used and expired tokens ARE returned; a token whose
+	// user or company is soft-deleted returns ErrNotFound.
+	PasswordResetByTokenHash(ctx context.Context, hash string) (model.PasswordReset, model.User, error)
+}
+
+// AdminTenantRepository is the platform operator's view across tenants.
+type AdminTenantRepository interface {
+	// ListCompanies lists every company for the admin role's company list and
+	// switcher (05 §3 GET /companies). It cannot take a Scope: its whole
+	// purpose is to show companies other than the caller's own.
+	ListCompanies(ctx context.Context, f CompanyFilter) ([]model.Company, error)
 }
 
 // AdminAuditRepository appends platform audit rows.

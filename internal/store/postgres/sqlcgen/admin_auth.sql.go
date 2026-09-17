@@ -13,10 +13,62 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const adminPasswordResetByTokenHash = `-- name: AdminPasswordResetByTokenHash :one
+select p.id, p.user_id, p.token_hash, p.expires_at, p.used_at, p.created_at as reset_created_at,
+       u.id, u.company_id, u.name, u.email, u.phone, u.password_hash, u.password_changed_at, u.role, u.is_active, u.last_login_at, u.created_at, u.updated_at, u.deleted_at, u.ui_preferences, u.locale
+from password_reset_tokens p
+join users u on u.id = p.user_id
+join companies c on c.id = u.company_id
+where p.token_hash = $1 and u.deleted_at is null and c.deleted_at is null
+`
+
+type AdminPasswordResetByTokenHashRow struct {
+	ID             uuid.UUID
+	UserID         uuid.UUID
+	TokenHash      string
+	ExpiresAt      pgtype.Timestamptz
+	UsedAt         pgtype.Timestamptz
+	ResetCreatedAt pgtype.Timestamptz
+	User           User
+}
+
+// A reset request carries only the token. Used and expired tokens ARE returned
+// (the caller refuses them); a deleted user or company excludes the row.
+func (q *Queries) AdminPasswordResetByTokenHash(ctx context.Context, tokenHash string) (AdminPasswordResetByTokenHashRow, error) {
+	row := q.db.QueryRow(ctx, adminPasswordResetByTokenHash, tokenHash)
+	var i AdminPasswordResetByTokenHashRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TokenHash,
+		&i.ExpiresAt,
+		&i.UsedAt,
+		&i.ResetCreatedAt,
+		&i.User.ID,
+		&i.User.CompanyID,
+		&i.User.Name,
+		&i.User.Email,
+		&i.User.Phone,
+		&i.User.PasswordHash,
+		&i.User.PasswordChangedAt,
+		&i.User.Role,
+		&i.User.IsActive,
+		&i.User.LastLoginAt,
+		&i.User.CreatedAt,
+		&i.User.UpdatedAt,
+		&i.User.DeletedAt,
+		&i.User.UiPreferences,
+		&i.User.Locale,
+	)
+	return i, err
+}
+
 const adminSessionByRefreshTokenHash = `-- name: AdminSessionByRefreshTokenHash :one
 select
     s.id, s.user_id, s.refresh_token_hash, s.device_fingerprint, s.user_agent, s.ip,
     s.expires_at, s.revoked_at, s.created_at as session_created_at,
+    s.client, s.remember, s.last_used_at, s.revoked_reason, s.rotated_from,
+    u.ui_preferences, u.locale,
     u.company_id, u.name, u.email, u.phone, u.password_hash, u.password_changed_at,
     u.role, u.is_active, u.last_login_at, u.created_at as user_created_at,
     u.updated_at, u.deleted_at
@@ -36,6 +88,13 @@ type AdminSessionByRefreshTokenHashRow struct {
 	ExpiresAt         pgtype.Timestamptz
 	RevokedAt         pgtype.Timestamptz
 	SessionCreatedAt  pgtype.Timestamptz
+	Client            string
+	Remember          bool
+	LastUsedAt        pgtype.Timestamptz
+	RevokedReason     *string
+	RotatedFrom       *uuid.UUID
+	UiPreferences     *string
+	Locale            string
 	CompanyID         uuid.UUID
 	Name              string
 	Email             string
@@ -67,6 +126,13 @@ func (q *Queries) AdminSessionByRefreshTokenHash(ctx context.Context, refreshTok
 		&i.ExpiresAt,
 		&i.RevokedAt,
 		&i.SessionCreatedAt,
+		&i.Client,
+		&i.Remember,
+		&i.LastUsedAt,
+		&i.RevokedReason,
+		&i.RotatedFrom,
+		&i.UiPreferences,
+		&i.Locale,
 		&i.CompanyID,
 		&i.Name,
 		&i.Email,
@@ -85,7 +151,7 @@ func (q *Queries) AdminSessionByRefreshTokenHash(ctx context.Context, refreshTok
 
 const adminUserByEmail = `-- name: AdminUserByEmail :one
 
-select u.id, u.company_id, u.name, u.email, u.phone, u.password_hash, u.password_changed_at, u.role, u.is_active, u.last_login_at, u.created_at, u.updated_at, u.deleted_at from users u
+select u.id, u.company_id, u.name, u.email, u.phone, u.password_hash, u.password_changed_at, u.role, u.is_active, u.last_login_at, u.created_at, u.updated_at, u.deleted_at, u.ui_preferences, u.locale from users u
 join companies c on c.id = u.company_id
 where u.email = $1 and u.deleted_at is null and c.deleted_at is null
 `
@@ -113,6 +179,8 @@ func (q *Queries) AdminUserByEmail(ctx context.Context, email string) (User, err
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.UiPreferences,
+		&i.Locale,
 	)
 	return i, err
 }

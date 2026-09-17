@@ -119,6 +119,7 @@ var scopeIsoRegisteredRepositories = map[string]bool{
 	"NewCompanyRepository":          true,
 	"NewUserRepository":             true,
 	"NewSessionRepository":          true,
+	"NewPasswordResetRepository":    true,
 	"NewAuditRepository":            true,
 	"NewBuildingRepository":         true,
 	"NewAnalyzerRepository":         true,
@@ -277,7 +278,7 @@ func isTestGoFile(name string) bool {
 var scopeIsoWriteMethodPrefixes = []string{
 	"Create", "Update", "SoftDelete", "Delete", "Replace", "Append",
 	"BulkInsert", "Insert", "Set", "Record", "Revoke", "Start", "Finish",
-	"Mark", "Resolve", "Touch", "Upsert", "Supersede", "Ensure",
+	"Mark", "Resolve", "Touch", "Upsert", "Supersede", "Ensure", "Rotate",
 }
 
 func scopeIsoIsWriteMethod(name string) bool {
