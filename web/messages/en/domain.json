@@ -67,5 +67,13 @@
     "hourly": "Refresh hourly values",
     "energy": "Refresh energy values",
     "chooseAnalyzer": "Choose an analyzer to refresh"
+  },
+  "bill": {
+    "status": {
+      "draft": "Draft",
+      "issued": "Issued",
+      "flagged": "Needs review",
+      "superseded": "Superseded"
+    }
   }
 }

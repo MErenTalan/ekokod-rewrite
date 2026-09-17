@@ -67,5 +67,13 @@
     "hourly": "Saatlik değerleri yenile",
     "energy": "Enerji değerlerini yenile",
     "chooseAnalyzer": "Yenilemek için bir analizör seçin"
+  },
+  "bill": {
+    "status": {
+      "draft": "Taslak",
+      "issued": "Kesinleşti",
+      "flagged": "İncelenmeli",
+      "superseded": "Yenilendi"
+    }
   }
 }

@@ -11,6 +11,7 @@ import trShell from './tr/shell.json';
 import trDomain from './tr/domain.json';
 import trMap from './tr/map.json';
 import trAuth from './tr/auth.json';
+import trDashboard from './tr/dashboard.json';
 import enApp from './en/app.json';
 import enHealth from './en/health.json';
 import enUnits from './en/units.json';
@@ -23,6 +24,7 @@ import enShell from './en/shell.json';
 import enDomain from './en/domain.json';
 import enMap from './en/map.json';
 import enAuth from './en/auth.json';
+import enDashboard from './en/dashboard.json';
 
 const tr = {
   app: trApp,
@@ -37,6 +39,7 @@ const tr = {
   domain: trDomain,
   map: trMap,
   auth: trAuth,
+  dashboard: trDashboard,
 };
 const en = {
   app: enApp,
@@ -51,6 +54,7 @@ const en = {
   domain: enDomain,
   map: enMap,
   auth: enAuth,
+  dashboard: enDashboard,
 };
 
 export type Messages = typeof tr;
