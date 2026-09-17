@@ -190,7 +190,7 @@ func newSeedDemoCmd() *cobra.Command {
 				return err
 			}
 			defer pool.Close()
-			res, err := seed.SeedDemo(ctx, pool, auth.Hasher{Pepper: cfg.Security.PasswordPepper, Cost: cfg.Security.BcryptCost},
+			res, err := seed.Demo(ctx, pool, auth.Hasher{Pepper: cfg.Security.PasswordPepper, Cost: cfg.Security.BcryptCost},
 				os.Getenv(demoPasswordEnv), time.Now())
 			if err != nil {
 				return fmt.Errorf("seed demo: %w", err)

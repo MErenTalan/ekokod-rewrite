@@ -45,9 +45,9 @@ type DemoResult struct {
 	Readings int
 }
 
-// SeedDemo creates the demo company, building, analyzers, calendar, tariff and
+// Demo creates the demo company, building, analyzers, calendar, tariff and
 // user when absent, then extends readings to the current hour.
-func SeedDemo(ctx context.Context, pool *pgxpool.Pool, hasher auth.Hasher, password string, now time.Time) (DemoResult, error) {
+func Demo(ctx context.Context, pool *pgxpool.Pool, hasher auth.Hasher, password string, now time.Time) (DemoResult, error) {
 	sc := store.SystemScope(DemoCompanyID)
 	companies := postgres.NewCompanyRepository(pool)
 	var res DemoResult

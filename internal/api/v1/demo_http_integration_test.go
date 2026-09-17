@@ -13,7 +13,7 @@ import (
 
 func (h *harness) seedDemo() {
 	h.t.Helper()
-	_, err := seed.SeedDemo(h.t.Context(), h.pool, h.hasher, testPassword, h.clock.Now())
+	_, err := seed.Demo(h.t.Context(), h.pool, h.hasher, testPassword, h.clock.Now())
 	require.NoError(h.t, err)
 }
 
