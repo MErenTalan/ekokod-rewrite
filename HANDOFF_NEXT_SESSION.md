@@ -1,15 +1,16 @@
-# Handoff — ekokod rewrite: F1–F5 + F6a COMPLETE → next phase F6b (core application screens)
+# Handoff — ekokod rewrite: F1–F6 COMPLETE → next phase F7 (alarms and messages)
 
-> **STATUS (2026-09-17):** F6a (auth, RBAC, `/api/v1` HTTP layer, OpenAPI client, mobile auth, `/ekorm` shell, e2e
-> harness) is finished on `phase/f6-core-screens` in `/home/personal/ekokod-f6-phase`. It started from
-> `phase/f5-design-system` with `phase/f4-billing-engine` merged in (`24b53ca`). All 18 implementation tasks are merged
-> `--no-ff`, each with its own mutation proofs, followed by one whole-phase self-review (authorisation/tenancy first) and an
-> acceptance run.
-> **F6 was split by the user (R136):** F6a = this phase; **F6b = the screens** (Dashboard, Consumption, Load Profile,
-> Settings with 8 tabs, Calendar) plus their e2e specs. **F6b has no written plan yet.** The next session writes it first.
-> **Working mode:** no parallel agents, no subagents, no Workflow. One session runs one phase inline, writes this handoff at
-> the end, and the user runs `/clear`.
-> **Nothing has been pushed and `main` is untouched. Pushing and merging to `main` are the user's call.**
+> **STATUS (2026-09-18):** **F6b (the screens) is finished** on `phase/f6b-screens` in
+> `/home/personal/ekokod-f6b-phase`, branched from `phase/f6-core-screens` (F6a). Dashboard, Consumption, Load Profile,
+> Settings (8 tabs) and Calendar are built, together with the Go additions the screens needed (`GET /jobs/{id}`,
+> `GET /consumption/grouped`, GridBox wiring numbers, `company_id` in OpenAPI, two permissions, e2e seed data). All 14
+> plan tasks are committed with their own mutation proofs, followed by one whole-phase self-review
+> (authorisation/tenancy first, then 07 §11 accessibility and design) and a full acceptance run.
+> **F6 as a whole (F6a + F6b) is now done, so F7 is next.**
+> **Working mode:** no parallel agents, no subagents, no Workflow. One session runs one phase inline, writes this handoff
+> at the end, and the user runs `/clear`.
+> **Nothing has been pushed and `main` is untouched. Pushing and merging to `main` are the user's call** — including
+> whether to merge `phase/f6b-screens` into `phase/f6-core-screens` first.
 
 ---
 
@@ -18,42 +19,43 @@
 > Bu, bcem-energy'nin (yeni adıyla ekokod) Go ile yeniden yazım projesi. Spesifikasyon `docs/rewrite/` içinde, faz planı
 > `docs/rewrite/09-implementation-plan.md` (16 faz, F0–F15).
 >
-> **Durum:** F1–F5 ve F6a tamam. F6 ikiye bölündü (R136): F6a (auth, RBAC, `/api/v1` HTTP katmanı, OpenAPI istemcisi,
-> mobil auth, `/ekorm` iskeleti, e2e altyapısı) `phase/f6-core-screens` üzerinde (`/home/personal/ekokod-f6-phase`) bitti.
-> **Sıradaki faz F6b (ekranlar: Dashboard, Tüketim, Yük Profili, Ayarlar 8 sekme, Takvim + e2e spec'leri) ve henüz planı
-> yok.** F4'ün gerçek-fatura karşılaştırması ürün sahibinden fatura gelene kadar AÇIK. Hiçbir şey push edilmedi, `main`'e
+> **Durum:** F1–F5 ve F6 (F6a auth/API/iskelet + F6b ekranlar) tamam. F6b `phase/f6b-screens` dalında
+> (`/home/personal/ekokod-f6b-phase`) bitti. **Sıradaki faz F7 (Alarmlar ve Mesajlar) ve henüz planı yok.** F4'ün
+> gerçek-fatura karşılaştırması ürün sahibinden fatura gelene kadar AÇIK. Hiçbir şey push edilmedi, `main`'e
 > dokunulmadı; push ve merge kararı bana ait.
 >
 > **Çalışma düzeni (kesin):** paralel agent YOK, subagent YOK, Workflow YOK. Fazı bu oturumda tek başına yürüt
 > (`superpowers:executing-plans` + TDD). Review'ları kendin yap: her task sonunda diff'i oku, kendi mutasyonunla
 > guard'ın kırmızıya düştüğünü kanıtla; faz sonunda bir kez bütün-faz self-review (yetki/tenancy önce, sonra
-> erişilebilirlik ve tasarım kuralları). Faz bitince `HANDOFF_NEXT_SESSION.md`'i F7 için yeniden yaz, bana yapıştırılacak
+> erişilebilirlik ve tasarım kuralları). Faz bitince `HANDOFF_NEXT_SESSION.md`'i F8 için yeniden yaz, bana yapıştırılacak
 > promptu ver ve dur.
 >
 > Şu sırayla ilerle:
-> 1. `/home/personal/ekokod-f6-phase/HANDOFF_NEXT_SESSION.md`'i baştan sona oku (START HERE, "What F6a built",
->    Deviations, "F6b must pick up", Open questions, Environment). F6a planını
->    (`docs/superpowers/plans/2026-09-17-f6a-auth-api-skeleton.md`, R136–R189 ve izin matrisi) ve F5 planındaki D1–D26'yı
+> 1. `/home/personal/ekokod-f6b-phase/HANDOFF_NEXT_SESSION.md`'i baştan sona oku (START HERE, "What F6b built",
+>    Deviations, "F7 must pick up", Open questions, Environment). F6b planını
+>    (`docs/superpowers/plans/2026-09-17-f6b-core-screens.md`, R190–R210) ve F6a planını (R136–R189 + izin matrisi)
 >    referans olarak kullan.
-> 2. F6b worktree'sini aç: `git worktree add -b phase/f6b-screens /home/personal/ekokod-f6b-phase phase/f6-core-screens`,
->    `web/` içinde `pnpm install --frozen-lockfile`.
-> 3. **F6b planını yaz** (`superpowers:writing-plans`, `docs/superpowers/plans/` altına; sıkı: imzalar, kural tablosu,
->    isimli testler, doğrulama komutları). Kaynak: 09 §F6, `01-project-context.md` §2 rol matrisi, §5, §6, §7.2–§7.4,
->    §7.15, §7.18, `05-api-contract.md`, `07-design-system.md`, `design-system/bcem-energy/MASTER.md` sonra `OVERRIDES.md`.
->    Legacy dashboard/consumption/load-profile/settings/calendar ekranlarını ve gerçek veriyi plan öncesi oku; ekranların
->    ihtiyaç duyduğu ama F6a'da olmayan API'leri (ör. tarife şablonları, toplu tarife, bill dashboard) açıkça listele ve
->    F6b'de mi yoksa sonraki fazda mı yapılacağını bana sor. Bu handoff'taki "F6b must pick up" listesinin tamamı planda
->    karşılanmalı. Planı kendin bir kez spec + legacy'ye karşı gözden geçir, sonra yürüt.
+> 2. F7 worktree'sini aç: `git worktree add -b phase/f7-alarms /home/personal/ekokod-f7-phase phase/f6b-screens`,
+>    ardından `web/` içinde `pnpm install --frozen-lockfile`.
+> 3. **F7 planını yaz** (`superpowers:writing-plans`, `docs/superpowers/plans/` altına; sıkı: imzalar, kural tablosu,
+>    isimlendirilmiş testler, doğrulama komutları). Kaynaklar: `09-implementation-plan.md` §F7,
+>    `01-project-context.md` §7.12 (dört alarm türü ve ayarları), §7.13 (Mesajlar), §7.14/§7.16 (iş geçmişi),
+>    `05-api-contract.md`, `07-design-system.md`, `design-system/bcem-energy/MASTER.md` ve sonra `OVERRIDES.md`.
+>    Planlamadan önce legacy alarm/mesaj kodunu ve gerçek veriyi oku. **SMS kararını bana sor** (gerçek bir gateway'e
+>    karşı mı yazılacak, yoksa arayüzden tamamen mi kaldırılacak — yarım bırakılmayacak, 09 §F7 böyle diyor); ayrıca
+>    alarm/mesaj ekranlarının ihtiyaç duyduğu ama mevcut API'de olmayan uçları açıkça listele ve F7'de mi yoksa sonraki
+>    fazda mı yapılacağını bana sor. Planı bir kez spesifikasyona + legacy'ye karşı kendin gözden geçir, sonra uygula.
 >
-> Ortam: her komuttan önce `export PATH="$HOME/.local/go/bin:$HOME/.local/node/bin:$HOME/go/bin:$PATH" GOFLAGS=-p=2 GOMEMLIMIT=2GiB`.
-> Sadece üzerinde çalıştığın paketleri/test hedeflerini koş, asla `make test` / `go test ./...` koşma. Integration testi
-> için paylaşımlı Postgres ve Redis: `docker ps` ile `ekokod-test-pg` ve `ekokod-test-redis` açık mı bak (yoksa
-> `make test-db-up` / `make test-redis-up`; Docker kapalıysa benden başlatmamı iste), sonra
+> **Ortam ve güvenlik:** her komutun başına
+> `export PATH="$HOME/.local/go/bin:$HOME/.local/node/bin:$HOME/go/bin:$PATH" GOFLAGS=-p=2 GOMEMLIMIT=2GiB` ekle.
+> Sadece üzerinde çalıştığın paketleri/test hedeflerini koştur; **asla `make test` veya `go test ./...` çalıştırma.**
+> Entegrasyon testleri için önce `docker ps` ile `ekokod-test-pg` ve `ekokod-test-redis` var mı bak (yoksa
+> `make test-db-up` / `make test-redis-up`; Docker kapalıysa bana söyle), sonra
 > `EKOKOD_TEST_PG_DSN='postgres://ekokod:ekokod@localhost:55432/postgres?sslmode=disable' EKOKOD_TEST_REDIS_URL=redis://localhost:56379/0 TESTCONTAINERS_HOST_OVERRIDE=127.0.0.1 go test <paket> -tags=integration -count=1 -parallel 4`.
-> Web: `pnpm test --maxWorkers=2`, Storybook/Playwright/`next build` tek tek; ağır işlerden önce `free -m` ve
-> `ps -eo rss,comm | grep java` ile belleğe bak (bellek darsa Playwright `--workers=1`). e2e:
-> `pnpm build && pnpm test:e2e --workers=1` (gerçek API'yi kendisi ayağa kaldırır). Başka projenin Gradle/java
-> süreçlerine, 5432'deki `dolmusum-dev-postgres-1` container'ına ve 8080'deki `dolmusum serve`'e dokunma.
+> Web'de `pnpm test --maxWorkers=2`; Storybook/Playwright/`next build` aynı anda değil, teker teker. Ağır işlerden önce
+> `free -m` ve `ps -eo rss,comm | grep java` kontrol et (bellek sıkışıksa Playwright `--workers=1`), e2e için
+> `pnpm build && pnpm test:e2e --workers=1`. Başka projenin Gradle/java süreçlerine, 5432'deki
+> `dolmusum-dev-postgres-1` container'ına ve 8080'deki dolmusum serve'e dokunma.
 
 ---
 
@@ -62,231 +64,224 @@
 | Branch / worktree | Head | State |
 |---|---|---|
 | `phase/f1-data-model` (main checkout `/mnt/c/Users/meren/Desktop/Work/ekokod-rewrite`) | `10d6577` | F1 complete |
-| `phase/f2-integration-layer` (`/home/personal/ekokod-f2-phase`) | `9919bd3` | F2 complete (`7dbe1ea`); tip also carries the F3 plan doc |
+| `phase/f2-integration-layer` (`/home/personal/ekokod-f2-phase`) | `9919bd3` | F2 complete |
 | `phase/f3-consumption-engine` (`/home/personal/ekokod-f3-phase`) | `58597ec` | F3 complete |
 | `phase/f4-billing-engine` (`/home/personal/ekokod-f4-phase`) | `cf79346` | F4 complete; real-invoice comparison OPEN |
 | `phase/f5-design-system` (`/home/personal/ekokod-f5-phase`) | `a162d7a` | F5 complete |
-| **`phase/f6-core-screens`** (`/home/personal/ekokod-f6-phase`) | this handoff commit | **F6a complete** (F4 merged at `24b53ca`; plan `fa18df2`; tasks 1–18 + phase review) |
-| `f6a/task-1` … `f6a/task-19` | merged | local branches only; can be deleted |
+| `phase/f6-core-screens` (`/home/personal/ekokod-f6-phase`) | `09e07bd` | F6a complete |
+| **`phase/f6b-screens`** (`/home/personal/ekokod-f6b-phase`) | this handoff commit | **F6b complete** (plan `1529c97`; tasks 1–14 + phase review) |
 
 Shared test containers (both tmpfs, recreate freely): `ekokod-test-pg` (TimescaleDB, :55432, `make test-db-up`) and
 `ekokod-test-redis` (:56379, `make test-redis-up`). The e2e run creates and drops the `ekokod_e2e` database in
 `ekokod-test-pg` and uses Redis DBs 6/7.
 
-## What F6a built
+- Plan: `docs/superpowers/plans/2026-09-17-f6b-core-screens.md` (rulings **R190–R210**, file map, tasks 1–14,
+  acceptance map, PO questions Q-B1…Q-B3).
+- Ledger (git-ignored, in the primary checkout):
+  `/mnt/c/Users/meren/Desktop/Work/ekokod-rewrite/.superpowers/sdd/2026-09-17-f6b/inline-ledger.md` — every task's
+  mutations, deviations and gates, plus the phase-end review findings.
+- Working tree clean, 30 commits on top of F6a. Everything at the tip is green: see **Verification at the F6b tip**.
 
-### Go: auth, tenancy and the HTTP API
-- **`internal/auth`** — `Hasher` (bcrypt over HMAC-pepper, `legacy$` rehash path, `DummyVerify` per configured cost),
-  `CheckPolicy` (R146 codes), `Tokens` (HS256 access JWT: `sub`, `sid`, `cid`, `aud` web|mobile, `typ=access`,
-  `iss=ekokod`), opaque refresh tokens (SHA-256 at rest), `Fingerprint` (HMAC of User-Agent), `RoleSet`/`PermissionsFor`
-  (R159, **the** permission table; the web reads it through `/auth/me` and a Go-checked fixture).
-- **Store** — migration `00015_auth_sessions.sql` (sessions: client, remember, last_used_at, revoked_reason, rotated_from;
-  users: ui_preferences ≤ 512, locale; `password_reset_tokens`); session `Rotate`/`RevokeWithReason`/`Touch`;
-  `PasswordResetRepository`; admin `ListCompanies`, `SectorFigures`, integration-definition CRUD.
-- **`internal/mail`** — SMTP sender (implicit TLS or STARTTLS, verified certs, refuses plaintext auth) and tr/en templates
-  (`password_reset`, `smtp_test`).
-- **Services** — `service/auth` (login, refresh with rotation + 30 s grace + reuse detection, device binding, logout(-all),
-  sessions, change/forgot/reset password, profile, `ResolveScope`), `service/tenancy` (companies, users with assignable
-  roles, SMTP), `service/assets` (buildings, analyzers, plants, analyzer refresh, sectoral comparison),
-  `service/analysis` (consumption rows/summary/export, anomalies, load profile, generation, energy balance, reactive
-  status), `service/billing/requests.go` (compute, PDF, hourly XLSX), `service/calendar`, `service/integrations`
-  (definitions), `credentials` (iSolar OAuth state), `seed` (`e2e` fixtures, synthetic `demo` company with an hourly job).
-- **`internal/api/v1`** — **one route table** (`routes.go` + `handlers_*.go`, 86 operations) drives the router, role
-  checks, OpenAPI 3.1 (`openapi.json`, committed, `make openapi`), idempotency (Redis) and audit. `kit/` (bind with
-  unknown-parameter/-field rejection, error envelope with tr/en catalogue, opaque cursors, cookies), `dto/`, `mw/`
-  (Authn, RequireRoles, Scope with admin `company_id`, BodyLimit, ContentType, per-principal and Redis auth rate limits,
-  Idempotency, Auditor). `internal/apiwire.Build` wires everything for `ekokod api`. `ekokod user create`,
-  `ekokod seed e2e`, `ekokod seed demo`, `ekokod tool openapi`.
-- **Guards** — `TestAuthorizationMatrix` (every route × six roles from an independent copy of 05), `TestMatrixCoversEveryRoute`,
-  `TestReadOnlyRolesForbiddenOnEveryMutation` (+ HTTP twin), `TestBuildingAdminCannotReachOtherBuildingsAnyEndpoint`
-  (every `{id}` route from `Table()`, foreign ids per path family — an unmapped new family fails), `TestEveryMutationAudited`,
-  `TestCredentialsNeverLeak`, `TestRouteTableMatchesRouter`, `TestOpenAPIDocumentIsCurrent`, `TestRequestTypesAreConsistent`,
-  `TestPermissionEnumMatchesTable`, `TestEnumComponentsAreNotNullable`, `TestPermissionsFixtureMatchesTable`, `internal/arch`
-  API guard, scope-isolation meta test (new repositories registered).
+---
 
-### Web
-- **API client** (`web/src/lib/api/`) — `schema.d.ts` generated by openapi-typescript (`pnpm gen:api`, CI `pnpm check:api`);
-  paths carry the `/api/v1` prefix (`api.GET('/api/v1/auth/me')`). `client.ts`: typed browser client with a
-  **single-flight refresh** on 401 `token_expired|token_rotated|unauthorized` and one retry, `device_mismatch` →
-  `/auth/login?reason=device_mismatch`, other ended sessions → `/auth/login?next=…`; public auth endpoints never refresh.
-  `query.ts`: `$api` (openapi-react-query) + `makeQueryClient` (no retry on 4xx). `server.ts`: `serverApi()` (internal URL,
-  forwards cookie/UA/XFF, app locale as Accept-Language), `getSession()`/`getMe()`. `errors.ts`: `safeNext` (post-login
-  target must be `/ekorm…`, no dot segments), `authRedirectFor`.
-- **Same-origin proxy** — `src/app/api/v1/[...path]/route.ts` proxies to `EKOKOD_INTERNAL_API_URL` **at runtime**
-  (keeps every `Set-Cookie`, strips hop-by-hop/encoding headers, refuses dot segments, 502 envelope when down).
-- **Middleware** (`src/middleware.ts`) — `/` → `/ekorm`; `/auth/*` public; missing `ekokod_at` with `ekokod_rt` →
-  server-side refresh forwarding cookie/UA/Accept-Language/XFF, fresh cookies copied onto the response **and** the
-  forwarded request; `device_mismatch` → login with reason; `token_rotated` → one retry of the same URL (10 s
-  `ekokod_retry` cookie); anything else → `/auth/login?next=…`.
-- **Auth pages** (`src/app/auth/*`, `src/features/auth/*`) — split layout (brand panel ≥ 768 px, language + theme controls),
-  login (legacy labels, remember device, focus-managed errors, `Retry-After` minutes, adopts profile `ui_preferences` and
-  locale), forgot password (identical confirmation), reset password (live R146 rule list mirroring `policy.go`, server codes
-  mapped, spent-token path, `referrer: no-referrer`), auth error, maintenance, register → login. Namespace `auth` (tr/en).
-- **`/ekorm` shell** — `src/app/ekorm/layout.tsx` (server `getSession`, redirect with reason) → `SessionProvider`
-  (`useSession().can(permission)`, preference sync) → `AppShell` (user from session, `navFor(permissions)`, admin
-  `CompanySwitcher`). `nav-config.ts`: `/ekorm/*` hrefs, Calendar after Reports, per-leaf `permission`
-  (solar plants, financial; everything else `nav.core`), disabled placeholders stay visible. `lib/selection`:
-  `useSelection()` per-user localStorage store (company switch clears building+analyzer; building switch clears analyzer),
-  `useScopeParams()` → `{company_id}` for admins. `features/preferences/sync-preferences.ts`: debounced (500 ms)
-  `PATCH /profile` of `ekokod_ui` + locale (not for demo). `UserMenu` logout (POST, clear queries, `/auth/login`).
-- **e2e** — Playwright projects `a11y` and `e2e` (webServer chosen by `PW_PROJECT`); `web/scripts/e2e-api.sh` (fresh
-  `ekokod_e2e` DB, fixtures, demo, `ekokod api` on :18080); `next start` on `http://localhost:13000` (localhost because the
-  cookies are Secure). `tests/e2e/auth.spec.ts` (11 tests): six roles × exact navigation + switcher only for admin,
-  remember-me cookie lifetime, device mismatch, logout, transparent refresh, forgot password. CI job `e2e` (TimescaleDB +
-  Redis services, 30 min). `make web-e2e`.
-- **Evidence ledger** (every mutation, invalid attempts and survivors):
-  `/mnt/c/Users/meren/Desktop/Work/ekokod-rewrite/.superpowers/sdd/2026-09-17-f6a/inline-ledger.md` (git-ignored).
+## What F6b built
 
-### Deviations from the F6a plan (all in the ledger)
-- Access token also carries `cid` (company) so the session row can be loaded under a Scope; role/company still come from
-  the DB on every request (R140 intent kept).
-- Middleware package is `internal/api/v1/mw`; the OpenAPI document lives at `internal/api/v1/openapi.json` (go:embed).
-- **R168:** `next.config` rewrites were **replaced by a runtime route-handler proxy** — the build baked
-  `localhost:8080` into `routes-manifest.json` while docker-compose sets `EKOKOD_INTERNAL_API_URL=http://api:8080` at
-  runtime. The browser client also refreshes on `unauthorized` (the access cookie's Max-Age equals the token TTL, so an
-  idle tab sends no token at all).
-- **R189 (new):** the iSolar OAuth callback is `/api/v1/integrations/isolar/callback` (worker updated).
-- R166 exempt reasons use F4's codes (`term`, `user_group`, `generation`, `below_kw`); R176 endpoint validation relaxed to
-  snake_case keys → non-empty strings (absolute `http://` refused).
-- Demo seed refreshes only the hourly/daily continuous aggregates over [earliest − 48 h, end + 1 h).
-- Company create/delete write platform audit rows.
-- `@tanstack/react-query` **5.102.8**, not the planned 5.103.1: the latter was under a day old and pnpm 12's
-  `minimumReleaseAge` refused it; pnpm's auto-added exemption was reverted rather than bypass the supply-chain guard.
-- Login form fields carry no "(Zorunlu)" marker (both are always required on sign-in).
-- **Phase-review fixes (on `f6a/task-19`):** enum OpenAPI components were nullable because PATCH DTOs point at them
-  (`Me.role` typed `null|string` in TypeScript) → interceptor + test; the layout lost the `device_mismatch` reason when the
-  access cookie was still present → `getSession` keeps the code; `safeNext` rejects dot segments; **client IP is now the
-  rightmost untrusted `X-Forwarded-For` hop** (the leftmost entry is client-written once the web proxy sits between a front
-  proxy and the API, which let per-IP auth limits be dodged); scheduler integration tests lacked `Schedule.Demo` (the
-  Task 13 cron entry made the scheduler fail to start there); `password_reset_tokens.token_hash` added to the F1
-  secret-column allow-list as a one-way hash; the HTTP test harness no longer sets `InsecureSkipVerify` (arch guard);
-  `testfixtures.InsertReadings` refreshes `consumption_hourly/daily` over the inserted range, retrying on SQLSTATE 55P03 —
-  a TimescaleDB policy job in the cloned test DB could move the watermark past historical rows and hide them (root cause of
-  the intermittent `TestWeekendAndVacationChangeLoadProfileHTTP`); excelize 2.11.0 and moby/go-archive 0.3.0 for
-  GO-2026-5960/GO-2026-6253.
+### Go
+- **`GET /jobs/{id}`** (R192, `internal/service/jobs`, `handlers_jobs.go`): the state of a job the user started, read
+  from asynq's Inspector across the `critical`/`default`/`low` queues. Roles A, CA, BA. One indistinguishable 404 for
+  unknown, unwatchable, foreign-company, out-of-scope-analyzer, and company-wide jobs seen by a building-scoped role.
+  Status: pending/scheduled/aggregating → `queued`, active/retry → `running`, completed → `succeeded`, archived →
+  `failed`; the response never carries `last_err`. `refresh_analyzer`, `sync_analyzers` and `backfill` gained
+  `asynq.Retention(time.Hour)` so a finished task stays queryable.
+- **`GET /consumption/grouped`** (R193, `internal/domain/grouping`, `internal/service/analysis/grouped.go`): daily rows
+  bucketed by `daily | week | day_type | season | season_day_type`, optional `compare=previous`, range ≤ 366 days, with
+  statistics (total, average 3 dp half-even, peak, valley). Day types come from the company calendar through
+  `loadprofile.CalendarConfig` (new exported method), so Consumption and Load Profile can never disagree (R137). Weeks
+  start Monday and are labelled by that Monday — a **deliberate divergence from legacy** (Q-B1).
+- **GridBox wiring numbers** (R210, `internal/credentials`): `wiring_numbers` (1–50, `^[A-Za-z0-9._-]{1,100}$`) and
+  `building_id` on credential create/update; each number is upserted as an analyzer, and numbers left out of a later
+  call are never deleted. PM5340 now honours `building_id` too.
+- **`company_id` in OpenAPI** (R190) for every non-public route, so the typed client can send the admin scope without
+  casts; array enums are moved onto `items`, with a guard test.
+- **Permissions** (R191): `settings.analyzers.edit` (A, CA) and `anomaly.check` (A, CA, BA), with the web fixture
+  regenerated from `auth.PermissionsFor`.
+- **Seed** (R194): `ekokod seed e2e` fills 75 days of hourly readings for A1/A2/B1 and one issued building bill, so every
+  screen has real data in e2e. The demo company keeps its F6a behaviour; `seed.fillHourly` is shared by both.
+- **Test infrastructure** (`b34faba`): continuous-aggregate refresh policies are dropped from the test template and from
+  every clone. They fired inside short-lived clones and materialised a monthly bucket for one analyzer while another
+  stayed R94-composed — a deterministic failure on the F6a tip too.
 
-## F6b must pick up
-- **Branching:** start from `phase/f6-core-screens` (see the prompt).
-- **Screens (R136):** Dashboard (01 §7.2: three-column grid + full-width chart, map with active/passive markers from R163,
-  reactive status card from R166, latest bill card from `/bills/latest`, sectoral comparison from R162 with ranks and a CSV
-  export), Consumption (every §7.3 column — the API's column set is pinned by `TestConsumptionColumnSet`; the eight
-  seasonal labels — keys exist from T10), Load Profile (profiles, statistics, XLSX export; weekday/weekend follows company
-  weekend days and vacations, R137), Settings with 8 tabs **gated by `useSession().can(...)` permissions**
-  (`settings.company(.edit)`, `settings.buildings`, `settings.plants`, `settings.users`, `settings.analyzers`,
-  `settings.integrations`, `settings.smtp`, profile/sessions/change-password for everyone but demo), Calendar (events +
-  vacations/weekend days, `calendar.edit`).
-- **From F5 (not done in F6a):** wire `BuildingAnalyzerPicker` to `useSelection`; card-grid stagger with
-  `--duration-stagger-step` (D26); map tile URL (Q5) or the coordinate list; every page on `PageHeader`/`FilterBar`/
-  `PeriodFilterBar`/`MetricCard`/chart wrappers/`DataTable` + `ExportMenu`/`DataQualityBadge`; new namespaces the same way
-  as `auth`/`shell`; read MASTER.md then OVERRIDES.md.
-- **Scope in queries:** every scoped `$api.useQuery` must spread `useScopeParams()` into `query` (admin `company_id`), and
-  query keys must include it so a company switch refetches.
-- **e2e:** `tests/e2e/{dashboard,consumption,load-profile,settings,calendar}.spec.ts` on the existing harness (fixtures:
-  company A with buildings A1/A2 and analyzers, company B, demo company with 180 days of readings). Add seed data the
-  screens need to `seed e2e`, not ad hoc in specs.
-- **APIs the screens will want that F6a did not build** (decide in the F6b plan, ask the user): tariff templates and bulk
-  tariff (05 §6), `GET /bills/dashboard` (+ export), solar plant realtime/production (F9), reports (F8), alarms (F7).
-- **Open from F6a:** `/ekorm/settings` and the other nav targets are 404 until F6b builds them; the e2e suite only covers
-  auth. The admin company switcher lists up to 500 companies (no paging UI). The layout redirect to login does not carry
-  `next` (the middleware covers the missing-cookie case).
+### Web (all under `web/src`)
+- **Shared plumbing:** `lib/api/{types,problem,mutation,download}.ts` (R198, R199), `lib/dates.ts`,
+  `lib/format-period.ts`, `test/api-mock.ts`, `features/scope/{use-assets,scope-picker}` (R196),
+  `features/jobs/{use-job,refresh-actions}` (R192), `components/ui/stagger-grid.tsx` (D26), `Map` `focusId` (R204),
+  `middleware.ts` `x-ekokod-path` + a layout redirect that keeps `next` (R208).
+- **Dashboard** (R204, R205): map panel with building/analyzer tabs and marker selection, building list with search and
+  marker filtering, latest-bill card, reactive status with the all-buildings dialog, consumption panel with the 50-point
+  cap and year-over-year bars, sectoral comparison with ranks and CSV.
+- **Consumption** (R206): the full §7.3 column set (29 columns), summary cards, series chart, detailed graphs over
+  `/consumption/grouped`, an alarm-check dialog that stays honest about the missing model (R165), CSV/Excel and print.
+- **Load Profile** (R207): labels derived from the profile key, daily/seasonal/compare (max 6, D21)/details tabs, Excel
+  export, and the weekend caption that links to the calendar.
+- **Settings** (R200, R201, R209, R210): 8 permission-gated tabs — account (demo read-only), integrations, company
+  (+ admin company list and integration credentials), buildings, plants, analyzers, users, SMTP.
+- **Calendar** (R202, R203): hand-built month/week/day/agenda views, an event dialog with the six data colours, and the
+  vacation dialog that owns weekend days and periods.
+- **e2e:** `tests/e2e/{dashboard,consumption,load-profile,settings,calendar,responsive}.spec.ts` on top of F6a's
+  `auth.spec.ts` — 39 tests.
+
+### Phase-end review findings, all fixed with guards
+1. **Tenancy (`f93583c`):** `jobs.Get` ignored `AnalyzerIDs` (backfill) and jobs that name no analyzer (credential sync),
+   so a building-scoped role could watch a job outside its buildings.
+2. **Page-level horizontal scroll (`0cc757b`):** `overflow-auto` clipped the 29-column table visually but left its width
+   in the document's scroll area (the page scrolled 2428 px into emptiness) → `contain-paint` on `TableContainer`. The
+   consumption average rendered at the division scale (`1.635,49478947368421052632`) → energy scale (R161) plus
+   wrapping. `StaggerGrid` items could not shrink below their content. The calendar's seven day columns now scroll in
+   place. Guard: `tests/e2e/responsive.spec.ts` (4 widths × 5 screens).
+3. **Accessibility (`04ee79e`):** dark-theme muted text on a selected row was 4.37:1 → `primary-subtle` darkened and the
+   contrast gate extended to secondary text on every subtle surface (75 pairs). Calendar chips and short time-grid
+   blocks now keep 44 px (D13). The three controlled dialog stories follow the house pattern (the story owns the opener).
+4. **Errors were invisible (`5c026a1`):** no screen surfaced a failed GET, so a failed request looked exactly like an
+   empty screen → `QueryErrorToaster` says it once per query. Reading that code showed the retry policy tested an HTTP
+   status the thrown error envelope never carries, so every 4xx was retried twice; both now read the envelope's `code`.
+
+---
+
+## Deviations from the F6b plan (all in the ledger)
+- An unknown `group_by` answers **422 `validation_failed`** (the DTO enum, R154), not the plan's 400.
+- `wiring_numbers` uses `validate:"dive,min=1"`: `dive,required` trips `TestRequestTypesAreConsistent`, which reads
+  `required` anywhere in the tag. `credentials.Deps` gained `Buildings` (apiwire, worker and four test call sites).
+- R194's seed data lives in `seed.E2EData`, called only by `ekokod seed e2e`; putting it in `E2EFixtures` broke four Go
+  tests written against empty fixtures.
+- Message keys are camelCase throughout (`check:i18n-parity` rejects anything else), so `months.1` and
+  `roles.company_admin` became camelCase keys or reuse `shell.roles`.
+- Story/container split: `*-page` and `*-panel` containers are exempt from the story-coverage rule and carry container
+  tests instead.
+- One unreproduced Go failure is recorded honestly: a single combined `credentials + api/v1 + worker` run reported FAIL
+  for `api/v1` with the test name lost to an over-filtered grep; three identical re-runs and every later run, including
+  the phase-end race and integration runs, were green.
+- Two a11y harness rules were relaxed **with the reason written down**: axe measures the settled state (a fade in flight
+  reads as low contrast), and the keyboard walk knows Chromium keeps a `type=time` input active while Tab crosses its
+  inner fields.
+
+---
+
+## F7 must pick up
+- **Branching:** start from `phase/f6b-screens` (see the prompt).
+- **Alarms (01 §7.12):** all four types with their full settings; `alarm.evaluate` and `alarm.notify` jobs; notification
+  frequency suppression; per-invoice deduplication for the invoice alarm; rule CRUD, event history and dry-run
+  evaluation. F1 already has the alarm tables and F6a the `alarms.*` permissions — read both before designing anything.
+- **SMS:** decide with the user, then build it against a real gateway or remove it from the UI. 09 §F7 forbids offering
+  it unimplemented.
+- **Mail:** delivery through the company's SMTP settings (`internal/mail`; the SMTP settings UI ships in F6b, R172),
+  templates in both locales; a failed send is recorded on the alarm event and surfaced in Messages without failing the
+  job.
+- **Messages screen (§7.13)** over `operational_messages`, with search and both filters.
+- **`job_runs` history for admins, with manual triggering** (§7.14/§7.16). `GET /jobs/{id}` (R192) already models "a job
+  the user started": reuse its watchable allow-list, its scope checks and the web `useJob` hook instead of inventing a
+  second convention; `RefreshActions` is the UI precedent.
+- **Screen conventions are set** (R195–R199): route → `*-page` container → views; `ScopePicker` for selection;
+  `useApiMutation` for every write; `downloadFile` for every export; `mockApi` for container tests; stories stay
+  data-free; and every new screen needs a line in `tests/e2e/responsive.spec.ts`'s `SCREENS` list.
+- **Never invent a verdict.** R165's placeholder ("Tahmin modeli şu anda kullanılamıyor") is the house style for
+  anything the ML service cannot answer yet.
 - **Deployment note (F15):** the API derives client IPs from `X-Forwarded-For` only for `EKOKOD_TRUSTED_PROXIES`; the web
   container and the front proxy must both be listed there, and the front proxy must append (not pass through) XFF.
-- **Later phases:** F7 extends `internal/mail`; F8 maps the bill DTO → `InvoiceLineView` and owns export/e-mail; F9 plant
-  aggregates; F12 public site; F13 `/anomaly/check` (R165 placeholder) and calendar events as an ML covariate (R137);
-  F15 CSP nonces and the supported-browser floor.
+- **Later phases:** F8 bills/tariffs/reports UI (tariff templates, bulk tariff, `GET /bills/dashboard` — deferred there
+  by the user on 2026-09-17); F9 solar plant realtime/production and the iSolar screens; F12 public site; F13 the real
+  `/anomaly/check` model and calendar events as an ML covariate (R137); F15 CSP nonces and the supported-browser floor.
+
+---
 
 ## Open questions for the product owner (defaults ship)
-- **F6a:** **Q-A1** two-step verification and self-registration are not built (R151) — needed? · **Q-A2** force a password
-  change at an admin-created user's first login? · **Q-A3** password-reset mail uses the user's company SMTP settings; no
-  platform SMTP exists — add one? · **Q-A4** sectoral comparison is cross-tenant: peers hidden, ≥ 3 peers required (R162),
-  grid factor 0.469 kg/kWh (`grid_electricity_tr_2022`) — acceptable? · **Q-A5** mobile sessions last 30 days and are
-  device-bound like web (R141/R142) — OK? · **Q6 (F5)** Calendar sits top-level after Reports (R167 default).
+- **F6b:** **Q-B1** detailed-graph weeks are Monday-start calendar weeks labelled by their Monday; legacy used
+  week-of-month (`01-04-25`) — OK? · **Q-B2** integration credential **creation** stays admin-only as in legacy, while
+  company admins manage existing ones — should CAs set up new integrations too? · **Q-B3** the dashboard year-over-year
+  chart appears only for monthly granularity inside one calendar year — enough? · **Q-B4 (new)** R94's accepted
+  divergence: a materialised monthly bucket is last−first inside the month (743 h) while a composed one is
+  closing-to-closing (744 h); test databases no longer materialise, but production will — confirm the documented rule.
+- **F6a:** **Q-A1** two-step verification and self-registration are not built (R151) · **Q-A2** force a password change
+  at an admin-created user's first login? · **Q-A3** password-reset mail uses the company SMTP settings; no platform SMTP
+  exists · **Q-A4** sectoral comparison is cross-tenant: peers hidden, ≥ 3 peers required (R162), grid factor
+  0.469 kg/kWh · **Q-A5** mobile sessions last 30 days and are device-bound (R141/R142) · **Q6 (F5)** Calendar sits
+  top-level after Reports (R167).
 - **F5:** Q1 customiser theme colour · Q2 RTL · Q3 English UI keeps `1.234,56` · Q4 light `primary` = emerald-700 ·
-  Q5 production map tile source · Q7 legacy catalogues disagree on 115 keys. Browser floor for `light-dark()`: Chrome/Edge
-  ≥ 123, Firefox ≥ 120, Safari ≥ 17.5.
-- **F4 (unchanged):** real-invoice comparison OPEN; dated `billing_parameters` defaults (R106, reactive basis, exemptions,
-  R118, tiering, PTF tolerance, rounding R112); R119, R111, R110, R114, R122, R135; OG transformer loss.
-- **F1–F3 (unchanged):** Q1 ratio zero-case, Q3 weekend default, Q5–Q10; F2 device/integration items. Q4 (calendar events vs
-  weekend split) is **decided: no** (R137).
+  Q5 production map tile source · Q7 legacy catalogues disagree on 115 keys. Browser floor for `light-dark()`:
+  Chrome/Edge ≥ 123, Firefox ≥ 120, Safari ≥ 17.5. **Note:** dark `primary-subtle` is now `#053F30` (was `#064E3B`) so
+  secondary text on a selected row reaches 4.5:1.
+- **F4 (unchanged):** real-invoice comparison OPEN; dated `billing_parameters` defaults (R106, reactive basis,
+  exemptions, R118, tiering, PTF tolerance, rounding R112); R119, R111, R110, R114, R122, R135; OG transformer loss.
+- **F1–F3 (unchanged):** Q1 ratio zero-case, Q3 weekend default, Q5–Q10; F2 device/integration items. Q4 (calendar
+  events vs the weekend split) is **decided: no** (R137).
 
 ## Binding rulings
-F1 rulings 1–14, F2 R1–R53, F3 R54–R104, F4 R105–R135, F5 D1–D26, **F6a R136–R189**
-(`docs/superpowers/plans/2026-09-17-f6a-auth-api-skeleton.md`; R189 and the amendments above are in the ledger), plus
-each phase's deviations.
+F1 rulings 1–14, F2 R1–R53, F3 R54–R104, F4 R105–R135, F5 D1–D26, F6a R136–R189, **F6b R190–R210**
+(`docs/superpowers/plans/2026-09-17-f6b-core-screens.md`), plus each phase's deviations.
 
 ## Process rules that paid off (keep them, inline)
-- **Read legacy code and real data before coding rules;** decide splits and blockers with the user up front (R136–R139).
-- **Prove every guard red with your own mutation, by script, restoring from a backup.** Record invalid mutants honestly:
-  F6a had several that failed to compile (shell-escaped `&&`, unused variables) or used a no-op test command; each was
-  re-run properly. Survivors exposed real gaps (refresh without a credential, rotated refresh keeping cookies, a public
-  auth endpoint guard) or were proven equivalent (defence in depth in SQL, a double permission check).
-- **Derive sweeps from the route table,** and make the sweep fail when a new route has no fixture mapping.
-- **Per-task gates must run the whole touched packages** (integration tag), not only `-run <new tests>`: the phase-end
-  race runs found four regressions the targeted runs had missed (scheduler cron config, F1 secret-column guard, arch TLS
-  guard, an aggregate-watermark flake).
-- **Build and run the real artefact.** The standalone build smoke found the build-time rewrite bug; designing the e2e
-  device-mismatch test found the lost reason; the e2e run itself found two test-helper bugs, not product bugs.
-- **Supply chain:** never accept pnpm's auto-written `minimumReleaseAgeExclude`; pick an aged version.
-- **Commit as soon as tests are green,** then mutations, then merge `--no-ff`. Comments say WHY in 1–3 lines.
+- **Read legacy code and real data before writing rules,** and list the APIs a screen needs but the backend lacks so the
+  user can decide. F6b's five gaps were settled that way in one round (grouped consumption and job status in F6b,
+  tariffs → F8, iSolar → F9, GridBox wiring numbers in F6b).
+- **Prove every guard red with your own mutation, restoring from a file backup — never `git checkout` a file whose fix
+  is not committed yet** (it silently reverted a finished fix once this phase). Survivors are findings: this phase they
+  exposed a reactive advisory read from `rows[0]`, an unasserted chart cap, a test that sliced by the very constant it
+  guarded, and a 403 test that only passed because of its own timeout.
+- **Per-task gates run the whole touched package,** and the whole web suite before every commit (the story-coverage
+  guard was committed red twice before that rule).
+- **Run the real artefact.** Four of the six phase-end findings only appear in a built app at a real viewport
+  (`pnpm build` + Playwright at 375/768/1024/1440); none is visible to jsdom tests.
+- **When a UI test fails, ask whether it is the test or the product.** Three e2e failures this phase were my own
+  matchers (`Cuma` also matches `Cumartesi`, a strict-mode row match, a click before the grid had rendered).
+- **Commit as soon as tests are green,** then the mutations, then the next task. Comments say WHY in 1–3 lines.
 
 ## Environment — read before running anything
 - Prefix every command with `export PATH="$HOME/.local/go/bin:$HOME/.local/node/bin:$HOME/go/bin:$PATH" GOFLAGS=-p=2 GOMEMLIMIT=2GiB`.
 - WSL: 12 GB RAM, 4 GB swap. Another project's Gradle/Kotlin daemons (dolmusum) come and go (up to ~6 GB) — never kill
-  them. Check `free -m` and `ps -eo rss,comm | grep java` before Storybook, Playwright or `next build`; Playwright
-  `--workers=1` when tight; run long Playwright work in the foreground.
-- **Never `pkill -f <pattern>` from a Bash call whose own command line contains the pattern** — it kills the calling shell
-  (exit 144). Stop processes with `pgrep -x <name>` + `kill`.
-- Testcontainers' reaper (ryuk) sometimes fails to become ready on Docker Desktop; if a package's own container start
-  times out, re-run with `TESTCONTAINERS_RYUK_DISABLED=true`.
-- Go integration: shared Postgres + Redis as in the prompt. Web (in `web/`): `pnpm lint && pnpm typecheck && pnpm check:api
-  && pnpm check:i18n-parity && pnpm check:contrast`, `pnpm test --maxWorkers=2` (~70 s), `pnpm storybook:build` (~10 s),
-  `STORIES='Shell,Features/Auth' pnpm test:a11y --workers=1`, `pnpm build` (~50 s),
-  `pnpm build && pnpm test:e2e --workers=1` (~20 s of tests after the API seeds). `make openapi` regenerates both the Go
-  document and `schema.d.ts`. Never leave `next dev`/`next start`, `storybook dev`, `vitest --watch`, a static server or
-  `bin/ekokod-e2e` running.
+  them, and never touch `dolmusum-dev-postgres-1` on 5432 or the dolmusum serve on 8080. Check `free -m` before
+  Storybook, Playwright or `next build`; run long Playwright work in the foreground with `--workers=1`.
+- **Never `pkill -f <pattern>` from a Bash call whose own command line contains the pattern** — it kills the calling
+  shell (exit 144; harmless but noisy, seen repeatedly this phase). Use `pgrep -x` + `kill`.
+- Go integration: shared Postgres + Redis as in the prompt. Test databases have **no** continuous-aggregate refresh
+  policies (`internal/testfixtures`); a test that needs materialised data must refresh explicitly.
+- Web (in `web/`): `pnpm lint && pnpm typecheck && pnpm check:api && pnpm check:i18n-parity && pnpm check:contrast`,
+  `pnpm test --maxWorkers=2` (~100 s), `pnpm storybook:build` (~30 s), a11y in chunks
+  (`STORIES='Features/Dashboard,Features/Consumption' pnpm test:a11y --workers=1`, ~3–4 min each), `pnpm build` (~60 s),
+  `pnpm build && PW_PROJECT=e2e pnpm exec playwright test --project=e2e --workers=1` (~60 s). `make openapi` regenerates
+  both the Go document and `schema.d.ts`. Never leave `next dev`/`next start`, `storybook dev`, `vitest --watch`, a
+  static server or `bin/ekokod-e2e` running.
 - Worktrees on the native filesystem (`/home/personal/...`) only; `/mnt/c` is slow.
 - `make check-generate` needs a clean tree for `internal/store/postgres/sqlcgen`, so commit first.
 - Commit trailer: `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>`.
 
 ## Key paths
 ```
-docs/superpowers/plans/2026-09-17-f6a-auth-api-skeleton.md      F6a plan (R136–R188, permission matrix, acceptance map)
-internal/auth/                                                   hashing, policy, tokens, roles/permissions
-internal/service/{auth,tenancy,assets,analysis,calendar,integrations}/, internal/service/billing/requests.go
-internal/api/v1/{routes.go,router.go,openapi.go,handlers_*.go}   route table and handlers
-internal/api/v1/{kit,dto,mw}/, internal/api/v1/openapi.json       HTTP kit, DTOs, middleware, committed OpenAPI
-internal/api/v1/*_integration_test.go                            HTTP harness, sweeps, acceptance tests
-internal/apiwire/, internal/seed/{fixtures,demo}.go              wiring, e2e and demo fixtures
-web/src/lib/api/, web/src/app/api/v1/[...path]/route.ts          typed client, server client, runtime proxy
-web/src/middleware.ts, web/src/app/{auth,ekorm}/                 auth guard, auth pages, /ekorm shell
-web/src/lib/{session,selection}/, web/src/features/{auth,preferences}/
-web/scripts/e2e-api.sh, web/tests/e2e/, web/playwright.config.ts e2e harness
-/mnt/c/Users/meren/Desktop/Work/ekokod-rewrite/.superpowers/sdd/2026-09-17-f6a/inline-ledger.md
+docs/superpowers/plans/2026-09-17-f6b-core-screens.md            F6b plan (R190–R210, acceptance map)
+docs/superpowers/plans/2026-09-17-f6a-auth-api-skeleton.md       F6a plan (R136–R189, permission matrix)
+internal/domain/grouping/                                        consumption grouping (R193)
+internal/service/{jobs,analysis,loadprofile}/, internal/credentials/
+internal/api/v1/{routes.go,openapi.go,handlers_jobs.go}          route table, OpenAPI generator, job status
+internal/seed/{readings.go,fixtures.go,demo.go}                  e2e and demo data (R194)
+internal/testfixtures/containers.go                              isolated template DB, no refresh policies
+web/src/features/{dashboard,consumption,load-profile,settings,calendar,scope,jobs}/
+web/src/lib/api/{query.ts,query-errors.tsx,mutation.ts,download.ts,problem.ts}
+web/src/components/ui/{table.tsx,stagger-grid.tsx}, web/src/styles/{tokens.css,event-palette.ts}
+web/tests/e2e/                                                   7 specs, 39 tests (incl. responsive.spec.ts)
+web/tests/a11y/                                                  stories, keyboard, touch-target and shell sweeps
+/mnt/c/Users/meren/Desktop/Work/ekokod-rewrite/.superpowers/sdd/2026-09-17-f6b/inline-ledger.md
 ```
 
-## Verification at the F6a tip
-Everything below ran on the merged tip (tasks 1–18 plus the task-19 review fixes), one step at a time:
-- **Acceptance (Go):** `TestAuthorizationMatrix`, `TestMatrixCoversEveryRoute`, `TestReadOnlyRolesForbiddenOnEveryMutation`
-  (unit) and, with `-tags=integration`, `TestCredentialsNeverLeak`, `TestDeviceMismatchInvalidatesSession`,
-  `TestMobileBearerAuthenticatesNonAuthEndpoint`, `TestDemoSeesOnlySyntheticData`,
-  `TestBuildingAdminCannotReachOtherBuildingsAnyEndpoint`, `TestReadOnlyRolesForbiddenOnEveryMutationHTTP`,
-  `TestEveryMutationAudited`, `TestWeekendAndVacationChangeLoadProfileHTTP`: all PASS.
-- **Race, package by package** (`-tags=integration -race`, shared Postgres/Redis) over every Go package F6a touched
-  (api, api/middleware, api/v1 and subpackages, apiwire, auth, cli, credentials, domain/comparison, domain/reactive,
-  ingest, job, mail, platform/config, render/table, scheduler, seed, service/*, store, store/postgres,
-  store/postgres/admin, testfixtures, worker): all `ok` after the review fixes. `internal/api/v1` full integration run
-  6× in a row green after the aggregate fix. Two one-off failures under load were green on isolated re-runs (ingest
-  `TestFetchEnqueuesTheHourlyBucketWhenTheLastReadingLandsOnAnHourBoundary`; a 181 s container start in worker).
-- `internal/arch` once: ok. `golangci-lint run --concurrency 2 --build-tags=integration` over every touched tree:
-  0 issues. `make check-generate`: exit 0. `make openapi`: no diff (86 operations, 62 paths). `make vuln`: exit 0.
-- **Web:** `pnpm lint` (0 problems), `pnpm typecheck`, `pnpm check:api`, `pnpm check:i18n-parity` (**12 namespaces,
-  291 keys**), `pnpm check:contrast` (70 pairs × 2 themes), `pnpm test --maxWorkers=2` (**118 files, 423 tests**),
-  `pnpm build` (`/ekorm` 2.63 kB, `/auth/login` 7.13 kB, middleware 34.8 kB), `pnpm audit --audit-level=high` (no known
-  vulnerabilities): all exit 0.
-- **a11y** (after the last UI change in each area, foreground, one worker): `STORIES='Features/Auth'` 98 passed and 2
-  touch-target failures on secondary links → fixed, touch-target spec re-run 13 passed; `STORIES='Shell'` 156 passed;
-  `STORIES='Features/Auth/AuthMessage'` 46 passed after the Playwright project split.
-- **e2e** at the tip: `pnpm build && PW_PROJECT=e2e pnpm exec playwright test --project=e2e --workers=1` → **11 passed**.
-- Standalone SSR smoke (Task 17): `/ekorm` without cookies → 307 `/auth/login?next=%2Fekorm`; `/` → 307 `/ekorm`; a
-  refresh-cookie-only request refreshed against the runtime API URL; `/api/v1/*` proxied to the runtime URL.
-- No dev server, `next start`, static server or `bin/ekokod-e2e` left running.
+## Verification at the F6b tip
+- **Go `-race`, package by package:** auth, domain/grouping, service/{jobs,analysis,loadprofile}, api/v1 (+kit, mw), job,
+  credentials, seed, scheduler, worker, arch — all `ok`.
+- **Integration** (`-tags=integration`, shared Postgres/Redis): api/v1, credentials, seed, service/analysis `ok`;
+  09 §F6 acceptance `TestAuthorizationMatrix` and `TestCredentialsNeverLeak` PASS.
+- `golangci-lint run --concurrency 2 --build-tags=integration ./internal/...` → **0 issues**.
+  `make check-generate` and `make openapi` → no diff.
+- **Web:** `pnpm lint` 0, `pnpm typecheck` 0, `pnpm check:api` ok, `pnpm check:i18n-parity` **17 namespaces, 861 keys**,
+  `pnpm check:contrast` **75 pairs × 2 themes**, `pnpm test --maxWorkers=2` **180 files, 644 tests**,
+  `pnpm audit --audit-level=high` no known vulnerabilities, `pnpm build` ok.
+- **a11y** (`pnpm storybook:build`, then chunks with `--workers=1`): Dashboard+Consumption 212, LoadProfile 98,
+  Calendar 124, Settings 228, Shell 156, Jobs/Scope/Table/Domain 216 — all green.
+- **e2e:** `pnpm build && PW_PROJECT=e2e pnpm exec playwright test --project=e2e --workers=1` → **39 passed**
+  (auth, dashboard, consumption, load-profile, settings, calendar, responsive).
+- No dev server, `next start`, Storybook, static server or `bin/ekokod-e2e` left running.
