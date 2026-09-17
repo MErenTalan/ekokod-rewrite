@@ -229,3 +229,22 @@ func TestSessionsListAndRevokeHTTP(t *testing.T) {
 	res = stranger.do(http.MethodDelete, "/auth/sessions/"+list.Items[0].ID.String(), nil)
 	require.Equal(t, http.StatusNotFound, res.status)
 }
+
+func TestRefreshRotatedKeepsCookies(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	tabA := h.client(uaChrome)
+	tabA.login(seed.E2ECompanyAdminEmail, true)
+	old := tabA.cookie("ekokod_rt").Value
+	require.Equal(t, http.StatusNoContent, tabA.do(http.MethodPost, "/auth/refresh", nil).status)
+
+	// A second tab still holding the pre-rotation cookie refreshes within the grace window.
+	tabB := h.client(uaChrome)
+	tabB.http.Jar.SetCookies(mustURL(t, h.srv.URL), []*http.Cookie{{Name: "ekokod_rt", Value: old, Path: "/", Secure: true}})
+	h.clock.Advance(5 * time.Second)
+	res := tabB.do(http.MethodPost, "/auth/refresh", nil)
+	require.Equal(t, http.StatusUnauthorized, res.status)
+	require.Equal(t, "token_rotated", res.code(t))
+	require.Empty(t, res.header.Values("Set-Cookie"), "the other tab's fresh cookies must not be cleared")
+	require.Equal(t, http.StatusOK, tabA.do(http.MethodGet, "/auth/me", nil).status)
+}
