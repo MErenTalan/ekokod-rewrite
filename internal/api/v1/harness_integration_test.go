@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
@@ -59,7 +60,33 @@ func (c *capturedMail) Send(_ context.Context, _ model.SMTPSettings, password []
 	return nil
 }
 
+// recordingEnqueuer records tasks and refuses a repeated (type, payload) like asynq.Unique.
+type recordingEnqueuer struct {
+	mu    sync.Mutex
+	tasks []*asynq.Task
+	seen  map[string]bool
+}
+
+func (e *recordingEnqueuer) Enqueue(_ context.Context, task *asynq.Task, _ ...asynq.Option) (*asynq.TaskInfo, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	key := task.Type() + string(task.Payload())
+	if e.seen[key] {
+		return nil, asynq.ErrDuplicateTask
+	}
+	e.seen[key] = true
+	e.tasks = append(e.tasks, task)
+	return &asynq.TaskInfo{ID: fmt.Sprintf("job-%d", len(e.tasks)), Type: task.Type()}, nil
+}
+
+func (e *recordingEnqueuer) snapshot() []*asynq.Task {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return append([]*asynq.Task(nil), e.tasks...)
+}
+
 type harness struct {
+	enq    *recordingEnqueuer
 	t      *testing.T
 	srv    *httptest.Server
 	clock  *clock.Fake
@@ -93,13 +120,13 @@ func newHarness(t *testing.T, tune ...func(*config.Config)) *harness {
 	for _, f := range tune {
 		f(cfg)
 	}
-	h := &harness{t: t, clock: clock.NewFake(time.Date(2026, 9, 17, 10, 0, 0, 0, time.UTC)), mail: &capturedMail{}, pool: pool, cfg: cfg,
+	h := &harness{enq: &recordingEnqueuer{seen: map[string]bool{}}, t: t, clock: clock.NewFake(time.Date(2026, 9, 17, 10, 0, 0, 0, time.UTC)), mail: &capturedMail{}, pool: pool, cfg: cfg,
 		hasher: auth.Hasher{Pepper: cfg.Security.PasswordPepper, Cost: cfg.Security.BcryptCost}}
 	fx, err := seed.E2EFixtures(ctx, pool, h.hasher, testPassword, h.clock.Now())
 	require.NoError(t, err)
 	h.fx = fx
 	built, err := apiwire.Build(ctx, cfg, pool, testfixtures.DiscardLogger(), apiwire.Options{
-		Clock: h.clock, Mail: h.mail, RedisPrefix: "test:" + uuid.NewString() + ":", Async: func(f func()) { f() },
+		Clock: h.clock, Mail: h.mail, RedisPrefix: "test:" + uuid.NewString() + ":", Async: func(f func()) { f() }, Enqueuer: h.enq,
 	})
 	require.NoError(t, err)
 	t.Cleanup(built.Close)

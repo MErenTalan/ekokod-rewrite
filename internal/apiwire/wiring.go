@@ -17,10 +17,12 @@ import (
 	v1 "github.com/MErenTalan/ekokod-rewrite/internal/api/v1"
 	"github.com/MErenTalan/ekokod-rewrite/internal/api/v1/mw"
 	"github.com/MErenTalan/ekokod-rewrite/internal/auth"
+	"github.com/MErenTalan/ekokod-rewrite/internal/job"
 	"github.com/MErenTalan/ekokod-rewrite/internal/mail"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/crypto"
+	"github.com/MErenTalan/ekokod-rewrite/internal/service/assets"
 	authsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/auth"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/tenancy"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
@@ -36,7 +38,12 @@ type Options struct {
 	RedisPrefix string
 	// Async overrides how the auth service runs off-request work.
 	Async func(func())
+	// Enqueuer replaces the asynq client.
+	Enqueuer Enqueuer
 }
+
+// Enqueuer is the job client the services enqueue through.
+type Enqueuer = assets.Enqueuer
 
 // Built is the API surface and its teardown.
 type Built struct {
@@ -57,8 +64,7 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 	if err != nil {
 		return Built{}, fmt.Errorf("apiwire: connect redis: %w", err)
 	}
-	var once sync.Once
-	closeAll := func() { once.Do(func() { _ = redisClient.Close() }) }
+	closeAll := func() { _ = redisClient.Close() }
 
 	cipher, err := crypto.NewCipher(cfg.Security.EncryptionKey)
 	if err != nil {
@@ -95,10 +101,33 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		return Built{}, fmt.Errorf("apiwire: build tenancy service: %w", err)
 	}
 
+	jobClient, err := job.NewClient(cfg.Redis)
+	if err != nil {
+		closeAll()
+		return Built{}, fmt.Errorf("apiwire: build job client: %w", err)
+	}
+	closeRedis := closeAll
+	closeAll = func() { _ = jobClient.Close(); closeRedis() }
+	enqueuer := Enqueuer(jobClient)
+	if opts.Enqueuer != nil {
+		enqueuer = opts.Enqueuer
+	}
+	assetService, err := assets.New(assets.Deps{
+		Buildings: postgres.NewBuildingRepository(pool), Analyzers: postgres.NewAnalyzerRepository(pool),
+		Plants: postgres.NewPlantRepository(pool), Tariffs: postgres.NewTariffRepository(pool),
+		Integrations: postgres.NewIntegrationRepository(pool, cipher), Enqueuer: enqueuer,
+		MaxRetry: cfg.Worker.MaxRetries, Clock: opts.Clock,
+	})
+	if err != nil {
+		closeAll()
+		return Built{}, fmt.Errorf("apiwire: build asset service: %w", err)
+	}
+
 	clientIP := middleware.ClientIP(cfg.HTTP.TrustedProxies)
-	handlers := &v1.Handlers{Auth: authService, Tenancy: tenancyService, Clock: opts.Clock, Log: log, ClientIP: clientIP}
+	handlers := &v1.Handlers{Auth: authService, Tenancy: tenancyService, Assets: assetService, Clock: opts.Clock, Log: log, ClientIP: clientIP}
 	router := v1.NewRouter(handlers, middlewareFor(cfg, redisClient, authService, auditRepo, admin.NewAuditRepository(pool), clientIP, opts.RedisPrefix, log), log)
-	return Built{V1: router, Auth: authService, Close: closeAll}, nil
+	var once sync.Once
+	return Built{V1: router, Auth: authService, Close: func() { once.Do(closeAll) }}, nil
 }
 
 func middlewareFor(cfg *config.Config, rc *goredis.Client, a mw.Authenticator, tenantAudit *postgres.AuditRepository,

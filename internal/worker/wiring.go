@@ -460,6 +460,7 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		handlers: &job.Handlers{
 			Log:                log,
 			Ingestion:          ingestSvc,
+			AnalyzerRefresh:    ingestSvc,
 			Backfill:           backfiller,
 			Prices:             syncer,
 			ConsumptionRefresh: consumptionRefresher,
