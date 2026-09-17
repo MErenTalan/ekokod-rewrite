@@ -53,3 +53,24 @@ were green. Watched for at phase end.
 Mutations: delete analyzers missing from a later wiring list → RED; replace the caller scope with a
 same-company SystemScope → SURVIVED (equivalent: the foreign building belongs to another company
 either way); removing the building check entirely → RED. All restored.
+
+## Task 4 — R194 seed data + web plumbing (e4068c0)
+Deviation: readings/bill first went into `E2EFixtures` and broke four Go tests written against empty
+fixtures (bill PDF, comparison, bills scope, load-profile keys); moved to `seed.E2EData`, called only
+by `ekokod seed e2e`, which is what R194 meant.
+Also fixed: the OpenAPI reflector put an `enum` tag on the array instead of its items, so `include`
+typed as a single value in the generated client (`moveArrayEnumsToItems` + `TestArrayEnumsDescribeTheirItems`).
+D14 forced a design change in the building list: a checkbox cannot have a hidden label, so the
+checkbox's own label is the building name and selection moved to an explicit "Seç" button.
+New dev dependency: `openapi-typescript-helpers@0.1.0` (already a transitive dep) for the mutation
+helper's path constraint.
+Gate: seed/api/v1 integration ok; lint 0; web lint/typecheck/parity/contrast ok; 448 web tests.
+Mutations: `istanbulToday` in UTC → RED; scope picker ignoring the stored building → RED; fixture
+readings restarting each run → RED (demo idempotency). All restored.
+
+## Task 5 — dashboard panels (9a03a0b)
+Views + containers per R195; stories for each (the repo guard requires one per component).
+Gate: lint, typecheck, 465 web tests.
+Mutations: markers drawn for coordinate-less records → RED; latest bill always company scope → RED;
+advisory read from rows[0] instead of any row → **SURVIVED** (the fixture had the over-limit analyzer
+first) → added "only a later analyzer is over" case, mutation then RED. All restored.
