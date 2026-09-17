@@ -1,1 +1,64 @@
-{}
+{
+  "picker": {
+    "building": "Bina",
+    "analyzer": "Analizör",
+    "searchBuilding": "Bina ara",
+    "searchAnalyzer": "Analizör ara",
+    "noBuildings": "Bina bulunamadı",
+    "noAnalyzers": "Analizör bulunamadı",
+    "activeOnly": "Yalnızca aktif",
+    "chooseBuildingFirst": "Önce bir bina seçin"
+  },
+  "period": {
+    "granularity": "Çözünürlük",
+    "hourly": "Saatlik",
+    "daily": "Günlük",
+    "monthly": "Aylık",
+    "yearly": "Yıllık",
+    "range": "Dönem",
+    "apply": "Uygula"
+  },
+  "metric": {
+    "noValue": "Değer yok"
+  },
+  "reactive": {
+    "title": "Reaktif enerji durumu",
+    "inductive": "Endüktif oran",
+    "capacitive": "Kapasitif oran",
+    "withinLimit": "Sınır içinde",
+    "overLimit": "Sınır aşıldı",
+    "noData": "Veri yok",
+    "penaltyApplied": "Reaktif ceza uygulandı",
+    "penaltyNotApplied": "Reaktif ceza uygulanmadı",
+    "limit": "Sınır {value}"
+  },
+  "invoice": {
+    "description": "Kalem",
+    "quantity": "Miktar",
+    "unitPrice": "Birim fiyat",
+    "amount": "Tutar",
+    "penalty": "Ceza"
+  },
+  "export": {
+    "menu": "Dışa aktar",
+    "csv": "CSV",
+    "excel": "Excel",
+    "pdf": "PDF",
+    "email": "E-posta ile gönder",
+    "started": "{format} dışa aktarımı başladı"
+  },
+  "job": {
+    "queued": "Sırada",
+    "running": "Çalışıyor",
+    "succeeded": "Tamamlandı",
+    "failed": "Başarısız",
+    "statusLine": "{label}: {status}",
+    "progress": "{label} ilerlemesi"
+  },
+  "quality": {
+    "estimated": "Tahmini",
+    "incomplete": "Eksik veri",
+    "suspect": "Şüpheli",
+    "coverage": "Veri kapsamı {value}"
+  }
+}
