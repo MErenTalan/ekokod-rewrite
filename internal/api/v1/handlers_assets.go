@@ -10,6 +10,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/api/v1/kit"
 	"github.com/MErenTalan/ekokod-rewrite/internal/api/v1/mw"
 	"github.com/MErenTalan/ekokod-rewrite/internal/auth"
+	"github.com/MErenTalan/ekokod-rewrite/internal/domain/comparison"
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/assets"
 )
@@ -34,6 +35,9 @@ func assetRoutes() []Route {
 		{Method: http.MethodDelete, Pattern: "/buildings/{id}", OperationID: "buildings.delete", Tag: "buildings", Access: RoleGated, Roles: aca,
 			Entity: "building", Summary: "Soft-delete a building with no analyzers.", Request: dto.IDPath{},
 			Status: http.StatusNoContent, Handler: (*Handlers).deleteBuilding},
+		{Method: http.MethodGet, Pattern: "/buildings/{id}/comparison", OperationID: "buildings.comparison", Tag: "buildings",
+			Access: RoleGated, Roles: all, Summary: "Sectoral comparison figures and ranks (02 §10.4).", Request: dto.IDPath{},
+			Response: dto.BuildingComparison{}, Status: http.StatusOK, Handler: (*Handlers).compareBuilding},
 		{Method: http.MethodGet, Pattern: "/analyzers", OperationID: "analyzers.list", Tag: "analyzers", Access: RoleGated, Roles: all,
 			Summary: "Analyzers in scope.", Request: dto.AnalyzerListRequest{}, Response: dto.Page[dto.Analyzer]{},
 			Status: http.StatusOK, Handler: (*Handlers).listAnalyzers},
@@ -328,5 +332,29 @@ func (h *Handlers) updatePlant(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) deletePlant(w http.ResponseWriter, r *http.Request) {
 	serve(w, r, http.StatusNoContent, func(req dto.IDPath) (any, error) {
 		return nil, h.Assets.DeletePlant(r.Context(), mw.ScopeFrom(r), req.ID)
+	})
+}
+
+func comparisonMetric(m comparison.Metric) dto.ComparisonMetric {
+	return dto.ComparisonMetric{Value: dto.DP(m.Value), Average: dto.DP(m.Average), Rank: m.Rank, Ranked: m.Ranked}
+}
+
+func (h *Handlers) compareBuilding(w http.ResponseWriter, r *http.Request) {
+	serve(w, r, http.StatusOK, func(req dto.IDPath) (any, error) {
+		c, err := h.Assets.Compare(r.Context(), mw.ScopeFrom(r), req.ID)
+		if err != nil {
+			return nil, err
+		}
+		out := dto.BuildingComparison{
+			Available: c.Result.Available, Sector: c.Sector, Peers: c.Result.Peers,
+			DailyConsumption: comparisonMetric(c.Result.Daily), MonthlyConsumption: comparisonMetric(c.Result.Monthly),
+			CO2EmissionKg: comparisonMetric(c.Result.CO2), ConsumptionPerCapita: comparisonMetric(c.Result.PerCapita),
+			ConsumptionPerArea: comparisonMetric(c.Result.PerArea),
+		}
+		if c.Result.Reason != "" {
+			reason := c.Result.Reason
+			out.Reason = &reason
+		}
+		return out, nil
 	})
 }

@@ -36,6 +36,8 @@ type Deps struct {
 	Plants       store.PlantRepository
 	Tariffs      store.TariffRepository
 	Integrations store.IntegrationRepository
+	Sector       store.AdminSectorRepository
+	Carbon       store.CarbonRepository
 	Enqueuer     Enqueuer
 	MaxRetry     int
 	Clock        clock.Clock
@@ -46,7 +48,7 @@ type Service struct{ d Deps }
 
 // New validates deps.
 func New(d Deps) (*Service, error) {
-	if d.Buildings == nil || d.Analyzers == nil || d.Plants == nil || d.Tariffs == nil || d.Integrations == nil ||
+	if d.Buildings == nil || d.Analyzers == nil || d.Plants == nil || d.Tariffs == nil || d.Integrations == nil || d.Sector == nil || d.Carbon == nil ||
 		d.Enqueuer == nil || d.Clock == nil {
 		return nil, errors.New("assets: missing dependency")
 	}

@@ -1933,6 +1933,105 @@
         ]
       }
     },
+    "/api/v1/buildings/{id}/comparison": {
+      "get": {
+        "tags": [
+          "buildings"
+        ],
+        "summary": "Sectoral comparison figures and ranks (02 §10.4).",
+        "operationId": "buildings.comparison",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildingComparison"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/v1/companies": {
       "get": {
         "tags": [
@@ -4598,6 +4697,54 @@
         ],
         "type": "object"
       },
+      "BuildingComparison": {
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "co2_emission_kg": {
+            "$ref": "#/components/schemas/ComparisonMetric"
+          },
+          "consumption_per_area": {
+            "$ref": "#/components/schemas/ComparisonMetric"
+          },
+          "consumption_per_capita": {
+            "$ref": "#/components/schemas/ComparisonMetric"
+          },
+          "daily_consumption": {
+            "$ref": "#/components/schemas/ComparisonMetric"
+          },
+          "monthly_consumption": {
+            "$ref": "#/components/schemas/ComparisonMetric"
+          },
+          "peers": {
+            "type": "integer"
+          },
+          "reason": {
+            "enum": [
+              "sector_too_small"
+            ],
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sector": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "available",
+          "sector",
+          "peers",
+          "daily_consumption",
+          "monthly_consumption",
+          "co2_emission_kg",
+          "consumption_per_capita",
+          "consumption_per_area"
+        ],
+        "type": "object"
+      },
       "BuildingCreateRequest": {
         "properties": {
           "address": {
@@ -5068,6 +5215,27 @@
             "$ref": "#/components/schemas/Decimal"
           }
         },
+        "type": "object"
+      },
+      "ComparisonMetric": {
+        "properties": {
+          "average": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "rank": {
+            "type": "integer"
+          },
+          "ranked": {
+            "type": "integer"
+          },
+          "value": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "required": [
+          "rank",
+          "ranked"
+        ],
         "type": "object"
       },
       "Contact": {

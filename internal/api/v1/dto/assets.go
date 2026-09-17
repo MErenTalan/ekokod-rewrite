@@ -210,3 +210,25 @@ type PlantUpdateRequest struct {
 	Name *string   `json:"name,omitempty" validate:"omitempty,min=1,max=200"`
 	PlantFields
 }
+
+// ComparisonMetric is one figure of the sectoral comparison: the building's
+// value, the sector average and the ascending rank (0 when unranked).
+type ComparisonMetric struct {
+	Value   *Decimal `json:"value"`
+	Average *Decimal `json:"average"`
+	Rank    int      `json:"rank" required:"true"`
+	Ranked  int      `json:"ranked" required:"true"`
+}
+
+// BuildingComparison is GET /buildings/{id}/comparison (R162): no peer identity.
+type BuildingComparison struct {
+	Available            bool             `json:"available" required:"true"`
+	Reason               *string          `json:"reason" enum:"sector_too_small"`
+	Sector               string           `json:"sector" required:"true"`
+	Peers                int              `json:"peers" required:"true"`
+	DailyConsumption     ComparisonMetric `json:"daily_consumption" required:"true"`
+	MonthlyConsumption   ComparisonMetric `json:"monthly_consumption" required:"true"`
+	CO2EmissionKg        ComparisonMetric `json:"co2_emission_kg" required:"true"`
+	ConsumptionPerCapita ComparisonMetric `json:"consumption_per_capita" required:"true"`
+	ConsumptionPerArea   ComparisonMetric `json:"consumption_per_area" required:"true"`
+}
