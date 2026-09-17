@@ -1,1 +1,15 @@
-{}
+{
+  "loading": "Loading...",
+  "save": "Save",
+  "cancel": "Cancel",
+  "close": "Close",
+  "apply": "Apply",
+  "clear": "Clear",
+  "search": "Search",
+  "add": "Add",
+  "edit": "Edit",
+  "delete": "Delete",
+  "actions": "Actions",
+  "notifications": "Notifications",
+  "more": "More"
+}

@@ -144,6 +144,8 @@ jobs:
   web:
     name: Frontend
     runs-on: ubuntu-latest
+    # The full Storybook a11y sweep (every story × theme × locale) needs more than the default budget.
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: web
@@ -162,6 +164,17 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm check:i18n-parity
+      - run: pnpm check:contrast
       - run: pnpm test
       - run: pnpm build
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm storybook:build
+        env:
+          NODE_OPTIONS: --max-old-space-size=3072
+      - run: pnpm test:a11y
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: web/playwright-report
       - run: pnpm audit --audit-level=high

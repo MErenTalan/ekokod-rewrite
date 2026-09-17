@@ -3,6 +3,9 @@ bin
 dist
 web/node_modules
 web/.next
+web/storybook-static
+web/playwright-report
+web/test-results
 docs
 *.tar
 *.tar.gz

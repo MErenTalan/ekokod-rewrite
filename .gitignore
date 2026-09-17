@@ -6,6 +6,9 @@
 /web/coverage/
 /web/next-env.d.ts
 /web/tsconfig.tsbuildinfo
+/web/storybook-static/
+/web/playwright-report/
+/web/test-results/
 .env
 .env.local
 .env.docker
