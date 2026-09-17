@@ -8,7 +8,7 @@ import { PageHeader } from './page-header';
 
 describe('PageHeader', () => {
   it('title is the page h1 and the breadcrumb is derived from the route', () => {
-    setMockPathname('/load-profile');
+    setMockPathname('/ekorm/load-profile');
     const { getByRole, getByText } = renderWithProviders(<PageHeader title="Yük Profili" description="Merkez Bina" />);
     expect(getByRole('heading', { level: 1, name: 'Yük Profili' })).toBeInTheDocument();
     expect(getByRole('navigation', { name: 'İçerik haritası' })).toHaveTextContent('Veri Analizi');

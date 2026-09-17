@@ -3,7 +3,7 @@
 import { Bell, Leaf, PanelLeft, PanelLeftClose, Search, Settings2 } from 'lucide-react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import { useUiPreferences } from '@/lib/ui-preferences-provider';
 
@@ -20,9 +20,11 @@ export type TopBarProps = {
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
   onOpenCustomizer: () => void;
+  /** The admin's company scope control, only for `admin.companies`. */
+  companySwitcher?: ReactNode;
 };
 
-export function TopBar({ user, notificationCount, sidebarOpen, onToggleSidebar, onOpenCustomizer }: TopBarProps) {
+export function TopBar({ user, notificationCount, sidebarOpen, onToggleSidebar, onOpenCustomizer, companySwitcher }: TopBarProps) {
   const t = useTranslations('shell');
   const common = useTranslations('common');
   const app = useTranslations('app');
@@ -41,10 +43,11 @@ export function TopBar({ user, notificationCount, sidebarOpen, onToggleSidebar, 
           onClick={() => update({ sidebar: collapsed ? 'expanded' : 'collapsed' })}
         />
       ) : null}
-      <Link href="/dashboard" aria-label={t('home')} className="flex items-center gap-1.5 rounded-md px-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11">
+      <Link href="/ekorm" aria-label={t('home')} className="flex items-center gap-1.5 rounded-md px-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11">
         <Leaf aria-hidden className="size-6 stroke-brand" />
         <span className="hidden font-heading text-lg font-semibold text-foreground sm:inline">{app('name')}</span>
       </Link>
+      {companySwitcher ? <div className="ms-2 hidden sm:block">{companySwitcher}</div> : null}
       <div className="ms-auto hidden w-72 md:block">
         <SearchInput label={t('search')} labelVisibility="hidden" placeholder={t('searchPlaceholder')} value={query} onValueChange={setQuery} />
       </div>

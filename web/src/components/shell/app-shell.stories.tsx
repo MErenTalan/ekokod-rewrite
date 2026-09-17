@@ -26,7 +26,7 @@ const meta = {
   title: 'Shell/AppShell',
   component: AppShell,
   args: { user: storyUser, notificationCount: 3, children: <Page /> },
-  parameters: { layout: 'fullscreen', nextjs: { appDirectory: true, navigation: { pathname: '/load-profile' } } },
+  parameters: { layout: 'fullscreen', nextjs: { appDirectory: true, navigation: { pathname: '/ekorm/load-profile' } } },
 } satisfies Meta<typeof AppShell>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -52,5 +52,5 @@ export const WithFilterBar: Story = {
       </>
     ),
   },
-  parameters: { nextjs: { appDirectory: true, navigation: { pathname: '/consumption' } } },
+  parameters: { nextjs: { appDirectory: true, navigation: { pathname: '/ekorm/consumption' } } },
 };

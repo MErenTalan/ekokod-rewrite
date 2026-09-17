@@ -8,7 +8,7 @@ const meta = {
   title: 'Shell/PageHeader',
   component: PageHeader,
   args: { title: 'Faturalar', description: 'Bina ve dönem bazında hesaplanmış faturalar' },
-  parameters: { nextjs: { appDirectory: true, navigation: { pathname: '/bills' } } },
+  parameters: { nextjs: { appDirectory: true, navigation: { pathname: '/ekorm/bills' } } },
 } satisfies Meta<typeof PageHeader>;
 export default meta;
 type Story = StoryObj<typeof meta>;

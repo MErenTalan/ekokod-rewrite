@@ -1,15 +1,20 @@
 'use client';
 
 import { ChevronDown, LogOut, SlidersHorizontal, UserRound } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+
+import { useLogout } from '@/lib/session/use-logout';
 
 import { DropdownMenu } from '../ui/dropdown-menu';
 
 export type ShellUser = { name: string; email: string; roleLabel: string };
 
-/** Profile and logout are no-ops until F6 wires auth. */
+/** Identity, profile, display settings and logout (R168: logout ends the server session). */
 export function UserMenu({ user, onOpenCustomizer }: { user: ShellUser; onOpenCustomizer?: () => void }) {
   const t = useTranslations('shell');
+  const router = useRouter();
+  const logout = useLogout();
   const initials = user.name
     .split(/\s+/)
     .map((part) => part[0])
@@ -35,10 +40,10 @@ export function UserMenu({ user, onOpenCustomizer }: { user: ShellUser; onOpenCu
         { type: 'label', label: user.name },
         { type: 'label', label: `${user.roleLabel} · ${user.email}` },
         { type: 'separator' },
-        { type: 'item', label: t('userMenu.profile'), icon: UserRound, onSelect: () => {} },
+        { type: 'item', label: t('userMenu.profile'), icon: UserRound, onSelect: () => router.push('/ekorm/settings') },
         { type: 'item', label: t('userMenu.displaySettings'), icon: SlidersHorizontal, onSelect: () => onOpenCustomizer?.() },
         { type: 'separator' },
-        { type: 'item', label: t('userMenu.logout'), icon: LogOut, onSelect: () => {} },
+        { type: 'item', label: t('userMenu.logout'), icon: LogOut, onSelect: () => void logout() },
       ]}
     />
   );

@@ -10,17 +10,17 @@ import { cn } from '@/lib/cn';
 import { Button } from '../ui/button';
 import { DropdownMenu } from '../ui/dropdown-menu';
 import { Tooltip } from '../ui/tooltip';
-import { findTrail, isGroup, navigation } from './nav-config';
+import { findTrail, isGroup, navigation, type NavEntry } from './nav-config';
 
 /** Horizontal layout at ≥lg: groups become menus; below lg the shell uses the same drawer as vertical (plan D24). */
-export function TopNav() {
+export function TopNav({ entries = navigation }: { entries?: NavEntry[] }) {
   const t = useTranslations('shell');
   const pathname = usePathname();
   const router = useRouter();
   const trail = findTrail(pathname);
   return (
     <nav aria-label={t('nav.label')} data-top-nav className="flex flex-wrap items-center gap-1 px-4 py-1">
-      {navigation.map((entry) => {
+      {entries.map((entry) => {
         const label = t(`nav.${entry.labelKey}`);
         if (isGroup(entry)) {
           const active = trail?.group?.id === entry.id;
