@@ -74,3 +74,21 @@ Gate: lint, typecheck, 465 web tests.
 Mutations: markers drawn for coordinate-less records → RED; latest bill always company scope → RED;
 advisory read from rows[0] instead of any row → **SURVIVED** (the fixture had the over-limit analyzer
 first) → added "only a later analyzer is over" case, mutation then RED. All restored.
+
+## Task 13 — Calendar (commit a31a0fe)
+
+Gates: lint 0, typecheck 0, vitest 178 files / 637 tests, i18n parity 17 ns / 860 keys,
+contrast 70 pairs, check:api ok, `pnpm build` + `calendar.spec.ts` 4/4 (workers=1).
+
+Mutations (each reverted after proving red):
+1. `startOfWeek` → Sunday-first (`addDays(iso, -weekday)`): 4 red
+   (range: month grid start, week range; month-view header order; dates test).
+2. `layoutLanes` first free lane → always lane 0: 3 red
+   (lane assignment, shared lane count, time-grid column widths).
+3. `toEventRequest` all-day end no longer exclusive: 1 red (R202 whole-day cover).
+
+Deviations: none. Two e2e fixes were my own test's fault — `getByRole('checkbox', {name:'Cuma'})`
+also matched "Cumartesi" (now `exact`), and the restored weekend pair comes back in the API's
+own order, so that one assertion accepts either order while the Friday+Saturday one stays strict.
+D5 forbids hex literals outside `src/styles/**`, so the calendar fixtures, tests and stories take
+their colours from `@/styles/event-palette` rather than naming them.
