@@ -137,19 +137,22 @@ check-generate: ## Fail if the committed sqlcgen output is not what sqlc produce
 offline-bundle: ## Build the air-gapped install bundle
 	./scripts/offline-bundle.sh
 
-.PHONY: web-install web-lint web-test web-build web-audit
+.PHONY: web-install web-lint web-test web-build web-audit web-a11y
 
 web-install:
 	cd web && pnpm install --frozen-lockfile
 
 web-lint:
-	cd web && pnpm lint && pnpm typecheck && pnpm check:i18n-parity
+	cd web && pnpm lint && pnpm typecheck && pnpm check:i18n-parity && pnpm check:contrast
 
 web-test:
 	cd web && pnpm test
 
 web-build:
 	cd web && pnpm build
+
+web-a11y: ## Storybook build + Playwright a11y sweep (slow, memory-heavy; not part of `ci`)
+	cd web && pnpm storybook:build && pnpm test:a11y
 
 web-audit: ## Fail on high-severity frontend dependency vulnerabilities
 	cd web && pnpm audit --audit-level=high

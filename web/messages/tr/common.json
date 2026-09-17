@@ -1,1 +1,15 @@
-{}
+{
+  "loading": "Yükleniyor...",
+  "save": "Kaydet",
+  "cancel": "İptal",
+  "close": "Kapat",
+  "apply": "Uygula",
+  "clear": "Temizle",
+  "search": "Ara",
+  "add": "Ekle",
+  "edit": "Düzenle",
+  "delete": "Sil",
+  "actions": "İşlemler",
+  "notifications": "Bildirimler",
+  "more": "Daha fazla"
+}
