@@ -12,9 +12,12 @@
     "check:i18n-parity": "node scripts/check-i18n-parity.ts",
     "check:contrast": "node scripts/check-contrast.ts",
     "storybook:build": "storybook build --quiet -o storybook-static",
-    "test:a11y": "playwright test tests/a11y/"
+    "test:a11y": "playwright test tests/a11y/",
+    "gen:api": "openapi-typescript ../internal/api/v1/openapi.json -o src/lib/api/schema.d.ts",
+    "check:api": "node scripts/check-api.ts"
   },
   "dependencies": {
+    "@tanstack/react-query": "5.102.8",
     "@tanstack/react-table": "8.21.3",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
@@ -24,6 +27,8 @@
     "maplibre-gl": "6.10.0",
     "next": "15.5.25",
     "next-intl": "4.14.2",
+    "openapi-fetch": "0.17.0",
+    "openapi-react-query": "0.5.4",
     "radix-ui": "1.6.7",
     "react": "19.2.8",
     "react-day-picker": "9.14.0",
@@ -53,6 +58,7 @@
     "eslint-config-next": "15.5.25",
     "fontkit": "2.0.4",
     "jsdom": "^26.0.0",
+    "openapi-typescript": "7.13.0",
     "prettier": "3.9.6",
     "storybook": "10.6.0",
     "tailwindcss": "4.3.3",

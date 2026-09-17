@@ -163,6 +163,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
+      - run: pnpm check:api
       - run: pnpm check:i18n-parity
       - run: pnpm check:contrast
       - run: pnpm test

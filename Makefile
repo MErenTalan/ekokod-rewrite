@@ -84,6 +84,7 @@ test-redis-down: ## Remove the shared test Redis
 
 openapi: ## Regenerate the committed OpenAPI document from the route table
 	go run ./cmd/ekokod tool openapi > internal/api/v1/openapi.json
+	cd web && pnpm gen:api
 
 # test-perf runs Task 13's slow F1 acceptance suite: 1,000,000 synthetic
 # readings across 100 analyzers, asserting the chunk layout and EXPLAIN plan
@@ -199,7 +200,7 @@ web-install:
 	cd web && pnpm install --frozen-lockfile
 
 web-lint:
-	cd web && pnpm lint && pnpm typecheck && pnpm check:i18n-parity && pnpm check:contrast
+	cd web && pnpm lint && pnpm typecheck && pnpm check:api && pnpm check:i18n-parity && pnpm check:contrast
 
 web-test:
 	cd web && pnpm test
