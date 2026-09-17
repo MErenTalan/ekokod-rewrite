@@ -12,6 +12,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
 	perr "github.com/MErenTalan/ekokod-rewrite/internal/platform/errors"
 	authsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/auth"
+	"github.com/MErenTalan/ekokod-rewrite/internal/service/tenancy"
 )
 
 //go:embed openapi.json
@@ -28,6 +29,7 @@ func serveOpenAPI(w http.ResponseWriter, _ *http.Request) {
 // Handlers holds the services the endpoint handlers call.
 type Handlers struct {
 	Auth     *authsvc.Service
+	Tenancy  *tenancy.Service
 	Clock    clock.Clock
 	Log      *slog.Logger
 	ClientIP func(*http.Request) string

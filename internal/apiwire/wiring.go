@@ -22,6 +22,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/crypto"
 	authsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/auth"
+	"github.com/MErenTalan/ekokod-rewrite/internal/service/tenancy"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/admin"
 	platformredis "github.com/MErenTalan/ekokod-rewrite/internal/store/redis"
@@ -83,8 +84,19 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		return Built{}, fmt.Errorf("apiwire: build auth service: %w", err)
 	}
 
+	tenancyService, err := tenancy.New(tenancy.Deps{
+		Companies: postgres.NewCompanyRepository(pool), AdminTenant: admin.NewTenantRepository(pool),
+		Users: postgres.NewUserRepository(pool), Sessions: postgres.NewSessionRepository(pool),
+		Analyzers: postgres.NewAnalyzerRepository(pool), SMTP: postgres.NewSMTPRepository(pool, cipher),
+		Mail: opts.Mail, Hasher: auth.Hasher{Pepper: cfg.Security.PasswordPepper, Cost: cfg.Security.BcryptCost}, Clock: opts.Clock,
+	})
+	if err != nil {
+		closeAll()
+		return Built{}, fmt.Errorf("apiwire: build tenancy service: %w", err)
+	}
+
 	clientIP := middleware.ClientIP(cfg.HTTP.TrustedProxies)
-	handlers := &v1.Handlers{Auth: authService, Clock: opts.Clock, Log: log, ClientIP: clientIP}
+	handlers := &v1.Handlers{Auth: authService, Tenancy: tenancyService, Clock: opts.Clock, Log: log, ClientIP: clientIP}
 	router := v1.NewRouter(handlers, middlewareFor(cfg, redisClient, authService, auditRepo, admin.NewAuditRepository(pool), clientIP, opts.RedisPrefix, log), log)
 	return Built{V1: router, Auth: authService, Close: closeAll}, nil
 }

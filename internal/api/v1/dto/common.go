@@ -69,12 +69,13 @@ func (d *Decimal) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// PrepareJSONSchema documents Decimal as a string.
-func (Decimal) PrepareJSONSchema(s *jsonschema.Schema) error {
-	s.TypeEns().WithSimpleTypes(jsonschema.String)
+// JSONSchema documents Decimal as a string.
+func (Decimal) JSONSchema() (jsonschema.Schema, error) {
+	var s jsonschema.Schema
+	s.AddType(jsonschema.String)
 	s.WithPattern(`^-?[0-9]+(\.[0-9]+)?$`)
 	s.WithExamples("1234.567890")
-	return nil
+	return s, nil
 }
 
 // Date is a calendar date, YYYY-MM-DD.
@@ -121,11 +122,12 @@ func (d *Date) UnmarshalText(b []byte) error {
 	return nil
 }
 
-// PrepareJSONSchema documents Date as a string date.
-func (Date) PrepareJSONSchema(s *jsonschema.Schema) error {
-	s.TypeEns().WithSimpleTypes(jsonschema.String)
+// JSONSchema documents Date as a string date.
+func (Date) JSONSchema() (jsonschema.Schema, error) {
+	var s jsonschema.Schema
+	s.AddType(jsonschema.String)
 	s.WithFormat("date")
-	return nil
+	return s, nil
 }
 
 // Error is the error envelope every failure returns (05 §1, R152).

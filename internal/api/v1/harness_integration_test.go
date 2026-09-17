@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
@@ -45,11 +46,15 @@ const (
 type capturedMail struct {
 	mu   sync.Mutex
 	msgs []mail.Message
+	fail error
 }
 
-func (c *capturedMail) Send(_ context.Context, _ model.SMTPSettings, _ []byte, m mail.Message) error {
+func (c *capturedMail) Send(_ context.Context, _ model.SMTPSettings, password []byte, m mail.Message) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.fail != nil {
+		return fmt.Errorf("%w (password %s)", c.fail, password)
+	}
 	c.msgs = append(c.msgs, m)
 	return nil
 }
@@ -216,4 +221,12 @@ func mustURL(t *testing.T, raw string) *url.URL {
 	u, err := url.Parse(raw)
 	require.NoError(t, err)
 	return u
+}
+
+// as logs in a fresh client for email.
+func (h *harness) as(email string) *client {
+	h.t.Helper()
+	c := h.client(uaChrome)
+	c.login(email, false)
+	return c
 }

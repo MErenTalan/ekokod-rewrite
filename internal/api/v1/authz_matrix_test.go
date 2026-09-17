@@ -35,8 +35,20 @@ var expectedAccess = map[string]string{
 	"GET /auth/sessions":         "authenticated",
 	"DELETE /auth/sessions/{id}": "authenticated",
 	// 05 §3
-	"GET /profile":   "authenticated",
-	"PATCH /profile": "A CA CR BA BR", // R150
+	"GET /profile":             "authenticated",
+	"PATCH /profile":           "A CA CR BA BR", // R150
+	"GET /companies":           "A",
+	"POST /companies":          "A",
+	"GET /companies/{id}":      "A CA CR",
+	"PATCH /companies/{id}":    "A CA",
+	"DELETE /companies/{id}":   "A",
+	"GET /users":               "A CA CR",
+	"POST /users":              "A CA",
+	"PATCH /users/{id}":        "A CA",
+	"DELETE /users/{id}":       "A CA",
+	"GET /smtp-settings":       "A",
+	"PUT /smtp-settings":       "A",
+	"POST /smtp-settings/test": "A",
 	// 05 §18
 	"POST /mobile/auth/login":   "public",
 	"POST /mobile/auth/refresh": "public",
