@@ -5,10 +5,10 @@ import { renderWithProviders } from '@/test/render';
 
 import { useAnnounce } from './live-announcer';
 
-function Announcer({ politeness }: { politeness?: 'polite' | 'assertive' }) {
+function Announcer({ message, politeness }: { message: string; politeness?: 'polite' | 'assertive' }) {
   const announce = useAnnounce();
   return (
-    <button type="button" onClick={() => announce('Rapor hazır', politeness)}>
+    <button type="button" onClick={() => announce(message, politeness)}>
       Duyur
     </button>
   );
@@ -16,16 +16,19 @@ function Announcer({ politeness }: { politeness?: 'polite' | 'assertive' }) {
 
 describe('LiveAnnouncer', () => {
   it('assertive uses the alert region, polite the status region', async () => {
-    const { getByRole, user, baseElement, rerender } = renderWithProviders(<Announcer politeness="assertive" />);
+    const { getByRole, user, baseElement, rerender } = renderWithProviders(<Announcer message="Alarm: sınır aşıldı" politeness="assertive" />);
+    const region = (p: string) => baseElement.querySelector(`[aria-live="${p}"][aria-atomic="true"]`)?.textContent;
     await user.click(getByRole('button'));
-    await expect.poll(() => baseElement.querySelector('[aria-live="assertive"]')?.textContent).toBe('Rapor hazır');
-    rerender(<Announcer />);
+    await expect.poll(() => region('assertive')).toBe('Alarm: sınır aşıldı');
+    expect(region('polite')).toBe('');
+    rerender(<Announcer message="Rapor hazır" />);
     await user.click(getByRole('button'));
-    await expect.poll(() => baseElement.querySelector('[aria-live="polite"]')?.textContent).toBe('Rapor hazır');
+    await expect.poll(() => region('polite')).toBe('Rapor hazır');
+    expect(region('assertive')).toBe('Alarm: sınır aşıldı');
   });
 
   it('has no axe violations', async () => {
-    const { container } = renderWithProviders(<Announcer />);
+    const { container } = renderWithProviders(<Announcer message="x" />);
     await expectNoAxeViolations(container);
   });
 });

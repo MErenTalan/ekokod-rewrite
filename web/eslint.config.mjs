@@ -11,7 +11,7 @@ const config = [
 const RAW_COLOR = String.raw`(?<![\w&-])#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})(?![\w-])|\b(?:rgba?|hsla?|oklch|oklab|lab|lch|hwb)\(`;
 const PALETTE = String.raw`(?:^|[\s:])(?:bg|text|border|ring|fill|stroke|outline|decoration|divide|accent|caret|placeholder|from|via|to|shadow)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|black|white)(?:-\d{2,3})?(?:\/\d+)?(?=\s|$)`;
 const ENERGY_TEXT = String.raw`(?:^|[\s:])text-(?:brand|consumption|generation|reactive-inductive|reactive-capacitive|cost|revenue|forecast)(?=\s|$)`;
-const FORBIDDEN = String.raw`(?:^|[\s:])(?:outline-none|outline-hidden)(?=\s|$)|(?:^|\s)dark:`;
+const FORBIDDEN = String.raw`(?:^|[\s:])(?:outline-none|outline-hidden|outline-0|\[outline:(?:none|0)\])(?=\s|$)|(?:^|\s)dark:`;
 const ban = (re, message) => [
   { selector: `Literal[value=/${re}/]`, message },
   { selector: `TemplateElement[value.raw=/${re}/]`, message },
