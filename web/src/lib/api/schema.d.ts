@@ -1333,7 +1333,7 @@ export interface components {
             address?: null | string;
             bill_cutoff_day?: null | number;
             clear_responsible_user?: boolean;
-            contacts?: null | components["schemas"]["Contact"][];
+            contacts?: components["schemas"]["Contact"][];
             floors?: null | number;
             latitude?: components["schemas"]["Decimal"];
             longitude?: components["schemas"]["Decimal"];
@@ -1370,7 +1370,7 @@ export interface components {
             address?: null | string;
             bill_cutoff_day?: null | number;
             clear_responsible_user?: boolean;
-            contacts?: null | components["schemas"]["Contact"][];
+            contacts?: components["schemas"]["Contact"][];
             floors?: null | number;
             latitude?: components["schemas"]["Decimal"];
             longitude?: components["schemas"]["Decimal"];
@@ -1674,8 +1674,8 @@ export interface components {
                 [key: string]: components["schemas"]["Decimal"][];
             };
         };
-        /** @enum {null|string} */
-        Locale: "tr" | "en" | null;
+        /** @enum {string} */
+        Locale: "tr" | "en";
         LoginRequest: {
             /** Format: email */
             email: string;
@@ -1746,12 +1746,12 @@ export interface components {
         };
         PlantCreateRequest: {
             address?: null | string;
-            alarm_recipients?: null | string[];
+            alarm_recipients?: string[];
             installation_date?: components["schemas"]["Date"];
             installation_number?: null | string;
             latitude?: components["schemas"]["Decimal"];
             longitude?: components["schemas"]["Decimal"];
-            monthly_targets?: null | components["schemas"]["Decimal"][];
+            monthly_targets?: components["schemas"]["Decimal"][];
             name: string;
             /** @enum {null|string} */
             orientation?: "n" | "s" | "e" | "w" | "ne" | "se" | "nw" | "sw" | null;
@@ -1809,12 +1809,12 @@ export interface components {
         };
         PlantUpdateRequest: {
             address?: null | string;
-            alarm_recipients?: null | string[];
+            alarm_recipients?: string[];
             installation_date?: components["schemas"]["Date"];
             installation_number?: null | string;
             latitude?: components["schemas"]["Decimal"];
             longitude?: components["schemas"]["Decimal"];
-            monthly_targets?: null | components["schemas"]["Decimal"][];
+            monthly_targets?: components["schemas"]["Decimal"][];
             name?: null | string;
             /** @enum {null|string} */
             orientation?: "n" | "s" | "e" | "w" | "ne" | "se" | "nw" | "sw" | null;
@@ -1888,8 +1888,8 @@ export interface components {
             password: string;
             token: string;
         };
-        /** @enum {null|string} */
-        Role: "admin" | "company_admin" | "company_readonly_admin" | "building_admin" | "building_readonly_admin" | "demo" | null;
+        /** @enum {string} */
+        Role: "admin" | "company_admin" | "company_readonly_admin" | "building_admin" | "building_readonly_admin" | "demo";
         SMTPPutRequest: {
             /** Format: email */
             from_address: string;

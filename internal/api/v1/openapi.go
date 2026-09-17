@@ -25,8 +25,15 @@ func BuildOpenAPI(routes []Route) ([]byte, error) {
 	r.Spec.SetHTTPBearerTokenSecurity("bearerAuth", "JWT", "Mobile access token.")
 	r.JSONSchemaReflector().DefaultOptions = append(r.JSONSchemaReflector().DefaultOptions,
 		jsonschema.InterceptNullability(func(p jsonschema.InterceptNullabilityParams) {
-			if p.Type.Kind() == reflect.Slice || p.Type.Kind() == reflect.Map {
-				p.Schema.RemoveType(jsonschema.Null) // the API never sends null collections
+			t := p.Type
+			for t.Kind() == reflect.Pointer {
+				t = t.Elem()
+			}
+			_, enum := reflect.New(t).Elem().Interface().(jsonschema.Enum)
+			// The API never sends null collections, and an optional enum field is omitted, never null:
+			// a shared enum component (Role, Locale) must not turn nullable because a PATCH field points at it.
+			if t.Kind() == reflect.Slice || t.Kind() == reflect.Map || enum {
+				p.Schema.RemoveType(jsonschema.Null)
 			}
 		}),
 		jsonschema.InterceptDefName(func(_ reflect.Type, name string) string {

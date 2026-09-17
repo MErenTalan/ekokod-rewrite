@@ -3,6 +3,7 @@ package v1_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -60,6 +61,28 @@ func TestOpenAPIDocumentIsCurrent(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, doc, again, "generation must be deterministic")
 	require.Contains(t, string(doc), `"openapi": "3.1.0"`)
+}
+
+// A nullable shared enum types every response field that uses it as nullable in the web client.
+func TestEnumComponentsAreNotNullable(t *testing.T) {
+	var doc struct {
+		Components struct {
+			Schemas map[string]struct {
+				Enum []any `json:"enum"`
+				Type any   `json:"type"`
+			} `json:"schemas"`
+		} `json:"components"`
+	}
+	require.NoError(t, json.Unmarshal(v1.OpenAPIDocument(), &doc))
+	enums := 0
+	for name, s := range doc.Components.Schemas {
+		if len(s.Enum) == 0 {
+			continue
+		}
+		enums++
+		require.Equal(t, "string", s.Type, "%s must not be nullable", name)
+	}
+	require.GreaterOrEqual(t, enums, 3)
 }
 
 func TestOpenAPIServed(t *testing.T) {

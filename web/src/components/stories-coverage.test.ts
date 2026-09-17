@@ -23,4 +23,12 @@ describe('gallery coverage', () => {
     );
     expect(missing).toEqual([]);
   });
+
+  it('every feature component has a story and a test', () => {
+    const features = join(import.meta.dirname, '../features');
+    const missing = components(features).flatMap((file) =>
+      (basename(file).startsWith('_') ? ['.test.tsx'] : ['.stories.tsx', '.test.tsx']).map((suffix) => file.replace(/\.tsx$/, suffix)).filter((sibling) => !existsSync(sibling)).map((sibling) => basename(sibling)),
+    );
+    expect(missing).toEqual([]);
+  });
 });
