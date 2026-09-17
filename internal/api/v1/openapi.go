@@ -69,6 +69,9 @@ func BuildOpenAPI(routes []Route) ([]byte, error) {
 			oc.AddRespStructure(dto.Error{}, openapi.WithHTTPStatus(status))
 		}
 		if rt.Access != Public {
+			// R190: kit.Bind accepts company_id on every route, but only an authenticated
+			// one resolves a scope from it (R139), so only those declare it.
+			oc.AddReqStructure(dto.CompanyScopeQuery{})
 			oc.AddSecurity("cookieAuth")
 			oc.AddSecurity("bearerAuth")
 		}

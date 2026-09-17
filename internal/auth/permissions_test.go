@@ -13,21 +13,24 @@ import (
 func TestPermissionsMatrix(t *testing.T) {
 	want := map[model.UserRole][]string{
 		model.UserRoleAdmin: {
-			"admin.companies", "analyzers.refresh", "bills.compute", "calendar.edit", "integrations.credentials",
-			"nav.core", "nav.financial", "nav.solar_plants", "settings.analyzers", "settings.buildings",
-			"settings.company", "settings.company.edit", "settings.integrations", "settings.plants",
-			"settings.smtp", "settings.users", "write",
+			"admin.companies", "analyzers.refresh", "anomaly.check", "bills.compute", "calendar.edit",
+			"integrations.credentials", "nav.core", "nav.financial", "nav.solar_plants", "settings.analyzers",
+			"settings.analyzers.edit", "settings.buildings", "settings.company", "settings.company.edit",
+			"settings.integrations", "settings.plants", "settings.smtp", "settings.users", "write",
 		},
 		model.UserRoleCompanyAdmin: {
-			"analyzers.refresh", "bills.compute", "calendar.edit", "integrations.credentials", "nav.core",
-			"nav.financial", "nav.solar_plants", "settings.analyzers", "settings.buildings", "settings.company",
-			"settings.company.edit", "settings.plants", "settings.users", "write",
+			"analyzers.refresh", "anomaly.check", "bills.compute", "calendar.edit", "integrations.credentials",
+			"nav.core", "nav.financial", "nav.solar_plants", "settings.analyzers", "settings.analyzers.edit",
+			"settings.buildings", "settings.company", "settings.company.edit", "settings.plants",
+			"settings.users", "write",
 		},
 		model.UserRoleCompanyReadonlyAdmin: {
 			"nav.core", "nav.financial", "nav.solar_plants", "settings.analyzers", "settings.buildings",
 			"settings.company", "settings.plants", "settings.users",
 		},
-		model.UserRoleBuildingAdmin:         {"analyzers.refresh", "bills.compute", "nav.core", "settings.analyzers", "write"},
+		model.UserRoleBuildingAdmin: {
+			"analyzers.refresh", "anomaly.check", "bills.compute", "nav.core", "settings.analyzers", "write",
+		},
 		model.UserRoleBuildingReadonlyAdmin: {"nav.core", "settings.analyzers"},
 		model.UserRoleDemo:                  {"nav.core"},
 	}

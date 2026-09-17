@@ -142,3 +142,45 @@ func TestPermissionEnumMatchesTable(t *testing.T) {
 	}
 	require.Equal(t, want, roles)
 }
+
+// R190: the web sends `company_id` on every authenticated route (R139), so the generated client must type it.
+func TestOpenAPIDeclaresCompanyIDOnScopedRoutes(t *testing.T) {
+	var doc struct {
+		Paths map[string]map[string]struct {
+			OperationID string `json:"operationId"`
+			Parameters  []struct {
+				Name   string `json:"name"`
+				In     string `json:"in"`
+				Schema struct {
+					Ref    string `json:"$ref"`
+					Format string `json:"format"`
+				} `json:"schema"`
+			} `json:"parameters"`
+		} `json:"paths"`
+	}
+	require.NoError(t, json.Unmarshal(v1.OpenAPIDocument(), &doc))
+	scoped, public := 0, 0
+	for _, rt := range v1.Table() {
+		op, ok := doc.Paths["/api/v1"+rt.Pattern][strings.ToLower(rt.Method)]
+		require.True(t, ok, "%s %s missing from the document", rt.Method, rt.Pattern)
+		var found int
+		for _, p := range op.Parameters {
+			if p.Name != "company_id" {
+				continue
+			}
+			found++
+			require.Equal(t, "query", p.In, rt.OperationID)
+			require.True(t, strings.HasSuffix(p.Schema.Ref, "/UuidUUID") || p.Schema.Format == "uuid",
+				"%s: company_id must be a uuid, got ref %q format %q", rt.OperationID, p.Schema.Ref, p.Schema.Format)
+		}
+		if rt.Access == v1.Public {
+			require.Zero(t, found, "%s is public and must not declare company_id", rt.OperationID)
+			public++
+			continue
+		}
+		require.Equal(t, 1, found, "%s must declare exactly one company_id parameter", rt.OperationID)
+		scoped++
+	}
+	require.Greater(t, scoped, 70)
+	require.GreaterOrEqual(t, public, 5)
+}

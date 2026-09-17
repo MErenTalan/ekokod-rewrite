@@ -72,6 +72,13 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
           }
         ],
         "responses": {
@@ -171,6 +178,13 @@
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
           }
         ],
         "responses": {
@@ -265,6 +279,13 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
@@ -396,6 +417,13 @@
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
           }
         ],
         "requestBody": {
@@ -516,6 +544,15 @@
         ],
         "summary": "Check one value against the model (unavailable until the ML service, R165).",
         "operationId": "anomaly.check",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -634,6 +671,15 @@
         ],
         "summary": "Change the current user's password; other sessions are revoked.",
         "operationId": "auth.change_password",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -898,6 +944,15 @@
         ],
         "summary": "Revoke the current session.",
         "operationId": "auth.logout",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
         "responses": {
           "204": {
             "description": "No Content"
@@ -990,6 +1045,15 @@
         ],
         "summary": "Revoke every session of the current user.",
         "operationId": "auth.logout_all",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
         "responses": {
           "204": {
             "description": "No Content"
@@ -1082,6 +1146,15 @@
         ],
         "summary": "The current principal with its permissions.",
         "operationId": "auth.me",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -1288,6 +1361,15 @@
         ],
         "summary": "Active sessions of the current user.",
         "operationId": "auth.sessions.list",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -1372,6 +1454,13 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
@@ -1531,6 +1620,13 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
           }
         ],
         "responses": {
@@ -1622,6 +1718,15 @@
         ],
         "summary": "Enqueue bill computation; recomputation supersedes.",
         "operationId": "bills.compute",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -1761,6 +1866,13 @@
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
           }
         ],
         "responses": {
@@ -1857,6 +1969,13 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
@@ -1970,6 +2089,13 @@
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
           }
         ],
         "responses": {
@@ -2066,6 +2192,13 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
@@ -2207,6 +2340,13 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
           }
         ],
         "responses": {
@@ -2296,6 +2436,15 @@
         ],
         "summary": "Create a building.",
         "operationId": "buildings.create",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -2422,6 +2571,13 @@
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
           }
         ],
         "responses": {
@@ -2516,6 +2672,13 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
@@ -2626,6 +2789,13 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
@@ -2757,6 +2927,13 @@
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
           }
         ],
         "responses": {
@@ -2864,6 +3041,13 @@
             "schema": {
               "$ref": "#/components/schemas/Date"
             }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
           }
         ],
         "responses": {
@@ -2953,6 +3137,15 @@
         ],
         "summary": "Create an event.",
         "operationId": "calendar.events.create",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -3079,6 +3272,13 @@
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
           }
         ],
         "responses": {
@@ -3186,6 +3386,13 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
@@ -3309,6 +3516,15 @@
         ],
         "summary": "Weekend days and vacation periods.",
         "operationId": "calendar.vacations.get",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -3396,6 +3612,15 @@
         ],
         "summary": "Replace weekend days and vacation periods.",
         "operationId": "calendar.vacations.put",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -3550,6 +3775,13 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
           }
         ],
         "responses": {
@@ -3639,6 +3871,15 @@
         ],
         "summary": "Create a company.",
         "operationId": "companies.create",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -3765,6 +4006,13 @@
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
           }
         ],
         "responses": {
@@ -3859,6 +4107,13 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
@@ -3969,6 +4224,13 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
@@ -4136,6 +4398,13 @@
             "schema": {
               "$ref": "#/components/schemas/Date"
             }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
           }
         ],
         "responses": {
@@ -4267,6 +4536,13 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
           }
         ],
         "responses": {
@@ -4363,6 +4639,13 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
@@ -4542,6 +4825,13 @@
               ],
               "type": "string"
             }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
           }
         ],
         "responses": {
@@ -4644,6 +4934,13 @@
           },
           {
             "name": "building_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "company_id",
             "in": "query",
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
@@ -4783,6 +5080,13 @@
             "schema": {
               "$ref": "#/components/schemas/Date"
             }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
           }
         ],
         "responses": {
@@ -4917,6 +5221,13 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
             }
           }
         ],
@@ -5053,6 +5364,13 @@
             "schema": {
               "$ref": "#/components/schemas/Date"
             }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
           }
         ],
         "responses": {
@@ -5144,6 +5462,15 @@
         ],
         "summary": "Configured integrations; never secrets.",
         "operationId": "integration_credentials.list",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -5231,6 +5558,15 @@
         ],
         "summary": "Configure an integration; secrets are write-only.",
         "operationId": "integration_credentials.create",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -5357,6 +5693,13 @@
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
           }
         ],
         "responses": {
@@ -5464,6 +5807,13 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
@@ -5595,6 +5945,13 @@
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
           }
         ],
         "requestBody": {
@@ -5723,6 +6080,13 @@
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
           }
         ],
         "responses": {
@@ -5842,6 +6206,13 @@
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
           }
         ],
         "responses": {
@@ -5953,6 +6324,15 @@
         ],
         "summary": "The provider catalogue.",
         "operationId": "integration_definitions.list",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -6040,6 +6420,15 @@
         ],
         "summary": "Add a provider/subtype.",
         "operationId": "integration_definitions.create",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -6166,6 +6555,13 @@
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
           }
         ],
         "responses": {
@@ -6273,6 +6669,13 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
@@ -6401,6 +6804,13 @@
             "name": "credential_id",
             "in": "query",
             "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
@@ -6563,6 +6973,13 @@
               },
               "type": "array"
             }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
           }
         ],
         "responses": {
@@ -6688,6 +7105,13 @@
               },
               "type": "array"
             }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
           }
         ],
         "responses": {
@@ -6812,6 +7236,13 @@
                 "type": "string"
               },
               "type": "array"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
             }
           }
         ],
@@ -6984,6 +7415,15 @@
         ],
         "summary": "The current principal for the mobile app.",
         "operationId": "mobile.me",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -7193,6 +7633,13 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
           }
         ],
         "responses": {
@@ -7282,6 +7729,15 @@
         ],
         "summary": "Create a power plant.",
         "operationId": "plants.create",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -7408,6 +7864,13 @@
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
           }
         ],
         "responses": {
@@ -7502,6 +7965,13 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
@@ -7612,6 +8082,13 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
@@ -7735,6 +8212,15 @@
         ],
         "summary": "The current user's profile.",
         "operationId": "profile.get",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -7812,6 +8298,15 @@
         ],
         "summary": "Update the current user's name, e-mail, phone, locale and UI preferences.",
         "operationId": "profile.update",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -7930,6 +8425,15 @@
         ],
         "summary": "SMTP settings of the company in scope; the password is never returned.",
         "operationId": "smtp.get",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -8017,6 +8521,15 @@
         ],
         "summary": "Create or replace SMTP settings.",
         "operationId": "smtp.upsert",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -8135,6 +8648,15 @@
         ],
         "summary": "Send a test message with the stored settings.",
         "operationId": "smtp.test",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -8272,6 +8794,13 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
           }
         ],
         "responses": {
@@ -8361,6 +8890,15 @@
         ],
         "summary": "Create a tariff version with taxes, extra charges and manual YEKDEM.",
         "operationId": "tariffs.create",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -8495,6 +9033,13 @@
             "schema": {
               "$ref": "#/components/schemas/Date"
             }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
           }
         ],
         "responses": {
@@ -8594,6 +9139,13 @@
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
           }
         ],
         "responses": {
@@ -8688,6 +9240,13 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
@@ -8798,6 +9357,13 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
@@ -8967,6 +9533,13 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
           }
         ],
         "responses": {
@@ -9056,6 +9629,15 @@
         ],
         "summary": "Create a user; role options depend on the caller's role.",
         "operationId": "users.create",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -9182,6 +9764,13 @@
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
           }
         ],
         "responses": {
@@ -9289,6 +9878,13 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
             "schema": {
               "$ref": "#/components/schemas/UuidUUID"
             }
@@ -11850,6 +12446,7 @@
         "enum": [
           "admin.companies",
           "analyzers.refresh",
+          "anomaly.check",
           "bills.compute",
           "calendar.edit",
           "integrations.credentials",
@@ -11857,6 +12454,7 @@
           "nav.financial",
           "nav.solar_plants",
           "settings.analyzers",
+          "settings.analyzers.edit",
           "settings.buildings",
           "settings.company",
           "settings.company.edit",

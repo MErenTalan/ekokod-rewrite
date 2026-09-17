@@ -1717,7 +1717,7 @@ export interface components {
             period_start: string;
         };
         /** @enum {string} */
-        Permission: "admin.companies" | "analyzers.refresh" | "bills.compute" | "calendar.edit" | "integrations.credentials" | "nav.core" | "nav.financial" | "nav.solar_plants" | "settings.analyzers" | "settings.buildings" | "settings.company" | "settings.company.edit" | "settings.integrations" | "settings.plants" | "settings.smtp" | "settings.users" | "write";
+        Permission: "admin.companies" | "analyzers.refresh" | "anomaly.check" | "bills.compute" | "calendar.edit" | "integrations.credentials" | "nav.core" | "nav.financial" | "nav.solar_plants" | "settings.analyzers" | "settings.analyzers.edit" | "settings.buildings" | "settings.company" | "settings.company.edit" | "settings.integrations" | "settings.plants" | "settings.smtp" | "settings.users" | "write";
         Plant: {
             address?: null | string;
             /** Format: date-time */
@@ -2198,6 +2198,7 @@ export interface operations {
                 q?: string;
                 limit?: null | number;
                 cursor?: string;
+                company_id?: components["schemas"]["UuidUUID"];
             };
             header?: never;
             path?: never;
@@ -2272,7 +2273,9 @@ export interface operations {
     };
     "analyzers.get": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path: {
                 id: components["schemas"]["UuidUUID"];
@@ -2348,7 +2351,9 @@ export interface operations {
     };
     "analyzers.update": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path: {
                 id: components["schemas"]["UuidUUID"];
@@ -2446,7 +2451,9 @@ export interface operations {
     };
     "analyzers.refresh": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path: {
                 id: components["schemas"]["UuidUUID"];
@@ -2544,7 +2551,9 @@ export interface operations {
     };
     "anomaly.check": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2640,7 +2649,9 @@ export interface operations {
     };
     "auth.change_password": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2870,7 +2881,9 @@ export interface operations {
     };
     "auth.logout": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2951,7 +2964,9 @@ export interface operations {
     };
     "auth.logout_all": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -3032,7 +3047,9 @@ export interface operations {
     };
     "auth.me": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -3218,7 +3235,9 @@ export interface operations {
     };
     "auth.sessions.list": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -3283,7 +3302,9 @@ export interface operations {
     };
     "auth.sessions.revoke": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path: {
                 id: components["schemas"]["UuidUUID"];
@@ -3374,6 +3395,7 @@ export interface operations {
                 status?: string[];
                 limit?: null | number;
                 cursor?: string;
+                company_id?: components["schemas"]["UuidUUID"];
             };
             header?: never;
             path?: never;
@@ -3448,7 +3470,9 @@ export interface operations {
     };
     "bills.compute": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -3547,6 +3571,7 @@ export interface operations {
             query: {
                 scope: "analyzer" | "building" | "company";
                 subject_id: components["schemas"]["UuidUUID"];
+                company_id?: components["schemas"]["UuidUUID"];
             };
             header?: never;
             path?: never;
@@ -3621,7 +3646,9 @@ export interface operations {
     };
     "bills.get": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path: {
                 id: components["schemas"]["UuidUUID"];
@@ -3699,6 +3726,7 @@ export interface operations {
         parameters: {
             query?: {
                 format?: "json" | "xlsx";
+                company_id?: components["schemas"]["UuidUUID"];
             };
             header?: never;
             path: {
@@ -3775,7 +3803,9 @@ export interface operations {
     };
     "bills.pdf": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path: {
                 id: components["schemas"]["UuidUUID"];
@@ -3857,6 +3887,7 @@ export interface operations {
                 sector?: string;
                 limit?: null | number;
                 cursor?: string;
+                company_id?: components["schemas"]["UuidUUID"];
             };
             header?: never;
             path?: never;
@@ -3931,7 +3962,9 @@ export interface operations {
     };
     "buildings.create": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -4027,7 +4060,9 @@ export interface operations {
     };
     "buildings.get": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path: {
                 id: components["schemas"]["UuidUUID"];
@@ -4103,7 +4138,9 @@ export interface operations {
     };
     "buildings.delete": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path: {
                 id: components["schemas"]["UuidUUID"];
@@ -4195,7 +4232,9 @@ export interface operations {
     };
     "buildings.update": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path: {
                 id: components["schemas"]["UuidUUID"];
@@ -4293,7 +4332,9 @@ export interface operations {
     };
     "buildings.comparison": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path: {
                 id: components["schemas"]["UuidUUID"];
@@ -4372,6 +4413,7 @@ export interface operations {
             query: {
                 from: components["schemas"]["Date"];
                 to: components["schemas"]["Date"];
+                company_id?: components["schemas"]["UuidUUID"];
             };
             header?: never;
             path?: never;
@@ -4446,7 +4488,9 @@ export interface operations {
     };
     "calendar.events.create": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -4542,7 +4586,9 @@ export interface operations {
     };
     "calendar.events.delete": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path: {
                 id: components["schemas"]["UuidUUID"];
@@ -4634,7 +4680,9 @@ export interface operations {
     };
     "calendar.events.update": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path: {
                 id: components["schemas"]["UuidUUID"];
@@ -4732,7 +4780,9 @@ export interface operations {
     };
     "calendar.vacations.get": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -4806,7 +4856,9 @@ export interface operations {
     };
     "calendar.vacations.put": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -4907,6 +4959,7 @@ export interface operations {
                 sector?: null | string;
                 limit?: null | number;
                 cursor?: string;
+                company_id?: components["schemas"]["UuidUUID"];
             };
             header?: never;
             path?: never;
@@ -4981,7 +5034,9 @@ export interface operations {
     };
     "companies.create": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -5077,7 +5132,9 @@ export interface operations {
     };
     "companies.get": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path: {
                 id: components["schemas"]["UuidUUID"];
@@ -5153,7 +5210,9 @@ export interface operations {
     };
     "companies.delete": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path: {
                 id: components["schemas"]["UuidUUID"];
@@ -5245,7 +5304,9 @@ export interface operations {
     };
     "companies.update": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path: {
                 id: components["schemas"]["UuidUUID"];
@@ -5349,6 +5410,7 @@ export interface operations {
                 granularity: "hourly" | "daily" | "monthly" | "yearly";
                 from: components["schemas"]["Date"];
                 to: components["schemas"]["Date"];
+                company_id?: components["schemas"]["UuidUUID"];
             };
             header?: never;
             path?: never;
@@ -5429,6 +5491,7 @@ export interface operations {
                 unresolved?: boolean;
                 limit?: null | number;
                 cursor?: string;
+                company_id?: components["schemas"]["UuidUUID"];
             };
             header?: never;
             path?: never;
@@ -5503,7 +5566,9 @@ export interface operations {
     };
     "consumption.anomalies.resolve": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path: {
                 id: components["schemas"]["UuidUUID"];
@@ -5608,6 +5673,7 @@ export interface operations {
                 from: components["schemas"]["Date"];
                 to: components["schemas"]["Date"];
                 format: "csv" | "xlsx";
+                company_id?: components["schemas"]["UuidUUID"];
             };
             header?: never;
             path?: never;
@@ -5685,6 +5751,7 @@ export interface operations {
             query?: {
                 month?: string;
                 building_id?: components["schemas"]["UuidUUID"];
+                company_id?: components["schemas"]["UuidUUID"];
             };
             header?: never;
             path?: never;
@@ -5765,6 +5832,7 @@ export interface operations {
                 granularity: "hourly" | "daily" | "monthly" | "yearly";
                 from: components["schemas"]["Date"];
                 to: components["schemas"]["Date"];
+                company_id?: components["schemas"]["UuidUUID"];
             };
             header?: never;
             path?: never;
@@ -5845,6 +5913,7 @@ export interface operations {
                 granularity: "hourly" | "daily" | "monthly" | "yearly";
                 from: components["schemas"]["Date"];
                 to: components["schemas"]["Date"];
+                company_id?: components["schemas"]["UuidUUID"];
             };
             header?: never;
             path?: never;
@@ -5925,6 +5994,7 @@ export interface operations {
                 granularity: "hourly" | "daily" | "monthly" | "yearly";
                 from: components["schemas"]["Date"];
                 to: components["schemas"]["Date"];
+                company_id?: components["schemas"]["UuidUUID"];
             };
             header?: never;
             path?: never;
@@ -5999,7 +6069,9 @@ export interface operations {
     };
     "integration_credentials.list": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -6073,7 +6145,9 @@ export interface operations {
     };
     "integration_credentials.create": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -6169,7 +6243,9 @@ export interface operations {
     };
     "integration_credentials.delete": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path: {
                 id: components["schemas"]["UuidUUID"];
@@ -6261,7 +6337,9 @@ export interface operations {
     };
     "integration_credentials.update": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path: {
                 id: components["schemas"]["UuidUUID"];
@@ -6359,7 +6437,9 @@ export interface operations {
     };
     "integration_credentials.backfill": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path: {
                 id: components["schemas"]["UuidUUID"];
@@ -6457,7 +6537,9 @@ export interface operations {
     };
     "integration_credentials.discover": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path: {
                 id: components["schemas"]["UuidUUID"];
@@ -6551,7 +6633,9 @@ export interface operations {
     };
     "integration_credentials.verify": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path: {
                 id: components["schemas"]["UuidUUID"];
@@ -6645,7 +6729,9 @@ export interface operations {
     };
     "integration_definitions.list": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -6719,7 +6805,9 @@ export interface operations {
     };
     "integration_definitions.create": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -6815,7 +6903,9 @@ export interface operations {
     };
     "integration_definitions.delete": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path: {
                 id: components["schemas"]["UuidUUID"];
@@ -6907,7 +6997,9 @@ export interface operations {
     };
     "integration_definitions.update": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path: {
                 id: components["schemas"]["UuidUUID"];
@@ -7007,6 +7099,7 @@ export interface operations {
         parameters: {
             query: {
                 credential_id: components["schemas"]["UuidUUID"];
+                company_id?: components["schemas"]["UuidUUID"];
             };
             header?: never;
             path?: never;
@@ -7122,6 +7215,7 @@ export interface operations {
                 from: components["schemas"]["Date"];
                 to: components["schemas"]["Date"];
                 profiles?: string[];
+                company_id?: components["schemas"]["UuidUUID"];
             };
             header?: never;
             path?: never;
@@ -7201,6 +7295,7 @@ export interface operations {
                 from: components["schemas"]["Date"];
                 to: components["schemas"]["Date"];
                 profiles?: string[];
+                company_id?: components["schemas"]["UuidUUID"];
             };
             header?: never;
             path?: never;
@@ -7280,6 +7375,7 @@ export interface operations {
                 from: components["schemas"]["Date"];
                 to: components["schemas"]["Date"];
                 profiles?: string[];
+                company_id?: components["schemas"]["UuidUUID"];
             };
             header?: never;
             path?: never;
@@ -7423,7 +7519,9 @@ export interface operations {
     };
     "mobile.me": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -7589,6 +7687,7 @@ export interface operations {
             query?: {
                 limit?: null | number;
                 cursor?: string;
+                company_id?: components["schemas"]["UuidUUID"];
             };
             header?: never;
             path?: never;
@@ -7663,7 +7762,9 @@ export interface operations {
     };
     "plants.create": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -7759,7 +7860,9 @@ export interface operations {
     };
     "plants.get": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path: {
                 id: components["schemas"]["UuidUUID"];
@@ -7835,7 +7938,9 @@ export interface operations {
     };
     "plants.delete": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path: {
                 id: components["schemas"]["UuidUUID"];
@@ -7927,7 +8032,9 @@ export interface operations {
     };
     "plants.update": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path: {
                 id: components["schemas"]["UuidUUID"];
@@ -8025,7 +8132,9 @@ export interface operations {
     };
     "profile.get": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -8090,7 +8199,9 @@ export interface operations {
     };
     "profile.update": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -8186,7 +8297,9 @@ export interface operations {
     };
     "smtp.get": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -8260,7 +8373,9 @@ export interface operations {
     };
     "smtp.upsert": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -8356,7 +8471,9 @@ export interface operations {
     };
     "smtp.test": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -8454,6 +8571,7 @@ export interface operations {
                 building_id?: components["schemas"]["UuidUUID"];
                 limit?: null | number;
                 cursor?: string;
+                company_id?: components["schemas"]["UuidUUID"];
             };
             header?: never;
             path?: never;
@@ -8528,7 +8646,9 @@ export interface operations {
     };
     "tariffs.create": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -8627,6 +8747,7 @@ export interface operations {
             query: {
                 building_id: components["schemas"]["UuidUUID"];
                 date: components["schemas"]["Date"];
+                company_id?: components["schemas"]["UuidUUID"];
             };
             header?: never;
             path?: never;
@@ -8701,7 +8822,9 @@ export interface operations {
     };
     "tariffs.get": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path: {
                 id: components["schemas"]["UuidUUID"];
@@ -8777,7 +8900,9 @@ export interface operations {
     };
     "tariffs.delete": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path: {
                 id: components["schemas"]["UuidUUID"];
@@ -8869,7 +8994,9 @@ export interface operations {
     };
     "tariffs.update": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path: {
                 id: components["schemas"]["UuidUUID"];
@@ -8973,6 +9100,7 @@ export interface operations {
                 q?: string;
                 limit?: null | number;
                 cursor?: string;
+                company_id?: components["schemas"]["UuidUUID"];
             };
             header?: never;
             path?: never;
@@ -9047,7 +9175,9 @@ export interface operations {
     };
     "users.create": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -9143,7 +9273,9 @@ export interface operations {
     };
     "users.delete": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path: {
                 id: components["schemas"]["UuidUUID"];
@@ -9235,7 +9367,9 @@ export interface operations {
     };
     "users.update": {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
             header?: never;
             path: {
                 id: components["schemas"]["UuidUUID"];

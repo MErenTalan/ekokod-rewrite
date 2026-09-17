@@ -8,6 +8,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 	"github.com/swaggest/jsonschema-go"
 )
@@ -149,4 +150,11 @@ type Empty struct{}
 // JobAccepted is the 202 body of an enqueue.
 type JobAccepted struct {
 	JobID string `json:"job_id" required:"true"`
+}
+
+// CompanyScopeQuery is R190: the admin company selector every authenticated
+// route accepts (R139). Handlers never read it — the Scope middleware does —
+// so it is only declared to the OpenAPI document and the generated client.
+type CompanyScopeQuery struct {
+	CompanyID *uuid.UUID `query:"company_id" json:"-"`
 }
