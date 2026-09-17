@@ -14,7 +14,7 @@ export function FilterBar({ children, onApply, activeCount }: FilterBarProps) {
   const t = useTranslations('shell');
   const [open, setOpen] = useState(false);
   return (
-    <div className="sticky top-14 z-10 -mx-4 border-b border-border bg-background px-4 py-3 lg:-mx-6 lg:px-6">
+    <div className="sticky top-14 z-10 border-b border-border bg-background py-3">
       <div className="hidden flex-wrap items-end gap-3 sm:flex">
         {children}
         {onApply ? <Button onClick={onApply}>{t('applyFilters')}</Button> : null}

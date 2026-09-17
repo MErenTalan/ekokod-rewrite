@@ -39,7 +39,8 @@ export function AppShell({ children, user, notificationCount }: AppShellProps) {
           e.preventDefault();
           document.getElementById('main-content')?.focus();
         }}
-        className="sr-only z-50 rounded-md bg-primary px-3 py-2 text-on-primary focus:not-sr-only focus:fixed focus:start-2 focus:top-2 pointer-coarse:min-h-11"
+        // Box styles apply only while focused, so the hidden link stays a true 1×1 sr-only element.
+        className="sr-only focus:not-sr-only focus:fixed focus:start-2 focus:top-2 focus:z-50 focus:inline-flex focus:min-h-11 focus:items-center focus:rounded-md focus:bg-primary focus:px-3 focus:text-on-primary"
       >
         {t('skipToContent')}
       </a>

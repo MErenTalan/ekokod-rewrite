@@ -40,7 +40,7 @@ export function TopBar({ user, notificationCount, sidebarOpen, onToggleSidebar, 
           onClick={() => update({ sidebar: collapsed ? 'expanded' : 'collapsed' })}
         />
       ) : null}
-      <Link href="/dashboard" aria-label={t('home')} className="flex items-center gap-1.5 rounded-md px-1 pointer-coarse:min-h-11">
+      <Link href="/dashboard" aria-label={t('home')} className="flex items-center gap-1.5 rounded-md px-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11">
         <Leaf aria-hidden className="size-6 stroke-brand" />
         <span className="hidden font-heading text-lg font-semibold text-foreground sm:inline">ekokod</span>
       </Link>

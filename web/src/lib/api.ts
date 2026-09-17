@@ -17,7 +17,9 @@ const apiBase =
 export async function fetchHealth(): Promise<HealthReport | null> {
   try {
     const response = await fetch(`${apiBase}/health/ready`, { cache: 'no-store' });
-    return (await response.json()) as HealthReport;
+    const body = (await response.json()) as Partial<HealthReport> | null;
+    // Anything else answering on the port (a different service, a proxy page) is not our API.
+    return body && Array.isArray(body.checks) ? (body as HealthReport) : null;
   } catch {
     return null;
   }
