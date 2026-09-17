@@ -22,9 +22,9 @@ func testTokens(now time.Time) auth.Tokens {
 func TestTokensIssueParse(t *testing.T) {
 	now := time.Date(2026, 9, 17, 10, 0, 0, 0, time.UTC)
 	tk := testTokens(now)
-	user, session := uuid.New(), uuid.New()
+	user, session, company := uuid.New(), uuid.New(), uuid.New()
 
-	token, exp, err := tk.Issue(user, session, "mobile")
+	token, exp, err := tk.Issue(user, session, company, "mobile")
 	require.NoError(t, err)
 	require.True(t, exp.Equal(now.Add(15*time.Minute)))
 
@@ -32,6 +32,7 @@ func TestTokensIssueParse(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, user, claims.UserID)
 	require.Equal(t, session, claims.SessionID)
+	require.Equal(t, company, claims.CompanyID)
 	require.Equal(t, "mobile", claims.Audience)
 
 	_, err = testTokens(now.Add(16 * time.Minute)).Parse(token)
@@ -55,7 +56,7 @@ func TestTokensRejectForeignShapes(t *testing.T) {
 	now := time.Date(2026, 9, 17, 10, 0, 0, 0, time.UTC)
 	tk := testTokens(now)
 	claims := jwt.MapClaims{
-		"iss": "ekokod", "sub": uuid.NewString(), "sid": uuid.NewString(), "aud": "web",
+		"iss": "ekokod", "sub": uuid.NewString(), "sid": uuid.NewString(), "cid": uuid.NewString(), "aud": "web",
 		"typ": "access", "iat": now.Unix(), "exp": now.Add(time.Minute).Unix(),
 	}
 	sign := func(m jwt.SigningMethod, key any, c jwt.MapClaims) string {
@@ -92,6 +93,15 @@ func TestTokensRejectForeignShapes(t *testing.T) {
 		}
 	}
 	_, err = tk.Parse(sign(jwt.SigningMethodHS256, tokenKey, noExp))
+	require.ErrorIs(t, err, auth.ErrTokenInvalid)
+
+	noCompany := jwt.MapClaims{}
+	for k, v := range claims {
+		if k != "cid" {
+			noCompany[k] = v
+		}
+	}
+	_, err = tk.Parse(sign(jwt.SigningMethodHS256, tokenKey, noCompany))
 	require.ErrorIs(t, err, auth.ErrTokenInvalid)
 
 	badAud := jwt.MapClaims{}
