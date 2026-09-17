@@ -55,6 +55,11 @@ describe('ReactivePanelView', () => {
     expect(r.getByText('Sınır aşıldı')).toBeInTheDocument();
   });
 
+  it('advises correction even when only a later analyzer is over its limit', () => {
+    const r = renderWithProviders(view({ rows: [exempt, over], highestInductive: over, highestCapacitive: over }));
+    expect(r.getByText('Kompanzasyon (güç faktörü düzeltmesi) gerekiyor.')).toBeInTheDocument();
+  });
+
   it('reports limits kept when nobody is over', () => {
     const r = renderWithProviders(view({ rows: [exempt], highestInductive: exempt, highestCapacitive: exempt }));
     expect(r.getByText('Oranlar sınırlar içinde.')).toBeInTheDocument();
