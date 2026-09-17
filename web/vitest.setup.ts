@@ -19,6 +19,14 @@ if (typeof window !== 'undefined') {
   Element.prototype.releasePointerCapture ??= () => {};
   setMatchMedia(() => false);
 
+  // Recharts' ResponsiveContainer re-measures on mount and jsdom reports 0×0, which would hide every chart.
+  const nativeRect = Element.prototype.getBoundingClientRect;
+  Element.prototype.getBoundingClientRect = function getBoundingClientRect(this: Element) {
+    if (!this.classList.contains('recharts-responsive-container')) return nativeRect.call(this);
+    const height = parseFloat((this as HTMLElement).style.height) || 320;
+    return { x: 0, y: 0, top: 0, left: 0, width: 640, height, right: 640, bottom: height, toJSON: () => ({}) } as DOMRect;
+  };
+
   // nwsapi 2.2.27 resolves :modal/:fullscreen/:open/:closed by calling node.matches, which jsdom routes back into
   // nwsapi: it recurses to a stack overflow per call (~15 s per Radix popper via floating-ui's isTopLayer).
   // jsdom has no top layer, so these states are always false.
