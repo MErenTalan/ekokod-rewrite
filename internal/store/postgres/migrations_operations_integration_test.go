@@ -85,6 +85,8 @@ var plaintextSecretColumnAllowlist = map[secretColumnKey]string{
 	{"user_password_history", "password_hash"}: "bcrypt hash (one-way); the plaintext password is never stored",
 	{"sessions", "refresh_token_hash"}: "sha-256 hash of the refresh token (one-way); the raw token itself " +
 		"is never stored, only ever compared by re-hashing an incoming one",
+	{"password_reset_tokens", "token_hash"}: "sha-256 hash of the 32-byte reset token (one-way); the raw token " +
+		"only ever travels in the e-mailed link and is compared by re-hashing",
 	{"integration_credentials", "token_expires_at"}: "a timestamp of when the OAuth token expires, not the " +
 		"token itself; matches the pattern only because its name contains \"token\"",
 }
