@@ -364,6 +364,51 @@ func (ns NullEnergyType) Value() (driver.Value, error) {
 	return string(ns.EnergyType), nil
 }
 
+type ExtraChargeBasis string
+
+const (
+	ExtraChargeBasisPerKwh          ExtraChargeBasis = "per_kwh"
+	ExtraChargeBasisPerContractedKw ExtraChargeBasis = "per_contracted_kw"
+	ExtraChargeBasisPerMaxDemandKw  ExtraChargeBasis = "per_max_demand_kw"
+	ExtraChargeBasisFixedPerPeriod  ExtraChargeBasis = "fixed_per_period"
+	ExtraChargeBasisPctOfEnergy     ExtraChargeBasis = "pct_of_energy"
+)
+
+func (e *ExtraChargeBasis) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ExtraChargeBasis(s)
+	case string:
+		*e = ExtraChargeBasis(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ExtraChargeBasis: %T", src)
+	}
+	return nil
+}
+
+type NullExtraChargeBasis struct {
+	ExtraChargeBasis ExtraChargeBasis
+	Valid            bool // Valid is true if ExtraChargeBasis is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullExtraChargeBasis) Scan(value interface{}) error {
+	if value == nil {
+		ns.ExtraChargeBasis, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ExtraChargeBasis.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullExtraChargeBasis) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ExtraChargeBasis), nil
+}
+
 type GenerationUsage string
 
 const (
@@ -450,6 +495,48 @@ func (ns NullIntegrationProvider) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return string(ns.IntegrationProvider), nil
+}
+
+type MoneyRoundingMode string
+
+const (
+	MoneyRoundingModeHalfUp   MoneyRoundingMode = "half_up"
+	MoneyRoundingModeHalfEven MoneyRoundingMode = "half_even"
+)
+
+func (e *MoneyRoundingMode) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = MoneyRoundingMode(s)
+	case string:
+		*e = MoneyRoundingMode(s)
+	default:
+		return fmt.Errorf("unsupported scan type for MoneyRoundingMode: %T", src)
+	}
+	return nil
+}
+
+type NullMoneyRoundingMode struct {
+	MoneyRoundingMode MoneyRoundingMode
+	Valid             bool // Valid is true if MoneyRoundingMode is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullMoneyRoundingMode) Scan(value interface{}) error {
+	if value == nil {
+		ns.MoneyRoundingMode, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.MoneyRoundingMode.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullMoneyRoundingMode) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.MoneyRoundingMode), nil
 }
 
 type NotifyChannel string
@@ -627,6 +714,48 @@ func (ns NullPlantSelection) Value() (driver.Value, error) {
 	return string(ns.PlantSelection), nil
 }
 
+type PriceSource string
+
+const (
+	PriceSourceKbk   PriceSource = "kbk"
+	PriceSourceFixed PriceSource = "fixed"
+)
+
+func (e *PriceSource) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = PriceSource(s)
+	case string:
+		*e = PriceSource(s)
+	default:
+		return fmt.Errorf("unsupported scan type for PriceSource: %T", src)
+	}
+	return nil
+}
+
+type NullPriceSource struct {
+	PriceSource PriceSource
+	Valid       bool // Valid is true if PriceSource is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullPriceSource) Scan(value interface{}) error {
+	if value == nil {
+		ns.PriceSource, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.PriceSource.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullPriceSource) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.PriceSource), nil
+}
+
 type PriceType string
 
 const (
@@ -667,6 +796,48 @@ func (ns NullPriceType) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return string(ns.PriceType), nil
+}
+
+type ReactivePenaltyBasis string
+
+const (
+	ReactivePenaltyBasisWholeQuantity   ReactivePenaltyBasis = "whole_quantity"
+	ReactivePenaltyBasisExcessOverLimit ReactivePenaltyBasis = "excess_over_limit"
+)
+
+func (e *ReactivePenaltyBasis) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ReactivePenaltyBasis(s)
+	case string:
+		*e = ReactivePenaltyBasis(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ReactivePenaltyBasis: %T", src)
+	}
+	return nil
+}
+
+type NullReactivePenaltyBasis struct {
+	ReactivePenaltyBasis ReactivePenaltyBasis
+	Valid                bool // Valid is true if ReactivePenaltyBasis is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullReactivePenaltyBasis) Scan(value interface{}) error {
+	if value == nil {
+		ns.ReactivePenaltyBasis, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ReactivePenaltyBasis.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullReactivePenaltyBasis) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ReactivePenaltyBasis), nil
 }
 
 type ReadingKind string
@@ -883,6 +1054,48 @@ func (ns NullTariffTerm) Value() (driver.Value, error) {
 	return string(ns.TariffTerm), nil
 }
 
+type TieringMode string
+
+const (
+	TieringModeSplitAtThreshold       TieringMode = "split_at_threshold"
+	TieringModeWholeConsumptionSwitch TieringMode = "whole_consumption_switch"
+)
+
+func (e *TieringMode) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = TieringMode(s)
+	case string:
+		*e = TieringMode(s)
+	default:
+		return fmt.Errorf("unsupported scan type for TieringMode: %T", src)
+	}
+	return nil
+}
+
+type NullTieringMode struct {
+	TieringMode TieringMode
+	Valid       bool // Valid is true if TieringMode is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullTieringMode) Scan(value interface{}) error {
+	if value == nil {
+		ns.TieringMode, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.TieringMode.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullTieringMode) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.TieringMode), nil
+}
+
 type UserRole string
 
 const (
@@ -1076,64 +1289,69 @@ type AuditLog struct {
 }
 
 type Bill struct {
-	ID                     uuid.UUID
-	CompanyID              uuid.UUID
-	BuildingID             *uuid.UUID
-	AnalyzerID             *uuid.UUID
-	Scope                  BillScope
-	PeriodKey              string
-	PeriodStart            pgtype.Timestamptz
-	PeriodEnd              pgtype.Timestamptz
-	DaysInPeriod           int32
-	TariffID               *uuid.UUID
-	TariffEffectiveFrom    pgtype.Date
-	ActiveImport           pgtype.Numeric
-	T1Kwh                  pgtype.Numeric
-	T2Kwh                  pgtype.Numeric
-	T3Kwh                  pgtype.Numeric
-	InductiveKvarh         pgtype.Numeric
-	CapacitiveKvarh        pgtype.Numeric
-	ActiveExport           pgtype.Numeric
-	NetConsumption         pgtype.Numeric
-	LowTierKwh             pgtype.Numeric
-	HighTierKwh            pgtype.Numeric
-	MaxDemandKw            pgtype.Numeric
-	TieredApplied          bool
-	IndexStart             []byte
-	IndexEnd               []byte
-	EffectiveEnergyPrice   pgtype.Numeric
-	LowTierPrice           pgtype.Numeric
-	HighTierPrice          pgtype.Numeric
-	EnergyCost             pgtype.Numeric
-	DistributionCost       pgtype.Numeric
-	GreenEnergyCost        pgtype.Numeric
-	PowerCost              pgtype.Numeric
-	DemandOverrunCost      pgtype.Numeric
-	ReactivePenalty        pgtype.Numeric
-	OtherTaxesCost         pgtype.Numeric
-	VatBase                pgtype.Numeric
-	VatCost                pgtype.Numeric
-	GenerationCredit       pgtype.Numeric
-	TotalCost              pgtype.Numeric
-	InductiveRatio         pgtype.Numeric
-	CapacitiveRatio        pgtype.Numeric
-	InductiveThreshold     pgtype.Numeric
-	CapacitiveThreshold    pgtype.Numeric
-	ReactivePenaltyApplied bool
-	ReactivePowerPrice     pgtype.Numeric
-	GenerationUsage        GenerationUsage
-	GenerationPricePerKwh  pgtype.Numeric
-	PtfYekdemUsed          bool
-	PtfHoursMatched        *int32
-	PtfHoursMissing        *int32
-	PtfAverage             pgtype.Numeric
-	YekdemUsed             pgtype.Numeric
-	Status                 BillStatus
-	FlagReason             *string
-	PdfPath                *string
-	ComputedAt             pgtype.Timestamptz
-	CreatedAt              pgtype.Timestamptz
-	UpdatedAt              pgtype.Timestamptz
+	ID                      uuid.UUID
+	CompanyID               uuid.UUID
+	BuildingID              *uuid.UUID
+	AnalyzerID              *uuid.UUID
+	Scope                   BillScope
+	PeriodKey               string
+	PeriodStart             pgtype.Timestamptz
+	PeriodEnd               pgtype.Timestamptz
+	DaysInPeriod            int32
+	TariffID                *uuid.UUID
+	TariffEffectiveFrom     pgtype.Date
+	ActiveImport            pgtype.Numeric
+	T1Kwh                   pgtype.Numeric
+	T2Kwh                   pgtype.Numeric
+	T3Kwh                   pgtype.Numeric
+	InductiveKvarh          pgtype.Numeric
+	CapacitiveKvarh         pgtype.Numeric
+	ActiveExport            pgtype.Numeric
+	NetConsumption          pgtype.Numeric
+	LowTierKwh              pgtype.Numeric
+	HighTierKwh             pgtype.Numeric
+	MaxDemandKw             pgtype.Numeric
+	TieredApplied           bool
+	IndexStart              []byte
+	IndexEnd                []byte
+	EffectiveEnergyPrice    pgtype.Numeric
+	LowTierPrice            pgtype.Numeric
+	HighTierPrice           pgtype.Numeric
+	EnergyCost              pgtype.Numeric
+	DistributionCost        pgtype.Numeric
+	GreenEnergyCost         pgtype.Numeric
+	PowerCost               pgtype.Numeric
+	DemandOverrunCost       pgtype.Numeric
+	ReactivePenalty         pgtype.Numeric
+	OtherTaxesCost          pgtype.Numeric
+	VatBase                 pgtype.Numeric
+	VatCost                 pgtype.Numeric
+	GenerationCredit        pgtype.Numeric
+	TotalCost               pgtype.Numeric
+	InductiveRatio          pgtype.Numeric
+	CapacitiveRatio         pgtype.Numeric
+	InductiveThreshold      pgtype.Numeric
+	CapacitiveThreshold     pgtype.Numeric
+	ReactivePenaltyApplied  bool
+	ReactivePowerPrice      pgtype.Numeric
+	GenerationUsage         GenerationUsage
+	GenerationPricePerKwh   pgtype.Numeric
+	PtfYekdemUsed           bool
+	PtfHoursMatched         *int32
+	PtfHoursMissing         *int32
+	PtfAverage              pgtype.Numeric
+	YekdemUsed              pgtype.Numeric
+	Status                  BillStatus
+	FlagReason              *string
+	PdfPath                 *string
+	ComputedAt              pgtype.Timestamptz
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+	Currency                CurrencyCode
+	ExtraChargesCost        pgtype.Numeric
+	DemandDataAvailable     bool
+	PtfHoursExpected        *int32
+	ConsumptionHoursMissing *int32
 }
 
 type BillHourlyDetail struct {
@@ -1163,6 +1381,24 @@ type BillLine struct {
 type BillMember struct {
 	BillID     uuid.UUID
 	AnalyzerID uuid.UUID
+}
+
+type BillingParameter struct {
+	EffectiveFrom               pgtype.Date
+	ReactivePenaltyBasis        ReactivePenaltyBasis
+	ReactiveExemptBelowKw       pgtype.Numeric
+	ReactiveExemptTerms         []TariffTerm
+	ReactiveExemptUserGroups    []DistributionUserGroup
+	ReactiveGenerationExemptKwh pgtype.Numeric
+	ReactiveBands               []byte
+	TieringGroups               []byte
+	TieringMode                 TieringMode
+	TieringVoltageLevels        []VoltageLevel
+	TieringSupplyCompanies      []SupplyCompany
+	PtfMissingHourTolerance     pgtype.Numeric
+	DemandOverrunMultiplier     pgtype.Numeric
+	MoneyRoundingMode           MoneyRoundingMode
+	CreatedAt                   pgtype.Timestamptz
 }
 
 type Building struct {
@@ -1859,6 +2095,18 @@ type Tariff struct {
 	CreatedAt                   pgtype.Timestamptz
 	UpdatedAt                   pgtype.Timestamptz
 	DeletedAt                   pgtype.Timestamptz
+	PowerPriceSource            PriceSource
+	ReactivePriceSource         PriceSource
+	DistributionPriceSource     PriceSource
+}
+
+type TariffExtraCharge struct {
+	ID        uuid.UUID
+	TariffID  uuid.UUID
+	Name      string
+	Basis     ExtraChargeBasis
+	Amount    pgtype.Numeric
+	SortOrder int16
 }
 
 type TariffManualYekdem struct {

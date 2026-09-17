@@ -82,6 +82,12 @@ type Tariff struct {
 	// ManualYekdem rows instead of the platform-wide yekdem_monthly table.
 	UseManualYekdem bool
 
+	// R119: where a PTF tariff's power, reactive and distribution unit prices
+	// come from — base × KBK coefficient, or the tariff's own fixed column.
+	PowerPriceSource        PriceSource
+	ReactivePriceSource     PriceSource
+	DistributionPriceSource PriceSource
+
 	CreatedBy *uuid.UUID
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -98,6 +104,18 @@ type TariffTax struct {
 	Name string
 	// Rate is a PERCENT, numeric(6,3) — not a ratio. 2.000 means 2%.
 	Rate      decimal.Decimal
+	SortOrder int16
+}
+
+// TariffExtraCharge is a custom contract charge billed as its own line inside
+// the VAT base (R126). Mirrors table `tariff_extra_charges` (migration 00014).
+type TariffExtraCharge struct {
+	ID       uuid.UUID
+	TariffID uuid.UUID
+	Name     string
+	Basis    ExtraChargeBasis
+	// Amount is TL per basis unit, or a percent for pct_of_energy; negative is a discount.
+	Amount    decimal.Decimal
 	SortOrder int16
 }
 

@@ -1,0 +1,372 @@
+{
+  "description": "3 of 24 hours without consumption (12.5% \u003e 2%) → flagged (R109)",
+  "input": {
+    "PeriodKey": "2026-01",
+    "Period": {
+      "From": "2026-01-01T00:00:00+03:00",
+      "To": "2026-01-02T00:00:00+03:00"
+    },
+    "Days": 1,
+    "Tariff": {
+      "ID": "00000000-0000-0000-0000-000000000000",
+      "CompanyID": "00000000-0000-0000-0000-000000000000",
+      "BuildingID": null,
+      "Name": null,
+      "EffectiveFrom": "2025-01-01T00:00:00Z",
+      "Currency": "TRY",
+      "EnergyType": "grid_energy",
+      "VoltageLevel": "lv",
+      "UserGroup": "commercial",
+      "PriceType": "single_time",
+      "Term": "monomial",
+      "SupplyCompany": "private",
+      "SingleTimePrice": null,
+      "T1Price": null,
+      "T2Price": null,
+      "T3Price": null,
+      "OverusePrice": "3.5",
+      "OveruseThresholdKwhPerDay": null,
+      "DistributionCost": "0.5",
+      "ReactivePowerPrice": "1",
+      "GreenEnergyPrice": null,
+      "GreenEnergyDistributionCost": null,
+      "ContractedPowerKw": null,
+      "PowerUnitPrice": null,
+      "GenerationUsage": "none",
+      "GenerationPricePerKwh": null,
+      "VatRate": "20",
+      "UsePtfYekdem": true,
+      "KbkEnergy": "1.1",
+      "KbkT1": null,
+      "KbkT2": null,
+      "KbkT3": null,
+      "KbkPowerPrice": null,
+      "KbkOverusePrice": null,
+      "KbkReactivePower": "0.5",
+      "KbkDistributionCostTlPerKwh": "0.8",
+      "UseManualYekdem": false,
+      "PowerPriceSource": "",
+      "ReactivePriceSource": "",
+      "DistributionPriceSource": "",
+      "CreatedBy": null,
+      "CreatedAt": "0001-01-01T00:00:00Z",
+      "UpdatedAt": "0001-01-01T00:00:00Z",
+      "DeletedAt": null
+    },
+    "Taxes": null,
+    "ExtraCharges": null,
+    "Params": {
+      "EffectiveFrom": "2000-01-01T00:00:00Z",
+      "ReactivePenaltyBasis": "whole_quantity",
+      "ReactiveExemptBelowKw": "9",
+      "ReactiveExemptTerms": [
+        "monomial"
+      ],
+      "ReactiveExemptUserGroups": [
+        "residential",
+        "lighting"
+      ],
+      "ReactiveGenerationExemptKwh": "1",
+      "ReactiveBands": [
+        {
+          "MinKw": "9",
+          "MaxKw": "30",
+          "Inductive": "0.33",
+          "Capacitive": "0.2"
+        },
+        {
+          "MinKw": "30",
+          "MaxKw": null,
+          "Inductive": "0.2",
+          "Capacitive": "0.15"
+        }
+      ],
+      "TieringGroups": {
+        "commercial": "30",
+        "residential": "8"
+      },
+      "TieringMode": "split_at_threshold",
+      "TieringVoltageLevels": [
+        "lv"
+      ],
+      "TieringSupplyCompanies": [
+        "incumbent"
+      ],
+      "PTFMissingHourTolerance": "0.02",
+      "DemandOverrunMultiplier": "2",
+      "MoneyRoundingMode": "half_up",
+      "CreatedAt": "0001-01-01T00:00:00Z"
+    },
+    "Quantities": {
+      "ActiveImport": "516",
+      "T1": null,
+      "T2": null,
+      "T3": null,
+      "ReactiveInductive": "0",
+      "ReactiveCapacitive": "0",
+      "ActiveExport": "0",
+      "ActiveExportKnownSum": "0",
+      "ActiveExportPartial": false,
+      "MaxDemandKw": null,
+      "IndexStart": null,
+      "IndexEnd": null
+    },
+    "InstalledPowerKw": "50",
+    "Pricing": {
+      "Method": "hourly",
+      "BasePrice": "2.075",
+      "EnergyUnitPrice": "2.45268115942028985507",
+      "T1": null,
+      "T2": null,
+      "T3": null,
+      "PowerUnitPrice": null,
+      "ReactiveUnitPrice": "1.0375",
+      "DistributionUnitPrice": "0.8",
+      "PTFAverage": "1575",
+      "YekdemUsed": "500",
+      "HoursExpected": 24,
+      "HoursMatched": 21,
+      "HoursMissingPrice": 0,
+      "HoursMissingConsumption": 3,
+      "Hourly": [
+        {
+          "Hour": "2026-01-01T00:00:00Z",
+          "Kwh": "13",
+          "PTF": "1150",
+          "Yekdem": "500",
+          "Kbk": "1.1",
+          "UnitPrice": "1.815",
+          "Cost": "23.595"
+        },
+        {
+          "Hour": "2026-01-01T01:00:00Z",
+          "Kwh": "14",
+          "PTF": "1200",
+          "Yekdem": "500",
+          "Kbk": "1.1",
+          "UnitPrice": "1.87",
+          "Cost": "26.18"
+        },
+        {
+          "Hour": "2026-01-01T02:00:00Z",
+          "Kwh": "15",
+          "PTF": "1250",
+          "Yekdem": "500",
+          "Kbk": "1.1",
+          "UnitPrice": "1.925",
+          "Cost": "28.875"
+        },
+        {
+          "Hour": "2026-01-01T03:00:00Z",
+          "Kwh": "16",
+          "PTF": "1300",
+          "Yekdem": "500",
+          "Kbk": "1.1",
+          "UnitPrice": "1.98",
+          "Cost": "31.68"
+        },
+        {
+          "Hour": "2026-01-01T04:00:00Z",
+          "Kwh": "17",
+          "PTF": "1350",
+          "Yekdem": "500",
+          "Kbk": "1.1",
+          "UnitPrice": "2.035",
+          "Cost": "34.595"
+        },
+        {
+          "Hour": "2026-01-01T05:00:00Z",
+          "Kwh": "18",
+          "PTF": "1400",
+          "Yekdem": "500",
+          "Kbk": "1.1",
+          "UnitPrice": "2.09",
+          "Cost": "37.62"
+        },
+        {
+          "Hour": "2026-01-01T06:00:00Z",
+          "Kwh": "19",
+          "PTF": "1450",
+          "Yekdem": "500",
+          "Kbk": "1.1",
+          "UnitPrice": "2.145",
+          "Cost": "40.755"
+        },
+        {
+          "Hour": "2026-01-01T07:00:00Z",
+          "Kwh": "20",
+          "PTF": "1500",
+          "Yekdem": "500",
+          "Kbk": "1.1",
+          "UnitPrice": "2.2",
+          "Cost": "44"
+        },
+        {
+          "Hour": "2026-01-01T08:00:00Z",
+          "Kwh": "21",
+          "PTF": "1550",
+          "Yekdem": "500",
+          "Kbk": "1.1",
+          "UnitPrice": "2.255",
+          "Cost": "47.355"
+        },
+        {
+          "Hour": "2026-01-01T09:00:00Z",
+          "Kwh": "22",
+          "PTF": "1600",
+          "Yekdem": "500",
+          "Kbk": "1.1",
+          "UnitPrice": "2.31",
+          "Cost": "50.82"
+        },
+        {
+          "Hour": "2026-01-01T10:00:00Z",
+          "Kwh": "23",
+          "PTF": "1650",
+          "Yekdem": "500",
+          "Kbk": "1.1",
+          "UnitPrice": "2.365",
+          "Cost": "54.395"
+        },
+        {
+          "Hour": "2026-01-01T11:00:00Z",
+          "Kwh": "24",
+          "PTF": "1700",
+          "Yekdem": "500",
+          "Kbk": "1.1",
+          "UnitPrice": "2.42",
+          "Cost": "58.08"
+        },
+        {
+          "Hour": "2026-01-01T12:00:00Z",
+          "Kwh": "25",
+          "PTF": "1750",
+          "Yekdem": "500",
+          "Kbk": "1.1",
+          "UnitPrice": "2.475",
+          "Cost": "61.875"
+        },
+        {
+          "Hour": "2026-01-01T13:00:00Z",
+          "Kwh": "26",
+          "PTF": "1800",
+          "Yekdem": "500",
+          "Kbk": "1.1",
+          "UnitPrice": "2.53",
+          "Cost": "65.78"
+        },
+        {
+          "Hour": "2026-01-01T14:00:00Z",
+          "Kwh": "27",
+          "PTF": "1850",
+          "Yekdem": "500",
+          "Kbk": "1.1",
+          "UnitPrice": "2.585",
+          "Cost": "69.795"
+        },
+        {
+          "Hour": "2026-01-01T15:00:00Z",
+          "Kwh": "28",
+          "PTF": "1900",
+          "Yekdem": "500",
+          "Kbk": "1.1",
+          "UnitPrice": "2.64",
+          "Cost": "73.92"
+        },
+        {
+          "Hour": "2026-01-01T16:00:00Z",
+          "Kwh": "29",
+          "PTF": "1950",
+          "Yekdem": "500",
+          "Kbk": "1.1",
+          "UnitPrice": "2.695",
+          "Cost": "78.155"
+        },
+        {
+          "Hour": "2026-01-01T17:00:00Z",
+          "Kwh": "30",
+          "PTF": "2000",
+          "Yekdem": "500",
+          "Kbk": "1.1",
+          "UnitPrice": "2.75",
+          "Cost": "82.5"
+        },
+        {
+          "Hour": "2026-01-01T18:00:00Z",
+          "Kwh": "31",
+          "PTF": "2050",
+          "Yekdem": "500",
+          "Kbk": "1.1",
+          "UnitPrice": "2.805",
+          "Cost": "86.955"
+        },
+        {
+          "Hour": "2026-01-01T19:00:00Z",
+          "Kwh": "32",
+          "PTF": "2100",
+          "Yekdem": "500",
+          "Kbk": "1.1",
+          "UnitPrice": "2.86",
+          "Cost": "91.52"
+        },
+        {
+          "Hour": "2026-01-01T20:00:00Z",
+          "Kwh": "33",
+          "PTF": "2150",
+          "Yekdem": "500",
+          "Kbk": "1.1",
+          "UnitPrice": "2.915",
+          "Cost": "96.195"
+        }
+      ],
+      "Complete": false,
+      "Reason": "ptf_hours_over_tolerance"
+    }
+  },
+  "expected": {
+    "lines": [
+      {
+        "code": "energy",
+        "quantity": "516",
+        "unit_price": "2.45268115942028985507",
+        "rate_pct": null,
+        "amount": "1265.58"
+      },
+      {
+        "code": "distribution",
+        "quantity": "516",
+        "unit_price": "0.8",
+        "rate_pct": null,
+        "amount": "412.8"
+      },
+      {
+        "code": "vat",
+        "quantity": null,
+        "unit_price": null,
+        "rate_pct": "20",
+        "amount": "335.68"
+      }
+    ],
+    "net_consumption": "516",
+    "low_tier_kwh": "0",
+    "high_tier_kwh": "0",
+    "energy_cost": "1265.58",
+    "distribution_cost": "412.8",
+    "power_cost": "0",
+    "demand_overrun_cost": "0",
+    "reactive_penalty": "0",
+    "extra_charges_cost": "0",
+    "other_taxes_cost": "0",
+    "vat_base": "1678.38",
+    "vat_cost": "335.68",
+    "generation_credit": "0",
+    "total_cost": "2014.06",
+    "flags": [
+      "ptf_data_missing"
+    ],
+    "tiered_applied": false,
+    "reactive_applied": false,
+    "reactive_exempt": true,
+    "demand_data_available": false
+  }
+}

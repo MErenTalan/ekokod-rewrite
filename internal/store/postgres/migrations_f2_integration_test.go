@@ -186,8 +186,8 @@ func TestF2IntervalColumnSurvivesCompressedChunk(t *testing.T) {
 		analyzerID, old).Scan(&got))
 	require.Equal(t, "0.6250", got, "must read back exactly, from a COMPRESSED chunk")
 
-	// The migration round-trip: down 2 (00013 then 00012 — a single down 1
-	// would only revert 00013) then up (replays both). This proves the
+	// The migration round-trip: down to 00011 (reverting 00012, 00013 and
+	// every later migration) then up (replays them). This proves the
 	// add-column/drop-column pair itself is reversible against a real,
 	// already-compressed chunk, which a fresh `up`-only database never
 	// exercises. seedCompanyAndBuilding's rows, and the reading inserted
@@ -202,7 +202,9 @@ func TestF2IntervalColumnSurvivesCompressedChunk(t *testing.T) {
 	// depend on how any one pgx connection caches a query plan across the
 	// schema change — the round trip is real, not an artefact of one
 	// connection's cache.
-	require.NoError(t, postgres.MigrateDownN(ctx, dsn, testfixtures.DiscardLogger(), 2))
+	head, err := postgres.HighestEmbeddedVersion()
+	require.NoError(t, err)
+	require.NoError(t, postgres.MigrateDownN(ctx, dsn, testfixtures.DiscardLogger(), int(head-11))) // down to 00011, whatever came after 00013
 	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
 
 	pool2 := testfixtures.NewPool(t, dsn)

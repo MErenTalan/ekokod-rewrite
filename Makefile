@@ -12,7 +12,17 @@ GOLANGCI_VERSION := v2.13.2
 GOVULNCHECK_VERSION := v1.8.0
 SQLC_VERSION := v1.30.0
 
-.PHONY: build test test-integration test-perf lint fmt tidy tools vuln ci check-script-modes
+.PHONY: build test test-integration test-perf lint fmt tidy tools vuln ci check-script-modes test-db-up test-db-down
+
+# TEST_DB_* back test-db-up/test-db-down (F4 Task 0): one long-lived
+# TimescaleDB container integration tests can opt into sharing, instead of
+# every test binary booting its own (see internal/testfixtures/containers.go,
+# isolatedTestDSNEnv). Port 55432, NOT 5432: 5432 on this machine is owned
+# by another project's container (dolmusum-dev-postgres-1) and must never
+# be touched.
+TEST_DB_CONTAINER := ekokod-test-pg
+TEST_DB_PORT       ?= 55432
+TEST_DB_DSN         = postgres://ekokod:ekokod@localhost:$(TEST_DB_PORT)/postgres?sslmode=disable
 
 build: ## Build the ekokod binary
 	go build -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/ekokod
@@ -27,7 +37,42 @@ test-integration: ## Run integration tests (requires Docker)
 	# it resolve "localhost", which under Docker Desktop/WSL2 can flake as a
 	# DNS lookup timeout or a stale docker.sock deadline when the daemon is
 	# under load from a concurrent test run sharing it.
+	#
+	# This target does NOT start or use the shared test-db-up container: it
+	# runs the whole repo's integration suite, and StartPostgres/
+	# StartPostgresUnmigrated/NewMigratedPool callers (see containers.go's
+	# comment on StartPostgresUnmigrated) always need their own container
+	# regardless. To run a SUBSET of packages against the shared container
+	# instead of booting a container per test binary:
+	#   make test-db-up
+	#   EKOKOD_TEST_PG_DSN='$(TEST_DB_DSN)' go test ./internal/testfixtures/ ./internal/store/postgres/ -tags=integration -count=1 -parallel 4
+	#   make test-db-down
 	TESTCONTAINERS_HOST_OVERRIDE=127.0.0.1 go test ./... -tags=integration -race -count=1 -parallel 8
+
+test-db-up: ## Start one long-lived TimescaleDB container for shared integration-test use; see EKOKOD_TEST_PG_DSN usage above test-integration
+	# Same image tag and per-connection server args
+	# internal/testfixtures/containers.go's isolatedRoot passes its own
+	# per-binary container (postgresImage, isolatedConnBoundArgs), so
+	# behaviour matches whether a test binary boots its own container or
+	# points at this one. tmpfs data dir: this is throwaway test data, never
+	# durable, and skipping the filesystem entirely is faster than -c
+	# fsync=off alone.
+	docker run -d --name $(TEST_DB_CONTAINER) \
+		-e POSTGRES_DB=ekokod -e POSTGRES_USER=ekokod -e POSTGRES_PASSWORD=ekokod \
+		-p $(TEST_DB_PORT):5432 \
+		--tmpfs /var/lib/postgresql/data \
+		timescale/timescaledb:2.30.0-pg16 \
+		-c fsync=off -c max_connections=300 -c timescaledb.max_background_workers=64
+	@echo "waiting for $(TEST_DB_CONTAINER) to accept connections..."
+	@for i in $$(seq 1 60); do \
+		docker exec $(TEST_DB_CONTAINER) pg_isready -U ekokod >/dev/null 2>&1 && exit 0; \
+		sleep 1; \
+	done; \
+	echo "test-db-up: $(TEST_DB_CONTAINER) did not become ready in time" >&2; exit 1
+	@echo "ready: EKOKOD_TEST_PG_DSN='$(TEST_DB_DSN)'"
+
+test-db-down: ## Stop and remove the shared test-database container started by test-db-up
+	docker rm -f $(TEST_DB_CONTAINER) >/dev/null 2>&1 || true
 
 # test-perf runs Task 13's slow F1 acceptance suite: 1,000,000 synthetic
 # readings across 100 analyzers, asserting the chunk layout and EXPLAIN plan

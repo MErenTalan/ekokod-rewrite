@@ -488,6 +488,9 @@ func billInsert(ctx context.Context, q *sqlcgen.Queries, pool *pgxpool.Pool, s s
 		PtfAverage: decimalPtrToNumeric(b.PtfAverage), YekdemUsed: decimalPtrToNumeric(b.YekdemUsed),
 		Status: sqlcgen.BillStatus(b.Status), FlagReason: b.FlagReason, PdfPath: b.PdfPath,
 		ComputedAt: tariffTimestamptz(b.ComputedAt), CreatedAt: tariffTimestamptz(b.CreatedAt),
+		Currency: billCurrency(b.Currency), ExtraChargesCost: decimalToNumeric(b.ExtraChargesCost),
+		DemandDataAvailable: b.DemandDataAvailable, PtfHoursExpected: b.PtfHoursExpected,
+		ConsumptionHoursMissing: b.ConsumptionHoursMissing,
 	})
 	if err != nil {
 		return sqlcgen.Bill{}, pgerr.Translate(pool, "create bill", err)
@@ -523,6 +526,14 @@ func billInsertLinesAndMembers(ctx context.Context, q *sqlcgen.Queries, pool *pg
 		}
 	}
 	return nil
+}
+
+// billCurrency maps an unset currency to the column default TRY (R127).
+func billCurrency(c model.CurrencyCode) sqlcgen.CurrencyCode {
+	if c == "" {
+		return sqlcgen.CurrencyCodeTRY
+	}
+	return sqlcgen.CurrencyCode(c)
 }
 
 func billFromRow(row sqlcgen.Bill) (model.Bill, error) {
@@ -610,6 +621,10 @@ func billFromRow(row sqlcgen.Bill) (model.Bill, error) {
 	if err != nil {
 		return model.Bill{}, fmt.Errorf("bills.total_cost: %w", err)
 	}
+	extraChargesCost, err := numericToDecimal(row.ExtraChargesCost)
+	if err != nil {
+		return model.Bill{}, fmt.Errorf("bills.extra_charges_cost: %w", err)
+	}
 
 	out := model.Bill{
 		ID: row.ID, CompanyID: row.CompanyID, BuildingID: row.BuildingID, AnalyzerID: row.AnalyzerID,
@@ -625,7 +640,9 @@ func billFromRow(row sqlcgen.Bill) (model.Bill, error) {
 		EnergyCost: energyCost, DistributionCost: distributionCost, GreenEnergyCost: greenEnergyCost,
 		PowerCost: powerCost, DemandOverrunCost: demandOverrunCost, ReactivePenalty: reactivePenalty,
 		OtherTaxesCost: otherTaxesCost, VatBase: vatBase, VatCost: vatCost, GenerationCredit: generationCredit,
-		TotalCost: totalCost,
+		TotalCost: totalCost, ExtraChargesCost: extraChargesCost, Currency: model.CurrencyCode(row.Currency),
+		DemandDataAvailable: row.DemandDataAvailable, PtfHoursExpected: row.PtfHoursExpected,
+		ConsumptionHoursMissing: row.ConsumptionHoursMissing,
 
 		ReactivePenaltyApplied: row.ReactivePenaltyApplied,
 		GenerationUsage:        model.GenerationUsage(row.GenerationUsage),

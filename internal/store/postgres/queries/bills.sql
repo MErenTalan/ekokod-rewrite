@@ -82,7 +82,8 @@ insert into bills (
   total_cost, inductive_ratio, capacitive_ratio, inductive_threshold, capacitive_threshold,
   reactive_penalty_applied, reactive_power_price, generation_usage, generation_price_per_kwh,
   ptf_yekdem_used, ptf_hours_matched, ptf_hours_missing, ptf_average, yekdem_used, status,
-  flag_reason, pdf_path, computed_at, created_at, updated_at
+  flag_reason, pdf_path, computed_at, created_at, updated_at,
+  currency, extra_charges_cost, demand_data_available, ptf_hours_expected, consumption_hours_missing
 )
 select
   gen_random_uuid(), sqlc.arg(company_id), sqlc.narg(building_id), sqlc.narg(analyzer_id),
@@ -101,7 +102,9 @@ select
   sqlc.narg(reactive_power_price), sqlc.arg(generation_usage), sqlc.narg(generation_price_per_kwh),
   sqlc.arg(ptf_yekdem_used), sqlc.narg(ptf_hours_matched), sqlc.narg(ptf_hours_missing),
   sqlc.narg(ptf_average), sqlc.narg(yekdem_used), sqlc.arg(status), sqlc.narg(flag_reason),
-  sqlc.narg(pdf_path), sqlc.arg(computed_at), sqlc.arg(created_at), sqlc.arg(created_at)
+  sqlc.narg(pdf_path), sqlc.arg(computed_at), sqlc.arg(created_at), sqlc.arg(created_at),
+  sqlc.arg(currency), sqlc.arg(extra_charges_cost), sqlc.arg(demand_data_available),
+  sqlc.narg(ptf_hours_expected), sqlc.narg(consumption_hours_missing)
 where
   (sqlc.narg(building_id)::uuid is null or exists (
     select 1 from buildings b

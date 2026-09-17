@@ -18,9 +18,9 @@ import (
 // This file is a WHITE-BOX companion to isolated_db_integration_test.go,
 // deliberately in package testfixtures (not testfixtures_test), because I7a
 // (template protection) is only provable against the unexported
-// isolatedTemplateDB, isolatedTemplate and cloneIsolatedDB — the black-box
-// tests in isolated_db_integration_test.go only ever see NewIsolatedDB's
-// finished pool, never the template database itself.
+// isolatedTemplate, ensureIsolatedTemplate and cloneIsolatedDB — the
+// black-box tests in isolated_db_integration_test.go only ever see
+// NewIsolatedDB's finished pool, never the template database itself.
 
 // TestCreateDatabaseTemplateFailsWith55006WhileASessionIsConnected pins the
 // underlying Postgres mechanism the whole template-protection design exists
@@ -33,8 +33,8 @@ import (
 // terminateSessionsAndRetry and the ALLOW_CONNECTIONS protection both exist
 // to remove.
 //
-// This deliberately does NOT use isolatedTemplateDB: after the I7a fix that
-// database refuses every connection once isolatedTemplate has protected it
+// This deliberately does NOT use the shared template: after the I7a fix
+// that database refuses every connection once isolatedTemplate has protected it
 // (see TestIsolatedTemplateRefusesConnectionsAfterSetup), which would make
 // this test's own holder connection fail before it could ever demonstrate
 // 55006. A throwaway, UNPROTECTED database makes this test prove the
@@ -82,8 +82,8 @@ func TestCreateDatabaseTemplateFailsWith55006WhileASessionIsConnected(t *testing
 }
 
 // TestIsolatedTemplateRefusesConnectionsAfterSetup is the regression test for
-// I7a. Before the fix, isolatedTemplate left isolatedTemplateDB fully
-// connectable after migrating it, so nothing stopped a straggler session (or
+// I7a. Before the fix, isolatedTemplate left the template fully connectable
+// after migrating it, so nothing stopped a straggler session (or
 // TimescaleDB's own per-database scheduler, spawned because migrations add
 // continuous-aggregate and compression policies — see 00005) from attaching
 // to it at any point after setup, which is exactly the session
@@ -101,9 +101,9 @@ func TestIsolatedTemplateRefusesConnectionsAfterSetup(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	rootDSN := isolatedRoot(t)
-	isolatedTemplate(t, rootDSN)
+	templateName := isolatedTemplate(t, rootDSN)
 
-	_, err := pgx.Connect(ctx, withDatabase(rootDSN, isolatedTemplateDB))
+	_, err := pgx.Connect(ctx, withDatabase(rootDSN, templateName))
 	require.Error(t, err, "the template must refuse new connections once isolatedTemplate has protected it")
 
 	var pgErr *pgconn.PgError
@@ -126,7 +126,7 @@ func TestCloneIsolatedDBSurvivesConcurrentConnectionFloodOnTemplate(t *testing.T
 	t.Parallel()
 	ctx := context.Background()
 	rootDSN := isolatedRoot(t)
-	isolatedTemplate(t, rootDSN)
+	templateName := isolatedTemplate(t, rootDSN)
 
 	stop := make(chan struct{})
 	var floodAttempts, floodRefused atomic.Int64
@@ -142,7 +142,7 @@ func TestCloneIsolatedDBSurvivesConcurrentConnectionFloodOnTemplate(t *testing.T
 				default:
 				}
 				floodAttempts.Add(1)
-				conn, err := pgx.Connect(ctx, withDatabase(rootDSN, isolatedTemplateDB))
+				conn, err := pgx.Connect(ctx, withDatabase(rootDSN, templateName))
 				if err != nil {
 					floodRefused.Add(1)
 					continue
@@ -162,7 +162,7 @@ func TestCloneIsolatedDBSurvivesConcurrentConnectionFloodOnTemplate(t *testing.T
 		go func(i int) {
 			defer cloneWG.Done()
 			name := fmt.Sprintf("flood_clone_%d", i)
-			if err := cloneIsolatedDB(ctx, rootDSN, name); err != nil {
+			if err := cloneIsolatedDB(ctx, rootDSN, name, templateName); err != nil {
 				cloneFailures.Add(1)
 				t.Errorf("clone %d failed under connection-flood contention: %v", i, err)
 				return

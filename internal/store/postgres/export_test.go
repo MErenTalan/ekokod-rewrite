@@ -23,3 +23,7 @@ import "github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/sqlcgen"
 // testfixtures.NewIsolatedDB like every other integration test in this
 // directory.
 func (r *BillRepository) Queries() *sqlcgen.Queries { return r.q }
+
+// HighestEmbeddedVersion exposes the newest embedded migration version, so a
+// round-trip test can step down to a fixed version as migrations are added.
+func HighestEmbeddedVersion() (int64, error) { return highestEmbeddedVersion() }

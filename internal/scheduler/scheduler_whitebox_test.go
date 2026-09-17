@@ -82,14 +82,14 @@ func TestElectorLogsFailedUnlockQueryError(t *testing.T) {
 func TestSchedulerEntriesIncludeIngestionAndPrices(t *testing.T) {
 	cfg := &config.Config{
 		Timezone: time.UTC,
-		Schedule: config.Schedule{Ingestion: "0 3 * * *", EPIAS: "0 14 * * *"},
+		Schedule: config.Schedule{Ingestion: "0 3 * * *", EPIAS: "0 14 * * *", Billing: "0 6 * * *"},
 		Worker:   config.Worker{MaxRetries: 5},
 	}
 	s := &Scheduler{cfg: cfg, log: slog.New(slog.DiscardHandler)}
 
 	entries, err := s.entries()
 	require.NoError(t, err)
-	require.Len(t, entries, 3)
+	require.Len(t, entries, 4)
 
 	require.Equal(t, "@every 1h", entries[0].Cron)
 	require.Equal(t, job.TypeNoop, entries[0].Task.Type())
@@ -99,4 +99,8 @@ func TestSchedulerEntriesIncludeIngestionAndPrices(t *testing.T) {
 
 	require.Equal(t, cfg.Schedule.EPIAS, entries[2].Cron)
 	require.Equal(t, job.TypeEPIASSyncPrices, entries[2].Task.Type())
+
+	// TestSchedulerRegistersBillingDispatch (F4 Task 10).
+	require.Equal(t, cfg.Schedule.Billing, entries[3].Cron)
+	require.Equal(t, job.TypeBillingDispatch, entries[3].Task.Type())
 }

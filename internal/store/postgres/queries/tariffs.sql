@@ -35,7 +35,8 @@ insert into tariffs (
   power_unit_price, generation_usage, generation_price_per_kwh, vat_rate,
   use_ptf_yekdem, kbk_energy, kbk_t1, kbk_t2, kbk_t3, kbk_power_price,
   kbk_overuse_price, kbk_reactive_power, kbk_distribution_cost_tl_per_kwh,
-  use_manual_yekdem, created_by, created_at, updated_at
+  use_manual_yekdem, created_by, created_at, updated_at,
+  power_price_source, reactive_price_source, distribution_price_source
 )
 select
   gen_random_uuid(), sqlc.arg(company_id), sqlc.narg(building_id), sqlc.narg(name),
@@ -50,7 +51,8 @@ select
   sqlc.arg(vat_rate), sqlc.arg(use_ptf_yekdem), sqlc.narg(kbk_energy), sqlc.narg(kbk_t1),
   sqlc.narg(kbk_t2), sqlc.narg(kbk_t3), sqlc.narg(kbk_power_price), sqlc.narg(kbk_overuse_price),
   sqlc.narg(kbk_reactive_power), sqlc.narg(kbk_distribution_cost_tl_per_kwh),
-  sqlc.arg(use_manual_yekdem), sqlc.narg(created_by), sqlc.arg(created_at), sqlc.arg(created_at)
+  sqlc.arg(use_manual_yekdem), sqlc.narg(created_by), sqlc.arg(created_at), sqlc.arg(created_at),
+  sqlc.arg(power_price_source), sqlc.arg(reactive_price_source), sqlc.arg(distribution_price_source)
 where
   -- Critical Finding 1 (task-11a fix round 1): a stored building_id is a
   -- foreign key and MUST be validated in SQL against the Scope's company,
@@ -90,7 +92,9 @@ update tariffs set
   kbk_t3 = sqlc.narg(kbk_t3), kbk_power_price = sqlc.narg(kbk_power_price),
   kbk_overuse_price = sqlc.narg(kbk_overuse_price), kbk_reactive_power = sqlc.narg(kbk_reactive_power),
   kbk_distribution_cost_tl_per_kwh = sqlc.narg(kbk_distribution_cost_tl_per_kwh),
-  use_manual_yekdem = sqlc.arg(use_manual_yekdem), updated_at = sqlc.arg(updated_at)
+  use_manual_yekdem = sqlc.arg(use_manual_yekdem), updated_at = sqlc.arg(updated_at),
+  power_price_source = sqlc.arg(power_price_source), reactive_price_source = sqlc.arg(reactive_price_source),
+  distribution_price_source = sqlc.arg(distribution_price_source)
 where tariffs.id = sqlc.arg(id) and tariffs.company_id = sqlc.arg(company_id)
   and (sqlc.arg(all_buildings)::boolean or tariffs.building_id = any(sqlc.arg(building_ids)::uuid[]))
   and tariffs.deleted_at is null
@@ -375,3 +379,34 @@ select count(*) from buildings
 where company_id = sqlc.arg(company_id) and deleted_at is null
   and id = any(sqlc.arg(check_ids)::uuid[])
   and (sqlc.arg(all_buildings)::boolean or id = any(sqlc.arg(building_ids)::uuid[]));
+
+-- tariff_extra_charges has no company_id: every statement re-validates the
+-- tariff against the Scope, like tariff_taxes.
+-- name: TariffExtraChargeList :many
+select tec.* from tariff_extra_charges tec
+where tec.tariff_id = sqlc.arg(tariff_id)
+  and exists (
+    select 1 from tariffs t where t.id = tec.tariff_id and t.company_id = sqlc.arg(company_id)
+      and (sqlc.arg(all_buildings)::boolean or t.building_id = any(sqlc.arg(building_ids)::uuid[]))
+      and t.deleted_at is null
+  )
+order by tec.sort_order, tec.id;
+
+-- name: TariffExtraChargeDeleteForTariff :exec
+delete from tariff_extra_charges
+where tariff_id = sqlc.arg(tariff_id)
+  and exists (
+    select 1 from tariffs t where t.id = sqlc.arg(tariff_id) and t.company_id = sqlc.arg(company_id)
+      and (sqlc.arg(all_buildings)::boolean or t.building_id = any(sqlc.arg(building_ids)::uuid[]))
+      and t.deleted_at is null
+  );
+
+-- name: TariffExtraChargeInsert :one
+insert into tariff_extra_charges (id, tariff_id, name, basis, amount, sort_order)
+select gen_random_uuid(), sqlc.arg(tariff_id), sqlc.arg(name), sqlc.arg(basis), sqlc.arg(amount), sqlc.arg(sort_order)
+where exists (
+  select 1 from tariffs t where t.id = sqlc.arg(tariff_id) and t.company_id = sqlc.arg(company_id)
+    and (sqlc.arg(all_buildings)::boolean or t.building_id = any(sqlc.arg(building_ids)::uuid[]))
+    and t.deleted_at is null
+)
+returning *;

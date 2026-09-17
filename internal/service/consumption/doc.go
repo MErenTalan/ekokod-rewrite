@@ -209,17 +209,24 @@ type SeriesRequest struct {
 // itself always leaves this nil — there is no anomaly-reading logic in
 // Task 7's own Consumption.
 type Row struct {
-	AnalyzerID      uuid.UUID
-	Window          energy.Window
-	Values          map[energy.Register]*decimal.Decimal
-	Indexes         map[energy.Register]*decimal.Decimal
-	InductiveRatio  *decimal.Decimal
-	CapacitiveRatio *decimal.Decimal
-	MaxDemandKw     *decimal.Decimal
-	Source          energy.Kind
-	Suspect         map[energy.Register]energy.Suspicion
-	Partial         bool
-	Resolution      map[energy.Register]string
+	AnalyzerID uuid.UUID
+	Window     energy.Window
+	Values     map[energy.Register]*decimal.Decimal
+	Indexes    map[energy.Register]*decimal.Decimal
+	// StartIndexes is the start boundary reading's index per register (Billing
+	// only; nil on Analytics rows and when an override row has no start reading).
+	StartIndexes map[energy.Register]*decimal.Decimal
+	// SpanFrom and SpanTo are the instants of the start and end readings a
+	// Billing derivation used; zero on Analytics and override-synthesised rows.
+	// At Hourly the span exceeds Window when §3.1 absorbed missing hours.
+	SpanFrom, SpanTo time.Time
+	InductiveRatio   *decimal.Decimal
+	CapacitiveRatio  *decimal.Decimal
+	MaxDemandKw      *decimal.Decimal
+	Source           energy.Kind
+	Suspect          map[energy.Register]energy.Suspicion
+	Partial          bool
+	Resolution       map[energy.Register]string
 }
 
 // istanbul is the one *time.Location every bucket boundary in this package

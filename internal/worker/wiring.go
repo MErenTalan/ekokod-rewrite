@@ -56,6 +56,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/crypto"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/lock"
+	billingsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/billing"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/consumption"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/admin"
@@ -426,6 +427,30 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		return graph{}, fmt.Errorf("worker: build consumption refresher: %w", err)
 	}
 
+	// F4 billing: invoice-grade consumption (full BillingDeps: the locker,
+	// analyzers and users serve anomaly recording and resolution), the billing
+	// service and its three job adapters.
+	billingConsumption, err := consumption.NewBilling(consumption.BillingDeps{
+		Readings: readingRepo, Anomalies: anomalyRepo, Ops: opsRepo, Clock: clock.System(), Log: log,
+		Locker: redisLock, Analyzers: analyzerRepo, Users: postgres.NewUserRepository(pool),
+	})
+	if err != nil {
+		closeAll()
+		return graph{}, fmt.Errorf("worker: build billing consumption: %w", err)
+	}
+	billRepo := postgres.NewBillRepository(pool)
+	buildingRepo := postgres.NewBuildingRepository(pool)
+	billingService, err := billingsvc.New(billingsvc.Deps{
+		Consumption: billingConsumption, Buildings: buildingRepo, Analyzers: analyzerRepo,
+		Tariffs: postgres.NewTariffRepository(pool), Params: postgres.NewBillingParameterRepository(pool),
+		Prices: postgres.NewPriceRepository(pool), Anomalies: anomalyRepo, Bills: billRepo, Ops: opsRepo,
+		Clock: clock.System(), Log: log,
+	})
+	if err != nil {
+		closeAll()
+		return graph{}, fmt.Errorf("worker: build billing service: %w", err)
+	}
+
 	return graph{
 		cipher:          cipher,
 		integrationRepo: integrationRepo,
@@ -438,6 +463,12 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 			Backfill:           backfiller,
 			Prices:             syncer,
 			ConsumptionRefresh: consumptionRefresher,
+			BillingDispatch: billingsvc.Dispatcher{Billable: admin.NewBillingRepository(pool), Bills: billRepo, Enqueuer: jobClient,
+				Clock: clock.System(), MaxRetry: cfg.Worker.MaxRetries},
+			BillingGenerate: billingsvc.JobGenerator{Service: billingService, Ops: opsRepo, Enqueuer: jobClient,
+				Clock: clock.System(), MaxRetry: cfg.Worker.MaxRetries},
+			BillingRender: billingsvc.PDFRenderer{Bills: billRepo, Companies: postgres.NewCompanyRepository(pool),
+				Buildings: buildingRepo, Analyzers: analyzerRepo, Root: cfg.Storage.Root},
 		},
 		closers: closers,
 	}, nil

@@ -21,9 +21,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"log/slog"
 	"math/rand/v2"
 	"net/url"
+	"os"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -87,6 +89,20 @@ const (
 	// started per run, and raising an unmeasured bound on a guess is how a
 	// budget stops meaning anything.
 	redisReadyBudget = 60 * time.Second
+
+	// isolatedTestDSNEnv opts the isolated-database path (isolatedRoot,
+	// isolatedTemplate, NewIsolatedDB, NewEmptyDB) into a long-lived,
+	// externally managed Postgres/TimescaleDB server — e.g. the one
+	// `make test-db-up` starts — instead of every test binary booting and
+	// owning its own container (F4 Task 0).
+	//
+	// Set to a superuser DSN reachable from every test process that wants to
+	// share it. Unset — the default, and what CI runs today — every call
+	// behaves exactly as before this task: isolatedRoot boots its own
+	// container, scoped to this one process. Only the isolated-database
+	// path reads this variable; see StartPostgresUnmigrated's doc comment
+	// for why StartPostgres/StartPostgresUnmigrated/NewMigratedPool do not.
+	isolatedTestDSNEnv = "EKOKOD_TEST_PG_DSN"
 )
 
 // isolatedConnBoundArgs raises the shared isolatedRoot container's
@@ -172,6 +188,28 @@ func postgresWaitStrategy() testcontainers.CustomizeRequestOption {
 // only thing `up`, `down --all`, `up` can be asserted against — and what the
 // scheduler's advisory-lock tests need, since those touch no table at all.
 // Everything else wants StartPostgres.
+//
+// F4 TASK 0 DECISION (does not read isolatedTestDSNEnv, unlike
+// isolatedRoot): this function, StartPostgres and NewMigratedPool keep
+// booting their OWN dedicated container regardless of the shared-server env
+// var. internal/scheduler's elector_integration_test.go and
+// scheduler_integration_test.go — both callers of this function — run
+// leader-election over a session-level Postgres advisory lock
+// (scheduler.LockKeyScheduler) and, to prove a dropped connection is
+// noticed, query `pg_locks where locktype = 'advisory'` / `pg_stat_activity`
+// with NO scoping and pg_terminate_backend whatever pid they find. Advisory
+// locks and pg_locks/pg_stat_activity are SERVER-wide, not per-database:
+// on a server shared with unrelated concurrently-running test binaries,
+// that query could match — and that terminate could kill — a completely
+// unrelated test's backend. A dedicated container removes the shared
+// namespace those tests rely on being alone in, which no per-database
+// isolation (a clone, a fresh empty DB) can substitute for. Since all three
+// functions share this one entry point, and migrations_f2_integration_test.go
+// (the other StartPostgresUnmigrated caller) would have been safe to move,
+// splitting the safe caller onto NewEmptyDB is left to a future task rather
+// than done opportunistically here — no test in this task's scope
+// regressed by leaving it alone, and this task's job is the shared-server
+// path, not a rewrite of every caller.
 func StartPostgresUnmigrated(t *testing.T) string {
 	t.Helper()
 	ctx := context.Background()
@@ -302,9 +340,67 @@ func NewMigratedPool(t *testing.T) *pgxpool.Pool {
 	return NewPool(t, StartPostgres(t))
 }
 
-// isolatedTemplateDB is the name of the database NewIsolatedDB migrates
-// exactly once per test binary and clones on every call.
-const isolatedTemplateDB = "ekokod_isolated_template"
+// isolatedTemplateNamePrefix names the database NewIsolatedDB clones on
+// every call. The full name (isolatedTemplateName) appends
+// postgres.MigrationsFingerprint — see that function's call site in
+// isolatedTemplateName for why: a name-only constant was fine when every
+// test binary owned its own container, since a stale template could only
+// ever be this SAME process's own prior migration set, but a template built
+// under isolatedTestDSNEnv lives on a server other processes (a different
+// branch's build, a stale `make test-db-up` left running) may also have
+// touched, and a name that does not change when the migrations do would
+// let one of those reuse a template that no longer matches this build's
+// schema.
+const isolatedTemplateNamePrefix = "ekokod_isolated_template_"
+
+// isolatedTemplateName returns the full name of the database NewIsolatedDB
+// migrates once (see ensureIsolatedTemplate) and clones on every call.
+func isolatedTemplateName() (string, error) {
+	fingerprint, err := postgres.MigrationsFingerprint()
+	if err != nil {
+		return "", fmt.Errorf("compute migrations fingerprint for the isolated template name: %w", err)
+	}
+	return templateNameForFingerprint(fingerprint), nil
+}
+
+// templateNameForFingerprint is isolatedTemplateName's pure part, split out
+// so a unit test can prove "a changed migration hash yields a different
+// template name" directly, without needing a database connection or the
+// real embedded migrations.
+func templateNameForFingerprint(fingerprint string) string {
+	return isolatedTemplateNamePrefix + fingerprint
+}
+
+// isolatedProcessSalt tags every clone/empty database this PROCESS creates.
+//
+// isolatedDBSeq alone is only unique WITHIN one process's counter, which
+// was enough when every test binary owned its own container — no other
+// process ever saw its names. Under isolatedTestDSNEnv, several test
+// binaries (different packages, `go test -p=N`) share one server, each
+// starting isolatedDBSeq back at 1, so two of them would otherwise both try
+// to create "isolated_db_1" and one loses with a duplicate-name error. The
+// salt is computed once per process (pid, cheap and always available, plus
+// a random value in case two processes share a pid across time on a
+// short-lived CI runner) and folded into every name below it.
+var isolatedProcessSalt = fmt.Sprintf("%d_%d", os.Getpid(), rand.Int64N(1_000_000_000))
+
+// isolatedProcessTag is isolatedProcessSalt, folded down to 8 hex chars via
+// FNV-1a, for the ONE name that cannot afford the full salt's length:
+// ensureIsolatedTemplate's temporary build name is built on top of the
+// FULL template name (prefix + 16-hex fingerprint, 41 bytes already), and
+// Postgres silently TRUNCATES identifiers past 63 bytes (NAMEDATALEN=64) —
+// appending "_build_" plus the full 17-ish byte isolatedProcessSalt would
+// overflow that limit and risk two different processes' temp names
+// truncating to the same bytes, defeating the whole point of salting them.
+// 8 hex chars keeps every name this package constructs comfortably under
+// the limit while still making two processes' temp names collide only by
+// a 1-in-2^32 coincidence, same as any other hash collision this package
+// already accepts (e.g. templateLockKey).
+var isolatedProcessTag = func() string {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(isolatedProcessSalt))
+	return fmt.Sprintf("%08x", h.Sum32())
+}()
 
 // isolatedRetryAttempts and isolatedRetryBaseDelay bound the retry loop
 // terminateSessionsAndRetry runs. See that function for why any retry is
@@ -370,10 +466,14 @@ var (
 	isolatedRootDSN       string
 	isolatedContainerErr  error
 
-	// isolatedTemplateOnce guards migrating isolatedTemplateDB exactly once,
-	// the first time any call needs it.
-	isolatedTemplateOnce sync.Once
-	isolatedTemplateErr  error
+	// isolatedTemplateOnce guards this PROCESS building/finding the template
+	// exactly once. It is not what makes the template safe across
+	// PROCESSES sharing isolatedTestDSNEnv's server — ensureIsolatedTemplate's
+	// advisory lock does that; this only avoids every one of this process's
+	// own NewIsolatedDB calls redoing the check.
+	isolatedTemplateOnce  sync.Once
+	isolatedTemplateErr   error
+	isolatedTemplateDBVal string
 
 	// isolatedDBSeq names every cloned database uniquely, so that concurrent
 	// t.Parallel() callers in the same package never race on a name.
@@ -394,8 +494,10 @@ var (
 // which is the load that exhausted postgresReadyBudget earlier in this
 // phase, now mean one.
 //
-// The per-call database is not migrated from scratch: isolatedTemplateDB is
-// migrated once per binary and every call clones it with
+// The per-call database is not migrated from scratch: the shared template
+// (see isolatedTemplateName and ensureIsolatedTemplate) is migrated once —
+// once per binary normally, or once total for however many binaries share a
+// server under isolatedTestDSNEnv — and every call clones it with
 // `CREATE DATABASE … TEMPLATE …`, which this package measured at roughly
 // 7x faster than a full migration run — about 120ms against about 850ms on
 // the machine this was measured on (see the report for Task 8c). That is
@@ -411,10 +513,10 @@ func NewIsolatedDB(t *testing.T) *pgxpool.Pool {
 	ctx := context.Background()
 
 	rootDSN := isolatedRoot(t)
-	isolatedTemplate(t, rootDSN)
+	templateName := isolatedTemplate(t, rootDSN)
 
-	name := fmt.Sprintf("isolated_db_%d", isolatedDBSeq.Add(1))
-	require.NoError(t, cloneIsolatedDB(ctx, rootDSN, name), "cloning the isolated-database template")
+	name := fmt.Sprintf("isolated_db_%s_%d", isolatedProcessSalt, isolatedDBSeq.Add(1))
+	require.NoError(t, cloneIsolatedDB(ctx, rootDSN, name, templateName), "cloning the isolated-database template")
 
 	// Registered BEFORE calling NewPool, and that order is load-bearing.
 	// t.Cleanup runs LAST REGISTERED FIRST, so this runs AFTER NewPool's own
@@ -428,7 +530,7 @@ func NewIsolatedDB(t *testing.T) *pgxpool.Pool {
 // NewEmptyDB returns the DSN of a brand-new, COMPLETELY UNMIGRATED database
 // inside the ONE shared TimescaleDB container NewIsolatedDB itself boots
 // (see isolatedRoot) — the same container reuse NewIsolatedDB gives every
-// scoped-repository test, but without cloning isolatedTemplateDB, for a
+// scoped-repository test, but without cloning the shared template, for a
 // caller that needs to run its OWN migrate up/down/round-trip against a
 // virgin schema rather than observe one that is already migrated.
 //
@@ -452,7 +554,7 @@ func NewEmptyDB(t *testing.T) string {
 	ctx := context.Background()
 
 	rootDSN := isolatedRoot(t)
-	name := fmt.Sprintf("isolated_empty_%d", isolatedDBSeq.Add(1))
+	name := fmt.Sprintf("isolated_empty_%s_%d", isolatedProcessSalt, isolatedDBSeq.Add(1))
 
 	func() {
 		cloneMu.Lock()
@@ -472,11 +574,18 @@ func NewEmptyDB(t *testing.T) string {
 	return withDatabase(rootDSN, name)
 }
 
-// isolatedRoot returns the DSN of the one TimescaleDB container every
-// NewIsolatedDB call in this test binary shares, booting it on the first
-// call.
+// isolatedRoot returns the DSN of the one TimescaleDB server every
+// NewIsolatedDB call in this test binary shares.
 //
-// It deliberately does NOT call t.Cleanup(container.Terminate), unlike
+// If isolatedTestDSNEnv is set, that DSN is returned directly and NO
+// container is booted here: the server is externally managed (e.g.
+// `make test-db-up`) and may be shared with OTHER test binaries running
+// concurrently. Everything downstream of this call (isolatedTemplate's
+// advisory lock, isolatedProcessSalt in clone/empty names) exists because
+// of that sharing.
+//
+// Otherwise this boots its own container, exactly as before F4 Task 0. It
+// deliberately does NOT call t.Cleanup(container.Terminate), unlike
 // StartPostgresUnmigrated: that Cleanup runs at the end of whichever TEST
 // happened to be first to call NewIsolatedDB, not at the end of the test
 // BINARY, and terminating the container there would pull it out from under
@@ -489,6 +598,11 @@ func NewEmptyDB(t *testing.T) string {
 func isolatedRoot(t *testing.T) string {
 	t.Helper()
 	isolatedContainerOnce.Do(func() {
+		if dsn := os.Getenv(isolatedTestDSNEnv); dsn != "" {
+			isolatedRootDSN = dsn
+			return
+		}
+
 		ctx := context.Background()
 		container, err := tcpostgres.Run(ctx, postgresImage,
 			tcpostgres.WithDatabase(fixtureDB),
@@ -510,80 +624,168 @@ func isolatedRoot(t *testing.T) string {
 	return isolatedRootDSN
 }
 
-// isolatedTemplate migrates isolatedTemplateDB inside the container at
-// rootDSN exactly once per test binary, then PROTECTS it: once this
-// function returns, no session can ever connect to isolatedTemplateDB
-// again, not this package's, not a straggler's, not TimescaleDB's own
-// per-database scheduler backend (spawned because migrations add
-// continuous-aggregate and compression policies — see
-// 00005_continuous_aggregates.sql).
+// isolatedTemplate ensures the shared template exists inside the container
+// at rootDSN, once per test binary, and returns its name.
 //
-// THIS IS I7a (final-review-B-report.md §"t.Parallel readiness", item 1).
-// Before this, terminateSessionsAndRetry's terminate-then-act dance was the
-// ONLY defence against SQLSTATE 55006 — see
-// TestCreateDatabaseTemplateFailsWith55006WhileASessionIsConnected for the
-// exact mechanism it defends against — and a defence that must win a race
-// on every single clone is a defence that eventually loses one under enough
-// concurrent fan-out. Making the template ALLOW_CONNECTIONS false removes
-// the race entirely: nothing can attach to it again, so nothing can ever be
-// attached to it when a clone runs, so terminateSessionsAndRetry's retry
-// loop over cloneIsolatedDB becomes a belt with no buckle to catch — see
-// TestIsolatedTemplateRefusesConnectionsAfterSetup and
-// TestCloneIsolatedDBSurvivesConcurrentConnectionFloodOnTemplate for the
-// regression tests this fixes.
-func isolatedTemplate(t *testing.T, rootDSN string) {
+// The process-local sync.Once here is a fast path only — every one of THIS
+// process's own calls after the first return instantly. It is NOT what
+// makes the template safe when isolatedTestDSNEnv points several different
+// test binaries at the same server: a sync.Once in one process cannot stop
+// another process's sync.Once from also deciding the template does not
+// exist yet and racing to build it. ensureIsolatedTemplate's advisory lock
+// is what makes that safe; see its doc comment.
+func isolatedTemplate(t *testing.T, rootDSN string) string {
 	t.Helper()
 	isolatedTemplateOnce.Do(func() {
-		isolatedTemplateErr = func() error {
-			ctx := context.Background()
-			root, err := pgx.Connect(ctx, rootDSN)
-			if err != nil {
-				return err
-			}
-			defer func() { _ = root.Close(ctx) }()
-
-			ident := pgx.Identifier{isolatedTemplateDB}.Sanitize()
-			if _, err := root.Exec(ctx, "create database "+ident); err != nil {
-				return err
-			}
-			if err := postgres.MigrateUp(ctx, withDatabase(rootDSN, isolatedTemplateDB), DiscardLogger()); err != nil {
-				return err
-			}
-
-			// Terminate whatever migrating may already have caused to spawn
-			// (e.g. a scheduler backend reacting to a policy the LAST
-			// migration added), THEN make the template non-connectable, THEN
-			// terminate once more to catch anything that raced into the gap
-			// between those two statements — belt AND suspenders, because
-			// this is the one-time setup every later clone's safety depends
-			// on.
-			if _, err := root.Exec(ctx,
-				`select pg_terminate_backend(pid) from pg_stat_activity where datname = $1 and pid <> pg_backend_pid()`,
-				isolatedTemplateDB); err != nil {
-				return err
-			}
-			if _, err := root.Exec(ctx,
-				fmt.Sprintf("alter database %s with allow_connections false is_template true", ident)); err != nil {
-				return err
-			}
-			_, err = root.Exec(ctx,
-				`select pg_terminate_backend(pid) from pg_stat_activity where datname = $1 and pid <> pg_backend_pid()`,
-				isolatedTemplateDB)
-			return err
-		}()
+		name, err := isolatedTemplateName()
+		if err != nil {
+			isolatedTemplateErr = err
+			return
+		}
+		isolatedTemplateDBVal = name
+		isolatedTemplateErr = ensureIsolatedTemplate(context.Background(), rootDSN, name)
 	})
 	require.NoError(t, isolatedTemplateErr, "migrating and protecting the shared isolated-database template")
+	return isolatedTemplateDBVal
+}
+
+// templateLockKey derives a stable pg_advisory_lock key from a template
+// name, via FNV-1a folded into int64 (pg_advisory_lock's argument type).
+// Different migration fingerprints get different keys, so building two
+// different templates (e.g. two branches' migration sets, on the same
+// shared server) never serialises against each other for no reason — only
+// concurrent attempts to build the SAME template do.
+func templateLockKey(name string) int64 {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(name))
+	return int64(h.Sum64()) //nolint:gosec // deliberate: any bit pattern is a valid pg_advisory_lock key, signedness is irrelevant
+}
+
+// templateExists reports whether a database named name exists on the
+// server conn is connected to.
+func templateExists(ctx context.Context, conn *pgx.Conn, name string) (bool, error) {
+	var exists bool
+	err := conn.QueryRow(ctx, `select exists(select 1 from pg_database where datname = $1)`, name).Scan(&exists)
+	return exists, err
+}
+
+// ensureIsolatedTemplate makes database name exist on the server at
+// rootDSN, fully migrated and PROTECTED (ALLOW_CONNECTIONS false,
+// IS_TEMPLATE true — see below), building it if it does not already exist.
+//
+// Safe to call concurrently, from multiple connections and multiple
+// PROCESSES sharing one server (isolatedTestDSNEnv is exactly this): it
+// takes a session-level pg_advisory_lock keyed on name (templateLockKey)
+// before doing anything else, so at most one caller anywhere ever builds a
+// given template, and every other caller blocks until the lock is free —
+// then RE-CHECKS existence before touching anything, so a caller that lost
+// the race to build finds the template already there and returns
+// immediately instead of building a second one or erroring.
+//
+// A HALF-BUILT TEMPLATE MUST NEVER BE TRUSTED: if this process is killed
+// (or the connection drops) partway through migrating, the advisory lock
+// releases with the connection and a later caller must not mistake the
+// wreckage for a finished template. This is why the build happens under a
+// TEMPORARY name (isolatedTemplateNamePrefix collision-free per attempt —
+// see the pid+random suffix below) and only the temp database is renamed to
+// the final name — a single, atomic catalog operation — once it is fully
+// migrated AND protected. Nothing but a fully-built, fully-protected
+// database is ever visible under name, so templateExists (and every
+// re-check above) can trust a positive result unconditionally: an
+// in-progress build is invisible under that name by construction, not by
+// convention.
+func ensureIsolatedTemplate(ctx context.Context, rootDSN, name string) error {
+	root, err := pgx.Connect(ctx, rootDSN)
+	if err != nil {
+		return fmt.Errorf("connect to ensure the isolated template: %w", err)
+	}
+	defer func() { _ = root.Close(ctx) }()
+
+	key := templateLockKey(name)
+	if _, err := root.Exec(ctx, `select pg_advisory_lock($1)`, key); err != nil {
+		return fmt.Errorf("acquire the isolated-template advisory lock: %w", err)
+	}
+	// Session-level: releasing explicitly (rather than relying only on
+	// root.Close above) means a caller that reuses this same *pgx.Conn for
+	// something else later — none does today, but the alternative is a lock
+	// held for the rest of the connection's life by accident — is never
+	// surprised by it.
+	defer func() {
+		_, _ = root.Exec(context.Background(), `select pg_advisory_unlock($1)`, key)
+	}()
+
+	// Re-check AFTER acquiring the lock: another caller (this process's
+	// first NewIsolatedDB call, or a different process entirely) may have
+	// built and protected the template while this call was blocked waiting
+	// for the lock.
+	exists, err := templateExists(ctx, root, name)
+	if err != nil {
+		return fmt.Errorf("check whether the isolated template already exists: %w", err)
+	}
+	if exists {
+		return nil
+	}
+
+	tempName := fmt.Sprintf("%s_build_%s", name, isolatedProcessTag)
+	tempIdent := pgx.Identifier{tempName}.Sanitize()
+
+	if _, err := root.Exec(ctx, "create database "+tempIdent); err != nil {
+		return fmt.Errorf("create the temporary isolated-template build database: %w", err)
+	}
+	built := false
+	defer func() {
+		if !built {
+			// Best-effort: a leftover half-built temp database under a
+			// process-salted name never collides with a later attempt (see
+			// the name above), so leaving it for the reaper/next test-db-up
+			// is litter, not a correctness problem.
+			_, _ = root.Exec(context.Background(), "drop database if exists "+tempIdent+" with (force)")
+		}
+	}()
+
+	if err := postgres.MigrateUp(ctx, withDatabase(rootDSN, tempName), DiscardLogger()); err != nil {
+		return fmt.Errorf("migrate the isolated-template build database: %w", err)
+	}
+
+	// Terminate whatever migrating may already have caused to spawn (e.g. a
+	// scheduler backend reacting to a policy the LAST migration added),
+	// THEN make the template non-connectable, THEN terminate once more to
+	// catch anything that raced into the gap between those two statements —
+	// belt AND suspenders, because this is the one-time setup every later
+	// clone's safety depends on. See isolatedTemplateNamePrefix's original
+	// note (I7a) for why ALLOW_CONNECTIONS false removes the 55006 race
+	// entirely rather than merely narrowing it.
+	terminateSQL := `select pg_terminate_backend(pid) from pg_stat_activity where datname = $1 and pid <> pg_backend_pid()`
+	if _, err := root.Exec(ctx, terminateSQL, tempName); err != nil {
+		return fmt.Errorf("terminate sessions on the isolated-template build database: %w", err)
+	}
+	if _, err := root.Exec(ctx,
+		fmt.Sprintf("alter database %s with allow_connections false is_template true", tempIdent)); err != nil {
+		return fmt.Errorf("protect the isolated-template build database: %w", err)
+	}
+	if _, err := root.Exec(ctx, terminateSQL, tempName); err != nil {
+		return fmt.Errorf("terminate sessions on the isolated-template build database after protecting it: %w", err)
+	}
+
+	// The rename is the single moment the template becomes visible under
+	// its final name — fully migrated and fully protected, never before.
+	ident := pgx.Identifier{name}.Sanitize()
+	if _, err := root.Exec(ctx, fmt.Sprintf("alter database %s rename to %s", tempIdent, ident)); err != nil {
+		return fmt.Errorf("rename the isolated-template build database into place: %w", err)
+	}
+	built = true
+	return nil
 }
 
 // cloneIsolatedDB creates database name inside the container at rootDSN as a
-// `CREATE DATABASE … TEMPLATE isolatedTemplateDB`.
+// `CREATE DATABASE … TEMPLATE templateName`.
 //
 // Serialised behind cloneMu — see that variable's doc comment — and still
 // wrapped in terminateSessionsAndRetry as a belt: the template itself is
 // protected by isolatedTemplate before this is ever reachable, so the
 // terminate below is normally a no-op against an empty result set, cheap
 // insurance rather than the load-bearing defence it used to be.
-func cloneIsolatedDB(ctx context.Context, rootDSN, name string) error {
+func cloneIsolatedDB(ctx context.Context, rootDSN, name, templateName string) error {
 	cloneMu.Lock()
 	defer cloneMu.Unlock()
 
@@ -594,8 +796,9 @@ func cloneIsolatedDB(ctx context.Context, rootDSN, name string) error {
 	defer func() { _ = root.Close(ctx) }()
 
 	ident := pgx.Identifier{name}.Sanitize()
-	return terminateSessionsAndRetry(ctx, root, isolatedTemplateDB, func() error {
-		_, err := root.Exec(ctx, fmt.Sprintf("create database %s template %s", ident, isolatedTemplateDB))
+	templateIdent := pgx.Identifier{templateName}.Sanitize()
+	return terminateSessionsAndRetry(ctx, root, templateName, func() error {
+		_, err := root.Exec(ctx, fmt.Sprintf("create database %s template %s", ident, templateIdent))
 		return err
 	})
 }

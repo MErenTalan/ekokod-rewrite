@@ -283,12 +283,21 @@ func (b *Billing) ConsumptionAndRecord(ctx context.Context, sc store.Scope, req 
 	if err != nil {
 		return nil, err
 	}
+	if err := b.recordRowsAndGaps(ctx, sc, rows, gapsByAnalyzer); err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// recordRowsAndGaps writes the anomalies for one derivation's suspect rows and
+// gaps; ConsumptionAndRecord and PeriodConsumptionAndRecord share it.
+func (b *Billing) recordRowsAndGaps(ctx context.Context, sc store.Scope, rows []Row, gapsByAnalyzer map[uuid.UUID][]bucketGap) error {
 	for _, row := range rows {
 		if len(row.Suspect) == 0 {
 			continue
 		}
 		if err := b.recordSuspectPeriod(ctx, sc, row); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	// R97: one missing_readings anomaly per requested bucket that produced
@@ -298,11 +307,11 @@ func (b *Billing) ConsumptionAndRecord(ctx context.Context, sc store.Scope, req 
 	for analyzerID, gaps := range gapsByAnalyzer {
 		for _, gap := range gaps {
 			if err := b.recordMissingReadingsGap(ctx, sc, analyzerID, gap); err != nil {
-				return nil, err
+				return err
 			}
 		}
 	}
-	return rows, nil
+	return nil
 }
 
 // recordSuspectPeriod writes one anomaly row (+ operator message) per
