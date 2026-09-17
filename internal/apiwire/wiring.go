@@ -308,7 +308,7 @@ func buildCredentials(cfg *config.Config, pool *pgxpool.Pool, cipher *crypto.Cip
 	}
 	svc, err := credentials.New(credentials.Deps{
 		Integrations: postgres.NewIntegrationRepository(pool, cipher), Analyzers: postgres.NewAnalyzerRepository(pool),
-		Verifiers: verifiers, ISolar: isolarTokens, Enqueuer: enq, Locker: redisLock, Nonces: redisLock, Clock: opts.Clock,
+		Buildings: postgres.NewBuildingRepository(pool), Verifiers: verifiers, ISolar: isolarTokens, Enqueuer: enq, Locker: redisLock, Nonces: redisLock, Clock: opts.Clock,
 		StateKey: worker.StateKey(cfg.Security.JWTSigningKey), RedirectURI: worker.RedirectURI(cfg), MaxRetry: cfg.Worker.MaxRetries,
 	})
 	if err != nil {

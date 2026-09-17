@@ -150,6 +150,7 @@ func TestStateIsSingleUse(t *testing.T) {
 	svc, err := New(Deps{
 		Integrations: integrations,
 		Analyzers:    stateFakeAnalyzers{},
+		Buildings:    stateFakeBuildings{},
 		Verifiers:    stateFakeVerifiers{},
 		ISolar:       isolarFake,
 		Enqueuer:     stateFakeEnqueuer{},
@@ -342,6 +343,9 @@ func (f *stateFakeIntegrations) RecordVerification(_ context.Context, s store.Sc
 }
 
 var _ store.IntegrationRepository = (*stateFakeIntegrations)(nil)
+
+// stateFakeBuildings is a not-implemented stub: no state test names a building.
+type stateFakeBuildings struct{ store.BuildingRepository }
 
 // stateFakeAnalyzers is a not-implemented stub: TestStateIsSingleUse never
 // exercises the pm5340 analyzer path.

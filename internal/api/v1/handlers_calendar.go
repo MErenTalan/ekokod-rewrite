@@ -211,6 +211,10 @@ func credErr(err error) error {
 		return perr.New("integration_unavailable", 503, "errors.integrations.unavailable")
 	case errors.Is(err, credentials.ErrInvalidSettings), errors.Is(err, credentials.ErrInvalidExtraKey):
 		return perr.Validation.WithParams(map[string]any{"settings": []string{"invalid"}})
+	case errors.Is(err, credentials.ErrInvalidWiringNumber):
+		return perr.Validation.WithParams(map[string]any{"wiring_numbers": []string{"invalid"}})
+	case errors.Is(err, credentials.ErrInvalidBuilding):
+		return perr.Validation.WithParams(map[string]any{"building_id": []string{"invalid"}})
 	case errors.Is(err, credentials.ErrNotIsolar):
 		return perr.Validation.WithParams(map[string]any{"credential_id": []string{"not_isolar"}})
 	case errors.Is(err, store.ErrConflict):
@@ -232,7 +236,8 @@ func credentialDTO(v credentials.View) dto.IntegrationCredential {
 
 func credentialInput(provider, subtype string, f dto.IntegrationCredentialFields) credentials.Input {
 	in := credentials.Input{Provider: model.IntegrationProvider(provider), Subtype: subtype, Username: f.Username,
-		Settings: f.Settings, PM5340URL: f.PM5340URL, InstallationNumber: f.InstallationNumber, IsolarRegion: f.IsolarRegion, IsActive: f.IsActive}
+		Settings: f.Settings, PM5340URL: f.PM5340URL, InstallationNumber: f.InstallationNumber, IsolarRegion: f.IsolarRegion,
+		IsActive: f.IsActive, WiringNumbers: f.WiringNumbers, BuildingID: f.BuildingID}
 	if f.Secret != nil {
 		secret := integration.NewSecret([]byte(*f.Secret))
 		in.Secret = &secret

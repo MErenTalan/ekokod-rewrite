@@ -23,6 +23,7 @@ func TestNewRejectsShortStateKey(t *testing.T) {
 	deps := credentials.Deps{
 		Integrations: fakeMinimalIntegrations{},
 		Analyzers:    fakeMinimalAnalyzers{},
+		Buildings:    fakeMinimalBuildings{},
 		Verifiers:    fakeMinimalVerifiers{},
 		ISolar:       fakeMinimalISolar{},
 		Enqueuer:     fakeMinimalEnqueuer{},
@@ -46,6 +47,7 @@ func TestNewRejectsShortStateKey(t *testing.T) {
 
 type fakeMinimalIntegrations struct{ store.IntegrationRepository }
 type fakeMinimalAnalyzers struct{ store.AnalyzerRepository }
+type fakeMinimalBuildings struct{ store.BuildingRepository }
 type fakeMinimalVerifiers struct{}
 
 func (fakeMinimalVerifiers) Verifier(integration.Provider) (credentials.Verifier, error) {

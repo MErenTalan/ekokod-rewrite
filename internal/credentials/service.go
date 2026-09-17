@@ -54,6 +54,55 @@ var ErrInvalidSettings = errors.New("credentials: invalid settings")
 // could smuggle something unexpected into that trust.
 var ErrInvalidExtraKey = errors.New("credentials: invalid extra key")
 
+// ErrInvalidWiringNumber is returned when Input.WiringNumbers carries a
+// malformed, duplicate or over-long metering point identifier, or when a
+// provider that has no manual metering points supplies any (R210).
+var ErrInvalidWiringNumber = errors.New("credentials: invalid wiring number")
+
+// ErrInvalidBuilding is returned when Input.BuildingID names a building the
+// scope cannot see, or a provider whose analyzers are not created here (R210).
+var ErrInvalidBuilding = errors.New("credentials: invalid building")
+
+// wiringNumberPattern is what a GridBox wiring number may look like.
+var wiringNumberPattern = regexp.MustCompile(`^[A-Za-z0-9._-]{1,100}$`)
+
+const maxWiringNumbers = 50
+
+// validateManualAnalyzers enforces R210: only gridbox takes wiring numbers,
+// only gridbox and pm5340 take a target building, and the numbers themselves
+// are well formed and unique.
+func (s *Service) validateManualAnalyzers(ctx context.Context, sc store.Scope, provider model.IntegrationProvider, in Input) error {
+	if len(in.WiringNumbers) > 0 && provider != model.IntegrationProviderGridbox {
+		return fmt.Errorf("%w: %s has no manual metering points", ErrInvalidWiringNumber, provider)
+	}
+	if len(in.WiringNumbers) > maxWiringNumbers {
+		return fmt.Errorf("%w: at most %d", ErrInvalidWiringNumber, maxWiringNumbers)
+	}
+	seen := make(map[string]bool, len(in.WiringNumbers))
+	for _, n := range in.WiringNumbers {
+		if !wiringNumberPattern.MatchString(n) {
+			return fmt.Errorf("%w: %q", ErrInvalidWiringNumber, n)
+		}
+		if seen[n] {
+			return fmt.Errorf("%w: %q is listed twice", ErrInvalidWiringNumber, n)
+		}
+		seen[n] = true
+	}
+	if in.BuildingID == nil {
+		return nil
+	}
+	if provider != model.IntegrationProviderGridbox && provider != model.IntegrationProviderPM5340 {
+		return fmt.Errorf("%w: %s analyzers are not created here", ErrInvalidBuilding, provider)
+	}
+	if _, err := s.deps.Buildings.Get(ctx, sc, *in.BuildingID); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return fmt.Errorf("%w: not visible", ErrInvalidBuilding)
+		}
+		return err
+	}
+	return nil
+}
+
 // extraKeyPattern is the allowed shape for an Input.Extra key: lowercase
 // ASCII, starting with a letter, snake_case.
 var extraKeyPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
@@ -156,8 +205,14 @@ type Input struct {
 	Settings           json.RawMessage
 	PM5340URL          *string
 	InstallationNumber *string // pm5340 only: creates/updates its single analyzer
-	IsolarRegion       *string
-	IsActive           *bool
+	// WiringNumbers is gridbox only (R210): 06 §3 gives GridBox no discovery
+	// endpoint, so its metering points are the ones an operator types here.
+	// Numbers left out of a later call are never deleted.
+	WiringNumbers []string
+	// BuildingID assigns the analyzers this call creates (gridbox, pm5340).
+	BuildingID   *uuid.UUID
+	IsolarRegion *string
+	IsActive     *bool
 }
 
 // BackfillInput is Service.Backfill's write model — see job.BackfillPayload,
@@ -201,6 +256,7 @@ type ISolarTokens interface {
 type Deps struct {
 	Integrations store.IntegrationRepository
 	Analyzers    store.AnalyzerRepository
+	Buildings    store.BuildingRepository
 	Verifiers    VerifierResolver
 	ISolar       ISolarTokens
 	Enqueuer     ingest.Enqueuer // *job.Client
@@ -238,6 +294,8 @@ func New(d Deps) (*Service, error) {
 		return nil, fmt.Errorf("credentials: Deps.Integrations is required")
 	case d.Analyzers == nil:
 		return nil, fmt.Errorf("credentials: Deps.Analyzers is required")
+	case d.Buildings == nil:
+		return nil, fmt.Errorf("credentials: Deps.Buildings is required")
 	case d.Verifiers == nil:
 		return nil, fmt.Errorf("credentials: Deps.Verifiers is required")
 	case d.ISolar == nil:
@@ -424,6 +482,9 @@ func (s *Service) Configure(ctx context.Context, sc store.Scope, in Input) (View
 	if err := validateExtraKeys(in.Extra); err != nil {
 		return View{}, err
 	}
+	if err := s.validateManualAnalyzers(ctx, sc, in.Provider, in); err != nil {
+		return View{}, err
+	}
 
 	def, err := s.deps.Integrations.Definition(ctx, sc, in.Provider, in.Subtype)
 	if err != nil {
@@ -476,10 +537,8 @@ func (s *Service) Configure(ctx context.Context, sc store.Scope, in Input) (View
 		return View{}, err
 	}
 
-	if def.Provider == model.IntegrationProviderPM5340 && in.InstallationNumber != nil {
-		if err := s.upsertPM5340Analyzer(ctx, sc, def, *in.InstallationNumber); err != nil {
-			return View{}, err
-		}
+	if err := s.upsertManualAnalyzers(ctx, sc, def, in); err != nil {
+		return View{}, err
 	}
 
 	return s.viewOf(ctx, sc, saved, def)
@@ -497,6 +556,9 @@ func (s *Service) Update(ctx context.Context, sc store.Scope, id uuid.UUID, in I
 		return View{}, err
 	}
 	if err := validateExtraKeys(in.Extra); err != nil {
+		return View{}, err
+	}
+	if err := s.validateManualAnalyzers(ctx, sc, def.Provider, in); err != nil {
 		return View{}, err
 	}
 
@@ -604,13 +666,51 @@ func (s *Service) Update(ctx context.Context, sc store.Scope, id uuid.UUID, in I
 		return View{}, err
 	}
 
-	if def.Provider == model.IntegrationProviderPM5340 && in.InstallationNumber != nil {
-		if err := s.upsertPM5340Analyzer(ctx, sc, def, *in.InstallationNumber); err != nil {
-			return View{}, err
-		}
+	if err := s.upsertManualAnalyzers(ctx, sc, def, in); err != nil {
+		return View{}, err
 	}
 
 	return s.viewOf(ctx, sc, saved, def)
+}
+
+// upsertManualAnalyzers creates the metering points an operator typed in
+// (R210): pm5340's single installation number, and every GridBox wiring
+// number, since 06 §3 gives GridBox no discovery endpoint. A number already
+// known keeps its building unless this call names one; a number left out of a
+// later call is never deleted — the Analyzers tab deactivates instead.
+func (s *Service) upsertManualAnalyzers(ctx context.Context, sc store.Scope, def model.IntegrationDefinition, in Input) error {
+	if def.Provider == model.IntegrationProviderPM5340 && in.InstallationNumber != nil {
+		return s.upsertPM5340Analyzer(ctx, sc, def, *in.InstallationNumber, in.BuildingID)
+	}
+	if def.Provider != model.IntegrationProviderGridbox {
+		return nil
+	}
+	now := s.deps.Clock.Now()
+	for _, number := range in.WiringNumbers {
+		existing, err := s.deps.Analyzers.GetByInstallation(ctx, sc, def.Provider, def.Subtype, number)
+		switch {
+		case err == nil:
+			if in.BuildingID == nil || (existing.BuildingID != nil && *existing.BuildingID == *in.BuildingID) {
+				continue
+			}
+			existing.BuildingID = in.BuildingID
+			existing.UpdatedAt = now
+			if _, uerr := s.deps.Analyzers.Update(ctx, sc, existing); uerr != nil {
+				return uerr
+			}
+		case errors.Is(err, store.ErrNotFound):
+			if _, cerr := s.deps.Analyzers.Create(ctx, sc, model.Analyzer{
+				CompanyID: sc.CompanyID, BuildingID: in.BuildingID, Provider: def.Provider, ProviderSubtype: def.Subtype,
+				InstallationNumber: number, MeterMultiplier: decimal.NewFromInt(1), IsActive: true,
+				CreatedAt: now, UpdatedAt: now,
+			}); cerr != nil {
+				return cerr
+			}
+		default:
+			return err
+		}
+	}
+	return nil
 }
 
 // upsertPM5340Analyzer ensures the credential has exactly ONE active
@@ -647,7 +747,8 @@ func (s *Service) Update(ctx context.Context, sc store.Scope, id uuid.UUID, in I
 // discovery call to find it, only what the operator types in here — so the
 // analyzer is created ACTIVE immediately, unlike a provider-discovered one
 // (R27, which is about analyzers a sync job finds unprompted).
-func (s *Service) upsertPM5340Analyzer(ctx context.Context, sc store.Scope, def model.IntegrationDefinition, installationNumber string) error {
+func (s *Service) upsertPM5340Analyzer(ctx context.Context, sc store.Scope, def model.IntegrationDefinition,
+	installationNumber string, buildingID *uuid.UUID) error {
 	existing, err := s.deps.Analyzers.List(ctx, sc, store.AnalyzerFilter{
 		Providers: []model.IntegrationProvider{def.Provider},
 	})
@@ -659,7 +760,13 @@ func (s *Service) upsertPM5340Analyzer(ctx context.Context, sc store.Scope, def 
 			continue
 		}
 		if a.InstallationNumber == installationNumber {
-			return nil
+			if buildingID == nil || (a.BuildingID != nil && *a.BuildingID == *buildingID) {
+				return nil
+			}
+			a.BuildingID = buildingID
+			a.UpdatedAt = s.deps.Clock.Now()
+			_, uerr := s.deps.Analyzers.Update(ctx, sc, a)
+			return uerr
 		}
 		// AnalyzerRepository.Update (internal/store/postgres/analyzers.go)
 		// never touches installation_number/provider/provider_subtype —
@@ -678,6 +785,7 @@ func (s *Service) upsertPM5340Analyzer(ctx context.Context, sc store.Scope, def 
 	now := s.deps.Clock.Now()
 	_, cerr := s.deps.Analyzers.Create(ctx, sc, model.Analyzer{
 		CompanyID:          sc.CompanyID,
+		BuildingID:         buildingID,
 		Provider:           def.Provider,
 		ProviderSubtype:    def.Subtype,
 		InstallationNumber: installationNumber,

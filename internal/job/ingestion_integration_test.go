@@ -268,6 +268,7 @@ func acceptEnvSetupFull(t *testing.T, seed int64, pins map[string]string, log *s
 	credSvc, err := credentials.New(credentials.Deps{
 		Integrations: postgres.NewIntegrationRepository(pool, cipher),
 		Analyzers:    analyzers,
+		Buildings:    postgres.NewBuildingRepository(pool),
 		Verifiers:    acceptNoVerifierResolver{},
 		ISolar:       acceptNoISolar{},
 		Enqueuer:     client,

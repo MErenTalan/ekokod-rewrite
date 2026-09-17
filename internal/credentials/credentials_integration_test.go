@@ -204,6 +204,7 @@ type credHarness struct {
 	svc          *credentials.Service
 	integrations *postgres.IntegrationRepository
 	analyzers    *postgres.AnalyzerRepository
+	buildings    *postgres.BuildingRepository
 	enqueuer     *recordingEnqueuer
 	isolarFake   *credFakeISolar
 	verifiers    *credFakeVerifierResolver
@@ -222,6 +223,7 @@ func newCredHarness(t *testing.T, pool *pgxpool.Pool, now time.Time) *credHarnes
 	h := &credHarness{
 		integrations: postgres.NewIntegrationRepository(pool, credCipher(t)),
 		analyzers:    postgres.NewAnalyzerRepository(pool),
+		buildings:    postgres.NewBuildingRepository(pool),
 		enqueuer:     &recordingEnqueuer{},
 		isolarFake:   &credFakeISolar{},
 		verifiers:    newCredFakeVerifierResolver(),
@@ -233,6 +235,7 @@ func newCredHarness(t *testing.T, pool *pgxpool.Pool, now time.Time) *credHarnes
 	svc, err := credentials.New(credentials.Deps{
 		Integrations: h.integrations,
 		Analyzers:    h.analyzers,
+		Buildings:    h.buildings,
 		Verifiers:    h.verifiers,
 		ISolar:       h.isolarFake,
 		Enqueuer:     h.enqueuer,
@@ -1042,6 +1045,7 @@ func TestUpdateHoldsIsolarLockAcrossUpsertWrite(t *testing.T) {
 	svc, err := credentials.New(credentials.Deps{
 		Integrations: blocker,
 		Analyzers:    postgres.NewAnalyzerRepository(pool),
+		Buildings:    postgres.NewBuildingRepository(pool),
 		Verifiers:    newCredFakeVerifierResolver(),
 		ISolar:       isolarFake,
 		Enqueuer:     &recordingEnqueuer{},
@@ -1151,6 +1155,7 @@ func TestISolarAccessTokenRefreshesOnceAcrossTwoServiceInstances(t *testing.T) {
 		svc, err := credentials.New(credentials.Deps{
 			Integrations: integrations,
 			Analyzers:    analyzers,
+			Buildings:    postgres.NewBuildingRepository(pool),
 			Verifiers:    verifiers,
 			ISolar:       isolarFake,
 			Enqueuer:     enqueuer,
@@ -1402,4 +1407,126 @@ func TestISolarMethodsAreScopedToTenant(t *testing.T) {
 	tok, err := h.svc.ISolarAccessToken(ctx, tenantA.AdminScope, view.ID)
 	require.NoError(t, err)
 	require.Equal(t, "access-1", tok.Reveal())
+}
+
+// R210: 06 §3 gives GridBox no discovery endpoint, so its metering points are
+// the wiring numbers an operator types, optionally assigned to a building.
+func TestGridboxWiringNumbersCreateAnalyzers(t *testing.T) {
+	t.Parallel()
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenant := testfixtures.NewTenant(t, ctx, pool, 140016)
+	credInsertDefinition(t, ctx, pool, "gridbox", "default", nil)
+	h := newCredHarness(t, pool, credNow)
+	building := tenant.Buildings[0].ID
+	username, secret := "gridbox-user", integration.NewSecret([]byte("gridbox-pass"))
+
+	view, err := h.svc.Configure(ctx, tenant.AdminScope, credentials.Input{
+		Provider: model.IntegrationProviderGridbox, Subtype: "default", Username: &username, Secret: &secret,
+		WiringNumbers: []string{"1001", "1002"}, BuildingID: &building,
+	})
+	require.NoError(t, err)
+
+	for _, number := range []string{"1001", "1002"} {
+		a, gerr := h.analyzers.GetByInstallation(ctx, tenant.AdminScope, model.IntegrationProviderGridbox, "default", number)
+		require.NoError(t, gerr, number)
+		require.NotNil(t, a.BuildingID)
+		require.Equal(t, building, *a.BuildingID)
+		require.True(t, a.IsActive)
+	}
+
+	// A later call adds a number and never deletes the ones left out.
+	_, err = h.svc.Update(ctx, tenant.AdminScope, view.ID, credentials.Input{WiringNumbers: []string{"1003"}})
+	require.NoError(t, err)
+	require.Len(t, gridboxDefault(t, ctx, h, tenant.AdminScope), 3)
+	third, err := h.analyzers.GetByInstallation(ctx, tenant.AdminScope, model.IntegrationProviderGridbox, "default", "1003")
+	require.NoError(t, err)
+	require.Nil(t, third.BuildingID, "no building named on this call, so none is assigned")
+
+	// Re-running with the same numbers is idempotent.
+	_, err = h.svc.Update(ctx, tenant.AdminScope, view.ID, credentials.Input{WiringNumbers: []string{"1001", "1002", "1003"}})
+	require.NoError(t, err)
+	require.Len(t, gridboxDefault(t, ctx, h, tenant.AdminScope), 3, "re-running the same numbers changes nothing")
+}
+
+// gridboxDefault lists only the analyzers this credential owns; the tenant
+// fixture seeds its own gridbox/Baskent ones.
+func gridboxDefault(t *testing.T, ctx context.Context, h *credHarness, sc store.Scope) []model.Analyzer {
+	t.Helper()
+	all, err := h.analyzers.List(ctx, sc, store.AnalyzerFilter{
+		Providers: []model.IntegrationProvider{model.IntegrationProviderGridbox}})
+	require.NoError(t, err)
+	var out []model.Analyzer
+	for _, a := range all {
+		if a.ProviderSubtype == "default" {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+func TestManualAnalyzerInputIsValidated(t *testing.T) {
+	t.Parallel()
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenant := testfixtures.NewTenant(t, ctx, pool, 140017)
+	other := testfixtures.NewTenant(t, ctx, pool, 140018)
+	credInsertDefinition(t, ctx, pool, "gridbox", "default", nil)
+	credInsertDefinition(t, ctx, pool, "osos", "Baskent", nil)
+	h := newCredHarness(t, pool, credNow)
+	username, secret := "u", integration.NewSecret([]byte("p"))
+	foreign := other.Buildings[0].ID
+	own := tenant.Buildings[0].ID
+
+	cases := []struct {
+		name string
+		in   credentials.Input
+		want error
+	}{
+		{"wiring numbers on another provider", credentials.Input{
+			Provider: model.IntegrationProviderOSOS, Subtype: "Baskent", Username: &username, Secret: &secret,
+			WiringNumbers: []string{"1001"}}, credentials.ErrInvalidWiringNumber},
+		{"a malformed number", credentials.Input{
+			Provider: model.IntegrationProviderGridbox, Subtype: "default", Username: &username, Secret: &secret,
+			WiringNumbers: []string{"1001; drop"}}, credentials.ErrInvalidWiringNumber},
+		{"an empty number", credentials.Input{
+			Provider: model.IntegrationProviderGridbox, Subtype: "default", Username: &username, Secret: &secret,
+			WiringNumbers: []string{""}}, credentials.ErrInvalidWiringNumber},
+		{"a duplicate number", credentials.Input{
+			Provider: model.IntegrationProviderGridbox, Subtype: "default", Username: &username, Secret: &secret,
+			WiringNumbers: []string{"1001", "1001"}}, credentials.ErrInvalidWiringNumber},
+		{"a building outside the scope", credentials.Input{
+			Provider: model.IntegrationProviderGridbox, Subtype: "default", Username: &username, Secret: &secret,
+			BuildingID: &foreign}, credentials.ErrInvalidBuilding},
+		{"a building on a provider whose analyzers come from discovery", credentials.Input{
+			Provider: model.IntegrationProviderOSOS, Subtype: "Baskent", Username: &username, Secret: &secret,
+			BuildingID: &own}, credentials.ErrInvalidBuilding},
+	}
+	for _, c := range cases {
+		_, err := h.svc.Configure(ctx, tenant.AdminScope, c.in)
+		require.ErrorIs(t, err, c.want, c.name)
+	}
+	require.Empty(t, gridboxDefault(t, ctx, h, tenant.AdminScope), "a refused call writes no analyzer")
+}
+
+// R210: pm5340's single analyzer also honours the target building.
+func TestPM5340HonoursBuildingID(t *testing.T) {
+	t.Parallel()
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenant := testfixtures.NewTenant(t, ctx, pool, 140019)
+	credInsertDefinition(t, ctx, pool, "pm5340", "default", nil)
+	h := newCredHarness(t, pool, credNow)
+	building := tenant.Buildings[0].ID
+	pm5340URL := "http://10.0.0.9:502"
+
+	_, err := h.svc.Configure(ctx, tenant.AdminScope, credentials.Input{
+		Provider: model.IntegrationProviderPM5340, Subtype: "default", PM5340URL: &pm5340URL,
+		InstallationNumber: ptr("PM-BUILD-1"), BuildingID: &building,
+	})
+	require.NoError(t, err)
+	a, err := h.analyzers.GetByInstallation(ctx, tenant.AdminScope, model.IntegrationProviderPM5340, "default", "PM-BUILD-1")
+	require.NoError(t, err)
+	require.NotNil(t, a.BuildingID)
+	require.Equal(t, building, *a.BuildingID)
 }

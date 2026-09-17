@@ -123,8 +123,12 @@ type IntegrationCredentialFields struct {
 	Settings           json.RawMessage   `json:"settings,omitempty"`
 	PM5340URL          *string           `json:"pm5340_url,omitempty" validate:"omitempty,max=2048"`
 	InstallationNumber *string           `json:"installation_number,omitempty" validate:"omitempty,max=100"`
-	IsolarRegion       *string           `json:"isolar_region,omitempty" validate:"omitempty,max=10"`
-	IsActive           *bool             `json:"is_active,omitempty"`
+	// WiringNumbers is gridbox's manual metering points and BuildingID assigns
+	// the analyzers this call creates (R210).
+	WiringNumbers []string   `json:"wiring_numbers,omitempty" validate:"omitempty,max=50,dive,min=1,max=100"`
+	BuildingID    *uuid.UUID `json:"building_id,omitempty"`
+	IsolarRegion  *string    `json:"isolar_region,omitempty" validate:"omitempty,max=10"`
+	IsActive      *bool      `json:"is_active,omitempty"`
 }
 
 // IntegrationCredentialCreateRequest is POST /integration-credentials.

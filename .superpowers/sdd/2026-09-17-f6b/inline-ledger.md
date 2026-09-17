@@ -19,3 +19,24 @@ Mutations:
 - company_id declared on public routes too → RED (`system.openapi is public and must not declare company_id`). Restored.
 - `settings.analyzers.edit` given to building_admin → first attempt INVALID (gofmt alignment made the
   string replace a no-op, tests stayed green); redone with a regex → RED (matrix + fixture guards). Restored.
+
+## Task 2 — R192 GET /jobs/{id} (d99d9e5)
+Service tests written after the first implementation draft (deviation from strict TDD, recorded);
+the retention guard and the HTTP test were written red first
+(`integration.refresh_analyzer must be retained`; matrix row missing → 418).
+Deviation: `asynq.Retention` first landed on `NewSyncDispatchTask` by a mis-targeted edit; moved to
+`NewSyncAnalyzersTask` (the scheduler's dispatch task is not watchable).
+Gate: api/v1 (+kit, mw), service/jobs, job, apiwire integration ok; lint 0; web typecheck/check:api ok.
+Mutations: drop the company check → RED; `retry` mapped to failed → RED; drop the analyzer visibility
+check → RED. All restored.
+
+## Task 3 — R193 GET /consumption/grouped (64f91ae)
+Domain tests first (red: no non-test files), then service tests (red: missing deps), then HTTP.
+Deviations: an unknown `group_by` answers **422 validation_failed** (the DTO enum, R154) rather than
+the plan's 400; the plan's `TestGroupSumsNonNilAndMarksPartial` needed a day with all three registers
+for the "not partial" case.
+Gate: domain/grouping (-race), service/analysis, service/loadprofile, api/v1 integration ok;
+golangci-lint 0 after fixing 4 findings; internal/arch ok; web typecheck ok.
+Mutations: Sunday-start weeks → RED (2 tests); nil summed as zero → RED (2); December in the previous
+winter → RED; hardcoded Sat/Sun instead of the company calendar → first attempt INVALID (did not
+compile), redone → RED. All restored.

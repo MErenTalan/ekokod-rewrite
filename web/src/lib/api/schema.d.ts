@@ -1662,6 +1662,7 @@ export interface components {
             username?: null | string;
         };
         IntegrationCredentialCreateRequest: {
+            building_id?: components["schemas"]["UuidUUID"];
             extra?: {
                 [key: string]: string;
             };
@@ -1675,8 +1676,10 @@ export interface components {
             settings?: unknown;
             subtype: string;
             username?: null | string;
+            wiring_numbers?: string[];
         };
         IntegrationCredentialUpdateRequest: {
+            building_id?: components["schemas"]["UuidUUID"];
             extra?: {
                 [key: string]: string;
             };
@@ -1687,6 +1690,7 @@ export interface components {
             secret?: null | string;
             settings?: unknown;
             username?: null | string;
+            wiring_numbers?: string[];
         };
         IntegrationCredentials: {
             items: components["schemas"]["IntegrationCredential"][];

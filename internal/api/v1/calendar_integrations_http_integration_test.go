@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"strings"
@@ -16,7 +17,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/api/v1/dto"
+	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/seed"
+	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/admin"
 	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
 )
 
@@ -278,4 +281,42 @@ func TestIsolarCallbackRequiresBrowserBinding(t *testing.T) {
 	require.Contains(t, setCookie(t, res, "ekokod_oauth"), "Max-Age=0")
 	_, used = h.providers.exchanged.Load("c2")
 	require.True(t, used)
+}
+
+// R210: GridBox metering points are typed in, so the API takes wiring numbers
+// and a target building — and refuses both for providers that discover theirs.
+func TestGridboxWiringNumbersHTTP(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	ctx := t.Context()
+	_, err := admin.NewCatalogueRepository(h.pool).UpsertIntegrationDefinitions(ctx, []model.IntegrationDefinition{
+		{Provider: model.IntegrationProviderGridbox, Subtype: "default", Endpoints: json.RawMessage(`{}`)},
+		{Provider: model.IntegrationProviderOSOS, Subtype: "Baskent", Endpoints: json.RawMessage(`{}`)},
+	})
+	require.NoError(t, err)
+	ca := h.as(seed.E2ECompanyAdminEmail)
+
+	res := ca.do(http.MethodPost, "/integration-credentials", map[string]any{
+		"provider": "gridbox", "subtype": "default", "username": "gb", "secret": "pw",
+		"wiring_numbers": []string{"1001", "1002"}, "building_id": h.fx.BuildingA1.String(),
+	})
+	require.Equal(t, http.StatusCreated, res.status, string(res.body))
+
+	var list dto.Page[dto.Analyzer]
+	ca.do(http.MethodGet, "/analyzers?building_id="+h.fx.BuildingA1.String()+"&limit=100", nil).json(t, &list)
+	numbers := map[string]bool{}
+	for _, a := range list.Items {
+		numbers[a.InstallationNumber] = true
+	}
+	require.True(t, numbers["1001"] && numbers["1002"], "both wiring numbers became analyzers of A1")
+
+	// Another company's building is invisible, and a discovering provider takes neither field.
+	bad := ca.do(http.MethodPost, "/integration-credentials", map[string]any{
+		"provider": "osos", "subtype": "Baskent", "username": "o", "secret": "p", "wiring_numbers": []string{"1003"}})
+	require.Equal(t, http.StatusUnprocessableEntity, bad.status)
+	require.Equal(t, "validation_failed", bad.code(t))
+
+	foreign := ca.do(http.MethodPost, "/integration-credentials", map[string]any{
+		"provider": "osos", "subtype": "Baskent", "username": "o", "secret": "p", "building_id": h.fx.BuildingB1.String()})
+	require.Equal(t, http.StatusUnprocessableEntity, foreign.status)
 }

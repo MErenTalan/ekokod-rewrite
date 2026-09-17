@@ -12359,6 +12359,9 @@
       },
       "IntegrationCredentialCreateRequest": {
         "properties": {
+          "building_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
           "extra": {
             "additionalProperties": {
               "type": "string"
@@ -12414,6 +12417,12 @@
               "null",
               "string"
             ]
+          },
+          "wiring_numbers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           }
         },
         "required": [
@@ -12424,6 +12433,9 @@
       },
       "IntegrationCredentialUpdateRequest": {
         "properties": {
+          "building_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
           "extra": {
             "additionalProperties": {
               "type": "string"
@@ -12466,6 +12478,12 @@
               "null",
               "string"
             ]
+          },
+          "wiring_numbers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           }
         },
         "type": "object"

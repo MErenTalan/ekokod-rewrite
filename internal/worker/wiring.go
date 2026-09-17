@@ -326,6 +326,7 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 	credDeps := credentials.Deps{
 		Integrations: integrationRepo,
 		Analyzers:    analyzerRepo,
+		Buildings:    postgres.NewBuildingRepository(pool),
 		Verifiers:    verifiers,
 		ISolar:       isolarClient,
 		Enqueuer:     jobClient,
