@@ -3,11 +3,11 @@ import { NextIntlClientProvider } from 'next-intl';
 import { describe, expect, it } from 'vitest';
 
 import { HealthStatus } from './health-status';
-import messages from '../../messages/tr.json';
+import { messages } from '../../../messages';
 
 function renderWithIntl(ui: React.ReactNode) {
   return render(
-    <NextIntlClientProvider locale="tr" messages={messages}>
+    <NextIntlClientProvider locale="tr" messages={messages.tr}>
       {ui}
     </NextIntlClientProvider>,
   );
@@ -47,6 +47,6 @@ describe('HealthStatus', () => {
 
   it('renders an explicit unavailable state when the API cannot be reached', () => {
     renderWithIntl(<HealthStatus report={null} />);
-    expect(screen.getByText(messages.health.unreachable)).toBeInTheDocument();
+    expect(screen.getByText(messages.tr.health.unreachable)).toBeInTheDocument();
   });
 });

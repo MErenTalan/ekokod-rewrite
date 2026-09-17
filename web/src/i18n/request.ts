@@ -1,9 +1,10 @@
+import { cookies } from 'next/headers';
 import { getRequestConfig } from 'next-intl/server';
 
-export const locales = ['tr', 'en'] as const;
-export const defaultLocale = 'tr';
+import { messages } from '../../messages';
+import { LOCALE_COOKIE, resolveLocale } from './locale';
 
 export default getRequestConfig(async () => {
-  const locale = defaultLocale;
-  return { locale, messages: (await import(`../../messages/${locale}.json`)).default };
+  const locale = resolveLocale((await cookies()).get(LOCALE_COOKIE)?.value);
+  return { locale, messages: messages[locale], timeZone: 'Europe/Istanbul' };
 });

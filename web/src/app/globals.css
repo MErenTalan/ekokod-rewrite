@@ -1,1 +1,14 @@
 @import 'tailwindcss';
+@import '../styles/tokens.css';
+@layer base {
+  html { background: var(--color-background); color: var(--color-foreground); }
+  body { @apply type-body antialiased; min-height: 100dvh; }
+  :focus-visible { outline: 2px solid var(--color-ring); outline-offset: 2px; }
+  button:not(:disabled), [role='button']:not([aria-disabled='true']), a[href], summary, select, label[for],
+  [role='tab'], [role='menuitem'], [role='option'] { cursor: pointer; }
+  :disabled, [aria-disabled='true'] { cursor: not-allowed; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+  }
+}
