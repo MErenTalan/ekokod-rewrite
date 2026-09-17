@@ -30,7 +30,7 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = { render: () => <Example /> };
 export const Open: Story = {
-  tags: ['open'],
+  tags: ['open', 'modal-popup'],
   render: () => <Example />,
   play: async ({ canvasElement }) => {
     await userEvent.click(within(canvasElement).getByRole('button'));

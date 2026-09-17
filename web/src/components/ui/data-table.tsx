@@ -154,7 +154,7 @@ export function DataTable<T>({
                         <button
                           type="button"
                           onClick={header.column.getToggleSortingHandler()}
-                          className={cn('inline-flex items-center gap-1 rounded-sm hover:text-foreground pointer-coarse:min-h-11', numeric && 'flex-row-reverse')}
+                          className={cn('inline-flex items-center gap-1 rounded-sm hover:text-foreground pointer-coarse:min-h-11 pointer-coarse:min-w-11', numeric && 'flex-row-reverse')}
                         >
                           {label}
                           <SortIcon aria-hidden className="size-3.5" />

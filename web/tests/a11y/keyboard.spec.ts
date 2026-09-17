@@ -2,7 +2,7 @@ import { expect, type Page, test } from '@playwright/test';
 
 import { gotoStory, keyboardScope, loadStories, tabbables } from './helpers';
 
-type Focus = { kb: string | null; guard: boolean; inScope: boolean; outline: string; width: number; area: number; tag: string } | null;
+type Focus = { kb: string | null; guard: boolean; item: boolean; inScope: boolean; outline: string; width: number; area: number; tag: string } | null;
 
 const readFocus = (page: Page, scope: string): Promise<Focus> =>
   page.evaluate((scope) => {
@@ -12,7 +12,8 @@ const readFocus = (page: Page, scope: string): Promise<Focus> =>
     const r = el.getBoundingClientRect();
     return {
       kb: el.dataset.kb ?? null,
-      guard: el.hasAttribute('data-radix-focus-guard'),
+      guard: el.hasAttribute('data-radix-focus-guard') || (r.width <= 1 && r.height <= 1 && !el.textContent?.trim()),
+      item: el.matches('[role="option"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="gridcell"], [role="tab"], [role="radio"], td button'),
       inScope: [...document.querySelectorAll(scope)].some((root) => root.contains(el)),
       outline: s.outlineStyle,
       width: parseFloat(s.outlineWidth),
@@ -39,6 +40,12 @@ for (const story of loadStories()) {
       if (focus!.kb) reached.add(focus!.kb);
     };
     if (start?.inScope && start.kb) record(start);
+    // Menus and listboxes focus their container; arrow keys move focus to items, which must show the ring too.
+    if (open && start?.inScope && !start.kb && !start.item) {
+      await page.keyboard.press('ArrowDown');
+      const item = await readFocus(page, scope);
+      if (item?.item) record(item);
+    }
 
     // Forward from the initial focus, then (for non-trapping overlays) backward from it.
     for (const key of start?.kb ? ['Tab', 'Shift+Tab'] : ['Tab']) {
@@ -49,6 +56,8 @@ for (const story of loadStories()) {
         const focus = await readFocus(page, scope);
         if (focus?.guard) continue; // Radix focus guards are invisible hops at the document edges
         if (!focus || !focus.inScope || (focus.kb && seen.has(focus.kb))) break;
+        // A menu/listbox container keeping programmatic focus (Radix prevents Tab) ends the walk; items still need a ring.
+        if (!focus.kb && !focus.item) break;
         record(focus);
         if (focus.kb) seen.add(focus.kb);
       }
