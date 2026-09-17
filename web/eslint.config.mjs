@@ -4,7 +4,7 @@ const compat = new FlatCompat({ baseDirectory: import.meta.dirname });
 
 const config = [
   ...compat.extends('next/core-web-vitals', 'next/typescript'),
-  { ignores: ['.next/**', 'node_modules/**', 'storybook-static/**', 'playwright-report/**', 'test-results/**'] },
+  { ignores: ['.next/**', 'next-env.d.ts', 'node_modules/**', 'storybook-static/**', 'playwright-report/**', 'test-results/**'] },
 ];
 
 // Design-system guards (07 §2.4, §5, §9; plan D3, D4, D5, D10, D23).
