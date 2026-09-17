@@ -524,6 +524,11 @@ func NewIsolatedDB(t *testing.T) *pgxpool.Pool {
 	// own pool still holds a connection open against it.
 	t.Cleanup(func() { dropIsolatedDB(t, rootDSN, name) })
 
+	// Also here, not only in the template: an existing template (same migrations
+	// fingerprint) is reused as it was built, and a clone that kept a policy would
+	// race the scheduler again.
+	require.NoError(t, dropRefreshPolicies(ctx, withDatabase(rootDSN, name)), "removing refresh policies from the clone")
+
 	return NewPool(t, withDatabase(rootDSN, name))
 }
 
@@ -747,6 +752,10 @@ func ensureIsolatedTemplate(ctx context.Context, rootDSN, name string) error {
 		return fmt.Errorf("migrate the isolated-template build database: %w", err)
 	}
 
+	if err := dropRefreshPolicies(ctx, withDatabase(rootDSN, tempName)); err != nil {
+		return err
+	}
+
 	// Terminate whatever migrating may already have caused to spawn (e.g. a
 	// scheduler backend reacting to a policy the LAST migration added),
 	// THEN make the template non-connectable, THEN terminate once more to
@@ -774,6 +783,33 @@ func ensureIsolatedTemplate(ctx context.Context, rootDSN, name string) error {
 		return fmt.Errorf("rename the isolated-template build database into place: %w", err)
 	}
 	built = true
+	return nil
+}
+
+// dropRefreshPolicies deletes 00005's continuous-aggregate refresh policies in
+// the template every clone inherits. A policy job fires on the container's own
+// schedule, seconds after a clone appears, and materialises whatever window it
+// happens to catch: the same read then answers from a materialised bucket in one
+// run and from an R94-composed one in the next — and the two legitimately differ
+// by the boundary step. Tests that want a materialised bucket refresh it
+// themselves (`call refresh_continuous_aggregate(...)`), so removing the
+// scheduled jobs only removes the race, never a behaviour under test.
+func dropRefreshPolicies(ctx context.Context, dsn string) error {
+	conn, err := pgx.Connect(ctx, dsn)
+	if err != nil {
+		return fmt.Errorf("connect to the isolated-template build database: %w", err)
+	}
+	defer func() { _ = conn.Close(context.Background()) }()
+	const sql = `do $$
+declare job record;
+begin
+  for job in select job_id from timescaledb_information.jobs where proc_name = 'policy_refresh_continuous_aggregate' loop
+    perform delete_job(job.job_id);
+  end loop;
+end $$`
+	if _, err := conn.Exec(ctx, sql); err != nil {
+		return fmt.Errorf("remove continuous-aggregate refresh policies from the isolated template: %w", err)
+	}
 	return nil
 }
 

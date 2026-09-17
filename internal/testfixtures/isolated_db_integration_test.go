@@ -171,3 +171,15 @@ func TestNewIsolatedDBIsSafeUnderConcurrentCalls(t *testing.T) {
 		})
 	}
 }
+
+// Scheduled refresh policies make aggregate reads race the container's job
+// scheduler (a materialised bucket and an R94-composed one differ by the
+// boundary step), so no clone may carry one.
+func TestIsolatedDBHasNoRefreshPolicies(t *testing.T) {
+	t.Parallel()
+	pool := testfixtures.NewIsolatedDB(t)
+	var jobs int
+	require.NoError(t, pool.QueryRow(t.Context(),
+		`select count(*) from timescaledb_information.jobs where proc_name = 'policy_refresh_continuous_aggregate'`).Scan(&jobs))
+	require.Zero(t, jobs, "the isolated template must ship without continuous-aggregate refresh policies")
+}
