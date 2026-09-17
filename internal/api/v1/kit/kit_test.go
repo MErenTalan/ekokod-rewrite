@@ -31,7 +31,7 @@ type sampleRequest struct {
 	Name     string       `json:"name" validate:"required"`
 	Area     *dto.Decimal `json:"total_area_m2,omitempty"`
 	Children []child      `json:"children,omitempty" validate:"dive"`
-	kit.PageRequest
+	dto.PageRequest
 }
 
 type child struct {
@@ -119,7 +119,7 @@ func TestBindBadPathAndQueryValues(t *testing.T) {
 
 func TestPageCursorRoundTrip(t *testing.T) {
 	limit := int32(2)
-	page, size, err := kit.PageRequest{Limit: &limit}.Resolve(1000)
+	page, size, err := kit.ResolvePage(dto.PageRequest{Limit: &limit}, 1000)
 	require.NoError(t, err)
 	require.Equal(t, store.Page{Limit: 3, Offset: 0}, page)
 
@@ -127,7 +127,7 @@ func TestPageCursorRoundTrip(t *testing.T) {
 	require.Equal(t, []int{1, 2}, full.Items)
 	require.NotNil(t, full.NextCursor)
 
-	next, _, err := kit.PageRequest{Limit: &limit, Cursor: *full.NextCursor}.Resolve(1000)
+	next, _, err := kit.ResolvePage(dto.PageRequest{Limit: &limit, Cursor: *full.NextCursor}, 1000)
 	require.NoError(t, err)
 	require.Equal(t, int32(2), next.Offset)
 	last := kit.PageOf([]int{3}, next, size)
@@ -135,14 +135,14 @@ func TestPageCursorRoundTrip(t *testing.T) {
 	require.Equal(t, []int{}, kit.PageOf[int](nil, next, size).Items, "items is never null")
 
 	tooBig := int32(501)
-	_, _, err = kit.PageRequest{Limit: &tooBig}.Resolve(1000)
+	_, _, err = kit.ResolvePage(dto.PageRequest{Limit: &tooBig}, 1000)
 	requireCode(t, err, "invalid_limit")
 	capped := int32(300)
-	_, _, err = kit.PageRequest{Limit: &capped}.Resolve(200)
+	_, _, err = kit.ResolvePage(dto.PageRequest{Limit: &capped}, 200)
 	requireCode(t, err, "invalid_limit")
-	_, _, err = kit.PageRequest{Cursor: "zz"}.Resolve(1000)
+	_, _, err = kit.ResolvePage(dto.PageRequest{Cursor: "zz"}, 1000)
 	requireCode(t, err, "invalid_cursor")
-	def, size, err := kit.PageRequest{}.Resolve(1000)
+	def, size, err := kit.ResolvePage(dto.PageRequest{}, 1000)
 	require.NoError(t, err)
 	require.Equal(t, int32(50), size)
 	require.Equal(t, int32(51), def.Limit)

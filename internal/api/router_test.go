@@ -12,6 +12,7 @@ import (
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/api"
 	v1 "github.com/MErenTalan/ekokod-rewrite/internal/api/v1"
+	"github.com/MErenTalan/ekokod-rewrite/internal/api/v1/mw"
 	"github.com/MErenTalan/ekokod-rewrite/internal/buildinfo"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/health"
@@ -136,7 +137,7 @@ func TestCORSAllowsTheConfiguredOriginOnly(t *testing.T) {
 func TestAPIV1MountedWithErrorEnvelope(t *testing.T) {
 	router := api.NewRouter(api.Deps{
 		Cfg: testConfig(t), Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Build: buildinfo.Get(),
-		V1: v1.NewRouterForTable(v1.Table(), &v1.Handlers{}, v1.Middleware{}, nil),
+		V1: v1.NewRouterForTable(v1.Table(), &v1.Handlers{}, identityMiddleware(), nil),
 	})
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/nope", nil))
@@ -159,4 +160,14 @@ func TestAPIV1MountedWithErrorEnvelope(t *testing.T) {
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/openapi.json", nil))
 	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func identityMiddleware() v1.Middleware {
+	id := func(next http.Handler) http.Handler { return next }
+	return v1.Middleware{
+		Authn: id, PrincipalLimit: id, Scope: id,
+		AuthLimit:   func(string, bool) func(http.Handler) http.Handler { return id },
+		Idempotency: func(string) func(http.Handler) http.Handler { return id },
+		Audit:       func(mw.AuditInfo) func(http.Handler) http.Handler { return id },
+	}
 }
