@@ -10,7 +10,9 @@ export const pairs: Pair[] = [
   ['primary', 'surface', TEXT], ['primary', 'primary-subtle', TEXT], ['foreground', 'primary-subtle', TEXT],
   ['on-danger', 'danger', TEXT],
   ...['success', 'warning', 'danger', 'info'].flatMap((s) => [
-    [s, `${s}-subtle`, TEXT], [s, 'surface', TEXT], [s, 'background', TEXT], ['foreground', `${s}-subtle`, TEXT]] as const),
+    [s, `${s}-subtle`, TEXT], [s, 'surface', TEXT], [s, 'surface-raised', TEXT], [s, 'background', TEXT], ['foreground', `${s}-subtle`, TEXT]] as const),
+  // Status text inside cards and popovers, and brand text there (MetricCard delta, FileList, badges).
+  ['primary', 'surface-raised', TEXT],
   ...['ring', 'border-control', 'brand', 'consumption', 'generation', 'reactive-inductive', 'reactive-capacitive',
     'cost', 'revenue', 'forecast'].flatMap((g) => ['background', 'surface', 'surface-raised'].map((b) => [g, b, UI] as const)),
 ];

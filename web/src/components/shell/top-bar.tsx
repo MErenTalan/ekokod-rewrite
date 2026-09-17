@@ -25,6 +25,7 @@ export type TopBarProps = {
 export function TopBar({ user, notificationCount, sidebarOpen, onToggleSidebar, onOpenCustomizer }: TopBarProps) {
   const t = useTranslations('shell');
   const common = useTranslations('common');
+  const app = useTranslations('app');
   const { prefs, update } = useUiPreferences();
   const [query, setQuery] = useState('');
   const collapsed = prefs.sidebar === 'collapsed';
@@ -42,7 +43,7 @@ export function TopBar({ user, notificationCount, sidebarOpen, onToggleSidebar, 
       ) : null}
       <Link href="/dashboard" aria-label={t('home')} className="flex items-center gap-1.5 rounded-md px-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11">
         <Leaf aria-hidden className="size-6 stroke-brand" />
-        <span className="hidden font-heading text-lg font-semibold text-foreground sm:inline">ekokod</span>
+        <span className="hidden font-heading text-lg font-semibold text-foreground sm:inline">{app('name')}</span>
       </Link>
       <div className="ms-auto hidden w-72 md:block">
         <SearchInput label={t('search')} labelVisibility="hidden" placeholder={t('searchPlaceholder')} value={query} onValueChange={setQuery} />
