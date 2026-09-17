@@ -1,0 +1,62 @@
+{
+  "title": "Yük Profili Analizi",
+  "subtitle": "Saatlik tüketim alışkanlıklarınızı gün tipine ve mevsime göre inceleyin.",
+  "tabs": {
+    "daily": "Günlük",
+    "seasonal": "Mevsimsel",
+    "compare": "Karşılaştırma",
+    "details": "Detaylar"
+  },
+  "dayType": {
+    "weekday": "Hafta içi",
+    "weekend": "Hafta sonu"
+  },
+  "season": {
+    "winter": "Kış",
+    "spring": "İlkbahar",
+    "summer": "Yaz",
+    "autumn": "Sonbahar"
+  },
+  "note": {
+    "weekday": "Bu grafik, seçilen tarih aralığındaki tüm hafta içi günleri için hesaplanan ortalama saatlik elektrik tüketimini gösterir.",
+    "weekend": "Bu grafik, seçilen tarih aralığındaki tüm hafta sonu günleri için hesaplanan ortalama saatlik elektrik tüketimini gösterir.",
+    "seasonal": "Bu grafik, {season} mevsimindeki {dayType} günlerine ait ortalama saatlik elektrik tüketimini gösterir."
+  },
+  "chart": {
+    "hour": "Saat",
+    "description": "Ortalama 24 saatlik yük eğrisi.",
+    "empty": "Bu profil için veri yok",
+    "emptyHint": "Tarih aralığını genişletin.",
+    "days": "{count} gün"
+  },
+  "compare": {
+    "select": "Karşılaştırılacak profiller",
+    "max": "En fazla 6 profil seçebilirsiniz",
+    "title": "Profil karşılaştırması",
+    "description": "Seçilen profillerin aynı eksende karşılaştırması.",
+    "search": "Profil ara",
+    "empty": "Profil bulunamadı"
+  },
+  "details": {
+    "caption": "Profil istatistikleri",
+    "profile": "Profil",
+    "max": "Maksimum",
+    "min": "Minimum",
+    "hourOfMax": "Maksimum saati",
+    "mean": "Ortalama",
+    "stddev": "Standart sapma",
+    "range": "Aralık (maks-min)",
+    "loadFactor": "Yük faktörü",
+    "export": "Saatlik matrisi dışa aktar",
+    "empty": "İstatistik yok",
+    "emptyHint": "Önce bir analizör ve tarih aralığı seçin."
+  },
+  "config": {
+    "weekendDays": "Hafta sonu günleri: {days} ({source}) · {vacations} tatil dönemi",
+    "sourceCompany": "şirket takvimi",
+    "sourceDefault": "varsayılan",
+    "calendarLink": "Takvimi düzenle"
+  },
+  "selectAnalyzer": "Yük profili için bir analizör seçin",
+  "selectAnalyzerHint": "Bina seçtikten sonra analizörü seçin; yük profili analizör bazında hesaplanır."
+}

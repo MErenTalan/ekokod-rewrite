@@ -1,0 +1,62 @@
+{
+  "title": "Load profile analysis",
+  "subtitle": "See how your hourly consumption behaves by day type and by season.",
+  "tabs": {
+    "daily": "Daily",
+    "seasonal": "Seasonal",
+    "compare": "Comparison",
+    "details": "Details"
+  },
+  "dayType": {
+    "weekday": "Weekday",
+    "weekend": "Weekend"
+  },
+  "season": {
+    "winter": "Winter",
+    "spring": "Spring",
+    "summer": "Summer",
+    "autumn": "Autumn"
+  },
+  "note": {
+    "weekday": "This chart shows the average hourly consumption of every weekday in the selected range.",
+    "weekend": "This chart shows the average hourly consumption of every weekend day in the selected range.",
+    "seasonal": "This chart shows the average hourly consumption of {dayType} days in {season}."
+  },
+  "chart": {
+    "hour": "Hour",
+    "description": "The average 24-hour load curve.",
+    "empty": "No data for this profile",
+    "emptyHint": "Widen the date range.",
+    "days": "{count} days"
+  },
+  "compare": {
+    "select": "Profiles to compare",
+    "max": "You can compare at most 6 profiles",
+    "title": "Profile comparison",
+    "description": "The selected profiles on one axis.",
+    "search": "Search a profile",
+    "empty": "No profile found"
+  },
+  "details": {
+    "caption": "Profile statistics",
+    "profile": "Profile",
+    "max": "Maximum",
+    "min": "Minimum",
+    "hourOfMax": "Hour of maximum",
+    "mean": "Average",
+    "stddev": "Standard deviation",
+    "range": "Range (max-min)",
+    "loadFactor": "Load factor",
+    "export": "Export the hourly matrix",
+    "empty": "No statistics",
+    "emptyHint": "Choose an analyzer and a date range first."
+  },
+  "config": {
+    "weekendDays": "Weekend days: {days} ({source}) · {vacations} vacation periods",
+    "sourceCompany": "company calendar",
+    "sourceDefault": "default",
+    "calendarLink": "Edit the calendar"
+  },
+  "selectAnalyzer": "Choose an analyzer for the load profile",
+  "selectAnalyzerHint": "Pick a building, then its analyzer: the load profile is computed per analyzer."
+}
