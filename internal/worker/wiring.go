@@ -56,6 +56,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/crypto"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/lock"
+	"github.com/MErenTalan/ekokod-rewrite/internal/seed"
 	billingsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/billing"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/consumption"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
@@ -461,6 +462,7 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 			Log:                log,
 			Ingestion:          ingestSvc,
 			AnalyzerRefresh:    ingestSvc,
+			Demo:               seed.DemoJob{Pool: pool, Clock: clock.System()},
 			Backfill:           backfiller,
 			Prices:             syncer,
 			ConsumptionRefresh: consumptionRefresher,

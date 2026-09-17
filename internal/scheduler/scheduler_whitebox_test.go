@@ -89,7 +89,7 @@ func TestSchedulerEntriesIncludeIngestionAndPrices(t *testing.T) {
 
 	entries, err := s.entries()
 	require.NoError(t, err)
-	require.Len(t, entries, 4)
+	require.Len(t, entries, 5)
 
 	require.Equal(t, "@every 1h", entries[0].Cron)
 	require.Equal(t, job.TypeNoop, entries[0].Task.Type())
