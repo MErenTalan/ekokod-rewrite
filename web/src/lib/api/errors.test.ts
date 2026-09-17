@@ -20,6 +20,9 @@ describe('safeNext', () => {
     ['/auth/login', '/ekorm'],
     ['/ekormevil', '/ekorm'],
     ['/ekorm/\\evil.com', '/ekorm'],
+    ['/ekorm/../auth/login', '/ekorm'],
+    ['/ekorm/./x', '/ekorm'],
+    ['/ekorm/a..b', '/ekorm/a..b'],
   ])('%s → %s', (input, want) => {
     expect(safeNext(input)).toBe(want);
   });
