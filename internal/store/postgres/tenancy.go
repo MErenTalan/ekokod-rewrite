@@ -267,12 +267,12 @@ func (r *UserRepository) Create(ctx context.Context, s store.Scope, u model.User
 		id = uuid.New()
 	}
 	row, err := r.q.UserCreate(ctx, sqlcgen.UserCreateParams{
-		ID:           id,
-		CompanyID:    s.CompanyID,
-		Name:         u.Name,
-		Email:        u.Email,
-		Phone:        u.Phone,
-		PasswordHash: u.PasswordHash,
+		ID:            id,
+		CompanyID:     s.CompanyID,
+		Name:          u.Name,
+		Email:         u.Email,
+		Phone:         u.Phone,
+		PasswordHash:  u.PasswordHash,
 		Role:          sqlcgen.UserRole(u.Role),
 		IsActive:      u.IsActive,
 		UiPreferences: u.UIPreferences,
@@ -294,11 +294,11 @@ func (r *UserRepository) Update(ctx context.Context, s store.Scope, u model.User
 		return model.User{}, store.ErrNotFound
 	}
 	row, err := r.q.UserUpdate(ctx, sqlcgen.UserUpdateParams{
-		ID:        u.ID,
-		CompanyID: s.CompanyID,
-		Name:      u.Name,
-		Email:     u.Email,
-		Phone:     u.Phone,
+		ID:            u.ID,
+		CompanyID:     s.CompanyID,
+		Name:          u.Name,
+		Email:         u.Email,
+		Phone:         u.Phone,
 		Role:          sqlcgen.UserRole(u.Role),
 		IsActive:      u.IsActive,
 		UiPreferences: u.UIPreferences,
