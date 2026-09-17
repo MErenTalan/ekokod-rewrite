@@ -1,1 +1,16 @@
-{}
+{
+  "showTable": "Veri tablosunu göster",
+  "hideTable": "Veri tablosunu gizle",
+  "downsampled": "{shown} / {total} nokta gösteriliyor",
+  "tooManySeries": "Bu grafik en fazla 6 seri gösterebilir; seçimi daraltın veya tablo görünümünü kullanın.",
+  "noData": "Veri yok",
+  "sparklineSummary": "İlk {first}, son {last}, en düşük {min}, en yüksek {max}",
+  "forecastBand": "Tahmin aralığı (p10–p90)",
+  "target": "Hedef",
+  "legend": "Açıklama",
+  "valueAt": "{x}: {value}",
+  "seriesWithUnit": "{label} ({unit})",
+  "value": "Değer",
+  "bucket": "{from} – {to}",
+  "threshold": "Eşik"
+}
