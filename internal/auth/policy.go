@@ -45,7 +45,7 @@ func CheckPolicy(h Hasher, in PolicyInput) []string {
 	if n > maxPasswordRunes {
 		out = append(out, PolicyTooLong)
 	}
-	if !complex(pw) {
+	if !meetsComplexity(pw) {
 		out = append(out, PolicyComplexity)
 	}
 	if hasRun(pw, 4) {
@@ -70,7 +70,7 @@ func CheckPolicy(h Hasher, in PolicyInput) []string {
 	return out
 }
 
-func complex(pw string) bool {
+func meetsComplexity(pw string) bool {
 	var lower, upper, digit, special bool
 	for _, r := range pw {
 		switch {
