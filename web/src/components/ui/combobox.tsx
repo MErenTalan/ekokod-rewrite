@@ -15,6 +15,7 @@ export type ComboboxProps = FieldProps & {
   onValueChange: (value: string | null) => void;
   searchPlaceholder: string;
   emptyText: string;
+  labelVisibility?: 'visible' | 'hidden';
 };
 
 /** Case-folds Turkish text so `istanbul`, `ISTANBUL` and `ıstanbul` all match `İstanbul` (plan I-11). */
@@ -34,7 +35,7 @@ export const itemClasses =
 export const searchClasses =
   'h-9 w-full border-b border-border bg-transparent px-3 text-foreground type-body placeholder:text-foreground-subtle pointer-coarse:min-h-11';
 
-export function Combobox({ label, description, error, required, id, disabled, options, value, onValueChange, searchPlaceholder, emptyText }: ComboboxProps) {
+export function Combobox({ label, description, error, required, id, disabled, options, value, onValueChange, searchPlaceholder, emptyText, labelVisibility }: ComboboxProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const listId = useId();
@@ -44,7 +45,7 @@ export function Combobox({ label, description, error, required, id, disabled, op
     if (!next) setQuery('');
   };
   return (
-    <Field label={label} description={description} error={error} required={required} id={id} disabled={disabled}>
+    <Field label={label} description={description} error={error} required={required} id={id} disabled={disabled} labelVisibility={labelVisibility}>
       {({ controlId, describedBy, invalid }) => (
         <Popover
           open={open}

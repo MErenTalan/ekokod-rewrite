@@ -20,6 +20,7 @@
     "messages": "Messages",
     "ai": "AI",
     "reports": "Reports",
+    "calendar": "Calendar",
     "settings": "Settings",
     "carbonFootprint": "Carbon Footprint",
     "iso50001": "ISO 50001 Module",
@@ -64,11 +65,27 @@
     "label": "User menu: {name}",
     "profile": "Profile",
     "displaySettings": "Display settings",
-    "logout": "Logout"
+    "logout": "Logout",
+    "logoutFailed": "Could not sign out. Please try again."
   },
   "filters": "Filters",
   "filtersCount": "Filters ({count})",
   "applyFilters": "Apply Filters",
   "toggleSidebar": "Toggle menu",
-  "collapseSidebar": "Collapse or expand sidebar"
+  "collapseSidebar": "Collapse or expand sidebar",
+  "roles": {
+    "admin": "Administrator",
+    "companyAdmin": "Company administrator",
+    "companyReadonlyAdmin": "Company read-only administrator",
+    "buildingAdmin": "Building administrator",
+    "buildingReadonlyAdmin": "Building read-only administrator",
+    "demo": "Demo user"
+  },
+  "companySwitcher": {
+    "label": "Company",
+    "placeholder": "Select a company",
+    "own": "My company ({name})",
+    "search": "Search companies",
+    "empty": "No company found"
+  }
 }

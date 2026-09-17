@@ -5,7 +5,7 @@ import { renderWithProviders } from '@/test/render';
 
 import { AppShell } from './app-shell';
 
-const user = { name: 'Ayşe Yılmaz', email: 'ayse@ornek.com.tr', roleLabel: 'Şirket yöneticisi' };
+const user = { name: 'Ayşe Yılmaz', email: 'ayse@ornek.com.tr', roleLabel: 'Şirket Yöneticisi' };
 
 describe('AppShell', () => {
   it('skip link moves focus to main', async () => {

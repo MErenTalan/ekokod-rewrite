@@ -1,22 +1,60 @@
 import { describe, expect, it } from 'vitest';
 
-import { findTrail, isActive, navigation } from './nav-config';
+import fixture from '@/lib/session/permissions.fixture.json';
+
+import { findTrail, isActive, isGroup, navFor, navigation, type NavEntry } from './nav-config';
+
+const leafIds = (entries: NavEntry[]) => entries.flatMap((e) => (isGroup(e) ? e.children : [e])).map((l) => l.id);
+const ALL = leafIds(navigation);
+const WITHOUT_RESTRICTED = ALL.filter((id) => id !== 'solarPlants' && id !== 'financial');
 
 describe('nav config', () => {
   it('finds the group and leaf for a route and its sub-routes', () => {
-    expect(findTrail('/alarms/ai')?.leaf.id).toBe('alarmsAi');
-    expect(findTrail('/alarms/ai')?.group?.id).toBe('alarms');
-    expect(findTrail('/bills/2026-08')?.leaf.id).toBe('bills');
-    expect(findTrail('/reports')?.group).toBeUndefined();
-    expect(findTrail('/unknown')).toBeNull();
+    expect(findTrail('/ekorm/alarms/ai')?.leaf.id).toBe('alarmsAi');
+    expect(findTrail('/ekorm/alarms/ai')?.group?.id).toBe('alarms');
+    expect(findTrail('/ekorm/bills/2026-08')?.leaf.id).toBe('bills');
+    expect(findTrail('/ekorm/reports')?.group).toBeUndefined();
+    expect(findTrail('/ekorm')?.leaf.id).toBe('dashboard');
+    expect(findTrail('/ekorm/unknown')).toBeNull();
   });
 
   it('does not treat a shared prefix as active', () => {
-    expect(isActive('/billsx', '/bills')).toBe(false);
+    expect(isActive('/ekorm/billsx', '/ekorm/bills')).toBe(false);
+  });
+
+  it('every href lives under /ekorm and Calendar follows Reports (R167)', () => {
+    const leaves = navigation.flatMap((e) => (isGroup(e) ? e.children : [e]));
+    expect(leaves.every((l) => l.href === '/ekorm' || l.href.startsWith('/ekorm/'))).toBe(true);
+    expect(navigation.map((e) => e.id).slice(4, 7)).toEqual(['reports', 'calendar', 'settings']);
   });
 
   it('disabled entries are exactly those 07 §7 marks', () => {
     const disabled = navigation.flatMap((e) => ('children' in e ? e.children : [e])).filter((l) => l.disabled).map((l) => l.id);
     expect(disabled).toEqual(['water', 'gas', 'evDrivers', 'alarmsAi', 'savingActions']);
+  });
+});
+
+// The fixture is auth.PermissionsFor per role (Go TestPermissionsFixtureMatchesTable keeps it exact).
+describe('navFor', () => {
+  it.each([
+    ['admin', ALL],
+    ['company_admin', ALL],
+    ['company_readonly_admin', ALL],
+    ['building_admin', WITHOUT_RESTRICTED],
+    ['building_readonly_admin', WITHOUT_RESTRICTED],
+    ['demo', WITHOUT_RESTRICTED],
+  ] as const)('%s sees exactly its navigation', (role, want) => {
+    expect(leafIds(navFor(fixture[role]))).toEqual(want);
+  });
+
+  it('keeps disabled placeholders visible for everyone (01 §5)', () => {
+    expect(leafIds(navFor(fixture.demo))).toContain('water');
+  });
+
+  it('drops a group left empty and shows nothing without nav.core', () => {
+    expect(navFor([])).toEqual([]);
+    const onlySolar = navFor(['nav.solar_plants']);
+    expect(onlySolar.map((e) => e.id)).toEqual(['dataAnalysis']);
+    expect(leafIds(onlySolar)).toEqual(['solarPlants']);
   });
 });

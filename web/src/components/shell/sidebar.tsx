@@ -10,9 +10,9 @@ import { cn } from '@/lib/cn';
 
 import { DropdownMenu } from '../ui/dropdown-menu';
 import { Tooltip } from '../ui/tooltip';
-import { findTrail, isGroup, navigation, type NavGroup, type NavLeaf } from './nav-config';
+import { findTrail, isGroup, navigation, type NavEntry, type NavGroup, type NavLeaf } from './nav-config';
 
-export type SidebarProps = { collapsed: boolean; onNavigate?: () => void };
+export type SidebarProps = { collapsed: boolean; onNavigate?: () => void; entries?: NavEntry[] };
 
 const row =
   'relative flex h-9 w-full items-center gap-3 rounded-md px-3 text-start type-body transition-colors duration-(--duration-hover) pointer-coarse:min-h-11';
@@ -124,12 +124,12 @@ function Group({ group, collapsed, onNavigate }: { group: NavGroup; collapsed: b
   );
 }
 
-export function Sidebar({ collapsed, onNavigate }: SidebarProps) {
+export function Sidebar({ collapsed, onNavigate, entries = navigation }: SidebarProps) {
   const t = useTranslations('shell');
   return (
     <nav aria-label={t('nav.label')} className={cn('flex flex-col p-2', collapsed ? 'w-16' : 'w-64')}>
       <ul className="flex flex-col gap-0.5">
-        {navigation.map((entry) => (
+        {entries.map((entry) => (
           <li key={entry.id}>
             {isGroup(entry) ? <Group group={entry} collapsed={collapsed} onNavigate={onNavigate} /> : <Leaf leaf={entry} collapsed={collapsed} onNavigate={onNavigate} />}
           </li>

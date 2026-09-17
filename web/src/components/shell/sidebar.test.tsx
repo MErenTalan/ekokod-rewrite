@@ -21,6 +21,7 @@ describe('Sidebar', () => {
       'Faturalar ve Tarifeler',
       'Alarmlar',
       'Raporlar',
+      'Takvim',
       'Ayarlar',
       'Karbon Ayak İzi',
       'ISO 50001 Modülü',
@@ -30,7 +31,7 @@ describe('Sidebar', () => {
   });
 
   it('disabled entries are visible, not links, and explain why', async () => {
-    setMockPathname('/consumption');
+    setMockPathname('/ekorm/consumption');
     const { getByRole, findByRole, user } = renderWithProviders(<Sidebar collapsed={false} />);
     await user.click(getByRole('button', { name: 'Alarmlar' }));
     for (const name of ['Su', 'Doğal Gaz', 'EV Sürücüleri', 'Yapay Zeka', 'Tasarruf Önerileri']) {
@@ -43,7 +44,7 @@ describe('Sidebar', () => {
   });
 
   it('active route is marked', () => {
-    setMockPathname('/load-profile');
+    setMockPathname('/ekorm/load-profile');
     const { getByRole } = renderWithProviders(<Sidebar collapsed={false} />);
     expect(getByRole('link', { name: 'Yük Profili' })).toHaveAttribute('aria-current', 'page');
     expect(getByRole('button', { name: 'Veri Analizi' })).toHaveAttribute('aria-expanded', 'true');
@@ -51,10 +52,10 @@ describe('Sidebar', () => {
   });
 
   it('only the most specific entry is active', async () => {
-    setMockPathname('/alarms/ai');
+    setMockPathname('/ekorm/alarms/ai');
     const { queryAllByRole } = renderWithProviders(<Sidebar collapsed={false} />);
     expect(queryAllByRole('link', { current: 'page' })).toHaveLength(0);
-    setMockPathname('/alarms');
+    setMockPathname('/ekorm/alarms');
     const second = renderWithProviders(<Sidebar collapsed={false} />);
     expect(second.getAllByRole('link', { current: 'page' }).map((l) => l.textContent)).toEqual(['Manuel']);
   });
@@ -76,7 +77,7 @@ describe('Sidebar', () => {
   });
 
   it('has no axe violations', async () => {
-    setMockPathname('/bills');
+    setMockPathname('/ekorm/bills');
     const { container } = renderWithProviders(<Sidebar collapsed={false} />);
     await expectNoAxeViolations(container);
   });

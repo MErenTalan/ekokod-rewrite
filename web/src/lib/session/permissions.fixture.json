@@ -1,0 +1,61 @@
+{
+  "admin": [
+    "admin.companies",
+    "analyzers.refresh",
+    "bills.compute",
+    "calendar.edit",
+    "integrations.credentials",
+    "nav.core",
+    "nav.financial",
+    "nav.solar_plants",
+    "settings.analyzers",
+    "settings.buildings",
+    "settings.company",
+    "settings.company.edit",
+    "settings.integrations",
+    "settings.plants",
+    "settings.smtp",
+    "settings.users",
+    "write"
+  ],
+  "company_admin": [
+    "analyzers.refresh",
+    "bills.compute",
+    "calendar.edit",
+    "integrations.credentials",
+    "nav.core",
+    "nav.financial",
+    "nav.solar_plants",
+    "settings.analyzers",
+    "settings.buildings",
+    "settings.company",
+    "settings.company.edit",
+    "settings.plants",
+    "settings.users",
+    "write"
+  ],
+  "company_readonly_admin": [
+    "nav.core",
+    "nav.financial",
+    "nav.solar_plants",
+    "settings.analyzers",
+    "settings.buildings",
+    "settings.company",
+    "settings.plants",
+    "settings.users"
+  ],
+  "building_admin": [
+    "analyzers.refresh",
+    "bills.compute",
+    "nav.core",
+    "settings.analyzers",
+    "write"
+  ],
+  "building_readonly_admin": [
+    "nav.core",
+    "settings.analyzers"
+  ],
+  "demo": [
+    "nav.core"
+  ]
+}
