@@ -1,0 +1,104 @@
+'use client';
+
+import { useTranslations } from 'next-intl';
+import { useState } from 'react';
+
+import { Button } from '@/components/ui/button';
+import { Dialog } from '@/components/ui/dialog';
+import { useApiMutation } from '@/lib/api/mutation';
+import { $api } from '@/lib/api/query';
+import type { Plant } from '@/lib/api/types';
+import { useScopeParams } from '@/lib/selection/selection-store';
+import { useSession } from '@/lib/session/session-provider';
+
+import { PlantFormView, emptyPlant, monthlyTargetsComplete, plantDraft, toPlantRequest, type PlantDraft } from './plant-form';
+import { PlantsTabView } from './plants-tab';
+
+/** The Solar Plants tab's data (01 §7.15); the iSolar link modal is F9's. */
+export function PlantsPanel() {
+  const t = useTranslations('settings.plants');
+  const settings = useTranslations('settings');
+  const common = useTranslations('common');
+  const { can } = useSession();
+  const scope = useScopeParams();
+  const [draft, setDraft] = useState<PlantDraft | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Plant | null>(null);
+  const canEdit = can('write') && can('settings.plants');
+
+  const plants = $api.useQuery('get', '/api/v1/power-plants', { params: { query: { ...scope, limit: 500 } } });
+  const detail = $api.useQuery(
+    'get',
+    '/api/v1/power-plants/{id}',
+    { params: { path: { id: draft?.id ?? '' }, query: scope } },
+    { enabled: Boolean(draft?.id) },
+  );
+  const create = useApiMutation('post', '/api/v1/power-plants', { success: t('saved'), invalidate: ['/api/v1/power-plants'] });
+  const update = useApiMutation('patch', '/api/v1/power-plants/{id}', { success: t('saved'), invalidate: ['/api/v1/power-plants'] });
+  const remove = useApiMutation('delete', '/api/v1/power-plants/{id}', { success: t('deleted'), invalidate: ['/api/v1/power-plants'] });
+
+  const value = detail.data && detail.data.id === draft?.id ? plantDraft(detail.data) : draft;
+
+  return (
+    <>
+      <PlantsTabView
+        plants={plants.data?.items ?? []}
+        canEdit={canEdit}
+        loading={plants.isLoading}
+        onAdd={() => setDraft(emptyPlant())}
+        onEdit={(plant) => setDraft({ ...emptyPlant(), id: plant.id, name: plant.name })}
+        onDelete={setPendingDelete}
+      />
+
+      <Dialog
+        open={draft !== null}
+        onOpenChange={(open) => !open && setDraft(null)}
+        title={draft?.id ? t('edit') : t('add')}
+        size="lg"
+        footer={
+          <Button
+            loading={create.isPending || update.isPending}
+            disabled={!value || !monthlyTargetsComplete(value)}
+            onClick={() => {
+              if (!value) return;
+              const body = toPlantRequest(value);
+              if (value.id) update.mutate({ params: { path: { id: value.id }, query: scope }, body });
+              else create.mutate({ params: { query: scope }, body });
+              setDraft(null);
+            }}
+          >
+            {common('save')}
+          </Button>
+        }
+      >
+        {value ? (
+          <PlantFormView
+            key={detail.data?.id ?? draft?.id ?? 'new'}
+            value={value}
+            onChange={setDraft}
+            devices={detail.data?.devices ?? []}
+            fieldErrors={{ ...create.fieldErrors, ...update.fieldErrors }}
+          />
+        ) : null}
+      </Dialog>
+
+      <Dialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+        title={settings('confirmDelete')}
+        footer={
+          <Button
+            variant="danger"
+            onClick={() => {
+              if (pendingDelete) remove.mutate({ params: { path: { id: pendingDelete.id }, query: scope } });
+              setPendingDelete(null);
+            }}
+          >
+            {settings('deleteAction')}
+          </Button>
+        }
+      >
+        {pendingDelete ? <p>{t('deleteConfirm', { name: pendingDelete.name })}</p> : null}
+      </Dialog>
+    </>
+  );
+}
