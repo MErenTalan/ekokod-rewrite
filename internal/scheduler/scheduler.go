@@ -66,11 +66,16 @@ func (s *Scheduler) entries() ([]Entry, error) {
 	if err != nil {
 		return nil, err
 	}
+	demoExtend, err := job.NewDemoExtendTask(retryOpts)
+	if err != nil {
+		return nil, err
+	}
 	return []Entry{
 		{Cron: "@every 1h", Task: noop},
 		{Cron: s.cfg.Schedule.Ingestion, Task: syncDispatch},
 		{Cron: s.cfg.Schedule.EPIAS, Task: syncPrices},
 		{Cron: s.cfg.Schedule.Billing, Task: billingDispatch},
+		{Cron: s.cfg.Schedule.Demo, Task: demoExtend},
 	}, nil
 }
 

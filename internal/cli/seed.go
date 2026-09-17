@@ -85,7 +85,7 @@ func newSeedCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&yes, "yes", false, "confirm seeding the production database")
-	cmd.AddCommand(newSeedE2ECmd())
+	cmd.AddCommand(newSeedE2ECmd(), newSeedDemoCmd())
 	return cmd
 }
 
@@ -169,4 +169,34 @@ func dbURLDisplay(cfg *config.Config) string {
 		}
 	}
 	return "(unknown)"
+}
+
+// demoPasswordEnv is the demo user's password, needed only when the demo
+// company is created (R138).
+const demoPasswordEnv = "EKOKOD_DEMO_PASSWORD"
+
+func newSeedDemoCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "demo",
+		Short: "Create the synthetic demo company or extend its readings to now",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			cfg, err := config.FromEnv()
+			if err != nil {
+				return err
+			}
+			ctx := cmd.Context()
+			pool, err := postgres.NewPool(ctx, cfg.DB, newCommandLogger(cfg, os.Stderr))
+			if err != nil {
+				return err
+			}
+			defer pool.Close()
+			res, err := seed.Demo(ctx, pool, auth.Hasher{Pepper: cfg.Security.PasswordPepper, Cost: cfg.Security.BcryptCost},
+				os.Getenv(demoPasswordEnv), time.Now())
+			if err != nil {
+				return fmt.Errorf("seed demo: %w", err)
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "demo company ready (created=%t, readings added=%d)\n", res.Created, res.Readings)
+			return err
+		},
+	}
 }

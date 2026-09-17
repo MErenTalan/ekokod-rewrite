@@ -50,6 +50,7 @@ type Handlers struct {
 	Prices             PriceSyncer
 	ConsumptionRefresh Refresher
 	AnalyzerRefresh    AnalyzerRefresher
+	Demo               DemoExtender
 
 	BillingDispatch BillingDispatcher
 	BillingGenerate BillingGenerator
@@ -71,6 +72,9 @@ func Register(mux *asynq.ServeMux, h *Handlers) {
 		mux.HandleFunc(TypeIntegrationSyncDispatch, h.integHandleSyncDispatch)
 		mux.HandleFunc(TypeIntegrationSyncAnalyzers, h.integHandleSyncAnalyzers)
 		mux.HandleFunc(TypeIntegrationFetchReadings, h.integHandleFetchReadings)
+	}
+	if h.Demo != nil {
+		mux.HandleFunc(TypeDemoExtend, h.handleDemoExtend)
 	}
 	if h.AnalyzerRefresh != nil {
 		mux.HandleFunc(TypeIntegrationRefreshAnalyzer, h.handleRefreshAnalyzer)
