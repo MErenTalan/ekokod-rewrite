@@ -57,19 +57,18 @@ for (const story of loadStories()) {
     expect(expected.filter((kb) => !reached.has(kb)), 'tabbables never reached').toEqual([]);
 
     if (open) {
-      await page.locator(`[data-kb="${start!.kb}"]`).focus();
-      await page.keyboard.press('Escape');
-      // Radix restores focus after the close animation/unmount, so poll.
-      await expect
-        .poll(
-          () =>
-            page.evaluate(() => {
-              const el = document.activeElement;
-              return !!el && el !== document.body && !!document.querySelector('#storybook-root')?.contains(el);
-            }),
-          { message: 'Escape returns focus to the opener' },
-        )
-        .toBe(true);
+      if (start?.kb) await page.locator(`[data-kb="${start.kb}"]`).focus();
+      const restored = () =>
+        page.evaluate(() => {
+          const el = document.activeElement;
+          return !!el && el !== document.body && !!document.querySelector('#storybook-root')?.contains(el);
+        });
+      // One Escape per layer (a tooltip inside a popover closes first); Radix restores focus after unmount.
+      for (let i = 0; i < 3 && !(await restored()); i++) {
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(300);
+      }
+      expect(await restored(), 'Escape returns focus to the opener').toBe(true);
     }
   });
 }

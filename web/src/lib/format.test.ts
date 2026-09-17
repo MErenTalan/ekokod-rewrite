@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatCurrency, formatDate, formatMonth, formatNumber, formatQuantity, unitSymbol } from './format';
+import { formatBytes, formatCurrency, formatDate, formatMonth, formatNumber, formatQuantity, unitSymbol } from './format';
 
 describe('format', () => {
   it('formats with Turkish separators', () => {
@@ -42,5 +42,11 @@ describe('format', () => {
     expect(formatMonth('2026-09', 'tr')).toBe('Eylül 2026');
     // 22:30 UTC on the 16th is already the 17th in Istanbul (UTC+3).
     expect(formatDate('2026-09-16T22:30:00Z', 'tr')).toBe('17 Eyl 2026');
+  });
+
+  it('file sizes', () => {
+    expect(formatBytes(512)).toBe('512 B');
+    expect(formatBytes(1_500_000)).toBe('1,5 MB');
+    expect(formatBytes(1_000_000)).toBe('1 MB');
   });
 });

@@ -66,3 +66,15 @@ export function formatMonth(iso: string, locale: Locale): string {
     timeZone: 'Europe/Istanbul',
   }).format(toDate(iso));
 }
+
+/** File sizes in decimal units with Turkish separators: `1,5 MB`. */
+export function formatBytes(bytes: number): string {
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let value = bytes;
+  let i = 0;
+  while (value >= 1000 && i < units.length - 1) {
+    value /= 1000;
+    i++;
+  }
+  return `${formatNumber(Math.round(value * 10) / 10, { maxFractionDigits: 1 })} ${units[i]}`;
+}
