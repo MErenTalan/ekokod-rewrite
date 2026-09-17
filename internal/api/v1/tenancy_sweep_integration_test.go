@@ -61,6 +61,8 @@ func (h *harness) foreign(t *testing.T) foreignIDs {
 		"integration-credentials": {uuid.NewString()},
 		"auth":                    {sessions.Items[0].ID.String()},
 		"consumption":             {uuid.NewString()},
+		// A job id is an asynq task id, not a UUID; an unknown one must 404 like a foreign one.
+		"jobs": {uuid.NewString()},
 	}
 }
 

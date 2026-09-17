@@ -98,6 +98,7 @@ var expectedAccess = map[string]string{
 	"PATCH /calendar/events/{id}":  "A CA",
 	"DELETE /calendar/events/{id}": "A CA",
 	"GET /calendar/vacations":      "A CA CR BA BR D",
+	"GET /jobs/{id}":               "A CA BA",
 	"PUT /calendar/vacations":      "A CA",
 	// 05 §15
 	"GET /integration-definitions":                "A",

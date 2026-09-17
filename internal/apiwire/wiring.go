@@ -3,6 +3,8 @@
 package apiwire
 
 import (
+	"github.com/hibiken/asynq"
+
 	"context"
 	"fmt"
 	"log/slog"
@@ -38,6 +40,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/calendar"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/consumption"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/integrations"
+	"github.com/MErenTalan/ekokod-rewrite/internal/service/jobs"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/loadprofile"
 	tariffsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/tariff"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/tenancy"
@@ -196,9 +199,24 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		return Built{}, err
 	}
 
+	// R192: the inspector reads the same queue the job client writes to.
+	redisOpt, err := job.RedisOpt(cfg.Redis)
+	if err != nil {
+		closeAll()
+		return Built{}, fmt.Errorf("apiwire: redis options for the job inspector: %w", err)
+	}
+	inspector := asynq.NewInspector(redisOpt)
+	closeJobs := closeAll
+	closeAll = func() { _ = inspector.Close(); closeJobs() }
+	jobService, err := jobs.New(jobs.Deps{Inspector: inspector, Analyzers: postgres.NewAnalyzerRepository(pool)})
+	if err != nil {
+		closeAll()
+		return Built{}, err
+	}
+
 	clientIP := middleware.ClientIP(cfg.HTTP.TrustedProxies)
 	handlers := &v1.Handlers{
-		Calendar: calendarService, Credentials: credentialService,
+		Calendar: calendarService, Credentials: credentialService, Jobs: jobService,
 		Definitions: integrations.Definitions{Integrations: postgres.NewIntegrationRepository(pool, cipher), Catalogue: admin.NewCatalogueRepository(pool)}, Auth: authService, Tenancy: tenancyService, Assets: assetService, Analysis: analysisService,
 		Tariffs: tariffService, Billing: billingService, BillRequests: billRequests, Clock: opts.Clock, Log: log, ClientIP: clientIP}
 	router := v1.NewRouter(handlers, middlewareFor(cfg, redisClient, authService, auditRepo, admin.NewAuditRepository(pool), clientIP, opts.RedisPrefix, log), log)

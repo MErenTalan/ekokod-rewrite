@@ -18,6 +18,7 @@ import (
 	billingsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/billing"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/calendar"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/integrations"
+	"github.com/MErenTalan/ekokod-rewrite/internal/service/jobs"
 	tariffsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/tariff"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/tenancy"
 )
@@ -43,6 +44,7 @@ type Handlers struct {
 	Billing      *billingsvc.Service
 	BillRequests billingsvc.Requests
 	Calendar     *calendar.Service
+	Jobs         *jobs.Service
 	Definitions  integrations.Definitions
 	Credentials  *credentials.Service
 	Clock        clock.Clock

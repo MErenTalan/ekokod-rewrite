@@ -166,6 +166,7 @@ func NewSyncAnalyzersTask(p SyncAnalyzersPayload, o TaskOptions) (*asynq.Task, e
 	opts := append([]asynq.Option{
 		asynq.Unique(time.Hour),
 		asynq.Timeout(10 * time.Minute),
+		asynq.Retention(time.Hour), // R192: watchable from /jobs/{id} after it finishes
 	}, integMaxRetryOptions(o)...)
 	return asynq.NewTask(TypeIntegrationSyncAnalyzers, payload, opts...), nil
 }
@@ -243,6 +244,7 @@ func NewBackfillTask(p BackfillPayload, o TaskOptions) (*asynq.Task, error) {
 	opts := append([]asynq.Option{
 		asynq.Timeout(30 * time.Minute),
 		asynq.Queue(QueueLow),
+		asynq.Retention(time.Hour), // R192
 	}, integMaxRetryOptions(o)...)
 	return asynq.NewTask(TypeIntegrationBackfill, payload, opts...), nil
 }

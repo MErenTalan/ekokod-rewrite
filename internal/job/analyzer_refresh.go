@@ -35,7 +35,9 @@ func NewRefreshAnalyzerTask(p RefreshAnalyzerPayload, o TaskOptions) (*asynq.Tas
 	if err != nil {
 		return nil, err
 	}
-	opts := append([]asynq.Option{asynq.Timeout(5 * time.Minute), asynq.Unique(time.Minute)}, integMaxRetryOptions(o)...)
+	// Retention: /jobs/{id} must still find the task after it finished (R192).
+	opts := append([]asynq.Option{asynq.Timeout(5 * time.Minute), asynq.Unique(time.Minute), asynq.Retention(time.Hour)},
+		integMaxRetryOptions(o)...)
 	return asynq.NewTask(TypeIntegrationRefreshAnalyzer, raw, opts...), nil
 }
 
