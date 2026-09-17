@@ -78,6 +78,20 @@ var expectedAccess = map[string]string{
 	"GET /generation":                          "A CA CR BA BR D",
 	"GET /energy-balance":                      "A CA CR BA BR D",
 	"POST /anomaly/check":                      "A CA BA",
+	// 05 §6 (F6a subset, R178)
+	"GET /tariffs":            "A CA CR BA BR D",
+	"POST /tariffs":           "A CA",
+	"GET /tariffs/applicable": "A CA CR BA BR D",
+	"GET /tariffs/{id}":       "A CA CR BA BR D",
+	"PATCH /tariffs/{id}":     "A CA",
+	"DELETE /tariffs/{id}":    "A CA",
+	// 05 §7 (F6a subset, R179)
+	"GET /bills":                    "A CA CR BA BR D",
+	"POST /bills/compute":           "A CA BA",
+	"GET /bills/latest":             "A CA CR BA BR D",
+	"GET /bills/{id}":               "A CA CR BA BR D",
+	"GET /bills/{id}/pdf":           "A CA CR BA BR D",
+	"GET /bills/{id}/hourly-detail": "A CA CR BA BR D",
 	// 05 §18
 	"POST /mobile/auth/login":   "public",
 	"POST /mobile/auth/refresh": "public",

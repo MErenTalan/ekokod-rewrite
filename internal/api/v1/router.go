@@ -14,6 +14,8 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/analysis"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/assets"
 	authsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/auth"
+	billingsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/billing"
+	tariffsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/tariff"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/tenancy"
 )
 
@@ -30,13 +32,16 @@ func serveOpenAPI(w http.ResponseWriter, _ *http.Request) {
 
 // Handlers holds the services the endpoint handlers call.
 type Handlers struct {
-	Auth     *authsvc.Service
-	Tenancy  *tenancy.Service
-	Assets   *assets.Service
-	Analysis *analysis.Service
-	Clock    clock.Clock
-	Log      *slog.Logger
-	ClientIP func(*http.Request) string
+	Auth         *authsvc.Service
+	Tenancy      *tenancy.Service
+	Assets       *assets.Service
+	Analysis     *analysis.Service
+	Tariffs      *tariffsvc.Service
+	Billing      *billingsvc.Service
+	BillRequests billingsvc.Requests
+	Clock        clock.Clock
+	Log          *slog.Logger
+	ClientIP     func(*http.Request) string
 }
 
 // Middleware is the per-route middleware the router composes; tests swap it.
