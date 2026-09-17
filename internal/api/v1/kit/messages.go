@@ -42,6 +42,12 @@ var messages = map[string][2]string{ // code → {tr, en}
 	"refresh_in_progress":        {"Bu analizör için yenileme zaten sırada.", "A refresh for this analyzer is already queued."},
 	"building_sector_missing":    {"Karşılaştırma için binanın sektörü tanımlı olmalıdır.", "The building needs a sector to be compared."},
 	"billing_parameters_missing": {"Fatura parametreleri tanımlı değil; operatöre başvurun.", "Billing parameters are not configured; contact the operator."},
+	"tariff_not_found":           {"Seçilen dönem için geçerli bir tarife bulunamadı.", "No tariff is in force for the selected period."},
+	"no_consumption_data":        {"Dönem için tüketim verisi yok.", "There is no consumption data for the period."},
+	"unresolved_anomaly":         {"Dönemde çözülmemiş bir tüketim anomalisi var.", "The period has an unresolved consumption anomaly."},
+	"period_not_closed":          {"Fatura dönemi henüz kapanmadı.", "The billing period has not closed yet."},
+	"ptf_data_missing":           {"Dönem için PTF verisi eksik.", "PTF prices are missing for the period."},
+	"billing_parameters_invalid": {"Fatura parametreleri geçersiz; operatöre başvurun.", "Billing parameters are invalid; contact the operator."},
 	"reset_token_invalid":        {"Şifre sıfırlama bağlantısı geçersiz veya süresi dolmuş.", "The password reset link is invalid or has expired."},
 }
 

@@ -26,8 +26,10 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/analysis"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/assets"
 	authsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/auth"
+	billingsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/billing"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/consumption"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/loadprofile"
+	tariffsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/tariff"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/tenancy"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/admin"
@@ -128,14 +130,50 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		return Built{}, fmt.Errorf("apiwire: build asset service: %w", err)
 	}
 
-	analysisService, err := buildAnalysis(pool, log, opts.Clock, lock.NewRedis(redisClient))
+	billingConsumption, err := consumption.NewBilling(consumption.BillingDeps{
+		Readings: postgres.NewReadingRepository(pool), Anomalies: postgres.NewAnomalyRepository(pool), Ops: postgres.NewOpsRepository(pool),
+		Clock: opts.Clock, Log: log, Locker: lock.NewRedis(redisClient), Analyzers: postgres.NewAnalyzerRepository(pool),
+		Users: postgres.NewUserRepository(pool),
+	})
+	if err != nil {
+		closeAll()
+		return Built{}, fmt.Errorf("apiwire: build billing consumption: %w", err)
+	}
+	analysisService, err := buildAnalysis(pool, log, opts.Clock, billingConsumption)
 	if err != nil {
 		closeAll()
 		return Built{}, err
 	}
+	tariffService, err := tariffsvc.New(tariffsvc.Deps{
+		Tariffs: postgres.NewTariffRepository(pool), Templates: postgres.NewTariffTemplateRepository(pool),
+		Buildings: postgres.NewBuildingRepository(pool), Analyzers: postgres.NewAnalyzerRepository(pool),
+		Icmal: postgres.NewIcmalRepository(pool), Prices: postgres.NewPriceRepository(pool),
+		Params: postgres.NewBillingParameterRepository(pool), Clock: opts.Clock, Log: log,
+	})
+	if err != nil {
+		closeAll()
+		return Built{}, fmt.Errorf("apiwire: build tariff service: %w", err)
+	}
+	billRepo := postgres.NewBillRepository(pool)
+	billingService, err := billingsvc.New(billingsvc.Deps{
+		Consumption: billingConsumption, Buildings: postgres.NewBuildingRepository(pool), Analyzers: postgres.NewAnalyzerRepository(pool),
+		Tariffs: postgres.NewTariffRepository(pool), Params: postgres.NewBillingParameterRepository(pool),
+		Prices: postgres.NewPriceRepository(pool), Anomalies: postgres.NewAnomalyRepository(pool), Bills: billRepo,
+		Ops: postgres.NewOpsRepository(pool), Clock: opts.Clock, Log: log,
+	})
+	if err != nil {
+		closeAll()
+		return Built{}, fmt.Errorf("apiwire: build billing service: %w", err)
+	}
+	billRequests := billingsvc.Requests{
+		Service: billingService, Enqueuer: enqueuer, MaxRetry: cfg.Worker.MaxRetries, Location: istanbul,
+		Renderer: billingsvc.PDFRenderer{Bills: billRepo, Companies: postgres.NewCompanyRepository(pool),
+			Buildings: postgres.NewBuildingRepository(pool), Analyzers: postgres.NewAnalyzerRepository(pool), Root: cfg.Storage.Root},
+	}
 
 	clientIP := middleware.ClientIP(cfg.HTTP.TrustedProxies)
-	handlers := &v1.Handlers{Auth: authService, Tenancy: tenancyService, Assets: assetService, Analysis: analysisService, Clock: opts.Clock, Log: log, ClientIP: clientIP}
+	handlers := &v1.Handlers{Auth: authService, Tenancy: tenancyService, Assets: assetService, Analysis: analysisService,
+		Tariffs: tariffService, Billing: billingService, BillRequests: billRequests, Clock: opts.Clock, Log: log, ClientIP: clientIP}
 	router := v1.NewRouter(handlers, middlewareFor(cfg, redisClient, authService, auditRepo, admin.NewAuditRepository(pool), clientIP, opts.RedisPrefix, log), log)
 	var once sync.Once
 	return Built{V1: router, Auth: authService, Close: func() { once.Do(closeAll) }}, nil
@@ -156,19 +194,12 @@ func middlewareFor(cfg *config.Config, rc *goredis.Client, a mw.Authenticator, t
 	}
 }
 
-func buildAnalysis(pool *pgxpool.Pool, log *slog.Logger, clk clock.Clock, locker lock.Locker) (*analysis.Service, error) {
+func buildAnalysis(pool *pgxpool.Pool, log *slog.Logger, clk clock.Clock, billing *consumption.Billing) (*analysis.Service, error) {
 	analytics, err := consumption.NewAnalytics(consumption.AnalyticsDeps{Analytics: postgres.NewAnalyticsRepository(pool), Log: log})
 	if err != nil {
 		return nil, fmt.Errorf("apiwire: build analytics: %w", err)
 	}
 	analyzers := postgres.NewAnalyzerRepository(pool)
-	billing, err := consumption.NewBilling(consumption.BillingDeps{
-		Readings: postgres.NewReadingRepository(pool), Anomalies: postgres.NewAnomalyRepository(pool), Ops: postgres.NewOpsRepository(pool),
-		Clock: clk, Log: log, Locker: locker, Analyzers: analyzers, Users: postgres.NewUserRepository(pool),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("apiwire: build billing consumption: %w", err)
-	}
 	profiles, err := loadprofile.New(loadprofile.Deps{
 		Calendar: postgres.NewCalendarRepository(pool), Hourly: postgres.NewAnalyticsRepository(pool), Location: istanbul, Log: log,
 	})

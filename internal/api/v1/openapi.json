@@ -1462,6 +1462,697 @@
         ]
       }
     },
+    "/api/v1/bills": {
+      "get": {
+        "tags": [
+          "bills"
+        ],
+        "summary": "Bills in scope.",
+        "operationId": "bills.list",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "analyzer",
+                "building",
+                "company"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "building_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "analyzer_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "maximum": 500,
+              "minimum": 1,
+              "type": [
+                "null",
+                "integer"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GithubComMErenTalanEkokodRewriteInternalApiV1DtoBillPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/bills/compute": {
+      "post": {
+        "tags": [
+          "bills"
+        ],
+        "summary": "Enqueue bill computation; recomputation supersedes.",
+        "operationId": "bills.compute",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BillComputeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillComputeAccepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/bills/latest": {
+      "get": {
+        "tags": [
+          "bills"
+        ],
+        "summary": "The most recent bill of a subject.",
+        "operationId": "bills.latest",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "enum": [
+                "analyzer",
+                "building",
+                "company"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "subject_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Bill"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/bills/{id}": {
+      "get": {
+        "tags": [
+          "bills"
+        ],
+        "summary": "A bill with lines and members.",
+        "operationId": "bills.get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/bills/{id}/hourly-detail": {
+      "get": {
+        "tags": [
+          "bills"
+        ],
+        "summary": "Per-hour PTF detail as JSON or XLSX.",
+        "operationId": "bills.hourly_detail",
+        "parameters": [
+          {
+            "name": "format",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "json",
+                "xlsx"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillHours"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/bills/{id}/pdf": {
+      "get": {
+        "tags": [
+          "bills"
+        ],
+        "summary": "The invoice PDF, rendered on demand when not yet stored.",
+        "operationId": "bills.pdf",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/v1/buildings": {
       "get": {
         "tags": [
@@ -5497,6 +6188,681 @@
         ]
       }
     },
+    "/api/v1/tariffs": {
+      "get": {
+        "tags": [
+          "tariffs"
+        ],
+        "summary": "Tariff history.",
+        "operationId": "tariffs.list",
+        "parameters": [
+          {
+            "name": "building_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "maximum": 500,
+              "minimum": 1,
+              "type": [
+                "null",
+                "integer"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GithubComMErenTalanEkokodRewriteInternalApiV1DtoTariffSummaryItemPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "tariffs"
+        ],
+        "summary": "Create a tariff version with taxes, extra charges and manual YEKDEM.",
+        "operationId": "tariffs.create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TariffFields"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tariff"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tariffs/applicable": {
+      "get": {
+        "tags": [
+          "tariffs"
+        ],
+        "summary": "The tariff in force for a building on a date.",
+        "operationId": "tariffs.applicable",
+        "parameters": [
+          {
+            "name": "building_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tariff"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tariffs/{id}": {
+      "get": {
+        "tags": [
+          "tariffs"
+        ],
+        "summary": "A tariff version.",
+        "operationId": "tariffs.get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tariff"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "tariffs"
+        ],
+        "summary": "Soft-delete a tariff version.",
+        "operationId": "tariffs.delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "tariffs"
+        ],
+        "summary": "Replace a tariff version.",
+        "operationId": "tariffs.update",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TariffUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tariff"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/v1/users": {
       "get": {
         "tags": [
@@ -6301,6 +7667,422 @@
         "required": [
           "period_start",
           "period_end"
+        ],
+        "type": "object"
+      },
+      "Bill": {
+        "properties": {
+          "active_import": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "analyzer_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "building_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "capacitive_kvarh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "capacitive_ratio": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "computed_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "days_in_period": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "distribution_cost": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "energy_cost": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "flag_reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "has_pdf": {
+            "type": "boolean"
+          },
+          "id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "inductive_kvarh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "inductive_ratio": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "max_demand_kw": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "net_consumption": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "period_end": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "period_key": {
+            "type": "string"
+          },
+          "period_start": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "power_cost": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "ptf_yekdem_used": {
+            "type": "boolean"
+          },
+          "reactive_penalty": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "reactive_penalty_applied": {
+            "type": "boolean"
+          },
+          "scope": {
+            "enum": [
+              "analyzer",
+              "building",
+              "company"
+            ],
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "issued",
+              "flagged",
+              "superseded"
+            ],
+            "type": "string"
+          },
+          "tariff_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "total_cost": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "vat_cost": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "required": [
+          "id",
+          "scope",
+          "period_key",
+          "period_start",
+          "period_end",
+          "days_in_period",
+          "active_import",
+          "net_consumption",
+          "inductive_kvarh",
+          "capacitive_kvarh",
+          "energy_cost",
+          "distribution_cost",
+          "power_cost",
+          "reactive_penalty",
+          "vat_cost",
+          "total_cost",
+          "currency",
+          "reactive_penalty_applied",
+          "ptf_yekdem_used",
+          "status",
+          "has_pdf",
+          "computed_at"
+        ],
+        "type": "object"
+      },
+      "BillComputeAccepted": {
+        "properties": {
+          "job_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "job_ids"
+        ],
+        "type": "object"
+      },
+      "BillComputeRequest": {
+        "properties": {
+          "analyzer_ids": {
+            "items": {
+              "$ref": "#/components/schemas/UuidUUID"
+            },
+            "type": "array"
+          },
+          "building_ids": {
+            "items": {
+              "$ref": "#/components/schemas/UuidUUID"
+            },
+            "type": "array"
+          },
+          "force": {
+            "type": "boolean"
+          },
+          "period": {
+            "pattern": "^[0-9]{4}-[0-9]{2}$",
+            "type": "string"
+          },
+          "scope": {
+            "enum": [
+              "analyzer",
+              "building",
+              "company"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "period"
+        ],
+        "type": "object"
+      },
+      "BillDetail": {
+        "properties": {
+          "active_import": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "analyzer_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "building_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "capacitive_kvarh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "capacitive_ratio": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "computed_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "days_in_period": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "distribution_cost": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "energy_cost": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "flag_reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "has_pdf": {
+            "type": "boolean"
+          },
+          "id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "inductive_kvarh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "inductive_ratio": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/BillLine"
+            },
+            "type": "array"
+          },
+          "max_demand_kw": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "member_analyzer_ids": {
+            "items": {
+              "$ref": "#/components/schemas/UuidUUID"
+            },
+            "type": "array"
+          },
+          "net_consumption": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "period_end": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "period_key": {
+            "type": "string"
+          },
+          "period_start": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "power_cost": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "ptf_yekdem_used": {
+            "type": "boolean"
+          },
+          "reactive_penalty": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "reactive_penalty_applied": {
+            "type": "boolean"
+          },
+          "scope": {
+            "enum": [
+              "analyzer",
+              "building",
+              "company"
+            ],
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "issued",
+              "flagged",
+              "superseded"
+            ],
+            "type": "string"
+          },
+          "tariff_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "total_cost": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "vat_cost": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "required": [
+          "id",
+          "scope",
+          "period_key",
+          "period_start",
+          "period_end",
+          "days_in_period",
+          "active_import",
+          "net_consumption",
+          "inductive_kvarh",
+          "capacitive_kvarh",
+          "energy_cost",
+          "distribution_cost",
+          "power_cost",
+          "reactive_penalty",
+          "vat_cost",
+          "total_cost",
+          "currency",
+          "reactive_penalty_applied",
+          "ptf_yekdem_used",
+          "status",
+          "has_pdf",
+          "computed_at",
+          "lines",
+          "member_analyzer_ids"
+        ],
+        "type": "object"
+      },
+      "BillHour": {
+        "properties": {
+          "consumption": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "cost": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "kbk": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "ptf": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "ts": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "unit_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "yekdem": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "required": [
+          "ts",
+          "consumption",
+          "ptf",
+          "yekdem",
+          "kbk",
+          "unit_price",
+          "cost"
+        ],
+        "type": "object"
+      },
+      "BillHours": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BillHour"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "BillLine": {
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "code": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "quantity": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "rate_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "unit": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "unit_price": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "required": [
+          "code",
+          "label",
+          "amount"
         ],
         "type": "object"
       },
@@ -7221,6 +9003,26 @@
         ],
         "type": "object"
       },
+      "GithubComMErenTalanEkokodRewriteInternalApiV1DtoBillPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Bill"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
       "GithubComMErenTalanEkokodRewriteInternalApiV1DtoBuildingPage": {
         "properties": {
           "items": {
@@ -7266,6 +9068,26 @@
           "items": {
             "items": {
               "$ref": "#/components/schemas/Plant"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "GithubComMErenTalanEkokodRewriteInternalApiV1DtoTariffSummaryItemPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TariffSummaryItem"
             },
             "type": "array"
           },
@@ -8444,6 +10266,479 @@
         ],
         "type": "object"
       },
+      "Tariff": {
+        "properties": {
+          "building_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "contracted_power_kw": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "currency": {
+            "enum": [
+              "TRY",
+              "USD",
+              "EUR"
+            ],
+            "type": "string"
+          },
+          "distribution_cost": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "distribution_price_source": {
+            "enum": [
+              "kbk",
+              "fixed"
+            ],
+            "type": "string"
+          },
+          "effective_from": {
+            "$ref": "#/components/schemas/Date"
+          },
+          "energy_type": {
+            "enum": [
+              "grid_energy",
+              "green_energy"
+            ],
+            "type": "string"
+          },
+          "extra_charges": {
+            "items": {
+              "$ref": "#/components/schemas/TariffExtraCharge"
+            },
+            "type": "array"
+          },
+          "generation_price_per_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "generation_usage": {
+            "enum": [
+              "none",
+              "subtract_from_consumption",
+              "subtract_from_total"
+            ],
+            "type": "string"
+          },
+          "green_energy_distribution_cost": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "green_energy_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "kbk_distribution_cost_tl_per_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "kbk_energy": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "kbk_overuse_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "kbk_power_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "kbk_reactive_power": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "kbk_t1": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "kbk_t2": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "kbk_t3": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "manual_yekdem": {
+            "items": {
+              "$ref": "#/components/schemas/TariffManualYekdem"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "overuse_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "overuse_threshold_kwh_per_day": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "power_price_source": {
+            "enum": [
+              "kbk",
+              "fixed"
+            ],
+            "type": "string"
+          },
+          "power_unit_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "price_type": {
+            "enum": [
+              "single_time",
+              "multi_time"
+            ],
+            "type": "string"
+          },
+          "reactive_power_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "reactive_price_source": {
+            "enum": [
+              "kbk",
+              "fixed"
+            ],
+            "type": "string"
+          },
+          "single_time_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "supply_company": {
+            "enum": [
+              "incumbent",
+              "private"
+            ],
+            "type": "string"
+          },
+          "t1_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "t2_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "t3_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "taxes": {
+            "items": {
+              "$ref": "#/components/schemas/TariffTax"
+            },
+            "type": "array"
+          },
+          "term": {
+            "enum": [
+              "monomial",
+              "binomial"
+            ],
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "use_manual_yekdem": {
+            "type": "boolean"
+          },
+          "use_ptf_yekdem": {
+            "type": "boolean"
+          },
+          "user_group": {
+            "enum": [
+              "residential",
+              "residential_plus",
+              "commercial",
+              "commercial_plus",
+              "industrial",
+              "agricultural",
+              "lighting",
+              "martyrs_families",
+              "public_lighting"
+            ],
+            "type": "string"
+          },
+          "vat_rate": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "voltage_level": {
+            "enum": [
+              "lv",
+              "mv"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "effective_from",
+          "currency",
+          "energy_type",
+          "voltage_level",
+          "user_group",
+          "price_type",
+          "term",
+          "supply_company",
+          "distribution_cost",
+          "reactive_power_price",
+          "generation_usage",
+          "vat_rate",
+          "created_at",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "TariffExtraCharge": {
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "basis": {
+            "enum": [
+              "per_kwh",
+              "per_contracted_kw",
+              "per_max_demand_kw",
+              "fixed_per_period",
+              "pct_of_energy"
+            ],
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "basis",
+          "amount"
+        ],
+        "type": "object"
+      },
+      "TariffFields": {
+        "properties": {
+          "building_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "contracted_power_kw": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "currency": {
+            "enum": [
+              "TRY",
+              "USD",
+              "EUR"
+            ],
+            "type": "string"
+          },
+          "distribution_cost": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "distribution_price_source": {
+            "enum": [
+              "kbk",
+              "fixed"
+            ],
+            "type": "string"
+          },
+          "effective_from": {
+            "$ref": "#/components/schemas/Date"
+          },
+          "energy_type": {
+            "enum": [
+              "grid_energy",
+              "green_energy"
+            ],
+            "type": "string"
+          },
+          "extra_charges": {
+            "items": {
+              "$ref": "#/components/schemas/TariffExtraCharge"
+            },
+            "type": "array"
+          },
+          "generation_price_per_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "generation_usage": {
+            "enum": [
+              "none",
+              "subtract_from_consumption",
+              "subtract_from_total"
+            ],
+            "type": "string"
+          },
+          "green_energy_distribution_cost": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "green_energy_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "kbk_distribution_cost_tl_per_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "kbk_energy": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "kbk_overuse_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "kbk_power_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "kbk_reactive_power": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "kbk_t1": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "kbk_t2": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "kbk_t3": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "manual_yekdem": {
+            "items": {
+              "$ref": "#/components/schemas/TariffManualYekdem"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "overuse_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "overuse_threshold_kwh_per_day": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "power_price_source": {
+            "enum": [
+              "kbk",
+              "fixed"
+            ],
+            "type": "string"
+          },
+          "power_unit_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "price_type": {
+            "enum": [
+              "single_time",
+              "multi_time"
+            ],
+            "type": "string"
+          },
+          "reactive_power_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "reactive_price_source": {
+            "enum": [
+              "kbk",
+              "fixed"
+            ],
+            "type": "string"
+          },
+          "single_time_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "supply_company": {
+            "enum": [
+              "incumbent",
+              "private"
+            ],
+            "type": "string"
+          },
+          "t1_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "t2_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "t3_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "taxes": {
+            "items": {
+              "$ref": "#/components/schemas/TariffTax"
+            },
+            "type": "array"
+          },
+          "term": {
+            "enum": [
+              "monomial",
+              "binomial"
+            ],
+            "type": "string"
+          },
+          "use_manual_yekdem": {
+            "type": "boolean"
+          },
+          "use_ptf_yekdem": {
+            "type": "boolean"
+          },
+          "user_group": {
+            "enum": [
+              "residential",
+              "residential_plus",
+              "commercial",
+              "commercial_plus",
+              "industrial",
+              "agricultural",
+              "lighting",
+              "martyrs_families",
+              "public_lighting"
+            ],
+            "type": "string"
+          },
+          "vat_rate": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "voltage_level": {
+            "enum": [
+              "lv",
+              "mv"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "effective_from",
+          "currency",
+          "energy_type",
+          "voltage_level",
+          "user_group",
+          "price_type",
+          "term",
+          "supply_company",
+          "distribution_cost",
+          "reactive_power_price",
+          "generation_usage",
+          "vat_rate"
+        ],
+        "type": "object"
+      },
+      "TariffManualYekdem": {
+        "properties": {
+          "month": {
+            "type": "integer"
+          },
+          "value": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "year": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "year",
+          "month",
+          "value"
+        ],
+        "type": "object"
+      },
       "TariffSummary": {
         "properties": {
           "effective_from": {
@@ -8462,6 +10757,264 @@
         "required": [
           "id",
           "effective_from"
+        ],
+        "type": "object"
+      },
+      "TariffSummaryItem": {
+        "properties": {
+          "building_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "effective_from": {
+            "$ref": "#/components/schemas/Date"
+          },
+          "id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "price_type": {
+            "type": "string"
+          },
+          "term": {
+            "type": "string"
+          },
+          "use_ptf_yekdem": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "effective_from",
+          "price_type",
+          "term",
+          "use_ptf_yekdem"
+        ],
+        "type": "object"
+      },
+      "TariffTax": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "rate": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "required": [
+          "name",
+          "rate"
+        ],
+        "type": "object"
+      },
+      "TariffUpdateRequest": {
+        "properties": {
+          "building_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "contracted_power_kw": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "currency": {
+            "enum": [
+              "TRY",
+              "USD",
+              "EUR"
+            ],
+            "type": "string"
+          },
+          "distribution_cost": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "distribution_price_source": {
+            "enum": [
+              "kbk",
+              "fixed"
+            ],
+            "type": "string"
+          },
+          "effective_from": {
+            "$ref": "#/components/schemas/Date"
+          },
+          "energy_type": {
+            "enum": [
+              "grid_energy",
+              "green_energy"
+            ],
+            "type": "string"
+          },
+          "extra_charges": {
+            "items": {
+              "$ref": "#/components/schemas/TariffExtraCharge"
+            },
+            "type": "array"
+          },
+          "generation_price_per_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "generation_usage": {
+            "enum": [
+              "none",
+              "subtract_from_consumption",
+              "subtract_from_total"
+            ],
+            "type": "string"
+          },
+          "green_energy_distribution_cost": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "green_energy_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "kbk_distribution_cost_tl_per_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "kbk_energy": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "kbk_overuse_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "kbk_power_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "kbk_reactive_power": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "kbk_t1": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "kbk_t2": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "kbk_t3": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "manual_yekdem": {
+            "items": {
+              "$ref": "#/components/schemas/TariffManualYekdem"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "overuse_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "overuse_threshold_kwh_per_day": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "power_price_source": {
+            "enum": [
+              "kbk",
+              "fixed"
+            ],
+            "type": "string"
+          },
+          "power_unit_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "price_type": {
+            "enum": [
+              "single_time",
+              "multi_time"
+            ],
+            "type": "string"
+          },
+          "reactive_power_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "reactive_price_source": {
+            "enum": [
+              "kbk",
+              "fixed"
+            ],
+            "type": "string"
+          },
+          "single_time_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "supply_company": {
+            "enum": [
+              "incumbent",
+              "private"
+            ],
+            "type": "string"
+          },
+          "t1_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "t2_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "t3_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "taxes": {
+            "items": {
+              "$ref": "#/components/schemas/TariffTax"
+            },
+            "type": "array"
+          },
+          "term": {
+            "enum": [
+              "monomial",
+              "binomial"
+            ],
+            "type": "string"
+          },
+          "use_manual_yekdem": {
+            "type": "boolean"
+          },
+          "use_ptf_yekdem": {
+            "type": "boolean"
+          },
+          "user_group": {
+            "enum": [
+              "residential",
+              "residential_plus",
+              "commercial",
+              "commercial_plus",
+              "industrial",
+              "agricultural",
+              "lighting",
+              "martyrs_families",
+              "public_lighting"
+            ],
+            "type": "string"
+          },
+          "vat_rate": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "voltage_level": {
+            "enum": [
+              "lv",
+              "mv"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "effective_from",
+          "currency",
+          "energy_type",
+          "voltage_level",
+          "user_group",
+          "price_type",
+          "term",
+          "supply_company",
+          "distribution_cost",
+          "reactive_power_price",
+          "generation_usage",
+          "vat_rate"
         ],
         "type": "object"
       },

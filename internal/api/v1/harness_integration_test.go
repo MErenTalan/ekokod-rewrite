@@ -107,7 +107,8 @@ func newHarness(t *testing.T, tune ...func(*config.Config)) *harness {
 			RateLimitAPI:  config.RateLimit{Limit: 100000, Window: time.Minute},
 			RateLimitAuth: config.RateLimit{Limit: 1000, Window: 15 * time.Minute},
 		},
-		Redis: testfixtures.SharedRedisConfig(t),
+		Redis:   testfixtures.SharedRedisConfig(t),
+		Storage: config.Storage{Root: t.TempDir()},
 		Security: config.Security{
 			EncryptionKey:           []byte("0123456789abcdef0123456789abcdef"),
 			JWTSigningKey:           []byte("jwt-signing-key-0123456789abcdef-0123"),

@@ -187,31 +187,30 @@ type PDFRenderer struct {
 	Root      string
 }
 
-// Render writes <Root>/bills/<company>/<bill>.pdf atomically (temp + rename)
-// and records the path.
-func (r PDFRenderer) Render(ctx context.Context, p job.BillingRenderPayload) error {
+// Bytes renders a bill's PDF without storing it.
+func (r PDFRenderer) Bytes(ctx context.Context, p job.BillingRenderPayload) ([]byte, model.Bill, error) {
 	sc := store.SystemScope(p.CompanyID)
 	b, err := r.Bills.Get(ctx, sc, p.BillID)
 	if err != nil {
-		return err
+		return nil, model.Bill{}, err
 	}
 	lines, err := r.Bills.Lines(ctx, sc, b.ID)
 	if err != nil {
-		return err
+		return nil, model.Bill{}, err
 	}
 	members, err := r.Bills.Members(ctx, sc, b.ID)
 	if err != nil {
-		return err
+		return nil, model.Bill{}, err
 	}
 	company, err := r.Companies.Get(ctx, sc, p.CompanyID)
 	if err != nil {
-		return err
+		return nil, model.Bill{}, err
 	}
 	doc := invoicepdf.Document{Bill: b, Lines: lines, CompanyName: company.Name}
 	if b.BuildingID != nil {
 		building, err := r.Buildings.Get(ctx, sc, *b.BuildingID)
 		if err != nil {
-			return err
+			return nil, model.Bill{}, err
 		}
 		doc.BuildingName = building.Name
 	}
@@ -222,7 +221,7 @@ func (r PDFRenderer) Render(ctx context.Context, p job.BillingRenderPayload) err
 	if len(ids) > 0 {
 		analyzers, err := r.Analyzers.List(ctx, sc, store.AnalyzerFilter{IDs: ids, IncludeDeleted: true, Page: store.Page{Limit: 500}})
 		if err != nil {
-			return err
+			return nil, model.Bill{}, err
 		}
 		slices.SortFunc(analyzers, func(a, b model.Analyzer) int { return compareStrings(a.InstallationNumber, b.InstallationNumber) })
 		for _, a := range analyzers {
@@ -235,7 +234,18 @@ func (r PDFRenderer) Render(ctx context.Context, p job.BillingRenderPayload) err
 	}
 	pdf, err := invoicepdf.Render(doc)
 	if err != nil {
-		return job.SkipRetry(err)
+		return nil, model.Bill{}, job.SkipRetry(err)
+	}
+	return pdf, b, nil
+}
+
+// Render writes <Root>/bills/<company>/<bill>.pdf atomically (temp + rename)
+// and records the path.
+func (r PDFRenderer) Render(ctx context.Context, p job.BillingRenderPayload) error {
+	sc := store.SystemScope(p.CompanyID)
+	pdf, b, err := r.Bytes(ctx, p)
+	if err != nil {
+		return err
 	}
 	dir := filepath.Join(r.Root, "bills", p.CompanyID.String())
 	if err := os.MkdirAll(dir, 0o750); err != nil {
