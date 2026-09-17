@@ -147,8 +147,9 @@ func TestDomainHasNoIOImports(t *testing.T) {
 
 func TestOnlyTheCLIImportsTheAPIPackage(t *testing.T) {
 	allowed := map[string]bool{
-		modulePath + "/internal/cli": true,
-		modulePath + "/internal/api": true,
+		modulePath + "/internal/cli":     true,
+		modulePath + "/internal/api":     true,
+		modulePath + "/internal/apiwire": true,
 	}
 	for _, pkg := range loadPackages(t, "./...") {
 		if allowed[pkg.PkgPath] || underPackage(pkg.PkgPath, modulePath+"/internal/api") {

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/api"
+	"github.com/MErenTalan/ekokod-rewrite/internal/apiwire"
 	"github.com/MErenTalan/ekokod-rewrite/internal/buildinfo"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/health"
@@ -57,7 +58,14 @@ func newAPICmd() *cobra.Command {
 			}
 			defer func() { _ = cache.Close() }()
 
+			surface, err := apiwire.Build(ctx, cfg, pool, log, apiwire.Options{})
+			if err != nil {
+				return err
+			}
+			defer surface.Close()
+
 			router := api.NewRouter(api.Deps{
+				V1:    surface.V1,
 				Cfg:   cfg,
 				Log:   log,
 				Build: buildinfo.Get(),

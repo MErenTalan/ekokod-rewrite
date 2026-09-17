@@ -22,10 +22,32 @@ import (
 // the route table (R157): "public", "authenticated", or role abbreviations.
 var expectedAccess = map[string]string{
 	"GET /openapi.json": "public",
+
+	// 05 §2
+	"POST /auth/login":           "public",
+	"POST /auth/refresh":         "public",
+	"POST /auth/logout":          "authenticated",
+	"POST /auth/logout-all":      "authenticated",
+	"GET /auth/me":               "authenticated",
+	"POST /auth/forgot-password": "public",
+	"POST /auth/reset-password":  "public",
+	"POST /auth/change-password": "A CA CR BA BR", // R150: demo excluded
+	"GET /auth/sessions":         "authenticated",
+	"DELETE /auth/sessions/{id}": "authenticated",
+	// 05 §3
+	"GET /profile":   "authenticated",
+	"PATCH /profile": "A CA CR BA BR", // R150
+	// 05 §18
+	"POST /mobile/auth/login":   "public",
+	"POST /mobile/auth/refresh": "public",
+	"GET /mobile/auth/me":       "authenticated",
 }
 
 // selfServiceMutations is R150's literal exemption list.
-var selfServiceMutations = map[string]bool{}
+var selfServiceMutations = map[string]bool{
+	"POST /auth/logout": true, "POST /auth/logout-all": true, "POST /auth/change-password": true,
+	"DELETE /auth/sessions/{id}": true, "PATCH /profile": true,
+}
 
 var abbreviations = map[string]model.UserRole{
 	"A": model.UserRoleAdmin, "CA": model.UserRoleCompanyAdmin, "CR": model.UserRoleCompanyReadonlyAdmin,
@@ -58,9 +80,7 @@ func passthrough(scope *store.Scope) v1.Middleware {
 func sentinelTable() []v1.Route {
 	routes := v1.Table()
 	for i := range routes {
-		routes[i].Handler = func(*v1.Handlers) http.HandlerFunc {
-			return func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusTeapot) }
-		}
+		routes[i].Handler = func(_ *v1.Handlers, w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusTeapot) }
 	}
 	return routes
 }
