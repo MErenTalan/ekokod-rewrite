@@ -23,6 +23,14 @@ describe('SummaryCardsView', () => {
     expect(r.queryByText('Şüpheli')).toBeNull();
   });
 
+  it('rounds the average to the energy scale so a raw division cannot fill the card (R161)', () => {
+    const raw = { ...summary(), averages: { active_import: '1635.49478947368421052632' } } as ConsumptionSummary;
+    const r = renderWithProviders(<SummaryCardsView summary={raw} />);
+    expect(r.getByText('1.635,495')).toBeInTheDocument();
+    // The totals keep the scale the API sent them in.
+    expect(r.getByText('18.450,5')).toBeInTheDocument();
+  });
+
   it('marks every figure when any period is suspect', () => {
     const r = renderWithProviders(<SummaryCardsView summary={summary(2)} />);
     expect(r.getAllByText('Şüpheli')).toHaveLength(4);

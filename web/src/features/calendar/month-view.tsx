@@ -59,15 +59,17 @@ export function MonthView({ anchor, events, weekendDays, periods, canEdit, onSel
   const month = anchor.slice(0, 7);
 
   return (
-    <div className="flex flex-col gap-1">
-      <div className="grid grid-cols-7 gap-1">
+    // Seven day columns need more width than a phone has, so the grid scrolls
+    // inside its own box and the page never does (07 §11).
+    <div className="flex flex-col gap-1 overflow-x-auto">
+      <div className="grid min-w-3xl grid-cols-7 gap-1">
         {WEEKDAY_KEYS.map((key) => (
           <div key={key} className="px-1 text-foreground-muted type-caption">
             {weekdays(key)}
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-1">
+      <div className="grid min-w-3xl grid-cols-7 gap-1">
         {days.map((day) => {
           const status = nonWorkingDay(day, weekendDays, periods);
           const dayEvents = byDay.get(day) ?? [];

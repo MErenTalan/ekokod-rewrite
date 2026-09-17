@@ -18,6 +18,8 @@ export type MetricCardProps = {
   delta?: MetricDelta;
   sparkline?: ReactNode;
   quality?: DataQuality;
+  /** Caps the shown scale; without it the value keeps the scale the API sent. */
+  maxFractionDigits?: number;
   loading?: boolean;
 };
 
@@ -25,9 +27,10 @@ const arrows = { up: ArrowUp, down: ArrowDown, flat: Minus } as const;
 const tones = { good: 'text-success', bad: 'text-danger', neutral: 'text-foreground-muted' } as const;
 
 /** Colour follows sentiment (a rising cost is bad), the arrow follows direction (07 §6). */
-export function MetricCard({ label, value, unit, delta, sparkline, quality, loading = false }: MetricCardProps) {
+export function MetricCard({ label, value, unit, delta, sparkline, quality, maxFractionDigits, loading = false }: MetricCardProps) {
   const Arrow = delta ? arrows[delta.direction] : null;
-  const shown = unit === 'TRY' ? formatCurrency(value) : formatNumber(value);
+  const precision = maxFractionDigits === undefined ? {} : { maxFractionDigits };
+  const shown = unit === 'TRY' ? formatCurrency(value, precision) : formatNumber(value, precision);
   const magnitude = delta ? formatNumber(delta.value.replace(/^-/, '')) : '';
   const sign = !delta || /^-?0*(\.0*)?$/.test(delta.value) ? '' : delta.value.startsWith('-') ? '−' : '+';
   return (
@@ -45,7 +48,7 @@ export function MetricCard({ label, value, unit, delta, sparkline, quality, load
         <>
           <div className="flex items-end justify-between gap-3">
             <p className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 text-foreground">
-              <span className="type-metric">{shown}</span>
+              <span className="type-metric [overflow-wrap:anywhere]">{shown}</span>
               {unit !== 'TRY' && value !== null ? <span className="text-foreground-muted type-small">{unitSymbol(unit)}</span> : null}
             </p>
             {sparkline}

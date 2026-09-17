@@ -13,7 +13,7 @@ export function StaggerGrid({ className, children }: { className?: string; child
   return (
     <div className={cn('grid gap-4', className)}>
       {Children.map(children, (child, index) => (
-        <div className="stagger-item" style={{ ['--i' as string]: index }}>
+        <div className="stagger-item min-w-0" style={{ ['--i' as string]: index }}>
           {child}
         </div>
       ))}

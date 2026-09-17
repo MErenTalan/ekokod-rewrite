@@ -2,9 +2,14 @@ import type { ComponentPropsWithRef } from 'react';
 
 import { cn } from '@/lib/cn';
 
-/** Tables scroll inside their own focusable region; the page never scrolls sideways (07 §7). */
+/**
+ * Tables scroll inside their own focusable region; the page never scrolls
+ * sideways (07 §7). `contain-paint` is what keeps that promise: overflow alone
+ * clips the table visually but still leaves its width in the document's scroll
+ * area, so a 29-column table let the whole page scroll into emptiness.
+ */
 export function TableContainer({ label, className, ...props }: ComponentPropsWithRef<'div'> & { label: string }) {
-  return <div role="region" aria-label={label} tabIndex={0} className={cn('w-full overflow-auto rounded-lg border border-border bg-surface-raised', className)} {...props} />;
+  return <div role="region" aria-label={label} tabIndex={0} className={cn('w-full contain-paint overflow-auto rounded-lg border border-border bg-surface-raised', className)} {...props} />;
 }
 
 export function Table({ className, ...props }: ComponentPropsWithRef<'table'>) {

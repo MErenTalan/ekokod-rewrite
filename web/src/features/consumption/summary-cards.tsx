@@ -19,12 +19,21 @@ export function SummaryCardsView({ summary, loading = false }: SummaryCardsViewP
     { label: t('active'), value: summary?.totals.active_import ?? null, unit: 'kWh' as const },
     { label: t('inductive'), value: summary?.totals.reactive_inductive_import ?? null, unit: 'kVArh' as const },
     { label: t('capacitive'), value: summary?.totals.reactive_capacitive_import ?? null, unit: 'kVArh' as const },
-    { label: t('average'), value: summary?.averages.active_import ?? null, unit: 'kWh' as const },
+    // An average is a division: it arrives at the division scale, so it is shown at the energy scale (R161).
+    { label: t('average'), value: summary?.averages.active_import ?? null, unit: 'kWh' as const, maxFractionDigits: 3 },
   ];
   return (
     <StaggerGrid className="sm:grid-cols-2 xl:grid-cols-4">
       {cards.map((card) => (
-        <MetricCard key={card.label} label={card.label} value={card.value} unit={card.unit} quality={quality} loading={loading} />
+        <MetricCard
+          key={card.label}
+          label={card.label}
+          value={card.value}
+          unit={card.unit}
+          maxFractionDigits={card.maxFractionDigits}
+          quality={quality}
+          loading={loading}
+        />
       ))}
     </StaggerGrid>
   );
