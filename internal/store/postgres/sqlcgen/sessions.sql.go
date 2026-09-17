@@ -14,15 +14,16 @@ import (
 )
 
 const sessionCreate = `-- name: SessionCreate :one
-insert into sessions (id, user_id, refresh_token_hash, device_fingerprint, user_agent, ip, expires_at, revoked_at, created_at)
+insert into sessions (id, user_id, refresh_token_hash, device_fingerprint, user_agent, ip,
+                      expires_at, revoked_at, created_at, client, remember, rotated_from)
 select $1, $2, $3, $4,
        $5, $6, $7, $8,
-       coalesce($9::timestamptz, now()) as created_at
+       coalesce($9::timestamptz, now()), $10, $11, $12
 where exists (
     select 1 from users
-    where id = $2 and company_id = $10 and deleted_at is null
+    where id = $2 and company_id = $13 and deleted_at is null
 )
-returning id, user_id, refresh_token_hash, device_fingerprint, user_agent, ip, expires_at, revoked_at, created_at
+returning id, user_id, refresh_token_hash, device_fingerprint, user_agent, ip, expires_at, revoked_at, created_at, client, remember, last_used_at, revoked_reason, rotated_from
 `
 
 type SessionCreateParams struct {
@@ -35,15 +36,15 @@ type SessionCreateParams struct {
 	ExpiresAt         pgtype.Timestamptz
 	RevokedAt         pgtype.Timestamptz
 	At                pgtype.Timestamptz
+	Client            string
+	Remember          bool
+	RotatedFrom       *uuid.UUID
 	CompanyID         uuid.UUID
 }
 
 // Isolation: sess.UserID must be a user of company_id, checked by inserting
-// only when that user is visible; if not, zero rows are inserted and the
-// :one scan reports ErrNoRows, translated to ErrNotFound.
-//
-// coalesce(sqlc.narg(at)::timestamptz, now()): a caller that leaves CreatedAt at its zero
-// value gets the database's own now() rather than writing 0001-01-01.
+// only when that user is visible; zero rows scan as ErrNoRows → ErrNotFound.
+// client, remember and rotated_from are F6a's rotation bookkeeping (R141).
 func (q *Queries) SessionCreate(ctx context.Context, arg SessionCreateParams) (Session, error) {
 	row := q.db.QueryRow(ctx, sessionCreate,
 		arg.ID,
@@ -55,6 +56,9 @@ func (q *Queries) SessionCreate(ctx context.Context, arg SessionCreateParams) (S
 		arg.ExpiresAt,
 		arg.RevokedAt,
 		arg.At,
+		arg.Client,
+		arg.Remember,
+		arg.RotatedFrom,
 		arg.CompanyID,
 	)
 	var i Session
@@ -68,6 +72,11 @@ func (q *Queries) SessionCreate(ctx context.Context, arg SessionCreateParams) (S
 		&i.ExpiresAt,
 		&i.RevokedAt,
 		&i.CreatedAt,
+		&i.Client,
+		&i.Remember,
+		&i.LastUsedAt,
+		&i.RevokedReason,
+		&i.RotatedFrom,
 	)
 	return i, err
 }
@@ -93,7 +102,7 @@ func (q *Queries) SessionDeleteExpired(ctx context.Context, arg SessionDeleteExp
 
 const sessionGet = `-- name: SessionGet :one
 
-select s.id, s.user_id, s.refresh_token_hash, s.device_fingerprint, s.user_agent, s.ip, s.expires_at, s.revoked_at, s.created_at from sessions s
+select s.id, s.user_id, s.refresh_token_hash, s.device_fingerprint, s.user_agent, s.ip, s.expires_at, s.revoked_at, s.created_at, s.client, s.remember, s.last_used_at, s.revoked_reason, s.rotated_from from sessions s
 join users u on u.id = s.user_id
 where s.id = $1 and u.company_id = $2 and u.deleted_at is null
 `
@@ -118,12 +127,52 @@ func (q *Queries) SessionGet(ctx context.Context, arg SessionGetParams) (Session
 		&i.ExpiresAt,
 		&i.RevokedAt,
 		&i.CreatedAt,
+		&i.Client,
+		&i.Remember,
+		&i.LastUsedAt,
+		&i.RevokedReason,
+		&i.RotatedFrom,
+	)
+	return i, err
+}
+
+const sessionGetForUpdate = `-- name: SessionGetForUpdate :one
+select s.id, s.user_id, s.refresh_token_hash, s.device_fingerprint, s.user_agent, s.ip, s.expires_at, s.revoked_at, s.created_at, s.client, s.remember, s.last_used_at, s.revoked_reason, s.rotated_from from sessions s
+join users u on u.id = s.user_id
+where s.id = $1 and u.company_id = $2 and u.deleted_at is null
+for update of s
+`
+
+type SessionGetForUpdateParams struct {
+	ID        uuid.UUID
+	CompanyID uuid.UUID
+}
+
+// Rotate locks the old row so two concurrent refreshes cannot both rotate it.
+func (q *Queries) SessionGetForUpdate(ctx context.Context, arg SessionGetForUpdateParams) (Session, error) {
+	row := q.db.QueryRow(ctx, sessionGetForUpdate, arg.ID, arg.CompanyID)
+	var i Session
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.RefreshTokenHash,
+		&i.DeviceFingerprint,
+		&i.UserAgent,
+		&i.Ip,
+		&i.ExpiresAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+		&i.Client,
+		&i.Remember,
+		&i.LastUsedAt,
+		&i.RevokedReason,
+		&i.RotatedFrom,
 	)
 	return i, err
 }
 
 const sessionList = `-- name: SessionList :many
-select s.id, s.user_id, s.refresh_token_hash, s.device_fingerprint, s.user_agent, s.ip, s.expires_at, s.revoked_at, s.created_at from sessions s
+select s.id, s.user_id, s.refresh_token_hash, s.device_fingerprint, s.user_agent, s.ip, s.expires_at, s.revoked_at, s.created_at, s.client, s.remember, s.last_used_at, s.revoked_reason, s.rotated_from from sessions s
 join users u on u.id = s.user_id
 where u.company_id = $1 and u.deleted_at is null
   and ($2::uuid is null or s.user_id = $2)
@@ -166,6 +215,11 @@ func (q *Queries) SessionList(ctx context.Context, arg SessionListParams) ([]Ses
 			&i.ExpiresAt,
 			&i.RevokedAt,
 			&i.CreatedAt,
+			&i.Client,
+			&i.Remember,
+			&i.LastUsedAt,
+			&i.RevokedReason,
+			&i.RotatedFrom,
 		); err != nil {
 			return nil, err
 		}
@@ -224,6 +278,92 @@ func (q *Queries) SessionRevokeAllForUser(ctx context.Context, arg SessionRevoke
 	return result.RowsAffected(), nil
 }
 
+const sessionRevokeAllForUserWithReason = `-- name: SessionRevokeAllForUserWithReason :execrows
+update sessions
+set revoked_at = $1, revoked_reason = $2
+where sessions.user_id = $3
+  and sessions.revoked_at is null
+  and ($4::uuid is null or sessions.id <> $4)
+  and sessions.user_id in (select users.id from users where users.company_id = $5 and users.deleted_at is null)
+`
+
+type SessionRevokeAllForUserWithReasonParams struct {
+	At        pgtype.Timestamptz
+	Reason    *string
+	UserID    uuid.UUID
+	ExceptID  *uuid.UUID
+	CompanyID uuid.UUID
+}
+
+func (q *Queries) SessionRevokeAllForUserWithReason(ctx context.Context, arg SessionRevokeAllForUserWithReasonParams) (int64, error) {
+	result, err := q.db.Exec(ctx, sessionRevokeAllForUserWithReason,
+		arg.At,
+		arg.Reason,
+		arg.UserID,
+		arg.ExceptID,
+		arg.CompanyID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const sessionRevokeLiveWithReason = `-- name: SessionRevokeLiveWithReason :execrows
+update sessions
+set revoked_at = $1, revoked_reason = $2
+where sessions.id = $3
+  and sessions.revoked_at is null
+  and sessions.user_id in (select users.id from users where users.company_id = $4 and users.deleted_at is null)
+`
+
+type SessionRevokeLiveWithReasonParams struct {
+	At        pgtype.Timestamptz
+	Reason    *string
+	ID        uuid.UUID
+	CompanyID uuid.UUID
+}
+
+// Only a live session is revoked, so the first reason recorded is kept.
+func (q *Queries) SessionRevokeLiveWithReason(ctx context.Context, arg SessionRevokeLiveWithReasonParams) (int64, error) {
+	result, err := q.db.Exec(ctx, sessionRevokeLiveWithReason,
+		arg.At,
+		arg.Reason,
+		arg.ID,
+		arg.CompanyID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const sessionTouch = `-- name: SessionTouch :execrows
+update sessions
+set last_used_at = case
+        when sessions.last_used_at is null or sessions.last_used_at < $1::timestamptz - interval '5 minutes'
+        then $1::timestamptz
+        else sessions.last_used_at end
+where sessions.id = $2
+  and sessions.user_id in (select users.id from users where users.company_id = $3 and users.deleted_at is null)
+`
+
+type SessionTouchParams struct {
+	At        pgtype.Timestamptz
+	ID        uuid.UUID
+	CompanyID uuid.UUID
+}
+
+// Matches every visible session (so a visible one never reads as missing) but
+// only moves last_used_at when it is unset or five minutes stale.
+func (q *Queries) SessionTouch(ctx context.Context, arg SessionTouchParams) (int64, error) {
+	result, err := q.db.Exec(ctx, sessionTouch, arg.At, arg.ID, arg.CompanyID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const sessionUserVisible = `-- name: SessionUserVisible :one
 select exists(
     select 1 from users
@@ -238,6 +378,25 @@ type SessionUserVisibleParams struct {
 
 func (q *Queries) SessionUserVisible(ctx context.Context, arg SessionUserVisibleParams) (bool, error) {
 	row := q.db.QueryRow(ctx, sessionUserVisible, arg.UserID, arg.CompanyID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const sessionVisible = `-- name: SessionVisible :one
+select exists(
+    select 1 from sessions s join users u on u.id = s.user_id
+    where s.id = $1 and u.company_id = $2 and u.deleted_at is null
+)
+`
+
+type SessionVisibleParams struct {
+	ID        uuid.UUID
+	CompanyID uuid.UUID
+}
+
+func (q *Queries) SessionVisible(ctx context.Context, arg SessionVisibleParams) (bool, error) {
+	row := q.db.QueryRow(ctx, sessionVisible, arg.ID, arg.CompanyID)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err

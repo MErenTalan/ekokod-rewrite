@@ -16,7 +16,7 @@
 // cross-tenant hole that no test at the request layer will ever catch, because
 // the method itself is exactly as capable as it looks: nothing narrows it.
 //
-// The seven interfaces, and why each one cannot take a Scope:
+// The interfaces, and why each one cannot take a Scope:
 //
 //   - AdminAuthRepository resolves the two credentials a request presents
 //     BEFORE it has a Scope: a login carries only an email, and a refresh
@@ -62,6 +62,13 @@
 //     refresh necessarily covers every tenant's buckets in that range, and a
 //     Scope parameter would be a lie about what the call actually does. It is
 //     a genuine seventh member of this closed list.
+//
+//   - AdminTenantRepository lists companies for the platform operator (the
+//     admin role's company list and switcher, F6a). Its purpose is to show
+//     companies other than the caller's own, which no Scope can express.
+//
+//   - AdminAuthRepository.PasswordResetByTokenHash (F6a) joins the first
+//     entry: a reset request, like a refresh, carries only a token.
 //
 // THE LIST OF METHODS IS CLOSED. A method is added here only when its caller
 // cannot hold a Scope, never because holding one is inconvenient: see each

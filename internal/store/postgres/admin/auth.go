@@ -43,6 +43,8 @@ func adminUserFromRow(row sqlcgen.User) model.User {
 		Role:              model.UserRole(row.Role),
 		IsActive:          row.IsActive,
 		LastLoginAt:       adminTSPtr(row.LastLoginAt),
+		UIPreferences:     row.UiPreferences,
+		Locale:            row.Locale,
 		CreatedAt:         row.CreatedAt.Time,
 		UpdatedAt:         row.UpdatedAt.Time,
 		DeletedAt:         adminTSPtr(row.DeletedAt),
@@ -77,6 +79,11 @@ func (r *AuthRepository) SessionByRefreshTokenHash(ctx context.Context, hash str
 		ExpiresAt:         row.ExpiresAt.Time,
 		RevokedAt:         adminTSPtr(row.RevokedAt),
 		CreatedAt:         row.SessionCreatedAt.Time,
+		Client:            row.Client,
+		Remember:          row.Remember,
+		LastUsedAt:        adminTSPtr(row.LastUsedAt),
+		RevokedReason:     row.RevokedReason,
+		RotatedFrom:       row.RotatedFrom,
 	}
 	user := model.User{
 		ID:                row.UserID,
@@ -89,11 +96,26 @@ func (r *AuthRepository) SessionByRefreshTokenHash(ctx context.Context, hash str
 		Role:              model.UserRole(row.Role),
 		IsActive:          row.IsActive,
 		LastLoginAt:       adminTSPtr(row.LastLoginAt),
+		UIPreferences:     row.UiPreferences,
+		Locale:            row.Locale,
 		CreatedAt:         row.UserCreatedAt.Time,
 		UpdatedAt:         row.UpdatedAt.Time,
 		DeletedAt:         adminTSPtr(row.DeletedAt),
 	}
 	return sess, user, nil
+}
+
+// PasswordResetByTokenHash resolves a reset request, which carries only the
+// token. See store.AdminAuthRepository.
+func (r *AuthRepository) PasswordResetByTokenHash(ctx context.Context, hash string) (model.PasswordReset, model.User, error) {
+	row, err := r.q.AdminPasswordResetByTokenHash(ctx, hash)
+	if err != nil {
+		return model.PasswordReset{}, model.User{}, pgerr.Translate(r.pool, "admin get password reset by token hash", err)
+	}
+	return model.PasswordReset{
+		ID: row.ID, UserID: row.UserID, TokenHash: row.TokenHash, ExpiresAt: row.ExpiresAt.Time,
+		UsedAt: adminTSPtr(row.UsedAt), CreatedAt: row.ResetCreatedAt.Time,
+	}, adminUserFromRow(row.User), nil
 }
 
 // adminTSPtr converts a NULLABLE pgtype.Timestamptz into a *time.Time, nil

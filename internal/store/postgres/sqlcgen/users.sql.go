@@ -14,22 +14,26 @@ import (
 
 const userCreate = `-- name: UserCreate :one
 insert into users
-    (id, company_id, name, email, phone, password_hash, role, is_active, created_at, updated_at)
+    (id, company_id, name, email, phone, password_hash, role, is_active, ui_preferences, locale, created_at, updated_at)
 values ($1, $2, $3, $4, $5,
-        $6, $7, $8, coalesce($9::timestamptz, now()), coalesce($9::timestamptz, now()))
-returning id, company_id, name, email, phone, password_hash, password_changed_at, role, is_active, last_login_at, created_at, updated_at, deleted_at
+        $6, $7, $8, $9,
+        coalesce(nullif($10::text, ''), 'tr'),
+        coalesce($11::timestamptz, now()), coalesce($11::timestamptz, now()))
+returning id, company_id, name, email, phone, password_hash, password_changed_at, role, is_active, last_login_at, created_at, updated_at, deleted_at, ui_preferences, locale
 `
 
 type UserCreateParams struct {
-	ID           uuid.UUID
-	CompanyID    uuid.UUID
-	Name         string
-	Email        string
-	Phone        *string
-	PasswordHash string
-	Role         UserRole
-	IsActive     bool
-	At           pgtype.Timestamptz
+	ID            uuid.UUID
+	CompanyID     uuid.UUID
+	Name          string
+	Email         string
+	Phone         *string
+	PasswordHash  string
+	Role          UserRole
+	IsActive      bool
+	UiPreferences *string
+	Locale        string
+	At            pgtype.Timestamptz
 }
 
 // coalesce(sqlc.narg(at)::timestamptz, now()): a caller that leaves CreatedAt at its zero
@@ -44,6 +48,8 @@ func (q *Queries) UserCreate(ctx context.Context, arg UserCreateParams) (User, e
 		arg.PasswordHash,
 		arg.Role,
 		arg.IsActive,
+		arg.UiPreferences,
+		arg.Locale,
 		arg.At,
 	)
 	var i User
@@ -61,13 +67,15 @@ func (q *Queries) UserCreate(ctx context.Context, arg UserCreateParams) (User, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.UiPreferences,
+		&i.Locale,
 	)
 	return i, err
 }
 
 const userGet = `-- name: UserGet :one
 
-select id, company_id, name, email, phone, password_hash, password_changed_at, role, is_active, last_login_at, created_at, updated_at, deleted_at from users
+select id, company_id, name, email, phone, password_hash, password_changed_at, role, is_active, last_login_at, created_at, updated_at, deleted_at, ui_preferences, locale from users
 where id = $1 and company_id = $2 and deleted_at is null
 `
 
@@ -94,6 +102,8 @@ func (q *Queries) UserGet(ctx context.Context, arg UserGetParams) (User, error) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.UiPreferences,
+		&i.Locale,
 	)
 	return i, err
 }
@@ -119,7 +129,7 @@ func (q *Queries) UserGetPasswordHashForUpdate(ctx context.Context, arg UserGetP
 }
 
 const userList = `-- name: UserList :many
-select id, company_id, name, email, phone, password_hash, password_changed_at, role, is_active, last_login_at, created_at, updated_at, deleted_at from users
+select id, company_id, name, email, phone, password_hash, password_changed_at, role, is_active, last_login_at, created_at, updated_at, deleted_at, ui_preferences, locale from users
 where company_id = $1
   and ($2::boolean or deleted_at is null)
   -- pgx has no static codec for a custom enum's array OID without a
@@ -178,6 +188,8 @@ func (q *Queries) UserList(ctx context.Context, arg UserListParams) ([]User, err
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.UiPreferences,
+			&i.Locale,
 		); err != nil {
 			return nil, err
 		}
@@ -326,20 +338,25 @@ set name = $1,
     phone = $3,
     role = $4,
     is_active = $5,
-    updated_at = $6
-where id = $7 and company_id = $8 and deleted_at is null
-returning id, company_id, name, email, phone, password_hash, password_changed_at, role, is_active, last_login_at, created_at, updated_at, deleted_at
+    ui_preferences = $6,
+    -- an unset (empty) locale keeps the stored one, so pre-F6 callers stay valid
+    locale = coalesce(nullif($7::text, ''), locale),
+    updated_at = $8
+where id = $9 and company_id = $10 and deleted_at is null
+returning id, company_id, name, email, phone, password_hash, password_changed_at, role, is_active, last_login_at, created_at, updated_at, deleted_at, ui_preferences, locale
 `
 
 type UserUpdateParams struct {
-	Name      string
-	Email     string
-	Phone     *string
-	Role      UserRole
-	IsActive  bool
-	UpdatedAt pgtype.Timestamptz
-	ID        uuid.UUID
-	CompanyID uuid.UUID
+	Name          string
+	Email         string
+	Phone         *string
+	Role          UserRole
+	IsActive      bool
+	UiPreferences *string
+	Locale        string
+	UpdatedAt     pgtype.Timestamptz
+	ID            uuid.UUID
+	CompanyID     uuid.UUID
 }
 
 func (q *Queries) UserUpdate(ctx context.Context, arg UserUpdateParams) (User, error) {
@@ -349,6 +366,8 @@ func (q *Queries) UserUpdate(ctx context.Context, arg UserUpdateParams) (User, e
 		arg.Phone,
 		arg.Role,
 		arg.IsActive,
+		arg.UiPreferences,
+		arg.Locale,
 		arg.UpdatedAt,
 		arg.ID,
 		arg.CompanyID,
@@ -368,6 +387,8 @@ func (q *Queries) UserUpdate(ctx context.Context, arg UserUpdateParams) (User, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.UiPreferences,
+		&i.Locale,
 	)
 	return i, err
 }

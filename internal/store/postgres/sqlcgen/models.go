@@ -1886,6 +1886,15 @@ type OperationalMessage struct {
 	CreatedAt   pgtype.Timestamptz
 }
 
+type PasswordResetToken struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	TokenHash string
+	ExpiresAt pgtype.Timestamptz
+	UsedAt    pgtype.Timestamptz
+	CreatedAt pgtype.Timestamptz
+}
+
 type PlantProduction struct {
 	PlantID       uuid.UUID
 	Ts            pgtype.Timestamptz
@@ -2011,6 +2020,11 @@ type Session struct {
 	ExpiresAt         pgtype.Timestamptz
 	RevokedAt         pgtype.Timestamptz
 	CreatedAt         pgtype.Timestamptz
+	Client            string
+	Remember          bool
+	LastUsedAt        pgtype.Timestamptz
+	RevokedReason     *string
+	RotatedFrom       *uuid.UUID
 }
 
 type SmtpSetting struct {
@@ -2149,6 +2163,8 @@ type User struct {
 	CreatedAt         pgtype.Timestamptz
 	UpdatedAt         pgtype.Timestamptz
 	DeletedAt         pgtype.Timestamptz
+	UiPreferences     *string
+	Locale            string
 }
 
 type UserPasswordHistory struct {
