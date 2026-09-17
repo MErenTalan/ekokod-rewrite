@@ -14,6 +14,7 @@ import { useSession } from '@/lib/session/session-provider';
 import { useLogout } from '@/lib/session/use-logout';
 
 import { AccountTabView } from './account-tab';
+import { CompanyPanel } from './company-panel';
 import { IntegrationsTabView } from './integrations-tab';
 import { SmtpTabView } from './smtp-tab';
 import { resolveTab, visibleTabs, type SettingsTabId } from './tabs';
@@ -103,6 +104,8 @@ export function SettingsPage({ slots }: { slots?: Partial<Record<SettingsTabId, 
     ),
     smtp: (
       <SmtpTabView
+        // Same reason as the company form: the fields are seeded from the response.
+        key={smtp.data?.updated_at ?? 'loading'}
         settings={smtp.data ?? null}
         fieldErrors={saveSmtp.fieldErrors}
         saving={saveSmtp.isPending}
@@ -128,7 +131,7 @@ export function SettingsPage({ slots }: { slots?: Partial<Record<SettingsTabId, 
         onDelete={(definition) => deleteDefinition.mutate({ params: { path: { id: definition.id } } })}
       />
     ),
-    company: slots?.company ?? null,
+    company: slots?.company ?? <CompanyPanel />,
     buildings: slots?.buildings ?? null,
     plants: slots?.plants ?? null,
     analyzers: slots?.analyzers ?? null,
