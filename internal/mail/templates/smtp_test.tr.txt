@@ -1,0 +1,1 @@
+Bu ileti, ekokod SMTP ayarlarınızı doğrulamak için gönderilmiştir. Bu iletiyi aldıysanız ayarlarınız çalışıyor.
