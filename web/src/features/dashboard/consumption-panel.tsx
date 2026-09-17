@@ -17,7 +17,7 @@ import type { Locale } from '@/i18n/locale';
 import type { ConsumptionRow } from '@/lib/api/types';
 import { formatNumber } from '@/lib/format';
 
-import { formatPeriod } from './format-period';
+import { formatPeriod } from '@/lib/format-period';
 
 /** The three series the dashboard chart can draw (01 §7.2). */
 export type SeriesToggles = { active: boolean; inductive: boolean; capacitive: boolean };
