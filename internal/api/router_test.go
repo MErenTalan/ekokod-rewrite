@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/api"
+	v1 "github.com/MErenTalan/ekokod-rewrite/internal/api/v1"
 	"github.com/MErenTalan/ekokod-rewrite/internal/buildinfo"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/health"
@@ -130,4 +131,32 @@ func TestCORSAllowsTheConfiguredOriginOnly(t *testing.T) {
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	require.Empty(t, rec.Header().Get("Access-Control-Allow-Origin"))
+}
+
+func TestAPIV1MountedWithErrorEnvelope(t *testing.T) {
+	router := api.NewRouter(api.Deps{
+		Cfg: testConfig(t), Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Build: buildinfo.Get(),
+		V1: v1.NewRouterForTable(v1.Table(), &v1.Handlers{}, v1.Middleware{}, nil),
+	})
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/nope", nil))
+	require.Equal(t, http.StatusNotFound, rec.Code)
+	var body struct {
+		Error struct {
+			Code      string `json:"code"`
+			Message   string `json:"message"`
+			RequestID string `json:"request_id"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.Equal(t, "not_found", body.Error.Code)
+	require.NotEmpty(t, body.Error.RequestID)
+
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/v1/openapi.json", nil))
+	require.Equal(t, http.StatusMethodNotAllowed, rec.Code)
+
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/openapi.json", nil))
+	require.Equal(t, http.StatusOK, rec.Code)
 }

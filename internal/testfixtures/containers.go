@@ -906,3 +906,14 @@ func withDatabase(dsn, name string) string {
 	u.Path = "/" + name
 	return u.String()
 }
+
+// SharedRedisConfig points at the long-lived test Redis when
+// EKOKOD_TEST_REDIS_URL is set (make test-redis-up), else boots a container.
+// Callers must namespace their keys: the shared server is not flushed.
+func SharedRedisConfig(t *testing.T) config.Redis {
+	t.Helper()
+	if url := os.Getenv("EKOKOD_TEST_REDIS_URL"); url != "" {
+		return config.Redis{URL: url, CacheDB: 0, QueueDB: 1}
+	}
+	return RedisConfig(t)
+}

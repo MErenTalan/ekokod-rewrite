@@ -19,6 +19,8 @@ type Deps struct {
 	Log         *slog.Logger
 	Build       buildinfo.Info
 	ReadyChecks []health.Check
+	// V1 is the /api/v1 surface (internal/api/v1), built by internal/apiwire.
+	V1 http.Handler
 }
 
 // NewRouter builds the HTTP handler.
@@ -36,6 +38,9 @@ func NewRouter(d Deps) http.Handler {
 	r.Get("/health/ready", readyHandler(d.ReadyChecks))
 	r.Get("/version", versionHandler(d.Build))
 	r.Handle("/metrics", middleware.MetricsHandler())
+	if d.V1 != nil {
+		r.Mount("/api/v1", d.V1)
+	}
 
 	return r
 }
