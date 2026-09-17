@@ -16,6 +16,7 @@
   "threshold": "Threshold",
   "notification": "Notification",
   "saved": "Saved",
+  "loadFailed": "Could not load the data",
   "saveFailed": "Could not be saved",
   "deleted": "Deleted",
   "created": "Created"

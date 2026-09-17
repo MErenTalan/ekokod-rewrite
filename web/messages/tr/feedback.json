@@ -16,6 +16,7 @@
   "threshold": "Eşik",
   "notification": "Bildirim",
   "saved": "Kaydedildi",
+  "loadFailed": "Veriler yüklenemedi",
   "saveFailed": "Kaydedilemedi",
   "deleted": "Silindi",
   "created": "Oluşturuldu"

@@ -5,6 +5,7 @@ import { Tooltip } from 'radix-ui';
 import { useState, type ReactNode } from 'react';
 
 import { makeQueryClient } from '@/lib/api/query';
+import { QueryErrorToaster } from '@/lib/api/query-errors';
 
 import { LiveAnnouncerProvider } from './ui/live-announcer';
 import { Toaster } from './ui/toast';
@@ -16,7 +17,10 @@ export function AppProviders({ children }: { children: ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <Tooltip.Provider delayDuration={300}>
         <LiveAnnouncerProvider>
-          <Toaster>{children}</Toaster>
+          <Toaster>
+            <QueryErrorToaster />
+            {children}
+          </Toaster>
         </LiveAnnouncerProvider>
       </Tooltip.Provider>
     </QueryClientProvider>
