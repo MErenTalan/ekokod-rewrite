@@ -92,3 +92,62 @@ also matched "Cumartesi" (now `exact`), and the restored weekend pair comes back
 own order, so that one assertion accepts either order while the Friday+Saturday one stays strict.
 D5 forbids hex literals outside `src/styles/**`, so the calendar fixtures, tests and stories take
 their colours from `@/styles/event-palette` rather than naming them.
+
+## Task 14 — Phase-end self-review and acceptance
+
+### Authorisation and tenancy (read first, diff 09e07bd..HEAD -- internal/)
+- **Finding, fixed (f93583c):** `jobs.Get` read only the singular `AnalyzerID`, so a
+  backfill (which names `AnalyzerIDs`) and a credential sync (which names none) were
+  visible to any role in the company, including one that sees a single building. Every
+  named analyzer now goes through the scoped repository and a job that names none is
+  only visible with `AllBuildings`. Mutations proved red: (a) `if false` on the
+  company-wide guard, (b) reading only the singular id.
+- `/jobs/{id}` answers `store.ErrNotFound` identically for unknown, unwatchable,
+  foreign-company and out-of-scope ids; the response carries no provider error text.
+- Grouped consumption resolves its subject through the scoped analysis service; both
+  routes have matrix rows (`TestAuthorizationMatrix`, integration, green).
+- Web: `company_id` appears only via `useScopeParams` (R139) — the two other hits read
+  that value back. Every mutation call site sits behind `can(...)` or a `canEdit` prop
+  (company/users/plants/analyzers/buildings panels, settings page, calendar, refresh
+  actions). Credentials send secrets and never render them (`has_secret`, `extra_keys`).
+
+### Accessibility and design (07 §11)
+Findings, all fixed with guards:
+1. **Page-level horizontal scroll (0cc757b).** At 375/768/1024/1440: Consumption let the
+   whole document scroll 2428 px into emptiness — `overflow-auto` clipped the 29-column
+   table visually but left its width in the root scroll area; `contain-paint` on
+   TableContainer fixes it (proved in-browser: scrollX 2428 → 0). The consumption average
+   rendered as `1.635,49478947368421052632` (division scale) and widened its card; it now
+   shows at the energy scale (R161) and a long figure wraps. StaggerGrid items could not
+   shrink below their content (375 px). The calendar's seven day columns now scroll inside
+   the month view. Guard: `tests/e2e/responsive.spec.ts`, four widths × five screens.
+2. **Contrast (04ee79e).** Dark theme muted text on a selected row: 4.37:1. `primary-subtle`
+   darkened for dark theme; the contrast gate now covers secondary text on every subtle
+   surface (75 pairs).
+3. **Touch targets (04ee79e).** Calendar chips and short time-grid blocks now keep 44 px
+   on a coarse pointer (D13).
+4. **Dialog stories (04ee79e).** The three controlled dialogs follow the house pattern
+   (story owns the opener), so Escape has somewhere to return focus to.
+5. **Harness (04ee79e).** Axe measures the settled state — a fade in flight reads as low
+   contrast — and the keyboard walk knows Chromium keeps a `type=time` input active while
+   Tab crosses its inner fields.
+6. **Errors were invisible (5c026a1).** No screen surfaced a failed GET: a failed request
+   looked like an empty screen. `QueryErrorToaster` says it once per query in the API's own
+   wording; reading that code showed the retry policy tested an HTTP status the thrown
+   envelope never carries, so every 4xx was retried twice. Both now read the envelope code.
+   Mutations proved red: no toast; no dedup; refusal speaks; retry everything.
+
+### Acceptance evidence
+- Go `-race`, package by package: auth, domain/grouping, service/{jobs,analysis,loadprofile},
+  api/v1 (+kit, mw), job, credentials, seed, scheduler, worker, arch — all ok.
+- Integration (`-tags=integration`, shared containers): api/v1, credentials, seed, analysis ok;
+  `TestAuthorizationMatrix` and `TestCredentialsNeverLeak` green.
+- `golangci-lint run --concurrency 2 --build-tags=integration ./internal/...` → 0 issues.
+- `make check-generate`, `make openapi` → no diff.
+- Web: lint 0, typecheck 0, check:api ok, i18n parity 17 namespaces / 861 keys,
+  contrast 75 pairs × 2 themes, vitest 180 files / 644 tests, `pnpm audit --audit-level=high`
+  → no known vulnerabilities.
+- Storybook build ok; a11y in chunks, `--workers=1`: Dashboard+Consumption 212,
+  LoadProfile 98, Calendar 124, Settings 228, Shell 156, Jobs/Scope/Table/Domain 216 — all green.
+- e2e full suite: 39 passed (auth, dashboard, consumption, load-profile, settings, calendar,
+  responsive), `pnpm build` first, `--workers=1`.
