@@ -15,6 +15,7 @@ import trDashboard from './tr/dashboard.json';
 import trConsumption from './tr/consumption.json';
 import trLoadProfile from './tr/loadProfile.json';
 import trCalendar from './tr/calendar.json';
+import trSettings from './tr/settings.json';
 import enApp from './en/app.json';
 import enHealth from './en/health.json';
 import enUnits from './en/units.json';
@@ -31,6 +32,7 @@ import enDashboard from './en/dashboard.json';
 import enConsumption from './en/consumption.json';
 import enLoadProfile from './en/loadProfile.json';
 import enCalendar from './en/calendar.json';
+import enSettings from './en/settings.json';
 
 const tr = {
   app: trApp,
@@ -49,6 +51,7 @@ const tr = {
   consumption: trConsumption,
   loadProfile: trLoadProfile,
   calendar: trCalendar,
+  settings: trSettings,
 };
 const en = {
   app: enApp,
@@ -67,6 +70,7 @@ const en = {
   consumption: enConsumption,
   loadProfile: enLoadProfile,
   calendar: enCalendar,
+  settings: enSettings,
 };
 
 export type Messages = typeof tr;
