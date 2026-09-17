@@ -1,1 +1,10 @@
-{}
+{
+  "columns": "Sütunlar",
+  "actions": "İşlemler",
+  "rowActions": "İşlemler: {label}",
+  "sortAscending": "Artan sırala",
+  "sortDescending": "Azalan sırala",
+  "noResults": "Sonuç bulunamadı",
+  "export": "Dışa aktar",
+  "scrollRegion": "{caption} tablosu"
+}

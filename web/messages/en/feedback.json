@@ -1,1 +1,18 @@
-{}
+{
+  "breadcrumb": "Breadcrumb",
+  "close": "Close",
+  "pageOf": "Page {page} of {count}",
+  "previousPage": "Previous page",
+  "nextPage": "Next page",
+  "rowsPerPage": "Rows per page",
+  "totalItems": "{count} records",
+  "loading": "Loading...",
+  "dismiss": "Dismiss",
+  "stepOf": "Step {current} of {total}",
+  "stepCompleted": "Completed",
+  "stepCurrent": "Current step",
+  "notifications": "Notifications ({hotkey})",
+  "progressIndeterminate": "In progress",
+  "threshold": "Threshold",
+  "notification": "Notification"
+}
