@@ -43,7 +43,7 @@ func NewRefreshAnalyzerTask(p RefreshAnalyzerPayload, o TaskOptions) (*asynq.Tas
 func DecodeRefreshAnalyzer(t *asynq.Task) (RefreshAnalyzerPayload, error) {
 	var p RefreshAnalyzerPayload
 	if err := json.Unmarshal(t.Payload(), &p); err != nil {
-		return p, fmt.Errorf("%w: %v", asynq.SkipRetry, err)
+		return p, fmt.Errorf("%w: %w", asynq.SkipRetry, err)
 	}
 	if p.CompanyID == uuid.Nil || p.AnalyzerID == uuid.Nil || p.CredentialID == uuid.Nil {
 		return p, fmt.Errorf("%w: incomplete refresh payload", asynq.SkipRetry)
