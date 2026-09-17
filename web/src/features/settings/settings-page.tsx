@@ -14,9 +14,11 @@ import { useSession } from '@/lib/session/session-provider';
 import { useLogout } from '@/lib/session/use-logout';
 
 import { AccountTabView } from './account-tab';
+import { AnalyzersPanel } from './analyzers-panel';
 import { BuildingsPanel } from './buildings-panel';
 import { CompanyPanel } from './company-panel';
 import { PlantsPanel } from './plants-panel';
+import { UsersPanel } from './users-panel';
 import { IntegrationsTabView } from './integrations-tab';
 import { SmtpTabView } from './smtp-tab';
 import { resolveTab, visibleTabs, type SettingsTabId } from './tabs';
@@ -136,8 +138,8 @@ export function SettingsPage({ slots }: { slots?: Partial<Record<SettingsTabId, 
     company: slots?.company ?? <CompanyPanel />,
     buildings: slots?.buildings ?? <BuildingsPanel />,
     plants: slots?.plants ?? <PlantsPanel />,
-    analyzers: slots?.analyzers ?? null,
-    users: slots?.users ?? null,
+    analyzers: slots?.analyzers ?? <AnalyzersPanel />,
+    users: slots?.users ?? <UsersPanel />,
   };
 
   return (
