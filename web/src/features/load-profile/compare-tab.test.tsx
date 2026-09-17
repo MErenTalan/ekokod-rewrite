@@ -23,10 +23,25 @@ describe('CompareTabView', () => {
     expect(legend).toHaveTextContent('Yaz – Hafta sonu');
   });
 
-  it('refuses a seventh profile and says why (D21)', () => {
-    const six = PROFILE_KEYS.slice(0, MAX_COMPARED) as ProfileKey[];
+  // D21: more than six series stop being readable, so the limit is six — the
+  // literal number, not whatever the constant happens to say.
+  it('refuses a seventh profile and says why (D21)', async () => {
+    expect(MAX_COMPARED).toBe(6);
+    const six: ProfileKey[] = [
+      'weekday',
+      'weekend',
+      'winter_weekday',
+      'winter_weekend',
+      'spring_weekday',
+      'spring_weekend',
+    ];
     const onSelectedChange = vi.fn();
     const r = renderWithProviders(<CompareTabView data={data} selected={six} onSelectedChange={onSelectedChange} />);
     expect(r.getByText('En fazla 6 profil seçebilirsiniz')).toBeInTheDocument();
+
+    await r.user.click(r.getByRole('combobox', { name: 'Karşılaştırılacak profiller' }));
+    expect(await r.findByRole('option', { name: 'Yaz – Hafta içi' })).toHaveAttribute('aria-disabled', 'true');
+    expect(onSelectedChange).not.toHaveBeenCalled();
   });
+
 });
