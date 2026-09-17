@@ -24,12 +24,12 @@ func TestRedirectURIDerivedFromPublicURL(t *testing.T) {
 
 	t.Run("derived from public URL, trailing slash trimmed", func(t *testing.T) {
 		cfg := &config.Config{HTTP: config.HTTP{PublicURL: "https://app.example.com/"}}
-		require.Equal(t, "https://app.example.com/integrations/isolar/callback", worker.RedirectURI(cfg))
+		require.Equal(t, "https://app.example.com/api/v1/integrations/isolar/callback", worker.RedirectURI(cfg))
 	})
 
 	t.Run("no trailing slash on public URL", func(t *testing.T) {
 		cfg := &config.Config{HTTP: config.HTTP{PublicURL: "https://app.example.com"}}
-		require.Equal(t, "https://app.example.com/integrations/isolar/callback", worker.RedirectURI(cfg))
+		require.Equal(t, "https://app.example.com/api/v1/integrations/isolar/callback", worker.RedirectURI(cfg))
 	})
 }
 

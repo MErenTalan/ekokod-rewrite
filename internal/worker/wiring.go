@@ -71,7 +71,7 @@ const isolarStateKeyInfo = "isolar-oauth-state/v1"
 
 // isolarCallbackPath is the fixed suffix RedirectURI appends to PublicURL
 // when EKOKOD_ISOLAR_REDIRECT_URL is not set.
-const isolarCallbackPath = "/integrations/isolar/callback"
+const isolarCallbackPath = "/api/v1/integrations/isolar/callback" // F6a: the callback route lives under /api/v1
 
 // StateKey derives the isolar OAuth state HMAC key from the platform's JWT
 // signing key (HMAC-SHA256, domain-separated by isolarStateKeyInfo) —

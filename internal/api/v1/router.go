@@ -9,12 +9,15 @@ import (
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/api/v1/kit"
 	"github.com/MErenTalan/ekokod-rewrite/internal/api/v1/mw"
+	"github.com/MErenTalan/ekokod-rewrite/internal/credentials"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
 	perr "github.com/MErenTalan/ekokod-rewrite/internal/platform/errors"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/analysis"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/assets"
 	authsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/auth"
 	billingsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/billing"
+	"github.com/MErenTalan/ekokod-rewrite/internal/service/calendar"
+	"github.com/MErenTalan/ekokod-rewrite/internal/service/integrations"
 	tariffsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/tariff"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/tenancy"
 )
@@ -39,6 +42,9 @@ type Handlers struct {
 	Tariffs      *tariffsvc.Service
 	Billing      *billingsvc.Service
 	BillRequests billingsvc.Requests
+	Calendar     *calendar.Service
+	Definitions  integrations.Definitions
+	Credentials  *credentials.Service
 	Clock        clock.Clock
 	Log          *slog.Logger
 	ClientIP     func(*http.Request) string

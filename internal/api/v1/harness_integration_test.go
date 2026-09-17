@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -28,7 +29,10 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/apiwire"
 	"github.com/MErenTalan/ekokod-rewrite/internal/auth"
 	"github.com/MErenTalan/ekokod-rewrite/internal/buildinfo"
+	"github.com/MErenTalan/ekokod-rewrite/internal/credentials"
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
+	"github.com/MErenTalan/ekokod-rewrite/internal/integration"
+	"github.com/MErenTalan/ekokod-rewrite/internal/integration/isolar"
 	"github.com/MErenTalan/ekokod-rewrite/internal/mail"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
@@ -85,16 +89,48 @@ func (e *recordingEnqueuer) snapshot() []*asynq.Task {
 	return append([]*asynq.Task(nil), e.tasks...)
 }
 
+// fakeProviders answers every verification by the credential's username:
+// "config-broken" → ErrConfig, "auth-broken" → ErrAuth, anything else succeeds.
+type fakeProviders struct {
+	exchanged sync.Map
+}
+
+func (f *fakeProviders) Verifier(integration.Provider) (credentials.Verifier, error) { return f, nil }
+
+func (f *fakeProviders) Verify(_ context.Context, creds integration.Credentials) error {
+	switch creds.Username {
+	case "config-broken":
+		return &integration.Error{Kind: integration.ErrConfig, Provider: creds.Provider, Op: "verify"}
+	case "auth-broken":
+		return &integration.Error{Kind: integration.ErrAuth, Provider: creds.Provider, Op: "verify", HTTPStatus: 401}
+	}
+	return nil
+}
+
+func (f *fakeProviders) AuthorizeURL(_ integration.Credentials, redirectURI string) (string, error) {
+	return "https://web3.isolarcloud.example/#/authorized-app?redirectUrl=" + url.QueryEscape(redirectURI), nil
+}
+
+func (f *fakeProviders) ExchangeCode(_ context.Context, _ integration.Credentials, code, _ string) (isolar.Token, error) {
+	f.exchanged.Store(code, true)
+	return isolar.Token{AccessToken: integration.NewSecret([]byte("isolar-access-" + code)), ExpiresAt: time.Now().Add(time.Hour)}, nil
+}
+
+func (f *fakeProviders) Refresh(context.Context, integration.Credentials) (isolar.Token, error) {
+	return isolar.Token{}, errors.New("not used")
+}
+
 type harness struct {
-	enq    *recordingEnqueuer
-	t      *testing.T
-	srv    *httptest.Server
-	clock  *clock.Fake
-	mail   *capturedMail
-	fx     seed.Fixtures
-	pool   *pgxpool.Pool
-	cfg    *config.Config
-	hasher auth.Hasher
+	providers *fakeProviders
+	enq       *recordingEnqueuer
+	t         *testing.T
+	srv       *httptest.Server
+	clock     *clock.Fake
+	mail      *capturedMail
+	fx        seed.Fixtures
+	pool      *pgxpool.Pool
+	cfg       *config.Config
+	hasher    auth.Hasher
 }
 
 func newHarness(t *testing.T, tune ...func(*config.Config)) *harness {
@@ -121,13 +157,14 @@ func newHarness(t *testing.T, tune ...func(*config.Config)) *harness {
 	for _, f := range tune {
 		f(cfg)
 	}
-	h := &harness{enq: &recordingEnqueuer{seen: map[string]bool{}}, t: t, clock: clock.NewFake(time.Date(2026, 9, 17, 10, 0, 0, 0, time.UTC)), mail: &capturedMail{}, pool: pool, cfg: cfg,
+	h := &harness{providers: &fakeProviders{}, enq: &recordingEnqueuer{seen: map[string]bool{}}, t: t, clock: clock.NewFake(time.Date(2026, 9, 17, 10, 0, 0, 0, time.UTC)), mail: &capturedMail{}, pool: pool, cfg: cfg,
 		hasher: auth.Hasher{Pepper: cfg.Security.PasswordPepper, Cost: cfg.Security.BcryptCost}}
 	fx, err := seed.E2EFixtures(ctx, pool, h.hasher, testPassword, h.clock.Now())
 	require.NoError(t, err)
 	h.fx = fx
 	built, err := apiwire.Build(ctx, cfg, pool, testfixtures.DiscardLogger(), apiwire.Options{
 		Clock: h.clock, Mail: h.mail, RedisPrefix: "test:" + uuid.NewString() + ":", Async: func(f func()) { f() }, Enqueuer: h.enq,
+		Verifiers: h.providers, ISolar: h.providers,
 	})
 	require.NoError(t, err)
 	t.Cleanup(built.Close)

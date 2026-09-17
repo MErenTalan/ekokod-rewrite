@@ -1719,6 +1719,14 @@ type AdminCatalogueRepository interface {
 	// its unique (provider, subtype), and returns the number of rows written.
 	UpsertIntegrationDefinitions(ctx context.Context, defs []model.IntegrationDefinition) (int64, error)
 
+	// CreateIntegrationDefinition, UpdateIntegrationDefinition and
+	// DeleteIntegrationDefinition are the admin role's catalogue editing
+	// (05 §15). A duplicate (provider, subtype) is ErrConflict; deleting a
+	// definition a credential still references is ErrConflict.
+	CreateIntegrationDefinition(ctx context.Context, d model.IntegrationDefinition) (model.IntegrationDefinition, error)
+	UpdateIntegrationDefinition(ctx context.Context, d model.IntegrationDefinition) (model.IntegrationDefinition, error)
+	DeleteIntegrationDefinition(ctx context.Context, id uuid.UUID) error
+
 	// UpsertBillingParameters writes one dated billing_parameters row keyed on
 	// effective_from (R106).
 	UpsertBillingParameters(ctx context.Context, p model.BillingParameters) (model.BillingParameters, error)
