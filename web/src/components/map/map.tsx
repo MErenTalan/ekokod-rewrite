@@ -14,6 +14,8 @@ export type MapMarker = { id: string; name: string; lat: number; lng: number; st
 export type MapProps = {
   markers: MapMarker[];
   label: string;
+  /** Marker to centre on and highlight; the list fallback marks the same row (R204). */
+  focusId?: string;
   /** Style JSON URL or raster tile template; defaults to NEXT_PUBLIC_MAP_TILE_URL (plan D23). */
   tileUrl?: string;
   height?: number;
@@ -37,11 +39,13 @@ const styleFor = (url: string) =>
     : { version: 8 as const, sources: { tiles: { type: 'raster' as const, tiles: [url], tileSize: 256 } }, layers: [{ id: 'tiles', type: 'raster' as const, source: 'tiles' }] };
 
 /** MapLibre when a tile source is configured and loads within 8 s; otherwise the coordinate list (no public OSM default, Q5). */
-export function Map({ markers, label, tileUrl = process.env.NEXT_PUBLIC_MAP_TILE_URL ?? '', height = 360, onMarkerSelect }: MapProps) {
+export function Map({ markers, label, focusId, tileUrl = process.env.NEXT_PUBLIC_MAP_TILE_URL ?? '', height = 360, onMarkerSelect }: MapProps) {
   const t = useTranslations('map');
   const container = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'fallback'>(tileUrl ? 'loading' : 'fallback');
   const [showList, setShowList] = useState(false);
+
+  const instanceRef = useRef<{ flyTo(options: { center: [number, number]; zoom: number }): void } | null>(null);
 
   useEffect(() => {
     if (!tileUrl) return;
@@ -59,6 +63,7 @@ export function Map({ markers, label, tileUrl = process.env.NEXT_PUBLIC_MAP_TILE
         markers.forEach((m) => bounds.extend([m.lng, m.lat]));
         const instance = new maplibre.Map({ container: container.current, style: styleFor(tileUrl), bounds: markers.length ? bounds : undefined, fitBoundsOptions: { padding: 48, maxZoom: 14 } });
         map = instance;
+        instanceRef.current = instance;
         instance.on('load', () => {
           clearTimeout(timer);
           if (!cancelled) setState('ready');
@@ -81,15 +86,22 @@ export function Map({ markers, label, tileUrl = process.env.NEXT_PUBLIC_MAP_TILE
     return () => {
       cancelled = true;
       clearTimeout(timer);
+      instanceRef.current = null;
       map?.remove();
     };
   }, [tileUrl, markers, onMarkerSelect, t]);
+
+  useEffect(() => {
+    const marker = markers.find((m) => m.id === focusId);
+    if (state !== 'ready' || !marker) return;
+    instanceRef.current?.flyTo({ center: [marker.lng, marker.lat], zoom: 14 });
+  }, [focusId, markers, state]);
 
   if (state === 'fallback') {
     return (
       <div className="flex flex-col gap-3">
         <Alert tone="info" title={t('tilesUnavailable')} />
-        <MapMarkerList markers={markers} label={label} onMarkerSelect={onMarkerSelect} />
+        <MapMarkerList markers={markers} label={label} focusId={focusId} onMarkerSelect={onMarkerSelect} />
       </div>
     );
   }
@@ -99,7 +111,7 @@ export function Map({ markers, label, tileUrl = process.env.NEXT_PUBLIC_MAP_TILE
       <Button variant="ghost" size="sm" iconStart={List} className="self-start" aria-expanded={showList} onClick={() => setShowList((s) => !s)}>
         {showList ? t('hideList') : t('showList')}
       </Button>
-      {showList ? <MapMarkerList markers={markers} label={label} onMarkerSelect={onMarkerSelect} /> : null}
+      {showList ? <MapMarkerList markers={markers} label={label} focusId={focusId} onMarkerSelect={onMarkerSelect} /> : null}
     </div>
   );
 }

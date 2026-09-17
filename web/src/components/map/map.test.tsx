@@ -34,6 +34,12 @@ describe('Map', () => {
     expect(onMarkerSelect).toHaveBeenCalledWith('m1');
   });
 
+  it('marks the focused entry when there is no map to centre (R204)', () => {
+    const { getByRole } = renderWithProviders(<Map markers={markers} label="Bina konumları" tileUrl="" focusId="m2" />);
+    expect(getByRole('row', { name: /Eski Depo/ })).toHaveAttribute('aria-current', 'true');
+    expect(getByRole('row', { name: /Merkez Bina/ })).not.toHaveAttribute('aria-current');
+  });
+
   it('has no axe violations', async () => {
     const { container } = renderWithProviders(<Map markers={markers} label="Bina konumları" tileUrl="" />);
     await expectNoAxeViolations(container);

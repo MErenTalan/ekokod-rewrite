@@ -60,6 +60,7 @@
     "fontkit": "2.0.4",
     "jsdom": "^26.0.0",
     "openapi-typescript": "7.13.0",
+    "openapi-typescript-helpers": "0.1.0",
     "prettier": "3.9.6",
     "storybook": "10.6.0",
     "tailwindcss": "4.3.3",

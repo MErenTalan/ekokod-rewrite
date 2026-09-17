@@ -14,7 +14,6 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
-	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/admin"
 )
 
 // The synthetic demo company (R138, R186). Every id is fixed.
@@ -151,76 +150,7 @@ func ExtendDemo(ctx context.Context, pool *pgxpool.Pool, now time.Time) (int, er
 }
 
 func extendDemo(ctx context.Context, pool *pgxpool.Pool, now time.Time) (int, error) {
-	sc := store.SystemScope(DemoCompanyID)
-	analyzers := postgres.NewAnalyzerRepository(pool)
-	readings := postgres.NewReadingRepository(pool)
-	end := now.UTC().Truncate(time.Hour)
-	total := 0
-	earliest := end
-	for i, id := range DemoAnalyzerIDs {
-		a, err := analyzers.Get(ctx, sc, id)
-		if err != nil {
-			return total, fmt.Errorf("seed demo analyzer %s: %w", id, err)
-		}
-		start := end.Add(-demoHistory)
-		registers := demoRegisters{active: decimal.NewFromInt(100000), inductive: decimal.NewFromInt(20000), capacitive: decimal.NewFromInt(4000)}
-		if a.LastReadingAt != nil {
-			last, err := readings.Range(ctx, sc, id, store.TimeRange{From: *a.LastReadingAt, To: a.LastReadingAt.Add(time.Second)}, model.ReadingKindLoadProfile)
-			if err != nil {
-				return total, err
-			}
-			if len(last) == 1 && last[0].ActiveImport != nil && last[0].ReactiveInductiveImport != nil && last[0].ReactiveCapacitiveImport != nil {
-				registers = demoRegisters{*last[0].ActiveImport, *last[0].ReactiveInductiveImport, *last[0].ReactiveCapacitiveImport}
-				registers.advance(i, *a.LastReadingAt)
-				start = a.LastReadingAt.Add(time.Hour)
-			}
-		}
-		if start.After(end) {
-			continue
-		}
-		earliest = minTime(earliest, start)
-		var batch []model.MeterReading
-		flush := func() error {
-			if len(batch) == 0 {
-				return nil
-			}
-			_, _, err := readings.BulkInsert(ctx, sc, batch)
-			total += len(batch)
-			batch = batch[:0]
-			return err
-		}
-		for ts := start; !ts.After(end); ts = ts.Add(time.Hour) {
-			a, ind, capa := registers.active, registers.inductive, registers.capacitive
-			batch = append(batch, model.MeterReading{
-				AnalyzerID: id, Ts: ts, Kind: model.ReadingKindLoadProfile, ActiveImport: &a, ReactiveInductiveImport: &ind,
-				ReactiveCapacitiveImport: &capa, MultiplierApplied: decimal.NewFromInt(1), SourceProvider: model.IntegrationProviderOSOS, IngestedAt: now,
-			})
-			registers.advance(i, ts)
-			if len(batch) == 5000 {
-				if err := flush(); err != nil {
-					return total, err
-				}
-			}
-		}
-		if err := flush(); err != nil {
-			return total, err
-		}
-		if err := analyzers.TouchLastReading(ctx, sc, id, end); err != nil {
-			return total, err
-		}
-	}
-	if total == 0 {
-		return 0, nil
-	}
-	// Monthly and yearly figures are composed from the daily view (R94), so the
-	// two finest views are enough for backfilled history to become visible.
-	aggregates := admin.NewAggregateRepository(pool)
-	for _, view := range []store.AggregateView{store.ViewConsumptionHourly, store.ViewConsumptionDaily} {
-		if err := aggregates.Refresh(ctx, view, store.TimeRange{From: earliest.Add(-48 * time.Hour), To: end.Add(time.Hour)}); err != nil {
-			return total, err
-		}
-	}
-	return total, nil
+	return fillHourly(ctx, pool, store.SystemScope(DemoCompanyID), DemoAnalyzerIDs, []int{0, 1}, demoHistory, now)
 }
 
 func minTime(a, b time.Time) time.Time {
@@ -235,12 +165,9 @@ type demoRegisters struct{ active, inductive, capacitive decimal.Decimal }
 // advance adds the consumption of the hour starting at ts: a deterministic
 // weekday/weekend load curve with ±10 % noise, 18–26 % inductive and 2–6 %
 // capacitive shares, so re-running always produces the same history.
-func (r *demoRegisters) advance(analyzer int, ts time.Time) {
+func (r *demoRegisters) advance(p readingProfile, ts time.Time) {
 	local := ts.In(istanbul)
-	day, night := int64(120), int64(50)
-	if analyzer == 1 {
-		day, night = 20, 8
-	}
+	day, night := p.day, p.night
 	base := night
 	if h := local.Hour(); h >= 6 && h < 18 {
 		base = day
@@ -248,7 +175,7 @@ func (r *demoRegisters) advance(analyzer int, ts time.Time) {
 	if wd := local.Weekday(); wd == time.Saturday || wd == time.Sunday {
 		base = base * 4 / 10
 	}
-	seed := uint32(42000 + local.YearDay()*100 + local.Year()*37000 + local.Hour() + analyzer*7)
+	seed := uint32(42000 + local.YearDay()*100 + local.Year()*37000 + local.Hour() + int(p.day)*7)
 	noise := mulberry32(seed)
 	step := decimal.NewFromInt(base).Mul(decimal.New(int64(900+noise%201), -3))
 	r.active = r.active.Add(step)

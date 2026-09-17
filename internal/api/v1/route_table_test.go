@@ -184,3 +184,32 @@ func TestOpenAPIDeclaresCompanyIDOnScopedRoutes(t *testing.T) {
 	require.Greater(t, scoped, 70)
 	require.GreaterOrEqual(t, public, 5)
 }
+
+// An `enum` tag on a slice field must describe the items, not the array: a
+// generated client otherwise types the whole parameter as a single value.
+func TestArrayEnumsDescribeTheirItems(t *testing.T) {
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(v1.OpenAPIDocument(), &doc))
+	arrays := 0
+	var walk func(node any)
+	walk = func(node any) {
+		switch v := node.(type) {
+		case map[string]any:
+			if v["type"] == "array" {
+				require.Nil(t, v["enum"], "an array schema must not carry the enum itself")
+				if items, ok := v["items"].(map[string]any); ok && items["enum"] != nil {
+					arrays++
+				}
+			}
+			for _, child := range v {
+				walk(child)
+			}
+		case []any:
+			for _, child := range v {
+				walk(child)
+			}
+		}
+	}
+	walk(doc)
+	require.GreaterOrEqual(t, arrays, 1, "at least buildings.list include is an array of enum values")
+}

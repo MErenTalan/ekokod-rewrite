@@ -36,14 +36,25 @@ function withCookies(header: string, setCookies: string[]): string {
   return [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
 }
 
+/** PATH_HEADER carries the guarded path to the server layout (R208). */
+export const PATH_HEADER = 'x-ekokod-path';
+
+function withPath(request: NextRequest, path: string): Headers {
+  const headers = new Headers(request.headers);
+  headers.set(PATH_HEADER, path);
+  return headers;
+}
+
 /** Guards every page: a missing access cookie is refreshed server-side before the render (R168). */
 export async function middleware(request: NextRequest): Promise<NextResponse> {
   const { pathname, search } = request.nextUrl;
   if (pathname === '/') return redirectTo(request, HOME_PATH);
   if (pathname.startsWith('/auth/') || pathname === '/auth') return NextResponse.next();
-  if (request.cookies.get(ACCESS_COOKIE)?.value) return NextResponse.next();
-
   const next = pathname + search;
+  // R208: a server component cannot read its own URL, so the guarded path travels
+  // as a header and the layout's redirect can carry `next` like this one does.
+  if (request.cookies.get(ACCESS_COOKIE)?.value) return NextResponse.next({ request: { headers: withPath(request, next) } });
+
   const login = authRedirectFor('session_revoked', next)!;
   if (!request.cookies.get(REFRESH_COOKIE)?.value) return redirectTo(request, login);
 
@@ -66,7 +77,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   }
   const setCookies = response.headers.getSetCookie();
   if (response.ok) {
-    const forwarded = new Headers(request.headers);
+    const forwarded = withPath(request, next);
     forwarded.set('cookie', withCookies(request.headers.get('cookie') ?? '', setCookies));
     const res = NextResponse.next({ request: { headers: forwarded } });
     for (const c of setCookies) res.headers.append('set-cookie', c);

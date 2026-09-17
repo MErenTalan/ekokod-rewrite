@@ -47,6 +47,11 @@ afterEach(() => {
 });
 
 describe('middleware', () => {
+  it('tells the layout which path it guarded (R208)', async () => {
+    const res = await middleware(request('/ekorm/consumption?x=1', 'ekokod_at=AT'));
+    expect(res.headers.get('x-middleware-request-x-ekokod-path')).toBe('/ekorm/consumption?x=1');
+  });
+
   it('redirects / to /ekorm', async () => {
     const res = await middleware(request('/'));
     expect(res.status).toBe(307);

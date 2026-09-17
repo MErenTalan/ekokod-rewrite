@@ -12,3 +12,18 @@
       transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
   }
 }
+
+@layer components {
+  /* Card-grid stagger (07 §8, plan D26): each card enters --duration-stagger-step after the one before it. */
+  @media (prefers-reduced-motion: no-preference) {
+    .stagger-item {
+      animation: stagger-in var(--duration-dialog-in) ease-out backwards;
+      animation-delay: calc(var(--i, 0) * var(--duration-stagger-step));
+    }
+  }
+}
+
+@keyframes stagger-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}

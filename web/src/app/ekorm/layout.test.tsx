@@ -7,6 +7,8 @@ import { renderWithProviders } from '@/test/render';
 
 const getSession = vi.hoisted(() => vi.fn<() => Promise<{ me: MeResponse } | { me: null; code: string }>>());
 vi.mock('@/lib/api/server', () => ({ getSession }));
+const requestHeaders = vi.hoisted(() => ({ current: new Headers() }));
+vi.mock('next/headers', () => ({ headers: async () => requestHeaders.current }));
 const redirect = vi.hoisted(() =>
   vi.fn((href: string) => {
     throw new Error(`NEXT_REDIRECT ${href}`);
@@ -34,6 +36,7 @@ const me = (role: keyof typeof fixture): MeResponse => ({
 
 afterEach(() => {
   getSession.mockReset();
+  requestHeaders.current = new Headers();
   vi.unstubAllGlobals();
 });
 
@@ -41,6 +44,14 @@ describe('/ekorm layout', () => {
   it('sends a user without a session to login', async () => {
     getSession.mockResolvedValue({ me: null, code: 'session_revoked' });
     await expect(EkormLayout({ children: null })).rejects.toThrow('NEXT_REDIRECT /auth/login');
+  });
+
+  it('keeps the page the user asked for as `next` (R208)', async () => {
+    requestHeaders.current = new Headers({ 'x-ekokod-path': '/ekorm/consumption?tab=detay' });
+    getSession.mockResolvedValue({ me: null, code: 'session_revoked' });
+    await expect(EkormLayout({ children: null })).rejects.toThrow(
+      'NEXT_REDIRECT /auth/login?next=%2Fekorm%2Fconsumption%3Ftab%3Ddetay',
+    );
   });
 
   it('explains a device mismatch on the way to login', async () => {

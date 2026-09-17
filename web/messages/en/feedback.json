@@ -14,5 +14,9 @@
   "notifications": "Notifications ({hotkey})",
   "progressIndeterminate": "In progress",
   "threshold": "Threshold",
-  "notification": "Notification"
+  "notification": "Notification",
+  "saved": "Saved",
+  "saveFailed": "Could not be saved",
+  "deleted": "Deleted",
+  "created": "Created"
 }

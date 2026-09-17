@@ -83,12 +83,51 @@ func BuildOpenAPI(routes []Route) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	raw, err = moveArrayEnumsToItems(raw)
+	if err != nil {
+		return nil, err
+	}
 	var out bytes.Buffer
 	if err := json.Indent(&out, raw, "", "  "); err != nil {
 		return nil, err
 	}
 	out.WriteByte('\n')
 	return out.Bytes(), nil
+}
+
+// moveArrayEnumsToItems fixes the reflector's rendering of an `enum` tag on a
+// slice field: it lands on the array schema, where it means "the array itself is
+// one of these", and a generated client then types the parameter as a single
+// value. The values belong to the items schema.
+func moveArrayEnumsToItems(doc []byte) ([]byte, error) {
+	var root any
+	if err := json.Unmarshal(doc, &root); err != nil {
+		return nil, err
+	}
+	var walk func(node any)
+	walk = func(node any) {
+		switch v := node.(type) {
+		case map[string]any:
+			if v["type"] == "array" && v["enum"] != nil {
+				items, ok := v["items"].(map[string]any)
+				if !ok {
+					items = map[string]any{"type": "string"}
+					v["items"] = items
+				}
+				items["enum"] = v["enum"]
+				delete(v, "enum")
+			}
+			for _, child := range v {
+				walk(child)
+			}
+		case []any:
+			for _, child := range v {
+				walk(child)
+			}
+		}
+	}
+	walk(root)
+	return json.Marshal(root)
 }
 
 func errorStatuses(rt Route) []int {

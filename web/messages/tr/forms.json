@@ -29,5 +29,21 @@
   "thisYear": "Bu yıl",
   "lastYear": "Geçen yıl",
   "presets": "Hazır aralıklar",
-  "calendarNavigation": "Takvim gezintisi"
+  "calendarNavigation": "Takvim gezintisi",
+  "errors": {
+    "required": "Zorunlu alan",
+    "invalid": "Geçersiz değer",
+    "email": "Geçerli bir e-posta girin",
+    "min": "Çok kısa",
+    "max": "Çok uzun",
+    "oneof": "Geçersiz seçim",
+    "gtefield": "Bitiş başlangıçtan sonra olmalı",
+    "url": "Geçerli bir adres girin",
+    "uuid": "Geçersiz kayıt",
+    "numeric": "Sayısal bir değer girin",
+    "notAssignable": "Bu rolü atayamazsınız",
+    "tooManyAnalyzers": "Bu binada çok fazla analizör var",
+    "rangeTooWide": "Tarih aralığı çok geniş",
+    "subjectExclusive": "Bina veya analizörden yalnızca birini seçin"
+  }
 }

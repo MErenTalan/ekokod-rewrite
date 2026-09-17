@@ -133,7 +133,38 @@ func E2EFixtures(ctx context.Context, pool *pgxpool.Pool, hasher auth.Hasher, pa
 			return f, err
 		}
 	}
+
 	return f, nil
+}
+
+// e2eReadingHistory is how far back E2EData's readings go: enough for a
+// "last 6 months" filter, the 7-day activity rule (R163) and a full previous
+// month for the sectoral comparison (R162).
+const e2eReadingHistory = 75 * 24 * time.Hour
+
+// E2EData fills the fixture analyzers with hourly readings and gives A1 a bill
+// for the previous month (R194), so the screens have something real to show.
+// It is separate from E2EFixtures because the Go HTTP tests seed the readings
+// their own assertions need; only `ekokod seed e2e` (the Playwright stack)
+// calls this.
+func E2EData(ctx context.Context, pool *pgxpool.Pool, f Fixtures, now time.Time) (int, error) {
+	total := 0
+	for _, tenant := range []struct {
+		company   uuid.UUID
+		analyzers []uuid.UUID
+		profiles  []int
+	}{
+		{f.CompanyA, []uuid.UUID{f.AnalyzerA1, f.AnalyzerA2}, []int{0, 1}},
+		{f.CompanyB, []uuid.UUID{f.AnalyzerB1}, []int{2}},
+	} {
+		n, err := fillHourly(ctx, pool, store.SystemScope(tenant.company), tenant.analyzers, tenant.profiles,
+			e2eReadingHistory, now)
+		total += n
+		if err != nil {
+			return total, err
+		}
+	}
+	return total, ensureBill(ctx, pool, store.SystemScope(f.CompanyA), f.BuildingA1, now)
 }
 
 func ensureCompany(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, name, sector string, now time.Time) error {

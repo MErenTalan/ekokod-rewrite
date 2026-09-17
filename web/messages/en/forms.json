@@ -29,5 +29,21 @@
   "thisYear": "This year",
   "lastYear": "Last year",
   "presets": "Presets",
-  "calendarNavigation": "Calendar navigation"
+  "calendarNavigation": "Calendar navigation",
+  "errors": {
+    "required": "Required",
+    "invalid": "Invalid value",
+    "email": "Enter a valid e-mail address",
+    "min": "Too short",
+    "max": "Too long",
+    "oneof": "Invalid choice",
+    "gtefield": "The end must be after the start",
+    "url": "Enter a valid address",
+    "uuid": "Invalid record",
+    "numeric": "Enter a number",
+    "notAssignable": "You cannot assign this role",
+    "tooManyAnalyzers": "This building has too many analyzers",
+    "rangeTooWide": "The date range is too wide",
+    "subjectExclusive": "Choose either a building or an analyzer, not both"
+  }
 }

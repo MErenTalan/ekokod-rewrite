@@ -53,12 +53,19 @@
     "succeeded": "Tamamlandı",
     "failed": "Başarısız",
     "statusLine": "{label}: {status}",
-    "progress": "{label} ilerlemesi"
+    "progress": "{label} ilerlemesi",
+    "stillRunning": "İş hâlâ çalışıyor; bu ekranı kapatabilirsiniz.",
+    "refreshQueued": "Veri çekme başlatıldı; değerler birkaç dakika içinde görünür."
   },
   "quality": {
     "estimated": "Tahmini",
     "incomplete": "Eksik veri",
     "suspect": "Şüpheli",
     "coverage": "Veri kapsamı {value}"
+  },
+  "refresh": {
+    "hourly": "Saatlik değerleri yenile",
+    "energy": "Enerji değerlerini yenile",
+    "chooseAnalyzer": "Yenilemek için bir analizör seçin"
   }
 }

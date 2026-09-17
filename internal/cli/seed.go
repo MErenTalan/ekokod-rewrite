@@ -114,11 +114,18 @@ func newSeedE2ECmd() *cobra.Command {
 				return err
 			}
 			defer pool.Close()
-			f, err := seed.E2EFixtures(ctx, pool, auth.Hasher{Pepper: cfg.Security.PasswordPepper, Cost: cfg.Security.BcryptCost}, password, time.Now())
+			now := time.Now()
+			f, err := seed.E2EFixtures(ctx, pool, auth.Hasher{Pepper: cfg.Security.PasswordPepper, Cost: cfg.Security.BcryptCost}, password, now)
 			if err != nil {
 				return fmt.Errorf("seed e2e: %w", err)
 			}
-			_, err = fmt.Fprintf(cmd.OutOrStdout(), "e2e fixtures ready: company A %s, company B %s, %d users\n", f.CompanyA, f.CompanyB, len(f.Users))
+			// R194: the screens the e2e suite drives need real readings and a bill.
+			readings, err := seed.E2EData(ctx, pool, f, now)
+			if err != nil {
+				return fmt.Errorf("seed e2e data: %w", err)
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "e2e fixtures ready: company A %s, company B %s, %d users, %d readings\n",
+				f.CompanyA, f.CompanyB, len(f.Users), readings)
 			return err
 		},
 	}

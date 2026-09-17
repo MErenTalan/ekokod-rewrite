@@ -53,12 +53,19 @@
     "succeeded": "Completed",
     "failed": "Failed",
     "statusLine": "{label}: {status}",
-    "progress": "{label} progress"
+    "progress": "{label} progress",
+    "stillRunning": "The job is still running; you can leave this screen.",
+    "refreshQueued": "The pull has started; the values appear within a few minutes."
   },
   "quality": {
     "estimated": "Estimated",
     "incomplete": "Incomplete data",
     "suspect": "Suspect",
     "coverage": "Data coverage {value}"
+  },
+  "refresh": {
+    "hourly": "Refresh hourly values",
+    "energy": "Refresh energy values",
+    "chooseAnalyzer": "Choose an analyzer to refresh"
   }
 }

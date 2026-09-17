@@ -14,5 +14,9 @@
   "notifications": "Bildirimler ({hotkey})",
   "progressIndeterminate": "Devam ediyor",
   "threshold": "Eşik",
-  "notification": "Bildirim"
+  "notification": "Bildirim",
+  "saved": "Kaydedildi",
+  "saveFailed": "Kaydedilemedi",
+  "deleted": "Silindi",
+  "created": "Oluşturuldu"
 }

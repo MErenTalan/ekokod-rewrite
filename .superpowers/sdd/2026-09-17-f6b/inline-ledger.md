@@ -40,3 +40,16 @@ golangci-lint 0 after fixing 4 findings; internal/arch ok; web typecheck ok.
 Mutations: Sunday-start weeks → RED (2 tests); nil summed as zero → RED (2); December in the previous
 winter → RED; hardcoded Sat/Sun instead of the company calendar → first attempt INVALID (did not
 compile), redone → RED. All restored.
+
+## Task 3b — R210 GridBox wiring numbers (ce12c9b)
+Tests first at the service level, then HTTP. Deviations: `validate:"dive,required"` trips the repo's
+`TestRequestTypesAreConsistent` guard (it reads `required` anywhere in the tag), so the DTO uses
+`dive,min=1`; `credentials.Deps` gained `Buildings`, which required updating apiwire, worker and four
+test call sites.
+Gate: credentials, api/v1 (+kit, mw), worker integration ok; golangci-lint 0; web typecheck ok.
+**One unreproduced failure:** a first combined run of credentials+api/v1+worker reported FAIL for
+api/v1; the failing test name was lost to an over-filtered grep, and three subsequent identical runs
+were green. Watched for at phase end.
+Mutations: delete analyzers missing from a later wiring list → RED; replace the caller scope with a
+same-company SystemScope → SURVIVED (equivalent: the foreign building belongs to another company
+either way); removing the building check entirely → RED. All restored.

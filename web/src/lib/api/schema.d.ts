@@ -3957,7 +3957,7 @@ export interface operations {
     "buildings.list": {
         parameters: {
             query?: {
-                include?: "analyzer_count" | "active_status";
+                include?: ("analyzer_count" | "active_status")[];
                 q?: string;
                 sector?: string;
                 limit?: null | number;

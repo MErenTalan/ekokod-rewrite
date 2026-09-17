@@ -12,7 +12,17 @@ import type { MapMarker } from './map';
 const coordinate = (v: number) => formatNumber(v, { minFractionDigits: 5, maxFractionDigits: 5 });
 
 /** The map's accessible equivalent and its offline fallback (plan D23). */
-export function MapMarkerList({ markers, label, onMarkerSelect }: { markers: MapMarker[]; label: string; onMarkerSelect?: (id: string) => void }) {
+export function MapMarkerList({
+  markers,
+  label,
+  focusId,
+  onMarkerSelect,
+}: {
+  markers: MapMarker[];
+  label: string;
+  focusId?: string;
+  onMarkerSelect?: (id: string) => void;
+}) {
   const t = useTranslations('map');
   return (
     <TableContainer label={label} className="max-h-96">
@@ -32,7 +42,8 @@ export function MapMarkerList({ markers, label, onMarkerSelect }: { markers: Map
         </TableHeader>
         <TableBody>
           {markers.map((m) => (
-            <TableRow key={m.id}>
+            // The focused marker is the current row here, since there is no map to centre (R204).
+            <TableRow key={m.id} aria-current={m.id === focusId ? 'true' : undefined}>
               <TableHead scope="row" className="text-foreground type-body">
                 {m.name}
               </TableHead>
