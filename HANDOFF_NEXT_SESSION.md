@@ -62,10 +62,10 @@
 | Branch / worktree | Head | State |
 |---|---|---|
 | `phase/f1-data-model` (main checkout `/mnt/c/Users/meren/Desktop/Work/ekokod-rewrite`) | `10d6577` | F1 complete |
-| `phase/f2-integration-layer` | `7dbe1ea` | F2 complete |
+| `phase/f2-integration-layer` (`/home/personal/ekokod-f2-phase`) | `9919bd3` | F2 complete (`7dbe1ea`); tip also carries the F3 plan doc |
 | `phase/f3-consumption-engine` (`/home/personal/ekokod-f3-phase`) | `58597ec` | F3 complete |
 | `phase/f4-billing-engine` (`/home/personal/ekokod-f4-phase`) | `cf79346` | F4 complete; real-invoice comparison OPEN |
-| `phase/f5-design-system` (`/home/personal/ekokod-f5-phase`) | F5 handoff commit | F5 complete |
+| `phase/f5-design-system` (`/home/personal/ekokod-f5-phase`) | `a162d7a` | F5 complete |
 | **`phase/f6-core-screens`** (`/home/personal/ekokod-f6-phase`) | this handoff commit | **F6a complete** (F4 merged at `24b53ca`; plan `fa18df2`; tasks 1–18 + phase review) |
 | `f6a/task-1` … `f6a/task-19` | merged | local branches only; can be deleted |
 
