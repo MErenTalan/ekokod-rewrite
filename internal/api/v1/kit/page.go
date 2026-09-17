@@ -17,7 +17,7 @@ type cursor struct {
 	Offset int32 `json:"o"`
 }
 
-// Resolve returns the store page to request (limit+1 rows) and the page size;
+// ResolvePage returns the store page to request (limit+1 rows) and the page size;
 // max caps the limit below the repository's own cap.
 func ResolvePage(p dto.PageRequest, maxRows int32) (store.Page, int32, error) {
 	limit := int32(defaultLimit)

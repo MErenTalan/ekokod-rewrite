@@ -4,10 +4,10 @@ package v1_test
 
 import (
 	"bytes"
-	"fmt"
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
