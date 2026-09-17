@@ -73,14 +73,26 @@ var watchable = map[string]bool{
 }
 
 // payloadScope is the part of every watchable payload this service reads.
+// Backfill names its analyzers in the plural, the other two in the singular.
 type payloadScope struct {
-	CompanyID  uuid.UUID
-	AnalyzerID uuid.UUID
+	CompanyID   uuid.UUID
+	AnalyzerID  uuid.UUID
+	AnalyzerIDs []uuid.UUID
+}
+
+// analyzers is every analyzer the job touches. Empty means the job covers the
+// whole company (a credential sync, a backfill over everything it finds).
+func (p payloadScope) analyzers() []uuid.UUID {
+	if p.AnalyzerID != uuid.Nil {
+		return append([]uuid.UUID{p.AnalyzerID}, p.AnalyzerIDs...)
+	}
+	return p.AnalyzerIDs
 }
 
 // Get returns the job's state, or store.ErrNotFound when it does not exist,
-// is not watchable, or belongs to another company or another building's
-// analyzer — one indistinguishable answer, so an id is never an oracle.
+// is not watchable, belongs to another company, touches an analyzer outside
+// the scope, or covers the whole company while the caller sees only some of
+// it — one indistinguishable answer, so an id is never an oracle.
 func (s *Service) Get(ctx context.Context, sc store.Scope, id string) (View, error) {
 	if !sc.Valid() {
 		return View{}, store.ErrInvalidScope
@@ -96,8 +108,14 @@ func (s *Service) Get(ctx context.Context, sc store.Scope, id string) (View, err
 	if err := json.Unmarshal(info.Payload, &p); err != nil || p.CompanyID != sc.CompanyID {
 		return View{}, store.ErrNotFound
 	}
-	if p.AnalyzerID != uuid.Nil {
-		if _, err := s.d.Analyzers.Get(ctx, sc, p.AnalyzerID); err != nil {
+	ids := p.analyzers()
+	// A job that names no analyzer covers the whole company, so only a
+	// principal who may see the whole company may watch it.
+	if len(ids) == 0 && !sc.AllBuildings {
+		return View{}, store.ErrNotFound
+	}
+	for _, id := range ids {
+		if _, err := s.d.Analyzers.Get(ctx, sc, id); err != nil {
 			if errors.Is(err, store.ErrNotFound) {
 				return View{}, store.ErrNotFound
 			}

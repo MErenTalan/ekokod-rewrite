@@ -142,3 +142,37 @@ func TestJobFoundInTheLastQueue(t *testing.T) {
 	require.Equal(t, jobs.Running, v.Status)
 	require.Equal(t, job.TypeIntegrationBackfill, v.Type)
 }
+
+func buildingScope() store.Scope {
+	return store.Scope{CompanyID: companyA, BuildingIDs: []uuid.UUID{uuid.MustParse("55555555-5555-5555-5555-555555555555")}}
+}
+
+func TestJobBackfillChecksEveryAnalyzer(t *testing.T) {
+	t.Parallel()
+	backfill := func(ids ...uuid.UUID) *fakeInspector {
+		return &fakeInspector{tasks: map[string]map[string]*asynq.TaskInfo{job.QueueLow: {"b1": taskInfo(
+			"b1", job.QueueLow, job.TypeIntegrationBackfill, asynq.TaskStateActive,
+			job.BackfillPayload{CompanyID: companyA, CredentialID: uuid.New(), AnalyzerIDs: ids})}}}
+	}
+	_, err := newService(t, backfill(analyzerA, analyzerB), analyzerA).Get(t.Context(), buildingScope(), "b1")
+	require.ErrorIs(t, err, store.ErrNotFound, "one analyzer outside the scope hides the whole job")
+
+	v, err := newService(t, backfill(analyzerA), analyzerA).Get(t.Context(), buildingScope(), "b1")
+	require.NoError(t, err)
+	require.Equal(t, jobs.Running, v.Status)
+}
+
+func TestJobWithoutAnalyzersNeedsTheWholeCompany(t *testing.T) {
+	t.Parallel()
+	insp := func() *fakeInspector {
+		return &fakeInspector{tasks: map[string]map[string]*asynq.TaskInfo{job.QueueDefault: {"s1": taskInfo(
+			"s1", job.QueueDefault, job.TypeIntegrationSyncAnalyzers, asynq.TaskStatePending,
+			job.SyncAnalyzersPayload{CompanyID: companyA, CredentialID: uuid.New()})}}}
+	}
+	_, err := newService(t, insp(), analyzerA).Get(t.Context(), buildingScope(), "s1")
+	require.ErrorIs(t, err, store.ErrNotFound, "a company-wide job is not a building role's to watch")
+
+	v, err := newService(t, insp()).Get(t.Context(), scopeA(), "s1")
+	require.NoError(t, err)
+	require.Equal(t, jobs.Queued, v.Status)
+}
