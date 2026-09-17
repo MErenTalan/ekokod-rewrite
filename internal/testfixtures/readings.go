@@ -16,9 +16,16 @@ import (
 )
 
 // HourlyReadings returns load-profile readings every hour in [from, to) whose
-// active_import register grows by perHour(ts) kWh per hour, starting at 1000.
-// Inductive and capacitive registers grow by 20 % and 5 % of the active step.
+// active_import register grows by perHour(ts) kWh per hour, starting at 1000;
+// inductive and capacitive registers grow by 20 % and 5 % of each step.
 func HourlyReadings(analyzerID uuid.UUID, from, to time.Time, perHour func(ts time.Time) decimal.Decimal) []model.MeterReading {
+	return HourlyReadingsReactive(analyzerID, from, to, perHour, "0.2", "0.05")
+}
+
+// HourlyReadingsReactive is HourlyReadings with explicit inductive and
+// capacitive shares of each active step.
+func HourlyReadingsReactive(analyzerID uuid.UUID, from, to time.Time, perHour func(ts time.Time) decimal.Decimal, inductiveShare, capacitiveShare string) []model.MeterReading {
+	ind, capShare := decimal.RequireFromString(inductiveShare), decimal.RequireFromString(capacitiveShare)
 	active := decimal.NewFromInt(1000)
 	inductive, capacitive := decimal.Zero, decimal.Zero
 	var out []model.MeterReading
@@ -31,8 +38,8 @@ func HourlyReadings(analyzerID uuid.UUID, from, to time.Time, perHour func(ts ti
 		})
 		step := perHour(ts)
 		active = active.Add(step)
-		inductive = inductive.Add(step.Mul(decimal.RequireFromString("0.2")))
-		capacitive = capacitive.Add(step.Mul(decimal.RequireFromString("0.05")))
+		inductive = inductive.Add(step.Mul(ind))
+		capacitive = capacitive.Add(step.Mul(capShare))
 	}
 	return out
 }

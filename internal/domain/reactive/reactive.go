@@ -83,7 +83,7 @@ func Evaluate(in Input) Result {
 		r.Missing = append(r.Missing, MissingInstalledPower)
 		return r
 	}
-	band, ok := findBand(p.ReactiveBands, *in.InstalledPowerKw)
+	band, ok := FindBand(p.ReactiveBands, *in.InstalledPowerKw)
 	if !ok {
 		r.Missing = append(r.Missing, MissingInstalledPower)
 		return r
@@ -123,7 +123,8 @@ func ratio(reg *decimal.Decimal, net decimal.Decimal) *decimal.Decimal {
 	return &v
 }
 
-func findBand(bands []model.ReactiveBand, kw decimal.Decimal) (model.ReactiveBand, bool) {
+// FindBand returns the installed-power band holding kw: MinKw inclusive, MaxKw exclusive.
+func FindBand(bands []model.ReactiveBand, kw decimal.Decimal) (model.ReactiveBand, bool) {
 	for _, b := range bands {
 		if kw.GreaterThanOrEqual(b.MinKw) && (b.MaxKw == nil || kw.LessThan(*b.MaxKw)) {
 			return b, true

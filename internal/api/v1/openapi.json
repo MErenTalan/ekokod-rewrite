@@ -509,6 +509,124 @@
         ]
       }
     },
+    "/api/v1/anomaly/check": {
+      "post": {
+        "tags": [
+          "forecast"
+        ],
+        "summary": "Check one value against the model (unavailable until the ML service, R165).",
+        "operationId": "anomaly.check",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnomalyCheckRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnomalyCheck"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/v1/auth/change-password": {
       "post": {
         "tags": [
@@ -2610,6 +2728,1433 @@
         ]
       }
     },
+    "/api/v1/consumption": {
+      "get": {
+        "tags": [
+          "consumption"
+        ],
+        "summary": "Consumption series for an analyzer or a building (summed).",
+        "operationId": "consumption.series",
+        "parameters": [
+          {
+            "name": "analyzer_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "building_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "granularity",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "enum": [
+                "hourly",
+                "daily",
+                "monthly",
+                "yearly"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsumptionSeries"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/consumption/anomalies": {
+      "get": {
+        "tags": [
+          "consumption"
+        ],
+        "summary": "Suspect periods.",
+        "operationId": "consumption.anomalies",
+        "parameters": [
+          {
+            "name": "analyzer_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "building_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "unresolved",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "maximum": 500,
+              "minimum": 1,
+              "type": [
+                "null",
+                "integer"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GithubComMErenTalanEkokodRewriteInternalApiV1DtoAnomalyPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/consumption/anomalies/{id}/resolve": {
+      "post": {
+        "tags": [
+          "consumption"
+        ],
+        "summary": "Resolve a suspect period: register a reset, override, or accept.",
+        "operationId": "consumption.anomalies.resolve",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnomalyResolveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Anomaly"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/consumption/export": {
+      "get": {
+        "tags": [
+          "consumption"
+        ],
+        "summary": "The series as CSV or XLSX.",
+        "operationId": "consumption.export",
+        "parameters": [
+          {
+            "name": "analyzer_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "building_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "granularity",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "enum": [
+                "hourly",
+                "daily",
+                "monthly",
+                "yearly"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "enum": [
+                "csv",
+                "xlsx"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/consumption/reactive-status": {
+      "get": {
+        "tags": [
+          "consumption"
+        ],
+        "summary": "Reactive ratios, limits and penalty status for a month (R166).",
+        "operationId": "consumption.reactive_status",
+        "parameters": [
+          {
+            "name": "month",
+            "in": "query",
+            "schema": {
+              "pattern": "^[0-9]{4}-[0-9]{2}$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "building_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReactiveStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/consumption/summary": {
+      "get": {
+        "tags": [
+          "consumption"
+        ],
+        "summary": "Totals, averages, peak and valley for the range.",
+        "operationId": "consumption.summary",
+        "parameters": [
+          {
+            "name": "analyzer_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "building_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "granularity",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "enum": [
+                "hourly",
+                "daily",
+                "monthly",
+                "yearly"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsumptionSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/energy-balance": {
+      "get": {
+        "tags": [
+          "consumption"
+        ],
+        "summary": "Consumption, generation, grid import and export.",
+        "operationId": "energy_balance",
+        "parameters": [
+          {
+            "name": "analyzer_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "building_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "granularity",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "enum": [
+                "hourly",
+                "daily",
+                "monthly",
+                "yearly"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnergyBalance"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/generation": {
+      "get": {
+        "tags": [
+          "consumption"
+        ],
+        "summary": "Generation series from the export registers.",
+        "operationId": "generation.series",
+        "parameters": [
+          {
+            "name": "analyzer_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "building_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "granularity",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "enum": [
+                "hourly",
+                "daily",
+                "monthly",
+                "yearly"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsumptionSeries"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/load-profile": {
+      "get": {
+        "tags": [
+          "load-profile"
+        ],
+        "summary": "Averaged 24-hour profiles.",
+        "operationId": "load_profile.profiles",
+        "parameters": [
+          {
+            "name": "analyzer_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "name": "profiles",
+            "in": "query",
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoadProfiles"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/load-profile/export": {
+      "get": {
+        "tags": [
+          "load-profile"
+        ],
+        "summary": "The hourly matrix as XLSX.",
+        "operationId": "load_profile.export",
+        "parameters": [
+          {
+            "name": "analyzer_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "name": "profiles",
+            "in": "query",
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/load-profile/statistics": {
+      "get": {
+        "tags": [
+          "load-profile"
+        ],
+        "summary": "Per-profile statistics.",
+        "operationId": "load_profile.statistics",
+        "parameters": [
+          {
+            "name": "analyzer_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "name": "profiles",
+            "in": "query",
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoadProfileStatistics"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/v1/mobile/auth/login": {
       "post": {
         "tags": [
@@ -4610,6 +6155,155 @@
         },
         "type": "object"
       },
+      "Anomaly": {
+        "properties": {
+          "analyzer_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "detail": {},
+          "id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "period_end": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "period_start": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "resolution": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "resolved_at": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "resolved_by": {
+            "$ref": "#/components/schemas/UuidUUID"
+          }
+        },
+        "required": [
+          "id",
+          "analyzer_id",
+          "period_start",
+          "period_end",
+          "reason",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "AnomalyCheck": {
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "available"
+        ],
+        "type": "object"
+      },
+      "AnomalyCheckRequest": {
+        "properties": {
+          "actual": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "analyzer_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "ts": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "analyzer_id",
+          "ts",
+          "actual"
+        ],
+        "type": "object"
+      },
+      "AnomalyResolveRequest": {
+        "properties": {
+          "mode": {
+            "enum": [
+              "reset_registered",
+              "manual_override",
+              "accepted"
+            ],
+            "type": "string"
+          },
+          "overrides": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Decimal"
+            },
+            "type": "object"
+          },
+          "reset_after": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Decimal"
+            },
+            "type": "object"
+          },
+          "reset_ts": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "type": "object"
+      },
+      "BalanceRow": {
+        "properties": {
+          "consumption": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "grid_export": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "grid_import": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "period_end": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "period_start": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "period_start",
+          "period_end"
+        ],
+        "type": "object"
+      },
       "Building": {
         "properties": {
           "active_analyzer_count": {
@@ -5238,6 +6932,168 @@
         ],
         "type": "object"
       },
+      "ConsumptionRow": {
+        "properties": {
+          "active_export": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "active_export_index": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "active_import": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "active_import_index": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "analyzer_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "capacitive_ratio": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "inductive_ratio": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "max_demand_kw": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "partial": {
+            "type": "boolean"
+          },
+          "period_end": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "period_start": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "reactive_capacitive_export": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "reactive_capacitive_export_index": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "reactive_capacitive_import": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "reactive_capacitive_import_index": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "reactive_inductive_export": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "reactive_inductive_export_index": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "reactive_inductive_import": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "reactive_inductive_import_index": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "source": {
+            "type": "string"
+          },
+          "suspect_registers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "t1_export": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "t1_export_index": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "t1_import": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "t1_import_index": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "t2_export": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "t2_export_index": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "t2_import": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "t2_import_index": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "t3_export": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "t3_export_index": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "t3_import": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "t3_import_index": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "required": [
+          "period_start",
+          "period_end",
+          "source",
+          "partial",
+          "suspect_registers"
+        ],
+        "type": "object"
+      },
+      "ConsumptionSeries": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ConsumptionRow"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "ConsumptionSummary": {
+        "properties": {
+          "averages": {
+            "$ref": "#/components/schemas/Registers"
+          },
+          "max_demand_kw": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "peak": {
+            "$ref": "#/components/schemas/PeriodValue"
+          },
+          "rows": {
+            "type": "integer"
+          },
+          "suspect_rows": {
+            "type": "integer"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/Registers"
+          },
+          "valley": {
+            "$ref": "#/components/schemas/PeriodValue"
+          }
+        },
+        "required": [
+          "rows",
+          "suspect_rows",
+          "totals",
+          "averages"
+        ],
+        "type": "object"
+      },
       "Contact": {
         "properties": {
           "name": {
@@ -5265,6 +7121,20 @@
         ],
         "pattern": "^-?[0-9]+(\\.[0-9]+)?$",
         "type": "string"
+      },
+      "EnergyBalance": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BalanceRow"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
       },
       "Error": {
         "properties": {
@@ -5316,6 +7186,26 @@
           "items": {
             "items": {
               "$ref": "#/components/schemas/Analyzer"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "GithubComMErenTalanEkokodRewriteInternalApiV1DtoAnomalyPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Anomaly"
             },
             "type": "array"
           },
@@ -5419,6 +7309,78 @@
         },
         "required": [
           "job_id"
+        ],
+        "type": "object"
+      },
+      "LoadProfileConfig": {
+        "properties": {
+          "vacations": {
+            "type": "integer"
+          },
+          "weekend_days": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "weekend_source": {
+            "enum": [
+              "company",
+              "default"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "weekend_days",
+          "weekend_source",
+          "vacations"
+        ],
+        "type": "object"
+      },
+      "LoadProfileStatistics": {
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/LoadProfileConfig"
+          },
+          "statistics": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ProfileStatistics"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "statistics",
+          "config"
+        ],
+        "type": "object"
+      },
+      "LoadProfiles": {
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/LoadProfileConfig"
+          },
+          "days": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object"
+          },
+          "profiles": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/Decimal"
+              },
+              "type": "array"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "profiles",
+          "days",
+          "config"
         ],
         "type": "object"
       },
@@ -5560,6 +7522,22 @@
           "token_type",
           "expires_in",
           "user"
+        ],
+        "type": "object"
+      },
+      "PeriodValue": {
+        "properties": {
+          "active_import": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "period_start": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "period_start",
+          "active_import"
         ],
         "type": "object"
       },
@@ -6098,6 +8076,35 @@
         },
         "type": "object"
       },
+      "ProfileStatistics": {
+        "properties": {
+          "hour_of_max": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "load_factor": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "max": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "mean": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "min": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "range": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "stddev": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "type": "object"
+      },
       "ProfileUpdateRequest": {
         "properties": {
           "email": {
@@ -6127,6 +8134,138 @@
               "null",
               "string"
             ]
+          }
+        },
+        "type": "object"
+      },
+      "ReactiveAnalyzer": {
+        "properties": {
+          "analyzer_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "building_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "capacitive_limit": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "capacitive_ratio": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "exempt_reason": {
+            "enum": [
+              "term",
+              "user_group",
+              "generation",
+              "below_kw"
+            ],
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "has_data": {
+            "type": "boolean"
+          },
+          "inductive_limit": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "inductive_ratio": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "installed_power_kw": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "penalty_applies": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "analyzer_id",
+          "has_data",
+          "penalty_applies"
+        ],
+        "type": "object"
+      },
+      "ReactiveExtreme": {
+        "properties": {
+          "analyzer_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "building_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "ratio": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "required": [
+          "analyzer_id",
+          "ratio"
+        ],
+        "type": "object"
+      },
+      "ReactiveStatus": {
+        "properties": {
+          "analyzers": {
+            "items": {
+              "$ref": "#/components/schemas/ReactiveAnalyzer"
+            },
+            "type": "array"
+          },
+          "highest_capacitive": {
+            "$ref": "#/components/schemas/ReactiveExtreme"
+          },
+          "highest_inductive": {
+            "$ref": "#/components/schemas/ReactiveExtreme"
+          },
+          "month": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "month",
+          "analyzers"
+        ],
+        "type": "object"
+      },
+      "Registers": {
+        "properties": {
+          "active_export": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "active_import": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "reactive_capacitive_export": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "reactive_capacitive_import": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "reactive_inductive_export": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "reactive_inductive_import": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "t1_export": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "t1_import": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "t2_export": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "t2_import": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "t3_export": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "t3_import": {
+            "$ref": "#/components/schemas/Decimal"
           }
         },
         "type": "object"
@@ -6449,10 +8588,7 @@
           "248df4b7-aa70-47b8-a036-33ac447e668d"
         ],
         "format": "uuid",
-        "type": [
-          "null",
-          "string"
-        ]
+        "type": "string"
       }
     },
     "securitySchemes": {
