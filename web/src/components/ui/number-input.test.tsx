@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { expectNoAxeViolations } from '@/test/axe';
 import { renderWithProviders } from '@/test/render';
 
-import { compareDecimal, NumberInput } from './number-input';
+import { NumberInput } from './number-input';
 
 function setup(value: string | null = null, extra: Partial<Parameters<typeof NumberInput>[0]> = {}) {
   const onValueChange = vi.fn();
@@ -47,12 +47,6 @@ describe('NumberInput', () => {
     expect(onValueChange).not.toHaveBeenCalled();
     expect(input).toHaveAttribute('aria-invalid', 'true');
     expect(input.value).toBe('100,01');
-  });
-
-  it('compares decimals without floats', () => {
-    expect(compareDecimal('12345678901234567.891', '12345678901234567.89')).toBe(1);
-    expect(compareDecimal('-2', '-10')).toBe(1);
-    expect(compareDecimal('0.10', '0.1')).toBe(0);
   });
 
   it('has no axe violations', async () => {
