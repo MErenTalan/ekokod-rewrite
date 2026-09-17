@@ -51,11 +51,16 @@ export function Field({
   const describedBy = [descriptionId, errorId].filter(Boolean).join(' ') || undefined;
   const Label = as;
   return (
-    <div className={cn('flex min-w-0 flex-col gap-1.5', disabled && 'opacity-80', className)}>
+    <div className={cn('flex min-w-0 flex-col gap-1.5', className)}>
       <Label
         id={labelId}
         htmlFor={as === 'label' ? controlId : undefined}
-        className={cn('text-foreground type-small font-semibold', labelVisibility === 'hidden' && 'sr-only')}
+        className={cn(
+          'type-small font-semibold',
+          // Muted, not faded: opacity on text would break contrast (07 §9).
+          disabled ? 'text-foreground-muted' : 'text-foreground',
+          labelVisibility === 'hidden' && 'sr-only',
+        )}
       >
         {label}
         {required ? <span className="ms-1 font-normal text-foreground-muted">({t('required')})</span> : null}

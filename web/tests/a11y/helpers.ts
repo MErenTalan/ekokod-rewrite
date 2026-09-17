@@ -34,6 +34,15 @@ export async function gotoStory(page: Page, id: string, o: { theme: Theme; local
     { timeout: 20_000 },
   );
   await page.evaluate(() => document.fonts.ready);
+  // Overlays fade in; axe must not sample colours mid-animation.
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((a) => a.effect?.getTiming().iterations !== Infinity) // spinners never finish
+        .map((a) => a.finished.catch(() => undefined)),
+    ),
+  );
 }
 
 export async function expectNoHorizontalScroll(page: Page) {
@@ -54,7 +63,7 @@ export async function expectNoClippedText(page: Page) {
           el.scrollWidth > el.clientWidth + 1 &&
           (s.overflowX === 'hidden' || s.overflowX === 'clip') &&
           s.textOverflow !== 'ellipsis' &&
-          !el.classList.contains('sr-only') &&
+          el.getBoundingClientRect().width > 1 && // visually-hidden text (sr-only, cmdk labels) is clipped on purpose
           (el.textContent ?? '').trim() !== ''
         );
       })
@@ -97,6 +106,8 @@ export async function tabbables(page: Page, scope?: Locator | string): Promise<s
           if (el.closest('[inert], [aria-hidden="true"]') || style.visibility === 'hidden' || style.display === 'none') continue;
           if (rect.width === 0 && rect.height === 0 && !el.hasAttribute('data-skip-link')) continue;
           if (el.tabIndex < 0) continue;
+          // Radix roving-focus containers are tabbable only to forward focus to their active item.
+          if (el.matches('[role="radiogroup"], [role="tablist"], [role="toolbar"], [role="menubar"]')) continue;
           el.dataset.kb ??= String(n++);
           ids.push(el.dataset.kb);
         }

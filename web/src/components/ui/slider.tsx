@@ -26,6 +26,7 @@ export function Slider({ label, description, error, required, id, disabled, valu
             max={max}
             step={step}
             disabled={disabled}
+            data-touch-target
             className="relative flex h-5 grow touch-none items-center select-none pointer-coarse:h-11 data-[disabled]:opacity-60"
           >
             <RadixSlider.Track className="relative h-1.5 grow rounded-full bg-surface-sunken">

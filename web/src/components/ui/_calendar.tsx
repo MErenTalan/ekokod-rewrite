@@ -18,11 +18,12 @@ export function toIsoDate(date: Date): string {
 const day = 'inline-flex size-9 items-center justify-center rounded-md type-small pointer-coarse:size-11';
 
 /** react-day-picker themed from tokens, Monday-first, date-fns locale from next-intl. */
-export function Calendar(props: DayPickerProps) {
+export function Calendar({ classNames, ...props }: DayPickerProps) {
   const locale = useLocale();
   const t = useTranslations('forms');
   return (
     <DayPicker
+      {...props}
       locale={locale === 'tr' ? tr : enUS}
       weekStartsOn={1}
       showOutsideDays
@@ -51,8 +52,8 @@ export function Calendar(props: DayPickerProps) {
         selected: '[&>button]:bg-primary [&>button]:text-on-primary [&>button]:hover:bg-primary-hover',
         range_middle: '[&>button]:rounded-none [&>button]:bg-primary-subtle [&>button]:text-foreground [&>button]:hover:bg-primary-subtle',
         hidden: 'invisible',
+        ...classNames,
       }}
-      {...props}
     />
   );
 }

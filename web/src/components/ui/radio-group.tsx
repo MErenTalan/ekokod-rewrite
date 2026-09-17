@@ -28,6 +28,7 @@ export function RadioGroup({ label, description, error, required, id, disabled, 
         onValueChange={onValueChange}
         orientation={orientation}
         required={required}
+        disabled={disabled}
         aria-describedby={FieldMessages.describedBy(groupId, description, error)}
         className={cn('flex gap-x-4 gap-y-1', orientation === 'vertical' ? 'flex-col' : 'flex-row flex-wrap')}
       >

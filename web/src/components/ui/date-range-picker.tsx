@@ -72,6 +72,12 @@ export function DateRangePicker({ label, description, error, required, id, disab
             <Calendar
               mode="range"
               numberOfMonths={2}
+              // Range middles are subtle; only the ends are solid, so text colours never stack.
+              classNames={{
+                selected: '',
+                range_start: '[&>button]:bg-primary [&>button]:text-on-primary [&>button]:hover:bg-primary-hover',
+                range_end: '[&>button]:bg-primary [&>button]:text-on-primary [&>button]:hover:bg-primary-hover',
+              }}
               selected={selected}
               defaultMonth={selected?.from}
               disabled={[...(min ? [{ before: fromIsoDate(min) }] : []), ...(max ? [{ after: fromIsoDate(max) }] : [])]}
