@@ -102,18 +102,32 @@ func clientKey(r *http.Request, trusted []*net.IPNet) string {
 	if err != nil {
 		host = r.RemoteAddr
 	}
-	peer := net.ParseIP(host)
-	for _, network := range trusted {
-		if peer != nil && network.Contains(peer) {
-			if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-				if comma := strings.IndexByte(forwarded, ','); comma > 0 {
-					return strings.TrimSpace(forwarded[:comma])
-				}
-				return strings.TrimSpace(forwarded)
-			}
+	forwarded := r.Header.Get("X-Forwarded-For")
+	if forwarded == "" || !isTrusted(net.ParseIP(host), trusted) {
+		return host
+	}
+	// Each trusted proxy appends the address it saw, so walk from the right and stop at the
+	// first hop no trusted proxy vouches for; entries further left are client-controlled.
+	hops := strings.Split(forwarded, ",")
+	for i := len(hops) - 1; i >= 0; i-- {
+		hop := net.ParseIP(strings.TrimSpace(hops[i]))
+		if hop == nil {
+			break
+		}
+		if !isTrusted(hop, trusted) || i == 0 {
+			return hop.String()
 		}
 	}
 	return host
+}
+
+func isTrusted(ip net.IP, trusted []*net.IPNet) bool {
+	for _, network := range trusted {
+		if ip != nil && network.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 // writeEnvelope writes the 05 §1 error envelope for the edge middleware, which
