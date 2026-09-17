@@ -5,12 +5,14 @@ import type { ReactElement } from 'react';
 
 import { AppProviders } from '@/components/providers';
 import type { Locale } from '@/i18n/locale';
+import { defaultUiPreferences, type UiPreferences } from '@/lib/ui-preferences';
+import { UiPreferencesProvider } from '@/lib/ui-preferences-provider';
 
 import { messages } from '../../messages';
 
 export function renderWithProviders(
   ui: ReactElement,
-  o: { locale?: Locale } = {},
+  o: { locale?: Locale; preferences?: Partial<UiPreferences> } = {},
 ): RenderResult & { user: UserEvent } {
   const locale = o.locale ?? 'tr';
   const user = userEvent.setup();
@@ -24,7 +26,9 @@ export function renderWithProviders(
           throw error;
         }}
       >
-        <AppProviders>{children}</AppProviders>
+        <UiPreferencesProvider initial={{ ...defaultUiPreferences, ...o.preferences }}>
+          <AppProviders>{children}</AppProviders>
+        </UiPreferencesProvider>
       </NextIntlClientProvider>
     ),
   });

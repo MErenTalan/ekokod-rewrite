@@ -26,7 +26,8 @@ for (const story of stories) {
       let axe = new AxeBuilder({ page })
         .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
         .exclude('#storybook-docs');
-      if (!story.title.startsWith('Shell/')) axe = axe.disableRules(['region', 'landmark-one-main', 'page-has-heading-one']);
+      // Page-level rules apply only to whole pages; other stories are fragments.
+      if (story.title !== 'Shell/AppShell') axe = axe.disableRules(['region', 'landmark-one-main', 'page-has-heading-one']);
       // Radix Select and DropdownMenu trap focus and aria-hide the page; axe only recognises that for dialogs.
       // keyboard.spec proves focus starts inside and Escape restores it.
       if (story.tags.includes('modal-popup')) axe = axe.disableRules(['aria-hidden-focus']);

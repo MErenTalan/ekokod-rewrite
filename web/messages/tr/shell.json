@@ -1,1 +1,74 @@
-{}
+{
+  "nav": {
+    "label": "Ana menü",
+    "dashboard": "Yönetim Arayüzü",
+    "dataAnalysis": "Veri Analizi",
+    "consumption": "Tüketim",
+    "loadProfile": "Yük Profili",
+    "forecast": "Tüketim Tahmini",
+    "solarPlants": "GES Santralleri",
+    "financialAnalysis": "Finansal Analiz",
+    "renewableEnergy": "Yenilenebilir Enerji",
+    "water": "Su",
+    "gas": "Doğal Gaz",
+    "evDrivers": "EV Sürücüleri",
+    "billsAndTariffs": "Faturalar ve Tarifeler",
+    "bills": "Faturalar",
+    "tariffs": "Tarifeler",
+    "alarms": "Alarmlar",
+    "manual": "Manuel",
+    "messages": "Mesajlar",
+    "ai": "Yapay Zeka",
+    "reports": "Raporlar",
+    "settings": "Ayarlar",
+    "carbonFootprint": "Karbon Ayak İzi",
+    "iso50001": "ISO 50001 Modülü",
+    "savingActions": "Tasarruf Önerileri",
+    "contact": "İletişim"
+  },
+  "notYetAvailable": "Bu bölüm henüz kullanıma açılmadı",
+  "skipToContent": "İçeriğe geç",
+  "home": "ekokod ana sayfa",
+  "search": "Ara",
+  "searchPlaceholder": "Bina, analizör veya rapor ara",
+  "notificationsCount": "Bildirimler ({count} yeni)",
+  "language": "Dil",
+  "languages": {
+    "tr": "Türkçe",
+    "en": "English"
+  },
+  "theme": {
+    "label": "Tema Seçeneği",
+    "light": "Aydınlık",
+    "dark": "Karanlık",
+    "system": "Sistem",
+    "toggle": "Tema: {mode}"
+  },
+  "customizer": {
+    "title": "Görünüm ayarları",
+    "open": "Görünüm ayarlarını aç",
+    "layout": "Düzen Türü",
+    "vertical": "Dikey",
+    "horizontal": "Yatay",
+    "container": "Kapsayıcı Seçeneği",
+    "full": "Tam",
+    "boxed": "Kutu",
+    "sidebarCollapsed": "Kenar çubuğunu daralt",
+    "card": "Kart Türü",
+    "border": "Kenarlık",
+    "shadow": "Gölge",
+    "radius": "Tema Kenar Yuvarlaklığı",
+    "reset": "Varsayılana dön"
+  },
+  "userMenu": {
+    "label": "Kullanıcı menüsü: {name}",
+    "profile": "Profil",
+    "displaySettings": "Görünüm ayarları",
+    "logout": "Çıkış"
+  },
+  "filters": "Filtreler",
+  "filtersCount": "Filtreler ({count})",
+  "applyFilters": "Filtreleri Uygula",
+  "toggleSidebar": "Menüyü Aç/Kapat",
+  "collapseSidebar": "Kenar çubuğunu daralt veya genişlet"
+}

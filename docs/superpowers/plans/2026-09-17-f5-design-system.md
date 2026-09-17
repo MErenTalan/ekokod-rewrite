@@ -720,7 +720,7 @@ In tests, Recharts wrappers render inside `ResponsiveContainer initialDimension=
 
 ## Task 6: Application shell, UI preferences and theme customiser
 
-**Interfaces** — Consumes: T1–T4 (`Drawer`, `DropdownMenu`, `Tooltip`, `Breadcrumb`, `RadioGroup`, `Switch`, `Slider`, `SearchInput`, `Badge`). Produces:
+**Interfaces** — Consumes: T1–T4 (`Drawer`, `DropdownMenu`, `Tooltip`, `Popover` (T2), `Breadcrumb` and `BreadcrumbItem` (T4), `RadioGroup`, `Switch`, `Slider`, `SearchInput`, `Badge`); `useUiPreferences` is produced below and consumed by every shell component. Produces:
 ```ts
 // src/lib/ui-preferences.ts (full code)
 export const UI_COOKIE = 'ekokod_ui';
