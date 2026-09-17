@@ -9,7 +9,7 @@
   --color-*: initial; --shadow-*: initial; --radius-*: initial;
   --color-primary: light-dark(#047857, #34D399);
   --color-primary-hover: light-dark(#065F46, #6EE7B7);
-  --color-primary-subtle: light-dark(#D1FAE5, #064E3B);
+  --color-primary-subtle: light-dark(#D1FAE5, #053F30); /* dark darkened: muted text on a selected row needed 4.5:1 */
   --color-on-primary: light-dark(#FFFFFF, #04211A);
   --color-brand: light-dark(#059669, #34D399);
   --color-background: light-dark(#F6FAF8, #0B1512);

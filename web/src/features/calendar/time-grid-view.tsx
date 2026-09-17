@@ -16,6 +16,8 @@ import { EventChip } from './month-view';
 import { visibleDays } from './range';
 
 const HOUR_HEIGHT = 48;
+// D13: even a 15-minute event keeps a 44 px tap target.
+const MIN_BLOCK_HEIGHT = 44;
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 
 /** The week and day grids of 01 §7.18: an all-day row over a 24-hour column. */
@@ -112,7 +114,8 @@ export function TimeGridView({
                     style={{
                       position: 'absolute',
                       top: (start / 60) * HOUR_HEIGHT,
-                      height: ((end - start) / 60) * HOUR_HEIGHT,
+                      // A short event still needs a tappable box on a coarse pointer (D13).
+                      height: Math.max(((end - start) / 60) * HOUR_HEIGHT, MIN_BLOCK_HEIGHT),
                       insetInlineStart: `${(lane.lane / lane.lanes) * 100}%`,
                       width: `${100 / lane.lanes}%`,
                       borderInlineStartColor: event.colour ?? undefined,

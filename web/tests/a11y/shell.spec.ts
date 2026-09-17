@@ -34,12 +34,17 @@ for (const story of STORIES) {
         await page.locator('[role="link"][aria-disabled="true"]:visible').first().focus();
         await expect(page.getByRole('tooltip')).toContainText(NOT_YET);
         await page.keyboard.press('Escape');
-        await expect(page.getByRole('tooltip')).toBeHidden();
+        // Detached, not merely hidden: axe reads a tooltip mid-exit as low contrast.
+        await expect(page.getByRole('tooltip')).toHaveCount(0);
 
         if (width < 1024) {
           await page.getByRole('dialog').getByRole('button', { name: 'Kapat' }).click();
-          await expect(page.getByRole('dialog')).toBeHidden();
+          await expect(page.getByRole('dialog')).toHaveCount(0);
         }
+        // Closing the drawer hands focus back to the disabled link, which opens
+        // its tooltip again. Axe reads a fade in flight as a blend of the two
+        // colours and calls it low contrast, so measure the settled state.
+        await page.addStyleTag({ content: '*, *::before, *::after { animation: none !important; transition: none !important; }' });
 
         const { violations } = await new AxeBuilder({ page })
           .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])

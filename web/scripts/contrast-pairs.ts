@@ -8,6 +8,8 @@ export const pairs: Pair[] = [
   ...['foreground', 'foreground-muted', 'foreground-subtle'].flatMap((f) => surfaces.map((b) => [f, b, TEXT] as const)),
   ['on-primary', 'primary', TEXT], ['on-primary', 'primary-hover', TEXT], ['primary', 'background', TEXT],
   ['primary', 'surface', TEXT], ['primary', 'primary-subtle', TEXT], ['foreground', 'primary-subtle', TEXT],
+  // Secondary text also lands on the subtle surfaces (a selected row's caption).
+  ...['primary', 'success', 'warning', 'danger', 'info'].map((s) => ['foreground-muted', `${s}-subtle`, TEXT] as const),
   ['on-danger', 'danger', TEXT],
   ...['success', 'warning', 'danger', 'info'].flatMap((s) => [
     [s, `${s}-subtle`, TEXT], [s, 'surface', TEXT], [s, 'surface-raised', TEXT], [s, 'background', TEXT], ['foreground', `${s}-subtle`, TEXT]] as const),

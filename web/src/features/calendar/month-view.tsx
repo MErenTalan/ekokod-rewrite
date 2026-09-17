@@ -31,7 +31,7 @@ export function EventChip({ event, onSelect }: { event: CalendarEvent; onSelect:
       type="button"
       onClick={onSelect}
       style={{ borderInlineStartColor: event.colour ?? undefined }}
-      className="flex w-full items-center gap-1 truncate rounded-sm border-s-4 bg-surface-sunken px-1 py-0.5 text-start text-foreground type-caption"
+      className="flex w-full items-center gap-1 truncate rounded-sm border-s-4 bg-surface-sunken px-1 py-0.5 text-start text-foreground type-caption pointer-coarse:min-h-11"
     >
       <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ backgroundColor: event.colour ?? undefined }} />
       <span className="truncate">{event.title}</span>

@@ -23,6 +23,9 @@ for (const story of stories) {
       await gotoStory(page, story.id, { theme, locale });
       await expect(page.locator('#storybook-root')).toBeVisible();
       await expect(page.locator('body')).not.toHaveClass(/sb-show-errordisplay/);
+      // Measure the settled state: axe reads a fade in flight as a blend of the
+      // two colours and reports it as low contrast.
+      await page.addStyleTag({ content: '*, *::before, *::after { animation: none !important; transition: none !important; }' });
       let axe = new AxeBuilder({ page })
         .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
         .exclude('#storybook-docs');
