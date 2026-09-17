@@ -5,7 +5,6 @@ package v1_test
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -184,8 +183,8 @@ type client struct {
 func (h *harness) client(ua string) *client {
 	jar, err := cookiejar.New(nil)
 	require.NoError(h.t, err)
+	// The server's own client transport already trusts httptest's certificate.
 	transport := h.srv.Client().Transport.(*http.Transport).Clone()
-	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // httptest's own self-signed server
 	return &client{h: h, ua: ua, http: &http.Client{Jar: jar, Transport: transport,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 }

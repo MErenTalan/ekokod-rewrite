@@ -2,10 +2,12 @@ package testfixtures
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
@@ -59,6 +61,49 @@ func InsertReadings(t *testing.T, ctx context.Context, pool *pgxpool.Pool, compa
 		_, _, err := repo.BulkInsert(ctx, store.SystemScope(companyID), rows[start:min(start+chunk, len(rows))])
 		require.NoError(t, err)
 	}
+	if len(rows) == 0 {
+		return
+	}
+	// A refresh policy may already have run in this database and moved the watermark past these
+	// (historical) rows; below the watermark real-time aggregation shows nothing until a refresh
+	// (00005's operator note). Refresh the real-time views over whole days around the data.
+	from, to := rows[0].Ts, rows[0].Ts
+	for _, r := range rows {
+		from, to = minTime(from, r.Ts), maxTime(to, r.Ts)
+	}
+	from, to = from.Add(-48*time.Hour), to.Add(48*time.Hour)
+	for _, view := range []string{"consumption_hourly", "consumption_daily"} {
+		refreshAggregate(t, ctx, pool, view, from, to)
+	}
+}
+
+// refreshAggregate waits out the policy job that may be refreshing the same view (SQLSTATE 55P03).
+func refreshAggregate(t *testing.T, ctx context.Context, pool *pgxpool.Pool, view string, from, to time.Time) {
+	t.Helper()
+	var err error
+	for range 100 {
+		_, err = pool.Exec(ctx, `call refresh_continuous_aggregate($1, $2::timestamptz, $3::timestamptz)`, view, from, to)
+		var pgErr *pgconn.PgError
+		if !errors.As(err, &pgErr) || pgErr.Code != "55P03" {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	require.NoError(t, err, "refresh %s", view)
+}
+
+func minTime(a, b time.Time) time.Time {
+	if b.Before(a) {
+		return b
+	}
+	return a
+}
+
+func maxTime(a, b time.Time) time.Time {
+	if b.After(a) {
+		return b
+	}
+	return a
 }
 
 // MustUUID parses s or panics; for test tables keyed by id strings.

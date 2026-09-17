@@ -25,7 +25,7 @@ export function errorCode(body: unknown): string | undefined {
 
 /** Only an in-app path is a valid post-login target (open-redirect guard). */
 export function safeNext(next: string | null | undefined): string {
-  if (!next || /[\\\s]/.test(next)) return HOME_PATH;
+  if (!next || /[\\\s]|\/\.\.?(?:\/|\?|$)/.test(next)) return HOME_PATH;
   if (next !== HOME_PATH && !next.startsWith(`${HOME_PATH}/`) && !next.startsWith(`${HOME_PATH}?`))
     return HOME_PATH;
   return next;
