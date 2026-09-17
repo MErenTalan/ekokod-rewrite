@@ -10,7 +10,7 @@ vi.mock('next/headers', () => ({
   }),
 }));
 
-const { getMe, serverApi } = await import('./server');
+const { getMe, getSession, serverApi } = await import('./server');
 
 let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => {
@@ -51,5 +51,10 @@ describe('getMe', () => {
       Response.json({ error: { code: 'unauthorized', message: 'x' } }, { status: 401 }),
     );
     expect(await getMe()).toBeNull();
+  });
+
+  it('keeps the refusal code so the layout can explain a device mismatch', async () => {
+    fetchMock.mockResolvedValueOnce(Response.json({ error: { code: 'device_mismatch', message: 'x' } }, { status: 401 }));
+    expect(await getSession()).toEqual({ me: null, code: 'device_mismatch' });
   });
 });

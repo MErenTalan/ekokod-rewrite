@@ -194,7 +194,7 @@ check-generate: ## Fail if the committed sqlcgen output is not what sqlc produce
 offline-bundle: ## Build the air-gapped install bundle
 	./scripts/offline-bundle.sh
 
-.PHONY: web-install web-lint web-test web-build web-audit web-a11y
+.PHONY: web-install web-lint web-test web-build web-audit web-a11y web-e2e
 
 web-install:
 	cd web && pnpm install --frozen-lockfile
@@ -210,6 +210,9 @@ web-build:
 
 web-a11y: ## Storybook build + Playwright a11y sweep (slow, memory-heavy; not part of `ci`)
 	cd web && pnpm storybook:build && pnpm test:a11y
+
+web-e2e: ## Playwright e2e against the real API (needs test-db-up and test-redis-up; builds the web first)
+	cd web && pnpm build && pnpm test:e2e --workers=1
 
 web-audit: ## Fail on high-severity frontend dependency vulnerabilities
 	cd web && pnpm audit --audit-level=high

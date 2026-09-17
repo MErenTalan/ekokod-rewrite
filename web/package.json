@@ -12,9 +12,10 @@
     "check:i18n-parity": "node scripts/check-i18n-parity.ts",
     "check:contrast": "node scripts/check-contrast.ts",
     "storybook:build": "storybook build --quiet -o storybook-static",
-    "test:a11y": "playwright test tests/a11y/",
+    "test:a11y": "playwright test --project=a11y tests/a11y/",
     "gen:api": "openapi-typescript ../internal/api/v1/openapi.json -o src/lib/api/schema.d.ts",
-    "check:api": "node scripts/check-api.ts"
+    "check:api": "node scripts/check-api.ts",
+    "test:e2e": "PW_PROJECT=e2e playwright test --project=e2e"
   },
   "dependencies": {
     "@tanstack/react-query": "5.102.8",

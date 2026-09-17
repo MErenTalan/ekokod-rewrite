@@ -179,3 +179,53 @@ jobs:
           name: playwright-report
           path: web/playwright-report
       - run: pnpm audit --audit-level=high
+
+  e2e:
+    name: End-to-end (real API)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # R171: scripts/e2e-api.sh creates a fresh database in this Postgres and uses this Redis,
+    # at the same ports the local test containers use (make test-db-up / test-redis-up).
+    services:
+      postgres:
+        image: timescale/timescaledb:2.30.0-pg16
+        env:
+          POSTGRES_DB: ekokod
+          POSTGRES_USER: ekokod
+          POSTGRES_PASSWORD: ekokod
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U ekokod" --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:7.4.11-alpine
+        ports:
+          - 56379:6379
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 20
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.3.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm build
+      - run: pnpm test:e2e --workers=1
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-e2e-report
+          path: web/playwright-report
