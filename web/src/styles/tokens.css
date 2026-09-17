@@ -1,0 +1,80 @@
+/* 07-design-system.md §2–§4, §8 as ruled by plan D3/D4. The ONLY file in web/src allowed colour literals (D5). */
+:root { color-scheme: light; --radius-scale: 1;
+  --duration-hover: 150ms; --duration-popover: 180ms; --duration-dialog-in: 250ms; --duration-dialog-out: 180ms;
+  --duration-tab: 200ms; --duration-chart: 400ms; --duration-stagger-step: 60ms; }
+:root[data-theme='dark'] { color-scheme: dark; }
+:root[data-theme='system'] { color-scheme: light dark; }
+
+@theme static {
+  --color-*: initial; --shadow-*: initial; --radius-*: initial;
+  --color-primary: light-dark(#047857, #34D399);
+  --color-primary-hover: light-dark(#065F46, #6EE7B7);
+  --color-primary-subtle: light-dark(#D1FAE5, #064E3B);
+  --color-on-primary: light-dark(#FFFFFF, #04211A);
+  --color-brand: light-dark(#059669, #34D399);
+  --color-background: light-dark(#F6FAF8, #0B1512);
+  --color-surface: light-dark(#FFFFFF, #12201C);
+  --color-surface-raised: light-dark(#FFFFFF, #172823);
+  --color-surface-sunken: light-dark(#ECF3EF, #0A100E);
+  --color-foreground: light-dark(#0B2A22, #E8F2EE);
+  --color-foreground-muted: light-dark(#4B5D57, #9CB3AB);
+  --color-foreground-subtle: light-dark(#5A6B65, #82978F);
+  --color-border: light-dark(#DCE7E2, #23372F);
+  --color-border-strong: light-dark(#B9CCC4, #354E44);
+  --color-border-control: light-dark(#7A8E87, #607F73);
+  --color-ring: light-dark(#047857, #34D399);
+  --color-success: light-dark(#15803D, #4ADE80);   --color-success-subtle: light-dark(#DCFCE7, #052E16);
+  --color-warning: light-dark(#B45309, #FBBF24);   --color-warning-subtle: light-dark(#FEF3C7, #3B2A06);
+  --color-danger: light-dark(#B91C1C, #F87171);    --color-danger-subtle: light-dark(#FEE2E2, #3B0D0D);
+  --color-on-danger: light-dark(#FFFFFF, #1A0505);
+  --color-info: light-dark(#0369A1, #38BDF8);      --color-info-subtle: light-dark(#E0F2FE, #06283B);
+  --color-consumption: light-dark(#0E7490, #22D3EE);
+  --color-generation: light-dark(#16A34A, #4ADE80);
+  --color-reactive-inductive: light-dark(#A16207, #FBBF24);
+  --color-reactive-capacitive: light-dark(#7E22CE, #C084FC);
+  --color-cost: light-dark(#B91C1C, #F87171);
+  --color-revenue: light-dark(#15803D, #4ADE80);
+  --color-forecast: light-dark(#64748B, #94A3B8);
+  --color-overlay: light-dark(rgb(11 42 34 / 0.45), rgb(0 0 0 / 0.6));
+  --color-card-edge: light-dark(transparent, #354E44); /* shadow-mode card edge; shadows vanish in dark */
+  --radius-sm: calc(4px * var(--radius-scale)); --radius-md: calc(8px * var(--radius-scale));
+  --radius-lg: calc(12px * var(--radius-scale)); --radius-full: 9999px;
+  --shadow-sm: 0 1px 2px light-dark(rgb(11 42 34 / 0.06), transparent);
+  --shadow-md: 0 4px 12px light-dark(rgb(11 42 34 / 0.08), transparent);
+  --shadow-lg: 0 12px 32px light-dark(rgb(11 42 34 / 0.1), transparent);
+  /* I-14: keyframes for overlays. Presence only delays unmount for CSS animations, not transitions. */
+  --animate-fade-in: fade-in var(--duration-popover) ease-out;
+  --animate-fade-out: fade-out var(--duration-popover) ease-in;
+  --animate-dialog-in: dialog-in var(--duration-dialog-in) ease-out;
+  --animate-dialog-out: dialog-out var(--duration-dialog-out) ease-in;
+  --animate-drawer-in-start: drawer-in-start var(--duration-dialog-in) ease-out;
+  --animate-drawer-out-start: drawer-out-start var(--duration-dialog-out) ease-in;
+  --animate-drawer-in-end: drawer-in-end var(--duration-dialog-in) ease-out;
+  --animate-drawer-out-end: drawer-out-end var(--duration-dialog-out) ease-in;
+  --animate-drawer-in-bottom: drawer-in-bottom var(--duration-dialog-in) ease-out;
+  --animate-drawer-out-bottom: drawer-out-bottom var(--duration-dialog-out) ease-in;
+  --animate-popover-in: popover-in var(--duration-popover) ease-out;
+  --animate-popover-out: popover-out var(--duration-popover) ease-in;
+}
+@keyframes fade-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes fade-out { from { opacity: 1 } to { opacity: 0 } }
+@keyframes dialog-in { from { opacity: 0; transform: scale(.96) } to { opacity: 1; transform: scale(1) } }
+@keyframes dialog-out { from { opacity: 1; transform: scale(1) } to { opacity: 0; transform: scale(.96) } }
+@keyframes drawer-in-start { from { transform: translateX(-100%) } to { transform: translateX(0) } }
+@keyframes drawer-out-start { from { transform: translateX(0) } to { transform: translateX(-100%) } }
+@keyframes drawer-in-end { from { transform: translateX(100%) } to { transform: translateX(0) } }
+@keyframes drawer-out-end { from { transform: translateX(0) } to { transform: translateX(100%) } }
+@keyframes drawer-in-bottom { from { transform: translateY(100%) } to { transform: translateY(0) } }
+@keyframes drawer-out-bottom { from { transform: translateY(0) } to { transform: translateY(100%) } }
+@keyframes popover-in { from { opacity: 0; transform: scale(.98) } to { opacity: 1; transform: scale(1) } }
+@keyframes popover-out { from { opacity: 1; transform: scale(1) } to { opacity: 0; transform: scale(.98) } }
+@theme inline {
+  --font-heading: var(--font-lexend), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-source-sans-3), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+}
+@utility type-display { font-family: var(--font-heading); font-size: 32px; line-height: 40px; font-weight: 600; } @utility type-h1 { font-family: var(--font-heading); font-size: 24px; line-height: 32px; font-weight: 600; }
+@utility type-h2 { font-family: var(--font-heading); font-size: 20px; line-height: 28px; font-weight: 600; } @utility type-h3 { font-family: var(--font-heading); font-size: 16px; line-height: 24px; font-weight: 600; }
+@utility type-body { font-family: var(--font-sans); font-size: 14px; line-height: 20px; font-weight: 400; } @utility type-body-lg { font-family: var(--font-sans); font-size: 16px; line-height: 24px; font-weight: 400; }
+@utility type-small { font-family: var(--font-sans); font-size: 13px; line-height: 18px; font-weight: 400; } @utility type-caption { font-family: var(--font-sans); font-size: 12px; line-height: 16px; font-weight: 500; }
+@utility type-metric { font-family: var(--font-mono); font-size: 28px; line-height: 32px; font-weight: 600; font-variant-numeric: tabular-nums; font-variant-ligatures: none; } @utility type-data { font-family: var(--font-mono); font-size: 13px; line-height: 18px; font-weight: 400; font-variant-numeric: tabular-nums; font-variant-ligatures: none; }
