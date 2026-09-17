@@ -12,7 +12,7 @@ GOLANGCI_VERSION := v2.13.2
 GOVULNCHECK_VERSION := v1.8.0
 SQLC_VERSION := v1.30.0
 
-.PHONY: build test test-integration test-perf lint fmt tidy tools vuln ci check-script-modes test-db-up test-db-down
+.PHONY: build test test-integration test-perf lint fmt tidy tools vuln ci check-script-modes test-db-up test-db-down test-redis-up test-redis-down openapi
 
 # TEST_DB_* back test-db-up/test-db-down (F4 Task 0): one long-lived
 # TimescaleDB container integration tests can opt into sharing, instead of
@@ -73,6 +73,17 @@ test-db-up: ## Start one long-lived TimescaleDB container for shared integration
 
 test-db-down: ## Stop and remove the shared test-database container started by test-db-up
 	docker rm -f $(TEST_DB_CONTAINER) >/dev/null 2>&1 || true
+
+# Shared Redis for API integration tests (F6a): EKOKOD_TEST_REDIS_URL=redis://localhost:56379/0.
+# Tests namespace their keys, so one container serves every package.
+test-redis-up: ## Start a long-lived Redis for API integration tests (port 56379)
+	docker run -d --name ekokod-test-redis -p 56379:6379 redis:7.4.11-alpine --save "" --appendonly no
+
+test-redis-down: ## Remove the shared test Redis
+	docker rm -f ekokod-test-redis
+
+openapi: ## Regenerate the committed OpenAPI document from the route table
+	go run ./cmd/ekokod tool openapi > internal/api/v1/openapi.json
 
 # test-perf runs Task 13's slow F1 acceptance suite: 1,000,000 synthetic
 # readings across 100 analyzers, asserting the chunk layout and EXPLAIN plan

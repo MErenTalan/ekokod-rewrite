@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"encoding/json"
 	"net"
 	"net/http"
 	"strings"
@@ -15,7 +16,18 @@ import (
 // unless the peer is a trusted proxy, in which case the left-most
 // X-Forwarded-For entry is used. F6 adds a per-principal bucket on top.
 func RateLimit(limit config.RateLimit, trustedProxies []string) func(http.Handler) http.Handler {
+	return RateLimitBy(limit, ClientIP(trustedProxies))
+}
+
+// ClientIP returns the caller-address function RateLimit keys buckets by.
+func ClientIP(trustedProxies []string) func(*http.Request) string {
 	trusted := parseCIDRs(trustedProxies)
+	return func(r *http.Request) string { return clientKey(r, trusted) }
+}
+
+// RateLimitBy applies a token bucket per key; an empty key is not limited.
+// R180 uses it per authenticated user.
+func RateLimitBy(limit config.RateLimit, key func(*http.Request) string) func(http.Handler) http.Handler {
 	buckets := &bucketSet{
 		limiters: map[string]*bucketEntry{},
 		rate:     rate.Limit(float64(limit.Limit) / limit.Window.Seconds()),
@@ -25,11 +37,10 @@ func RateLimit(limit config.RateLimit, trustedProxies []string) func(http.Handle
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if !buckets.allow(clientKey(r, trusted)) {
-				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			if k := key(r); k != "" && !buckets.allow(k) {
 				w.Header().Set("Retry-After", "60")
-				w.WriteHeader(http.StatusTooManyRequests)
-				_, _ = w.Write([]byte(`{"code":"rate_limited","message_key":"errors.generic.rateLimited"}`))
+				writeEnvelope(w, http.StatusTooManyRequests, "rate_limited",
+					"Çok fazla deneme yapıldı. Lütfen daha sonra tekrar deneyin.")
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -103,4 +114,15 @@ func clientKey(r *http.Request, trusted []*net.IPNet) string {
 		}
 	}
 	return host
+}
+
+// writeEnvelope writes the 05 §1 error envelope for the edge middleware, which
+// sits outside /api/v1's localised kit (R152); the message is the Turkish default.
+func writeEnvelope(w http.ResponseWriter, status int, code, message string) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	body, _ := json.Marshal(map[string]any{"error": map[string]string{
+		"code": code, "message": message, "request_id": w.Header().Get(HeaderRequestID),
+	}})
+	_, _ = w.Write(append(body, '\n'))
 }
