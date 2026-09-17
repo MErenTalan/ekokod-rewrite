@@ -33,11 +33,16 @@ const view = (overrides: Partial<React.ComponentProps<typeof ConsumptionPanelVie
 );
 
 describe('ConsumptionPanelView', () => {
-  it('caps the chart and says so, without hiding rows from the table', () => {
+  it('caps the chart at 50 points and says so, without hiding rows from the table', async () => {
     const rows = Array.from({ length: 60 }, (_, i) => row(i, 100 + i));
     const r = renderWithProviders(view({ rows }));
     expect(r.getByText(`Grafik ilk ${CHART_POINT_CAP} noktayı gösteriyor (toplam 60).`)).toBeInTheDocument();
     expect(r.getByText('60 kayıt')).toBeInTheDocument();
+
+    // The chart's own data table is what it plotted: it must stop at the cap.
+    await r.user.click(r.getAllByRole('button', { name: 'Veri tablosunu göster' })[0]);
+    const chartTable = r.getByRole('table', { name: 'Tüketim eğilimi' });
+    expect(chartTable.querySelectorAll('tbody tr')).toHaveLength(CHART_POINT_CAP);
   });
 
   it('draws only the series that are switched on', async () => {
