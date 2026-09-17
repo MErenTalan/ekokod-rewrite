@@ -224,3 +224,52 @@ type AnomalyCheck struct {
 	Available bool   `json:"available" required:"true"`
 	Reason    string `json:"reason,omitempty"`
 }
+
+// ConsumptionGroupedQuery is R193: the "detailed graphs" query.
+type ConsumptionGroupedQuery struct {
+	AnalyzerID *uuid.UUID `query:"analyzer_id" json:"-"`
+	BuildingID *uuid.UUID `query:"building_id" json:"-"`
+	From       Date       `query:"from" json:"-" validate:"required" required:"true"`
+	To         Date       `query:"to" json:"-" validate:"required" required:"true"`
+	GroupBy    string     `query:"group_by" json:"-" validate:"required,oneof=daily week day_type season season_day_type" required:"true" enum:"daily,week,day_type,season,season_day_type"`
+	Compare    string     `query:"compare" json:"-" validate:"omitempty,oneof=previous" enum:"previous"`
+}
+
+// GroupedBucket is one group's totals.
+type GroupedBucket struct {
+	Key                      string   `json:"key" required:"true"`
+	Days                     int      `json:"days" required:"true"`
+	ActiveImport             *Decimal `json:"active_import"`
+	ReactiveInductiveImport  *Decimal `json:"reactive_inductive_import"`
+	ReactiveCapacitiveImport *Decimal `json:"reactive_capacitive_import"`
+	Partial                  bool     `json:"partial" required:"true"`
+}
+
+// GroupedExtreme is the peak or valley group.
+type GroupedExtreme struct {
+	Key   string  `json:"key" required:"true"`
+	Value Decimal `json:"value" required:"true"`
+}
+
+// GroupedStatistics is the total/average/peak/valley row (01 §7.3).
+type GroupedStatistics struct {
+	Total   *Decimal        `json:"total"`
+	Average *Decimal        `json:"average"`
+	Peak    *GroupedExtreme `json:"peak,omitempty"`
+	Valley  *GroupedExtreme `json:"valley,omitempty"`
+}
+
+// GroupedPeriod is one period's groups.
+type GroupedPeriod struct {
+	From       Date              `json:"from" required:"true"`
+	To         Date              `json:"to" required:"true"`
+	Groups     []GroupedBucket   `json:"groups" required:"true"`
+	Statistics GroupedStatistics `json:"statistics" required:"true"`
+}
+
+// ConsumptionGrouped is the grouped read, with the previous period when asked.
+type ConsumptionGrouped struct {
+	GroupBy  string         `json:"group_by" required:"true"`
+	Current  GroupedPeriod  `json:"current" required:"true"`
+	Previous *GroupedPeriod `json:"previous,omitempty"`
+}

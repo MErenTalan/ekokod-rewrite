@@ -13,6 +13,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/api/v1/mw"
 	"github.com/MErenTalan/ekokod-rewrite/internal/auth"
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/energy"
+	"github.com/MErenTalan/ekokod-rewrite/internal/domain/grouping"
 	domainlp "github.com/MErenTalan/ekokod-rewrite/internal/domain/loadprofile"
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/render/table"
@@ -30,6 +31,10 @@ func analysisRoutes() []Route {
 		{Method: http.MethodGet, Pattern: "/consumption/summary", OperationID: "consumption.summary", Tag: "consumption", Access: RoleGated, Roles: all,
 			Summary: "Totals, averages, peak and valley for the range.", Request: dto.ConsumptionQuery{},
 			Response: dto.ConsumptionSummary{}, Status: http.StatusOK, Handler: (*Handlers).consumptionSummary},
+		{Method: http.MethodGet, Pattern: "/consumption/grouped", OperationID: "consumption.grouped", Tag: "consumption",
+			Access: RoleGated, Roles: all, Summary: "Consumption grouped by week, day type or season, with the previous period (R193).",
+			Request: dto.ConsumptionGroupedQuery{}, Response: dto.ConsumptionGrouped{}, Status: http.StatusOK,
+			Handler: (*Handlers).consumptionGrouped},
 		{Method: http.MethodGet, Pattern: "/consumption/export", OperationID: "consumption.export", Tag: "consumption", Access: RoleGated, Roles: all,
 			Summary: "The series as CSV or XLSX.", Request: dto.ConsumptionExportQuery{}, Status: http.StatusOK,
 			RawContentType: "application/octet-stream", Handler: (*Handlers).consumptionExport},
@@ -420,4 +425,46 @@ func (h *Handlers) energyBalance(w http.ResponseWriter, r *http.Request) {
 		}
 		return out, nil
 	})
+}
+
+func (h *Handlers) consumptionGrouped(w http.ResponseWriter, r *http.Request) {
+	serve(w, r, http.StatusOK, func(q dto.ConsumptionGroupedQuery) (any, error) {
+		out, err := h.Analysis.Grouped(r.Context(), mw.ScopeFrom(r), analysis.GroupedInput{
+			Subject: analysis.Subject{AnalyzerID: q.AnalyzerID, BuildingID: q.BuildingID},
+			From:    q.From.Time, To: q.To.Time, By: grouping.By(q.GroupBy), ComparePrevious: q.Compare == "previous",
+		})
+		if err != nil {
+			return nil, err
+		}
+		res := dto.ConsumptionGrouped{GroupBy: string(out.By), Current: groupedPeriodDTO(out.Current)}
+		if out.Previous != nil {
+			previous := groupedPeriodDTO(*out.Previous)
+			res.Previous = &previous
+		}
+		return res, nil
+	})
+}
+
+func groupedPeriodDTO(p analysis.GroupedPeriod) dto.GroupedPeriod {
+	groups := make([]dto.GroupedBucket, 0, len(p.Buckets))
+	for _, b := range p.Buckets {
+		groups = append(groups, dto.GroupedBucket{
+			Key: b.Key, Days: b.Days, ActiveImport: decOrNil(b.Active), ReactiveInductiveImport: decOrNil(b.Inductive),
+			ReactiveCapacitiveImport: decOrNil(b.Capacitive), Partial: b.Partial,
+		})
+	}
+	return dto.GroupedPeriod{
+		From: dto.Date{Time: p.From}, To: dto.Date{Time: p.To}, Groups: groups,
+		Statistics: dto.GroupedStatistics{
+			Total: decOrNil(p.Statistics.Total), Average: decOrNil(p.Statistics.Average),
+			Peak: extremeDTO(p.Statistics.Peak), Valley: extremeDTO(p.Statistics.Valley),
+		},
+	}
+}
+
+func extremeDTO(e *grouping.Extreme) *dto.GroupedExtreme {
+	if e == nil {
+		return nil
+	}
+	return &dto.GroupedExtreme{Key: e.Key, Value: dto.D(e.Value)}
 }

@@ -558,6 +558,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/consumption/grouped": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Consumption grouped by week, day type or season, with the previous period (R193). */
+        get: operations["consumption.grouped"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/consumption/reactive-status": {
         parameters: {
             query?: never;
@@ -1489,6 +1506,11 @@ export interface components {
             ranked: number;
             value?: components["schemas"]["Decimal"];
         };
+        ConsumptionGrouped: {
+            current: components["schemas"]["GroupedPeriod"];
+            group_by: string;
+            previous?: components["schemas"]["GroupedPeriod"];
+        };
         ConsumptionRow: {
             active_export?: components["schemas"]["Decimal"];
             active_export_index?: components["schemas"]["Decimal"];
@@ -1595,6 +1617,30 @@ export interface components {
         GithubComMErenTalanEkokodRewriteInternalApiV1DtoUserPage: {
             items: components["schemas"]["User"][];
             next_cursor?: null | string;
+        };
+        GroupedBucket: {
+            active_import?: components["schemas"]["Decimal"];
+            days: number;
+            key: string;
+            partial: boolean;
+            reactive_capacitive_import?: components["schemas"]["Decimal"];
+            reactive_inductive_import?: components["schemas"]["Decimal"];
+        };
+        GroupedExtreme: {
+            key: string;
+            value: components["schemas"]["Decimal"];
+        };
+        GroupedPeriod: {
+            from: components["schemas"]["Date"];
+            groups: components["schemas"]["GroupedBucket"][];
+            statistics: components["schemas"]["GroupedStatistics"];
+            to: components["schemas"]["Date"];
+        };
+        GroupedStatistics: {
+            average?: components["schemas"]["Decimal"];
+            peak?: components["schemas"]["GroupedExtreme"];
+            total?: components["schemas"]["Decimal"];
+            valley?: components["schemas"]["GroupedExtreme"];
         };
         IntegrationCredential: {
             definition_id: components["schemas"]["UuidUUID"];
@@ -5713,6 +5759,88 @@ export interface operations {
                 };
                 content: {
                     "application/octet-stream": string;
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "consumption.grouped": {
+        parameters: {
+            query: {
+                analyzer_id?: components["schemas"]["UuidUUID"];
+                building_id?: components["schemas"]["UuidUUID"];
+                from: components["schemas"]["Date"];
+                to: components["schemas"]["Date"];
+                group_by: "daily" | "week" | "day_type" | "season" | "season_day_type";
+                compare?: "previous";
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsumptionGrouped"];
                 };
             };
             /** @description Bad Request */

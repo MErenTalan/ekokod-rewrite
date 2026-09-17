@@ -4916,6 +4916,159 @@
         ]
       }
     },
+    "/api/v1/consumption/grouped": {
+      "get": {
+        "tags": [
+          "consumption"
+        ],
+        "summary": "Consumption grouped by week, day type or season, with the previous period (R193).",
+        "operationId": "consumption.grouped",
+        "parameters": [
+          {
+            "name": "analyzer_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "building_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "name": "group_by",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "enum": [
+                "daily",
+                "week",
+                "day_type",
+                "season",
+                "season_day_type"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "compare",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "previous"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsumptionGrouped"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/v1/consumption/reactive-status": {
       "get": {
         "tags": [
@@ -11615,6 +11768,24 @@
         ],
         "type": "object"
       },
+      "ConsumptionGrouped": {
+        "properties": {
+          "current": {
+            "$ref": "#/components/schemas/GroupedPeriod"
+          },
+          "group_by": {
+            "type": "string"
+          },
+          "previous": {
+            "$ref": "#/components/schemas/GroupedPeriod"
+          }
+        },
+        "required": [
+          "group_by",
+          "current"
+        ],
+        "type": "object"
+      },
       "ConsumptionRow": {
         "properties": {
           "active_export": {
@@ -12022,6 +12193,92 @@
         "required": [
           "items"
         ],
+        "type": "object"
+      },
+      "GroupedBucket": {
+        "properties": {
+          "active_import": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "days": {
+            "type": "integer"
+          },
+          "key": {
+            "type": "string"
+          },
+          "partial": {
+            "type": "boolean"
+          },
+          "reactive_capacitive_import": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "reactive_inductive_import": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "required": [
+          "key",
+          "days",
+          "partial"
+        ],
+        "type": "object"
+      },
+      "GroupedExtreme": {
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "value": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "required": [
+          "key",
+          "value"
+        ],
+        "type": "object"
+      },
+      "GroupedPeriod": {
+        "properties": {
+          "from": {
+            "$ref": "#/components/schemas/Date"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/GroupedBucket"
+            },
+            "type": "array"
+          },
+          "statistics": {
+            "$ref": "#/components/schemas/GroupedStatistics"
+          },
+          "to": {
+            "$ref": "#/components/schemas/Date"
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "groups",
+          "statistics"
+        ],
+        "type": "object"
+      },
+      "GroupedStatistics": {
+        "properties": {
+          "average": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "peak": {
+            "$ref": "#/components/schemas/GroupedExtreme"
+          },
+          "total": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "valley": {
+            "$ref": "#/components/schemas/GroupedExtreme"
+          }
+        },
         "type": "object"
       },
       "IntegrationCredential": {

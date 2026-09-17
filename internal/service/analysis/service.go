@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	domainlp "github.com/MErenTalan/ekokod-rewrite/internal/domain/loadprofile"
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
 	perr "github.com/MErenTalan/ekokod-rewrite/internal/platform/errors"
@@ -37,6 +38,9 @@ type Anomalies interface {
 // Profiles is the load-profile service.
 type Profiles interface {
 	Profiles(ctx context.Context, sc store.Scope, req loadprofile.Request) (loadprofile.Result, error)
+	// CalendarConfig is the company's weekend days and vacations (R137), shared
+	// with the grouped consumption read so the two never classify a day differently.
+	CalendarConfig(ctx context.Context, sc store.Scope, r store.TimeRange) (domainlp.Config, error)
 }
 
 // Deps is everything Service needs.

@@ -215,3 +215,50 @@ func TestAnomalyCheckUnavailable(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, ca.do(http.MethodPost, "/anomaly/check", body).status)
 	require.Equal(t, http.StatusForbidden, h.as(seed.E2ECompanyReadonlyEmail).do(http.MethodPost, "/anomaly/check", body).status)
 }
+
+// R193: the grouped read must agree with the daily rows it is built from, and
+// classify days exactly as the load profile does (R137).
+func TestConsumptionGroupedHTTP(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.seedAnalysis()
+	ca := h.as(seed.E2ECompanyAdminEmail)
+	window := "&from=2026-08-03&to=2026-08-16" // two whole Mon–Sun weeks
+
+	var daily dto.ConsumptionSeries
+	ca.do(http.MethodGet, "/consumption?analyzer_id="+h.fx.AnalyzerA1.String()+"&granularity=daily"+window, nil).json(t, &daily)
+	require.Len(t, daily.Items, 14)
+	total := decimal.Zero
+	for _, row := range daily.Items {
+		require.NotNil(t, row.ActiveImport)
+		total = total.Add(row.ActiveImport.Decimal)
+	}
+
+	var weeks dto.ConsumptionGrouped
+	res := ca.do(http.MethodGet, "/consumption/grouped?analyzer_id="+h.fx.AnalyzerA1.String()+"&group_by=week"+window, nil)
+	require.Equal(t, http.StatusOK, res.status, string(res.body))
+	res.json(t, &weeks)
+	require.Equal(t, "week", weeks.GroupBy)
+	require.Len(t, weeks.Current.Groups, 2)
+	require.Equal(t, []string{"2026-08-03", "2026-08-10"}, []string{weeks.Current.Groups[0].Key, weeks.Current.Groups[1].Key})
+	require.Equal(t, total.String(), weeks.Current.Statistics.Total.String(), "the groups sum to the daily rows")
+	require.Nil(t, weeks.Previous, "no comparison unless it was asked for")
+
+	var dayTypes dto.ConsumptionGrouped
+	ca.do(http.MethodGet, "/consumption/grouped?analyzer_id="+h.fx.AnalyzerA1.String()+"&group_by=day_type&compare=previous"+window, nil).
+		json(t, &dayTypes)
+	require.Equal(t, []string{"weekday", "weekend"}, []string{dayTypes.Current.Groups[0].Key, dayTypes.Current.Groups[1].Key})
+	require.Equal(t, 10, dayTypes.Current.Groups[0].Days)
+	require.Equal(t, 4, dayTypes.Current.Groups[1].Days)
+	require.NotNil(t, dayTypes.Previous)
+	require.Equal(t, "2026-07-20", dayTypes.Previous.From.Format(time.DateOnly))
+	require.Equal(t, "2026-08-02", dayTypes.Previous.To.Format(time.DateOnly))
+
+	// An unknown mode is caught by the DTO's own enum (R154): 422 with the field code, like every other request.
+	bad := ca.do(http.MethodGet, "/consumption/grouped?analyzer_id="+h.fx.AnalyzerA1.String()+"&group_by=monthly"+window, nil)
+	require.Equal(t, http.StatusUnprocessableEntity, bad.status)
+	require.Equal(t, "validation_failed", bad.code(t))
+	ba := h.as(seed.E2EBuildingAdminEmail)
+	require.Equal(t, http.StatusNotFound, ba.do(http.MethodGet,
+		"/consumption/grouped?analyzer_id="+h.fx.AnalyzerA2.String()+"&group_by=week"+window, nil).status)
+}

@@ -238,6 +238,25 @@ func (s *Service) Profiles(ctx context.Context, sc store.Scope, req Request) (Re
 	}, nil
 }
 
+// CalendarConfig is the company's day-type configuration over r: the same
+// weekend days and vacation periods Profiles classifies with (R137), so a
+// caller outside this package (the grouped consumption read, R193) can never
+// drift from the load profile.
+func (s *Service) CalendarConfig(ctx context.Context, sc store.Scope, r store.TimeRange) (domainlp.Config, error) {
+	if !sc.Valid() {
+		return domainlp.Config{}, store.ErrInvalidScope
+	}
+	weekendDays, _, err := s.resolveWeekendDays(ctx, sc)
+	if err != nil {
+		return domainlp.Config{}, err
+	}
+	vacations, err := s.resolveVacations(ctx, sc, r)
+	if err != nil {
+		return domainlp.Config{}, err
+	}
+	return domainlp.Config{WeekendDays: weekendDays, Vacations: vacations, Location: s.deps.Location}, nil
+}
+
 // resolveWeekendDays reads sc's company weekend days (R69), falling back to
 // DefaultWeekendDays — a fresh copy, never the package variable itself —
 // when the company configured none.
