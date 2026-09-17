@@ -32,6 +32,7 @@ var messages = map[string][2]string{ // code → {tr, en}
 	"token_rotated":            {"Oturum yenilendi, lütfen tekrar deneyin.", "The session was refreshed, please retry."},
 	"session_revoked":          {"Oturumunuz sonlandırıldı. Lütfen tekrar giriş yapın.", "Your session has ended. Please sign in again."},
 	"device_mismatch":          {"Oturumunuz başka bir cihazda kullanıldığı için sonlandırıldı. Lütfen tekrar giriş yapın.", "Your session was ended because it was used from another device. Please sign in again."},
+	"email_taken":              {"Bu e-posta adresi başka bir kullanıcıya ait.", "This e-mail address belongs to another user."},
 	"reset_token_invalid":      {"Şifre sıfırlama bağlantısı geçersiz veya süresi dolmuş.", "The password reset link is invalid or has expired."},
 }
 

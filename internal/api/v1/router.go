@@ -9,7 +9,9 @@ import (
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/api/v1/kit"
 	"github.com/MErenTalan/ekokod-rewrite/internal/api/v1/mw"
+	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
 	perr "github.com/MErenTalan/ekokod-rewrite/internal/platform/errors"
+	authsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/auth"
 )
 
 //go:embed openapi.json
@@ -24,7 +26,12 @@ func serveOpenAPI(w http.ResponseWriter, _ *http.Request) {
 }
 
 // Handlers holds the services the endpoint handlers call.
-type Handlers struct{}
+type Handlers struct {
+	Auth     *authsvc.Service
+	Clock    clock.Clock
+	Log      *slog.Logger
+	ClientIP func(*http.Request) string
+}
 
 // Middleware is the per-route middleware the router composes; tests swap it.
 type Middleware struct {
@@ -73,7 +80,8 @@ func NewRouterForTable(routes []Route, h *Handlers, m Middleware, log *slog.Logg
 				chain = append(chain, m.Audit(mw.AuditInfo{Operation: rt.OperationID, Entity: rt.Entity, Platform: rt.PlatformAudit}))
 			}
 		}
-		r.With(chain...).Method(rt.Method, rt.Pattern, rt.Handler(h))
+		handle := rt.Handler
+		r.With(chain...).MethodFunc(rt.Method, rt.Pattern, func(w http.ResponseWriter, req *http.Request) { handle(h, w, req) })
 	}
 	return r
 }

@@ -13,6 +13,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	v1 "github.com/MErenTalan/ekokod-rewrite/internal/api/v1"
+	"github.com/MErenTalan/ekokod-rewrite/internal/api/v1/dto"
+	"github.com/MErenTalan/ekokod-rewrite/internal/auth"
+	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 )
 
 func TestRouteTableMatchesRouter(t *testing.T) {
@@ -98,4 +101,21 @@ func TestRequestTypesAreConsistent(t *testing.T) {
 			check(rt.Method+" "+rt.Pattern, reflect.TypeOf(rt.Request))
 		}
 	}
+}
+
+func TestPermissionEnumMatchesTable(t *testing.T) {
+	var got []string
+	for _, v := range (dto.Permission("")).Enum() {
+		got = append(got, v.(string))
+	}
+	require.Equal(t, auth.AllPermissions(), got)
+	var roles []string
+	for _, v := range (dto.Role("")).Enum() {
+		roles = append(roles, v.(string))
+	}
+	var want []string
+	for _, r := range model.UserRoles() {
+		want = append(want, string(r))
+	}
+	require.Equal(t, want, roles)
 }

@@ -27,6 +27,7 @@ func NewRoot(out io.Writer) *cobra.Command {
 		newSchedulerCmd(),
 		newSeedCmd(),
 		newToolCmd(),
+		newUserCmd(),
 	)
 	return root
 }

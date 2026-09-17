@@ -1,8 +1,12 @@
 package cli
 
 import (
+	"time"
+
 	"fmt"
 	"os"
+
+	"github.com/MErenTalan/ekokod-rewrite/internal/auth"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/seed"
@@ -81,7 +85,43 @@ func newSeedCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&yes, "yes", false, "confirm seeding the production database")
+	cmd.AddCommand(newSeedE2ECmd())
 	return cmd
+}
+
+// e2ePasswordEnv is the password every e2e fixture user gets (R183).
+const e2ePasswordEnv = "EKOKOD_E2E_PASSWORD"
+
+func newSeedE2ECmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "e2e",
+		Short: "Create the deterministic e2e/test tenants and users (never in production)",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			cfg, err := config.FromEnv()
+			if err != nil {
+				return err
+			}
+			if cfg.Env == config.EnvProduction {
+				return fmt.Errorf("refusing to create e2e fixtures in production")
+			}
+			password := os.Getenv(e2ePasswordEnv)
+			if password == "" {
+				return fmt.Errorf("%s is required", e2ePasswordEnv)
+			}
+			ctx := cmd.Context()
+			pool, err := postgres.NewPool(ctx, cfg.DB, newCommandLogger(cfg, os.Stderr))
+			if err != nil {
+				return err
+			}
+			defer pool.Close()
+			f, err := seed.E2EFixtures(ctx, pool, auth.Hasher{Pepper: cfg.Security.PasswordPepper, Cost: cfg.Security.BcryptCost}, password, time.Now())
+			if err != nil {
+				return fmt.Errorf("seed e2e: %w", err)
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "e2e fixtures ready: company A %s, company B %s, %d users\n", f.CompanyA, f.CompanyB, len(f.Users))
+			return err
+		},
+	}
 }
 
 // dbURLDisplay returns the already-masked EKOKOD_DB_URL row from
