@@ -6,6 +6,12 @@ const TITLE = 'E2E Bakım Günü';
 
 const chips = (page: Page) => page.getByRole('button', { name: TITLE });
 
+/** The month grid adds one button per day, so wait for it and take the header's. */
+async function addEvent(page: Page) {
+  await expect(page.locator('[data-day]').first()).toBeVisible();
+  await page.getByRole('button', { name: 'Etkinlik ekle' }).first().click();
+}
+
 async function openVacations(page: Page) {
   await page.getByRole('button', { name: 'Tatil yönetimi' }).click();
   return page.getByRole('dialog');
@@ -30,7 +36,7 @@ test.describe.configure({ mode: 'serial' });
 test.describe('calendar', () => {
   test('a company admin creates an all-day event', async ({ page }) => {
     await login(page, USERS.companyAdmin.email, { next: '/ekorm/calendar' });
-    await page.getByRole('button', { name: 'Etkinlik ekle' }).click();
+    await addEvent(page);
     await page.getByLabel(/Başlık/).fill(TITLE);
     await page.getByRole('radio', { name: 'Camgöbeği' }).click();
     await page.getByRole('button', { name: 'Kaydet' }).click();
