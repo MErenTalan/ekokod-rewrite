@@ -67,6 +67,10 @@
 //     admin role's company list and switcher, F6a). Its purpose is to show
 //     companies other than the caller's own, which no Scope can express.
 //
+//   - AdminSectorRepository reads sector peers across tenants for the
+//     sectoral comparison (F6a, R162). The peers are other tenants' buildings;
+//     only figures leave it.
+//
 //   - AdminAuthRepository.PasswordResetByTokenHash (F6a) joins the first
 //     entry: a reset request, like a refresh, carries only a token.
 //

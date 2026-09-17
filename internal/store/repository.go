@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 )
@@ -1619,6 +1620,31 @@ type AdminTenantRepository interface {
 	// switcher (05 §3 GET /companies). It cannot take a Scope: its whole
 	// purpose is to show companies other than the caller's own.
 	ListCompanies(ctx context.Context, f CompanyFilter) ([]model.Company, error)
+}
+
+// SectorFigures is one sector peer's inputs to the comparison (R162): no name
+// and no company, only figures.
+type SectorFigures struct {
+	BuildingID     uuid.UUID
+	PersonnelCount *int32
+	TotalAreaM2    *decimal.Decimal
+	// DailySum is consumption over the daily window across DaysWithData days;
+	// nil when the building has no readings there.
+	DailySum     *decimal.Decimal
+	DaysWithData int32
+	// MonthlySum is consumption over the month window; nil without readings.
+	MonthlySum *decimal.Decimal
+}
+
+// AdminSectorRepository reads sector peers across tenants for the sectoral
+// comparison (02 §10.4). It cannot take a Scope: the peers ARE other tenants'
+// buildings. It returns figures only; the service must never expose a peer's
+// id, name or company.
+type AdminSectorRepository interface {
+	// SectorFigures returns every live building of a live company whose
+	// trimmed, case-folded sector equals sector, with consumption over daily
+	// and month. Invalid ranges return ErrInvalidRange before any I/O.
+	SectorFigures(ctx context.Context, sector string, daily, month TimeRange) ([]SectorFigures, error)
 }
 
 // AdminAuditRepository appends platform audit rows.

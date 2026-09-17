@@ -116,6 +116,7 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		Buildings: postgres.NewBuildingRepository(pool), Analyzers: postgres.NewAnalyzerRepository(pool),
 		Plants: postgres.NewPlantRepository(pool), Tariffs: postgres.NewTariffRepository(pool),
 		Integrations: postgres.NewIntegrationRepository(pool, cipher), Enqueuer: enqueuer,
+		Sector: admin.NewSectorRepository(pool), Carbon: postgres.NewCarbonRepository(pool),
 		MaxRetry: cfg.Worker.MaxRetries, Clock: opts.Clock,
 	})
 	if err != nil {
