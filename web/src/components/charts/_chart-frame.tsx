@@ -33,6 +33,8 @@ export type BaseChartProps = {
 type FrameProps = BaseChartProps & {
   children: (plot: Datum[]) => ReactNode;
   legendExtra?: LegendExtra[];
+  /** Series keys drawn as bars (solid legend swatch). */
+  barKeys?: string[];
   /** Replaces the series legend (gauge, heatmap). */
   legend?: ReactNode;
   /** Replaces the series data table (gauge, heatmap). */
@@ -61,6 +63,7 @@ export function ChartFrame({
   dataTableDefaultOpen = false,
   children,
   legendExtra,
+  barKeys,
   legend,
   table,
   isEmpty,
@@ -91,7 +94,7 @@ export function ChartFrame({
           {description}
         </p>
       </div>
-      {ready ? (legend ?? <ChartLegend series={series} extra={legendExtra} />) : null}
+      {ready ? (legend ?? <ChartLegend series={series} extra={legendExtra} barKeys={barKeys} />) : null}
       {loading ? (
         <Skeleton className="w-full" style={{ height }} />
       ) : !hasData ? (

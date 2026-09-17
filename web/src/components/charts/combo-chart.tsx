@@ -28,7 +28,7 @@ export function ComboChart({ bars, lines, ...props }: ComboChartProps) {
   const leftUnit = (bars[0] ?? lines[0])?.unit ?? 'kWh';
   const rightUnit = lines.find((l) => l.unit !== leftUnit)?.unit;
   return (
-    <ChartFrame {...props} series={series}>
+    <ChartFrame {...props} series={series} barKeys={bars.map((s) => s.key)}>
       {(plot) => (
         <ResponsiveContainer width="100%" height={height} initialDimension={{ width: 640, height }}>
           <ComposedChart data={toPlotData(plot, series.map((s) => s.key))} margin={{ top: 8, right: rightUnit ? 4 : 16, bottom: 4, left: 4 }} accessibilityLayer title={title} desc={description}>

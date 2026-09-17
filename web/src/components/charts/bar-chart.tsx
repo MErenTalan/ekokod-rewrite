@@ -44,6 +44,7 @@ export function BarChart({ layout = 'vertical', sort, referenceLine, diverging =
     <ChartFrame
       {...props}
       data={data}
+      barKeys={series.map((s) => s.key)}
       legendExtra={referenceLine ? [{ label: referenceLine.label, color: REFERENCE.stroke, dash: REFERENCE.dash }] : undefined}
       table={diverging && first ? <ChartDataTable caption={title} xLabel={props.xLabel} series={[{ ...first, label: series.map((s) => s.label).join(' / ') }]} data={data} formatX={formatX} /> : undefined}
     >

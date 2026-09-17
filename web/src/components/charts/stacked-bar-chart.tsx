@@ -24,7 +24,7 @@ export function StackedBarChart({ layout = 'vertical', ...props }: StackedBarCha
   };
   const categoryAxis = { ...AXIS, type: 'category' as const, dataKey: 'x', tickFormatter: formatX };
   return (
-    <ChartFrame {...props}>
+    <ChartFrame {...props} barKeys={series.map((s) => s.key)}>
       {(plot) => (
         <ResponsiveContainer width="100%" height={height} initialDimension={{ width: 640, height }}>
           <RBarChart

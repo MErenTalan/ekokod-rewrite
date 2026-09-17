@@ -21,6 +21,8 @@ export function LineChart({ band, directLabels = true, ...props }: LineChartProp
   const reduced = usePrefersReducedMotion();
   const { series, height = 320, formatX, title, description } = props;
   const keys = [...series.map((s) => s.key), ...(band ? [band.lowerKey, band.upperKey] : [])];
+  // Room for the longest end-of-line label at 12 px (~7 px per glyph) so it is never cut by the SVG edge.
+  const labelRoom = directLabels ? Math.min(180, 16 + 7 * Math.max(0, ...series.map((s) => s.label.length))) : 16;
   return (
     <ChartFrame
       {...props}
@@ -28,7 +30,7 @@ export function LineChart({ band, directLabels = true, ...props }: LineChartProp
     >
       {(plot) => (
         <ResponsiveContainer width="100%" height={height} initialDimension={{ width: 640, height }}>
-          <ComposedChart data={toPlotData(plot, keys)} margin={{ top: 8, right: directLabels ? 72 : 16, bottom: 4, left: 4 }} accessibilityLayer title={title} desc={description}>
+          <ComposedChart data={toPlotData(plot, keys)} margin={{ top: 8, right: labelRoom, bottom: 4, left: 4 }} accessibilityLayer title={title} desc={description}>
             <CartesianGrid {...GRID} vertical={false} />
             <XAxis dataKey="x" tickFormatter={formatX} {...AXIS} />
             <YAxis
