@@ -154,6 +154,10 @@ func TestAnalyzerRefreshEnqueues(t *testing.T) {
 		{Provider: model.IntegrationProviderOSOS, Subtype: "Baskent", Endpoints: json.RawMessage(`{}`)},
 	})
 	require.NoError(t, err)
+	res = ca.do(http.MethodPost, path, map[string]any{"mode": "hourly"})
+	require.Equal(t, http.StatusConflict, res.status, "a definition without a company credential is not configured either")
+	require.Equal(t, "integration_not_configured", res.code(t))
+	require.Empty(t, h.enq.snapshot())
 	cipher, err := crypto.NewCipher(h.cfg.Security.EncryptionKey)
 	require.NoError(t, err)
 	integrations := postgres.NewIntegrationRepository(h.pool, cipher)
