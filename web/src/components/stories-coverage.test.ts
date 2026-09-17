@@ -26,10 +26,11 @@ describe('gallery coverage', () => {
 
   it('every feature component has a story and a test', () => {
     const features = join(import.meta.dirname, '../features');
-    // Internal `_` helpers and `*-page` containers need a test but no story: a
-    // container only wires data into views that each have their own story, and
-    // the page itself is covered by its container test and by the e2e suite.
-    const storyless = (file: string) => basename(file).startsWith('_') || /-page\.tsx$/.test(basename(file));
+    // Internal `_` helpers and the `*-page` / `*-panel` containers need a test
+    // but no story: a container only wires data into views that each have their
+    // own story, and the screen itself is covered by its container test and by
+    // the e2e suite.
+    const storyless = (file: string) => basename(file).startsWith('_') || /-(page|panel)\.tsx$/.test(basename(file));
     const missing = components(features).flatMap((file) =>
       (storyless(file) ? ['.test.tsx'] : ['.stories.tsx', '.test.tsx']).map((suffix) => file.replace(/\.tsx$/, suffix)).filter((sibling) => !existsSync(sibling)).map((sibling) => basename(sibling)),
     );
