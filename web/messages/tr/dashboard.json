@@ -63,5 +63,41 @@
     "exemptUserGroup": "Abone grubu muaf",
     "exemptGeneration": "Üretim tesisi — muaf",
     "unnamedBuilding": "Bina atanmamış"
+  },
+  "consumption": {
+    "title": "Tüketim",
+    "period": "Dönem",
+    "active": "Aktif",
+    "inductive": "Endüktif",
+    "capacitive": "Kapasitif",
+    "chartTitle": "Tüketim eğilimi",
+    "chartDescription": "Seçilen dönemdeki aktif, endüktif ve kapasitif tüketim.",
+    "capNotice": "Grafik ilk {shown} noktayı gösteriyor (toplam {total}).",
+    "tableCaption": "Tüketim verileri",
+    "empty": "Seçilen dönem için veri yok",
+    "emptyHint": "Tarih aralığını genişletin veya verileri yenileyin.",
+    "yoyTitle": "Yıllık karşılaştırma",
+    "yoyDescription": "Seçilen aylar ile bir önceki yılın aynı ayları.",
+    "currentPeriod": "Seçili dönem",
+    "previousYear": "Önceki yıl",
+    "yoyOnlyMonthly": "Yıllık karşılaştırma, tek bir yıl içindeki aylık görünümde gösterilir."
+  },
+  "sector": {
+    "title": "Sektörel karşılaştırma",
+    "header": "Sektör: {sector} · {count} bina",
+    "building": "Bina",
+    "average": "Sektör ortalaması",
+    "daily": "Günlük tüketim (kWh/gün)",
+    "monthly": "Aylık tüketim (kWh/ay)",
+    "co2": "CO₂ salımı (kg/ay)",
+    "perCapita": "Kişi başına (kWh/kişi·ay)",
+    "perArea": "Birim alan başına (kWh/m²·ay)",
+    "rankLine": "{peers} bina içinde {rank}.",
+    "unranked": "sıralanamadı",
+    "noBuilding": "Karşılaştırma için bir bina seçin",
+    "noBuildingHint": "Listeden bir bina seçtiğinizde burada görünür.",
+    "missingSector": "Bu binanın sektörü girilmemiş; karşılaştırma yapılamıyor.",
+    "missingSectorAction": "Binayı düzenle",
+    "tooSmall": "Sektörde karşılaştırma için yeterli bina yok (en az 3)."
   }
 }

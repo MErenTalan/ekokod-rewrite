@@ -63,5 +63,41 @@
     "exemptUserGroup": "Exempt user group",
     "exemptGeneration": "Generation site — exempt",
     "unnamedBuilding": "No building assigned"
+  },
+  "consumption": {
+    "title": "Consumption",
+    "period": "Period",
+    "active": "Active",
+    "inductive": "Inductive",
+    "capacitive": "Capacitive",
+    "chartTitle": "Consumption trend",
+    "chartDescription": "Active, inductive and capacitive consumption over the selected period.",
+    "capNotice": "The chart shows the first {shown} points (of {total}).",
+    "tableCaption": "Consumption data",
+    "empty": "No data for the selected period",
+    "emptyHint": "Widen the date range or refresh the values.",
+    "yoyTitle": "Year-over-year",
+    "yoyDescription": "The selected months against the same months a year earlier.",
+    "currentPeriod": "Selected period",
+    "previousYear": "Previous year",
+    "yoyOnlyMonthly": "The year-over-year chart is shown for a monthly view inside one calendar year."
+  },
+  "sector": {
+    "title": "Sectoral comparison",
+    "header": "Sector: {sector} · {count} buildings",
+    "building": "Building",
+    "average": "Sector average",
+    "daily": "Daily consumption (kWh/day)",
+    "monthly": "Monthly consumption (kWh/month)",
+    "co2": "CO₂ emission (kg/month)",
+    "perCapita": "Per person (kWh/person·month)",
+    "perArea": "Per area (kWh/m²·month)",
+    "rankLine": "{rank} of {peers} buildings",
+    "unranked": "not ranked",
+    "noBuilding": "Choose a building to compare",
+    "noBuildingHint": "It appears here once you select one from the list.",
+    "missingSector": "This building has no sector yet, so it cannot be compared.",
+    "missingSectorAction": "Edit the building",
+    "tooSmall": "The sector has too few buildings to compare (at least 3 are needed)."
   }
 }
