@@ -82,7 +82,7 @@ func TestElectorLogsFailedUnlockQueryError(t *testing.T) {
 func TestSchedulerEntriesIncludeIngestionAndPrices(t *testing.T) {
 	cfg := &config.Config{
 		Timezone: time.UTC,
-		Schedule: config.Schedule{Ingestion: "0 3 * * *", EPIAS: "0 14 * * *", Billing: "0 6 * * *"},
+		Schedule: config.Schedule{Ingestion: "0 3 * * *", EPIAS: "0 14 * * *", Billing: "0 6 * * *", Demo: "15 * * * *"},
 		Worker:   config.Worker{MaxRetries: 5},
 	}
 	s := &Scheduler{cfg: cfg, log: slog.New(slog.DiscardHandler)}
