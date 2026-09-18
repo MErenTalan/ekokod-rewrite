@@ -69,6 +69,8 @@ type Service struct {
 	d  Deps
 	ed *EvaluateDeps
 	nd *NotifyDeps
+	rd *RunDeps
+	dd *DispatchDeps
 	// loc is Europe/Istanbul. NOT dto.Istanbul: internal/service may not import
 	// internal/api (TestServiceLayerImportBoundaries), which is why
 	// internal/service/billing loads its own the same way.

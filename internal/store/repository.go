@@ -1756,6 +1756,16 @@ type AdminBillingRepository interface {
 	BillableBuildings(ctx context.Context) ([]BillableBuilding, error)
 }
 
+// AdminAlarmRepository finds the tenants an alarm tick has work for. Like
+// every other Admin* interface it cannot take a Scope: the dispatcher acts for
+// no single tenant, and asking each company in turn would write an empty
+// job_run and a summary message per company per hour (R219's noise, at scale).
+type AdminAlarmRepository interface {
+	// CompaniesWithEnabledAlarms returns the id of every live company that has
+	// at least one enabled, non-deleted alarm rule.
+	CompaniesWithEnabledAlarms(ctx context.Context) ([]uuid.UUID, error)
+}
+
 // AdminJournalRepository records platform jobs — work that runs for no tenant,
 // such as the market price import — in the same job_runs and
 // operational_messages tables tenants' jobs use, with company_id NULL.

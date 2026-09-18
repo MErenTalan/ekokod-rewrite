@@ -12,6 +12,35 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const adminCompaniesWithEnabledAlarms = `-- name: AdminCompaniesWithEnabledAlarms :many
+select distinct a.company_id from alarms a
+join companies c on c.id = a.company_id and c.deleted_at is null
+where a.deleted_at is null and a.is_enabled
+order by a.company_id
+`
+
+// Every live company with at least one enabled rule. The dispatcher uses it so
+// a company with no alarms never gets an empty run (R219).
+func (q *Queries) AdminCompaniesWithEnabledAlarms(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, adminCompaniesWithEnabledAlarms)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var company_id uuid.UUID
+		if err := rows.Scan(&company_id); err != nil {
+			return nil, err
+		}
+		items = append(items, company_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const alarmAnalyzerDeleteVisibleForAlarm = `-- name: AlarmAnalyzerDeleteVisibleForAlarm :exec
 delete from alarm_analyzers aa
 using analyzers an

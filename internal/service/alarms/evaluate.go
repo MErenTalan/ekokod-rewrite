@@ -78,7 +78,12 @@ func (s *Service) DryRun(ctx context.Context, sc store.Scope, id uuid.UUID, noti
 		return Evaluation{}, err
 	}
 	if notify {
-		return s.fire(ctx, sc, rule)
+		if s.rd == nil {
+			// Honest: a silent dry run would tell the operator a notification
+			// went out when none did.
+			return Evaluation{}, perr.New(perr.Unavailable.Code, perr.Unavailable.HTTPStatus, "errors.alarm.notifyUnavailable")
+		}
+		return s.fire(ctx, sc, rule, s.d.Clock.Now())
 	}
 	return s.EvaluateRule(ctx, sc, rule, s.d.Clock.Now())
 }
@@ -204,12 +209,4 @@ func (s *Service) twoNewestBills(ctx context.Context, sc store.Scope, analyzerID
 		previous = &list[1]
 	}
 	return latest, previous, nil
-}
-
-// fire is the real firing path: it records events, claims invoices and
-// enqueues notifications. Task 9 supplies it; until then an explicit
-// Unavailable is honest, where a silent dry run would tell the operator a
-// notification went out when none did.
-func (s *Service) fire(_ context.Context, _ store.Scope, _ Rule) (Evaluation, error) {
-	return Evaluation{}, perr.New(perr.Unavailable.Code, perr.Unavailable.HTTPStatus, "errors.alarm.notifyUnavailable")
 }

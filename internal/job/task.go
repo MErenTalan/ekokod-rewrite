@@ -55,6 +55,10 @@ type Handlers struct {
 	BillingDispatch BillingDispatcher
 	BillingGenerate BillingGenerator
 	BillingRender   BillingRenderer
+
+	AlarmDispatch AlarmDispatcher
+	AlarmEvaluate AlarmEvaluator
+	AlarmNotify   AlarmNotifier
 }
 
 // Register attaches every handler to the mux. TypeNoop is always
@@ -96,5 +100,14 @@ func Register(mux *asynq.ServeMux, h *Handlers) {
 	}
 	if h.BillingRender != nil {
 		mux.HandleFunc(TypeBillingRenderPDF, h.handleBillingRender)
+	}
+	if h.AlarmDispatch != nil {
+		mux.HandleFunc(TypeAlarmDispatch, h.handleAlarmDispatch)
+	}
+	if h.AlarmEvaluate != nil {
+		mux.HandleFunc(TypeAlarmEvaluate, h.handleAlarmEvaluate)
+	}
+	if h.AlarmNotify != nil {
+		mux.HandleFunc(TypeAlarmNotify, h.handleAlarmNotify)
 	}
 }

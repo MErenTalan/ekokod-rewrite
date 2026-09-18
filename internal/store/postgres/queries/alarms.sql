@@ -257,3 +257,11 @@ returning true;
 select exists (
   select 1 from power_plants where id = sqlc.arg(plant_id) and company_id = sqlc.arg(company_id) and deleted_at is null
 ) as visible;
+
+-- name: AdminCompaniesWithEnabledAlarms :many
+-- Every live company with at least one enabled rule. The dispatcher uses it so
+-- a company with no alarms never gets an empty run (R219).
+select distinct a.company_id from alarms a
+join companies c on c.id = a.company_id and c.deleted_at is null
+where a.deleted_at is null and a.is_enabled
+order by a.company_id;

@@ -46,8 +46,9 @@ func New(cfg *config.Config, pool *pgxpool.Pool, log *slog.Logger) *Scheduler {
 // entries returns the cron schedule: the F0 heartbeat, plus F2's two
 // platform-wide dispatch ticks (R16) — integration.sync_dispatch, which
 // itself fans out per-credential work, and epias.sync_prices. Every future
-// phase's own cron task (alarms, billing, forecast, carbon, reports) is
-// added here the same way, each driven by its own field on config.Schedule.
+// phase's own cron task (billing, forecast, carbon, reports) is added here
+// the same way, each driven by its own field on config.Schedule. F7 adds
+// alarm.dispatch on config.Schedule.Alarms (01 §8: hourly).
 func (s *Scheduler) entries() ([]Entry, error) {
 	noop, err := job.NewNoopTask("scheduled heartbeat")
 	if err != nil {
@@ -70,12 +71,17 @@ func (s *Scheduler) entries() ([]Entry, error) {
 	if err != nil {
 		return nil, err
 	}
+	alarmDispatch, err := job.NewAlarmDispatchTask(retryOpts)
+	if err != nil {
+		return nil, err
+	}
 	return []Entry{
 		{Cron: "@every 1h", Task: noop},
 		{Cron: s.cfg.Schedule.Ingestion, Task: syncDispatch},
 		{Cron: s.cfg.Schedule.EPIAS, Task: syncPrices},
 		{Cron: s.cfg.Schedule.Billing, Task: billingDispatch},
 		{Cron: s.cfg.Schedule.Demo, Task: demoExtend},
+		{Cron: s.cfg.Schedule.Alarms, Task: alarmDispatch},
 	}, nil
 }
 

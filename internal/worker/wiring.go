@@ -32,6 +32,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -51,18 +52,24 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/osos"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/pm5340"
 	"github.com/MErenTalan/ekokod-rewrite/internal/job"
+	"github.com/MErenTalan/ekokod-rewrite/internal/mail"
 	"github.com/MErenTalan/ekokod-rewrite/internal/marketdata"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/crypto"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/lock"
 	"github.com/MErenTalan/ekokod-rewrite/internal/seed"
+	"github.com/MErenTalan/ekokod-rewrite/internal/service/alarms"
 	billingsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/billing"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/consumption"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/admin"
 	platformredis "github.com/MErenTalan/ekokod-rewrite/internal/store/redis"
 )
+
+// mailDialTimeout matches apiwire's: an alarm notification must not hold a
+// worker slot waiting on an unreachable SMTP host.
+const mailDialTimeout = 15 * time.Second
 
 // isolarStateKeyInfo domain-separates the isolar OAuth state signing key
 // (StateKey) from the raw JWT signing key it is derived from, so the two
@@ -453,6 +460,27 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		return graph{}, fmt.Errorf("worker: build billing service: %w", err)
 	}
 
+	// F7 alarms: the worker is the only process that fires rules — it
+	// dispatches, evaluates and delivers. The API holds the same service
+	// without RunDeps, so a dry run there can never send anything.
+	alarmService, err := alarms.New(alarms.Deps{
+		Alarms: postgres.NewAlarmRepository(pool), Analyzers: analyzerRepo, Clock: clock.System(),
+	})
+	if err != nil {
+		closeAll()
+		return graph{}, fmt.Errorf("worker: build alarm service: %w", err)
+	}
+	alarmService = alarmService.
+		WithEvaluate(alarms.EvaluateDeps{Readings: readingRepo, Bills: billRepo}).
+		WithRun(alarms.RunDeps{Ops: opsRepo, Enqueue: alarms.EnqueueNotify(jobClient, cfg.Worker.MaxRetries)}).
+		WithNotify(alarms.NotifyDeps{SMTP: postgres.NewSMTPRepository(pool, cipher),
+			Mail: mail.NewSMTPSender(mailDialTimeout, nil), Ops: opsRepo}).
+		WithDispatch(alarms.DispatchDeps{
+			Companies: admin.NewAlarmRepository(pool), Journal: admin.NewJournalRepository(pool),
+			Enqueue: alarms.EnqueueEvaluate(jobClient, cfg.Worker.MaxRetries),
+		})
+	alarmJobs := alarms.JobAdapter{Service: alarmService, Clock: clock.System()}
+
 	return graph{
 		cipher:          cipher,
 		integrationRepo: integrationRepo,
@@ -473,6 +501,9 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 				Clock: clock.System(), MaxRetry: cfg.Worker.MaxRetries},
 			BillingRender: billingsvc.PDFRenderer{Bills: billRepo, Companies: postgres.NewCompanyRepository(pool),
 				Buildings: buildingRepo, Analyzers: analyzerRepo, Root: cfg.Storage.Root},
+			AlarmDispatch: alarmJobs,
+			AlarmEvaluate: alarmJobs,
+			AlarmNotify:   alarmJobs,
 		},
 		closers: closers,
 	}, nil
