@@ -109,7 +109,11 @@ var expectedAccess = map[string]string{
 	"DELETE /alarms/{id}":        "A CA BA",
 	"GET /alarms/{id}/events":    "A CA CR BA BR D",
 	"POST /alarms/{id}/evaluate": "A CA",
-	"PUT /calendar/vacations":    "A CA",
+
+	"GET /messages":                 "A CA CR BA BR D",
+	"GET /job-runs":                 "A CA",
+	"POST /job-runs/{type}/trigger": "A",
+	"PUT /calendar/vacations":       "A CA",
 	// 05 §15
 	"GET /integration-definitions":                "A",
 	"POST /integration-definitions":               "A",

@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
+	"sort"
 	"strings"
 	"testing"
 
@@ -17,6 +19,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/api/v1/dto"
 	"github.com/MErenTalan/ekokod-rewrite/internal/auth"
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
+	"github.com/MErenTalan/ekokod-rewrite/internal/service/ops"
 )
 
 func TestRouteTableMatchesRouter(t *testing.T) {
@@ -212,4 +215,24 @@ func TestArrayEnumsDescribeTheirItems(t *testing.T) {
 	}
 	walk(doc)
 	require.GreaterOrEqual(t, arrays, 1, "at least buildings.list include is an array of enum values")
+}
+
+// TestTriggerEnumMatchesTheAllowList pins R220's single source of truth.
+//
+// The service refuses an unknown type twice — once against ops.Triggerable and
+// again in taskFor's exhaustive switch — so removing either check alone leaves
+// the promise intact. What is NOT covered by that redundancy is DRIFT: a type
+// added to one side and not the other would give the generated client a button
+// the server refuses, or hide a triggerable job from every operator.
+func TestTriggerEnumMatchesTheAllowList(t *testing.T) {
+	t.Parallel()
+	field, ok := reflect.TypeOf(dto.JobTriggerRequest{}).FieldByName("Type")
+	require.True(t, ok)
+	declared := strings.Split(field.Tag.Get("enum"), ",")
+	sort.Strings(declared)
+
+	allowed := slices.Clone(ops.Triggerable)
+	sort.Strings(allowed)
+	require.Equal(t, allowed, declared,
+		"dto.JobTriggerRequest's enum and ops.Triggerable must name the same jobs")
 }

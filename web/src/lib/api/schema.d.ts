@@ -871,6 +871,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/job-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Job execution history with counts and errors. */
+        get: operations["jobRuns.list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/job-runs/{type}/trigger": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Trigger an allow-listed job for the caller's company. */
+        post: operations["jobRuns.trigger"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/jobs/{id}": {
         parameters: {
             query?: never;
@@ -931,6 +965,23 @@ export interface paths {
         };
         /** Per-profile statistics. */
         get: operations["load_profile.statistics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Operational messages for the tenant. */
+        get: operations["messages.list"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1790,6 +1841,14 @@ export interface components {
             items: components["schemas"]["Company"][];
             next_cursor?: null | string;
         };
+        GithubComMErenTalanEkokodRewriteInternalApiV1DtoJobRunPage: {
+            items: components["schemas"]["JobRun"][];
+            next_cursor?: null | string;
+        };
+        GithubComMErenTalanEkokodRewriteInternalApiV1DtoMessagePage: {
+            items: components["schemas"]["Message"][];
+            next_cursor?: null | string;
+        };
         GithubComMErenTalanEkokodRewriteInternalApiV1DtoPlantPage: {
             items: components["schemas"]["Plant"][];
             next_cursor?: null | string;
@@ -1912,6 +1971,24 @@ export interface components {
         JobAccepted: {
             job_id: string;
         };
+        JobRun: {
+            error?: null | string;
+            /** Format: int32 */
+            failed: number;
+            /** Format: date-time */
+            finished_at?: null | string;
+            id: components["schemas"]["UuidUUID"];
+            job_type: string;
+            /** Format: int32 */
+            processed: number;
+            scope: unknown;
+            /** Format: int32 */
+            skipped: number;
+            /** Format: date-time */
+            started_at: string;
+            /** @enum {string} */
+            status: "running" | "success" | "partial" | "failed";
+        };
         LoadProfileConfig: {
             vacations: number;
             weekend_days: number[];
@@ -1952,6 +2029,21 @@ export interface components {
             role: components["schemas"]["Role"];
             session_id: components["schemas"]["UuidUUID"];
             ui_preferences?: null | string;
+        };
+        Message: {
+            category: string;
+            /** Format: date-time */
+            created_at: string;
+            detail?: null | string;
+            /** Format: int64 */
+            id: number;
+            /** @enum {string} */
+            kind: "alarm" | "job" | "system";
+            message: string;
+            related_id?: components["schemas"]["UuidUUID"];
+            related_type?: null | string;
+            /** @enum {string} */
+            status: "success" | "error" | "warning" | "info";
         };
         MobileLoginRequest: {
             /** Format: email */
@@ -8179,6 +8271,182 @@ export interface operations {
             };
         };
     };
+    "jobRuns.list": {
+        parameters: {
+            query?: {
+                limit?: null | number;
+                cursor?: string;
+                job_type?: null | string;
+                status?: "running" | "success" | "partial" | "failed" | null;
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GithubComMErenTalanEkokodRewriteInternalApiV1DtoJobRunPage"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "jobRuns.trigger": {
+        parameters: {
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path: {
+                type: "alarm.evaluate" | "billing.dispatch" | "integration.sync_dispatch" | "epias.sync_prices";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobAccepted"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     "jobs.get": {
         parameters: {
             query?: {
@@ -8439,6 +8707,89 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LoadProfileStatistics"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "messages.list": {
+        parameters: {
+            query?: {
+                limit?: null | number;
+                cursor?: string;
+                kind?: "alarm" | "job" | "system" | null;
+                status?: "success" | "error" | "warning" | "info" | null;
+                q?: string;
+                from?: null | string;
+                to?: null | string;
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GithubComMErenTalanEkokodRewriteInternalApiV1DtoMessagePage"];
                 };
             };
             /** @description Bad Request */

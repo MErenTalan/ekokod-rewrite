@@ -43,6 +43,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/integrations"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/jobs"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/loadprofile"
+	"github.com/MErenTalan/ekokod-rewrite/internal/service/ops"
 	tariffsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/tariff"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/tenancy"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
@@ -230,9 +231,17 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		Readings: postgres.NewReadingRepository(pool), Bills: billRepo,
 	})
 
+	opsService, err := ops.New(ops.Deps{
+		Ops: postgres.NewOpsRepository(pool), Enqueuer: enqueuer, Clock: opts.Clock, MaxRetry: cfg.Worker.MaxRetries,
+	})
+	if err != nil {
+		closeAll()
+		return Built{}, err
+	}
+
 	clientIP := middleware.ClientIP(cfg.HTTP.TrustedProxies)
 	handlers := &v1.Handlers{
-		Calendar: calendarService, Credentials: credentialService, Jobs: jobService, Alarms: alarmService,
+		Calendar: calendarService, Credentials: credentialService, Jobs: jobService, Alarms: alarmService, Ops: opsService,
 		Definitions: integrations.Definitions{Integrations: postgres.NewIntegrationRepository(pool, cipher), Catalogue: admin.NewCatalogueRepository(pool)}, Auth: authService, Tenancy: tenancyService, Assets: assetService, Analysis: analysisService,
 		Tariffs: tariffService, Billing: billingService, BillRequests: billRequests, Clock: opts.Clock, Log: log, ClientIP: clientIP}
 	router := v1.NewRouter(handlers, middlewareFor(cfg, redisClient, authService, auditRepo, admin.NewAuditRepository(pool), clientIP, opts.RedisPrefix, log), log)
