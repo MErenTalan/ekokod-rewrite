@@ -1,0 +1,60 @@
+{
+  "title": "All messages",
+  "refresh": "Refresh",
+  "tabs": {
+    "messages": "Messages",
+    "jobRuns": "Job history"
+  },
+  "search": "Search",
+  "searchPlaceholder": "Search message content...",
+  "type": "Type",
+  "status": "Status",
+  "types": {
+    "all": "All",
+    "alarm": "Alarms",
+    "job": "Automated jobs",
+    "system": "System"
+  },
+  "statuses": {
+    "all": "All",
+    "success": "Success",
+    "error": "Error",
+    "warning": "Warning",
+    "info": "Information"
+  },
+  "table": {
+    "type": "Type",
+    "message": "Message",
+    "details": "Details",
+    "related": "Related",
+    "status": "Status",
+    "date": "Date",
+    "category": "Category"
+  },
+  "empty": "No messages yet.",
+  "emptyFiltered": "No message matches the filters.",
+  "jobs": {
+    "type": "Job",
+    "scope": "Scope",
+    "startedAt": "Started",
+    "finishedAt": "Finished",
+    "status": "Status",
+    "processed": "Processed",
+    "skipped": "Skipped",
+    "failed": "Failed",
+    "empty": "No job runs yet.",
+    "trigger": "Run now",
+    "triggerLabel": "{job} — Run now",
+    "triggered": "Job queued.",
+    "running": "Running",
+    "queued": "Queued",
+    "succeeded": "Completed",
+    "jobFailed": "Failed",
+    "statuses": {
+      "running": "Running",
+      "success": "Success",
+      "partial": "Partial",
+      "failed": "Failed"
+    }
+  }
+}

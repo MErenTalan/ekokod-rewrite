@@ -68,3 +68,16 @@ export type BackfillRequest = S['BackfillRequest'];
 
 /** A next-intl namespace function, narrowed to what presentational views need. */
 export type Translator = (key: string, values?: Record<string, string | number>) => string;
+
+// F7 alarms and messages (05 §10).
+export type Alarm = S['Alarm'];
+export type AlarmFields = S['AlarmFields'];
+export type AlarmSettings = S['AlarmSettings'];
+export type AlarmChannel = S['AlarmChannel'];
+export type AlarmAnalyzer = S['AlarmAnalyzer'];
+export type AlarmEvent = S['AlarmEvent'];
+export type AlarmEvaluation = S['AlarmEvaluation'];
+export type AlarmEvaluationAnalyzer = S['AlarmEvaluationAnalyzer'];
+export type AlarmEvaluationBreach = S['AlarmEvaluationBreach'];
+export type OperationalMessage = S['Message'];
+export type JobRun = S['JobRun'];

@@ -59,6 +59,16 @@ export function formatDate(iso: string, locale: Locale): string {
   );
 }
 
+/** A timestamp with its time, always in Europe/Istanbul (R161). The alarm log
+ *  and the Messages screen both need the minute, not just the day. */
+export function formatDateTime(iso: string, locale: Locale): string {
+  return new Intl.DateTimeFormat(DATE_LOCALE[locale], {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: 'Europe/Istanbul',
+  }).format(toDate(iso));
+}
+
 export function formatMonth(iso: string, locale: Locale): string {
   return new Intl.DateTimeFormat(DATE_LOCALE[locale], {
     month: 'long',
