@@ -1,6 +1,8 @@
 package alarm
 
 import (
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 
@@ -137,4 +139,87 @@ func (v *Verdict) bound(field string, g group, rows []model.MeterReading, over b
 	if (over && d.GreaterThan(*g.threshold)) || (!over && d.LessThan(*g.threshold)) {
 		v.Breaches = append(v.Breaches, Breach{Field: field, Measured: d, Threshold: *g.threshold, Window: w})
 	}
+}
+
+// EvaluateComms fires when the analyzer has been silent too long (R216). It
+// reads Analyzer.LastReadingAt and nothing else — no hypertable access at all.
+//
+// lastReadingAt nil is a no-verdict rather than a breach: a meter added five
+// minutes ago has not lost communication, it has never had any.
+func EvaluateComms(a model.Alarm, analyzerID uuid.UUID, lastReadingAt *time.Time, now time.Time) Verdict {
+	v := Verdict{AnalyzerID: analyzerID}
+	if a.CommunicationThresholdHours == nil {
+		return v
+	}
+	if lastReadingAt == nil {
+		v.NoVerdict = append(v.NoVerdict, FieldCommsHours)
+		return v
+	}
+	threshold := decimal.NewFromInt(int64(*a.CommunicationThresholdHours))
+	// Rounded to three places so the message reads "7.25 saat", not a float tail.
+	measured := decimal.NewFromFloat(now.Sub(*lastReadingAt).Hours()).Round(3)
+	if measured.GreaterThan(threshold) {
+		v.Breaches = append(v.Breaches, Breach{Field: FieldCommsHours, Measured: measured, Threshold: threshold,
+			Extra: map[string]string{"last_reading_at": lastReadingAt.Format(time.RFC3339)}})
+	}
+	return v
+}
+
+// EvaluatePower compares MaxDemandKw of the newest reading in the lookback
+// against power_max/power_min (R212, R214).
+//
+// Voltage is never read: no provider reports it, which is why R212 removed the
+// two thresholds from the rule rather than leaving them to evaluate to nothing.
+func EvaluatePower(a model.Alarm, analyzerID uuid.UUID, latest *model.MeterReading, w Window) Verdict {
+	v := Verdict{AnalyzerID: analyzerID}
+	if latest == nil || latest.MaxDemandKw == nil {
+		// Not zero kW: that would fire the minimum bound on every meter that
+		// simply does not report demand.
+		if a.PowerMax != nil {
+			v.NoVerdict = append(v.NoVerdict, FieldPowerMax)
+		}
+		if a.PowerMin != nil {
+			v.NoVerdict = append(v.NoVerdict, FieldPowerMin)
+		}
+		return v
+	}
+	kw := *latest.MaxDemandKw
+	if a.PowerMax != nil && kw.GreaterThan(*a.PowerMax) {
+		v.Breaches = append(v.Breaches, Breach{Field: FieldPowerMax, Measured: kw, Threshold: *a.PowerMax, Window: w})
+	}
+	if a.PowerMin != nil && kw.LessThan(*a.PowerMin) {
+		v.Breaches = append(v.Breaches, Breach{Field: FieldPowerMin, Measured: kw, Threshold: *a.PowerMin, Window: w})
+	}
+	return v
+}
+
+// EvaluateInvoice compares the two newest bills on TotalCost (R217). The caller
+// has ordered them newest-first and has NOT yet claimed anything: the
+// deduplication claim belongs to the service, which must make it before any
+// event is written.
+func EvaluateInvoice(a model.Alarm, analyzerID uuid.UUID, latest, previous *model.Bill) Verdict {
+	v := Verdict{AnalyzerID: analyzerID}
+	if a.InvoiceThresholdPct == nil {
+		return v
+	}
+	// No percentage exists without two bills and a non-zero baseline. Treating
+	// a zero baseline as an infinite increase would fire on every first
+	// invoice after an idle period.
+	if latest == nil || previous == nil || previous.TotalCost.IsZero() {
+		v.NoVerdict = append(v.NoVerdict, FieldInvoicePct)
+		return v
+	}
+	pct := latest.TotalCost.Sub(previous.TotalCost).
+		DivRound(previous.TotalCost, divisionScale).Mul(hundred)
+	if pct.GreaterThan(*a.InvoiceThresholdPct) {
+		v.Breaches = append(v.Breaches, Breach{Field: FieldInvoicePct, Measured: pct,
+			Threshold: *a.InvoiceThresholdPct, Extra: map[string]string{
+				"period_key":     latest.PeriodKey,
+				"bill_id":        latest.ID.String(),
+				"previous_key":   previous.PeriodKey,
+				"latest_total":   latest.TotalCost.String(),
+				"previous_total": previous.TotalCost.String(),
+			}})
+	}
+	return v
 }
