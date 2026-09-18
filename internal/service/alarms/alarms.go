@@ -61,8 +61,13 @@ type Deps struct {
 }
 
 // Service implements alarm rule management.
+//
+// ed is nil in a process that only does CRUD (the API before an evaluate is
+// wired); WithEvaluate supplies it. A method reached without its own deps
+// answers Unavailable rather than panicking on a nil interface.
 type Service struct {
-	d Deps
+	d  Deps
+	ed *EvaluateDeps
 }
 
 // New validates deps.
@@ -242,8 +247,12 @@ func prepare(in Input) (model.Alarm, []model.AlarmChannel, error) {
 	if name := strings.TrimSpace(in.Name); name == "" || len(name) > maxNameLength {
 		return model.Alarm{}, nil, validation("name", "required")
 	}
-	row := settingsFor(in)
-	if err := alarm.Validate(row, len(in.AnalyzerIDs)); err != nil {
+	// Validate the INCOMING settings, not the stripped row: settingsFor drops
+	// the fields another type owns, so validating its output could never see a
+	// voltage threshold and R212's refusal would never fire.
+	incoming := in.Alarm
+	incoming.Type, incoming.Name = in.Type, strings.TrimSpace(in.Name)
+	if err := alarm.Validate(incoming, len(in.AnalyzerIDs)); err != nil {
 		var ve *alarm.ValidationError
 		if errors.As(err, &ve) {
 			params := make(map[string]any, len(ve.Fields))
@@ -258,7 +267,7 @@ func prepare(in Input) (model.Alarm, []model.AlarmChannel, error) {
 	if err != nil {
 		return model.Alarm{}, nil, err
 	}
-	return row, channels, nil
+	return settingsFor(in), channels, nil
 }
 
 // Create stores a rule and its attachments.

@@ -100,7 +100,16 @@ var expectedAccess = map[string]string{
 	"GET /calendar/vacations":      "A CA CR BA BR D",
 	"GET /consumption/grouped":     "A CA CR BA BR D",
 	"GET /jobs/{id}":               "A CA BA",
-	"PUT /calendar/vacations":      "A CA",
+
+	// 05 §10 alarms and messages.
+	"GET /alarms":                "A CA CR BA BR D",
+	"POST /alarms":               "A CA BA",
+	"GET /alarms/{id}":           "A CA CR BA BR D",
+	"PATCH /alarms/{id}":         "A CA BA",
+	"DELETE /alarms/{id}":        "A CA BA",
+	"GET /alarms/{id}/events":    "A CA CR BA BR D",
+	"POST /alarms/{id}/evaluate": "A CA",
+	"PUT /calendar/vacations":    "A CA",
 	// 05 §15
 	"GET /integration-definitions":                "A",
 	"POST /integration-definitions":               "A",

@@ -1,6 +1,460 @@
 {
   "components": {
     "schemas": {
+      "Alarm": {
+        "properties": {
+          "analyzers": {
+            "items": {
+              "$ref": "#/components/schemas/AlarmAnalyzer"
+            },
+            "type": "array"
+          },
+          "channels": {
+            "items": {
+              "$ref": "#/components/schemas/AlarmChannel"
+            },
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "is_enabled": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "notification_frequency_unit": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "notification_frequency_value": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "settings": {
+            "$ref": "#/components/schemas/AlarmSettings"
+          },
+          "type": {
+            "enum": [
+              "reactive_limit",
+              "data_communication",
+              "current_voltage_power",
+              "invoice_increase"
+            ],
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type",
+          "is_enabled",
+          "analyzers",
+          "channels",
+          "settings",
+          "created_at",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "AlarmAnalyzer": {
+        "properties": {
+          "building_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "installation_number": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "installation_number"
+        ],
+        "type": "object"
+      },
+      "AlarmChannel": {
+        "properties": {
+          "channel": {
+            "enum": [
+              "email",
+              "sms"
+            ],
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "channel",
+          "target"
+        ],
+        "type": "object"
+      },
+      "AlarmEvaluation": {
+        "properties": {
+          "analyzers": {
+            "items": {
+              "$ref": "#/components/schemas/AlarmEvaluationAnalyzer"
+            },
+            "type": "array"
+          },
+          "dry_run": {
+            "type": "boolean"
+          },
+          "evaluated_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "notifications_sent": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "evaluated_at",
+          "dry_run",
+          "analyzers",
+          "notifications_sent"
+        ],
+        "type": "object"
+      },
+      "AlarmEvaluationAnalyzer": {
+        "properties": {
+          "analyzer_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "breaches": {
+            "items": {
+              "$ref": "#/components/schemas/AlarmEvaluationBreach"
+            },
+            "type": "array"
+          },
+          "fired": {
+            "type": "boolean"
+          },
+          "installation_number": {
+            "type": "string"
+          },
+          "no_verdict": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "analyzer_id",
+          "installation_number",
+          "fired",
+          "breaches",
+          "no_verdict"
+        ],
+        "type": "object"
+      },
+      "AlarmEvaluationBreach": {
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "measured": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "message": {
+            "type": "string"
+          },
+          "threshold": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "required": [
+          "field",
+          "measured",
+          "threshold",
+          "message"
+        ],
+        "type": "object"
+      },
+      "AlarmEvent": {
+        "properties": {
+          "analyzer_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "detail": {},
+          "id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "message": {
+            "type": "string"
+          },
+          "notification_error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "notified_at": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "triggered_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "triggered_at",
+          "message"
+        ],
+        "type": "object"
+      },
+      "AlarmFields": {
+        "properties": {
+          "analyzer_ids": {
+            "items": {
+              "$ref": "#/components/schemas/UuidUUID"
+            },
+            "type": "array"
+          },
+          "channels": {
+            "items": {
+              "$ref": "#/components/schemas/AlarmChannel"
+            },
+            "type": "array"
+          },
+          "is_enabled": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "notification_frequency_unit": {
+            "enum": [
+              "hours",
+              "days"
+            ],
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "notification_frequency_value": {
+            "maximum": 8760,
+            "minimum": 1,
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "settings": {
+            "$ref": "#/components/schemas/AlarmSettings"
+          },
+          "type": {
+            "enum": [
+              "reactive_limit",
+              "data_communication",
+              "current_voltage_power",
+              "invoice_increase"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type",
+          "analyzer_ids"
+        ],
+        "type": "object"
+      },
+      "AlarmSettings": {
+        "properties": {
+          "active_consumption_max": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "active_consumption_max_period_unit": {
+            "enum": [
+              "hours",
+              "days"
+            ],
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "active_consumption_max_period_value": {
+            "maximum": 8760,
+            "minimum": 1,
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "active_consumption_min": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "active_consumption_min_period_unit": {
+            "enum": [
+              "hours",
+              "days"
+            ],
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "active_consumption_min_period_value": {
+            "maximum": 8760,
+            "minimum": 1,
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "capacitive_period_unit": {
+            "enum": [
+              "hours",
+              "days"
+            ],
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "capacitive_period_value": {
+            "maximum": 8760,
+            "minimum": 1,
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "capacitive_ratio_threshold": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "communication_threshold_hours": {
+            "maximum": 8760,
+            "minimum": 1,
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "inductive_period_unit": {
+            "enum": [
+              "hours",
+              "days"
+            ],
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "inductive_period_value": {
+            "maximum": 8760,
+            "minimum": 1,
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "inductive_ratio_threshold": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "invoice_threshold_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "power_max": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "power_min": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "voltage_max": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "voltage_min": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "type": "object"
+      },
+      "AlarmUpdateRequest": {
+        "properties": {
+          "analyzer_ids": {
+            "items": {
+              "$ref": "#/components/schemas/UuidUUID"
+            },
+            "type": "array"
+          },
+          "channels": {
+            "items": {
+              "$ref": "#/components/schemas/AlarmChannel"
+            },
+            "type": "array"
+          },
+          "is_enabled": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "notification_frequency_unit": {
+            "enum": [
+              "hours",
+              "days"
+            ],
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "notification_frequency_value": {
+            "maximum": 8760,
+            "minimum": 1,
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "settings": {
+            "$ref": "#/components/schemas/AlarmSettings"
+          },
+          "type": {
+            "enum": [
+              "reactive_limit",
+              "data_communication",
+              "current_voltage_power",
+              "invoice_increase"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type",
+          "analyzer_ids"
+        ],
+        "type": "object"
+      },
       "Analyzer": {
         "properties": {
           "activity_status": {
@@ -1770,6 +2224,46 @@
         },
         "required": [
           "email"
+        ],
+        "type": "object"
+      },
+      "GithubComMErenTalanEkokodRewriteInternalApiV1DtoAlarmEventPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AlarmEvent"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "GithubComMErenTalanEkokodRewriteInternalApiV1DtoAlarmPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Alarm"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "items"
         ],
         "type": "object"
       },
@@ -4458,6 +4952,917 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/alarms": {
+      "get": {
+        "operationId": "alarms.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "maximum": 500,
+              "minimum": 1,
+              "type": [
+                "null",
+                "integer"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "schema": {
+              "enum": [
+                "reactive_limit",
+                "data_communication",
+                "current_voltage_power",
+                "invoice_increase"
+              ],
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "is_enabled",
+            "schema": {
+              "type": [
+                "null",
+                "boolean"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "analyzer_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GithubComMErenTalanEkokodRewriteInternalApiV1DtoAlarmPage"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Alarm rules with their analyzers and channels.",
+        "tags": [
+          "alarms"
+        ]
+      },
+      "post": {
+        "operationId": "alarms.create",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlarmFields"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Alarm"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Create a rule; the body is validated per alarm type.",
+        "tags": [
+          "alarms"
+        ]
+      }
+    },
+    "/api/v1/alarms/{id}": {
+      "delete": {
+        "operationId": "alarms.delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Soft delete a rule.",
+        "tags": [
+          "alarms"
+        ]
+      },
+      "get": {
+        "operationId": "alarms.get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Alarm"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "One rule.",
+        "tags": [
+          "alarms"
+        ]
+      },
+      "patch": {
+        "operationId": "alarms.update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlarmUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Alarm"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Replace a rule, including the enable toggle.",
+        "tags": [
+          "alarms"
+        ]
+      }
+    },
+    "/api/v1/alarms/{id}/evaluate": {
+      "post": {
+        "operationId": "alarms.evaluate",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "notify",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlarmEvaluation"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Evaluate now; a dry run unless notify=true.",
+        "tags": [
+          "alarms"
+        ]
+      }
+    },
+    "/api/v1/alarms/{id}/events": {
+      "get": {
+        "operationId": "alarms.events.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "maximum": 500,
+              "minimum": 1,
+              "type": [
+                "null",
+                "integer"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "schema": {
+              "format": "date-time",
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "schema": {
+              "format": "date-time",
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GithubComMErenTalanEkokodRewriteInternalApiV1DtoAlarmEventPage"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Firing history.",
+        "tags": [
+          "alarms"
+        ]
+      }
+    },
     "/api/v1/analyzers": {
       "get": {
         "operationId": "analyzers.list",

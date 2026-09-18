@@ -12,6 +12,7 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
+	"github.com/MErenTalan/ekokod-rewrite/internal/domain/alarm"
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
 	perr "github.com/MErenTalan/ekokod-rewrite/internal/platform/errors"
@@ -218,14 +219,22 @@ func mustErr[T any](_ T, err error) error { return err }
 func TestCreateRejectsInvalidSettings(t *testing.T) {
 	t.Parallel()
 	svc, _ := newTestService(t)
+	// A complete power rule, so the only thing wrong with it is the voltage.
+	// Asserting the FIELD, not just the status: an earlier version of this test
+	// checked the status alone and passed for the wrong reason — settingsFor
+	// stripped the voltage before Validate ever saw it, and the 422 that came
+	// back was "at_least_one", not R212's refusal.
 	_, err := svc.Create(context.Background(), companyScope, alarms.Input{
 		Name: "Gerilim", Type: model.AlarmTypeCurrentVoltagePower,
-		Alarm:       model.Alarm{VoltageMax: dec("400")},
+		Alarm:       model.Alarm{PowerMax: dec("100"), VoltageMax: dec("400")},
 		AnalyzerIDs: []uuid.UUID{analyzerA},
 	})
-	// R212 travels from the domain package to a 422 with per-field codes.
 	require.Equal(t, http.StatusUnprocessableEntity, perr.StatusOf(err))
 	require.Equal(t, "validation_failed", perr.CodeOf(err))
+
+	var pe *perr.Error
+	require.ErrorAs(t, err, &pe)
+	require.Equal(t, []string{alarm.CodeUnsupported}, pe.Params["voltage_max"])
 }
 
 func TestCreateClearsSettingsOfOtherTypes(t *testing.T) {

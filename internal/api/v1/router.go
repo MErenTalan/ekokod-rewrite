@@ -12,6 +12,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/credentials"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
 	perr "github.com/MErenTalan/ekokod-rewrite/internal/platform/errors"
+	"github.com/MErenTalan/ekokod-rewrite/internal/service/alarms"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/analysis"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/assets"
 	authsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/auth"
@@ -45,6 +46,7 @@ type Handlers struct {
 	BillRequests billingsvc.Requests
 	Calendar     *calendar.Service
 	Jobs         *jobs.Service
+	Alarms       *alarms.Service
 	Definitions  integrations.Definitions
 	Credentials  *credentials.Service
 	Clock        clock.Clock

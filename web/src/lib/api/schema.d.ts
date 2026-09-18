@@ -4,6 +4,77 @@
  */
 
 export interface paths {
+    "/api/v1/alarms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Alarm rules with their analyzers and channels. */
+        get: operations["alarms.list"];
+        put?: never;
+        /** Create a rule; the body is validated per alarm type. */
+        post: operations["alarms.create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alarms/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One rule. */
+        get: operations["alarms.get"];
+        put?: never;
+        post?: never;
+        /** Soft delete a rule. */
+        delete: operations["alarms.delete"];
+        options?: never;
+        head?: never;
+        /** Replace a rule, including the enable toggle. */
+        patch: operations["alarms.update"];
+        trace?: never;
+    };
+    "/api/v1/alarms/{id}/evaluate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Evaluate now; a dry run unless notify=true. */
+        post: operations["alarms.evaluate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alarms/{id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Firing history. */
+        get: operations["alarms.events.list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/analyzers": {
         parameters: {
             query?: never;
@@ -1120,6 +1191,111 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        Alarm: {
+            analyzers: components["schemas"]["AlarmAnalyzer"][];
+            channels: components["schemas"]["AlarmChannel"][];
+            /** Format: date-time */
+            created_at: string;
+            id: components["schemas"]["UuidUUID"];
+            is_enabled: boolean;
+            name: string;
+            notification_frequency_unit?: null | string;
+            notification_frequency_value?: null | number;
+            settings: components["schemas"]["AlarmSettings"];
+            /** @enum {string} */
+            type: "reactive_limit" | "data_communication" | "current_voltage_power" | "invoice_increase";
+            /** Format: date-time */
+            updated_at: string;
+        };
+        AlarmAnalyzer: {
+            building_id?: components["schemas"]["UuidUUID"];
+            id: components["schemas"]["UuidUUID"];
+            installation_number: string;
+        };
+        AlarmChannel: {
+            /** @enum {string} */
+            channel: "email" | "sms";
+            target: string;
+        };
+        AlarmEvaluation: {
+            analyzers: components["schemas"]["AlarmEvaluationAnalyzer"][];
+            dry_run: boolean;
+            /** Format: date-time */
+            evaluated_at: string;
+            notifications_sent: number;
+        };
+        AlarmEvaluationAnalyzer: {
+            analyzer_id: components["schemas"]["UuidUUID"];
+            breaches: components["schemas"]["AlarmEvaluationBreach"][];
+            fired: boolean;
+            installation_number: string;
+            no_verdict: string[];
+        };
+        AlarmEvaluationBreach: {
+            field: string;
+            measured: components["schemas"]["Decimal"];
+            message: string;
+            threshold: components["schemas"]["Decimal"];
+        };
+        AlarmEvent: {
+            analyzer_id?: components["schemas"]["UuidUUID"];
+            detail?: unknown;
+            id: components["schemas"]["UuidUUID"];
+            message: string;
+            notification_error?: null | string;
+            /** Format: date-time */
+            notified_at?: null | string;
+            /** Format: date-time */
+            triggered_at: string;
+        };
+        AlarmFields: {
+            analyzer_ids: components["schemas"]["UuidUUID"][];
+            channels?: components["schemas"]["AlarmChannel"][];
+            is_enabled?: boolean;
+            name: string;
+            /** @enum {null|string} */
+            notification_frequency_unit?: "hours" | "days" | null;
+            notification_frequency_value?: null | number;
+            settings?: components["schemas"]["AlarmSettings"];
+            /** @enum {string} */
+            type: "reactive_limit" | "data_communication" | "current_voltage_power" | "invoice_increase";
+        };
+        AlarmSettings: {
+            active_consumption_max?: components["schemas"]["Decimal"];
+            /** @enum {null|string} */
+            active_consumption_max_period_unit?: "hours" | "days" | null;
+            active_consumption_max_period_value?: null | number;
+            active_consumption_min?: components["schemas"]["Decimal"];
+            /** @enum {null|string} */
+            active_consumption_min_period_unit?: "hours" | "days" | null;
+            active_consumption_min_period_value?: null | number;
+            /** @enum {null|string} */
+            capacitive_period_unit?: "hours" | "days" | null;
+            capacitive_period_value?: null | number;
+            capacitive_ratio_threshold?: components["schemas"]["Decimal"];
+            communication_threshold_hours?: null | number;
+            /** @enum {null|string} */
+            inductive_period_unit?: "hours" | "days" | null;
+            inductive_period_value?: null | number;
+            inductive_ratio_threshold?: components["schemas"]["Decimal"];
+            invoice_threshold_pct?: components["schemas"]["Decimal"];
+            power_max?: components["schemas"]["Decimal"];
+            power_min?: components["schemas"]["Decimal"];
+            voltage_max?: components["schemas"]["Decimal"];
+            voltage_min?: components["schemas"]["Decimal"];
+        };
+        AlarmUpdateRequest: {
+            analyzer_ids: components["schemas"]["UuidUUID"][];
+            channels?: components["schemas"]["AlarmChannel"][];
+            is_enabled?: boolean;
+            name: string;
+            /** @enum {null|string} */
+            notification_frequency_unit?: "hours" | "days" | null;
+            notification_frequency_value?: null | number;
+            settings?: components["schemas"]["AlarmSettings"];
+            /** @enum {string} */
+            type: "reactive_limit" | "data_communication" | "current_voltage_power" | "invoice_increase";
+        };
         Analyzer: {
             /** @enum {string} */
             activity_status: "active" | "passive";
@@ -1585,6 +1761,14 @@ export interface components {
         ForgotPasswordRequest: {
             /** Format: email */
             email: string;
+        };
+        GithubComMErenTalanEkokodRewriteInternalApiV1DtoAlarmEventPage: {
+            items: components["schemas"]["AlarmEvent"][];
+            next_cursor?: null | string;
+        };
+        GithubComMErenTalanEkokodRewriteInternalApiV1DtoAlarmPage: {
+            items: components["schemas"]["Alarm"][];
+            next_cursor?: null | string;
         };
         GithubComMErenTalanEkokodRewriteInternalApiV1DtoAnalyzerPage: {
             items: components["schemas"]["Analyzer"][];
@@ -2263,6 +2447,636 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    "alarms.list": {
+        parameters: {
+            query?: {
+                limit?: null | number;
+                cursor?: string;
+                type?: "reactive_limit" | "data_communication" | "current_voltage_power" | "invoice_increase" | null;
+                is_enabled?: null | boolean;
+                analyzer_id?: components["schemas"]["UuidUUID"];
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GithubComMErenTalanEkokodRewriteInternalApiV1DtoAlarmPage"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "alarms.create": {
+        parameters: {
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AlarmFields"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Alarm"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "alarms.get": {
+        parameters: {
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path: {
+                id: components["schemas"]["UuidUUID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Alarm"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "alarms.delete": {
+        parameters: {
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path: {
+                id: components["schemas"]["UuidUUID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "alarms.update": {
+        parameters: {
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path: {
+                id: components["schemas"]["UuidUUID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AlarmUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Alarm"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "alarms.evaluate": {
+        parameters: {
+            query?: {
+                notify?: boolean;
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path: {
+                id: components["schemas"]["UuidUUID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlarmEvaluation"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "alarms.events.list": {
+        parameters: {
+            query?: {
+                limit?: null | number;
+                cursor?: string;
+                from?: null | string;
+                to?: null | string;
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path: {
+                id: components["schemas"]["UuidUUID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GithubComMErenTalanEkokodRewriteInternalApiV1DtoAlarmEventPage"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     "analyzers.list": {
         parameters: {
             query?: {

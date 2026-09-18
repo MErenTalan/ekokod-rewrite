@@ -44,6 +44,12 @@ func (h *harness) foreign(t *testing.T) foreignIDs {
 	for _, id := range tariffs {
 		tariffIDs = append(tariffIDs, id)
 	}
+	// Two foreign rules: one on company B's meter, and one on A2 — the
+	// building this admin is NOT responsible for, which is what R213's
+	// intersection has to refuse even though the rule is in their own company.
+	alarmA2 := h.alarmOn(t, h.fx.CompanyA, h.fx.AnalyzerA2)
+	alarmB := h.alarmOn(t, h.fx.CompanyB, h.fx.AnalyzerB1)
+
 	other := h.client(uaSafari)
 	other.login(seed.E2ECompanyAdminEmail, false)
 	var sessions dto.SessionList
@@ -62,8 +68,27 @@ func (h *harness) foreign(t *testing.T) foreignIDs {
 		"auth":                    {sessions.Items[0].ID.String()},
 		"consumption":             {uuid.NewString()},
 		// A job id is an asynq task id, not a UUID; an unknown one must 404 like a foreign one.
-		"jobs": {uuid.NewString()},
+		"jobs":   {uuid.NewString()},
+		"alarms": {alarmA2, alarmB},
 	}
+}
+
+// alarmOn creates a rule on one analyzer through the repository, so the sweep
+// does not depend on the HTTP surface it is testing.
+func (h *harness) alarmOn(t *testing.T, company, analyzer uuid.UUID) string {
+	t.Helper()
+	ctx := t.Context()
+	repo := postgres.NewAlarmRepository(h.pool)
+	sc := store.SystemScope(company)
+	hours := int32(6)
+	rule, err := repo.Create(ctx, sc, model.Alarm{
+		CompanyID: company, Name: "Sweep", Type: model.AlarmTypeDataCommunication,
+		IsEnabled: true, CommunicationThresholdHours: &hours,
+		CreatedAt: h.clock.Now(), UpdatedAt: h.clock.Now(),
+	})
+	require.NoError(t, err)
+	require.NoError(t, repo.ReplaceAnalyzers(ctx, sc, rule.ID, []uuid.UUID{analyzer}))
+	return rule.ID.String()
 }
 
 func (h *harness) billFor(company, building uuid.UUID) model.Bill {
@@ -78,9 +103,21 @@ func (h *harness) billFor(company, building uuid.UUID) model.Bill {
 	return b
 }
 
-// validBodies holds bodies that pass validation, so a refusal proves scoping rather than binding.
-var validBodies = map[string]any{
-	"analyzers.refresh": map[string]any{"mode": "hourly"},
+// validBodies holds bodies that bind and validate, so a refusal proves scoping
+// rather than binding. It is a function, not a package-level literal: the
+// alarm body needs a fixture id, which does not exist at init.
+func validBodies(h *harness) map[string]any {
+	return map[string]any{
+		"analyzers.refresh": map[string]any{"mode": "hourly"},
+		// The analyzer named is the building admin's OWN, which sharpens the
+		// point: even a rule they could legitimately describe stays
+		// unreachable when its id is not theirs.
+		"alarms.update": map[string]any{
+			"name": "Sweep", "type": "data_communication", "is_enabled": true,
+			"analyzer_ids": []string{h.fx.AnalyzerA1.String()},
+			"settings":     map[string]any{"communication_threshold_hours": 6},
+		},
+	}
 }
 
 func pathFamily(pattern string) string {
@@ -93,6 +130,7 @@ func TestBuildingAdminCannotReachOtherBuildingsAnyEndpoint(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	ids := h.foreign(t)
+	bodies := validBodies(h)
 	ba := h.as(seed.E2EBuildingAdminEmail)
 	var auditBefore int
 	require.NoError(t, h.pool.QueryRow(t.Context(), `select count(*) from audit_log`).Scan(&auditBefore))
@@ -108,7 +146,7 @@ func TestBuildingAdminCannotReachOtherBuildingsAnyEndpoint(t *testing.T) {
 			path := strings.Replace(rt.Pattern, "{id}", id, 1)
 			var body any
 			if rt.Mutating() {
-				body = validBodies[rt.OperationID]
+				body = bodies[rt.OperationID]
 				if body == nil {
 					body = map[string]any{}
 				}

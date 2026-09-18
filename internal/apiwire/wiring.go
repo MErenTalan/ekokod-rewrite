@@ -33,6 +33,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/crypto"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/lock"
+	"github.com/MErenTalan/ekokod-rewrite/internal/service/alarms"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/analysis"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/assets"
 	authsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/auth"
@@ -214,9 +215,24 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		return Built{}, err
 	}
 
+	// The API can evaluate a rule as a dry run (R223), so it gets the reads
+	// the evaluation needs; the firing path itself belongs to the worker.
+	alarmService, err := alarms.New(alarms.Deps{
+		Alarms:    postgres.NewAlarmRepository(pool),
+		Analyzers: postgres.NewAnalyzerRepository(pool),
+		Clock:     opts.Clock,
+	})
+	if err != nil {
+		closeAll()
+		return Built{}, err
+	}
+	alarmService = alarmService.WithEvaluate(alarms.EvaluateDeps{
+		Readings: postgres.NewReadingRepository(pool), Bills: billRepo,
+	})
+
 	clientIP := middleware.ClientIP(cfg.HTTP.TrustedProxies)
 	handlers := &v1.Handlers{
-		Calendar: calendarService, Credentials: credentialService, Jobs: jobService,
+		Calendar: calendarService, Credentials: credentialService, Jobs: jobService, Alarms: alarmService,
 		Definitions: integrations.Definitions{Integrations: postgres.NewIntegrationRepository(pool, cipher), Catalogue: admin.NewCatalogueRepository(pool)}, Auth: authService, Tenancy: tenancyService, Assets: assetService, Analysis: analysisService,
 		Tariffs: tariffService, Billing: billingService, BillRequests: billRequests, Clock: opts.Clock, Log: log, ClientIP: clientIP}
 	router := v1.NewRouter(handlers, middlewareFor(cfg, redisClient, authService, auditRepo, admin.NewAuditRepository(pool), clientIP, opts.RedisPrefix, log), log)
