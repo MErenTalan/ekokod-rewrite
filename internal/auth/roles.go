@@ -86,6 +86,16 @@ var permissionTable = map[string]RoleSet{
 	"bills.compute":            Roles(roleA, roleCA, roleBA),
 	"calendar.edit":            Roles(roleA, roleCA),
 	"integrations.credentials": Roles(roleA, roleCA),
+
+	// F7 R228. alarms.edit includes BA because 05 §10 lists A CA BA on the CRUD
+	// rows; the service keeps a BA inside its own buildings (R213). Job history
+	// and triggering are operator tools, so they stop at CA and A respectively.
+	"alarms.read":     AllRoles,
+	"alarms.edit":     Roles(roleA, roleCA, roleBA),
+	"alarms.evaluate": Roles(roleA, roleCA),
+	"messages.read":   AllRoles,
+	"jobs.runs.read":  Roles(roleA, roleCA),
+	"jobs.trigger":    Roles(roleA),
 }
 
 // PermissionsFor returns the sorted permissions of a role, nil for an unknown role.

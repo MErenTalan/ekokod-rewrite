@@ -51,6 +51,17 @@ describe('navFor', () => {
     expect(leafIds(navFor(fixture.demo))).toContain('water');
   });
 
+  // R228: all six roles hold both permissions today, so navFor's output is
+  // unchanged. The point is that the leaves DECLARE them, so a later narrowing
+  // of alarms.read or messages.read moves the navigation with it.
+  it('gates the alarm and message leaves on their own permissions (R228)', () => {
+    const leaves = navigation.flatMap((e) => (isGroup(e) ? e.children : [e]));
+    expect(leaves.find((l) => l.href === '/ekorm/alarms')?.permission).toBe('alarms.read');
+    expect(leaves.find((l) => l.href === '/ekorm/messages')?.permission).toBe('messages.read');
+    expect(leafIds(navFor(['nav.core']))).not.toContain('alarmsManual');
+    expect(leafIds(navFor(['nav.core']))).not.toContain('messages');
+  });
+
   it('drops a group left empty and shows nothing without nav.core', () => {
     expect(navFor([])).toEqual([]);
     const onlySolar = navFor(['nav.solar_plants']);

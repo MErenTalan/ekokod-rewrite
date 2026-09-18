@@ -21,10 +21,12 @@ type Permission string
 // Enum lists every permission for OpenAPI; kept equal to auth.AllPermissions by test.
 func (Permission) Enum() []any {
 	return []any{
-		"admin.companies", "analyzers.refresh", "anomaly.check", "bills.compute", "calendar.edit",
-		"integrations.credentials", "nav.core", "nav.financial", "nav.solar_plants", "settings.analyzers",
-		"settings.analyzers.edit", "settings.buildings", "settings.company", "settings.company.edit",
-		"settings.integrations", "settings.plants", "settings.smtp", "settings.users", "write",
+		"admin.companies", "alarms.edit", "alarms.evaluate", "alarms.read", "analyzers.refresh",
+		"anomaly.check", "bills.compute", "calendar.edit", "integrations.credentials", "jobs.runs.read",
+		"jobs.trigger", "messages.read", "nav.core", "nav.financial", "nav.solar_plants",
+		"settings.analyzers", "settings.analyzers.edit", "settings.buildings", "settings.company",
+		"settings.company.edit", "settings.integrations", "settings.plants", "settings.smtp",
+		"settings.users", "write",
 	}
 }
 

@@ -51,7 +51,8 @@ export const navigation: NavEntry[] = [
   { id: 'billsTariffs', labelKey: 'billsAndTariffs', icon: Receipt, children: [
     { id: 'bills', labelKey: 'bills', href: '/ekorm/bills', icon: FileText }, { id: 'tariffs', labelKey: 'tariffs', href: '/ekorm/tariffs', icon: Tags } ] },
   { id: 'alarms', labelKey: 'alarms', icon: Bell, children: [
-    { id: 'alarmsManual', labelKey: 'manual', href: '/ekorm/alarms', icon: BellRing }, { id: 'messages', labelKey: 'messages', href: '/ekorm/messages', icon: MessageSquare },
+    { id: 'alarmsManual', labelKey: 'manual', href: '/ekorm/alarms', icon: BellRing, permission: 'alarms.read' },
+    { id: 'messages', labelKey: 'messages', href: '/ekorm/messages', icon: MessageSquare, permission: 'messages.read' },
     { id: 'alarmsAi', labelKey: 'ai', href: '/ekorm/alarms/ai', icon: Sparkles, disabled: true } ] },
   { id: 'reports', labelKey: 'reports', href: '/ekorm/reports', icon: FileBarChart },
   { id: 'calendar', labelKey: 'calendar', href: '/ekorm/calendar', icon: CalendarDays },
