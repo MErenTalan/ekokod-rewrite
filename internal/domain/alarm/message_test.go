@@ -55,11 +55,14 @@ func TestDescribeDetailCarriesOnlyCuratedKeys(t *testing.T) {
 	a := commsRule()
 	a.Name = "İletişim"
 	last := base.Add(-9 * time.Hour)
-	_, _, detail := alarm.Describe(a, alarm.EvaluateComms(a, uuid.New(), &last, base), "A-1", "tr")
+	_, lines, detail := alarm.Describe(a, alarm.EvaluateComms(a, uuid.New(), &last, base), "A-1", "tr")
 	for k := range detail {
-		require.Contains(t, []string{"analyzer", "alarm_type", "breaches", "no_verdict"}, k)
+		require.Contains(t, []string{"analyzer", "alarm_type", "breaches", "no_verdict", "lines"}, k)
 	}
 	require.Equal(t, string(model.AlarmTypeDataCommunication), detail["alarm_type"])
+	// The rendered sentences are part of the record, so the notifier repeats
+	// what fired rather than re-deriving it later from different data.
+	require.Equal(t, lines, detail["lines"])
 }
 
 func TestDescribeCarriesTheWindowAndTheTypeExtras(t *testing.T) {

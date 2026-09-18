@@ -68,6 +68,11 @@ type Deps struct {
 type Service struct {
 	d  Deps
 	ed *EvaluateDeps
+	nd *NotifyDeps
+	// loc is Europe/Istanbul. NOT dto.Istanbul: internal/service may not import
+	// internal/api (TestServiceLayerImportBoundaries), which is why
+	// internal/service/billing loads its own the same way.
+	loc *time.Location
 }
 
 // New validates deps.
@@ -75,7 +80,11 @@ func New(d Deps) (*Service, error) {
 	if d.Alarms == nil || d.Analyzers == nil || d.Clock == nil {
 		return nil, errors.New("alarms: Alarms, Analyzers and Clock are required")
 	}
-	return &Service{d: d}, nil
+	loc, err := time.LoadLocation("Europe/Istanbul")
+	if err != nil {
+		return nil, errors.Join(errors.New("alarms: load Europe/Istanbul"), err)
+	}
+	return &Service{d: d, loc: loc}, nil
 }
 
 func validation(field string, codes ...string) error {

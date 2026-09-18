@@ -51,11 +51,18 @@ type fakeAlarms struct {
 	// visibleAnalyzers is the set the analyzer repository will admit; anything
 	// else makes ReplaceAnalyzers answer ErrNotFound, as the real one does.
 	visible map[uuid.UUID]bool
+
+	events     map[uuid.UUID][]model.AlarmEvent
+	firedBills map[string]bool
+	notified   map[uuid.UUID]*time.Time
+	notifyErr  map[uuid.UUID]*string
 }
 
 func newFakeAlarms() *fakeAlarms {
 	return &fakeAlarms{stored: map[uuid.UUID]model.Alarm{}, analyzers: map[uuid.UUID][]uuid.UUID{},
-		channels: map[uuid.UUID][]model.AlarmChannel{}, visible: map[uuid.UUID]bool{}}
+		channels: map[uuid.UUID][]model.AlarmChannel{}, visible: map[uuid.UUID]bool{},
+		events: map[uuid.UUID][]model.AlarmEvent{}, notified: map[uuid.UUID]*time.Time{},
+		notifyErr: map[uuid.UUID]*string{}}
 }
 
 func (f *fakeAlarms) Get(_ context.Context, s store.Scope, id uuid.UUID) (model.Alarm, error) {
@@ -146,12 +153,55 @@ func (f *fakeAlarms) ReplaceChannels(_ context.Context, s store.Scope, alarmID u
 }
 
 func (f *fakeAlarms) ListEvents(_ context.Context, s store.Scope, fl store.AlarmEventFilter) ([]model.AlarmEvent, error) {
-	if fl.AlarmID != nil {
-		if a, ok := f.stored[*fl.AlarmID]; !ok || a.CompanyID != s.CompanyID {
-			return nil, store.ErrNotFound
-		}
+	if fl.AlarmID == nil {
+		return nil, nil
 	}
-	return nil, nil
+	if a, ok := f.stored[*fl.AlarmID]; !ok || a.CompanyID != s.CompanyID {
+		return nil, store.ErrNotFound
+	}
+	var out []model.AlarmEvent
+	for _, e := range f.events[*fl.AlarmID] {
+		if fl.Notified != nil && *fl.Notified != (f.notified[e.ID] != nil) {
+			continue
+		}
+		e.NotifiedAt, e.NotificationError = f.notified[e.ID], f.notifyErr[e.ID]
+		out = append(out, e)
+	}
+	return out, nil
+}
+
+func (f *fakeAlarms) CreateEvent(_ context.Context, s store.Scope, e model.AlarmEvent) (model.AlarmEvent, error) {
+	if a, ok := f.stored[e.AlarmID]; !ok || a.CompanyID != s.CompanyID {
+		return model.AlarmEvent{}, store.ErrNotFound
+	}
+	if e.ID == uuid.Nil {
+		e.ID = uuid.New()
+	}
+	f.events[e.AlarmID] = append([]model.AlarmEvent{e}, f.events[e.AlarmID]...) // newest first
+	return e, nil
+}
+
+// MarkNotified records delivery. A zero at with a non-nil error is the "fired
+// and nobody was told" state, so notified_at stays nil.
+func (f *fakeAlarms) MarkNotified(_ context.Context, _ store.Scope, eventID uuid.UUID, at time.Time, notificationError *string) error {
+	if !at.IsZero() {
+		stamp := at
+		f.notified[eventID] = &stamp
+	}
+	f.notifyErr[eventID] = notificationError
+	return nil
+}
+
+func (f *fakeAlarms) MarkBillFired(_ context.Context, _ store.Scope, alarmID, billID uuid.UUID) (bool, error) {
+	key := alarmID.String() + "|" + billID.String()
+	if f.firedBills == nil {
+		f.firedBills = map[string]bool{}
+	}
+	if f.firedBills[key] {
+		return false, nil
+	}
+	f.firedBills[key] = true
+	return true, nil
 }
 
 // analyzerBuilding is the fixture's meter-to-building map.

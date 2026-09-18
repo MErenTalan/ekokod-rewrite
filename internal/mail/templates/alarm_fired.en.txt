@@ -1,0 +1,9 @@
+Alarm triggered: {{.AlarmName}}
+
+Analyzer: {{.AnalyzerLabel}}
+Time: {{.FiredAt}}
+
+What was detected:
+{{range .Lines}}- {{.}}
+{{end}}
+This message was sent automatically by ekokod. Please do not reply.

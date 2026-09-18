@@ -1,0 +1,9 @@
+Alarm tetiklendi: {{.AlarmName}}
+
+Analizör: {{.AnalyzerLabel}}
+Zaman: {{.FiredAt}}
+
+Tespit edilen durumlar:
+{{range .Lines}}- {{.}}
+{{end}}
+Bu ileti ekokod tarafından otomatik olarak gönderildi. Lütfen yanıtlamayın.

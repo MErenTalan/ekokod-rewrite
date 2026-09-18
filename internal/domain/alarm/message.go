@@ -81,7 +81,12 @@ func Describe(a model.Alarm, v Verdict, analyzerLabel, locale string) (string, [
 	}
 	// The summary is the rule and the meter; the locale lives in the lines.
 	summary := fmt.Sprintf("%s — %s", a.Name, analyzerLabel)
-	detail := map[string]any{"analyzer": analyzerLabel, "alarm_type": string(a.Type), "breaches": rows}
+	// lines ride along in the detail so a later notifier says what the event
+	// said, rather than re-deriving sentences from thresholds whose readings it
+	// no longer has. It stays curated: five keys, all built here.
+	detail := map[string]any{
+		"analyzer": analyzerLabel, "alarm_type": string(a.Type), "breaches": rows, "lines": lines,
+	}
 	if len(v.NoVerdict) > 0 {
 		detail["no_verdict"] = v.NoVerdict
 	}
