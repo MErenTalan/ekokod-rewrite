@@ -12,6 +12,8 @@ const SCREENS = [
   ['load-profile', '/ekorm/load-profile'],
   ['settings', '/ekorm/settings'],
   ['calendar', '/ekorm/calendar'],
+  ['alarms', '/ekorm/alarms'],
+  ['messages', '/ekorm/messages'],
 ] as const;
 
 for (const width of WIDTHS) {

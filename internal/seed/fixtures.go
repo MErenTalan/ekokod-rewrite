@@ -164,7 +164,10 @@ func E2EData(ctx context.Context, pool *pgxpool.Pool, f Fixtures, now time.Time)
 			return total, err
 		}
 	}
-	return total, ensureBill(ctx, pool, store.SystemScope(f.CompanyA), f.BuildingA1, now)
+	if err := ensureBill(ctx, pool, store.SystemScope(f.CompanyA), f.BuildingA1, now); err != nil {
+		return total, err
+	}
+	return total, ensureAlarms(ctx, pool, f, now)
 }
 
 func ensureCompany(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, name, sector string, now time.Time) error {

@@ -95,7 +95,13 @@ func (s *Service) Trigger(ctx context.Context, sc store.Scope, jobType string) (
 		return "", err
 	}
 	info, err := s.d.Enqueuer.Enqueue(ctx, task)
-	if err != nil {
+	switch {
+	case errors.Is(err, asynq.ErrTaskIDConflict), errors.Is(err, asynq.ErrDuplicateTask):
+		// R225 working: this job is already queued for this scope and hour.
+		// That is a conflict the operator can understand, not a crash — an
+		// e2e run surfaced it as "Beklenmeyen bir hata oluştu".
+		return "", perr.New("job_already_queued", perr.Conflict.HTTPStatus, "errors.jobs.alreadyQueued")
+	case err != nil:
 		return "", err
 	}
 	return info.ID, nil

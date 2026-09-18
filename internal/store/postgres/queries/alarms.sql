@@ -215,7 +215,7 @@ limit sqlc.arg(limit_val) offset sqlc.arg(offset_val);
 -- AlarmEventList's own visibility rule exactly, so an event unreachable by
 -- ListEvents is unreachable by MarkNotified too.
 -- name: AlarmMarkNotified :execrows
-update alarm_events ae set notified_at = sqlc.arg(notified_at), notification_error = sqlc.narg(notification_error)
+update alarm_events ae set notified_at = sqlc.narg(notified_at), notification_error = sqlc.narg(notification_error)
 where ae.id = sqlc.arg(id)
   and exists (select 1 from alarms a where a.id = ae.alarm_id and a.company_id = sqlc.arg(company_id) and a.deleted_at is null)
   and (

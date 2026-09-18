@@ -505,3 +505,39 @@ func TestAlarmListEventsNotifiedFilter(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got, 2, "a nil Notified filters nothing")
 }
+
+// TestAlarmMarkNotifiedZeroTimeStoresNull pins model.AlarmEvent's own contract:
+// a nil NotifiedAt with a non-nil NotificationError is "fired and nobody was
+// told". Stamping the zero time instead made that state unreachable — every
+// failed delivery read back as delivered, which an e2e run caught after the
+// unit tests had passed against a fake that special-cased zero.
+func TestAlarmMarkNotifiedZeroTimeStoresNull(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 461)
+	repo := postgres.NewAlarmRepository(pool)
+
+	rule, err := repo.Create(ctx, tenant.AdminScope, alarmFixtureRow(tenant.Company.ID))
+	require.NoError(t, err)
+	analyzerID := tenant.Analyzers[0].ID
+
+	event, err := repo.CreateEvent(ctx, tenant.AdminScope, model.AlarmEvent{
+		AlarmID: rule.ID, AnalyzerID: &analyzerID, TriggeredAt: time.Now().UTC(), Message: "fired"})
+	require.NoError(t, err)
+
+	reason := "e-posta gönderilemedi"
+	require.NoError(t, repo.MarkNotified(ctx, tenant.AdminScope, event.ID, time.Time{}, &reason))
+
+	got, err := repo.ListEvents(ctx, tenant.AdminScope, store.AlarmEventFilter{AlarmID: &rule.ID})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Nil(t, got[0].NotifiedAt, "a zero time must store NULL, never year 1")
+	require.NotNil(t, got[0].NotificationError)
+
+	// And the Notified filter agrees: this event was never delivered.
+	yes := true
+	delivered, err := repo.ListEvents(ctx, tenant.AdminScope, store.AlarmEventFilter{AlarmID: &rule.ID, Notified: &yes})
+	require.NoError(t, err)
+	require.Empty(t, delivered)
+}

@@ -3,6 +3,7 @@ package ops_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -22,9 +23,15 @@ import (
 
 var companyScope = store.Scope{CompanyID: uuid.MustParse("00000000-0000-0000-0000-0000000000c0"), AllBuildings: true}
 
-type fakeEnqueuer struct{ tasks []*asynq.Task }
+type fakeEnqueuer struct {
+	tasks []*asynq.Task
+	err   error
+}
 
 func (f *fakeEnqueuer) Enqueue(_ context.Context, t *asynq.Task, _ ...asynq.Option) (*asynq.TaskInfo, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
 	f.tasks = append(f.tasks, t)
 	return &asynq.TaskInfo{ID: "task-" + t.Type()}, nil
 }
@@ -120,4 +127,28 @@ func TestNewRejectsMissingDependencies(t *testing.T) {
 	t.Parallel()
 	_, err := ops.New(ops.Deps{})
 	require.Error(t, err)
+}
+
+func TestTriggerReportsAnAlreadyQueuedJobAsAConflict(t *testing.T) {
+	t.Parallel()
+	// R225 de-duplicates a trigger against the cron tick's own hour. That is a
+	// state the operator can act on, not a crash: an e2e run surfaced it as
+	// "Beklenmeyen bir hata oluştu" before this mapping existed.
+	for _, dup := range []error{asynq.ErrTaskIDConflict, asynq.ErrDuplicateTask} {
+		svc, enq, _ := newService(t)
+		enq.err = dup
+
+		_, err := svc.Trigger(context.Background(), companyScope, job.TypeAlarmEvaluate)
+		require.Equal(t, http.StatusConflict, perr.StatusOf(err))
+		require.Equal(t, "job_already_queued", perr.CodeOf(err))
+	}
+}
+
+func TestTriggerStillReportsRealEnqueueFailures(t *testing.T) {
+	t.Parallel()
+	svc, enq, _ := newService(t)
+	enq.err = errors.New("redis unreachable")
+	_, err := svc.Trigger(context.Background(), companyScope, job.TypeAlarmEvaluate)
+	require.Error(t, err)
+	require.NotEqual(t, "job_already_queued", perr.CodeOf(err))
 }

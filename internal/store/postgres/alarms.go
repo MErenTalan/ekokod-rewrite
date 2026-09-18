@@ -400,8 +400,16 @@ func (r *AlarmRepository) MarkNotified(ctx context.Context, s store.Scope, event
 		return store.ErrInvalidScope
 	}
 	buildingIDs, all := s.BuildingFilter()
+	// A ZERO at stores NULL, not year 1: model.AlarmEvent's contract is that a
+	// nil NotifiedAt with a non-nil NotificationError means "fired and nobody
+	// was told". Stamping the zero time made that state unreachable — every
+	// failed delivery read back as delivered, which an e2e run caught.
+	notifiedAt := tariffTimestamptz(at)
+	if at.IsZero() {
+		notifiedAt = pgtype.Timestamptz{}
+	}
 	n, err := r.q.AlarmMarkNotified(ctx, sqlcgen.AlarmMarkNotifiedParams{
-		NotifiedAt: tariffTimestamptz(at), NotificationError: notificationError, ID: eventID, CompanyID: s.CompanyID,
+		NotifiedAt: notifiedAt, NotificationError: notificationError, ID: eventID, CompanyID: s.CompanyID,
 		AllBuildings: all, BuildingIds: buildingIDs,
 	})
 	if err != nil {
