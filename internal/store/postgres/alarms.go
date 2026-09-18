@@ -374,6 +374,7 @@ func (r *AlarmRepository) ListEvents(ctx context.Context, s store.Scope, f store
 	buildingIDs, all := s.BuildingFilter()
 	rows, err := r.q.AlarmEventList(ctx, sqlcgen.AlarmEventListParams{
 		CompanyID: s.CompanyID, AlarmID: f.AlarmID, AnalyzerID: f.AnalyzerID, Undelivered: f.Undelivered,
+		Notified:  f.Notified,
 		RangeFrom: from, RangeTo: to, AllBuildings: all, BuildingIds: buildingIDs, LimitVal: limit, OffsetVal: offset,
 	})
 	if err != nil {

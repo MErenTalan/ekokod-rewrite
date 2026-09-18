@@ -161,8 +161,15 @@ where company_id = $1::uuid
   and ($6::uuid is null or related_id = $6::uuid)
   and ($7::timestamptz is null or created_at >= $7::timestamptz)
   and ($8::timestamptz is null or created_at < $8::timestamptz)
+  -- R226: a case-insensitive SUBSTRING search over message and detail.
+  -- strpos on lower() rather than ilike: ilike would read '%' and '_' in the
+  -- user's own search term as wildcards, and escaping them correctly is a
+  -- trap this avoids entirely. An empty q filters nothing.
+  and ($9::text = ''
+       or strpos(lower(message), lower($9::text)) > 0
+       or strpos(lower(coalesce(detail, '')), lower($9::text)) > 0)
 order by created_at desc, id
-limit $10::int offset $9::int
+limit $11::int offset $10::int
 `
 
 type OpsListMessagesParams struct {
@@ -174,6 +181,7 @@ type OpsListMessagesParams struct {
 	RelatedID   *uuid.UUID
 	RangeFrom   pgtype.Timestamptz
 	RangeTo     pgtype.Timestamptz
+	Q           string
 	OffsetVal   int32
 	LimitVal    int32
 }
@@ -188,6 +196,7 @@ func (q *Queries) OpsListMessages(ctx context.Context, arg OpsListMessagesParams
 		arg.RelatedID,
 		arg.RangeFrom,
 		arg.RangeTo,
+		arg.Q,
 		arg.OffsetVal,
 		arg.LimitVal,
 	)

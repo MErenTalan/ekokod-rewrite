@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -26,6 +27,22 @@ func chunkInterval(t *testing.T, iv pgtype.Interval) time.Duration {
 	require.True(t, iv.Valid, "the time dimension must have an interval")
 	require.Zero(t, iv.Months, "a chunk interval in months has no exact duration")
 	return time.Duration(iv.Days)*24*time.Hour + time.Duration(iv.Microseconds)*time.Microsecond
+}
+
+// policyDB is a database the migrations were run against DIRECTLY, with its
+// continuous-aggregate refresh policies intact.
+//
+// NewIsolatedDB cannot serve the two tests below: F6b's b34faba strips those
+// policies from the shared template and from every clone, because a policy
+// firing inside a short-lived clone materialised a monthly bucket for one
+// analyzer while another stayed composed. That is right for repository tests
+// and wrong for these two, which assert what migration 00005 declares for
+// PRODUCTION — the only place the policies actually run.
+func policyDB(t *testing.T, ctx context.Context) *pgxpool.Pool {
+	t.Helper()
+	dsn := testfixtures.NewEmptyDB(t)
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
+	return testfixtures.NewPool(t, dsn)
 }
 
 // TestHypertablesAreConfigured pins the partitioning decisions from
@@ -105,7 +122,7 @@ func TestCompressionPoliciesExist(t *testing.T) {
 func TestContinuousAggregatesExist(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	pool := testfixtures.NewIsolatedDB(t)
+	pool := policyDB(t, ctx)
 
 	for _, name := range []string{
 		"consumption_hourly", "consumption_daily", "consumption_monthly",
@@ -457,7 +474,7 @@ func TestAggregateBucketsAreConfiguredForIstanbul(t *testing.T) {
 func TestRefreshPolicyOffsetsAreConfigured(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	pool := testfixtures.NewIsolatedDB(t)
+	pool := policyDB(t, ctx)
 
 	for _, want := range []struct{ view, start, end, schedule string }{
 		{"consumption_hourly", "30 days", "1 hour", "30 minutes"},

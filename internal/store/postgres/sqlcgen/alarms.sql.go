@@ -409,15 +409,20 @@ where a.company_id = $1 and a.deleted_at is null
   and ($2::uuid is null or ae.alarm_id = $2)
   and ($3::uuid is null or ae.analyzer_id = $3)
   and (not $4::boolean or ae.notified_at is null)
-  and ($5::timestamptz is null or ae.triggered_at >= $5)
-  and ($6::timestamptz is null or ae.triggered_at < $6)
+  -- R218: the frequency check asks the opposite question of
+  -- ` + "`" + `undelivered` + "`" + ` — was anyone actually told, and when?
+  and ($5::boolean is null
+       or ($5::boolean and ae.notified_at is not null)
+       or (not $5::boolean and ae.notified_at is null))
+  and ($6::timestamptz is null or ae.triggered_at >= $6)
+  and ($7::timestamptz is null or ae.triggered_at < $7)
   and (
-    (ae.analyzer_id is null and $7::boolean)
+    (ae.analyzer_id is null and $8::boolean)
     or (ae.analyzer_id is not null and an.company_id = $1 and an.deleted_at is null
-        and ($7::boolean or an.building_id = any($8::uuid[])))
+        and ($8::boolean or an.building_id = any($9::uuid[])))
   )
 order by ae.triggered_at desc, ae.id
-limit $10 offset $9
+limit $11 offset $10
 `
 
 type AlarmEventListParams struct {
@@ -425,6 +430,7 @@ type AlarmEventListParams struct {
 	AlarmID      *uuid.UUID
 	AnalyzerID   *uuid.UUID
 	Undelivered  bool
+	Notified     *bool
 	RangeFrom    pgtype.Timestamptz
 	RangeTo      pgtype.Timestamptz
 	AllBuildings bool
@@ -449,6 +455,7 @@ func (q *Queries) AlarmEventList(ctx context.Context, arg AlarmEventListParams) 
 		arg.AlarmID,
 		arg.AnalyzerID,
 		arg.Undelivered,
+		arg.Notified,
 		arg.RangeFrom,
 		arg.RangeTo,
 		arg.AllBuildings,

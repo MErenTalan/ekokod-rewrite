@@ -192,6 +192,7 @@ func (r *OpsRepository) ListMessages(ctx context.Context, s store.Scope, f store
 	rows, err := r.q.OpsListMessages(ctx, sqlcgen.OpsListMessagesParams{
 		CompanyID: s.CompanyID, Kinds: f.Kinds, Categories: f.Categories, Statuses: f.Statuses,
 		RelatedType: f.RelatedType, RelatedID: f.RelatedID, RangeFrom: from, RangeTo: to,
+		Q:         f.Q,
 		OffsetVal: offset, LimitVal: limit,
 	})
 	if err != nil {

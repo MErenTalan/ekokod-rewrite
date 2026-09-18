@@ -95,6 +95,7 @@ var nativeFunctions = map[string]bool{
 	"lower": true, "upper": true, "trim": true, "btrim": true, "length": true,
 	"concat": true, "concat_ws": true, "substring": true, "replace": true,
 	"split_part": true, "format": true, "md5": true, "encode": true, "decode": true,
+	"strpos": true, "position": true,
 	"array_agg": true, "string_agg": true, "unnest": true, "cardinality": true,
 	"array_length": true, "array_position": true,
 	"jsonb_agg": true, "json_agg": true, "jsonb_build_object": true,

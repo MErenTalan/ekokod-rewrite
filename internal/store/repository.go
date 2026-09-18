@@ -1103,8 +1103,13 @@ type AlarmEventFilter struct {
 	AnalyzerID *uuid.UUID
 	// Undelivered, when true, keeps only events with a NULL notified_at.
 	Undelivered bool
-	Range       *TimeRange
-	Page        Page
+	// Notified, when non-nil, keeps only events whose notified_at is set
+	// (true) or NULL (false). Undelivered stays for the NULL-only case it
+	// already serves; Notified answers the opposite question F7's frequency
+	// suppression asks (R218): was anyone actually told, and when?
+	Notified *bool
+	Range    *TimeRange
+	Page     Page
 }
 
 // AlarmRepository reads and writes alarm rules, their attachments and their
@@ -1435,8 +1440,14 @@ type MessageFilter struct {
 	Statuses    []string
 	RelatedType *string
 	RelatedID   *uuid.UUID
-	Range       *TimeRange
-	Page        Page
+	// Q is a case-insensitive SUBSTRING matched against message and detail
+	// (R226). Not full-text: neither column is indexed for it, and the screen's
+	// window is one tenant's recent rows. The query escapes `\`, `%` and `_`,
+	// so a metacharacter searches for itself rather than matching everything.
+	// An empty Q filters nothing. The service caps the length at 200.
+	Q     string
+	Range *TimeRange
+	Page  Page
 }
 
 // OpsRepository backs a tenant's Messages screen and job diagnostics.

@@ -214,3 +214,77 @@ func TestOpsStartRunIgnoresCallerSuppliedStatus(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "running", started.Status, "a caller-supplied Status must be ignored, not honoured, on StartRun")
 }
+
+// TestOpsListMessagesSearch is R226: the Messages screen's search box, a
+// case-insensitive substring over message and detail.
+func TestOpsListMessagesSearch(t *testing.T) {
+	t.Parallel()
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenant := testfixtures.NewTenant(t, ctx, pool, 8101)
+	repo := postgres.NewOpsRepository(pool)
+	companyID := tenant.Company.ID
+
+	detail := "Endüktif oran %25"
+	for _, m := range []model.OperationalMessage{
+		{CompanyID: &companyID, Kind: "job", Category: "analyzer-refresh", Status: "success", Message: "Analizör yenilendi"},
+		{CompanyID: &companyID, Kind: "alarm", Category: "alarm-trigger", Status: "warning", Message: "Alarm tetiklendi", Detail: &detail},
+		{CompanyID: &companyID, Kind: "system", Category: "auth", Status: "info", Message: "Oturum açıldı"},
+	} {
+		_, err := repo.AppendMessage(ctx, tenant.Scope, m)
+		require.NoError(t, err)
+	}
+
+	got, err := repo.ListMessages(ctx, tenant.Scope, store.MessageFilter{Q: "alarm"})
+	require.NoError(t, err)
+	require.Len(t, got, 1, "matches the message column, case-insensitively")
+
+	// "ENDÜKTIF" with an ASCII I, deliberately: Postgres' lower() maps the
+	// Turkish dotted İ to "i" plus a combining dot, which would not match the
+	// plain "i" stored in the text. The Ü still proves the fold is not ASCII-only.
+	got, err = repo.ListMessages(ctx, tenant.Scope, store.MessageFilter{Q: "ENDÜKTIF"})
+	require.NoError(t, err)
+	require.Len(t, got, 1, "matches the detail column too")
+
+	// A LIKE metacharacter is a literal, not a wildcard: '%' must match only
+	// the row whose detail actually contains one.
+	got, err = repo.ListMessages(ctx, tenant.Scope, store.MessageFilter{Q: "%"})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+
+	got, err = repo.ListMessages(ctx, tenant.Scope, store.MessageFilter{Q: "_"})
+	require.NoError(t, err)
+	require.Empty(t, got, "an underscore is a literal too")
+
+	got, err = repo.ListMessages(ctx, tenant.Scope, store.MessageFilter{Q: "yok"})
+	require.NoError(t, err)
+	require.Empty(t, got)
+
+	got, err = repo.ListMessages(ctx, tenant.Scope, store.MessageFilter{})
+	require.NoError(t, err)
+	require.Len(t, got, 3, "an empty Q filters nothing")
+}
+
+// TestOpsListMessagesSearchCombinesWithFilters pins that the search narrows
+// the other filters rather than replacing them.
+func TestOpsListMessagesSearchCombinesWithFilters(t *testing.T) {
+	t.Parallel()
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenant := testfixtures.NewTenant(t, ctx, pool, 8102)
+	repo := postgres.NewOpsRepository(pool)
+	companyID := tenant.Company.ID
+
+	for _, m := range []model.OperationalMessage{
+		{CompanyID: &companyID, Kind: "alarm", Category: "alarm-trigger", Status: "warning", Message: "Alarm tetiklendi"},
+		{CompanyID: &companyID, Kind: "job", Category: "alarm-evaluate", Status: "success", Message: "Alarm değerlendirmesi"},
+	} {
+		_, err := repo.AppendMessage(ctx, tenant.Scope, m)
+		require.NoError(t, err)
+	}
+
+	got, err := repo.ListMessages(ctx, tenant.Scope, store.MessageFilter{Q: "alarm", Kinds: []string{"job"}})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Equal(t, "job", got[0].Kind)
+}

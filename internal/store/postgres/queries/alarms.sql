@@ -191,6 +191,11 @@ where a.company_id = sqlc.arg(company_id) and a.deleted_at is null
   and (sqlc.narg(alarm_id)::uuid is null or ae.alarm_id = sqlc.narg(alarm_id))
   and (sqlc.narg(analyzer_id)::uuid is null or ae.analyzer_id = sqlc.narg(analyzer_id))
   and (not sqlc.arg(undelivered)::boolean or ae.notified_at is null)
+  -- R218: the frequency check asks the opposite question of
+  -- `undelivered` — was anyone actually told, and when?
+  and (sqlc.narg(notified)::boolean is null
+       or (sqlc.narg(notified)::boolean and ae.notified_at is not null)
+       or (not sqlc.narg(notified)::boolean and ae.notified_at is null))
   and (sqlc.narg(range_from)::timestamptz is null or ae.triggered_at >= sqlc.narg(range_from))
   and (sqlc.narg(range_to)::timestamptz is null or ae.triggered_at < sqlc.narg(range_to))
   and (

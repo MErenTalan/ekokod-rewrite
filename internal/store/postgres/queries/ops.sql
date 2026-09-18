@@ -66,5 +66,12 @@ where company_id = sqlc.arg(company_id)::uuid
   and (sqlc.narg(related_id)::uuid is null or related_id = sqlc.narg(related_id)::uuid)
   and (sqlc.narg(range_from)::timestamptz is null or created_at >= sqlc.narg(range_from)::timestamptz)
   and (sqlc.narg(range_to)::timestamptz is null or created_at < sqlc.narg(range_to)::timestamptz)
+  -- R226: a case-insensitive SUBSTRING search over message and detail.
+  -- strpos on lower() rather than ilike: ilike would read '%' and '_' in the
+  -- user's own search term as wildcards, and escaping them correctly is a
+  -- trap this avoids entirely. An empty q filters nothing.
+  and (sqlc.arg(q)::text = ''
+       or strpos(lower(message), lower(sqlc.arg(q)::text)) > 0
+       or strpos(lower(coalesce(detail, '')), lower(sqlc.arg(q)::text)) > 0)
 order by created_at desc, id
 limit sqlc.arg(limit_val)::int offset sqlc.arg(offset_val)::int;

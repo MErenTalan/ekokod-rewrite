@@ -462,3 +462,46 @@ func TestAlarmMarkIsolarForwardedJoinsThroughPlant(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, claimedAgain)
 }
+
+// TestAlarmListEventsNotifiedFilter is R218: the frequency check needs the
+// newest DELIVERED event for a (rule, analyzer) pair, which the existing
+// Undelivered flag cannot express.
+func TestAlarmListEventsNotifiedFilter(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 460)
+	repo := postgres.NewAlarmRepository(pool)
+
+	rule, err := repo.Create(ctx, tenant.AdminScope, alarmFixtureRow(tenant.Company.ID))
+	require.NoError(t, err)
+	analyzerID := tenant.Analyzers[0].ID
+
+	delivered, err := repo.CreateEvent(ctx, tenant.AdminScope, model.AlarmEvent{
+		AlarmID: rule.ID, AnalyzerID: &analyzerID, TriggeredAt: time.Now().UTC(), Message: "delivered"})
+	require.NoError(t, err)
+	require.NoError(t, repo.MarkNotified(ctx, tenant.AdminScope, delivered.ID, time.Now().UTC(), nil))
+
+	_, err = repo.CreateEvent(ctx, tenant.AdminScope, model.AlarmEvent{
+		AlarmID: rule.ID, AnalyzerID: &analyzerID, TriggeredAt: time.Now().UTC(), Message: "pending"})
+	require.NoError(t, err)
+
+	yes, no := true, false
+	got, err := repo.ListEvents(ctx, tenant.AdminScope, store.AlarmEventFilter{
+		AlarmID: &rule.ID, AnalyzerID: &analyzerID, Notified: &yes})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Equal(t, "delivered", got[0].Message)
+	require.NotNil(t, got[0].NotifiedAt)
+
+	got, err = repo.ListEvents(ctx, tenant.AdminScope, store.AlarmEventFilter{
+		AlarmID: &rule.ID, AnalyzerID: &analyzerID, Notified: &no})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Equal(t, "pending", got[0].Message)
+
+	got, err = repo.ListEvents(ctx, tenant.AdminScope, store.AlarmEventFilter{
+		AlarmID: &rule.ID, AnalyzerID: &analyzerID})
+	require.NoError(t, err)
+	require.Len(t, got, 2, "a nil Notified filters nothing")
+}
