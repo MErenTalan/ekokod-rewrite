@@ -55,6 +55,9 @@
       "success": "Başarılı",
       "partial": "Kısmi",
       "failed": "Hatalı"
-    }
-  }
+    },
+    "emptyDescription": "Henüz hiçbir iş çalışmadı."
+  },
+  "emptyDescription": "Otomatik işlemler ve alarmlar burada görünür.",
+  "emptyFilteredDescription": "Farklı bir filtre deneyin."
 }

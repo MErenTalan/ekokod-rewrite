@@ -45,15 +45,19 @@ export function AlarmsPage() {
 
   // The dialog's analyzer picker only needs what the caller may attach, which
   // is exactly what the scoped list returns.
-  const analyzers = $api.useQuery('get', '/api/v1/analyzers', {
-    params: { query: { ...scope, limit: 500 } },
-    enabled: draft !== null,
-  });
+  const analyzers = $api.useQuery(
+    'get',
+    '/api/v1/analyzers',
+    { params: { query: { ...scope, limit: 500 } } },
+    { enabled: draft !== null },
+  );
 
-  const events = $api.useQuery('get', '/api/v1/alarms/{id}/events', {
-    params: { path: { id: details?.id ?? '' }, query: { ...scope, limit: 100 } },
-    enabled: details !== null,
-  });
+  const events = $api.useQuery(
+    'get',
+    '/api/v1/alarms/{id}/events',
+    { params: { path: { id: details?.id ?? '' }, query: { ...scope, limit: 100 } } },
+    { enabled: details !== null },
+  );
 
   const invalidate = ['/api/v1/alarms'];
   const create = useApiMutation('post', '/api/v1/alarms', { success: t('saved'), invalidate });

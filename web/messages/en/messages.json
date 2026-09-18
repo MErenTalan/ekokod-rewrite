@@ -55,6 +55,9 @@
       "success": "Success",
       "partial": "Partial",
       "failed": "Failed"
-    }
-  }
+    },
+    "emptyDescription": "No job has run yet."
+  },
+  "emptyDescription": "Automated jobs and alarms appear here.",
+  "emptyFilteredDescription": "Try a different filter."
 }
