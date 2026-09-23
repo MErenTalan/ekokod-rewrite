@@ -94,8 +94,12 @@ func moneyByCurrency(bills []*Bill, pick func(*Bill) decimal.Decimal) []MoneyFig
 		out[i].Value = out[i].Value.Add(pick(b))
 		out[i].WithData++
 	}
-	slices.SortFunc(out, func(a, b MoneyFigure) int { return compareCurrency(a.Currency, b.Currency) })
+	sortMoney(out)
 	return out
+}
+
+func sortMoney(out []MoneyFigure) {
+	slices.SortFunc(out, func(a, b MoneyFigure) int { return compareCurrency(a.Currency, b.Currency) })
 }
 
 func compareCurrency(a, b string) int {

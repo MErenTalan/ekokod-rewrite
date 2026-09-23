@@ -193,3 +193,91 @@ type Monthly struct {
 	ChartCurrency     *string      `json:"chart_currency"`
 	OmittedCurrencies []string     `json:"omitted_currencies"`
 }
+
+// GridFactor is the grid emission factor a yearly report states (R262).
+type GridFactor struct {
+	Value      decimal.Decimal
+	Unit       string
+	SourceYear *int
+}
+
+// YearlyInput is everything BuildYearly reads.
+type YearlyInput struct {
+	Year      int
+	Selection string
+	Buildings []BuildingInput
+	Plants    []PlantInput
+	// Factor nil makes the carbon section unavailable.
+	Factor *GridFactor
+}
+
+// YearMonthRow is one month of the yearly consumption table.
+type YearMonthRow struct {
+	Month           int           `json:"month"`
+	Consumption     Figure        `json:"consumption"`
+	Rooftop         Figure        `json:"rooftop"`
+	Bill            []MoneyFigure `json:"bill"`
+	ReactivePenalty []MoneyFigure `json:"reactive_penalty"`
+}
+
+// YearPoint is one year of the yearly history charts.
+type YearPoint struct {
+	Year        int              `json:"year"`
+	Consumption *decimal.Decimal `json:"consumption"`
+	Production  *decimal.Decimal `json:"production"`
+	Bill        []MoneyFigure    `json:"bill"`
+}
+
+// Carbon is 02 §9.4's figures in tonnes per year.
+type Carbon struct {
+	Factor       decimal.Decimal  `json:"factor"`
+	FactorUnit   string           `json:"factor_unit"`
+	SourceYear   *int             `json:"source_year"`
+	ConsumptionT *decimal.Decimal `json:"consumption_t"`
+	ReductionT   *decimal.Decimal `json:"reduction_t"`
+	NetT         *decimal.Decimal `json:"net_t"`
+}
+
+// Yearly is the yearly report (01 §7.14, 02 §10.2).
+type Yearly struct {
+	Year      int            `json:"year"`
+	Selection string         `json:"plant_selection"`
+	Partial   bool           `json:"partial"`
+	Buildings []BuildingLine `json:"buildings"`
+	Plants    []PlantLine    `json:"plants"`
+	Months    []YearMonthRow `json:"months"`
+
+	Consumption      Figure        `json:"consumption"`
+	Rooftop          Figure        `json:"rooftop"`
+	Utility          Figure        `json:"utility"`
+	Production       Figure        `json:"production"`
+	Bill             []MoneyFigure `json:"bill"`
+	ReactivePenalty  []MoneyFigure `json:"reactive_penalty"`
+	DailyConsumption Figure        `json:"daily_consumption"`
+	DailyRooftop     Figure        `json:"daily_rooftop"`
+	DailyProduction  Figure        `json:"daily_production"`
+
+	Target         *decimal.Decimal `json:"target"`
+	AchievementPct *decimal.Decimal `json:"achievement_pct"`
+
+	ConsumptionDelta Delta            `json:"consumption_delta"`
+	BillDelta        []CurrencyDelta  `json:"bill_delta"`
+	SolarSharePct    *decimal.Decimal `json:"solar_share_pct"`
+	GridSharePct     *decimal.Decimal `json:"grid_share_pct"`
+
+	Carbon       *Carbon `json:"carbon"`
+	CarbonReason string  `json:"carbon_reason,omitempty"`
+
+	History           []YearPoint `json:"history"`
+	ChartCurrency     *string     `json:"chart_currency"`
+	OmittedCurrencies []string    `json:"omitted_currencies"`
+}
+
+// Payload is what reports.payload stores and GET /reports/preview answers.
+type Payload struct {
+	Version int      `json:"version"`
+	Type    string   `json:"type"`
+	Period  string   `json:"period"`
+	Monthly *Monthly `json:"monthly,omitempty"`
+	Yearly  *Yearly  `json:"yearly,omitempty"`
+}
