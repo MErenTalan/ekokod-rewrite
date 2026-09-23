@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"mime"
 	"mime/quotedprintable"
 	"net"
@@ -23,12 +24,23 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 )
 
-// Message is one plain-text e-mail.
+// Message is one e-mail: plain text, optionally with an HTML alternative
+// and attachments (E-2). Without either it is sent as a single text part.
 type Message struct {
 	To      []string
 	Subject string
 	Text    string
+	HTML    string
+	// Attachments wrap the body in multipart/mixed.
+	Attachments []Attachment
 }
+
+// now and randRead are seams so a test can pin the Date header and the
+// random Message-ID and boundaries.
+var (
+	now      = time.Now
+	randRead = rand.Read
+)
 
 // Sender delivers a Message with one company's SMTP settings.
 type Sender interface {
@@ -128,8 +140,11 @@ func compose(from string, m Message) ([]byte, error) {
 			return nil, fmt.Errorf("mail: invalid address: %w", err)
 		}
 	}
+	if err := checkAttachments(m.Attachments); err != nil {
+		return nil, err
+	}
 	var id [12]byte
-	_, _ = rand.Read(id[:])
+	_, _ = randRead(id[:])
 	domain := "ekokod"
 	if at := strings.LastIndexByte(from, '@'); at >= 0 {
 		domain = from[at+1:]
@@ -138,15 +153,26 @@ func compose(from string, m Message) ([]byte, error) {
 	fmt.Fprintf(&b, "From: %s\r\n", from)
 	fmt.Fprintf(&b, "To: %s\r\n", strings.Join(m.To, ", "))
 	fmt.Fprintf(&b, "Subject: %s\r\n", mime.QEncoding.Encode("utf-8", m.Subject))
-	fmt.Fprintf(&b, "Date: %s\r\n", time.Now().Format(time.RFC1123Z))
+	fmt.Fprintf(&b, "Date: %s\r\n", now().Format(time.RFC1123Z))
 	fmt.Fprintf(&b, "Message-ID: <%s@%s>\r\n", hex.EncodeToString(id[:]), domain)
-	b.WriteString("MIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n")
-	qp := quotedprintable.NewWriter(&b)
-	if _, err := qp.Write([]byte(strings.ReplaceAll(m.Text, "\n", "\r\n"))); err != nil {
-		return nil, err
+	b.WriteString("MIME-Version: 1.0\r\n")
+	if m.HTML != "" || len(m.Attachments) > 0 {
+		if err := writeMultipart(&b, m); err != nil {
+			return nil, err
+		}
+		return b.Bytes(), nil
 	}
-	if err := qp.Close(); err != nil {
+	b.WriteString("Content-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n")
+	if err := writeQP(&b, m.Text); err != nil {
 		return nil, err
 	}
 	return b.Bytes(), nil
+}
+
+func writeQP(w io.Writer, text string) error {
+	qp := quotedprintable.NewWriter(w)
+	if _, err := qp.Write([]byte(strings.ReplaceAll(text, "\n", "\r\n"))); err != nil {
+		return err
+	}
+	return qp.Close()
 }
