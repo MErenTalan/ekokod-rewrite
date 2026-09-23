@@ -2,8 +2,8 @@ package mail
 
 import (
 	"bytes"
-	"errors"
 	"encoding/base64"
+	"errors"
 	"io"
 	"mime"
 	"mime/multipart"
