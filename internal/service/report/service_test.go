@@ -47,7 +47,9 @@ func (fakeAnalyzers) List(context.Context, store.Scope, store.AnalyzerFilter) ([
 
 type fakeBills struct{ store.BillRepository }
 
-func (fakeBills) List(context.Context, store.Scope, store.BillFilter) ([]model.Bill, error) { return nil, nil }
+func (fakeBills) List(context.Context, store.Scope, store.BillFilter) ([]model.Bill, error) {
+	return nil, nil
+}
 
 type fakePlants struct {
 	store.PlantRepository
