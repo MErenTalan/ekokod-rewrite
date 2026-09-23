@@ -52,6 +52,10 @@ export type PlantDraft = {
   plantKind: 'rooftop' | 'grid';
   monthlyTargets: string[];
   alarmRecipients: string[];
+  /** R289's optional netting analyzer; '' means none. */
+  nettingAnalyzerId: string;
+  /** What the server holds, so an edit that removes it can say so. */
+  savedNettingAnalyzerId?: string;
 };
 
 export const emptyPlant = (): PlantDraft => ({
@@ -73,6 +77,7 @@ export const emptyPlant = (): PlantDraft => ({
   plantKind: 'rooftop',
   monthlyTargets: Array.from({ length: 12 }, () => ''),
   alarmRecipients: [],
+  nettingAnalyzerId: '',
 });
 
 export const plantDraft = (plant: PlantDetail): PlantDraft => ({
@@ -96,6 +101,8 @@ export const plantDraft = (plant: PlantDetail): PlantDraft => ({
   plantKind: plant.plant_kind,
   monthlyTargets: plant.monthly_targets.length === 12 ? plant.monthly_targets : Array.from({ length: 12 }, () => ''),
   alarmRecipients: plant.alarm_recipients,
+  nettingAnalyzerId: plant.netting_analyzer_id ?? '',
+  savedNettingAnalyzerId: plant.netting_analyzer_id ?? undefined,
 });
 
 /** Every month needs a target, so the request never carries a substituted zero. */
@@ -122,18 +129,24 @@ export function toPlantRequest(draft: PlantDraft): PlantCreateRequest {
     plant_kind: draft.plantKind,
     monthly_targets: draft.monthlyTargets,
     alarm_recipients: draft.alarmRecipients,
+    ...(draft.nettingAnalyzerId ? { netting_analyzer_id: draft.nettingAnalyzerId } : {}),
+    ...(!draft.nettingAnalyzerId && draft.savedNettingAnalyzerId ? { clear_netting_analyzer: true } : {}),
   };
 }
+
+const NO_ANALYZER = 'none';
 
 export type PlantFormViewProps = {
   value: PlantDraft;
   onChange: (draft: PlantDraft) => void;
   devices: PlantDevice[];
   fieldErrors?: Record<string, string>;
+  /** The company's analyzers for the netting choice (R289). */
+  analyzers?: { value: string; label: string }[];
 };
 
 /** Plant fields of 01 §7.15; devices arrive with the iSolar link (F9). */
-export function PlantFormView({ value, onChange, devices, fieldErrors = {} }: PlantFormViewProps) {
+export function PlantFormView({ value, onChange, devices, fieldErrors = {}, analyzers = [] }: PlantFormViewProps) {
   const t = useTranslations('settings.plants');
   const [recipient, setRecipient] = useState('');
   const set = (patch: Partial<PlantDraft>) => onChange({ ...value, ...patch });
@@ -151,6 +164,14 @@ export function PlantFormView({ value, onChange, devices, fieldErrors = {} }: Pl
         ]}
         value={value.plantKind}
         onValueChange={(kind) => set({ plantKind: kind as PlantDraft['plantKind'] })}
+      />
+      <Select
+        label={t('nettingAnalyzer')}
+        description={t('nettingAnalyzerHint')}
+        error={fieldErrors.netting_analyzer_id}
+        options={[{ value: NO_ANALYZER, label: t('nettingNone') }, ...analyzers]}
+        value={value.nettingAnalyzerId || NO_ANALYZER}
+        onValueChange={(id) => set({ nettingAnalyzerId: id === NO_ANALYZER ? '' : id })}
       />
       <Input label={t('pvBrandModel')} value={value.pvBrandModel} onChange={(e) => set({ pvBrandModel: e.target.value })} />
       <div className="flex flex-wrap gap-4">

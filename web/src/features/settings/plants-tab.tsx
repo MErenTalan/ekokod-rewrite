@@ -1,7 +1,7 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
-import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { Link2, Link2Off, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useMemo } from 'react';
 
@@ -17,11 +17,14 @@ export type PlantsTabViewProps = {
   onAdd: () => void;
   onEdit: (plant: Plant) => void;
   onDelete: (plant: Plant) => void;
+  /** R281: link an unlinked plant, unlink a linked one. */
+  onLink?: (plant: Plant) => void;
+  onUnlink?: (plant: Plant) => void;
   loading?: boolean;
 };
 
 /** The solar plant list of 01 §7.15. */
-export function PlantsTabView({ plants, canEdit, onAdd, onEdit, onDelete, loading = false }: PlantsTabViewProps) {
+export function PlantsTabView({ plants, canEdit, onAdd, onEdit, onDelete, onLink, onUnlink, loading = false }: PlantsTabViewProps) {
   const t = useTranslations('settings.plants');
   const common = useTranslations('common');
 
@@ -48,12 +51,15 @@ export function PlantsTabView({ plants, canEdit, onAdd, onEdit, onDelete, loadin
         cell: ({ row }) => (
           <span className="flex gap-1">
             <IconButton label={t('edit')} icon={Pencil} size="sm" onClick={() => onEdit(row.original)} />
+            {row.original.isolar_ps_id
+              ? onUnlink ? <IconButton label={t('unlinkIsolar')} icon={Link2Off} size="sm" onClick={() => onUnlink(row.original)} /> : null
+              : onLink ? <IconButton label={t('linkIsolar')} icon={Link2} size="sm" onClick={() => onLink(row.original)} /> : null}
             <IconButton label={t('delete')} icon={Trash2} size="sm" onClick={() => onDelete(row.original)} />
           </span>
         ),
       },
     ];
-  }, [t, common, canEdit, onEdit, onDelete]);
+  }, [t, common, canEdit, onEdit, onDelete, onLink, onUnlink]);
 
   return (
     <DataTable

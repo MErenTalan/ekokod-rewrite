@@ -57,3 +57,20 @@ describe('plant form', () => {
     expect(r.getByRole('row', { name: /İnvertör 1/ })).toBeInTheDocument();
   });
 });
+
+describe('netting analyzer (R289)', () => {
+  const analyzers = [{ value: 'a-1', label: 'Sayaç 1 · 40001' }];
+
+  it('offers the company analyzers and "none"', () => {
+    const r = renderWithProviders(<PlantFormView value={emptyPlant()} onChange={() => {}} devices={[]} analyzers={analyzers} />);
+    expect(r.getByRole('combobox', { name: /Mahsuplaşma analizörü/ })).toBeVisible();
+  });
+
+  it('sends the chosen analyzer, and clears it on an edit that removes it', () => {
+    expect(toPlantRequest({ ...plantDraft(detail), nettingAnalyzerId: 'a-1' }).netting_analyzer_id).toBe('a-1');
+    const cleared = toPlantRequest({ ...plantDraft({ ...detail, netting_analyzer_id: 'a-1' }), nettingAnalyzerId: '' });
+    expect(cleared.netting_analyzer_id).toBeUndefined();
+    expect((cleared as { clear_netting_analyzer?: boolean }).clear_netting_analyzer).toBe(true);
+    expect((toPlantRequest(emptyPlant()) as { clear_netting_analyzer?: boolean }).clear_netting_analyzer).toBeUndefined();
+  });
+});

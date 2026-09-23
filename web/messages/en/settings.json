@@ -246,6 +246,29 @@
       "se": "South-east",
       "nw": "North-west",
       "sw": "South-west"
+    },
+    "nettingAnalyzer": "Netting analyzer",
+    "nettingAnalyzerHint": "Optional: the meter the plant's production is netted against. Most utility-scale plants leave it empty.",
+    "nettingNone": "None",
+    "linkIsolar": "Link to iSolarCloud",
+    "unlinkIsolar": "Unlink iSolar",
+    "unlinkConfirm": "Unlink {name} from iSolarCloud? Stored production is kept.",
+    "unlinked": "Unlinked",
+    "linked": "Plant linked; history is being fetched",
+    "link": {
+      "title": "Choose an iSolarCloud plant",
+      "credential": "iSolarCloud account",
+      "plants": "Plants on the account",
+      "installed": "{kw} kW",
+      "linkedElsewhere": "Linked to another plant",
+      "linkedHere": "Linked to this plant",
+      "confirm": "Link",
+      "noCredential": "No iSolarCloud connection",
+      "noCredentialDescription": "Connect the company's iSolarCloud account first.",
+      "goToCompany": "Company tab",
+      "empty": "No plants on this account",
+      "emptyDescription": "The iSolarCloud account shows no plants.",
+      "job": "iSolar history"
     }
   },
   "analyzers": {

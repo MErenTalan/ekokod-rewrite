@@ -63,3 +63,37 @@ describe('PlantsPanel', () => {
     expect(r.queryByRole('button', { name: 'Santral ekle' })).toBeNull();
   });
 });
+
+describe('PlantsPanel iSolar link (R281)', () => {
+  const linkRoutes = {
+    ...ROUTES,
+    'GET /api/v1/integration-credentials': { items: [
+      { id: 'c-iso', provider: 'isolar', subtype: 'EU', definition_id: 'd', has_secret: true, extra_keys: [], is_active: true, updated_at: '' },
+      { id: 'c-osos', provider: 'osos', subtype: 'Baskent', definition_id: 'd2', has_secret: true, extra_keys: [], is_active: true, updated_at: '' },
+    ] },
+    'GET /api/v1/analyzers': { items: [], next_cursor: null },
+    // A finished job stops the poll, so nothing outlives the test.
+    'GET /api/v1/jobs/isolar.sync_plant%3Ap-1%3A400': { id: 'isolar.sync_plant:p-1:400', type: 'isolar.sync_plant', status: 'succeeded' },
+    'GET /api/v1/integrations/isolar/plants': { items: [{ ps_id: 'PS-1', name: 'Konya Solar', installed_kw: '250' }] },
+    'POST /api/v1/plants/p-1/isolar-link': (request: Request) =>
+      request.json().then((body: { credential_id?: string; ps_id?: string }) =>
+        body.credential_id === 'c-iso' && body.ps_id === 'PS-1'
+          ? Response.json({ plant: { ...plant, monthly_targets: [], alarm_recipients: [], devices: [] }, job_id: 'isolar.sync_plant:p-1:400' })
+          : Response.json({ error: { code: 'validation_failed' } }, { status: 422 })),
+  };
+
+  it('links a plant through the account list and only offers iSolar credentials', async () => {
+    api = mockApi(linkRoutes);
+    const r = renderWithProviders(
+      <SessionProvider me={me('company_admin')}>
+        <PlantsPanel />
+      </SessionProvider>,
+    );
+    await r.user.click(await r.findByRole('button', { name: 'iSolarCloud’a bağla' }));
+    await r.user.click(await r.findByRole('radio', { name: /Konya Solar/ }));
+    await r.user.click(r.getByRole('button', { name: 'Bağla' }));
+    await waitFor(() => expect(api.calls.some((c) => c.method === 'POST' && c.url.includes('/isolar-link'))).toBe(true));
+    const accountCall = api.calls.find((c) => c.url.includes('/integrations/isolar/plants'));
+    expect(new URL(accountCall!.url).searchParams.get('credential_id')).toBe('c-iso');
+  });
+});

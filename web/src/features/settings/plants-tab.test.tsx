@@ -39,3 +39,18 @@ describe('PlantsTabView', () => {
     expect(onDelete).toHaveBeenCalledWith(plants[0]);
   });
 });
+
+describe('iSolar link actions (R281)', () => {
+  it('offers link for an unlinked plant and unlink for a linked one', async () => {
+    const onLink = vi.fn();
+    const onUnlink = vi.fn();
+    const linked = { ...plants[0], id: 'p-2', name: 'Arazi GES', isolar_ps_id: 'PS-9', isolar_ps_name: 'Arazi' } as Plant;
+    const r = renderWithProviders(
+      <PlantsTabView plants={[plants[0], linked]} canEdit onAdd={() => {}} onEdit={() => {}} onDelete={() => {}} onLink={onLink} onUnlink={onUnlink} />,
+    );
+    await r.user.click(r.getByRole('button', { name: 'iSolarCloud’a bağla' }));
+    expect(onLink).toHaveBeenCalledWith(plants[0]);
+    await r.user.click(r.getByRole('button', { name: 'iSolar bağlantısını kaldır' }));
+    expect(onUnlink).toHaveBeenCalledWith(linked);
+  });
+});

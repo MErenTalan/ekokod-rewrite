@@ -33,7 +33,7 @@ const routes = (plants = demoPlants) => ({
   'GET /api/v1/plants/p-1/devices': { items: demoDevices },
   'GET /api/v1/plants/p-1/alarms': demoAlarms,
   'POST /api/v1/plants/p-1/sync': Response.json({ job_id: 'isolar.sync_plant:p-1:0' }, { status: 202 }),
-  'GET /api/v1/jobs/isolar.sync_plant%3Ap-1%3A0': { id: 'isolar.sync_plant:p-1:0', type: 'isolar.sync_plant', status: 'running' },
+  'GET /api/v1/jobs/isolar.sync_plant%3Ap-1%3A0': { id: 'isolar.sync_plant:p-1:0', type: 'isolar.sync_plant', status: 'succeeded' },
 });
 
 let api: ReturnType<typeof mockApi>;

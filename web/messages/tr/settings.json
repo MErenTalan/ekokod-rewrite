@@ -246,6 +246,29 @@
       "se": "Güneydoğu",
       "nw": "Kuzeybatı",
       "sw": "Güneybatı"
+    },
+    "nettingAnalyzer": "Mahsuplaşma analizörü",
+    "nettingAnalyzerHint": "İsteğe bağlı: santralin üretiminin mahsuplaştığı sayaç. Çoğu arazi santralinde boş kalır.",
+    "nettingNone": "Yok",
+    "linkIsolar": "iSolarCloud’a bağla",
+    "unlinkIsolar": "iSolar bağlantısını kaldır",
+    "unlinkConfirm": "{name} santralinin iSolarCloud bağlantısı kaldırılsın mı? Kaydedilmiş üretim silinmez.",
+    "unlinked": "Bağlantı kaldırıldı",
+    "linked": "Santral bağlandı; geçmiş üretim alınıyor",
+    "link": {
+      "title": "iSolarCloud santrali seç",
+      "credential": "iSolarCloud hesabı",
+      "plants": "Hesaptaki santraller",
+      "installed": "{kw} kW",
+      "linkedElsewhere": "Başka bir santrale bağlı",
+      "linkedHere": "Bu santrale bağlı",
+      "confirm": "Bağla",
+      "noCredential": "iSolarCloud bağlantısı yok",
+      "noCredentialDescription": "Önce şirketin iSolarCloud hesabını bağlayın.",
+      "goToCompany": "Şirket sekmesi",
+      "empty": "Bu hesapta santral bulunamadı",
+      "emptyDescription": "iSolarCloud hesabında görünen santral yok.",
+      "job": "iSolar geçmiş verisi"
     }
   },
   "analyzers": {
