@@ -174,5 +174,27 @@
     "rejected": "Kayıt reddedildi",
     "deleted": "Kayıt silindi",
     "saved": "Kayıt güncellendi; yeniden onay bekliyor"
+  },
+  "reporting": {
+    "formTitle": "Rapor oluştur",
+    "type": "Rapor türü",
+    "ghg": "GHG Protokolü",
+    "iso": "ISO 14064",
+    "period": "Dönem",
+    "name": "Rapor adı (isteğe bağlı)",
+    "generate": "Raporu oluştur",
+    "generated": "Rapor oluşturuldu",
+    "tooLong": "Dönem en fazla 366 gün olabilir.",
+    "future": "Dönem bugünden sonra bitemez.",
+    "readOnly": "Rapor oluşturmayı yalnızca şirket yöneticileri yapabilir.",
+    "historyTitle": "Rapor geçmişi",
+    "historyLabel": "Karbon raporları",
+    "created": "Oluşturulma",
+    "typeColumn": "Tür",
+    "download": "PDF indir",
+    "downloadName": "{name} PDF indir",
+    "noHistory": "Henüz rapor yok",
+    "noHistoryHint": "Oluşturduğunuz raporlar burada listelenir.",
+    "loadMore": "Daha fazla göster"
   }
 }

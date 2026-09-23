@@ -14,6 +14,7 @@ import { useSession } from '@/lib/session/session-provider';
 
 import { EntryPanel } from './entry-panel';
 import { OverviewPanel } from './overview-panel';
+import { ReportingPanel } from './reporting-panel';
 import { SelectionPanel } from './selection-panel';
 import { StatusPanel } from './status-panel';
 import { NEEDS_BUILDING, resolveTab, TABS, type CarbonTab } from './labels';
@@ -27,6 +28,7 @@ const SECTIONS: Partial<Record<CarbonTab, (ctx: SectionContext) => ReactNode>> =
   selection: ({ buildingId }) => <SelectionPanel buildingId={buildingId} />,
   entry: (ctx) => <EntryPanel {...ctx} />,
   status: ({ buildingId }) => <StatusPanel buildingId={buildingId} />,
+  reporting: ({ buildingId }) => <ReportingPanel buildingId={buildingId} />,
 };
 
 /** Eko-CM (01 §7.16): one module, its sections as deep-linkable tabs (R320, Q-F8). */

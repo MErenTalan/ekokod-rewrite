@@ -174,5 +174,27 @@
     "rejected": "Record rejected",
     "deleted": "Record deleted",
     "saved": "Record updated; it awaits approval again"
+  },
+  "reporting": {
+    "formTitle": "Generate a report",
+    "type": "Report type",
+    "ghg": "GHG Protocol",
+    "iso": "ISO 14064",
+    "period": "Period",
+    "name": "Report name (optional)",
+    "generate": "Generate report",
+    "generated": "Report generated",
+    "tooLong": "The period can be at most 366 days.",
+    "future": "The period cannot end after today.",
+    "readOnly": "Only company admins can generate reports.",
+    "historyTitle": "Report history",
+    "historyLabel": "Carbon reports",
+    "created": "Created",
+    "typeColumn": "Type",
+    "download": "Download PDF",
+    "downloadName": "Download {name} as PDF",
+    "noHistory": "No reports yet",
+    "noHistoryHint": "Reports you generate are listed here.",
+    "loadMore": "Show more"
   }
 }
