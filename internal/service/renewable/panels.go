@@ -213,7 +213,7 @@ type Realtime struct {
 	Unavailable         reasons          `json:"unavailable"`
 }
 
-// BuildRealtime: an hour's kWh is that hour's mean power in kW (R292).
+// BuildRealtime reads the last 24 hours; an hour's kWh is that hour's mean power in kW (R292).
 func BuildRealtime(in Inputs) Realtime {
 	r := Realtime{Unavailable: reasons{}}
 	last := lastHour(in.Now)
@@ -263,8 +263,8 @@ type GridInteraction struct {
 	Unavailable    reasons          `json:"unavailable"`
 }
 
-// BuildGridInteraction: direction from the last complete hour, PF from
-// today's active and inductive energy (R292).
+// BuildGridInteraction takes the direction from the last complete hour and the
+// power factor from today's active and inductive energy (R292).
 func BuildGridInteraction(in Inputs) GridInteraction {
 	g := GridInteraction{Unavailable: reasons{}}
 	last := lastHour(in.Now)
@@ -284,7 +284,7 @@ func BuildGridInteraction(in Inputs) GridInteraction {
 	g.TodayImportKwh = total(sumBy(in.Hourly, imp, today))
 	g.TodayExportKwh = total(sumBy(in.Hourly, gen, today))
 	ind := total(sumBy(in.Hourly, func(b model.ConsumptionBucket) *decimal.Decimal { return b.InductiveConsumption }, today))
-	if g.TodayImportKwh != nil && ind != nil && !(g.TodayImportKwh.IsZero() && ind.IsZero()) {
+	if g.TodayImportKwh != nil && ind != nil && (!g.TodayImportKwh.IsZero() || !ind.IsZero()) {
 		p, q := g.TodayImportKwh.InexactFloat64(), ind.InexactFloat64()
 		// PF = P / √(P² + Q²); the square root needs floats, the result is rounded to 3 dp.
 		pf := decimal.NewFromFloat(p / math.Sqrt(p*p+q*q)).Round(3)
@@ -323,8 +323,8 @@ type Environmental struct {
 	Unavailable      reasons          `json:"unavailable"`
 }
 
-// BuildEnvironmental: CO₂ = kWh × grid factor; each equivalence divides or
-// multiplies by its own seeded factor, or is unavailable without it.
+// BuildEnvironmental computes CO₂ = kWh × grid factor; each equivalence divides
+// or multiplies by its own seeded factor, or is unavailable without it.
 func BuildEnvironmental(in Inputs) Environmental {
 	e := Environmental{Unavailable: reasons{}, GenerationKwh: total(sumBy(in.Daily, gen, nil))}
 	if in.GridFactor == nil {
@@ -418,8 +418,8 @@ func latestBefore(forecasts []model.Forecast, cutoff func(ts time.Time) time.Tim
 	return out
 }
 
-// BuildForecast: sums of the latest run's medians ahead; accuracy is
-// 100 − MAPE against actual hourly consumption behind (R292).
+// BuildForecast sums the latest run's medians ahead; accuracy is 100 − MAPE
+// against actual hourly consumption behind (R292).
 func BuildForecast(in Inputs) Forecast {
 	f := Forecast{Unavailable: reasons{}}
 	for _, field := range []string{"estimated_generation_kwh", "net_excess_kwh", "weather_impact"} {
@@ -612,8 +612,8 @@ type SystemStatus struct {
 
 var severity = map[string]int{"healthy": 0, "attention": 1, "critical": 2}
 
-// BuildSystemStatus: monitoring from reading age (26 h / 72 h, readings
-// arrive daily), grid connection from recent data; the worst available wins.
+// BuildSystemStatus rates monitoring by reading age (26 h / 72 h, readings
+// arrive daily) and the grid connection by recent data; the worst available wins.
 func BuildSystemStatus(in Inputs) SystemStatus {
 	s := SystemStatus{Unavailable: reasons{}, LastReadingAt: in.LastReadingAt, TotalGenerationKwh: total(sumBy(in.Daily, gen, nil))}
 	if in.LastReadingAt != nil {
@@ -631,11 +631,12 @@ func BuildSystemStatus(in Inputs) SystemStatus {
 		s.Unavailable.mark("last_reading_at", ReasonNoData)
 	}
 	recent := within(in.Now.Add(-26*time.Hour), in.Now)
-	if len(sumBy(in.Hourly, imp, recent))+len(sumBy(in.Hourly, gen, recent)) > 0 {
+	switch {
+	case len(sumBy(in.Hourly, imp, recent))+len(sumBy(in.Hourly, gen, recent)) > 0:
 		s.GridConnection = str("healthy")
-	} else if in.LastReadingAt != nil {
+	case in.LastReadingAt != nil:
 		s.GridConnection = str("critical")
-	} else {
+	default:
 		s.Unavailable.mark("grid_connection", ReasonNoData)
 	}
 	for _, f := range []string{"solar_panels", "inverter", "battery", "security"} {

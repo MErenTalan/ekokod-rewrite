@@ -27,7 +27,7 @@ func flatten(t *testing.T, prefix string, v any) map[string]json.RawMessage {
 			continue
 		}
 		if strings.HasPrefix(string(val), "{") && !strings.Contains(k, "unavailable") {
-			for kk, vv := range flatten(t, "", json.RawMessage(val)) {
+			for kk, vv := range flatten(t, "", val) {
 				out[prefix+k+"."+kk] = vv
 			}
 			continue
