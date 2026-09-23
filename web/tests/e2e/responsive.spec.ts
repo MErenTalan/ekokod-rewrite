@@ -19,6 +19,7 @@ const SCREENS = [
   ['reports', '/ekorm/reports'],
   ['solar-plants', '/ekorm/solar-plants'],
   ['renewable-energy', '/ekorm/renewable-energy'],
+  ['financial-analysis', '/ekorm/financial-analysis'],
 ] as const;
 
 for (const width of WIDTHS) {

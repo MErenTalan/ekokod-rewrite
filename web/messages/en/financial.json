@@ -1,0 +1,77 @@
+{
+  "title": "Financial Analysis",
+  "subtitle": "Cost, revenue and net position from the company's building invoices and plant production",
+  "year": "Year",
+  "month": "Month",
+  "wholeYear": "Whole year",
+  "noData": "no data",
+  "months": {
+    "m1": "January",
+    "m2": "February",
+    "m3": "March",
+    "m4": "April",
+    "m5": "May",
+    "m6": "June",
+    "m7": "July",
+    "m8": "August",
+    "m9": "September",
+    "m10": "October",
+    "m11": "November",
+    "m12": "December"
+  },
+  "headline": {
+    "analyzers": "Analyzers",
+    "plants": "Plants",
+    "consumption": "Consumption",
+    "cost": "Cost",
+    "production": "Production",
+    "revenue": "Production revenue",
+    "net": "Net cost",
+    "coverage": "{withData} of {of} months have data",
+    "coverageMonth": "No invoices for this month",
+    "partial": "Some plants have no feed-in tariff; revenue is incomplete."
+  },
+  "offset": {
+    "title": "Netting (computed)",
+    "hint": "Production − consumption; a computed balance, not an invoice",
+    "offset": "Difference",
+    "purchase": "Bought from the grid",
+    "sale": "Sold to the grid",
+    "unavailable": "Cannot be computed without both consumption and production."
+  },
+  "tariffs": {
+    "title": "Tariffs in force",
+    "purchase": "Purchase (buildings)",
+    "sale": "Sale (plants)",
+    "purchaseMissing": "No building has a purchase tariff in force.",
+    "saleMissing": "No plant has a feed-in tariff in force.",
+    "single": "Single-time",
+    "t1": "T1 (day)",
+    "t2": "T2 (peak)",
+    "t3": "T3 (night)",
+    "perKwh": "/kWh"
+  },
+  "chart": {
+    "title": "Monthly consumption and production",
+    "description": "Consumption from building invoices and plant production, kWh",
+    "consumption": "Consumption",
+    "production": "Production",
+    "month": "Month",
+    "empty": "No data for this year",
+    "emptyHint": "Choose another year."
+  },
+  "table": {
+    "label": "Monthly financial table",
+    "month": "Month",
+    "consumption": "Consumption (kWh)",
+    "cost": "Cost",
+    "production": "Production (kWh)",
+    "revenue": "Revenue",
+    "offset": "Difference (kWh)",
+    "net": "Net",
+    "total": "Year total",
+    "partialMark": "partial"
+  },
+  "noAccess": "Financial analysis is company-level",
+  "noAccessHint": "This screen is for company admins and company readers."
+}

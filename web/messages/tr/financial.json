@@ -1,0 +1,77 @@
+{
+  "title": "Finansal Analiz",
+  "subtitle": "Şirketin bina faturaları ve santral üretimi üzerinden maliyet, gelir ve net durum",
+  "year": "Yıl",
+  "month": "Ay",
+  "wholeYear": "Tüm yıl",
+  "noData": "veri yok",
+  "months": {
+    "m1": "Ocak",
+    "m2": "Şubat",
+    "m3": "Mart",
+    "m4": "Nisan",
+    "m5": "Mayıs",
+    "m6": "Haziran",
+    "m7": "Temmuz",
+    "m8": "Ağustos",
+    "m9": "Eylül",
+    "m10": "Ekim",
+    "m11": "Kasım",
+    "m12": "Aralık"
+  },
+  "headline": {
+    "analyzers": "Analizör",
+    "plants": "Santral",
+    "consumption": "Tüketim",
+    "cost": "Maliyet",
+    "production": "Üretim",
+    "revenue": "Üretim geliri",
+    "net": "Net maliyet",
+    "coverage": "{of} ayın {withData}''{suffix} veri içeriyor",
+    "coverageMonth": "Bu ay için fatura yok",
+    "partial": "Bazı santrallerin satış tarifesi yok; gelir eksik."
+  },
+  "offset": {
+    "title": "Mahsuplaşma (hesaplanan)",
+    "hint": "Üretim − tüketim; fatura değil, hesaplanan denge",
+    "offset": "Fark",
+    "purchase": "Şebekeden alınan",
+    "sale": "Şebekeye verilen",
+    "unavailable": "Tüketim ya da üretim olmadan hesaplanamaz."
+  },
+  "tariffs": {
+    "title": "Yürürlükteki tarifeler",
+    "purchase": "Alış (binalar)",
+    "sale": "Satış (santraller)",
+    "purchaseMissing": "Hiçbir binada yürürlükte alış tarifesi yok.",
+    "saleMissing": "Hiçbir santralde yürürlükte satış tarifesi yok.",
+    "single": "Tek zamanlı",
+    "t1": "T1 (gündüz)",
+    "t2": "T2 (puant)",
+    "t3": "T3 (gece)",
+    "perKwh": "/kWh"
+  },
+  "chart": {
+    "title": "Aylık tüketim ve üretim",
+    "description": "Bina faturalarındaki tüketim ve santral üretimi, kWh",
+    "consumption": "Tüketim",
+    "production": "Üretim",
+    "month": "Ay",
+    "empty": "Bu yıl için veri yok",
+    "emptyHint": "Başka bir yıl seçin."
+  },
+  "table": {
+    "label": "Aylık finansal tablo",
+    "month": "Ay",
+    "consumption": "Tüketim (kWh)",
+    "cost": "Maliyet",
+    "production": "Üretim (kWh)",
+    "revenue": "Gelir",
+    "offset": "Fark (kWh)",
+    "net": "Net",
+    "total": "Yıl toplamı",
+    "partialMark": "eksik"
+  },
+  "noAccess": "Finansal analiz şirket düzeyindedir",
+  "noAccessHint": "Bu ekran şirket yöneticileri ve şirket okuyucuları içindir."
+}
