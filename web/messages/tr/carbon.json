@@ -117,5 +117,33 @@
     "readOnly": "Faaliyet seçimini yalnızca şirket yöneticileri değiştirebilir.",
     "mapping": "{scope} · {iso}",
     "selectedCount": "{count} seçili"
+  },
+  "entry": {
+    "intro": "Beyan edilen her faaliyet için dönem ve miktar girin; emisyon kaydederken emisyon faktörü kataloğundan hesaplanır.",
+    "records": "{count, plural, one {# kayıt} other {# kayıt}}",
+    "recordsMany": "500+ kayıt",
+    "add": "Veri ekle",
+    "nothingSelected": "Henüz faaliyet seçilmedi",
+    "nothingSelectedHint": "Veri girebilmek için önce kuruluşunuza uygulanan faaliyetleri seçin.",
+    "goSelection": "Faaliyet Seçimine git",
+    "readOnly": "Veri girişini yalnızca şirket yöneticileri yapabilir."
+  },
+  "dialog": {
+    "addTitle": "{sub} için veri ekle",
+    "editTitle": "{sub} kaydını düzenle",
+    "period": "İşlem dönemi",
+    "factor": "Emisyon kaynağı",
+    "factorSearch": "Kaynak ara",
+    "factorEmpty": "Bu faaliyet için emisyon faktörü yok.",
+    "unit": "Birim",
+    "quantity": "Miktar",
+    "description": "Açıklama",
+    "mapping": "GHG kapsamı ve ISO 14064 kategorisi: {scope} · {iso}",
+    "factorInfo": "Faktör: {value} kg CO₂e / {unit}",
+    "factorSource": "Kaynak: {source}",
+    "computed": "Emisyon, kaydettiğinizde sunucuda katalogdaki faktörle hesaplanır.",
+    "save": "Kaydet",
+    "saved": "Faaliyet kaydedildi",
+    "noFactors": "Faktörler yükleniyor…"
   }
 }

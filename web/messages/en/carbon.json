@@ -117,5 +117,33 @@
     "readOnly": "Only company admins can change the activity selection.",
     "mapping": "{scope} · {iso}",
     "selectedCount": "{count} selected"
+  },
+  "entry": {
+    "intro": "Enter the period and quantity for each declared activity; the emission is computed from the emission factor catalogue on save.",
+    "records": "{count, plural, one {# record} other {# records}}",
+    "recordsMany": "500+ records",
+    "add": "Add data",
+    "nothingSelected": "No activities selected yet",
+    "nothingSelectedHint": "Select the activities that apply to your organisation before entering data.",
+    "goSelection": "Go to Activity Selection",
+    "readOnly": "Only company admins can enter data."
+  },
+  "dialog": {
+    "addTitle": "Add data for {sub}",
+    "editTitle": "Edit the {sub} record",
+    "period": "Transaction period",
+    "factor": "Emission source",
+    "factorSearch": "Search sources",
+    "factorEmpty": "No emission factor for this activity.",
+    "unit": "Unit",
+    "quantity": "Quantity",
+    "description": "Description",
+    "mapping": "GHG scope and ISO 14064 category: {scope} · {iso}",
+    "factorInfo": "Factor: {value} kg CO₂e / {unit}",
+    "factorSource": "Source: {source}",
+    "computed": "The emission is computed on the server with the catalogue factor when you save.",
+    "save": "Save",
+    "saved": "Activity saved",
+    "noFactors": "Loading factors…"
   }
 }
