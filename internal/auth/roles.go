@@ -114,6 +114,12 @@ var permissionTable = map[string]RoleSet{
 	"reports.read":     AllRoles,
 	"reports.generate": Roles(roleA, roleCA, roleBA),
 	"reports.email":    Roles(roleA, roleCA, roleBA),
+
+	// F9 (R296): plants are company-level; renewable is every scope.
+	"plants.read":    Roles(roleA, roleCA, roleCR),
+	"plants.manage":  Roles(roleA, roleCA),
+	"financial.read": Roles(roleA, roleCA, roleCR),
+	"renewable.read": AllRoles,
 }
 
 // PermissionsFor returns the sorted permissions of a role, nil for an unknown role.

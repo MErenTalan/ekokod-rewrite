@@ -81,6 +81,8 @@ func (h *harness) foreign(t *testing.T) foreignIDs {
 		"national-tariff-schedule": {uuid.NewString()},
 		// F8b: a report of the other building and one of company B.
 		"reports": {reportA2, reportB},
+		// F9: plants are company-level, so a building admin never reaches one.
+		"plants": {h.plantFor(h.fx.CompanyA, "Sweep GES A", "PS-SWEEP-A").String(), h.plantFor(h.fx.CompanyB, "Sweep GES B", "PS-SWEEP-B").String()},
 	}
 }
 

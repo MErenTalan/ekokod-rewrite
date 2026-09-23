@@ -65,6 +65,18 @@ var expectedAccess = map[string]string{
 	"GET /power-plants/{id}":         "A CA CR",
 	"PATCH /power-plants/{id}":       "A CA",
 	"DELETE /power-plants/{id}":      "A CA",
+	// 05 §8 (F9)
+	"GET /plants/{id}/realtime":          "A CA CR",
+	"GET /plants/{id}/production":        "A CA CR",
+	"GET /plants/{id}/production/export": "A CA CR",
+	"GET /plants/{id}/devices":           "A CA CR",
+	"GET /plants/{id}/alarms":            "A CA CR",
+	"POST /plants/{id}/sync":             "A CA",
+	"GET /plants/{id}/revenue":           "A CA CR",
+	"GET /integrations/isolar/plants":    "A CA",
+	"POST /plants/{id}/isolar-link":      "A CA",
+	"DELETE /plants/{id}/isolar-link":    "A CA",
+	"PUT /plants/{id}/alarm-recipients":  "A CA",
 	// 05 §5, §16, R166
 	"GET /consumption":                         "A CA CR BA BR D",
 	"GET /consumption/summary":                 "A CA CR BA BR D",

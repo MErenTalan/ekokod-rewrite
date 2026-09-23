@@ -45,6 +45,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/loadprofile"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/ops"
 	reportsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/report"
+	"github.com/MErenTalan/ekokod-rewrite/internal/service/solar"
 	tariffsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/tariff"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/tenancy"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
@@ -66,6 +67,8 @@ type Options struct {
 	// Verifiers and ISolar replace the provider clients the credential service drives.
 	Verifiers credentials.VerifierResolver
 	ISolar    credentials.ISolarTokens
+	// Solar replaces the iSolar client behind the plant link routes (F9).
+	Solar solar.Adapter
 }
 
 // Enqueuer is the job client the services enqueue through.
@@ -240,6 +243,24 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		return Built{}, err
 	}
 
+	solarAdapter := opts.Solar
+	if solarAdapter == nil {
+		httpxPool, err := httpx.NewPool(httpx.PoolOptions{PinnedCerts: cfg.External.PinnedCerts, Locker: lock.NewRedis(redisClient)})
+		if err != nil {
+			closeAll()
+			return Built{}, fmt.Errorf("apiwire: build iSolar pool: %w", err)
+		}
+		solarAdapter = isolar.New(httpxPool, isolar.Options{})
+	}
+	// F9: the API reads plant data and links plants; only the worker syncs on a schedule.
+	solarService := solar.New(solar.Deps{
+		Plants: postgres.NewPlantRepository(pool), Production: postgres.NewProductionRepository(pool),
+		Totals: postgres.NewProductionTotalsRepository(pool), Faults: postgres.NewFaultRepository(pool),
+		Solar: postgres.NewSolarTariffRepository(pool), Analytics: postgres.NewAnalyticsRepository(pool),
+		Ops: postgres.NewOpsRepository(pool), Creds: credentialService, ISolar: solarAdapter, Clock: opts.Clock,
+		Enqueuer: enqueuer, Inspector: taskInspector, MaxRetry: cfg.Worker.MaxRetries,
+	})
+
 	jobService, err := jobs.New(jobs.Deps{Inspector: inspector, Analyzers: postgres.NewAnalyzerRepository(pool),
 		Buildings: postgres.NewBuildingRepository(pool), Ops: postgres.NewOpsRepository(pool), Reports: postgres.NewReportRepository(pool),
 		Plants: postgres.NewPlantRepository(pool)})
@@ -275,7 +296,8 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 	handlers := &v1.Handlers{
 		Calendar: calendarService, Credentials: credentialService, Jobs: jobService, Alarms: alarmService, Ops: opsService,
 		Definitions: integrations.Definitions{Integrations: postgres.NewIntegrationRepository(pool, cipher), Catalogue: admin.NewCatalogueRepository(pool)}, Auth: authService, Tenancy: tenancyService, Assets: assetService, Analysis: analysisService,
-		Tariffs: tariffService, Billing: billingService, BillRequests: billRequests, Reports: reportRequests, Clock: opts.Clock, Log: log, ClientIP: clientIP}
+		Tariffs: tariffService, Billing: billingService, BillRequests: billRequests, Reports: reportRequests, Solar: solarService,
+		Clock: opts.Clock, Log: log, ClientIP: clientIP}
 	router := v1.NewRouter(handlers, middlewareFor(cfg, redisClient, authService, auditRepo, admin.NewAuditRepository(pool), clientIP, opts.RedisPrefix, log), log)
 	var once sync.Once
 	return Built{V1: router, Auth: authService, Close: func() { once.Do(closeAll) }}, nil

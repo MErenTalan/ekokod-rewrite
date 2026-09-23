@@ -1007,6 +1007,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/integrations/isolar/plants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Plants on the connected iSolarCloud account, for linking. */
+        get: operations["isolar.plants"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/job-runs": {
         parameters: {
             query?: never;
@@ -1223,6 +1240,160 @@ export interface paths {
         get: operations["system.openapi"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plants/{id}/alarm-recipients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set the plant's alarm forwarding recipients. */
+        put: operations["plants.alarm_recipients"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plants/{id}/alarms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** iSolar fault alarms, newest first, translated. */
+        get: operations["plants.alarms"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plants/{id}/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Devices with status, power and last update; q searches name and serial. */
+        get: operations["plants.devices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plants/{id}/isolar-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Bind a plant to an iSolarCloud plant; imports it and backfills. */
+        post: operations["plants.isolar_link"];
+        /** Unlink; stored production stays. */
+        delete: operations["plants.isolar_unlink"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plants/{id}/production": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Production series by hour, day or month. */
+        get: operations["plants.production"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plants/{id}/production/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The production series as a workbook. */
+        get: operations["plants.production.export"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plants/{id}/realtime": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Current power, yields and capacity utilisation from the inverters' last snapshots. */
+        get: operations["plants.realtime"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plants/{id}/revenue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Daily, monthly, yearly and total revenue at the feed-in tariff effective each day. */
+        get: operations["plants.revenue"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plants/{id}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Enqueue an iSolar sync; returns the job to watch. */
+        post: operations["plants.sync"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1688,6 +1859,12 @@ export interface components {
             settings?: components["schemas"]["AlarmSettings"];
             /** @enum {string} */
             type: "reactive_limit" | "data_communication" | "current_voltage_power" | "invoice_increase";
+        };
+        AlarmRecipients: {
+            emails: string[];
+        };
+        AlarmRecipientsRequest: {
+            emails: string[];
         };
         AlarmSettings: {
             active_consumption_max?: components["schemas"]["Decimal"];
@@ -2361,6 +2538,23 @@ export interface components {
             total?: components["schemas"]["Decimal"];
             valley?: components["schemas"]["GroupedExtreme"];
         };
+        ISolarAccountPlant: {
+            installed_kw?: components["schemas"]["Decimal"];
+            linked_plant_id?: components["schemas"]["UuidUUID"];
+            name: string;
+            ps_id: string;
+        };
+        ISolarAccountPlants: {
+            items: components["schemas"]["ISolarAccountPlant"][];
+        };
+        ISolarLinkRequest: {
+            credential_id: components["schemas"]["UuidUUID"];
+            ps_id: string;
+        };
+        ISolarLinked: {
+            job_id: string;
+            plant: components["schemas"]["PlantDetail"];
+        };
         IcmalAnalysis: {
             building_id?: components["schemas"]["UuidUUID"];
             distribution_tl_per_kwh: components["schemas"]["IcmalCoefficient"];
@@ -2594,6 +2788,11 @@ export interface components {
             token_type: "Bearer";
             user: components["schemas"]["Me"];
         };
+        MoneyAmount: {
+            amount: components["schemas"]["Decimal"];
+            /** @enum {string} */
+            currency: "TRY" | "USD" | "EUR";
+        };
         NationalTariff: {
             /** Format: date-time */
             created_at: string;
@@ -2641,7 +2840,7 @@ export interface components {
             period_start: string;
         };
         /** @enum {string} */
-        Permission: "admin.companies" | "alarms.edit" | "alarms.evaluate" | "alarms.read" | "analyzers.refresh" | "anomaly.check" | "bills.compute" | "bills.read" | "calendar.edit" | "integrations.credentials" | "jobs.runs.read" | "jobs.trigger" | "messages.read" | "nav.core" | "nav.financial" | "nav.solar_plants" | "reports.email" | "reports.generate" | "reports.read" | "settings.analyzers" | "settings.analyzers.edit" | "settings.buildings" | "settings.company" | "settings.company.edit" | "settings.integrations" | "settings.plants" | "settings.smtp" | "settings.users" | "solar_tariffs.read" | "tariffs.bulk.read" | "tariffs.defaults" | "tariffs.edit" | "tariffs.icmal" | "tariffs.read" | "tariffs.templates.read" | "write";
+        Permission: "admin.companies" | "alarms.edit" | "alarms.evaluate" | "alarms.read" | "analyzers.refresh" | "anomaly.check" | "bills.compute" | "bills.read" | "calendar.edit" | "financial.read" | "integrations.credentials" | "jobs.runs.read" | "jobs.trigger" | "messages.read" | "nav.core" | "nav.financial" | "nav.solar_plants" | "plants.manage" | "plants.read" | "renewable.read" | "reports.email" | "reports.generate" | "reports.read" | "settings.analyzers" | "settings.analyzers.edit" | "settings.buildings" | "settings.company" | "settings.company.edit" | "settings.integrations" | "settings.plants" | "settings.smtp" | "settings.users" | "solar_tariffs.read" | "tariffs.bulk.read" | "tariffs.defaults" | "tariffs.edit" | "tariffs.icmal" | "tariffs.read" | "tariffs.templates.read" | "write";
         Plant: {
             address?: null | string;
             /** Format: date-time */
@@ -2649,12 +2848,19 @@ export interface components {
             id: components["schemas"]["UuidUUID"];
             installation_date?: components["schemas"]["Date"];
             installation_number?: null | string;
+            isolar_credential_id?: components["schemas"]["UuidUUID"];
+            isolar_installed_kw?: components["schemas"]["Decimal"];
+            /** Format: date-time */
+            isolar_last_sync_at?: null | string;
+            isolar_last_sync_error?: null | string;
             /** Format: date-time */
             isolar_linked_at?: null | string;
+            isolar_ps_id?: null | string;
             isolar_ps_name?: null | string;
             latitude?: components["schemas"]["Decimal"];
             longitude?: components["schemas"]["Decimal"];
             name: string;
+            netting_analyzer_id?: components["schemas"]["UuidUUID"];
             /** @enum {null|string} */
             orientation?: "n" | "s" | "e" | "w" | "ne" | "se" | "nw" | "sw" | null;
             panel_count?: null | number;
@@ -2671,12 +2877,14 @@ export interface components {
         PlantCreateRequest: {
             address?: null | string;
             alarm_recipients?: string[];
+            clear_netting_analyzer?: boolean;
             installation_date?: components["schemas"]["Date"];
             installation_number?: null | string;
             latitude?: components["schemas"]["Decimal"];
             longitude?: components["schemas"]["Decimal"];
             monthly_targets?: components["schemas"]["Decimal"][];
             name: string;
+            netting_analyzer_id?: components["schemas"]["UuidUUID"];
             /** @enum {null|string} */
             orientation?: "n" | "s" | "e" | "w" | "ne" | "se" | "nw" | "sw" | null;
             panel_count?: null | number;
@@ -2699,13 +2907,20 @@ export interface components {
             id: components["schemas"]["UuidUUID"];
             installation_date?: components["schemas"]["Date"];
             installation_number?: null | string;
+            isolar_credential_id?: components["schemas"]["UuidUUID"];
+            isolar_installed_kw?: components["schemas"]["Decimal"];
+            /** Format: date-time */
+            isolar_last_sync_at?: null | string;
+            isolar_last_sync_error?: null | string;
             /** Format: date-time */
             isolar_linked_at?: null | string;
+            isolar_ps_id?: null | string;
             isolar_ps_name?: null | string;
             latitude?: components["schemas"]["Decimal"];
             longitude?: components["schemas"]["Decimal"];
             monthly_targets: components["schemas"]["Decimal"][];
             name: string;
+            netting_analyzer_id?: components["schemas"]["UuidUUID"];
             /** @enum {null|string} */
             orientation?: "n" | "s" | "e" | "w" | "ne" | "se" | "nw" | "sw" | null;
             panel_count?: null | number;
@@ -2731,15 +2946,92 @@ export interface components {
             rated_power_kw?: components["schemas"]["Decimal"];
             status?: null | string;
         };
+        PlantDeviceView: {
+            active_power_kw?: components["schemas"]["Decimal"];
+            device_name?: null | string;
+            device_sn: string;
+            device_type?: null | number;
+            id: components["schemas"]["UuidUUID"];
+            /** Format: date-time */
+            last_update?: null | string;
+            /** @enum {null|string} */
+            status?: "normal" | "alarm" | "fault" | "offline" | null;
+            yield_today_kwh?: components["schemas"]["Decimal"];
+            yield_total_kwh?: components["schemas"]["Decimal"];
+        };
+        PlantDevices: {
+            items: components["schemas"]["PlantDeviceView"][];
+        };
+        PlantFault: {
+            /** Format: date-time */
+            closed_at?: null | string;
+            code: string;
+            device_name?: null | string;
+            level?: null | number;
+            message_tr: string;
+            name: string;
+            /** Format: date-time */
+            occurred_at: string;
+            ref: string;
+            translated: boolean;
+            type?: null | number;
+        };
+        PlantFaultPage: {
+            items: components["schemas"]["PlantFault"][];
+            next_cursor?: null | string;
+            total: number;
+        };
+        PlantProductionPoint: {
+            /** @enum {null|string} */
+            basis?: "plant_meter" | "inverter_sum" | "daily_total" | null;
+            production_kwh?: components["schemas"]["Decimal"];
+            /** Format: date-time */
+            ts: string;
+        };
+        PlantProductionSeries: {
+            /** @enum {string} */
+            granularity: "hour" | "day" | "month";
+            mixed_basis: boolean;
+            points: components["schemas"]["PlantProductionPoint"][];
+        };
+        PlantRealtime: {
+            active_power_kw?: components["schemas"]["Decimal"];
+            /** Format: date-time */
+            as_of?: null | string;
+            capacity_kw?: components["schemas"]["Decimal"];
+            capacity_utilisation_pct?: components["schemas"]["Decimal"];
+            /** @enum {string} */
+            connection: "connected" | "error" | "never_synced";
+            connection_error?: null | string;
+            inverter_count: number;
+            /** Format: date-time */
+            last_sync_at?: null | string;
+            stale: boolean;
+            yield_month_kwh?: components["schemas"]["Decimal"];
+            yield_today_kwh?: components["schemas"]["Decimal"];
+            yield_total_kwh?: components["schemas"]["Decimal"];
+            yield_year_kwh?: components["schemas"]["Decimal"];
+        };
+        PlantRevenue: {
+            available: boolean;
+            daily?: components["schemas"]["RevenuePeriod"];
+            monthly?: components["schemas"]["RevenuePeriod"];
+            /** @enum {string} */
+            reason?: "no_solar_tariff";
+            total?: components["schemas"]["RevenuePeriod"];
+            yearly?: components["schemas"]["RevenuePeriod"];
+        };
         PlantUpdateRequest: {
             address?: null | string;
             alarm_recipients?: string[];
+            clear_netting_analyzer?: boolean;
             installation_date?: components["schemas"]["Date"];
             installation_number?: null | string;
             latitude?: components["schemas"]["Decimal"];
             longitude?: components["schemas"]["Decimal"];
             monthly_targets?: components["schemas"]["Decimal"][];
             name?: null | string;
+            netting_analyzer_id?: components["schemas"]["UuidUUID"];
             /** @enum {null|string} */
             orientation?: "n" | "s" | "e" | "w" | "ne" | "se" | "nw" | "sw" | null;
             panel_count?: null | number;
@@ -3020,6 +3312,12 @@ export interface components {
         ResetPasswordRequest: {
             password: string;
             token: string;
+        };
+        RevenuePeriod: {
+            amounts: components["schemas"]["MoneyAmount"][];
+            partial: boolean;
+            since?: components["schemas"]["Date"];
+            unpriced_days: number;
         };
         /** @enum {string} */
         Role: "admin" | "company_admin" | "company_readonly_admin" | "building_admin" | "building_readonly_admin" | "demo";
@@ -9784,6 +10082,83 @@ export interface operations {
             };
         };
     };
+    "isolar.plants": {
+        parameters: {
+            query: {
+                credential_id: components["schemas"]["UuidUUID"];
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ISolarAccountPlants"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     "jobRuns.list": {
         parameters: {
             query?: {
@@ -9871,7 +10246,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                type: "alarm.evaluate" | "billing.dispatch" | "integration.sync_dispatch" | "epias.sync_prices" | "report.dispatch_monthly" | "report.dispatch_yearly";
+                type: "alarm.evaluate" | "billing.dispatch" | "integration.sync_dispatch" | "epias.sync_prices" | "report.dispatch_monthly" | "report.dispatch_yearly" | "isolar.dispatch_sync" | "isolar.fetch_alarms";
             };
             cookie?: never;
         };
@@ -10811,6 +11186,873 @@ export interface operations {
             };
             /** @description Bad Request */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "plants.alarm_recipients": {
+        parameters: {
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path: {
+                id: components["schemas"]["UuidUUID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AlarmRecipientsRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlarmRecipients"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "plants.alarms": {
+        parameters: {
+            query?: {
+                limit?: null | number;
+                cursor?: string;
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path: {
+                id: components["schemas"]["UuidUUID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlantFaultPage"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "plants.devices": {
+        parameters: {
+            query?: {
+                q?: string;
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path: {
+                id: components["schemas"]["UuidUUID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlantDevices"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "plants.isolar_link": {
+        parameters: {
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path: {
+                id: components["schemas"]["UuidUUID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ISolarLinkRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ISolarLinked"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "plants.isolar_unlink": {
+        parameters: {
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path: {
+                id: components["schemas"]["UuidUUID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "plants.production": {
+        parameters: {
+            query: {
+                granularity: "hour" | "day" | "month";
+                from: components["schemas"]["Date"];
+                to: components["schemas"]["Date"];
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path: {
+                id: components["schemas"]["UuidUUID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlantProductionSeries"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "plants.production.export": {
+        parameters: {
+            query: {
+                granularity: "hour" | "day" | "month";
+                from: components["schemas"]["Date"];
+                to: components["schemas"]["Date"];
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path: {
+                id: components["schemas"]["UuidUUID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "plants.realtime": {
+        parameters: {
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path: {
+                id: components["schemas"]["UuidUUID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlantRealtime"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "plants.revenue": {
+        parameters: {
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path: {
+                id: components["schemas"]["UuidUUID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlantRevenue"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "plants.sync": {
+        parameters: {
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path: {
+                id: components["schemas"]["UuidUUID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobAccepted"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

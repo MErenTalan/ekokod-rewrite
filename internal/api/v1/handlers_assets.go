@@ -239,6 +239,8 @@ func plantDTO(p model.PowerPlant) dto.Plant {
 		StringCount: p.StringCount, TiltAngleDeg: dto.DP(p.TiltAngleDeg), TotalCapacityKw: dto.DP(p.TotalCapacityKw),
 		YearlyTargetKwh: dto.DP(p.YearlyTargetKwh), Address: p.Address, Latitude: dto.DP(p.Latitude), Longitude: dto.DP(p.Longitude),
 		IsolarPsName: p.IsolarPsName, IsolarLinkedAt: dto.TP(p.IsolarLinkedAt), CreatedAt: dto.T(p.CreatedAt),
+		IsolarPsID: p.IsolarPsID, IsolarInstalledKw: dto.DP(p.IsolarInstalledKw), IsolarCredentialID: p.IsolarCredentialID,
+		IsolarLastSyncAt: dto.TP(p.IsolarLastSyncAt), IsolarLastSyncError: p.IsolarLastSyncError, NettingAnalyzerID: p.NettingAnalyzerID,
 	}
 	if p.Orientation != nil {
 		o := string(*p.Orientation)
@@ -272,6 +274,7 @@ func plantInput(name *string, f dto.PlantFields) assets.PlantInput {
 		PanelPowerW: dec(f.PanelPowerW), PanelEfficiencyPct: dec(f.PanelEfficiencyPct), TiltAngleDeg: dec(f.TiltAngleDeg),
 		TotalCapacityKw: dec(f.TotalCapacityKw), YearlyTargetKwh: dec(f.YearlyTargetKwh), Latitude: dec(f.Latitude),
 		Longitude: dec(f.Longitude), PanelCount: f.PanelCount, StringCount: f.StringCount, AlarmRecipients: f.AlarmRecipients,
+		NettingAnalyzerID: f.NettingAnalyzerID, ClearNettingAnalyzer: f.ClearNettingAnalyzer,
 	}
 	if f.Orientation != nil {
 		o := model.PanelOrientation(*f.Orientation)

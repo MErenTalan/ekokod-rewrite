@@ -2,6 +2,7 @@ package assets
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -31,6 +32,9 @@ type PlantInput struct {
 	InstallationDate                                           *time.Time
 	MonthlyTargets                                             *[]decimal.Decimal // exactly 12 when set
 	AlarmRecipients                                            *[]string
+	// NettingAnalyzerID is R289's optional netting meter; Clear removes it.
+	NettingAnalyzerID    *uuid.UUID
+	ClearNettingAnalyzer bool
 }
 
 // ListPlants lists the scope company's plants.
@@ -97,7 +101,26 @@ func applyPlant(p model.PowerPlant, in PlantInput) model.PowerPlant {
 	if in.InstallationDate != nil {
 		p.InstallationDate = in.InstallationDate
 	}
+	if in.NettingAnalyzerID != nil {
+		p.NettingAnalyzerID = in.NettingAnalyzerID
+	}
+	if in.ClearNettingAnalyzer {
+		p.NettingAnalyzerID = nil
+	}
 	return p
+}
+
+// checkNetting is R289: the netting meter is a live analyzer of the plant's own
+// company; anything else is one indistinguishable validation error.
+func (s *Service) checkNetting(ctx context.Context, sc store.Scope, in PlantInput) error {
+	if in.NettingAnalyzerID == nil {
+		return nil
+	}
+	a, err := s.d.Analyzers.Get(ctx, store.SystemScope(sc.CompanyID), *in.NettingAnalyzerID)
+	if errors.Is(err, store.ErrNotFound) || (err == nil && a.CompanyID != sc.CompanyID) {
+		return validation("netting_analyzer_id", "not_found")
+	}
+	return err
 }
 
 func (s *Service) writeChildren(ctx context.Context, sc store.Scope, id uuid.UUID, in PlantInput) error {
@@ -133,6 +156,9 @@ func (s *Service) CreatePlant(ctx context.Context, sc store.Scope, in PlantInput
 	if in.MonthlyTargets != nil && len(*in.MonthlyTargets) != 12 {
 		return PlantDetail{}, validation("monthly_targets", "len")
 	}
+	if err := s.checkNetting(ctx, sc, in); err != nil {
+		return PlantDetail{}, err
+	}
 	now := s.d.Clock.Now()
 	p := applyPlant(model.PowerPlant{ID: uuid.New(), CompanyID: sc.CompanyID, PlantKind: "rooftop", CreatedAt: now, UpdatedAt: now}, in)
 	created, err := s.d.Plants.Create(ctx, sc, p)
@@ -153,6 +179,9 @@ func (s *Service) UpdatePlant(ctx context.Context, sc store.Scope, id uuid.UUID,
 	}
 	if in.MonthlyTargets != nil && len(*in.MonthlyTargets) != 12 {
 		return PlantDetail{}, validation("monthly_targets", "len")
+	}
+	if err := s.checkNetting(ctx, sc, in); err != nil {
+		return PlantDetail{}, err
 	}
 	p = applyPlant(p, in)
 	p.UpdatedAt = s.d.Clock.Now()

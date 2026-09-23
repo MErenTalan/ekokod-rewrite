@@ -153,7 +153,14 @@ type Plant struct {
 	Longitude          *Decimal   `json:"longitude"`
 	IsolarPsName       *string    `json:"isolar_ps_name"`
 	IsolarLinkedAt     *time.Time `json:"isolar_linked_at"`
-	CreatedAt          time.Time  `json:"created_at" required:"true"`
+	// F9: the link and its sync state (R280, R282), and the netting meter (R289).
+	IsolarPsID          *string    `json:"isolar_ps_id"`
+	IsolarInstalledKw   *Decimal   `json:"isolar_installed_kw"`
+	IsolarCredentialID  *uuid.UUID `json:"isolar_credential_id"`
+	IsolarLastSyncAt    *time.Time `json:"isolar_last_sync_at"`
+	IsolarLastSyncError *string    `json:"isolar_last_sync_error"`
+	NettingAnalyzerID   *uuid.UUID `json:"netting_analyzer_id"`
+	CreatedAt           time.Time  `json:"created_at" required:"true"`
 }
 
 // PlantDevice is an inverter, meter or weather station.
@@ -196,6 +203,9 @@ type PlantFields struct {
 	Longitude          *Decimal   `json:"longitude,omitempty"`
 	MonthlyTargets     *[]Decimal `json:"monthly_targets,omitempty" validate:"omitempty,len=12"`
 	AlarmRecipients    *[]string  `json:"alarm_recipients,omitempty" validate:"omitempty,max=50,dive,email"`
+	// NettingAnalyzerID sets the optional netting meter; ClearNettingAnalyzer removes it (R289).
+	NettingAnalyzerID    *uuid.UUID `json:"netting_analyzer_id,omitempty"`
+	ClearNettingAnalyzer bool       `json:"clear_netting_analyzer,omitempty"`
 }
 
 // PlantCreateRequest is POST /power-plants.

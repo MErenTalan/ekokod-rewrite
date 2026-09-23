@@ -285,6 +285,34 @@
         ],
         "type": "object"
       },
+      "AlarmRecipients": {
+        "properties": {
+          "emails": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "emails"
+        ],
+        "type": "object"
+      },
+      "AlarmRecipientsRequest": {
+        "properties": {
+          "emails": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "emails"
+        ],
+        "type": "object"
+      },
       "AlarmSettings": {
         "properties": {
           "active_consumption_max": {
@@ -2969,6 +2997,71 @@
         },
         "type": "object"
       },
+      "ISolarAccountPlant": {
+        "properties": {
+          "installed_kw": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "linked_plant_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "name": {
+            "type": "string"
+          },
+          "ps_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ps_id",
+          "name"
+        ],
+        "type": "object"
+      },
+      "ISolarAccountPlants": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ISolarAccountPlant"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "ISolarLinkRequest": {
+        "properties": {
+          "credential_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "ps_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "credential_id",
+          "ps_id"
+        ],
+        "type": "object"
+      },
+      "ISolarLinked": {
+        "properties": {
+          "job_id": {
+            "type": "string"
+          },
+          "plant": {
+            "$ref": "#/components/schemas/PlantDetail"
+          }
+        },
+        "required": [
+          "plant",
+          "job_id"
+        ],
+        "type": "object"
+      },
       "IcmalAnalysis": {
         "properties": {
           "building_id": {
@@ -3885,6 +3978,26 @@
         ],
         "type": "object"
       },
+      "MoneyAmount": {
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "currency": {
+            "enum": [
+              "TRY",
+              "USD",
+              "EUR"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "currency",
+          "amount"
+        ],
+        "type": "object"
+      },
       "NationalTariff": {
         "properties": {
           "created_at": {
@@ -4077,6 +4190,7 @@
           "bills.compute",
           "bills.read",
           "calendar.edit",
+          "financial.read",
           "integrations.credentials",
           "jobs.runs.read",
           "jobs.trigger",
@@ -4084,6 +4198,9 @@
           "nav.core",
           "nav.financial",
           "nav.solar_plants",
+          "plants.manage",
+          "plants.read",
+          "renewable.read",
           "reports.email",
           "reports.generate",
           "reports.read",
@@ -4131,8 +4248,33 @@
               "string"
             ]
           },
+          "isolar_credential_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "isolar_installed_kw": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "isolar_last_sync_at": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isolar_last_sync_error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "isolar_linked_at": {
             "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isolar_ps_id": {
             "type": [
               "null",
               "string"
@@ -4152,6 +4294,9 @@
           },
           "name": {
             "type": "string"
+          },
+          "netting_analyzer_id": {
+            "$ref": "#/components/schemas/UuidUUID"
           },
           "orientation": {
             "enum": [
@@ -4232,6 +4377,9 @@
             },
             "type": "array"
           },
+          "clear_netting_analyzer": {
+            "type": "boolean"
+          },
           "installation_date": {
             "$ref": "#/components/schemas/Date"
           },
@@ -4255,6 +4403,9 @@
           },
           "name": {
             "type": "string"
+          },
+          "netting_analyzer_id": {
+            "$ref": "#/components/schemas/UuidUUID"
           },
           "orientation": {
             "enum": [
@@ -4357,8 +4508,33 @@
               "string"
             ]
           },
+          "isolar_credential_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "isolar_installed_kw": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "isolar_last_sync_at": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isolar_last_sync_error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "isolar_linked_at": {
             "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isolar_ps_id": {
             "type": [
               "null",
               "string"
@@ -4384,6 +4560,9 @@
           },
           "name": {
             "type": "string"
+          },
+          "netting_analyzer_id": {
+            "$ref": "#/components/schemas/UuidUUID"
           },
           "orientation": {
             "enum": [
@@ -4505,6 +4684,303 @@
         ],
         "type": "object"
       },
+      "PlantDeviceView": {
+        "properties": {
+          "active_power_kw": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "device_name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "device_sn": {
+            "type": "string"
+          },
+          "device_type": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "last_update": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "enum": [
+              "normal",
+              "alarm",
+              "fault",
+              "offline"
+            ],
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "yield_today_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "yield_total_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "required": [
+          "id",
+          "device_sn"
+        ],
+        "type": "object"
+      },
+      "PlantDevices": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PlantDeviceView"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "PlantFault": {
+        "properties": {
+          "closed_at": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "code": {
+            "type": "string"
+          },
+          "device_name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "level": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "message_tr": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "translated": {
+            "type": "boolean"
+          },
+          "type": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          }
+        },
+        "required": [
+          "ref",
+          "code",
+          "name",
+          "message_tr",
+          "translated",
+          "occurred_at"
+        ],
+        "type": "object"
+      },
+      "PlantFaultPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PlantFault"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "total": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "type": "object"
+      },
+      "PlantProductionPoint": {
+        "properties": {
+          "basis": {
+            "enum": [
+              "plant_meter",
+              "inverter_sum",
+              "daily_total"
+            ],
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "production_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "ts": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ts"
+        ],
+        "type": "object"
+      },
+      "PlantProductionSeries": {
+        "properties": {
+          "granularity": {
+            "enum": [
+              "hour",
+              "day",
+              "month"
+            ],
+            "type": "string"
+          },
+          "mixed_basis": {
+            "type": "boolean"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/PlantProductionPoint"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "granularity",
+          "points",
+          "mixed_basis"
+        ],
+        "type": "object"
+      },
+      "PlantRealtime": {
+        "properties": {
+          "active_power_kw": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "as_of": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "capacity_kw": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "capacity_utilisation_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "connection": {
+            "enum": [
+              "connected",
+              "error",
+              "never_synced"
+            ],
+            "type": "string"
+          },
+          "connection_error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "inverter_count": {
+            "type": "integer"
+          },
+          "last_sync_at": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "yield_month_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "yield_today_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "yield_total_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "yield_year_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "required": [
+          "stale",
+          "inverter_count",
+          "connection"
+        ],
+        "type": "object"
+      },
+      "PlantRevenue": {
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "daily": {
+            "$ref": "#/components/schemas/RevenuePeriod"
+          },
+          "monthly": {
+            "$ref": "#/components/schemas/RevenuePeriod"
+          },
+          "reason": {
+            "enum": [
+              "no_solar_tariff"
+            ],
+            "type": "string"
+          },
+          "total": {
+            "$ref": "#/components/schemas/RevenuePeriod"
+          },
+          "yearly": {
+            "$ref": "#/components/schemas/RevenuePeriod"
+          }
+        },
+        "required": [
+          "available"
+        ],
+        "type": "object"
+      },
       "PlantUpdateRequest": {
         "properties": {
           "address": {
@@ -4518,6 +4994,9 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "clear_netting_analyzer": {
+            "type": "boolean"
           },
           "installation_date": {
             "$ref": "#/components/schemas/Date"
@@ -4545,6 +5024,9 @@
               "null",
               "string"
             ]
+          },
+          "netting_analyzer_id": {
+            "$ref": "#/components/schemas/UuidUUID"
           },
           "orientation": {
             "enum": [
@@ -5693,6 +6175,31 @@
         "required": [
           "token",
           "password"
+        ],
+        "type": "object"
+      },
+      "RevenuePeriod": {
+        "properties": {
+          "amounts": {
+            "items": {
+              "$ref": "#/components/schemas/MoneyAmount"
+            },
+            "type": "array"
+          },
+          "partial": {
+            "type": "boolean"
+          },
+          "since": {
+            "$ref": "#/components/schemas/Date"
+          },
+          "unpriced_days": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "amounts",
+          "unpriced_days",
+          "partial"
         ],
         "type": "object"
       },
@@ -15956,6 +16463,112 @@
         ]
       }
     },
+    "/api/v1/integrations/isolar/plants": {
+      "get": {
+        "operationId": "isolar.plants",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "credential_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ISolarAccountPlants"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Plants on the connected iSolarCloud account, for linking.",
+        "tags": [
+          "integrations"
+        ]
+      }
+    },
     "/api/v1/job-runs": {
       "get": {
         "operationId": "jobRuns.list",
@@ -16114,7 +16727,9 @@
                 "integration.sync_dispatch",
                 "epias.sync_prices",
                 "report.dispatch_monthly",
-                "report.dispatch_yearly"
+                "report.dispatch_yearly",
+                "isolar.dispatch_sync",
+                "isolar.fetch_alarms"
               ],
               "type": "string"
             }
@@ -17508,6 +18123,1239 @@
         "summary": "The OpenAPI 3.1 document of this API.",
         "tags": [
           "system"
+        ]
+      }
+    },
+    "/api/v1/plants/{id}/alarm-recipients": {
+      "put": {
+        "operationId": "plants.alarm_recipients",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlarmRecipientsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlarmRecipients"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Set the plant's alarm forwarding recipients.",
+        "tags": [
+          "power-plants"
+        ]
+      }
+    },
+    "/api/v1/plants/{id}/alarms": {
+      "get": {
+        "operationId": "plants.alarms",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "maximum": 500,
+              "minimum": 1,
+              "type": [
+                "null",
+                "integer"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlantFaultPage"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "iSolar fault alarms, newest first, translated.",
+        "tags": [
+          "power-plants"
+        ]
+      }
+    },
+    "/api/v1/plants/{id}/devices": {
+      "get": {
+        "operationId": "plants.devices",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlantDevices"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Devices with status, power and last update; q searches name and serial.",
+        "tags": [
+          "power-plants"
+        ]
+      }
+    },
+    "/api/v1/plants/{id}/isolar-link": {
+      "delete": {
+        "operationId": "plants.isolar_unlink",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Unlink; stored production stays.",
+        "tags": [
+          "power-plants"
+        ]
+      },
+      "post": {
+        "operationId": "plants.isolar_link",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ISolarLinkRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ISolarLinked"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Bind a plant to an iSolarCloud plant; imports it and backfills.",
+        "tags": [
+          "power-plants"
+        ]
+      }
+    },
+    "/api/v1/plants/{id}/production": {
+      "get": {
+        "operationId": "plants.production",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "granularity",
+            "required": true,
+            "schema": {
+              "enum": [
+                "hour",
+                "day",
+                "month"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlantProductionSeries"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Production series by hour, day or month.",
+        "tags": [
+          "power-plants"
+        ]
+      }
+    },
+    "/api/v1/plants/{id}/production/export": {
+      "get": {
+        "operationId": "plants.production.export",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "granularity",
+            "required": true,
+            "schema": {
+              "enum": [
+                "hour",
+                "day",
+                "month"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "The production series as a workbook.",
+        "tags": [
+          "power-plants"
+        ]
+      }
+    },
+    "/api/v1/plants/{id}/realtime": {
+      "get": {
+        "operationId": "plants.realtime",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlantRealtime"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Current power, yields and capacity utilisation from the inverters' last snapshots.",
+        "tags": [
+          "power-plants"
+        ]
+      }
+    },
+    "/api/v1/plants/{id}/revenue": {
+      "get": {
+        "operationId": "plants.revenue",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlantRevenue"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Daily, monthly, yearly and total revenue at the feed-in tariff effective each day.",
+        "tags": [
+          "power-plants"
+        ]
+      }
+    },
+    "/api/v1/plants/{id}/sync": {
+      "post": {
+        "operationId": "plants.sync",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobAccepted"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Enqueue an iSolar sync; returns the job to watch.",
+        "tags": [
+          "power-plants"
         ]
       }
     },

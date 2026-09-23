@@ -163,7 +163,7 @@ func newHarness(t *testing.T, tune ...func(*config.Config)) *harness {
 	h.fx = fx
 	built, err := apiwire.Build(ctx, cfg, pool, testfixtures.DiscardLogger(), apiwire.Options{
 		Clock: h.clock, Mail: h.mail, RedisPrefix: "test:" + uuid.NewString() + ":", Async: func(f func()) { f() }, Enqueuer: h.enq,
-		Verifiers: h.providers, ISolar: h.providers,
+		Verifiers: h.providers, ISolar: h.providers, Solar: fakeSolar{},
 	})
 	require.NoError(t, err)
 	t.Cleanup(built.Close)
