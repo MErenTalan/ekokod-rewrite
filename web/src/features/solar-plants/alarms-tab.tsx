@@ -46,9 +46,11 @@ export function AlarmsTabView({ items, total, onLoadMore, loadingMore = false }:
                   <span className="flex flex-wrap items-center gap-2">
                     {a.message_tr}
                     {a.translated ? null : (
-                      <Tooltip content={t('alarms.untranslatedHint')}>
-                        <Badge tone="neutral" tabIndex={0}>{t('alarms.untranslated')}</Badge>
-                      </Tooltip>
+                      <span data-touch-target className="inline-flex items-center pointer-coarse:min-h-11">
+                        <Tooltip content={t('alarms.untranslatedHint')}>
+                          <Badge tone="neutral" tabIndex={0}>{t('alarms.untranslated')}</Badge>
+                        </Tooltip>
+                      </span>
                     )}
                   </span>
                 </TableCell>

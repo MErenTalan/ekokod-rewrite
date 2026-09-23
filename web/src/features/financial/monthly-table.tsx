@@ -2,6 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 
+import { Badge } from '@/components/ui/badge';
 import {
   Table,
   TableBody,
@@ -36,7 +37,7 @@ export function MonthlyTable({ monthly }: { monthly: FinancialMonthly }) {
       <TableCell numeric>
         <MoneyLines list={m.revenue} />
         {m.revenue_partial ? (
-          <span className="text-warning type-small">{t('table.partialMark')}</span>
+          <Badge tone="warning">{t('table.partialMark')}</Badge>
         ) : null}
       </TableCell>
       <TableCell numeric>{kwh(m.offset_kwh)}</TableCell>

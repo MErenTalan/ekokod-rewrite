@@ -34,7 +34,11 @@ export function IsolarLinkView({ plantId, credentials, credentialId, onCredentia
   if (credentials.length === 0) {
     return (
       <EmptyState title={t('link.noCredential')} description={t('link.noCredentialDescription')}
-        action={<Link className="text-primary underline underline-offset-4" href="/ekorm/settings?tab=company">{t('link.goToCompany')}</Link>} />
+        action={
+          <Button asChild size="sm" variant="secondary">
+            <Link href="/ekorm/settings?tab=company">{t('link.goToCompany')}</Link>
+          </Button>
+        } />
     );
   }
 

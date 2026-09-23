@@ -109,7 +109,11 @@ export function SolarPlantsPage() {
       <div className="flex flex-col gap-6">
         <PageHeader title={t('title')} description={t('subtitle')} />
         <EmptyState title={t('noLinked')} description={t('noLinkedDescription')}
-          action={<Link className="text-primary underline underline-offset-4" href="/ekorm/settings?tab=plants">{t('goToSettings')}</Link>} />
+          action={
+            <Button asChild size="sm" variant="secondary">
+              <Link href="/ekorm/settings?tab=plants">{t('goToSettings')}</Link>
+            </Button>
+          } />
       </div>
     );
   }
