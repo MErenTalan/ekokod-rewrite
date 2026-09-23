@@ -62,6 +62,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/alarms"
 	billingsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/billing"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/consumption"
+	reportsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/report"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/admin"
 	platformredis "github.com/MErenTalan/ekokod-rewrite/internal/store/redis"
@@ -481,6 +482,26 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		})
 	alarmJobs := alarms.JobAdapter{Service: alarmService, Clock: clock.System()}
 
+	// F8b reports: the worker builds, stores and e-mails them (R264–R268).
+	reportAnalytics, err := consumption.NewAnalytics(consumption.AnalyticsDeps{Analytics: postgres.NewAnalyticsRepository(pool), Log: log})
+	if err != nil {
+		closeAll()
+		return graph{}, fmt.Errorf("worker: build report analytics: %w", err)
+	}
+	reportService, err := reportsvc.New(reportsvc.Deps{
+		Buildings: buildingRepo, Analyzers: analyzerRepo, Bills: billRepo, Plants: postgres.NewPlantRepository(pool),
+		Solar: postgres.NewSolarTariffRepository(pool), Tariffs: postgres.NewTariffRepository(pool),
+		Carbon: postgres.NewCarbonRepository(pool), Analytics: postgres.NewAnalyticsRepository(pool),
+		Consumption: reportAnalytics, Clock: clock.System(),
+	})
+	if err != nil {
+		closeAll()
+		return graph{}, fmt.Errorf("worker: build report service: %w", err)
+	}
+	reportRepo := postgres.NewReportRepository(pool)
+	companyRepo := postgres.NewCompanyRepository(pool)
+	reportFiles := reportsvc.Files{Root: cfg.Storage.Root, Companies: companyRepo, Buildings: buildingRepo}
+
 	return graph{
 		cipher:          cipher,
 		integrationRepo: integrationRepo,
@@ -504,6 +525,12 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 			AlarmDispatch: alarmJobs,
 			AlarmEvaluate: alarmJobs,
 			AlarmNotify:   alarmJobs,
+			ReportDispatch: reportsvc.Dispatcher{Billable: admin.NewBillingRepository(pool), Enqueuer: jobClient,
+				Clock: clock.System(), MaxRetry: cfg.Worker.MaxRetries},
+			ReportGenerate: reportsvc.Generator{Service: reportService, Reports: reportRepo, Companies: companyRepo,
+				Ops: opsRepo, Files: reportFiles, Clock: clock.System()},
+			ReportDeliver: reportsvc.Deliverer{Reports: reportRepo, Files: reportFiles, SMTP: postgres.NewSMTPRepository(pool, cipher),
+				Mail: mail.NewSMTPSender(mailDialTimeout, nil), Ops: opsRepo, Clock: clock.System()},
 		},
 		closers: closers,
 	}, nil

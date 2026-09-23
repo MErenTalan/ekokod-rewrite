@@ -152,3 +152,16 @@ func TestTriggerStillReportsRealEnqueueFailures(t *testing.T) {
 	require.Error(t, err)
 	require.NotEqual(t, "job_already_queued", perr.CodeOf(err))
 }
+
+// R268: both report ticks are operator-triggerable, each as its own type.
+func TestTriggerableIncludesReportTicks(t *testing.T) {
+	require.Contains(t, ops.Triggerable, job.TypeReportDispatchMonthly)
+	require.Contains(t, ops.Triggerable, job.TypeReportDispatchYearly)
+	svc, enq, _ := newService(t)
+	for _, kind := range []string{job.TypeReportDispatchMonthly, job.TypeReportDispatchYearly} {
+		_, err := svc.Trigger(context.Background(), companyScope, kind)
+		require.NoError(t, err)
+	}
+	require.Equal(t, job.TypeReportDispatchMonthly, enq.tasks[0].Type())
+	require.Equal(t, job.TypeReportDispatchYearly, enq.tasks[1].Type())
+}

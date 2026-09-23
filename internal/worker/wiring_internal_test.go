@@ -271,3 +271,19 @@ func TestWorkerRegistersBillingHandlers(t *testing.T) {
 		require.Equal(t, typ, pattern)
 	}
 }
+
+// TestWorkerRegistersReportHandlers: the worker serves the two report ticks,
+// generation and delivery (R268, R266).
+func TestWorkerRegistersReportHandlers(t *testing.T) {
+	pool := testfixtures.NewIsolatedDB(t)
+	g := buildGraph(t, pool, testfixtures.RedisConfig(t))
+	require.NotNil(t, g.handlers.ReportDispatch)
+	require.NotNil(t, g.handlers.ReportGenerate)
+	require.NotNil(t, g.handlers.ReportDeliver)
+	mux := asynq.NewServeMux()
+	job.Register(mux, g.handlers)
+	for _, typ := range []string{job.TypeReportDispatchMonthly, job.TypeReportDispatchYearly, job.TypeReportGenerate, job.TypeReportDeliver} {
+		_, pattern := mux.Handler(asynq.NewTask(typ, nil))
+		require.Equal(t, typ, pattern)
+	}
+}

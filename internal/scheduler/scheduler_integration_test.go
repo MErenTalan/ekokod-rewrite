@@ -66,7 +66,8 @@ func TestSchedulerBuildsAFreshAsynqSchedulerEveryTerm(t *testing.T) {
 	cfg := &config.Config{
 		Redis:    redisCfg,
 		Timezone: time.UTC,
-		Schedule: config.Schedule{Ingestion: "0 3 * * *", EPIAS: "0 14 * * *", Billing: "0 6 * * *", Demo: "15 * * * *"},
+		Schedule: config.Schedule{Ingestion: "0 3 * * *", EPIAS: "0 14 * * *", Billing: "0 6 * * *", Demo: "15 * * * *",
+			Alarms: "0 * * * *", ReportsMonthly: "0 6 2 * *", ReportsYearly: "0 7 3 1 *"},
 	}
 	pool := testfixtures.NewPool(t, dsn)
 

@@ -83,14 +83,14 @@ func TestSchedulerEntriesIncludeIngestionAndPrices(t *testing.T) {
 	cfg := &config.Config{
 		Timezone: time.UTC,
 		Schedule: config.Schedule{Ingestion: "0 3 * * *", EPIAS: "0 14 * * *", Billing: "0 6 * * *",
-			Demo: "15 * * * *", Alarms: "0 * * * *"},
+			Demo: "15 * * * *", Alarms: "0 * * * *", ReportsMonthly: "0 6 2 * *", ReportsYearly: "0 7 3 1 *"},
 		Worker: config.Worker{MaxRetries: 5},
 	}
 	s := &Scheduler{cfg: cfg, log: slog.New(slog.DiscardHandler)}
 
 	entries, err := s.entries()
 	require.NoError(t, err)
-	require.Len(t, entries, 6)
+	require.Len(t, entries, 8)
 
 	require.Equal(t, "@every 1h", entries[0].Cron)
 	require.Equal(t, job.TypeNoop, entries[0].Task.Type())
@@ -109,4 +109,10 @@ func TestSchedulerEntriesIncludeIngestionAndPrices(t *testing.T) {
 	require.Equal(t, cfg.Schedule.Alarms, entries[5].Cron)
 	require.Equal(t, job.TypeAlarmDispatch, entries[5].Task.Type())
 	require.NotEmpty(t, entries[5].Cron, "an entry with an empty cron spec would silently never run")
+
+	// F8b R268: the two report ticks.
+	require.Equal(t, cfg.Schedule.ReportsMonthly, entries[6].Cron)
+	require.Equal(t, job.TypeReportDispatchMonthly, entries[6].Task.Type())
+	require.Equal(t, cfg.Schedule.ReportsYearly, entries[7].Cron)
+	require.Equal(t, job.TypeReportDispatchYearly, entries[7].Task.Type())
 }

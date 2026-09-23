@@ -37,6 +37,9 @@ var Triggerable = []string{
 	job.TypeBillingDispatch,
 	job.TypeIntegrationSyncDispatch,
 	job.TypeEPIASSyncPrices,
+	// R268: the report ticks, so an operator can re-run a missed month or year.
+	job.TypeReportDispatchMonthly,
+	job.TypeReportDispatchYearly,
 }
 
 // TaskEnqueuer is the job client seam.
@@ -108,7 +111,7 @@ func (s *Service) Trigger(ctx context.Context, sc store.Scope, jobType string) (
 }
 
 // taskFor builds the one task this type means. alarm.evaluate is the only
-// company-scoped member of the list; the other three are platform ticks that
+// company-scoped member of the list; the others are platform ticks that
 // fan out to every tenant themselves.
 func (s *Service) taskFor(sc store.Scope, jobType string) (*asynq.Task, error) {
 	opts := job.TaskOptions{MaxRetry: s.d.MaxRetry}
@@ -123,6 +126,10 @@ func (s *Service) taskFor(sc store.Scope, jobType string) (*asynq.Task, error) {
 		return job.NewSyncDispatchTask(opts)
 	case job.TypeEPIASSyncPrices:
 		return job.NewSyncPricesTask(job.SyncPricesPayload{}, opts)
+	case job.TypeReportDispatchMonthly:
+		return job.NewReportDispatchTask("monthly", opts)
+	case job.TypeReportDispatchYearly:
+		return job.NewReportDispatchTask("yearly", opts)
 	}
 	// Unreachable: Trigger checked the allow-list first. Refusing rather than
 	// falling through keeps a new list entry from silently enqueuing nothing.

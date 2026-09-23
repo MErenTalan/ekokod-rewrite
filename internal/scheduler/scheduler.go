@@ -75,6 +75,14 @@ func (s *Scheduler) entries() ([]Entry, error) {
 	if err != nil {
 		return nil, err
 	}
+	reportsMonthly, err := job.NewReportDispatchTask("monthly", retryOpts)
+	if err != nil {
+		return nil, err
+	}
+	reportsYearly, err := job.NewReportDispatchTask("yearly", retryOpts)
+	if err != nil {
+		return nil, err
+	}
 	return []Entry{
 		{Cron: "@every 1h", Task: noop},
 		{Cron: s.cfg.Schedule.Ingestion, Task: syncDispatch},
@@ -82,6 +90,8 @@ func (s *Scheduler) entries() ([]Entry, error) {
 		{Cron: s.cfg.Schedule.Billing, Task: billingDispatch},
 		{Cron: s.cfg.Schedule.Demo, Task: demoExtend},
 		{Cron: s.cfg.Schedule.Alarms, Task: alarmDispatch},
+		{Cron: s.cfg.Schedule.ReportsMonthly, Task: reportsMonthly},
+		{Cron: s.cfg.Schedule.ReportsYearly, Task: reportsYearly},
 	}, nil
 }
 

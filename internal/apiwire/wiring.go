@@ -213,7 +213,7 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 	closeJobs := closeAll
 	closeAll = func() { _ = inspector.Close(); closeJobs() }
 	jobService, err := jobs.New(jobs.Deps{Inspector: inspector, Analyzers: postgres.NewAnalyzerRepository(pool),
-		Buildings: postgres.NewBuildingRepository(pool), Ops: postgres.NewOpsRepository(pool)})
+		Buildings: postgres.NewBuildingRepository(pool), Ops: postgres.NewOpsRepository(pool), Reports: postgres.NewReportRepository(pool)})
 	if err != nil {
 		closeAll()
 		return Built{}, err
