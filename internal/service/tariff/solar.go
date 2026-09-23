@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
+	"github.com/MErenTalan/ekokod-rewrite/internal/domain/tariff"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
 )
 
@@ -26,20 +27,26 @@ func (s *Service) CreateSolarTariff(ctx context.Context, sc store.Scope, t model
 	if err := s.plantVisible(ctx, sc, t.PlantID); err != nil {
 		return model.SolarTariff{}, err
 	}
-	if t.EffectiveFrom.IsZero() {
-		return model.SolarTariff{}, ErrInvalidRequest
-	}
-	if t.FeedInTariff.IsNegative() {
-		return model.SolarTariff{}, ErrInvalidRequest
-	}
-	if t.PurchasePrice != nil && t.PurchasePrice.IsNegative() {
-		return model.SolarTariff{}, ErrInvalidRequest
-	}
 	if t.Currency == "" {
 		t.Currency = model.CurrencyTRY
 	}
+	// Field codes, not a bare bad request: a price the operator typed is body
+	// validation, and 05 §1 answers that with 422 and the field that failed.
+	fields := map[string]string{}
+	if t.EffectiveFrom.IsZero() {
+		fields["effective_from"] = tariff.CodeRequired
+	}
+	if t.FeedInTariff.IsNegative() {
+		fields["feed_in_tariff"] = tariff.CodeNegative
+	}
+	if t.PurchasePrice != nil && t.PurchasePrice.IsNegative() {
+		fields["purchase_price"] = tariff.CodeNegative
+	}
 	if !t.Currency.Valid() {
-		return model.SolarTariff{}, ErrInvalidRequest
+		fields["currency"] = tariff.CodeInvalid
+	}
+	if len(fields) > 0 {
+		return model.SolarTariff{}, &tariff.ValidationError{Fields: fields}
 	}
 	t.CompanyID = sc.CompanyID
 	t.CreatedAt = s.deps.Clock.Now().UTC()

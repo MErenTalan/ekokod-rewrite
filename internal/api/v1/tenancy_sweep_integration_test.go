@@ -70,6 +70,13 @@ func (h *harness) foreign(t *testing.T) foreignIDs {
 		// A job id is an asynq task id, not a UUID; an unknown one must 404 like a foreign one.
 		"jobs":   {uuid.NewString()},
 		"alarms": {alarmA2, alarmB},
+		// F8a's families. A template, an icmal import, a solar tariff and a
+		// catalogue row all live outside this building admin's reach, and an
+		// unknown id must answer exactly as a foreign one does.
+		"tariff-templates":         {uuid.NewString()},
+		"icmal-imports":            {uuid.NewString()},
+		"solar-tariffs":            {uuid.NewString()},
+		"national-tariff-schedule": {uuid.NewString()},
 	}
 }
 

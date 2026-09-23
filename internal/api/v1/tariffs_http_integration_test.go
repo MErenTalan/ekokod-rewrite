@@ -79,9 +79,13 @@ func TestTemplateCrudAndApply(t *testing.T) {
 		h.as(seed.E2ECompanyReadonlyEmail).do(http.MethodPost, "/tariff-templates", body).status)
 	require.Equal(t, http.StatusOK,
 		h.as(seed.E2ECompanyReadonlyEmail).do(http.MethodGet, "/tariff-templates", nil).status)
-	require.Equal(t, http.StatusNotFound,
-		h.as(seed.E2ECompanyBAdminEmail).do(http.MethodGet, "/tariff-templates/"+created.ID.String(), nil).status,
-		"another company's template answers like an unknown one")
+	// 05 §6 has no GET by id for a template; the isolation that matters is
+	// that another company's list never carries it.
+	var foreign dto.Page[dto.TariffTemplate]
+	h.as(seed.E2ECompanyBAdminEmail).do(http.MethodGet, "/tariff-templates", nil).json(t, &foreign)
+	for _, item := range foreign.Items {
+		require.NotEqual(t, created.ID, item.ID, "another company never sees this template")
+	}
 
 	apply := map[string]any{"building_ids": []string{h.fx.BuildingA1.String(), h.fx.BuildingA2.String()}, "effective_from": "2026-09-01"}
 	res = ca.do(http.MethodPost, "/tariff-templates/"+created.ID.String()+"/apply", apply)

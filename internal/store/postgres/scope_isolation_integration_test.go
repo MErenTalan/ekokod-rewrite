@@ -134,6 +134,7 @@ var scopeIsoRegisteredRepositories = map[string]bool{
 	"NewForecastRepository":         true,
 	"NewTariffRepository":           true,
 	"NewTariffTemplateRepository":   true,
+	"NewBulkAssignmentRepository":   true,
 	"NewSolarTariffRepository":      true,
 	"NewNationalTariffRepository":   true,
 	"NewIcmalRepository":            true,
@@ -576,6 +577,7 @@ type scopeIsoFixtures struct {
 
 	tariffTemplateID uuid.UUID
 	solarTariffID    uuid.UUID
+	bulkAssignmentID uuid.UUID
 
 	icmalImportID uuid.UUID
 
@@ -809,6 +811,14 @@ func seedScopeIsoFixtures(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	require.NoError(t, err)
 	f.tariffTemplateID = template.ID
 
+	bulkRepo := postgres.NewBulkAssignmentRepository(pool)
+	assignment, err := bulkRepo.Create(ctx, adminScope, model.TariffBulkAssignment{
+		CompanyID: companyID, TemplateID: &template.ID, EffectiveFrom: scopeIsoEpoch,
+		BuildingIDs: []uuid.UUID{f.buildingID},
+	})
+	require.NoError(t, err)
+	f.bulkAssignmentID = assignment.ID
+
 	solarTariffRepo := postgres.NewSolarTariffRepository(pool)
 	solarTariff, err := solarTariffRepo.Create(ctx, adminScope, model.SolarTariff{
 		CompanyID: companyID, PlantID: f.plantID, EffectiveFrom: scopeIsoEpoch,
@@ -943,7 +953,12 @@ func seedScopeIsoFixtures(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 
 	// --- ops (company-only) -----------------------------------------------------
 	opsRepo := postgres.NewOpsRepository(pool)
-	run, err := opsRepo.StartRun(ctx, adminScope, model.JobRun{CompanyID: &companyID, JobType: "scope-iso-job"})
+	// Both tenants seed the SAME task id on purpose: a deterministic billing
+	// task id is identical for two companies billing the same period, so
+	// RunByTaskID must answer from the caller's company and no other (R237).
+	scopeIsoTaskID := "billing.generate:company:scope-iso:2026-08"
+	run, err := opsRepo.StartRun(ctx, adminScope, model.JobRun{CompanyID: &companyID, JobType: "scope-iso-job",
+		TaskID: &scopeIsoTaskID})
 	require.NoError(t, err)
 	f.jobRunID = run.ID
 	msg, err := opsRepo.AppendMessage(ctx, adminScope, model.OperationalMessage{
@@ -1623,6 +1638,21 @@ func TestScopeIsolation(t *testing.T) {
 			func(tt model.TariffTemplate) uuid.UUID { return tt.ID }, "TariffTemplateRepository.List cross-tenant")
 	})
 
+	// --- BulkAssignmentRepository (company-only, R241's history) ---------------------
+	t.Run("BulkAssignmentRepository", func(t *testing.T) {
+		repo := postgres.NewBulkAssignmentRepository(pool)
+
+		scopeIsoAssertListExcludes(t,
+			func(s store.Scope) ([]model.TariffBulkAssignment, error) {
+				return repo.List(ctx, s, store.Page{Limit: 100})
+			},
+			tenantA.AdminScope, tenantB.AdminScope, bf.bulkAssignmentID,
+			func(a model.TariffBulkAssignment) uuid.UUID { return a.ID }, "BulkAssignmentRepository.List cross-tenant")
+
+		_, err := repo.List(ctx, invalidScope, store.Page{Limit: 100})
+		require.ErrorIs(t, err, store.ErrInvalidScope)
+	})
+
 	// --- SolarTariffRepository (company-only, prices a plant) ------------------------
 	t.Run("SolarTariffRepository", func(t *testing.T) {
 		repo := postgres.NewSolarTariffRepository(pool)
@@ -2093,5 +2123,17 @@ func TestScopeIsolation(t *testing.T) {
 			}
 		}
 		require.True(t, sawOwn, "positive control: tenant A's own AdminScope must see its own operational message")
+
+		// R237: the task id is deterministic per subject and period, so two
+		// companies can hold the same one. The read must stay in its tenant.
+		const sharedTaskID = "billing.generate:company:scope-iso:2026-08"
+		own, err := repo.RunByTaskID(ctx, tenantA.AdminScope, sharedTaskID)
+		require.NoError(t, err, "positive control: tenant A sees its own run")
+		require.Equal(t, af.jobRunID, own.ID)
+		other, err := repo.RunByTaskID(ctx, tenantB.AdminScope, sharedTaskID)
+		require.NoError(t, err)
+		require.Equal(t, bf.jobRunID, other.ID, "each tenant sees only its own run for the shared task id")
+		_, err = repo.RunByTaskID(ctx, invalidScope, sharedTaskID)
+		require.ErrorIs(t, err, store.ErrInvalidScope)
 	})
 }
