@@ -81,25 +81,16 @@
 
 ---
 
-## START HERE — exact state
+## START HERE — exact state (2026-09-24 ~02:25)
 
 | Branch / worktree | Head | State |
 |---|---|---|
-| `phase/f1-data-model` … `phase/f8a-bills-tariffs` | see git | F1–F8a complete (F4's real-invoice comparison OPEN) |
-| `phase/f8b-reports` (`/home/personal/ekokod-f8b-phase`) | F8b handoff commit | F8b complete |
-| **`phase/f9-solar`** (`/home/personal/ekokod-f9-phase`) | this handoff commit (after `9c746ca`) | Tasks 1–15 complete; **16 half**; **17 not started** |
+| `phase/f9-solar` (`/home/personal/ekokod-f9-phase`) | `fa70092` | F9 code + self-review done; Docker-bound gates PENDING (see "F9 remaining") |
+| **`phase/f10-carbon`** (`/home/personal/ekokod-f10-phase`) | this commit | **F10a (carbon backend) Tasks 1–8 done + self-review**; F10b (screens + e2e) next |
 
-- **Plan:** `docs/superpowers/plans/2026-09-23-f9-solar-renewable-financial.md`.
-  - Rulings **R276–R299**.
-  - Product-owner decisions **F-1…F-3**.
-  - Rule tables and tasks 1–17.
-- **Ledger** (git-ignored): `.superpowers/sdd/2026-09-23-f9-solar-renewable-financial/progress.md`.
-  - 59 `Ruling:` lines.
-  - Every task's mutation.
-  - The Task 16 findings and the blocker.
-- **Task scripts:** `/home/s2personal/.claude/plugins/cache/claude-plugins-official/superpowers/6.4.1/skills/executing-plans/scripts/{task-start,task-done}`.
-  - Usage: `task-done PLAN N BASE -- <cmd>`.
-  - Task 16 BASE = `757c73f`.
+- F10a plan: `docs/superpowers/plans/2026-09-24-f10a-carbon-backend.md` (R300–R319, Q-F1…Q-F7).
+- F10a ledger: `.superpowers/sdd/2026-09-24-f10a-carbon-backend/progress.md` (rulings, mutations, PENDING list).
+- **Docker is still hung** (since 00:25). Every integration/e2e test written since then is PENDING; the list is in both ledgers' `PENDING` lines. When Docker is back: run F9's pending gates, then F10a's, before anything else.
 
 ## Docker hang (read before any integration/e2e)
 - **What happened (at ~00:25):**
