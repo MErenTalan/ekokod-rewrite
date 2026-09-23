@@ -28,7 +28,7 @@ insert into power_plants
      panel_power_w, panel_efficiency_pct, panel_count, string_count, orientation,
      tilt_angle_deg, total_capacity_kw, yearly_target_kwh, installation_date,
      address, latitude, longitude, isolar_ps_id, isolar_ps_key, isolar_ps_name,
-     isolar_installed_kw, isolar_linked_at, created_at, updated_at)
+     isolar_installed_kw, isolar_linked_at, netting_analyzer_id, created_at, updated_at)
 values (sqlc.arg(id), sqlc.arg(company_id), sqlc.arg(name), sqlc.arg(installation_number),
         sqlc.arg(plant_kind), sqlc.arg(pv_brand_model), sqlc.arg(panel_power_w),
         sqlc.arg(panel_efficiency_pct), sqlc.arg(panel_count), sqlc.arg(string_count),
@@ -36,6 +36,7 @@ values (sqlc.arg(id), sqlc.arg(company_id), sqlc.arg(name), sqlc.arg(installatio
         sqlc.arg(yearly_target_kwh), sqlc.arg(installation_date), sqlc.arg(address),
         sqlc.arg(latitude), sqlc.arg(longitude), sqlc.arg(isolar_ps_id), sqlc.arg(isolar_ps_key),
         sqlc.arg(isolar_ps_name), sqlc.arg(isolar_installed_kw), sqlc.arg(isolar_linked_at),
+        sqlc.narg(netting_analyzer_id),
         coalesce(sqlc.narg(at)::timestamptz, now()), coalesce(sqlc.narg(at)::timestamptz, now()))
 returning *;
 
@@ -62,6 +63,7 @@ set name = sqlc.arg(name),
     isolar_ps_name = sqlc.arg(isolar_ps_name),
     isolar_installed_kw = sqlc.arg(isolar_installed_kw),
     isolar_linked_at = sqlc.arg(isolar_linked_at),
+    netting_analyzer_id = sqlc.narg(netting_analyzer_id),
     updated_at = sqlc.arg(updated_at)
 where id = sqlc.arg(id) and company_id = sqlc.arg(company_id) and deleted_at is null
 returning *;
@@ -139,7 +141,9 @@ returning *;
 -- row per device, none of them NULL.
 select d.id, d.plant_id, d.device_sn, d.device_name, d.device_type, d.device_type_name,
        d.provider_key, d.brand, d.model, d.rated_power_kw, d.status, d.efficiency_pct,
-       d.last_seen_at, d.created_at, d.updated_at
+       d.last_seen_at, d.created_at, d.updated_at,
+       d.snapshot_at, d.fault_status, d.active_power_kw, d.yield_today_kwh,
+       d.yield_month_kwh, d.yield_year_kwh, d.yield_total_kwh
 from power_plants p
 left join power_plant_devices d on d.plant_id = p.id
 where p.id = sqlc.arg(plant_id) and p.company_id = sqlc.arg(company_id) and p.deleted_at is null

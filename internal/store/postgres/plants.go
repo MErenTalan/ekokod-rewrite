@@ -102,32 +102,36 @@ func plantFromRow(row sqlcgen.PowerPlant) (model.PowerPlant, error) {
 		return model.PowerPlant{}, err
 	}
 	return model.PowerPlant{
-		ID:                 row.ID,
-		CompanyID:          row.CompanyID,
-		Name:               row.Name,
-		InstallationNumber: row.InstallationNumber,
-		PlantKind:          row.PlantKind,
-		PvBrandModel:       row.PvBrandModel,
-		PanelPowerW:        panelPowerW,
-		PanelEfficiencyPct: panelEfficiency,
-		PanelCount:         row.PanelCount,
-		StringCount:        row.StringCount,
-		Orientation:        plantOrientationPtr(row.Orientation),
-		TiltAngleDeg:       tiltAngle,
-		TotalCapacityKw:    totalCapacity,
-		YearlyTargetKwh:    yearlyTarget,
-		InstallationDate:   plantDatePtr(row.InstallationDate),
-		Address:            row.Address,
-		Latitude:           latitude,
-		Longitude:          longitude,
-		IsolarPsID:         row.IsolarPsID,
-		IsolarPsKey:        row.IsolarPsKey,
-		IsolarPsName:       row.IsolarPsName,
-		IsolarInstalledKw:  isolarInstalledKw,
-		IsolarLinkedAt:     tsPtr(row.IsolarLinkedAt),
-		CreatedAt:          row.CreatedAt.Time,
-		UpdatedAt:          row.UpdatedAt.Time,
-		DeletedAt:          tsPtr(row.DeletedAt),
+		ID:                  row.ID,
+		CompanyID:           row.CompanyID,
+		Name:                row.Name,
+		InstallationNumber:  row.InstallationNumber,
+		PlantKind:           row.PlantKind,
+		PvBrandModel:        row.PvBrandModel,
+		PanelPowerW:         panelPowerW,
+		PanelEfficiencyPct:  panelEfficiency,
+		PanelCount:          row.PanelCount,
+		StringCount:         row.StringCount,
+		Orientation:         plantOrientationPtr(row.Orientation),
+		TiltAngleDeg:        tiltAngle,
+		TotalCapacityKw:     totalCapacity,
+		YearlyTargetKwh:     yearlyTarget,
+		InstallationDate:    plantDatePtr(row.InstallationDate),
+		Address:             row.Address,
+		Latitude:            latitude,
+		Longitude:           longitude,
+		IsolarPsID:          row.IsolarPsID,
+		IsolarPsKey:         row.IsolarPsKey,
+		IsolarPsName:        row.IsolarPsName,
+		IsolarInstalledKw:   isolarInstalledKw,
+		IsolarLinkedAt:      tsPtr(row.IsolarLinkedAt),
+		IsolarCredentialID:  row.IsolarCredentialID,
+		IsolarLastSyncAt:    tsPtr(row.IsolarLastSyncAt),
+		IsolarLastSyncError: row.IsolarLastSyncError,
+		NettingAnalyzerID:   row.NettingAnalyzerID,
+		CreatedAt:           row.CreatedAt.Time,
+		UpdatedAt:           row.UpdatedAt.Time,
+		DeletedAt:           tsPtr(row.DeletedAt),
 	}, nil
 }
 
@@ -207,6 +211,7 @@ func (r *PlantRepository) Create(ctx context.Context, s store.Scope, p model.Pow
 		IsolarPsName:       p.IsolarPsName,
 		IsolarInstalledKw:  decimalPtrToNumeric(p.IsolarInstalledKw),
 		IsolarLinkedAt:     tsPtrOrZero(p.IsolarLinkedAt),
+		NettingAnalyzerID:  p.NettingAnalyzerID,
 		At:                 tsOrNow(p.CreatedAt),
 	})
 	if err != nil {
@@ -245,6 +250,7 @@ func (r *PlantRepository) Update(ctx context.Context, s store.Scope, p model.Pow
 		IsolarPsName:       p.IsolarPsName,
 		IsolarInstalledKw:  decimalPtrToNumeric(p.IsolarInstalledKw),
 		IsolarLinkedAt:     tsPtrOrZero(p.IsolarLinkedAt),
+		NettingAnalyzerID:  p.NettingAnalyzerID,
 		UpdatedAt:          ts(p.UpdatedAt),
 		ID:                 p.ID,
 		CompanyID:          s.CompanyID,
@@ -383,7 +389,7 @@ func plantDeviceListRowToModel(row sqlcgen.PlantDevicesListRow) (model.PlantDevi
 	if err != nil {
 		return model.PlantDevice{}, err
 	}
-	return model.PlantDevice{
+	return withDeviceSnapshot(model.PlantDevice{
 		ID:             *row.ID,
 		PlantID:        *row.PlantID,
 		DeviceSN:       *row.DeviceSn,
@@ -399,7 +405,7 @@ func plantDeviceListRowToModel(row sqlcgen.PlantDevicesListRow) (model.PlantDevi
 		LastSeenAt:     tsPtr(row.LastSeenAt),
 		CreatedAt:      row.CreatedAt.Time,
 		UpdatedAt:      row.UpdatedAt.Time,
-	}, nil
+	}, row.SnapshotAt, row.FaultStatus, row.ActivePowerKw, row.YieldTodayKwh, row.YieldMonthKwh, row.YieldYearKwh, row.YieldTotalKwh)
 }
 
 func plantDeviceFromRow(row sqlcgen.PowerPlantDevice) (model.PlantDevice, error) {
@@ -411,7 +417,7 @@ func plantDeviceFromRow(row sqlcgen.PowerPlantDevice) (model.PlantDevice, error)
 	if err != nil {
 		return model.PlantDevice{}, err
 	}
-	return model.PlantDevice{
+	return withDeviceSnapshot(model.PlantDevice{
 		ID:             row.ID,
 		PlantID:        row.PlantID,
 		DeviceSN:       row.DeviceSn,
@@ -427,7 +433,7 @@ func plantDeviceFromRow(row sqlcgen.PowerPlantDevice) (model.PlantDevice, error)
 		LastSeenAt:     tsPtr(row.LastSeenAt),
 		CreatedAt:      row.CreatedAt.Time,
 		UpdatedAt:      row.UpdatedAt.Time,
-	}, nil
+	}, row.SnapshotAt, row.FaultStatus, row.ActivePowerKw, row.YieldTodayKwh, row.YieldMonthKwh, row.YieldYearKwh, row.YieldTotalKwh)
 }
 
 // UpsertDevice is keyed on (plant_id, device_sn). Isolation: PlantDeviceUpsert

@@ -369,14 +369,14 @@ func newConsumptionBucket(
 }
 
 func productionBucketFromDaily(row sqlcgen.PlantProductionDaily) (model.PlantProductionBucket, error) {
-	return newPlantProductionBucket(row.PlantID, row.Bucket, row.ProductionKwh, row.MaxActivePowerKw, row.AvgEfficiencyPct)
+	return newPlantProductionBucket(row.PlantID, row.Bucket, row.ProductionKwh, row.MaxActivePowerKw)
 }
 
 func productionBucketFromMonthly(row sqlcgen.PlantProductionMonthly) (model.PlantProductionBucket, error) {
-	return newPlantProductionBucket(row.PlantID, row.Bucket, row.ProductionKwh, row.MaxActivePowerKw, row.AvgEfficiencyPct)
+	return newPlantProductionBucket(row.PlantID, row.Bucket, row.ProductionKwh, row.MaxActivePowerKw)
 }
 
-func newPlantProductionBucket(plantID uuid.UUID, bucket pgtype.Timestamptz, productionKwh, maxActivePowerKw, avgEfficiencyPct pgtype.Numeric) (model.PlantProductionBucket, error) {
+func newPlantProductionBucket(plantID uuid.UUID, bucket pgtype.Timestamptz, productionKwh, maxActivePowerKw pgtype.Numeric) (model.PlantProductionBucket, error) {
 	pKwh, err := numericToDecimalPtr(productionKwh)
 	if err != nil {
 		return model.PlantProductionBucket{}, err
@@ -385,15 +385,10 @@ func newPlantProductionBucket(plantID uuid.UUID, bucket pgtype.Timestamptz, prod
 	if err != nil {
 		return model.PlantProductionBucket{}, err
 	}
-	avgEff, err := numericToDecimalPtr(avgEfficiencyPct)
-	if err != nil {
-		return model.PlantProductionBucket{}, err
-	}
 	return model.PlantProductionBucket{
 		PlantID:          plantID,
 		Bucket:           bucket.Time,
 		ProductionKwh:    pKwh,
 		MaxActivePowerKw: maxKw,
-		AvgEfficiencyPct: avgEff,
 	}, nil
 }

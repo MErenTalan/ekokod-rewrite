@@ -504,6 +504,39 @@ type PlantRepository interface {
 	// through power_plants. Another tenant's plantID returns ErrNotFound and
 	// nothing is replaced.
 	ReplaceAlarmRecipients(ctx context.Context, s Scope, plantID uuid.UUID, emails []string) ([]model.PlantAlarmRecipient, error)
+
+	// UpdateDeviceSnapshot stores a device's realtime snapshot (R282);
+	// isolation through the parent plant, ErrNotFound otherwise.
+	UpdateDeviceSnapshot(ctx context.Context, s Scope, d model.PlantDevice) error
+	// SetSyncState records the last iSolar sync and its closed error code (nil clears it).
+	SetSyncState(ctx context.Context, s Scope, plantID uuid.UUID, at time.Time, errCode *string) error
+	// SetIsolarLink writes the iSolar link fields, credential and total capacity; nil clears.
+	SetIsolarLink(ctx context.Context, s Scope, p model.PowerPlant) (model.PowerPlant, error)
+	// ListLinked lists the company's iSolar-linked plants.
+	ListLinked(ctx context.Context, s Scope) ([]model.PowerPlant, error)
+}
+
+// ProductionTotalsRepository reads and replaces plant-level production (R276, R278).
+// Isolation: join through power_plants; another company's plant is ErrNotFound.
+type ProductionTotalsRepository interface {
+	// ReplaceDays deletes the plant's rows inside each Istanbul day and inserts
+	// rows in one transaction; a row outside the days is ErrInvalidRange.
+	ReplaceDays(ctx context.Context, s Scope, plantID uuid.UUID, days []time.Time, rows []model.PlantProductionTotal) (int, error)
+	Range(ctx context.Context, s Scope, plantID uuid.UUID, r TimeRange) ([]model.PlantProductionTotal, error)
+	// FirstDay is the Istanbul day of the earliest stored total, nil when none.
+	FirstDay(ctx context.Context, s Scope, plantID uuid.UUID) (*time.Time, error)
+}
+
+// FaultRepository stores iSolar faults and the forwarding claims (R286, R287).
+// Isolation: join through power_plants.
+type FaultRepository interface {
+	Upsert(ctx context.Context, s Scope, faults []model.PlantFault) (int, error)
+	List(ctx context.Context, s Scope, plantID uuid.UUID, p Page) ([]model.PlantFault, int, error)
+	Unforwarded(ctx context.Context, s Scope, plantID uuid.UUID, since time.Time) ([]model.PlantFault, error)
+	// Claim inserts forwarded refs and returns only those this call inserted.
+	Claim(ctx context.Context, s Scope, plantID uuid.UUID, refs []string) ([]string, error)
+	Release(ctx context.Context, s Scope, plantID uuid.UUID, refs []string) error
+	Prune(ctx context.Context, s Scope, before time.Time) (int, error)
 }
 
 // ---------------------------------------------------------------------------
@@ -685,6 +718,9 @@ type ProductionRepository interface {
 	// the first duplicate key, before any database round trip, nothing
 	// written.
 	BulkInsert(ctx context.Context, s Scope, rows []model.PlantProduction) (inserted, updated int, err error)
+
+	// ReplaceDeviceDays is ProductionTotalsRepository.ReplaceDays for device rows (R278).
+	ReplaceDeviceDays(ctx context.Context, s Scope, plantID uuid.UUID, days []time.Time, rows []model.PlantProduction) (int, error)
 
 	// Range reads the hypertable directly, over a bounded window. An invalid
 	// r returns ErrInvalidRange.

@@ -1896,6 +1896,19 @@ type PasswordResetToken struct {
 	CreatedAt pgtype.Timestamptz
 }
 
+type PlantFault struct {
+	PlantID     uuid.UUID
+	Ref         string
+	Code        string
+	Name        string
+	Level       *int32
+	Type        *int32
+	DeviceName  *string
+	OccurredAt  pgtype.Timestamptz
+	ClosedAt    pgtype.Timestamptz
+	FirstSeenAt pgtype.Timestamptz
+}
+
 type PlantProduction struct {
 	PlantID       uuid.UUID
 	Ts            pgtype.Timestamptz
@@ -1914,7 +1927,6 @@ type PlantProductionDaily struct {
 	Bucket           pgtype.Timestamptz
 	ProductionKwh    pgtype.Numeric
 	MaxActivePowerKw pgtype.Numeric
-	AvgEfficiencyPct pgtype.Numeric
 }
 
 type PlantProductionMonthly struct {
@@ -1922,36 +1934,48 @@ type PlantProductionMonthly struct {
 	Bucket           pgtype.Timestamptz
 	ProductionKwh    pgtype.Numeric
 	MaxActivePowerKw pgtype.Numeric
-	AvgEfficiencyPct pgtype.Numeric
+}
+
+type PlantProductionTotal struct {
+	PlantID       uuid.UUID
+	Ts            pgtype.Timestamptz
+	ProductionKwh pgtype.Numeric
+	ActivePowerKw pgtype.Numeric
+	Basis         string
+	UpdatedAt     pgtype.Timestamptz
 }
 
 type PowerPlant struct {
-	ID                 uuid.UUID
-	CompanyID          uuid.UUID
-	Name               string
-	InstallationNumber *string
-	PlantKind          string
-	PvBrandModel       *string
-	PanelPowerW        pgtype.Numeric
-	PanelEfficiencyPct pgtype.Numeric
-	PanelCount         *int32
-	StringCount        *int32
-	Orientation        NullPanelOrientation
-	TiltAngleDeg       pgtype.Numeric
-	TotalCapacityKw    pgtype.Numeric
-	YearlyTargetKwh    pgtype.Numeric
-	InstallationDate   pgtype.Date
-	Address            *string
-	Latitude           pgtype.Numeric
-	Longitude          pgtype.Numeric
-	IsolarPsID         *string
-	IsolarPsKey        *string
-	IsolarPsName       *string
-	IsolarInstalledKw  pgtype.Numeric
-	IsolarLinkedAt     pgtype.Timestamptz
-	CreatedAt          pgtype.Timestamptz
-	UpdatedAt          pgtype.Timestamptz
-	DeletedAt          pgtype.Timestamptz
+	ID                  uuid.UUID
+	CompanyID           uuid.UUID
+	Name                string
+	InstallationNumber  *string
+	PlantKind           string
+	PvBrandModel        *string
+	PanelPowerW         pgtype.Numeric
+	PanelEfficiencyPct  pgtype.Numeric
+	PanelCount          *int32
+	StringCount         *int32
+	Orientation         NullPanelOrientation
+	TiltAngleDeg        pgtype.Numeric
+	TotalCapacityKw     pgtype.Numeric
+	YearlyTargetKwh     pgtype.Numeric
+	InstallationDate    pgtype.Date
+	Address             *string
+	Latitude            pgtype.Numeric
+	Longitude           pgtype.Numeric
+	IsolarPsID          *string
+	IsolarPsKey         *string
+	IsolarPsName        *string
+	IsolarInstalledKw   pgtype.Numeric
+	IsolarLinkedAt      pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	IsolarCredentialID  *uuid.UUID
+	NettingAnalyzerID   *uuid.UUID
+	IsolarLastSyncAt    pgtype.Timestamptz
+	IsolarLastSyncError *string
 }
 
 type PowerPlantAlarmRecipient struct {
@@ -1975,6 +1999,13 @@ type PowerPlantDevice struct {
 	LastSeenAt     pgtype.Timestamptz
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
+	SnapshotAt     pgtype.Timestamptz
+	FaultStatus    *int32
+	ActivePowerKw  pgtype.Numeric
+	YieldTodayKwh  pgtype.Numeric
+	YieldMonthKwh  pgtype.Numeric
+	YieldYearKwh   pgtype.Numeric
+	YieldTotalKwh  pgtype.Numeric
 }
 
 type PowerPlantMonthlyTarget struct {

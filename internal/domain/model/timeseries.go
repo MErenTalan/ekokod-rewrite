@@ -228,7 +228,23 @@ type PlantProductionBucket struct {
 
 	ProductionKwh    *decimal.Decimal
 	MaxActivePowerKw *decimal.Decimal
-	AvgEfficiencyPct *decimal.Decimal
+}
+
+// Production totals bases (R279): which source filled a plant's day.
+const (
+	BasisPlantMeter  = "plant_meter"
+	BasisInverterSum = "inverter_sum"
+	BasisDailyTotal  = "daily_total"
+)
+
+// PlantProductionTotal is one plant-level interval (R276), table
+// plant_production_totals; the plant aggregates read only this table.
+type PlantProductionTotal struct {
+	PlantID       uuid.UUID
+	Ts            time.Time
+	ProductionKwh *decimal.Decimal
+	ActivePowerKw *decimal.Decimal
+	Basis         string
 }
 
 // MarketPrice is the hourly piyasa takas fiyatı. Mirrors the

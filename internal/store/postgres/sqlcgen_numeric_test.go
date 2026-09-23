@@ -57,6 +57,7 @@ var (
 	columnRe    = regexp.MustCompile(`(?i)^\s*(\w+)\s+([a-z0-9_]+)`)
 	matViewRe   = regexp.MustCompile(`(?is)create materialized view\s+(\w+)(.*?)\ngroup by`)
 	castAliasRe = regexp.MustCompile(`(?i)::numeric\s+as\s+(\w+)`)
+	dropViewRe  = regexp.MustCompile(`(?i)drop materialized view\s+(?:if exists\s+)?(\w+)`)
 	declRe      = regexp.MustCompile(`(?i)create function\s+(\w+)\s*\(`)
 	// matViewBodyRe captures a whole view body, unlike matViewRe which stops at
 	// `group by` because that is all the numeric-alias scan needs. Terminating
@@ -162,12 +163,16 @@ func parseSchema(t *testing.T) schema {
 
 	out := schema{numeric: map[string]string{}, integer: map[string]string{}}
 	tables := 0
+	tableNumeric := map[string]bool{}
+	viewCols := map[string][]string{}
 
 	for _, entry := range entries {
 		name := migrationsDir + "/" + entry.Name()
 		raw, err := migrationsFS.ReadFile(name)
 		require.NoError(t, err)
-		sql := commentRe.ReplaceAllString(string(raw), "")
+		// A Down section rebuilds the previous schema, not the live one (00018 recreates old views).
+		up, _, _ := strings.Cut(string(raw), "-- +goose Down")
+		sql := commentRe.ReplaceAllString(up, "")
 
 		for _, block := range createTabRe.FindAllStringSubmatch(sql, -1) {
 			tables++
@@ -179,6 +184,7 @@ func parseSchema(t *testing.T) schema {
 				switch typ := strings.ToLower(m[2]); {
 				case typ == "numeric", typ == "decimal":
 					out.numeric[normalise(m[1])] = name
+					tableNumeric[normalise(m[1])] = true
 				case integerTypes[typ]:
 					out.integer[normalise(m[1])] = name
 				}
@@ -187,9 +193,19 @@ func parseSchema(t *testing.T) schema {
 
 		// Continuous aggregates: every computed column carries an explicit
 		// `::numeric` cast, which is both what sqlc needs and what this reads.
+		// A dropped view takes its columns with it (00018 rebuilds the plant views).
+		for _, m := range dropViewRe.FindAllStringSubmatch(sql, -1) {
+			for _, col := range viewCols[m[1]] {
+				if !tableNumeric[col] {
+					delete(out.numeric, col)
+				}
+			}
+		}
 		for _, block := range matViewRe.FindAllStringSubmatch(sql, -1) {
+			viewCols[block[1]] = nil
 			for _, m := range castAliasRe.FindAllStringSubmatch(block[2], -1) {
 				out.numeric[normalise(m[1])] = name
+				viewCols[block[1]] = append(viewCols[block[1]], normalise(m[1]))
 			}
 		}
 	}
@@ -209,7 +225,7 @@ func parseSchema(t *testing.T) schema {
 		"basefactor",        // emission_factors
 		"maxdemandkw",       // meter_readings and every consumption aggregate
 		"activeimport",      // meter_readings
-		"avgefficiencypct",  // plant_production_monthly
+		"maxactivepowerkw",  // plant_production_monthly
 	} {
 		require.Contains(t, out.numeric, must, "expected numeric column missing from the parsed schema")
 	}

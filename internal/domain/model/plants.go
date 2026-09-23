@@ -54,6 +54,12 @@ type PowerPlant struct {
 	IsolarPsName      *string
 	IsolarInstalledKw *decimal.Decimal
 	IsolarLinkedAt    *time.Time
+	// IsolarCredentialID is the credential the link was made with (R280).
+	IsolarCredentialID  *uuid.UUID
+	IsolarLastSyncAt    *time.Time
+	IsolarLastSyncError *string
+	// NettingAnalyzerID is the optional netting meter (R289); never a building scope.
+	NettingAnalyzerID *uuid.UUID
 
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -93,6 +99,15 @@ type PlantDevice struct {
 	LastSeenAt *time.Time
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
+
+	// The last realtime snapshot (R282), all kWh/kW.
+	SnapshotAt    *time.Time
+	FaultStatus   *int32
+	ActivePowerKw *decimal.Decimal
+	YieldTodayKwh *decimal.Decimal
+	YieldMonthKwh *decimal.Decimal
+	YieldYearKwh  *decimal.Decimal
+	YieldTotalKwh *decimal.Decimal
 }
 
 // PlantAlarmRecipient is one email address notified about a plant's alarms.
@@ -101,4 +116,18 @@ type PlantDevice struct {
 type PlantAlarmRecipient struct {
 	PlantID uuid.UUID
 	Email   string
+}
+
+// PlantFault is one iSolar fault occurrence (R286), table plant_faults.
+type PlantFault struct {
+	PlantID     uuid.UUID
+	Ref         string
+	Code        string
+	Name        string
+	Level       *int32
+	Type        *int32
+	DeviceName  *string
+	OccurredAt  time.Time
+	ClosedAt    *time.Time
+	FirstSeenAt time.Time
 }

@@ -116,7 +116,7 @@ insert into power_plants
      panel_power_w, panel_efficiency_pct, panel_count, string_count, orientation,
      tilt_angle_deg, total_capacity_kw, yearly_target_kwh, installation_date,
      address, latitude, longitude, isolar_ps_id, isolar_ps_key, isolar_ps_name,
-     isolar_installed_kw, isolar_linked_at, created_at, updated_at)
+     isolar_installed_kw, isolar_linked_at, netting_analyzer_id, created_at, updated_at)
 values ($1, $2, $3, $4,
         $5, $6, $7,
         $8, $9, $10,
@@ -124,8 +124,9 @@ values ($1, $2, $3, $4,
         $14, $15, $16,
         $17, $18, $19, $20,
         $21, $22, $23,
-        coalesce($24::timestamptz, now()), coalesce($24::timestamptz, now()))
-returning id, company_id, name, installation_number, plant_kind, pv_brand_model, panel_power_w, panel_efficiency_pct, panel_count, string_count, orientation, tilt_angle_deg, total_capacity_kw, yearly_target_kwh, installation_date, address, latitude, longitude, isolar_ps_id, isolar_ps_key, isolar_ps_name, isolar_installed_kw, isolar_linked_at, created_at, updated_at, deleted_at
+        $24,
+        coalesce($25::timestamptz, now()), coalesce($25::timestamptz, now()))
+returning id, company_id, name, installation_number, plant_kind, pv_brand_model, panel_power_w, panel_efficiency_pct, panel_count, string_count, orientation, tilt_angle_deg, total_capacity_kw, yearly_target_kwh, installation_date, address, latitude, longitude, isolar_ps_id, isolar_ps_key, isolar_ps_name, isolar_installed_kw, isolar_linked_at, created_at, updated_at, deleted_at, isolar_credential_id, netting_analyzer_id, isolar_last_sync_at, isolar_last_sync_error
 `
 
 type PlantCreateParams struct {
@@ -152,6 +153,7 @@ type PlantCreateParams struct {
 	IsolarPsName       *string
 	IsolarInstalledKw  pgtype.Numeric
 	IsolarLinkedAt     pgtype.Timestamptz
+	NettingAnalyzerID  *uuid.UUID
 	At                 pgtype.Timestamptz
 }
 
@@ -182,6 +184,7 @@ func (q *Queries) PlantCreate(ctx context.Context, arg PlantCreateParams) (Power
 		arg.IsolarPsName,
 		arg.IsolarInstalledKw,
 		arg.IsolarLinkedAt,
+		arg.NettingAnalyzerID,
 		arg.At,
 	)
 	var i PowerPlant
@@ -212,6 +215,10 @@ func (q *Queries) PlantCreate(ctx context.Context, arg PlantCreateParams) (Power
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.IsolarCredentialID,
+		&i.NettingAnalyzerID,
+		&i.IsolarLastSyncAt,
+		&i.IsolarLastSyncError,
 	)
 	return i, err
 }
@@ -242,7 +249,7 @@ set device_name = excluded.device_name,
     efficiency_pct = excluded.efficiency_pct,
     last_seen_at = excluded.last_seen_at,
     updated_at = excluded.updated_at
-returning id, plant_id, device_sn, device_name, device_type, device_type_name, provider_key, brand, model, rated_power_kw, status, efficiency_pct, last_seen_at, created_at, updated_at
+returning id, plant_id, device_sn, device_name, device_type, device_type_name, provider_key, brand, model, rated_power_kw, status, efficiency_pct, last_seen_at, created_at, updated_at, snapshot_at, fault_status, active_power_kw, yield_today_kwh, yield_month_kwh, yield_year_kwh, yield_total_kwh
 `
 
 type PlantDeviceUpsertParams struct {
@@ -315,6 +322,13 @@ func (q *Queries) PlantDeviceUpsert(ctx context.Context, arg PlantDeviceUpsertPa
 		&i.LastSeenAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SnapshotAt,
+		&i.FaultStatus,
+		&i.ActivePowerKw,
+		&i.YieldTodayKwh,
+		&i.YieldMonthKwh,
+		&i.YieldYearKwh,
+		&i.YieldTotalKwh,
 	)
 	return i, err
 }
@@ -322,7 +336,9 @@ func (q *Queries) PlantDeviceUpsert(ctx context.Context, arg PlantDeviceUpsertPa
 const plantDevicesList = `-- name: PlantDevicesList :many
 select d.id, d.plant_id, d.device_sn, d.device_name, d.device_type, d.device_type_name,
        d.provider_key, d.brand, d.model, d.rated_power_kw, d.status, d.efficiency_pct,
-       d.last_seen_at, d.created_at, d.updated_at
+       d.last_seen_at, d.created_at, d.updated_at,
+       d.snapshot_at, d.fault_status, d.active_power_kw, d.yield_today_kwh,
+       d.yield_month_kwh, d.yield_year_kwh, d.yield_total_kwh
 from power_plants p
 left join power_plant_devices d on d.plant_id = p.id
 where p.id = $1 and p.company_id = $2 and p.deleted_at is null
@@ -350,6 +366,13 @@ type PlantDevicesListRow struct {
 	LastSeenAt     pgtype.Timestamptz
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
+	SnapshotAt     pgtype.Timestamptz
+	FaultStatus    *int32
+	ActivePowerKw  pgtype.Numeric
+	YieldTodayKwh  pgtype.Numeric
+	YieldMonthKwh  pgtype.Numeric
+	YieldYearKwh   pgtype.Numeric
+	YieldTotalKwh  pgtype.Numeric
 }
 
 // Isolation: power_plant_devices has no company_id and is reached ONLY by
@@ -387,6 +410,13 @@ func (q *Queries) PlantDevicesList(ctx context.Context, arg PlantDevicesListPara
 			&i.LastSeenAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.SnapshotAt,
+			&i.FaultStatus,
+			&i.ActivePowerKw,
+			&i.YieldTodayKwh,
+			&i.YieldMonthKwh,
+			&i.YieldYearKwh,
+			&i.YieldTotalKwh,
 		); err != nil {
 			return nil, err
 		}
@@ -400,7 +430,7 @@ func (q *Queries) PlantDevicesList(ctx context.Context, arg PlantDevicesListPara
 
 const plantGet = `-- name: PlantGet :one
 
-select id, company_id, name, installation_number, plant_kind, pv_brand_model, panel_power_w, panel_efficiency_pct, panel_count, string_count, orientation, tilt_angle_deg, total_capacity_kw, yearly_target_kwh, installation_date, address, latitude, longitude, isolar_ps_id, isolar_ps_key, isolar_ps_name, isolar_installed_kw, isolar_linked_at, created_at, updated_at, deleted_at from power_plants
+select id, company_id, name, installation_number, plant_kind, pv_brand_model, panel_power_w, panel_efficiency_pct, panel_count, string_count, orientation, tilt_angle_deg, total_capacity_kw, yearly_target_kwh, installation_date, address, latitude, longitude, isolar_ps_id, isolar_ps_key, isolar_ps_name, isolar_installed_kw, isolar_linked_at, created_at, updated_at, deleted_at, isolar_credential_id, netting_analyzer_id, isolar_last_sync_at, isolar_last_sync_error from power_plants
 where id = $1 and company_id = $2 and deleted_at is null
 `
 
@@ -444,12 +474,16 @@ func (q *Queries) PlantGet(ctx context.Context, arg PlantGetParams) (PowerPlant,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.IsolarCredentialID,
+		&i.NettingAnalyzerID,
+		&i.IsolarLastSyncAt,
+		&i.IsolarLastSyncError,
 	)
 	return i, err
 }
 
 const plantGetForShare = `-- name: PlantGetForShare :one
-select id, company_id, name, installation_number, plant_kind, pv_brand_model, panel_power_w, panel_efficiency_pct, panel_count, string_count, orientation, tilt_angle_deg, total_capacity_kw, yearly_target_kwh, installation_date, address, latitude, longitude, isolar_ps_id, isolar_ps_key, isolar_ps_name, isolar_installed_kw, isolar_linked_at, created_at, updated_at, deleted_at from power_plants
+select id, company_id, name, installation_number, plant_kind, pv_brand_model, panel_power_w, panel_efficiency_pct, panel_count, string_count, orientation, tilt_angle_deg, total_capacity_kw, yearly_target_kwh, installation_date, address, latitude, longitude, isolar_ps_id, isolar_ps_key, isolar_ps_name, isolar_installed_kw, isolar_linked_at, created_at, updated_at, deleted_at, isolar_credential_id, netting_analyzer_id, isolar_last_sync_at, isolar_last_sync_error from power_plants
 where id = $1 and company_id = $2 and deleted_at is null
 for share
 `
@@ -497,12 +531,16 @@ func (q *Queries) PlantGetForShare(ctx context.Context, arg PlantGetForSharePara
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.IsolarCredentialID,
+		&i.NettingAnalyzerID,
+		&i.IsolarLastSyncAt,
+		&i.IsolarLastSyncError,
 	)
 	return i, err
 }
 
 const plantList = `-- name: PlantList :many
-select id, company_id, name, installation_number, plant_kind, pv_brand_model, panel_power_w, panel_efficiency_pct, panel_count, string_count, orientation, tilt_angle_deg, total_capacity_kw, yearly_target_kwh, installation_date, address, latitude, longitude, isolar_ps_id, isolar_ps_key, isolar_ps_name, isolar_installed_kw, isolar_linked_at, created_at, updated_at, deleted_at from power_plants
+select id, company_id, name, installation_number, plant_kind, pv_brand_model, panel_power_w, panel_efficiency_pct, panel_count, string_count, orientation, tilt_angle_deg, total_capacity_kw, yearly_target_kwh, installation_date, address, latitude, longitude, isolar_ps_id, isolar_ps_key, isolar_ps_name, isolar_installed_kw, isolar_linked_at, created_at, updated_at, deleted_at, isolar_credential_id, netting_analyzer_id, isolar_last_sync_at, isolar_last_sync_error from power_plants
 where company_id = $1
   and (cardinality($2::uuid[]) = 0 or id = any($2::uuid[]))
   and ($3::text is null or plant_kind = $3)
@@ -568,6 +606,10 @@ func (q *Queries) PlantList(ctx context.Context, arg PlantListParams) ([]PowerPl
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.IsolarCredentialID,
+			&i.NettingAnalyzerID,
+			&i.IsolarLastSyncAt,
+			&i.IsolarLastSyncError,
 		); err != nil {
 			return nil, err
 		}
@@ -727,9 +769,10 @@ set name = $1,
     isolar_ps_name = $19,
     isolar_installed_kw = $20,
     isolar_linked_at = $21,
-    updated_at = $22
-where id = $23 and company_id = $24 and deleted_at is null
-returning id, company_id, name, installation_number, plant_kind, pv_brand_model, panel_power_w, panel_efficiency_pct, panel_count, string_count, orientation, tilt_angle_deg, total_capacity_kw, yearly_target_kwh, installation_date, address, latitude, longitude, isolar_ps_id, isolar_ps_key, isolar_ps_name, isolar_installed_kw, isolar_linked_at, created_at, updated_at, deleted_at
+    netting_analyzer_id = $22,
+    updated_at = $23
+where id = $24 and company_id = $25 and deleted_at is null
+returning id, company_id, name, installation_number, plant_kind, pv_brand_model, panel_power_w, panel_efficiency_pct, panel_count, string_count, orientation, tilt_angle_deg, total_capacity_kw, yearly_target_kwh, installation_date, address, latitude, longitude, isolar_ps_id, isolar_ps_key, isolar_ps_name, isolar_installed_kw, isolar_linked_at, created_at, updated_at, deleted_at, isolar_credential_id, netting_analyzer_id, isolar_last_sync_at, isolar_last_sync_error
 `
 
 type PlantUpdateParams struct {
@@ -754,6 +797,7 @@ type PlantUpdateParams struct {
 	IsolarPsName       *string
 	IsolarInstalledKw  pgtype.Numeric
 	IsolarLinkedAt     pgtype.Timestamptz
+	NettingAnalyzerID  *uuid.UUID
 	UpdatedAt          pgtype.Timestamptz
 	ID                 uuid.UUID
 	CompanyID          uuid.UUID
@@ -782,6 +826,7 @@ func (q *Queries) PlantUpdate(ctx context.Context, arg PlantUpdateParams) (Power
 		arg.IsolarPsName,
 		arg.IsolarInstalledKw,
 		arg.IsolarLinkedAt,
+		arg.NettingAnalyzerID,
 		arg.UpdatedAt,
 		arg.ID,
 		arg.CompanyID,
@@ -814,6 +859,10 @@ func (q *Queries) PlantUpdate(ctx context.Context, arg PlantUpdateParams) (Power
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.IsolarCredentialID,
+		&i.NettingAnalyzerID,
+		&i.IsolarLastSyncAt,
+		&i.IsolarLastSyncError,
 	)
 	return i, err
 }

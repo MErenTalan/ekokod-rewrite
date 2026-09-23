@@ -145,9 +145,9 @@ func TestAnalyticsProductionDailyIsRealTimeAndMonthlyRequiresRefresh(t *testing.
 	plantID := tenant.Plants[0].ID
 	deviceID := productionSeedDevice(t, ctx, pool, plantID, "ANALYTICS-DEV")
 
-	rows := []model.PlantProduction{productionRow(plantID, deviceID, analyticsEpoch, "5.0000")}
-	_, _, err := productionRepo.BulkInsert(ctx, tenant.AdminScope, rows)
-	require.NoError(t, err)
+	_ = productionRepo
+	_ = deviceID
+	seedTotal(t, ctx, pool, plantID, analyticsEpoch, "5.0000")
 
 	// plant_production_daily buckets in Europe/Istanbul too: same widened
 	// window as the consumption side. plantIDs is named explicitly
@@ -337,12 +337,9 @@ func TestAnalyticsProductionViewsIDsOutsideScopeContributeNoRowsAndEmptyIDsRetur
 	deviceA := productionSeedDevice(t, ctx, pool, tenantA.Plants[0].ID, "ISO-A")
 	deviceB := productionSeedDevice(t, ctx, pool, tenantB.Plants[0].ID, "ISO-B")
 
-	_, _, err := productionRepo.BulkInsert(ctx, tenantA.AdminScope,
-		[]model.PlantProduction{productionRow(tenantA.Plants[0].ID, deviceA, analyticsEpoch, "1.0000")})
-	require.NoError(t, err)
-	_, _, err = productionRepo.BulkInsert(ctx, tenantB.AdminScope,
-		[]model.PlantProduction{productionRow(tenantB.Plants[0].ID, deviceB, analyticsEpoch, "999.0000")})
-	require.NoError(t, err)
+	_, _, _ = productionRepo, deviceA, deviceB
+	seedTotal(t, ctx, pool, tenantA.Plants[0].ID, analyticsEpoch, "1.0000")
+	seedTotal(t, ctx, pool, tenantB.Plants[0].ID, analyticsEpoch, "999.0000")
 
 	analyticsRefresh(t, ctx, pool, "plant_production_monthly")
 
@@ -484,10 +481,8 @@ func TestAnalyticsProductionDailyIDsOutsideScopeContributeNoRows(t *testing.T) {
 	window := store.TimeRange{From: analyticsEpoch.Add(-24 * time.Hour), To: analyticsEpoch.Add(48 * time.Hour)}
 
 	deviceID := productionSeedDevice(t, ctx, pool, tenantB.Plants[0].ID, "ISO-DEV")
-	_, _, err := productionRepo.BulkInsert(ctx, tenantB.Scope, []model.PlantProduction{
-		productionRow(tenantB.Plants[0].ID, deviceID, analyticsEpoch, "1.0000"),
-	})
-	require.NoError(t, err)
+	_, _ = productionRepo, deviceID
+	seedTotal(t, ctx, pool, tenantB.Plants[0].ID, analyticsEpoch, "1.0000")
 
 	// Self-evident non-vacuity: tenant B's row really exists in this view.
 	selfB, err := analyticsRepo.ProductionDaily(ctx, tenantB.Scope, []uuid.UUID{tenantB.Plants[0].ID}, window)

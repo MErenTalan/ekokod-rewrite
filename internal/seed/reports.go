@@ -100,17 +100,19 @@ func ensureGridPlant(ctx context.Context, pool *pgxpool.Pool, sc store.Scope, no
 			return err
 		}
 	}
-	device, err := plants.UpsertDevice(ctx, sc, model.PlantDevice{PlantID: plant.ID, DeviceSN: "E2E-INV-1"})
-	if err != nil {
+	if _, err := plants.UpsertDevice(ctx, sc, model.PlantDevice{PlantID: plant.ID, DeviceSN: "E2E-INV-1"}); err != nil {
 		return err
 	}
 	local := now.In(istanbul)
-	var rows []model.PlantProduction
+	var rows []model.PlantProductionTotal
+	var days []time.Time
 	for m := time.Date(local.Year()-1, 1, 15, 12, 0, 0, 0, istanbul); m.Before(time.Date(local.Year(), local.Month(), 1, 0, 0, 0, 0, istanbul)); m = m.AddDate(0, 1, 0) {
 		v := decimal.RequireFromString("9000")
-		rows = append(rows, model.PlantProduction{PlantID: plant.ID, DeviceID: device.ID, Ts: m.UTC(), ProductionKwh: &v, Source: "isolar"})
+		rows = append(rows, model.PlantProductionTotal{PlantID: plant.ID, Ts: m.UTC(), ProductionKwh: &v, Basis: model.BasisDailyTotal})
+		days = append(days, m)
 	}
-	if _, _, err := postgres.NewProductionRepository(pool).BulkInsert(ctx, sc, rows); err != nil {
+	// R276: plant totals feed the plant aggregates.
+	if _, err := postgres.NewProductionTotalsRepository(pool).ReplaceDays(ctx, sc, plant.ID, days, rows); err != nil {
 		return err
 	}
 	for _, view := range []string{"plant_production_daily", "plant_production_monthly"} {

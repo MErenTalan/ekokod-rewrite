@@ -177,7 +177,7 @@ func TestConsumptionColumnsAreNumeric(t *testing.T) {
 	}
 
 	for _, view := range []string{"plant_production_daily", "plant_production_monthly"} {
-		for _, column := range []string{"production_kwh", "max_active_power_kw", "avg_efficiency_pct"} {
+		for _, column := range []string{"production_kwh", "max_active_power_kw"} {
 			var dataType string
 			require.NoError(t, pool.QueryRow(ctx,
 				`select data_type from information_schema.columns
@@ -402,10 +402,12 @@ func TestPlantProductionAggregatesBucketInIstanbul(t *testing.T) {
 		{at(2025, time.January, 1, 13, 0), "7.0000", "9.0000", "20.000"},
 		{at(2025, time.January, 2, 13, 0), "11.0000", "4.0000", "16.000"},
 	} {
+		// R276: the plant aggregates read plant_production_totals since 00018.
+		_ = deviceID
 		_, err := pool.Exec(ctx,
-			`insert into plant_production (plant_id, ts, device_id, production_kwh, active_power_kw, efficiency_pct)
-			 values ($1, $2, $3, $4::numeric, $5::numeric, $6::numeric)`,
-			plantID, r.ts, deviceID, r.kwh, r.power, r.eff)
+			`insert into plant_production_totals (plant_id, ts, production_kwh, active_power_kw, basis)
+			 values ($1, $2, $3::numeric, $4::numeric, 'plant_meter')`,
+			plantID, r.ts, r.kwh, r.power)
 		require.NoError(t, err)
 	}
 
@@ -413,23 +415,21 @@ func TestPlantProductionAggregatesBucketInIstanbul(t *testing.T) {
 		refreshAggregate(t, ctx, pool, view)
 	}
 
-	var kwh, power, eff pgtype.Numeric
+	var kwh, power pgtype.Numeric
 	require.NoError(t, pool.QueryRow(ctx,
-		`select production_kwh, max_active_power_kw, avg_efficiency_pct
+		`select production_kwh, max_active_power_kw
 		   from plant_production_daily where plant_id = $1 and bucket = $2`,
-		plantID, at(2025, time.January, 1, 0, 0)).Scan(&kwh, &power, &eff),
+		plantID, at(2025, time.January, 1, 0, 0)).Scan(&kwh, &power),
 		"the 01:00 Istanbul row must belong to 1 January, not 31 December")
 	requireNumericEquals(t, "12.0000", kwh)
 	requireNumericEquals(t, "9.0000", power)
-	requireNumericEquals(t, "19.000", eff)
 
 	require.NoError(t, pool.QueryRow(ctx,
-		`select production_kwh, max_active_power_kw, avg_efficiency_pct
+		`select production_kwh, max_active_power_kw
 		   from plant_production_monthly where plant_id = $1 and bucket = $2`,
-		plantID, at(2025, time.January, 1, 0, 0)).Scan(&kwh, &power, &eff))
+		plantID, at(2025, time.January, 1, 0, 0)).Scan(&kwh, &power))
 	requireNumericEquals(t, "23.0000", kwh)
 	requireNumericEquals(t, "9.0000", power)
-	requireNumericEquals(t, "18.000", eff)
 }
 
 // TestAggregateBucketsAreConfiguredForIstanbul pins the bucket width and the
@@ -665,11 +665,11 @@ func TestOpenBucketIsVisibleInRealTimeAggregates(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	plantID, deviceID := seedPlantWithDevice(t, ctx, pool)
+	plantID, _ := seedPlantWithDevice(t, ctx, pool)
 	_, err := pool.Exec(ctx,
-		`insert into plant_production (plant_id, ts, device_id, production_kwh, active_power_kw, efficiency_pct)
-		 values ($1, $2, $3, 4::numeric, 2::numeric, 15::numeric)`,
-		plantID, dayStart, deviceID)
+		`insert into plant_production_totals (plant_id, ts, production_kwh, active_power_kw, basis)
+		 values ($1, $2, 4::numeric, 2::numeric, 'plant_meter')`,
+		plantID, dayStart)
 	require.NoError(t, err)
 
 	refreshPolicyRange(t, ctx, pool, "consumption_hourly", 30*24*time.Hour, now)
@@ -731,10 +731,10 @@ func TestOpenBucketIsDeliberatelyAbsentFromCoarseAggregates(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	plantID, deviceID := seedPlantWithDevice(t, ctx, pool)
+	plantID, _ := seedPlantWithDevice(t, ctx, pool)
 	_, err := pool.Exec(ctx,
-		`insert into plant_production (plant_id, ts, device_id, production_kwh)
-		 values ($1, $2, $3, 9::numeric)`, plantID, monthStart, deviceID)
+		`insert into plant_production_totals (plant_id, ts, production_kwh, basis)
+		 values ($1, $2, 9::numeric, 'plant_meter')`, plantID, monthStart)
 	require.NoError(t, err)
 
 	refreshPolicyRange(t, ctx, pool, "consumption_monthly", 365*24*time.Hour, now)

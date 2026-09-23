@@ -95,14 +95,13 @@ func reportFixture(t *testing.T) (*report.Service, testfixtures.Tenant, uuid.UUI
 	plants := postgres.NewPlantRepository(pool)
 	plant, err := plants.Create(ctx, sc, model.PowerPlant{CompanyID: tenant.Company.ID, Name: "Arazi GES", PlantKind: "grid", YearlyTargetKwh: &target})
 	require.NoError(t, err)
-	device, err := plants.UpsertDevice(ctx, sc, model.PlantDevice{PlantID: plant.ID, DeviceSN: "INV-1"})
-	require.NoError(t, err)
-	var prod []model.PlantProduction
+	// R276: plant production lives in plant_production_totals since F9.
+	var prod []model.PlantProductionTotal
 	for h := range 3 {
 		v := dec("100")
-		prod = append(prod, model.PlantProduction{PlantID: plant.ID, DeviceID: device.ID, Ts: from.Add(time.Duration(h+12) * time.Hour).UTC(), ProductionKwh: &v, Source: "isolar"})
+		prod = append(prod, model.PlantProductionTotal{PlantID: plant.ID, Ts: from.Add(time.Duration(h+12) * time.Hour).UTC(), ProductionKwh: &v, Basis: model.BasisPlantMeter})
 	}
-	_, _, err = postgres.NewProductionRepository(pool).BulkInsert(ctx, sc, prod)
+	_, err = postgres.NewProductionTotalsRepository(pool).ReplaceDays(ctx, sc, plant.ID, []time.Time{from}, prod)
 	require.NoError(t, err)
 	_, err = postgres.NewSolarTariffRepository(pool).Create(ctx, sc, model.SolarTariff{CompanyID: tenant.Company.ID, PlantID: plant.ID,
 		EffectiveFrom: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), FeedInTariff: dec("2.0"), Currency: model.CurrencyTRY})

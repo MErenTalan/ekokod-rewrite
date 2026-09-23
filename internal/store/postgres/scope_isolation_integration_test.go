@@ -128,6 +128,8 @@ var scopeIsoRegisteredRepositories = map[string]bool{
 	"NewCursorRepository":           true,
 	"NewAnomalyRepository":          true,
 	"NewProductionRepository":       true,
+	"NewProductionTotalsRepository": true,
+	"NewFaultRepository":            true,
 	"NewAnalyticsRepository":        true,
 	"NewPriceRepository":            true,
 	"NewBillingParameterRepository": true,
@@ -771,6 +773,13 @@ func seedScopeIsoFixtures(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 		productionRow(f.plantID, f.deviceID, scopeIsoEpoch.Add(time.Hour), "6.0000"),
 	})
 	require.NoError(t, err)
+	// R276: the plant aggregates and totals reads use plant_production_totals.
+	seedTotal(t, ctx, pool, f.plantID, scopeIsoEpoch, "5.0000")
+	seedTotal(t, ctx, pool, f.plantID, scopeIsoEpoch.Add(time.Hour), "6.0000")
+	_, err = postgres.NewFaultRepository(pool).Upsert(ctx, adminScope, []model.PlantFault{{
+		PlantID: f.plantID, Ref: "scope-iso-fault", Code: "10", Name: "fault", OccurredAt: scopeIsoEpoch, FirstSeenAt: scopeIsoEpoch,
+	}})
+	require.NoError(t, err)
 
 	plantRepo := postgres.NewPlantRepository(pool)
 	_, err = plantRepo.ReplaceMonthlyTargets(ctx, adminScope, f.plantID, []model.PlantMonthlyTarget{
@@ -1372,6 +1381,65 @@ func TestScopeIsolation(t *testing.T) {
 		ownLatest, err := repo.Latest(ctx, tenantB.AdminScope, bf.plantID, narrowRange)
 		require.NoError(t, err)
 		require.NotNil(t, ownLatest)
+	})
+
+	// --- F9 solar repositories (company-only via power_plants) -----------------
+	t.Run("ProductionTotalsRepository", func(t *testing.T) {
+		repo := postgres.NewProductionTotalsRepository(pool)
+		_, err := repo.Range(ctx, tenantA.AdminScope, bf.plantID, narrowRange)
+		require.ErrorIs(t, err, store.ErrNotFound)
+		own, err := repo.Range(ctx, tenantB.AdminScope, bf.plantID, narrowRange)
+		require.NoError(t, err)
+		require.NotEmpty(t, own, "positive control")
+		_, err = repo.FirstDay(ctx, tenantA.AdminScope, bf.plantID)
+		require.ErrorIs(t, err, store.ErrNotFound)
+		_, err = repo.ReplaceDays(ctx, tenantA.AdminScope, bf.plantID, []time.Time{scopeIsoEpoch}, nil)
+		require.ErrorIs(t, err, store.ErrNotFound)
+		_, err = postgres.NewProductionRepository(pool).ReplaceDeviceDays(ctx, tenantA.AdminScope, bf.plantID, []time.Time{scopeIsoEpoch}, nil)
+		require.ErrorIs(t, err, store.ErrNotFound)
+		own, err = repo.Range(ctx, tenantB.AdminScope, bf.plantID, narrowRange)
+		require.NoError(t, err)
+		require.NotEmpty(t, own, "a refused replace deleted nothing")
+	})
+
+	t.Run("FaultRepository", func(t *testing.T) {
+		repo := postgres.NewFaultRepository(pool)
+		_, _, err := repo.List(ctx, tenantA.AdminScope, bf.plantID, store.Page{Limit: 10})
+		require.ErrorIs(t, err, store.ErrNotFound)
+		own, _, err := repo.List(ctx, tenantB.AdminScope, bf.plantID, store.Page{Limit: 10})
+		require.NoError(t, err)
+		require.NotEmpty(t, own, "positive control")
+		_, err = repo.Unforwarded(ctx, tenantA.AdminScope, bf.plantID, scopeIsoEpoch.AddDate(-1, 0, 0))
+		require.ErrorIs(t, err, store.ErrNotFound)
+		_, err = repo.Claim(ctx, tenantA.AdminScope, bf.plantID, []string{"scope-iso-fault"})
+		require.ErrorIs(t, err, store.ErrNotFound)
+		_, err = repo.Upsert(ctx, tenantA.AdminScope, []model.PlantFault{{PlantID: bf.plantID, Ref: "x", Code: "1", Name: "x", OccurredAt: scopeIsoEpoch}})
+		require.ErrorIs(t, err, store.ErrNotFound)
+		claimed, err := repo.Claim(ctx, tenantB.AdminScope, bf.plantID, []string{"iso-claim"})
+		require.NoError(t, err)
+		require.Equal(t, []string{"iso-claim"}, claimed)
+		require.NoError(t, repo.Release(ctx, tenantA.AdminScope, bf.plantID, []string{"iso-claim"}))
+		again, err := repo.Claim(ctx, tenantB.AdminScope, bf.plantID, []string{"iso-claim"})
+		require.NoError(t, err)
+		require.Empty(t, again, "still claimed: another company's release deleted nothing")
+		_, err = repo.Prune(ctx, tenantA.AdminScope, scopeIsoEpoch.AddDate(10, 0, 0))
+		require.NoError(t, err)
+		own, _, err = repo.List(ctx, tenantB.AdminScope, bf.plantID, store.Page{Limit: 10})
+		require.NoError(t, err)
+		require.NotEmpty(t, own, "another company's prune deleted nothing")
+	})
+
+	t.Run("PlantRepositorySolar", func(t *testing.T) {
+		repo := postgres.NewPlantRepository(pool)
+		now := scopeIsoEpoch
+		require.ErrorIs(t, repo.UpdateDeviceSnapshot(ctx, tenantA.AdminScope, model.PlantDevice{ID: bf.deviceID, PlantID: bf.plantID, SnapshotAt: &now}), store.ErrNotFound)
+		require.ErrorIs(t, repo.SetSyncState(ctx, tenantA.AdminScope, bf.plantID, now, nil), store.ErrNotFound)
+		_, err := repo.SetIsolarLink(ctx, tenantA.AdminScope, model.PowerPlant{ID: bf.plantID, CompanyID: tenantA.Company.ID})
+		require.ErrorIs(t, err, store.ErrNotFound)
+		scopeIsoAssertListExcludes(t,
+			func(s store.Scope) ([]model.PowerPlant, error) { return repo.ListLinked(ctx, s) },
+			tenantA.AdminScope, tenantB.AdminScope, bf.plantID,
+			func(p model.PowerPlant) uuid.UUID { return p.ID }, "PlantRepository.ListLinked cross-tenant")
 	})
 
 	// --- AnalyticsRepository (Consumption* building-scoped, Production*

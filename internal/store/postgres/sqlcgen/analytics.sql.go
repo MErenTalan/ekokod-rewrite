@@ -337,7 +337,7 @@ func (q *Queries) AnalyticsConsumptionYearly(ctx context.Context, arg AnalyticsC
 }
 
 const analyticsProductionDaily = `-- name: AnalyticsProductionDaily :many
-select p.plant_id, p.bucket, p.production_kwh, p.max_active_power_kw, p.avg_efficiency_pct from plant_production_daily p
+select p.plant_id, p.bucket, p.production_kwh, p.max_active_power_kw from plant_production_daily p
 join power_plants pp on pp.id = p.plant_id
 where pp.company_id = $1
   and pp.deleted_at is null
@@ -375,7 +375,6 @@ func (q *Queries) AnalyticsProductionDaily(ctx context.Context, arg AnalyticsPro
 			&i.Bucket,
 			&i.ProductionKwh,
 			&i.MaxActivePowerKw,
-			&i.AvgEfficiencyPct,
 		); err != nil {
 			return nil, err
 		}
@@ -388,7 +387,7 @@ func (q *Queries) AnalyticsProductionDaily(ctx context.Context, arg AnalyticsPro
 }
 
 const analyticsProductionMonthly = `-- name: AnalyticsProductionMonthly :many
-select p.plant_id, p.bucket, p.production_kwh, p.max_active_power_kw, p.avg_efficiency_pct from plant_production_monthly p
+select p.plant_id, p.bucket, p.production_kwh, p.max_active_power_kw from plant_production_monthly p
 join power_plants pp on pp.id = p.plant_id
 where pp.company_id = $1
   and pp.deleted_at is null
@@ -426,7 +425,6 @@ func (q *Queries) AnalyticsProductionMonthly(ctx context.Context, arg AnalyticsP
 			&i.Bucket,
 			&i.ProductionKwh,
 			&i.MaxActivePowerKw,
-			&i.AvgEfficiencyPct,
 		); err != nil {
 			return nil, err
 		}
