@@ -59,6 +59,9 @@ var catalogue = []struct {
 // ISOCategories are the report's ISO 14064 groups, in order.
 var ISOCategories = []string{"category_1", "category_2", "category_3", "category_4", "category_5", "category_6"}
 
+// GridFactorKey is the Türkiye grid factor row (R262, R313).
+const GridFactorKey = "grid_electricity_tr_2022"
+
 // Grid and generation are the sub-categories the daily accrual writes (R311).
 const (
 	SubGrid       = "sub_grid_electricity"
