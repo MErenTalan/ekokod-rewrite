@@ -28,12 +28,18 @@ const ROUTES = {
         : { version: 1, type: 'monthly', period: '2026-08', monthly: demoMonthly },
     ),
   // Two pages: the first names a cursor, the second is the rest.
-  'GET /api/v1/reports': (req: Request) =>
-    Response.json(
-      new URL(req.url).searchParams.get('cursor') === 'p2'
+  // The API refuses a cursor it did not issue, exactly as kit.ResolvePage does.
+  'GET /api/v1/reports': (req: Request) => {
+    const cursor = new URL(req.url).searchParams.get('cursor');
+    if (cursor !== null && cursor !== '' && cursor !== 'p2') {
+      return Response.json({ error: { code: 'invalid_cursor', message: 'Sayfa imleci geçersiz.' } }, { status: 400 });
+    }
+    return Response.json(
+      cursor === 'p2'
         ? { items: demoArchive.slice(2), next_cursor: null, total: demoArchive.length }
         : { items: demoArchive.slice(0, 2), next_cursor: 'p2', total: demoArchive.length },
-    ),
+    );
+  },
   'POST /api/v1/reports/generate': Response.json(
     { items: [{ building_id: 'b-1', report_id: 'r-9', job_id: 'report.generate:b-1:monthly:2026-08' }] },
     { status: 202 },

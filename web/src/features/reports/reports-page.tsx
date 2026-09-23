@@ -202,7 +202,9 @@ function ArchiveTab() {
     },
     {
       pageParamName: 'cursor',
-      initialPageParam: undefined,
+      // Not undefined: the client turns an undefined page param into 0,
+      // which is no cursor the API issued.
+      initialPageParam: '',
       getNextPageParam: (last: { next_cursor?: string | null }) => last.next_cursor ?? undefined,
     },
   );
