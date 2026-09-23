@@ -181,7 +181,7 @@ func (s *Service) forwardPlant(ctx context.Context, sc store.Scope, plant model.
 	msg := mail.Message{To: emails, Subject: fmt.Sprintf("iSolar Alarm Bildirimi: %s - %d yeni alarm", name, len(lines)),
 		Text: name + " santralinde yeni iSolar alarmları:\n\n" + strings.Join(lines, "\n") + "\n"}
 
-	sendErr, reason, hide := s.send(ctx, sc, msg)
+	reason, hide, sendErr := s.send(ctx, sc, msg)
 	if sendErr != nil {
 		if err := s.d.Faults.Release(ctx, sc, plant.ID, claimed); err != nil {
 			return err
@@ -194,23 +194,23 @@ func (s *Service) forwardPlant(ctx context.Context, sc store.Scope, plant model.
 	return nil
 }
 
-func (s *Service) send(ctx context.Context, sc store.Scope, msg mail.Message) (err error, reason string, hide []string) {
+func (s *Service) send(ctx context.Context, sc store.Scope, msg mail.Message) (reason string, hide []string, err error) {
 	if s.d.SMTP == nil || s.d.Mail == nil {
-		return errors.New("mail not configured"), "şirketin SMTP ayarları yok", nil
+		return "şirketin SMTP ayarları yok", nil, errors.New("mail not configured")
 	}
 	settings, err := s.d.SMTP.Get(ctx, sc)
 	if err != nil {
-		return err, "şirketin SMTP ayarları yok", nil
+		return "şirketin SMTP ayarları yok", nil, err
 	}
 	password, err := s.d.SMTP.OpenPassword(ctx, sc)
 	if err != nil {
-		return err, "SMTP parolası okunamadı", nil
+		return "SMTP parolası okunamadı", nil, err
 	}
 	hide = secret.Fragments(string(password))
 	if err := s.d.Mail.Send(ctx, settings, password, msg); err != nil {
-		return err, "e-posta gönderilemedi", hide
+		return "e-posta gönderilemedi", hide, err
 	}
-	return nil, "", nil
+	return "", nil, nil
 }
 
 func (s *Service) alarmMessage(ctx context.Context, sc store.Scope, status, text string) {
