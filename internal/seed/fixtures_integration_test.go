@@ -114,4 +114,27 @@ func TestE2EFixturesHaveReadingsAndBill(t *testing.T) {
 	require.Equal(t, 1, imports)
 	require.Equal(t, 1, solar)
 	require.GreaterOrEqual(t, schedule, 2)
+
+	// F8b: a utility-scale plant with a yearly target and monthly production
+	// (the yearly report's solar section), and one completed monthly report
+	// for A1's previous month (the archive), each exactly once after two runs.
+	var gridPlants int
+	var target decimal.Decimal
+	require.NoError(t, pool.QueryRow(ctx,
+		`select count(*), coalesce(max(yearly_target_kwh), 0) from power_plants where company_id = $1 and plant_kind = 'grid'`,
+		fx.CompanyA).Scan(&gridPlants, &target))
+	require.Equal(t, 1, gridPlants)
+	require.True(t, target.IsPositive(), "the solar section has a target to compare with")
+	var productionMonths int
+	require.NoError(t, pool.QueryRow(ctx,
+		`select count(*) from plant_production_monthly m join power_plants p on p.id = m.plant_id
+		 where p.company_id = $1 and p.plant_kind = 'grid'`, fx.CompanyA).Scan(&productionMonths))
+	require.GreaterOrEqual(t, productionMonths, 12, "a year of monthly production, materialised")
+	var reports int
+	var status string
+	require.NoError(t, pool.QueryRow(ctx,
+		`select count(*), coalesce(max(status::text), '') from reports where building_id = $1 and type = 'monthly' and period = '2026-08'`,
+		fx.BuildingA1).Scan(&reports, &status))
+	require.Equal(t, 1, reports)
+	require.Equal(t, "completed", status)
 }

@@ -160,7 +160,10 @@ func ensurePlantTariff(ctx context.Context, pool *pgxpool.Pool, sc store.Scope, 
 	effectiveFrom, now time.Time,
 ) error {
 	plants := postgres.NewPlantRepository(pool)
-	existing, err := plants.List(ctx, sc, store.PlantFilter{Page: store.Page{Limit: 10}})
+	// Its own rooftop plant: "the first plant" stops being one plant once the
+	// report seed adds a utility-scale one.
+	rooftop := "rooftop"
+	existing, err := plants.List(ctx, sc, store.PlantFilter{PlantKind: &rooftop, Page: store.Page{Limit: 10}})
 	if err != nil {
 		return err
 	}
