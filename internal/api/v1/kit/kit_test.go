@@ -218,3 +218,20 @@ func TestEveryErrorCodeHasBothLocales(t *testing.T) {
 		require.NotEqual(t, kit.Message(code, "tr"), kit.Message(code, "en"), code)
 	}
 }
+
+// A job id carries colons; the browser's client sends them percent-encoded,
+// and chi then routes on RawPath and hands back the escaped segment. The id
+// must bind decoded, or GET /jobs/{id} answers 404 for every such job (R267).
+func TestBindDecodesAnEscapedPathValue(t *testing.T) {
+	type jobPath struct {
+		ID string `path:"id" json:"-"`
+	}
+	var got jobPath
+	var err error
+	r := chi.NewRouter()
+	r.Get("/jobs/{id}", func(_ http.ResponseWriter, req *http.Request) { err = kit.Bind(req, &got) })
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/jobs/billing.generate%3Acompany%3Aabc%3A2026-08", nil)
+	r.ServeHTTP(httptest.NewRecorder(), req)
+	require.NoError(t, err)
+	require.Equal(t, "billing.generate:company:abc:2026-08", got.ID)
+}

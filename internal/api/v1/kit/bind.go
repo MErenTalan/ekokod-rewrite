@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
@@ -161,7 +162,12 @@ func bindFields(r *http.Request, v reflect.Value, query map[string][]string) err
 			continue
 		}
 		if name := f.Tag.Get("path"); name != "" {
-			raw := chi.URLParam(r, name)
+			// chi routes on RawPath when the URL has one, so the segment can
+			// still be escaped (a job id's colons arrive as %3A).
+			raw, err := url.PathUnescape(chi.URLParam(r, name))
+			if err != nil {
+				return perr.NotFound
+			}
 			if err := setValue(fv, []string{raw}); err != nil {
 				return perr.NotFound // a malformed id names nothing
 			}

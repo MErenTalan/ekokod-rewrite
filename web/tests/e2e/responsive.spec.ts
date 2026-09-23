@@ -16,6 +16,7 @@ const SCREENS = [
   ['messages', '/ekorm/messages'],
   ['bills', '/ekorm/bills'],
   ['tariffs', '/ekorm/tariffs'],
+  ['reports', '/ekorm/reports'],
 ] as const;
 
 for (const width of WIDTHS) {

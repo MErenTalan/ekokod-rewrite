@@ -53,4 +53,12 @@ go build -o "$bin" ./cmd/ekokod
 "$bin" seed >/dev/null
 "$bin" seed e2e
 "$bin" seed demo
-exec "$bin" api
+# F8b: a worker beside the API, so a job the screens start really runs
+# (report generation, delivery, and R267's finished-job answer). Both are
+# stopped together when Playwright stops this script.
+"$bin" worker &
+worker_pid=$!
+"$bin" api &
+api_pid=$!
+trap 'kill "$worker_pid" "$api_pid" 2>/dev/null || true' EXIT INT TERM
+wait "$api_pid"
