@@ -32,6 +32,9 @@ export function BillsPage() {
   const [month, setMonth] = useState<string | null>(null);
   const [activeOnly, setActiveOnly] = useState(false);
   const [jobID, setJobID] = useState<string | null>(null);
+  // What the last generation asked for, so the finished invoice can be found
+  // and offered for download (R238: compute -> watch -> download).
+  const [lastRequest, setLastRequest] = useState<GenerateRequest | null>(null);
 
   const canCompute = can('bills.compute');
   const [year, monthNumber] = month ? month.split('-').map(Number) : [0, 0];
@@ -54,6 +57,7 @@ export function BillsPage() {
   const { job, errorCode } = useJob(jobID, t('generate.title'));
 
   const generate = (request: GenerateRequest) => {
+    setLastRequest(request);
     compute.mutate(
       {
         params: { query: scope },
@@ -71,6 +75,29 @@ export function BillsPage() {
 
   const download = (path: string, query: Record<string, string | undefined>, name: string) =>
     void downloadFile(path, { ...scope, ...query }, name);
+
+  // The compute job answers with a state, not a bill, so the finished invoice
+  // is looked up by exactly what was asked for.
+  const generated = $api.useQuery(
+    'get',
+    '/api/v1/bills',
+    {
+      params: {
+        query: {
+          ...scope,
+          period: lastRequest?.period ?? '',
+          scope: lastRequest?.scope ?? 'company',
+          ...(lastRequest?.scope === 'analyzer' && lastRequest.analyzerIds.length === 1
+            ? { analyzer_id: lastRequest.analyzerIds[0] }
+            : {}),
+          ...(lastRequest?.scope === 'building' && lastRequest.buildingId
+            ? { building_id: lastRequest.buildingId }
+            : {}),
+        },
+      },
+    },
+    { enabled: lastRequest !== null && job?.status === 'succeeded' },
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -93,6 +120,8 @@ export function BillsPage() {
               onGenerate={generate}
               running={compute.isPending || job?.status === 'queued' || job?.status === 'running'}
               failure={job?.status === 'failed' ? messageKeyForErrorCode(errorCode) : undefined}
+              readyBillIds={job?.status === 'succeeded' ? (generated.data?.items ?? []).map((b) => b.id) : []}
+              onDownload={(id) => download(`/api/v1/bills/${id}/pdf`, {}, `fatura-${id}.pdf`)}
             />
           ) : null}
 

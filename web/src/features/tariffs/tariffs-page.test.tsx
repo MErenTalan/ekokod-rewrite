@@ -10,7 +10,8 @@ import { mockApi } from '@/test/api-mock';
 import { renderWithProviders } from '@/test/render';
 
 import {
-  demoAssignments, demoBuildingStates, demoNationalTariffs, demoTariff, demoTariffSummaries, demoTemplates,
+  demoAssignments, demoBuildingStates, demoIcmalImport, demoNationalTariffs, demoTariff, demoTariffSummaries,
+  demoTemplates,
 } from './_fixture';
 import { TariffsPage } from './tariffs-page';
 
@@ -140,12 +141,31 @@ describe('TariffsPage', () => {
     await user.type(screen.getByLabelText(/Dağıtım bedeli/), '0.85');
     await user.type(screen.getByLabelText(/Reaktif güç bedeli/), '1.2');
     await user.type(screen.getByLabelText(/KDV oranı/), '20');
-    await user.click(screen.getAllByRole('button', { name: /Kaydet/ })[0]);
+    await user.click(screen.getByRole('button', { name: /Uygula/ }));
 
     await waitFor(() => {
       const post = api.calls.find((c) => c.method === 'POST' && new URL(c.url).pathname === '/api/v1/buildings/bulk-tariff');
       expect(post).toBeDefined();
     });
+  });
+
+  it('uploads an icmal as multipart and shows the analysis it got back', async () => {
+    selectBuilding();
+    const user = userEvent.setup();
+    api = mockApi({ ...ROUTES, 'POST /api/v1/icmal-imports': Response.json(demoIcmalImport, { status: 201 }) });
+    render();
+
+    await user.click(await screen.findByRole('tab', { name: /İcmal/ }));
+    const file = new File(['Muhasebe Dönemi;ETSO Kodu\n202511;40ZTEST000000030\n'], 'icmal.csv', { type: 'text/csv' });
+    await user.upload(screen.getByLabelText(/İcmal dosyası/), file);
+
+    await waitFor(() => {
+      const post = api.calls.find((c) => c.method === 'POST' && new URL(c.url).pathname === '/api/v1/icmal-imports');
+      expect(post).toBeDefined();
+      // A spreadsheet travels as multipart/form-data, never as JSON.
+      expect(post?.headers.get('content-type') ?? '').toMatch(/multipart\/form-data/);
+    });
+    expect(await screen.findByText('40ZTEST000000030', { exact: false })).toBeVisible();
   });
 
   it('opens an existing version in the form', async () => {

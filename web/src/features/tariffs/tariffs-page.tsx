@@ -364,6 +364,7 @@ export function TariffsPage() {
               onDraftChange={(tariff) => setTemplateDraft({ ...templateDraft, tariff })}
               onSubmit={submitTemplate}
               serverErrors={templateDraft.id ? updateTemplate.fieldErrors : createTemplate.fieldErrors}
+              hideActions
             />
           </div>
         ) : null}
@@ -390,6 +391,7 @@ export function TariffsPage() {
               onSubmit={submitBulk}
               serverErrors={bulkAssign.fieldErrors}
               saving={bulkAssign.isPending}
+              hideActions
             />
           </div>
         ) : null}

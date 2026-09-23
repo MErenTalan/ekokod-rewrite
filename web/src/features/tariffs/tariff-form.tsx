@@ -21,6 +21,8 @@ export type TariffFormViewProps = {
   readOnly?: boolean;
   saving?: boolean;
   onCancel?: () => void;
+  /** Hides the form's own footer when a dialog already carries the actions. */
+  hideActions?: boolean;
 };
 
 const CURRENCIES = ['TRY', 'USD', 'EUR'] as const;
@@ -44,6 +46,7 @@ const EXTRA_BASES: ExtraChargeBasis[] = ['per_kwh', 'per_contracted_kw', 'per_ma
  */
 export function TariffFormView({
   draft, onDraftChange, onSubmit, serverErrors = {}, readOnly = false, saving = false, onCancel,
+  hideActions = false,
 }: TariffFormViewProps) {
   const t = useTranslations('tariffs');
   const common = useTranslations('common');
@@ -283,7 +286,7 @@ export function TariffFormView({
         )}
       </section>
 
-      {readOnly ? null : (
+      {readOnly || hideActions ? null : (
         <div className="flex justify-end gap-3">
           {onCancel ? <Button variant="ghost" onClick={onCancel}>{common('cancel')}</Button> : null}
           <Button loading={saving} disabled={Object.keys(errors).length > 0} onClick={onSubmit}>{common('save')}</Button>

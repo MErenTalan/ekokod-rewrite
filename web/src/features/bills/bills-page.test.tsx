@@ -78,6 +78,23 @@ describe('BillsPage', () => {
     expect(screen.queryByRole('button', { name: /Şirket faturası/ })).toBeNull();
   });
 
+  it('offers the finished invoice for download once the job succeeds', async () => {
+    const user = userEvent.setup();
+    api = mockApi({
+      ...ROUTES,
+      'GET /api/v1/jobs/billing.generate%3Acompany%3Ac-own%3A2026-08': {
+        id: 'billing.generate:company:c-own:2026-08', type: 'billing.generate', status: 'succeeded',
+      },
+      'GET /api/v1/bills': { items: [{ ...demoDashboard.buildings[0].rows[0], id: 'bill-9' }], total: 1 },
+    });
+    render();
+    await pickAugust(user);
+
+    await user.click(await screen.findByRole('button', { name: /Şirket faturası/ }));
+    // R238: compute -> watch -> download; the finished invoice is offered here.
+    expect(await screen.findByRole('button', { name: /Faturayı indir/ })).toBeVisible();
+  });
+
   it('names the data condition that stopped a generation', async () => {
     const user = userEvent.setup();
     api = mockApi(ROUTES);
