@@ -50,6 +50,8 @@ func (h *harness) foreign(t *testing.T) foreignIDs {
 	alarmA2 := h.alarmOn(t, h.fx.CompanyA, h.fx.AnalyzerA2)
 	alarmB := h.alarmOn(t, h.fx.CompanyB, h.fx.AnalyzerB1)
 
+	reportA2, reportB := h.reportFor(h.fx.CompanyA, h.fx.BuildingA2), h.reportFor(h.fx.CompanyB, h.fx.BuildingB1)
+
 	other := h.client(uaSafari)
 	other.login(seed.E2ECompanyAdminEmail, false)
 	var sessions dto.SessionList
@@ -77,7 +79,20 @@ func (h *harness) foreign(t *testing.T) foreignIDs {
 		"icmal-imports":            {uuid.NewString()},
 		"solar-tariffs":            {uuid.NewString()},
 		"national-tariff-schedule": {uuid.NewString()},
+		// F8b: a report of the other building and one of company B.
+		"reports": {reportA2, reportB},
 	}
+}
+
+// reportFor stores a completed report through the repository.
+func (h *harness) reportFor(company, building uuid.UUID) string {
+	h.t.Helper()
+	rp, err := postgres.NewReportRepository(h.pool).Upsert(h.t.Context(), store.SystemScope(company), model.Report{
+		CompanyID: company, BuildingID: building, Type: model.ReportTypeMonthly, Period: "2026-08",
+		PlantSelection: model.PlantSelectionAll, Payload: []byte(`{}`), Status: model.ReportStatusPending, CreatedAt: h.clock.Now(),
+	})
+	require.NoError(h.t, err)
+	return rp.ID.String()
 }
 
 // alarmOn creates a rule on one analyzer through the repository, so the sweep
@@ -116,6 +131,7 @@ func (h *harness) billFor(company, building uuid.UUID) model.Bill {
 func validBodies(h *harness) map[string]any {
 	return map[string]any{
 		"analyzers.refresh": map[string]any{"mode": "hourly"},
+		"reports.email":     map[string]any{"to": []string{"yonetici@firma.test"}},
 		// The analyzer named is the building admin's OWN, which sharpens the
 		// point: even a rule they could legitimately describe stays
 		// unreachable when its id is not theirs.
@@ -175,6 +191,13 @@ func TestBuildingAdminCannotReachOtherBuildingsAnyEndpoint(t *testing.T) {
 		res := ba.do(http.MethodPost, "/bills/compute", body)
 		require.Contains(t, []int{http.StatusForbidden, http.StatusNotFound}, res.status, "%v: %s", body, string(res.body))
 	}
+	for _, building := range []uuid.UUID{h.fx.BuildingA2, h.fx.BuildingB1} {
+		body := map[string]any{"type": "monthly", "period": "2026-08", "plant_selection": "all", "building_ids": []string{building.String()}}
+		res := ba.do(http.MethodPost, "/reports/generate", body)
+		require.Equal(t, http.StatusNotFound, res.status, "generate for %s: %s", building, string(res.body))
+		res = ba.do(http.MethodGet, "/reports/preview?type=monthly&period=2026-08&plant_selection=all&building_ids="+building.String(), nil)
+		require.Equal(t, http.StatusNotFound, res.status, "preview for %s: %s", building, string(res.body))
+	}
 	require.Empty(t, h.enq.snapshot(), "a refused foreign request enqueues nothing")
 	var auditAfter int
 	require.NoError(t, h.pool.QueryRow(t.Context(), `select count(*) from audit_log`).Scan(&auditAfter))
@@ -201,6 +224,7 @@ func TestBuildingAdminCannotReachOtherBuildingsAnyEndpoint(t *testing.T) {
 		require.Equal(t, http.StatusNotFound, res.status, "%s: %s", path, string(res.body))
 	}
 	for _, path := range []string{"/tariffs?building_id=" + h.fx.BuildingA2.String(), "/bills?building_id=" + h.fx.BuildingA2.String(),
+		"/reports", "/reports?building_id=" + h.fx.BuildingA2.String(),
 		"/analyzers?building_id=" + h.fx.BuildingA2.String(), "/buildings?company_id=" + h.fx.CompanyA.String()} {
 		res := ba.do(http.MethodGet, path, nil)
 		require.Equal(t, http.StatusOK, res.status, path)

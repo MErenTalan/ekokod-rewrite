@@ -44,6 +44,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/jobs"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/loadprofile"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/ops"
+	reportsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/report"
 	tariffsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/tariff"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/tenancy"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
@@ -192,6 +193,27 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 			Buildings: postgres.NewBuildingRepository(pool), Analyzers: postgres.NewAnalyzerRepository(pool), Root: cfg.Storage.Root},
 	}
 
+	// F8b reports: the API previews, enqueues and serves files; it never
+	// sends mail (R266).
+	reportAnalytics, err := consumption.NewAnalytics(consumption.AnalyticsDeps{Analytics: postgres.NewAnalyticsRepository(pool), Log: log})
+	if err != nil {
+		closeAll()
+		return Built{}, fmt.Errorf("apiwire: build report analytics: %w", err)
+	}
+	reportService, err := reportsvc.New(reportsvc.Deps{
+		Buildings: postgres.NewBuildingRepository(pool), Analyzers: postgres.NewAnalyzerRepository(pool), Bills: billRepo,
+		Plants: postgres.NewPlantRepository(pool), Solar: postgres.NewSolarTariffRepository(pool),
+		Tariffs: postgres.NewTariffRepository(pool), Carbon: postgres.NewCarbonRepository(pool),
+		Analytics: postgres.NewAnalyticsRepository(pool), Consumption: reportAnalytics, Clock: opts.Clock,
+	})
+	if err != nil {
+		closeAll()
+		return Built{}, fmt.Errorf("apiwire: build report service: %w", err)
+	}
+	reportRequests := reportsvc.Requests{Service: reportService, Reports: postgres.NewReportRepository(pool), Enqueuer: enqueuer,
+		Clock: opts.Clock, MaxRetry: cfg.Worker.MaxRetries,
+		Files: reportsvc.Files{Root: cfg.Storage.Root, Companies: postgres.NewCompanyRepository(pool), Buildings: postgres.NewBuildingRepository(pool)}}
+
 	calendarService, err := calendar.New(postgres.NewCalendarRepository(pool), opts.Clock)
 	if err != nil {
 		closeAll()
@@ -246,7 +268,7 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 	handlers := &v1.Handlers{
 		Calendar: calendarService, Credentials: credentialService, Jobs: jobService, Alarms: alarmService, Ops: opsService,
 		Definitions: integrations.Definitions{Integrations: postgres.NewIntegrationRepository(pool, cipher), Catalogue: admin.NewCatalogueRepository(pool)}, Auth: authService, Tenancy: tenancyService, Assets: assetService, Analysis: analysisService,
-		Tariffs: tariffService, Billing: billingService, BillRequests: billRequests, Clock: opts.Clock, Log: log, ClientIP: clientIP}
+		Tariffs: tariffService, Billing: billingService, BillRequests: billRequests, Reports: reportRequests, Clock: opts.Clock, Log: log, ClientIP: clientIP}
 	router := v1.NewRouter(handlers, middlewareFor(cfg, redisClient, authService, auditRepo, admin.NewAuditRepository(pool), clientIP, opts.RedisPrefix, log), log)
 	var once sync.Once
 	return Built{V1: router, Auth: authService, Close: func() { once.Do(closeAll) }}, nil

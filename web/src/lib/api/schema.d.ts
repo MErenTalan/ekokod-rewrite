@@ -1284,6 +1284,125 @@ export interface paths {
         patch: operations["profile.update"];
         trace?: never;
     };
+    "/api/v1/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The report archive, newest first, with the whole match's count. */
+        get: operations["reports.list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Generate one report per building; returns each building's job. */
+        post: operations["reports.generate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Compute report figures for buildings and a period without persisting them. */
+        get: operations["reports.preview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A stored report with its figures. */
+        get: operations["reports.get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/{id}/email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** E-mail the report with its PDF and workbook attached. */
+        post: operations["reports.email"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/{id}/excel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The report as a workbook, in the reader's language. */
+        get: operations["reports.excel"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/{id}/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The report as PDF, in the reader's language. */
+        get: operations["reports.pdf"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/smtp-settings": {
         parameters: {
             query?: never;
@@ -2375,7 +2494,7 @@ export interface components {
             /** Format: date-time */
             completed_at?: null | string;
             /** @enum {string} */
-            error_code?: "tariff_not_found" | "no_consumption_data" | "unresolved_anomaly" | "period_not_closed" | "ptf_data_missing" | "billing_parameters_missing" | "billing_parameters_invalid";
+            error_code?: "tariff_not_found" | "no_consumption_data" | "unresolved_anomaly" | "period_not_closed" | "ptf_data_missing" | "billing_parameters_missing" | "billing_parameters_invalid" | "report_building_not_found" | "report_not_ready" | "smtp_not_configured" | "delivery_failed";
             id: string;
             /** @enum {string} */
             status: "queued" | "running" | "succeeded" | "failed";
@@ -2688,6 +2807,215 @@ export interface components {
             t2_import?: components["schemas"]["Decimal"];
             t3_export?: components["schemas"]["Decimal"];
             t3_import?: components["schemas"]["Decimal"];
+        };
+        Report: {
+            building_id: components["schemas"]["UuidUUID"];
+            building_name: string;
+            /** Format: date-time */
+            created_at: string;
+            id: components["schemas"]["UuidUUID"];
+            payload?: components["schemas"]["ReportPayload"];
+            period: string;
+            /** @enum {string} */
+            plant_selection: "all" | "grid" | "rooftop";
+            /** Format: date-time */
+            processed_at?: null | string;
+            /** @enum {string} */
+            status: "pending" | "completed" | "error";
+            /** @enum {string} */
+            type: "monthly" | "yearly";
+        };
+        ReportBuildingLine: {
+            building_id: components["schemas"]["UuidUUID"];
+            currency?: null | string;
+            name: string;
+            purchase_price?: components["schemas"]["Decimal"];
+            tariff_name?: null | string;
+        };
+        ReportCarbon: {
+            consumption_t?: components["schemas"]["Decimal"];
+            factor: components["schemas"]["Decimal"];
+            factor_unit: string;
+            net_t?: components["schemas"]["Decimal"];
+            reduction_t?: components["schemas"]["Decimal"];
+            source_year?: null | number;
+        };
+        ReportCurrencyDelta: {
+            currency: string;
+            pct?: components["schemas"]["Decimal"];
+        };
+        ReportDelta: {
+            pct?: components["schemas"]["Decimal"];
+        };
+        ReportEmailAccepted: {
+            job_id: string;
+        };
+        ReportEmailRequest: {
+            to: string[];
+        };
+        ReportFigure: {
+            excluded?: boolean;
+            of: number;
+            partial?: boolean;
+            value?: components["schemas"]["Decimal"];
+            with_data: number;
+        };
+        ReportGenerateAccepted: {
+            items: components["schemas"]["ReportGenerateItem"][];
+        };
+        ReportGenerateItem: {
+            building_id: components["schemas"]["UuidUUID"];
+            job_id: string;
+            report_id: components["schemas"]["UuidUUID"];
+        };
+        ReportGenerateRequest: {
+            building_ids: components["schemas"]["UuidUUID"][];
+            period: string;
+            plant_ids?: components["schemas"]["UuidUUID"][];
+            /** @enum {string} */
+            plant_selection: "all" | "grid" | "rooftop";
+            /** @enum {string} */
+            type: "monthly" | "yearly";
+        };
+        ReportMoney: {
+            currency: string;
+            of: number;
+            value: components["schemas"]["Decimal"];
+            with_data: number;
+        };
+        ReportMonthPoint: {
+            current?: components["schemas"]["Decimal"];
+            month: number;
+            previous?: components["schemas"]["Decimal"];
+        };
+        ReportMonthly: {
+            average_purchase_price: components["schemas"]["ReportMoney"][];
+            bill: components["schemas"]["ReportMoney"][];
+            bill_chart: components["schemas"]["ReportMonthPoint"][];
+            bill_delta: components["schemas"]["ReportCurrencyDelta"][];
+            bill_prev: components["schemas"]["ReportMoney"][];
+            buildings: components["schemas"]["ReportBuildingLine"][];
+            capacitive: components["schemas"]["ReportFigure"];
+            capacitive_ratio?: components["schemas"]["Decimal"];
+            chart_currency?: null | string;
+            consumption: components["schemas"]["ReportFigure"];
+            consumption_chart: components["schemas"]["ReportMonthPoint"][];
+            consumption_delta: components["schemas"]["ReportDelta"];
+            consumption_prev: components["schemas"]["ReportFigure"];
+            daily_consumption: components["schemas"]["ReportFigure"];
+            daily_production: components["schemas"]["ReportFigure"];
+            days_in_month: number;
+            distribution_cost: components["schemas"]["ReportMoney"][];
+            energy_cost: components["schemas"]["ReportMoney"][];
+            inductive: components["schemas"]["ReportFigure"];
+            inductive_ratio?: components["schemas"]["Decimal"];
+            month: number;
+            omitted_currencies: string[];
+            partial: boolean;
+            plant_selection: string;
+            plants: components["schemas"]["ReportPlantLine"][];
+            production: components["schemas"]["ReportFigure"];
+            production_delta: components["schemas"]["ReportDelta"];
+            production_prev: components["schemas"]["ReportFigure"];
+            reactive_penalty: components["schemas"]["ReportMoney"][];
+            reactive_penalty_delta: components["schemas"]["ReportCurrencyDelta"][];
+            reactive_penalty_prev: components["schemas"]["ReportMoney"][];
+            rooftop: components["schemas"]["ReportFigure"];
+            rooftop_feed_in: components["schemas"]["ReportPriceRange"];
+            rooftop_prev: components["schemas"]["ReportFigure"];
+            t1: components["schemas"]["ReportFigure"];
+            t2: components["schemas"]["ReportFigure"];
+            t3: components["schemas"]["ReportFigure"];
+            taxes: components["schemas"]["ReportMoney"][];
+            utility: components["schemas"]["ReportFigure"];
+            utility_feed_in: components["schemas"]["ReportPriceRange"];
+            utility_prev: components["schemas"]["ReportFigure"];
+            year: number;
+        };
+        ReportPage: {
+            items: components["schemas"]["ReportSummary"][];
+            next_cursor?: null | string;
+            /** Format: int64 */
+            total: number;
+        };
+        ReportPayload: {
+            monthly?: components["schemas"]["ReportMonthly"];
+            period: string;
+            /** @enum {string} */
+            type: "monthly" | "yearly";
+            version: number;
+            yearly?: components["schemas"]["ReportYearly"];
+        };
+        ReportPlantLine: {
+            achievement_pct?: components["schemas"]["Decimal"];
+            feed_in?: components["schemas"]["Decimal"];
+            kind: string;
+            name: string;
+            plant_id: components["schemas"]["UuidUUID"];
+            production: components["schemas"]["ReportFigure"];
+            target?: components["schemas"]["Decimal"];
+        };
+        ReportPriceRange: {
+            max?: components["schemas"]["Decimal"];
+            min?: components["schemas"]["Decimal"];
+        };
+        ReportSummary: {
+            building_id: components["schemas"]["UuidUUID"];
+            building_name: string;
+            /** Format: date-time */
+            created_at: string;
+            id: components["schemas"]["UuidUUID"];
+            period: string;
+            /** @enum {string} */
+            plant_selection: "all" | "grid" | "rooftop";
+            /** Format: date-time */
+            processed_at?: null | string;
+            /** @enum {string} */
+            status: "pending" | "completed" | "error";
+            /** @enum {string} */
+            type: "monthly" | "yearly";
+        };
+        ReportYearMonthRow: {
+            bill: components["schemas"]["ReportMoney"][];
+            consumption: components["schemas"]["ReportFigure"];
+            month: number;
+            reactive_penalty: components["schemas"]["ReportMoney"][];
+            rooftop: components["schemas"]["ReportFigure"];
+        };
+        ReportYearPoint: {
+            bill: components["schemas"]["ReportMoney"][];
+            consumption?: components["schemas"]["Decimal"];
+            production?: components["schemas"]["Decimal"];
+            year: number;
+        };
+        ReportYearly: {
+            achievement_pct?: components["schemas"]["Decimal"];
+            bill: components["schemas"]["ReportMoney"][];
+            bill_delta: components["schemas"]["ReportCurrencyDelta"][];
+            buildings: components["schemas"]["ReportBuildingLine"][];
+            carbon?: components["schemas"]["ReportCarbon"];
+            carbon_reason?: string;
+            chart_currency?: null | string;
+            consumption: components["schemas"]["ReportFigure"];
+            consumption_delta: components["schemas"]["ReportDelta"];
+            daily_consumption: components["schemas"]["ReportFigure"];
+            daily_production: components["schemas"]["ReportFigure"];
+            daily_rooftop: components["schemas"]["ReportFigure"];
+            daily_utility: components["schemas"]["ReportFigure"];
+            grid_share_pct?: components["schemas"]["Decimal"];
+            history: components["schemas"]["ReportYearPoint"][];
+            months: components["schemas"]["ReportYearMonthRow"][];
+            omitted_currencies: string[];
+            partial: boolean;
+            plant_selection: string;
+            plants: components["schemas"]["ReportPlantLine"][];
+            production: components["schemas"]["ReportFigure"];
+            reactive_penalty: components["schemas"]["ReportMoney"][];
+            rooftop: components["schemas"]["ReportFigure"];
+            solar_share_pct?: components["schemas"]["Decimal"];
+            target?: components["schemas"]["Decimal"];
+            utility: components["schemas"]["ReportFigure"];
+            year: number;
         };
         ResetPasswordRequest: {
             password: string;
@@ -9543,7 +9871,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                type: "alarm.evaluate" | "billing.dispatch" | "integration.sync_dispatch" | "epias.sync_prices";
+                type: "alarm.evaluate" | "billing.dispatch" | "integration.sync_dispatch" | "epias.sync_prices" | "report.dispatch_monthly" | "report.dispatch_yearly";
             };
             cookie?: never;
         };
@@ -11087,6 +11415,600 @@ export interface operations {
             };
             /** @description Unprocessable Entity */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "reports.list": {
+        parameters: {
+            query?: {
+                type?: "monthly" | "yearly" | null;
+                building_id?: components["schemas"]["UuidUUID"];
+                year?: null | number;
+                limit?: null | number;
+                cursor?: string;
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportPage"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "reports.generate": {
+        parameters: {
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ReportGenerateRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportGenerateAccepted"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "reports.preview": {
+        parameters: {
+            query: {
+                type: "monthly" | "yearly";
+                period: string;
+                plant_selection: "all" | "grid" | "rooftop";
+                building_ids: components["schemas"]["UuidUUID"][];
+                plant_ids?: components["schemas"]["UuidUUID"][];
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportPayload"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "reports.get": {
+        parameters: {
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path: {
+                id: components["schemas"]["UuidUUID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Report"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "reports.email": {
+        parameters: {
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path: {
+                id: components["schemas"]["UuidUUID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ReportEmailRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportEmailAccepted"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "reports.excel": {
+        parameters: {
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path: {
+                id: components["schemas"]["UuidUUID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "reports.pdf": {
+        parameters: {
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path: {
+                id: components["schemas"]["UuidUUID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

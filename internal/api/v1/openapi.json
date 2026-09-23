@@ -3514,7 +3514,11 @@
               "period_not_closed",
               "ptf_data_missing",
               "billing_parameters_missing",
-              "billing_parameters_invalid"
+              "billing_parameters_invalid",
+              "report_building_not_found",
+              "report_not_ready",
+              "smtp_not_configured",
+              "delivery_failed"
             ],
             "type": "string"
           },
@@ -4796,6 +4800,885 @@
             "$ref": "#/components/schemas/Decimal"
           }
         },
+        "type": "object"
+      },
+      "Report": {
+        "properties": {
+          "building_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "building_name": {
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ReportPayload"
+          },
+          "period": {
+            "type": "string"
+          },
+          "plant_selection": {
+            "enum": [
+              "all",
+              "grid",
+              "rooftop"
+            ],
+            "type": "string"
+          },
+          "processed_at": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "completed",
+              "error"
+            ],
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "monthly",
+              "yearly"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "building_id",
+          "building_name",
+          "type",
+          "period",
+          "plant_selection",
+          "status",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "ReportBuildingLine": {
+        "properties": {
+          "building_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "currency": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "purchase_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "tariff_name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "building_id",
+          "name"
+        ],
+        "type": "object"
+      },
+      "ReportCarbon": {
+        "properties": {
+          "consumption_t": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "factor": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "factor_unit": {
+            "type": "string"
+          },
+          "net_t": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "reduction_t": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "source_year": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          }
+        },
+        "required": [
+          "factor",
+          "factor_unit"
+        ],
+        "type": "object"
+      },
+      "ReportCurrencyDelta": {
+        "properties": {
+          "currency": {
+            "type": "string"
+          },
+          "pct": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "required": [
+          "currency"
+        ],
+        "type": "object"
+      },
+      "ReportDelta": {
+        "properties": {
+          "pct": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "type": "object"
+      },
+      "ReportEmailAccepted": {
+        "properties": {
+          "job_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id"
+        ],
+        "type": "object"
+      },
+      "ReportEmailRequest": {
+        "properties": {
+          "to": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "to"
+        ],
+        "type": "object"
+      },
+      "ReportFigure": {
+        "properties": {
+          "excluded": {
+            "type": "boolean"
+          },
+          "of": {
+            "type": "integer"
+          },
+          "partial": {
+            "type": "boolean"
+          },
+          "value": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "with_data": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "with_data",
+          "of"
+        ],
+        "type": "object"
+      },
+      "ReportGenerateAccepted": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReportGenerateItem"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "ReportGenerateItem": {
+        "properties": {
+          "building_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "job_id": {
+            "type": "string"
+          },
+          "report_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          }
+        },
+        "required": [
+          "building_id",
+          "report_id",
+          "job_id"
+        ],
+        "type": "object"
+      },
+      "ReportGenerateRequest": {
+        "properties": {
+          "building_ids": {
+            "items": {
+              "$ref": "#/components/schemas/UuidUUID"
+            },
+            "type": "array"
+          },
+          "period": {
+            "type": "string"
+          },
+          "plant_ids": {
+            "items": {
+              "$ref": "#/components/schemas/UuidUUID"
+            },
+            "type": "array"
+          },
+          "plant_selection": {
+            "enum": [
+              "all",
+              "grid",
+              "rooftop"
+            ],
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "monthly",
+              "yearly"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "period",
+          "plant_selection",
+          "building_ids"
+        ],
+        "type": "object"
+      },
+      "ReportMoney": {
+        "properties": {
+          "currency": {
+            "type": "string"
+          },
+          "of": {
+            "type": "integer"
+          },
+          "value": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "with_data": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "currency",
+          "value",
+          "with_data",
+          "of"
+        ],
+        "type": "object"
+      },
+      "ReportMonthPoint": {
+        "properties": {
+          "current": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "month": {
+            "type": "integer"
+          },
+          "previous": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "required": [
+          "month"
+        ],
+        "type": "object"
+      },
+      "ReportMonthly": {
+        "properties": {
+          "average_purchase_price": {
+            "items": {
+              "$ref": "#/components/schemas/ReportMoney"
+            },
+            "type": "array"
+          },
+          "bill": {
+            "items": {
+              "$ref": "#/components/schemas/ReportMoney"
+            },
+            "type": "array"
+          },
+          "bill_chart": {
+            "items": {
+              "$ref": "#/components/schemas/ReportMonthPoint"
+            },
+            "type": "array"
+          },
+          "bill_delta": {
+            "items": {
+              "$ref": "#/components/schemas/ReportCurrencyDelta"
+            },
+            "type": "array"
+          },
+          "bill_prev": {
+            "items": {
+              "$ref": "#/components/schemas/ReportMoney"
+            },
+            "type": "array"
+          },
+          "buildings": {
+            "items": {
+              "$ref": "#/components/schemas/ReportBuildingLine"
+            },
+            "type": "array"
+          },
+          "capacitive": {
+            "$ref": "#/components/schemas/ReportFigure"
+          },
+          "capacitive_ratio": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "chart_currency": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "consumption": {
+            "$ref": "#/components/schemas/ReportFigure"
+          },
+          "consumption_chart": {
+            "items": {
+              "$ref": "#/components/schemas/ReportMonthPoint"
+            },
+            "type": "array"
+          },
+          "consumption_delta": {
+            "$ref": "#/components/schemas/ReportDelta"
+          },
+          "consumption_prev": {
+            "$ref": "#/components/schemas/ReportFigure"
+          },
+          "daily_consumption": {
+            "$ref": "#/components/schemas/ReportFigure"
+          },
+          "daily_production": {
+            "$ref": "#/components/schemas/ReportFigure"
+          },
+          "days_in_month": {
+            "type": "integer"
+          },
+          "distribution_cost": {
+            "items": {
+              "$ref": "#/components/schemas/ReportMoney"
+            },
+            "type": "array"
+          },
+          "energy_cost": {
+            "items": {
+              "$ref": "#/components/schemas/ReportMoney"
+            },
+            "type": "array"
+          },
+          "inductive": {
+            "$ref": "#/components/schemas/ReportFigure"
+          },
+          "inductive_ratio": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "month": {
+            "type": "integer"
+          },
+          "omitted_currencies": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "partial": {
+            "type": "boolean"
+          },
+          "plant_selection": {
+            "type": "string"
+          },
+          "plants": {
+            "items": {
+              "$ref": "#/components/schemas/ReportPlantLine"
+            },
+            "type": "array"
+          },
+          "production": {
+            "$ref": "#/components/schemas/ReportFigure"
+          },
+          "production_delta": {
+            "$ref": "#/components/schemas/ReportDelta"
+          },
+          "production_prev": {
+            "$ref": "#/components/schemas/ReportFigure"
+          },
+          "reactive_penalty": {
+            "items": {
+              "$ref": "#/components/schemas/ReportMoney"
+            },
+            "type": "array"
+          },
+          "reactive_penalty_delta": {
+            "items": {
+              "$ref": "#/components/schemas/ReportCurrencyDelta"
+            },
+            "type": "array"
+          },
+          "reactive_penalty_prev": {
+            "items": {
+              "$ref": "#/components/schemas/ReportMoney"
+            },
+            "type": "array"
+          },
+          "rooftop": {
+            "$ref": "#/components/schemas/ReportFigure"
+          },
+          "rooftop_feed_in": {
+            "$ref": "#/components/schemas/ReportPriceRange"
+          },
+          "rooftop_prev": {
+            "$ref": "#/components/schemas/ReportFigure"
+          },
+          "t1": {
+            "$ref": "#/components/schemas/ReportFigure"
+          },
+          "t2": {
+            "$ref": "#/components/schemas/ReportFigure"
+          },
+          "t3": {
+            "$ref": "#/components/schemas/ReportFigure"
+          },
+          "taxes": {
+            "items": {
+              "$ref": "#/components/schemas/ReportMoney"
+            },
+            "type": "array"
+          },
+          "utility": {
+            "$ref": "#/components/schemas/ReportFigure"
+          },
+          "utility_feed_in": {
+            "$ref": "#/components/schemas/ReportPriceRange"
+          },
+          "utility_prev": {
+            "$ref": "#/components/schemas/ReportFigure"
+          },
+          "year": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "year",
+          "month",
+          "days_in_month",
+          "plant_selection",
+          "partial",
+          "buildings",
+          "plants",
+          "consumption",
+          "consumption_prev",
+          "daily_consumption",
+          "t1",
+          "t2",
+          "t3",
+          "inductive",
+          "capacitive",
+          "rooftop",
+          "rooftop_prev",
+          "utility",
+          "utility_prev",
+          "production",
+          "production_prev",
+          "daily_production",
+          "bill",
+          "bill_prev",
+          "energy_cost",
+          "distribution_cost",
+          "taxes",
+          "reactive_penalty",
+          "reactive_penalty_prev",
+          "average_purchase_price",
+          "rooftop_feed_in",
+          "utility_feed_in",
+          "consumption_delta",
+          "production_delta",
+          "bill_delta",
+          "reactive_penalty_delta",
+          "consumption_chart",
+          "bill_chart",
+          "omitted_currencies"
+        ],
+        "type": "object"
+      },
+      "ReportPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReportSummary"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "total": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "type": "object"
+      },
+      "ReportPayload": {
+        "properties": {
+          "monthly": {
+            "$ref": "#/components/schemas/ReportMonthly"
+          },
+          "period": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "monthly",
+              "yearly"
+            ],
+            "type": "string"
+          },
+          "version": {
+            "type": "integer"
+          },
+          "yearly": {
+            "$ref": "#/components/schemas/ReportYearly"
+          }
+        },
+        "required": [
+          "version",
+          "type",
+          "period"
+        ],
+        "type": "object"
+      },
+      "ReportPlantLine": {
+        "properties": {
+          "achievement_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "feed_in": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "plant_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "production": {
+            "$ref": "#/components/schemas/ReportFigure"
+          },
+          "target": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "required": [
+          "plant_id",
+          "name",
+          "kind",
+          "production"
+        ],
+        "type": "object"
+      },
+      "ReportPriceRange": {
+        "properties": {
+          "max": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "min": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "type": "object"
+      },
+      "ReportSummary": {
+        "properties": {
+          "building_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "building_name": {
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "period": {
+            "type": "string"
+          },
+          "plant_selection": {
+            "enum": [
+              "all",
+              "grid",
+              "rooftop"
+            ],
+            "type": "string"
+          },
+          "processed_at": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "completed",
+              "error"
+            ],
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "monthly",
+              "yearly"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "building_id",
+          "building_name",
+          "type",
+          "period",
+          "plant_selection",
+          "status",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "ReportYearMonthRow": {
+        "properties": {
+          "bill": {
+            "items": {
+              "$ref": "#/components/schemas/ReportMoney"
+            },
+            "type": "array"
+          },
+          "consumption": {
+            "$ref": "#/components/schemas/ReportFigure"
+          },
+          "month": {
+            "type": "integer"
+          },
+          "reactive_penalty": {
+            "items": {
+              "$ref": "#/components/schemas/ReportMoney"
+            },
+            "type": "array"
+          },
+          "rooftop": {
+            "$ref": "#/components/schemas/ReportFigure"
+          }
+        },
+        "required": [
+          "month",
+          "consumption",
+          "rooftop",
+          "bill",
+          "reactive_penalty"
+        ],
+        "type": "object"
+      },
+      "ReportYearPoint": {
+        "properties": {
+          "bill": {
+            "items": {
+              "$ref": "#/components/schemas/ReportMoney"
+            },
+            "type": "array"
+          },
+          "consumption": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "production": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "year": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "year",
+          "bill"
+        ],
+        "type": "object"
+      },
+      "ReportYearly": {
+        "properties": {
+          "achievement_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "bill": {
+            "items": {
+              "$ref": "#/components/schemas/ReportMoney"
+            },
+            "type": "array"
+          },
+          "bill_delta": {
+            "items": {
+              "$ref": "#/components/schemas/ReportCurrencyDelta"
+            },
+            "type": "array"
+          },
+          "buildings": {
+            "items": {
+              "$ref": "#/components/schemas/ReportBuildingLine"
+            },
+            "type": "array"
+          },
+          "carbon": {
+            "$ref": "#/components/schemas/ReportCarbon"
+          },
+          "carbon_reason": {
+            "type": "string"
+          },
+          "chart_currency": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "consumption": {
+            "$ref": "#/components/schemas/ReportFigure"
+          },
+          "consumption_delta": {
+            "$ref": "#/components/schemas/ReportDelta"
+          },
+          "daily_consumption": {
+            "$ref": "#/components/schemas/ReportFigure"
+          },
+          "daily_production": {
+            "$ref": "#/components/schemas/ReportFigure"
+          },
+          "daily_rooftop": {
+            "$ref": "#/components/schemas/ReportFigure"
+          },
+          "daily_utility": {
+            "$ref": "#/components/schemas/ReportFigure"
+          },
+          "grid_share_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/ReportYearPoint"
+            },
+            "type": "array"
+          },
+          "months": {
+            "items": {
+              "$ref": "#/components/schemas/ReportYearMonthRow"
+            },
+            "type": "array"
+          },
+          "omitted_currencies": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "partial": {
+            "type": "boolean"
+          },
+          "plant_selection": {
+            "type": "string"
+          },
+          "plants": {
+            "items": {
+              "$ref": "#/components/schemas/ReportPlantLine"
+            },
+            "type": "array"
+          },
+          "production": {
+            "$ref": "#/components/schemas/ReportFigure"
+          },
+          "reactive_penalty": {
+            "items": {
+              "$ref": "#/components/schemas/ReportMoney"
+            },
+            "type": "array"
+          },
+          "rooftop": {
+            "$ref": "#/components/schemas/ReportFigure"
+          },
+          "solar_share_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "target": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "utility": {
+            "$ref": "#/components/schemas/ReportFigure"
+          },
+          "year": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "year",
+          "plant_selection",
+          "partial",
+          "buildings",
+          "plants",
+          "months",
+          "consumption",
+          "rooftop",
+          "utility",
+          "production",
+          "bill",
+          "reactive_penalty",
+          "daily_consumption",
+          "daily_rooftop",
+          "daily_production",
+          "daily_utility",
+          "consumption_delta",
+          "bill_delta",
+          "history",
+          "omitted_currencies"
+        ],
         "type": "object"
       },
       "ResetPasswordRequest": {
@@ -15229,7 +16112,9 @@
                 "alarm.evaluate",
                 "billing.dispatch",
                 "integration.sync_dispatch",
-                "epias.sync_prices"
+                "epias.sync_prices",
+                "report.dispatch_monthly",
+                "report.dispatch_yearly"
               ],
               "type": "string"
             }
@@ -17434,6 +18319,886 @@
         "summary": "Update the current user's name, e-mail, phone, locale and UI preferences.",
         "tags": [
           "profile"
+        ]
+      }
+    },
+    "/api/v1/reports": {
+      "get": {
+        "operationId": "reports.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "type",
+            "schema": {
+              "enum": [
+                "monthly",
+                "yearly"
+              ],
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "building_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "year",
+            "schema": {
+              "type": [
+                "null",
+                "integer"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "maximum": 500,
+              "minimum": 1,
+              "type": [
+                "null",
+                "integer"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportPage"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "The report archive, newest first, with the whole match's count.",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/api/v1/reports/generate": {
+      "post": {
+        "operationId": "reports.generate",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportGenerateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportGenerateAccepted"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Generate one report per building; returns each building's job.",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/api/v1/reports/preview": {
+      "get": {
+        "operationId": "reports.preview",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "type",
+            "required": true,
+            "schema": {
+              "enum": [
+                "monthly",
+                "yearly"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "period",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "plant_selection",
+            "required": true,
+            "schema": {
+              "enum": [
+                "all",
+                "grid",
+                "rooftop"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "building_ids",
+            "required": true,
+            "schema": {
+              "items": {
+                "$ref": "#/components/schemas/UuidUUID"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "plant_ids",
+            "schema": {
+              "items": {
+                "$ref": "#/components/schemas/UuidUUID"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportPayload"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Compute report figures for buildings and a period without persisting them.",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/api/v1/reports/{id}": {
+      "get": {
+        "operationId": "reports.get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Report"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "A stored report with its figures.",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/api/v1/reports/{id}/email": {
+      "post": {
+        "operationId": "reports.email",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportEmailRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportEmailAccepted"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "E-mail the report with its PDF and workbook attached.",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/api/v1/reports/{id}/excel": {
+      "get": {
+        "operationId": "reports.excel",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "The report as a workbook, in the reader's language.",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/api/v1/reports/{id}/pdf": {
+      "get": {
+        "operationId": "reports.pdf",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "The report as PDF, in the reader's language.",
+        "tags": [
+          "reports"
         ]
       }
     },

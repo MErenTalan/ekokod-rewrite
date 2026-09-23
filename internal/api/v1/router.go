@@ -21,6 +21,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/integrations"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/jobs"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/ops"
+	reportsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/report"
 	tariffsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/tariff"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/tenancy"
 )
@@ -45,6 +46,7 @@ type Handlers struct {
 	Tariffs      *tariffsvc.Service
 	Billing      *billingsvc.Service
 	BillRequests billingsvc.Requests
+	Reports      reportsvc.Requests
 	Calendar     *calendar.Service
 	Jobs         *jobs.Service
 	Alarms       *alarms.Service

@@ -112,6 +112,14 @@ var expectedAccess = map[string]string{
 	"GET /bills/{id}":               "A CA CR BA BR D",
 	"GET /bills/{id}/pdf":           "A CA CR BA BR D",
 	"GET /bills/{id}/hourly-detail": "A CA CR BA BR D",
+	// 05 §11
+	"GET /reports":             "A CA CR BA BR D",
+	"GET /reports/preview":     "A CA CR BA BR D",
+	"POST /reports/generate":   "A CA BA",
+	"GET /reports/{id}":        "A CA CR BA BR D",
+	"GET /reports/{id}/pdf":    "A CA CR BA BR D",
+	"GET /reports/{id}/excel":  "A CA CR BA BR D",
+	"POST /reports/{id}/email": "A CA BA",
 	// 05 §14
 	"GET /calendar/events":         "A CA CR BA BR D",
 	"POST /calendar/events":        "A CA",

@@ -255,3 +255,64 @@ func buildingNames(p domain.Payload) []string {
 	}
 	return names
 }
+
+// ArchiveItem is one report with its building's name.
+type ArchiveItem struct {
+	Report       model.Report
+	BuildingName string
+}
+
+// Archive is R275: the page of reports in scope and the whole match's count.
+func (q Requests) Archive(ctx context.Context, sc store.Scope, f store.ReportFilter) ([]ArchiveItem, int64, error) {
+	list, err := q.Reports.List(ctx, sc, f)
+	if err != nil {
+		return nil, 0, err
+	}
+	count := f
+	count.Page = store.Page{}
+	total, err := q.Reports.Count(ctx, sc, count)
+	if err != nil {
+		return nil, 0, err
+	}
+	names := map[uuid.UUID]string{}
+	out := make([]ArchiveItem, 0, len(list))
+	for _, rp := range list {
+		name, ok := names[rp.BuildingID]
+		if !ok {
+			b, err := q.Service.d.Buildings.Get(ctx, sc, rp.BuildingID)
+			if err != nil && !errors.Is(err, store.ErrNotFound) {
+				return nil, 0, err
+			}
+			name = b.Name
+			names[rp.BuildingID] = name
+		}
+		out = append(out, ArchiveItem{Report: rp, BuildingName: name})
+	}
+	return out, total, nil
+}
+
+// Get is one report in scope with its building's name.
+func (q Requests) Get(ctx context.Context, sc store.Scope, id uuid.UUID) (ArchiveItem, error) {
+	rp, err := q.Reports.Get(ctx, sc, id)
+	if err != nil {
+		return ArchiveItem{}, err
+	}
+	b, err := q.Service.d.Buildings.Get(ctx, sc, rp.BuildingID)
+	if err != nil {
+		return ArchiveItem{}, err
+	}
+	return ArchiveItem{Report: rp, BuildingName: b.Name}, nil
+}
+
+// File is a report's PDF or workbook in the reader's locale (R265).
+func (q Requests) File(ctx context.Context, sc store.Scope, id uuid.UUID, format, locale string) ([]byte, string, error) {
+	rp, err := q.Reports.Get(ctx, sc, id)
+	if err != nil {
+		return nil, "", err
+	}
+	raw, err := q.Files.Read(ctx, rp, format, locale)
+	if err != nil {
+		return nil, "", err
+	}
+	return raw, FileName(rp, format), nil
+}

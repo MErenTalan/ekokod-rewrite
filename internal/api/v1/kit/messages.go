@@ -37,6 +37,7 @@ var messages = map[string][2]string{ // code → {tr, en}
 	"cannot_delete_own_company":      {"Kendi şirketinizi silemezsiniz.", "You cannot delete your own company."},
 	"cannot_modify_self":             {"Kendi rolünüzü, durumunuzu değiştiremez veya hesabınızı silemezsiniz.", "You cannot change your own role or status, or delete yourself."},
 	"smtp_test_failed":               {"Test e-postası gönderilemedi.", "The test e-mail could not be sent."},
+	"report_not_ready":               {"Rapor henüz hazır değil.", "The report is not ready yet."},
 	"job_already_queued":             {"Bu iş bu saat için zaten kuyrukta.", "This job is already queued for this hour."},
 	"building_has_analyzers":         {"Analizör bağlı bir bina silinemez.", "A building with analyzers attached cannot be deleted."},
 	"integration_not_configured":     {"Bu analizör için entegrasyon tanımlanmamış.", "No integration is configured for this analyzer."},
