@@ -2630,8 +2630,7 @@
           "key",
           "factor",
           "unit",
-          "source",
-          "year"
+          "source"
         ],
         "type": "object"
       },
@@ -2703,10 +2702,6 @@
           "building_id",
           "building_name",
           "price_type",
-          "single",
-          "t1",
-          "t2",
-          "t3",
           "currency"
         ],
         "type": "object"
@@ -2774,14 +2769,9 @@
         },
         "required": [
           "month",
-          "consumption_kwh",
           "cost",
-          "production_kwh",
           "revenue",
           "revenue_partial",
-          "offset_kwh",
-          "grid_purchase_kwh",
-          "grid_sale_kwh",
           "net"
         ],
         "type": "object"
@@ -2863,7 +2853,6 @@
         },
         "required": [
           "year",
-          "month",
           "analyzer_count",
           "plant_count",
           "figures",
@@ -5683,16 +5672,7 @@
           }
         },
         "required": [
-          "peak_generation_kwh",
-          "peak_generation_at",
-          "average_generation_kwh",
           "trend",
-          "peak_hour",
-          "data_availability_pct",
-          "system_efficiency_pct",
-          "efficiency_change_30d_pct",
-          "consumption_optimisation",
-          "maintenance_required",
           "financial",
           "unavailable"
         ],
@@ -5732,11 +5712,6 @@
           }
         },
         "required": [
-          "overall_pct",
-          "panel_pct",
-          "inverter_pct",
-          "battery_pct",
-          "grid_pct",
           "trend",
           "recommendations",
           "unavailable"
@@ -5789,15 +5764,6 @@
           }
         },
         "required": [
-          "generation_kwh",
-          "co2_avoided_kg",
-          "trees",
-          "coal_kg",
-          "car_km",
-          "homes",
-          "grid_factor",
-          "grid_factor_unit",
-          "grid_factor_source",
           "factors",
           "unavailable"
         ],
@@ -5849,18 +5815,6 @@
           }
         },
         "required": [
-          "import_price",
-          "export_price",
-          "currency",
-          "today_import_cost",
-          "today_export_revenue",
-          "net_today",
-          "month_earnings",
-          "year_earnings",
-          "total_savings",
-          "roi_pct",
-          "payback_years",
-          "bill_savings",
           "unavailable"
         ],
         "type": "object"
@@ -5902,15 +5856,6 @@
           }
         },
         "required": [
-          "consumption_next_24h_kwh",
-          "consumption_next_7d_kwh",
-          "consumption_next_28d_kwh",
-          "accuracy_daily_pct",
-          "accuracy_weekly_pct",
-          "accuracy_overall_pct",
-          "estimated_generation_kwh",
-          "net_excess_kwh",
-          "weather_impact",
           "unavailable"
         ],
         "type": "object"
@@ -5958,16 +5903,6 @@
           }
         },
         "required": [
-          "direction",
-          "today_import_kwh",
-          "today_export_kwh",
-          "power_factor",
-          "voltage_v",
-          "frequency_hz",
-          "import_price",
-          "export_price",
-          "currency",
-          "net_today",
           "unavailable"
         ],
         "type": "object"
@@ -5991,10 +5926,6 @@
           }
         },
         "required": [
-          "active_generation_kwh",
-          "inductive_generation_kvarh",
-          "capacitive_generation_kvarh",
-          "average_generation_kwh",
           "unavailable"
         ],
         "type": "object"
@@ -6010,8 +5941,7 @@
           }
         },
         "required": [
-          "ts",
-          "kwh"
+          "ts"
         ],
         "type": "object"
       },
@@ -6054,13 +5984,7 @@
           }
         },
         "required": [
-          "current_power_kw",
-          "today_kwh",
-          "max_power_kw",
-          "avg_power_kw",
-          "status",
           "series_24h",
-          "system_efficiency_pct",
           "unavailable"
         ],
         "type": "object"
@@ -6127,16 +6051,6 @@
           }
         },
         "required": [
-          "overall",
-          "monitoring",
-          "grid_connection",
-          "last_reading_at",
-          "solar_panels",
-          "inverter",
-          "battery",
-          "security",
-          "total_generation_kwh",
-          "average_efficiency_pct",
           "unavailable"
         ],
         "type": "object"

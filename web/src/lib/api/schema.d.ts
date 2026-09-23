@@ -2641,7 +2641,7 @@ export interface components {
             key: "equiv_tree_co2_kg_per_year" | "equiv_coal_kg_per_kwh" | "equiv_car_co2_kg_per_km" | "equiv_home_heating_kwh_per_year";
             source: string;
             unit: string;
-            year: null | number;
+            year?: null | number;
         };
         Error: {
             error: components["schemas"]["ErrorBody"];
@@ -2660,10 +2660,10 @@ export interface components {
             currency: string;
             /** @enum {string} */
             price_type: "single_time" | "multi_time";
-            single: components["schemas"]["Decimal"];
-            t1: components["schemas"]["Decimal"];
-            t2: components["schemas"]["Decimal"];
-            t3: components["schemas"]["Decimal"];
+            single?: components["schemas"]["Decimal"];
+            t1?: components["schemas"]["Decimal"];
+            t2?: components["schemas"]["Decimal"];
+            t3?: components["schemas"]["Decimal"];
         };
         FinancialCoverage: {
             consumption_months: number;
@@ -2671,14 +2671,14 @@ export interface components {
             production_months: number;
         };
         FinancialMonth: {
-            consumption_kwh: components["schemas"]["Decimal"];
+            consumption_kwh?: components["schemas"]["Decimal"];
             cost: components["schemas"]["MoneyAmount"][];
-            grid_purchase_kwh: components["schemas"]["Decimal"];
-            grid_sale_kwh: components["schemas"]["Decimal"];
+            grid_purchase_kwh?: components["schemas"]["Decimal"];
+            grid_sale_kwh?: components["schemas"]["Decimal"];
             month: number;
             net: components["schemas"]["MoneyAmount"][];
-            offset_kwh: components["schemas"]["Decimal"];
-            production_kwh: components["schemas"]["Decimal"];
+            offset_kwh?: components["schemas"]["Decimal"];
+            production_kwh?: components["schemas"]["Decimal"];
             revenue: components["schemas"]["MoneyAmount"][];
             revenue_partial: boolean;
         };
@@ -2696,7 +2696,7 @@ export interface components {
         FinancialSummary: {
             analyzer_count: number;
             figures: components["schemas"]["FinancialMonth"];
-            month: null | number;
+            month?: null | number;
             of: number;
             plant_count: number;
             tariffs: components["schemas"]["FinancialTariffs"];
@@ -3368,118 +3368,118 @@ export interface components {
             t3_import?: components["schemas"]["Decimal"];
         };
         RenewableAnalytics: {
-            average_generation_kwh: components["schemas"]["Decimal"];
-            consumption_optimisation: null | string;
-            data_availability_pct: components["schemas"]["Decimal"];
-            efficiency_change_30d_pct: components["schemas"]["Decimal"];
+            average_generation_kwh?: components["schemas"]["Decimal"];
+            consumption_optimisation?: null | string;
+            data_availability_pct?: components["schemas"]["Decimal"];
+            efficiency_change_30d_pct?: components["schemas"]["Decimal"];
             financial: components["schemas"]["RenewableFinancial"];
-            maintenance_required: null | string;
+            maintenance_required?: null | string;
             /** Format: date-time */
-            peak_generation_at: null | string;
-            peak_generation_kwh: components["schemas"]["Decimal"];
-            peak_hour: null | number;
-            system_efficiency_pct: components["schemas"]["Decimal"];
+            peak_generation_at?: null | string;
+            peak_generation_kwh?: components["schemas"]["Decimal"];
+            peak_hour?: null | number;
+            system_efficiency_pct?: components["schemas"]["Decimal"];
             trend: components["schemas"]["RenewablePoint"][];
             unavailable: components["schemas"]["Unavailable"];
         };
         RenewableEfficiency: {
-            battery_pct: components["schemas"]["Decimal"];
-            grid_pct: components["schemas"]["Decimal"];
-            inverter_pct: components["schemas"]["Decimal"];
-            overall_pct: components["schemas"]["Decimal"];
-            panel_pct: components["schemas"]["Decimal"];
+            battery_pct?: components["schemas"]["Decimal"];
+            grid_pct?: components["schemas"]["Decimal"];
+            inverter_pct?: components["schemas"]["Decimal"];
+            overall_pct?: components["schemas"]["Decimal"];
+            panel_pct?: components["schemas"]["Decimal"];
             recommendations: string[];
             trend: components["schemas"]["RenewablePoint"][];
             unavailable: components["schemas"]["Unavailable"];
         };
         RenewableEnvironmental: {
-            car_km: components["schemas"]["Decimal"];
-            co2_avoided_kg: components["schemas"]["Decimal"];
-            coal_kg: components["schemas"]["Decimal"];
+            car_km?: components["schemas"]["Decimal"];
+            co2_avoided_kg?: components["schemas"]["Decimal"];
+            coal_kg?: components["schemas"]["Decimal"];
             factors: components["schemas"]["EquivalenceFactor"][];
-            generation_kwh: components["schemas"]["Decimal"];
-            grid_factor: components["schemas"]["Decimal"];
-            grid_factor_source: null | string;
-            grid_factor_unit: null | string;
-            homes: components["schemas"]["Decimal"];
-            trees: components["schemas"]["Decimal"];
+            generation_kwh?: components["schemas"]["Decimal"];
+            grid_factor?: components["schemas"]["Decimal"];
+            grid_factor_source?: null | string;
+            grid_factor_unit?: null | string;
+            homes?: components["schemas"]["Decimal"];
+            trees?: components["schemas"]["Decimal"];
             unavailable: components["schemas"]["Unavailable"];
         };
         RenewableFinancial: {
-            bill_savings: components["schemas"]["Decimal"];
-            currency: null | string;
-            export_price: components["schemas"]["Decimal"];
-            import_price: components["schemas"]["Decimal"];
-            month_earnings: components["schemas"]["Decimal"];
-            net_today: components["schemas"]["Decimal"];
-            payback_years: components["schemas"]["Decimal"];
-            roi_pct: components["schemas"]["Decimal"];
-            today_export_revenue: components["schemas"]["Decimal"];
-            today_import_cost: components["schemas"]["Decimal"];
-            total_savings: components["schemas"]["Decimal"];
+            bill_savings?: components["schemas"]["Decimal"];
+            currency?: null | string;
+            export_price?: components["schemas"]["Decimal"];
+            import_price?: components["schemas"]["Decimal"];
+            month_earnings?: components["schemas"]["Decimal"];
+            net_today?: components["schemas"]["Decimal"];
+            payback_years?: components["schemas"]["Decimal"];
+            roi_pct?: components["schemas"]["Decimal"];
+            today_export_revenue?: components["schemas"]["Decimal"];
+            today_import_cost?: components["schemas"]["Decimal"];
+            total_savings?: components["schemas"]["Decimal"];
             unavailable: components["schemas"]["Unavailable"];
-            year_earnings: components["schemas"]["Decimal"];
+            year_earnings?: components["schemas"]["Decimal"];
         };
         RenewableForecast: {
-            accuracy_daily_pct: components["schemas"]["Decimal"];
-            accuracy_overall_pct: components["schemas"]["Decimal"];
-            accuracy_weekly_pct: components["schemas"]["Decimal"];
-            consumption_next_24h_kwh: components["schemas"]["Decimal"];
-            consumption_next_28d_kwh: components["schemas"]["Decimal"];
-            consumption_next_7d_kwh: components["schemas"]["Decimal"];
-            estimated_generation_kwh: components["schemas"]["Decimal"];
-            net_excess_kwh: components["schemas"]["Decimal"];
+            accuracy_daily_pct?: components["schemas"]["Decimal"];
+            accuracy_overall_pct?: components["schemas"]["Decimal"];
+            accuracy_weekly_pct?: components["schemas"]["Decimal"];
+            consumption_next_24h_kwh?: components["schemas"]["Decimal"];
+            consumption_next_28d_kwh?: components["schemas"]["Decimal"];
+            consumption_next_7d_kwh?: components["schemas"]["Decimal"];
+            estimated_generation_kwh?: components["schemas"]["Decimal"];
+            net_excess_kwh?: components["schemas"]["Decimal"];
             unavailable: components["schemas"]["Unavailable"];
-            weather_impact: null | string;
+            weather_impact?: null | string;
         };
         RenewableGridInteraction: {
-            currency: null | string;
-            direction: null | string;
-            export_price: components["schemas"]["Decimal"];
-            frequency_hz: components["schemas"]["Decimal"];
-            import_price: components["schemas"]["Decimal"];
-            net_today: components["schemas"]["Decimal"];
-            power_factor: components["schemas"]["Decimal"];
-            today_export_kwh: components["schemas"]["Decimal"];
-            today_import_kwh: components["schemas"]["Decimal"];
+            currency?: null | string;
+            direction?: null | string;
+            export_price?: components["schemas"]["Decimal"];
+            frequency_hz?: components["schemas"]["Decimal"];
+            import_price?: components["schemas"]["Decimal"];
+            net_today?: components["schemas"]["Decimal"];
+            power_factor?: components["schemas"]["Decimal"];
+            today_export_kwh?: components["schemas"]["Decimal"];
+            today_import_kwh?: components["schemas"]["Decimal"];
             unavailable: components["schemas"]["Unavailable"];
-            voltage_v: components["schemas"]["Decimal"];
+            voltage_v?: components["schemas"]["Decimal"];
         };
         RenewableOverview: {
-            active_generation_kwh: components["schemas"]["Decimal"];
-            average_generation_kwh: components["schemas"]["Decimal"];
-            capacitive_generation_kvarh: components["schemas"]["Decimal"];
-            inductive_generation_kvarh: components["schemas"]["Decimal"];
+            active_generation_kwh?: components["schemas"]["Decimal"];
+            average_generation_kwh?: components["schemas"]["Decimal"];
+            capacitive_generation_kvarh?: components["schemas"]["Decimal"];
+            inductive_generation_kvarh?: components["schemas"]["Decimal"];
             unavailable: components["schemas"]["Unavailable"];
         };
         RenewablePoint: {
-            kwh: components["schemas"]["Decimal"];
+            kwh?: components["schemas"]["Decimal"];
             /** Format: date-time */
             ts: string;
         };
         RenewableRealtime: {
-            avg_power_kw: components["schemas"]["Decimal"];
-            current_power_kw: components["schemas"]["Decimal"];
-            max_power_kw: components["schemas"]["Decimal"];
+            avg_power_kw?: components["schemas"]["Decimal"];
+            current_power_kw?: components["schemas"]["Decimal"];
+            max_power_kw?: components["schemas"]["Decimal"];
             series_24h: components["schemas"]["RenewablePoint"][];
             /** @enum {null|string} */
-            status: "producing" | "idle" | "no_data" | null;
-            system_efficiency_pct: components["schemas"]["Decimal"];
-            today_kwh: components["schemas"]["Decimal"];
+            status?: "producing" | "idle" | "no_data" | null;
+            system_efficiency_pct?: components["schemas"]["Decimal"];
+            today_kwh?: components["schemas"]["Decimal"];
             unavailable: components["schemas"]["Unavailable"];
         };
         RenewableSystemStatus: {
-            average_efficiency_pct: components["schemas"]["Decimal"];
-            battery: null | string;
-            grid_connection: null | string;
-            inverter: null | string;
+            average_efficiency_pct?: components["schemas"]["Decimal"];
+            battery?: null | string;
+            grid_connection?: null | string;
+            inverter?: null | string;
             /** Format: date-time */
-            last_reading_at: null | string;
-            monitoring: null | string;
-            overall: null | string;
-            security: null | string;
-            solar_panels: null | string;
-            total_generation_kwh: components["schemas"]["Decimal"];
+            last_reading_at?: null | string;
+            monitoring?: null | string;
+            overall?: null | string;
+            security?: null | string;
+            solar_panels?: null | string;
+            total_generation_kwh?: components["schemas"]["Decimal"];
             unavailable: components["schemas"]["Unavailable"];
         };
         Report: {

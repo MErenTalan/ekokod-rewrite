@@ -20,42 +20,42 @@ type Unavailable map[string]string
 // RenewablePoint is one series value.
 type RenewablePoint struct {
 	Ts  time.Time `json:"ts" required:"true"`
-	Kwh *Decimal  `json:"kwh" required:"true"`
+	Kwh *Decimal  `json:"kwh"`
 }
 
 // RenewableOverview is the overview panel.
 type RenewableOverview struct {
-	ActiveGenerationKwh       *Decimal    `json:"active_generation_kwh" required:"true"`
-	InductiveGenerationKvarh  *Decimal    `json:"inductive_generation_kvarh" required:"true"`
-	CapacitiveGenerationKvarh *Decimal    `json:"capacitive_generation_kvarh" required:"true"`
-	AverageGenerationKwh      *Decimal    `json:"average_generation_kwh" required:"true"`
+	ActiveGenerationKwh       *Decimal    `json:"active_generation_kwh"`
+	InductiveGenerationKvarh  *Decimal    `json:"inductive_generation_kvarh"`
+	CapacitiveGenerationKvarh *Decimal    `json:"capacitive_generation_kvarh"`
+	AverageGenerationKwh      *Decimal    `json:"average_generation_kwh"`
 	Unavailable               Unavailable `json:"unavailable" required:"true"`
 }
 
 // RenewableRealtime is the real-time panel from the last complete hour.
 type RenewableRealtime struct {
-	CurrentPowerKw      *Decimal         `json:"current_power_kw" required:"true"`
-	TodayKwh            *Decimal         `json:"today_kwh" required:"true"`
-	MaxPowerKw          *Decimal         `json:"max_power_kw" required:"true"`
-	AvgPowerKw          *Decimal         `json:"avg_power_kw" required:"true"`
-	Status              *string          `json:"status" required:"true" enum:"producing,idle,no_data"`
+	CurrentPowerKw      *Decimal         `json:"current_power_kw"`
+	TodayKwh            *Decimal         `json:"today_kwh"`
+	MaxPowerKw          *Decimal         `json:"max_power_kw"`
+	AvgPowerKw          *Decimal         `json:"avg_power_kw"`
+	Status              *string          `json:"status" enum:"producing,idle,no_data"`
 	Series24h           []RenewablePoint `json:"series_24h" required:"true"`
-	SystemEfficiencyPct *Decimal         `json:"system_efficiency_pct" required:"true"`
+	SystemEfficiencyPct *Decimal         `json:"system_efficiency_pct"`
 	Unavailable         Unavailable      `json:"unavailable" required:"true"`
 }
 
 // RenewableGridInteraction is the grid interaction panel.
 type RenewableGridInteraction struct {
-	Direction      *string     `json:"direction" required:"true"`
-	TodayImportKwh *Decimal    `json:"today_import_kwh" required:"true"`
-	TodayExportKwh *Decimal    `json:"today_export_kwh" required:"true"`
-	PowerFactor    *Decimal    `json:"power_factor" required:"true"`
-	VoltageV       *Decimal    `json:"voltage_v" required:"true"`
-	FrequencyHz    *Decimal    `json:"frequency_hz" required:"true"`
-	ImportPrice    *Decimal    `json:"import_price" required:"true"`
-	ExportPrice    *Decimal    `json:"export_price" required:"true"`
-	Currency       *string     `json:"currency" required:"true"`
-	NetToday       *Decimal    `json:"net_today" required:"true"`
+	Direction      *string     `json:"direction"`
+	TodayImportKwh *Decimal    `json:"today_import_kwh"`
+	TodayExportKwh *Decimal    `json:"today_export_kwh"`
+	PowerFactor    *Decimal    `json:"power_factor"`
+	VoltageV       *Decimal    `json:"voltage_v"`
+	FrequencyHz    *Decimal    `json:"frequency_hz"`
+	ImportPrice    *Decimal    `json:"import_price"`
+	ExportPrice    *Decimal    `json:"export_price"`
+	Currency       *string     `json:"currency"`
+	NetToday       *Decimal    `json:"net_today"`
 	Unavailable    Unavailable `json:"unavailable" required:"true"`
 }
 
@@ -65,31 +65,31 @@ type EquivalenceFactor struct {
 	Factor Decimal `json:"factor" required:"true"`
 	Unit   string  `json:"unit" required:"true"`
 	Source string  `json:"source" required:"true"`
-	Year   *int16  `json:"year" required:"true"`
+	Year   *int16  `json:"year"`
 }
 
 // RenewableEnvironmental is R293's panel.
 type RenewableEnvironmental struct {
-	GenerationKwh    *Decimal            `json:"generation_kwh" required:"true"`
-	Co2AvoidedKg     *Decimal            `json:"co2_avoided_kg" required:"true"`
-	Trees            *Decimal            `json:"trees" required:"true"`
-	CoalKg           *Decimal            `json:"coal_kg" required:"true"`
-	CarKm            *Decimal            `json:"car_km" required:"true"`
-	Homes            *Decimal            `json:"homes" required:"true"`
-	GridFactor       *Decimal            `json:"grid_factor" required:"true"`
-	GridFactorUnit   *string             `json:"grid_factor_unit" required:"true"`
-	GridFactorSource *string             `json:"grid_factor_source" required:"true"`
+	GenerationKwh    *Decimal            `json:"generation_kwh"`
+	Co2AvoidedKg     *Decimal            `json:"co2_avoided_kg"`
+	Trees            *Decimal            `json:"trees"`
+	CoalKg           *Decimal            `json:"coal_kg"`
+	CarKm            *Decimal            `json:"car_km"`
+	Homes            *Decimal            `json:"homes"`
+	GridFactor       *Decimal            `json:"grid_factor"`
+	GridFactorUnit   *string             `json:"grid_factor_unit"`
+	GridFactorSource *string             `json:"grid_factor_source"`
 	Factors          []EquivalenceFactor `json:"factors" required:"true"`
 	Unavailable      Unavailable         `json:"unavailable" required:"true"`
 }
 
 // RenewableEfficiency is the efficiency panel; nothing in it is measurable yet.
 type RenewableEfficiency struct {
-	OverallPct      *Decimal         `json:"overall_pct" required:"true"`
-	PanelPct        *Decimal         `json:"panel_pct" required:"true"`
-	InverterPct     *Decimal         `json:"inverter_pct" required:"true"`
-	BatteryPct      *Decimal         `json:"battery_pct" required:"true"`
-	GridPct         *Decimal         `json:"grid_pct" required:"true"`
+	OverallPct      *Decimal         `json:"overall_pct"`
+	PanelPct        *Decimal         `json:"panel_pct"`
+	InverterPct     *Decimal         `json:"inverter_pct"`
+	BatteryPct      *Decimal         `json:"battery_pct"`
+	GridPct         *Decimal         `json:"grid_pct"`
 	Trend           []RenewablePoint `json:"trend" required:"true"`
 	Recommendations []string         `json:"recommendations" required:"true"`
 	Unavailable     Unavailable      `json:"unavailable" required:"true"`
@@ -97,63 +97,63 @@ type RenewableEfficiency struct {
 
 // RenewableForecast is the forecast panel from stored forecast runs.
 type RenewableForecast struct {
-	ConsumptionNext24hKwh  *Decimal    `json:"consumption_next_24h_kwh" required:"true"`
-	ConsumptionNext7dKwh   *Decimal    `json:"consumption_next_7d_kwh" required:"true"`
-	ConsumptionNext28dKwh  *Decimal    `json:"consumption_next_28d_kwh" required:"true"`
-	AccuracyDailyPct       *Decimal    `json:"accuracy_daily_pct" required:"true"`
-	AccuracyWeeklyPct      *Decimal    `json:"accuracy_weekly_pct" required:"true"`
-	AccuracyOverallPct     *Decimal    `json:"accuracy_overall_pct" required:"true"`
-	EstimatedGenerationKwh *Decimal    `json:"estimated_generation_kwh" required:"true"`
-	NetExcessKwh           *Decimal    `json:"net_excess_kwh" required:"true"`
-	WeatherImpact          *string     `json:"weather_impact" required:"true"`
+	ConsumptionNext24hKwh  *Decimal    `json:"consumption_next_24h_kwh"`
+	ConsumptionNext7dKwh   *Decimal    `json:"consumption_next_7d_kwh"`
+	ConsumptionNext28dKwh  *Decimal    `json:"consumption_next_28d_kwh"`
+	AccuracyDailyPct       *Decimal    `json:"accuracy_daily_pct"`
+	AccuracyWeeklyPct      *Decimal    `json:"accuracy_weekly_pct"`
+	AccuracyOverallPct     *Decimal    `json:"accuracy_overall_pct"`
+	EstimatedGenerationKwh *Decimal    `json:"estimated_generation_kwh"`
+	NetExcessKwh           *Decimal    `json:"net_excess_kwh"`
+	WeatherImpact          *string     `json:"weather_impact"`
 	Unavailable            Unavailable `json:"unavailable" required:"true"`
 }
 
 // RenewableFinancial is §7.8's financial gains inside the analytics panel.
 type RenewableFinancial struct {
-	ImportPrice        *Decimal    `json:"import_price" required:"true"`
-	ExportPrice        *Decimal    `json:"export_price" required:"true"`
-	Currency           *string     `json:"currency" required:"true"`
-	TodayImportCost    *Decimal    `json:"today_import_cost" required:"true"`
-	TodayExportRevenue *Decimal    `json:"today_export_revenue" required:"true"`
-	NetToday           *Decimal    `json:"net_today" required:"true"`
-	MonthEarnings      *Decimal    `json:"month_earnings" required:"true"`
-	YearEarnings       *Decimal    `json:"year_earnings" required:"true"`
-	TotalSavings       *Decimal    `json:"total_savings" required:"true"`
-	RoiPct             *Decimal    `json:"roi_pct" required:"true"`
-	PaybackYears       *Decimal    `json:"payback_years" required:"true"`
-	BillSavings        *Decimal    `json:"bill_savings" required:"true"`
+	ImportPrice        *Decimal    `json:"import_price"`
+	ExportPrice        *Decimal    `json:"export_price"`
+	Currency           *string     `json:"currency"`
+	TodayImportCost    *Decimal    `json:"today_import_cost"`
+	TodayExportRevenue *Decimal    `json:"today_export_revenue"`
+	NetToday           *Decimal    `json:"net_today"`
+	MonthEarnings      *Decimal    `json:"month_earnings"`
+	YearEarnings       *Decimal    `json:"year_earnings"`
+	TotalSavings       *Decimal    `json:"total_savings"`
+	RoiPct             *Decimal    `json:"roi_pct"`
+	PaybackYears       *Decimal    `json:"payback_years"`
+	BillSavings        *Decimal    `json:"bill_savings"`
 	Unavailable        Unavailable `json:"unavailable" required:"true"`
 }
 
 // RenewableAnalytics is the analytics panel.
 type RenewableAnalytics struct {
-	PeakGenerationKwh       *Decimal           `json:"peak_generation_kwh" required:"true"`
-	PeakGenerationAt        *time.Time         `json:"peak_generation_at" required:"true"`
-	AverageGenerationKwh    *Decimal           `json:"average_generation_kwh" required:"true"`
+	PeakGenerationKwh       *Decimal           `json:"peak_generation_kwh"`
+	PeakGenerationAt        *time.Time         `json:"peak_generation_at"`
+	AverageGenerationKwh    *Decimal           `json:"average_generation_kwh"`
 	Trend                   []RenewablePoint   `json:"trend" required:"true"`
-	PeakHour                *int               `json:"peak_hour" required:"true"`
-	DataAvailabilityPct     *Decimal           `json:"data_availability_pct" required:"true"`
-	SystemEfficiencyPct     *Decimal           `json:"system_efficiency_pct" required:"true"`
-	EfficiencyChange30dPct  *Decimal           `json:"efficiency_change_30d_pct" required:"true"`
-	ConsumptionOptimisation *string            `json:"consumption_optimisation" required:"true"`
-	MaintenanceRequired     *string            `json:"maintenance_required" required:"true"`
+	PeakHour                *int               `json:"peak_hour"`
+	DataAvailabilityPct     *Decimal           `json:"data_availability_pct"`
+	SystemEfficiencyPct     *Decimal           `json:"system_efficiency_pct"`
+	EfficiencyChange30dPct  *Decimal           `json:"efficiency_change_30d_pct"`
+	ConsumptionOptimisation *string            `json:"consumption_optimisation"`
+	MaintenanceRequired     *string            `json:"maintenance_required"`
 	Financial               RenewableFinancial `json:"financial" required:"true"`
 	Unavailable             Unavailable        `json:"unavailable" required:"true"`
 }
 
 // RenewableSystemStatus is the system status panel.
 type RenewableSystemStatus struct {
-	Overall              *string     `json:"overall" required:"true"`
-	Monitoring           *string     `json:"monitoring" required:"true"`
-	GridConnection       *string     `json:"grid_connection" required:"true"`
-	LastReadingAt        *time.Time  `json:"last_reading_at" required:"true"`
-	SolarPanels          *string     `json:"solar_panels" required:"true"`
-	Inverter             *string     `json:"inverter" required:"true"`
-	Battery              *string     `json:"battery" required:"true"`
-	Security             *string     `json:"security" required:"true"`
-	TotalGenerationKwh   *Decimal    `json:"total_generation_kwh" required:"true"`
-	AverageEfficiencyPct *Decimal    `json:"average_efficiency_pct" required:"true"`
+	Overall              *string     `json:"overall"`
+	Monitoring           *string     `json:"monitoring"`
+	GridConnection       *string     `json:"grid_connection"`
+	LastReadingAt        *time.Time  `json:"last_reading_at"`
+	SolarPanels          *string     `json:"solar_panels"`
+	Inverter             *string     `json:"inverter"`
+	Battery              *string     `json:"battery"`
+	Security             *string     `json:"security"`
+	TotalGenerationKwh   *Decimal    `json:"total_generation_kwh"`
+	AverageEfficiencyPct *Decimal    `json:"average_efficiency_pct"`
 	Unavailable          Unavailable `json:"unavailable" required:"true"`
 }
 
@@ -171,14 +171,14 @@ type FinancialMonthlyRequest struct {
 // FinancialMonth is one month (0 = the year row); null means no data.
 type FinancialMonth struct {
 	Month           int           `json:"month" required:"true"`
-	ConsumptionKwh  *Decimal      `json:"consumption_kwh" required:"true"`
+	ConsumptionKwh  *Decimal      `json:"consumption_kwh"`
 	Cost            []MoneyAmount `json:"cost" required:"true"`
-	ProductionKwh   *Decimal      `json:"production_kwh" required:"true"`
+	ProductionKwh   *Decimal      `json:"production_kwh"`
 	Revenue         []MoneyAmount `json:"revenue" required:"true"`
 	RevenuePartial  bool          `json:"revenue_partial" required:"true"`
-	OffsetKwh       *Decimal      `json:"offset_kwh" required:"true"`
-	GridPurchaseKwh *Decimal      `json:"grid_purchase_kwh" required:"true"`
-	GridSaleKwh     *Decimal      `json:"grid_sale_kwh" required:"true"`
+	OffsetKwh       *Decimal      `json:"offset_kwh"`
+	GridPurchaseKwh *Decimal      `json:"grid_purchase_kwh"`
+	GridSaleKwh     *Decimal      `json:"grid_sale_kwh"`
 	Net             []MoneyAmount `json:"net" required:"true"`
 }
 
@@ -201,10 +201,10 @@ type FinancialBuildingTariff struct {
 	BuildingID   uuid.UUID `json:"building_id" required:"true"`
 	BuildingName string    `json:"building_name" required:"true"`
 	PriceType    string    `json:"price_type" required:"true" enum:"single_time,multi_time"`
-	Single       *Decimal  `json:"single" required:"true"`
-	T1           *Decimal  `json:"t1" required:"true"`
-	T2           *Decimal  `json:"t2" required:"true"`
-	T3           *Decimal  `json:"t3" required:"true"`
+	Single       *Decimal  `json:"single"`
+	T1           *Decimal  `json:"t1"`
+	T2           *Decimal  `json:"t2"`
+	T3           *Decimal  `json:"t3"`
 	Currency     string    `json:"currency" required:"true"`
 }
 
@@ -227,7 +227,7 @@ type FinancialTariffs struct {
 // FinancialSummary is R294's headline.
 type FinancialSummary struct {
 	Year          int              `json:"year" required:"true"`
-	Month         *int             `json:"month" required:"true"`
+	Month         *int             `json:"month"`
 	AnalyzerCount int              `json:"analyzer_count" required:"true"`
 	PlantCount    int              `json:"plant_count" required:"true"`
 	Figures       FinancialMonth   `json:"figures" required:"true"`
