@@ -120,12 +120,11 @@ type wireDevice struct {
 // normalize.OptionalNumber (removed-behaviour 21: never a fabricated
 // zero).
 type wirePoint struct {
-	TimeStamp string  `json:"time_stamp"`
-	Point1    *string `json:"p1"`
-	Point24   *string `json:"p24"`
-	Point2001 *string `json:"p2001"`
-	Point2009 *string `json:"p2009"`
-	Point2010 *string `json:"p2010"`
+	TimeStamp  string  `json:"time_stamp"`
+	Point1     *string `json:"p1"`
+	Point24    *string `json:"p24"`
+	Point83022 *string `json:"p83022"`
+	Point83025 *string `json:"p83025"`
 }
 
 // wirePagedFaults is result_data for getFaultAlarmInfo. isolarTypes.ts:300-
@@ -161,4 +160,20 @@ type wireFault struct {
 	FaultCode  string  `json:"fault_code"`
 	FaultName  string  `json:"fault_name"`
 	CreateTime string  `json:"create_time"`
+	// F9: level/type/device/close time for the alarms tab (R286).
+	FaultLevel *json.Number `json:"fault_level"`
+	FaultType  *json.Number `json:"fault_type"`
+	DeviceName *string      `json:"device_name"`
+	OverTime   *string      `json:"over_time"`
+}
+
+// wireDailyPoint is one day of getPowerStationPointDayMonthYearDataList; the
+// value sits under the requested data_type key ("2"), as legacy reads it.
+type wireDailyPoint map[string]json.RawMessage
+
+// wireRealtime is getDeviceRealTimeData's result_data.
+type wireRealtime struct {
+	DevicePointList []struct {
+		DevicePoint map[string]json.RawMessage `json:"device_point"`
+	} `json:"device_point_list"`
 }

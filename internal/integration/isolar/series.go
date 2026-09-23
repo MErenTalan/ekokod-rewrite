@@ -30,28 +30,14 @@ const (
 // order.
 const legacyMaxSubWindow = 3 * time.Hour
 
-// ProductionSample is one minute-series reading, from either a device
-// (PSKey non-nil) or a plant (PSKey nil — the BLOCKER case: a plant-level
-// sample carries no device attribution and internal/ingest/production
-// quarantines it rather than storing it against a fabricated device).
-type ProductionSample struct {
-	// PSID is populated only when the caller's own request already names
-	// it: PlantMinuteSeries sets it to the psID it was asked for (the
-	// provider's minute-series result_data has no per-record ps_id/ps_key
-	// pair — see wire.go), and DeviceMinuteSeries leaves it empty (its
-	// caller — internal/ingest/production.Store — already has the plant id
-	// as an explicit parameter, so this field is informational only, never
-	// load-bearing for store attribution).
-	PSID     string
-	PSKey    *string
-	DeviceSN *string
-	Ts       time.Time
-
-	ProductionKwh *decimal.Decimal
+// YieldSample is one minute-series reading from a device (PSKey set) or a
+// plant (PSKey nil). YieldTodayKwh is CUMULATIVE since Istanbul midnight
+// (points 1 / 83022), never an interval; callers derive intervals (R277).
+type YieldSample struct {
+	PSKey         *string
+	Ts            time.Time
+	YieldTodayKwh *decimal.Decimal
 	ActivePowerKw *decimal.Decimal
-	IrradianceWm2 *decimal.Decimal
-	ModuleTempC   *decimal.Decimal
-	AmbientTempC  *decimal.Decimal
 }
 
 // DeviceMinuteSeries fetches minute-interval production for the given
@@ -63,7 +49,7 @@ type ProductionSample struct {
 // "no keys requested" is a valid degenerate case, matching the general
 // adapter convention that an empty request yields an empty result, not a
 // failure).
-func (c *Client) DeviceMinuteSeries(ctx context.Context, creds integration.Credentials, psKeys []string, from, to time.Time) ([]ProductionSample, error) {
+func (c *Client) DeviceMinuteSeries(ctx context.Context, creds integration.Credentials, psKeys []string, from, to time.Time) ([]YieldSample, error) {
 	if len(psKeys) == 0 {
 		return nil, nil
 	}
@@ -71,14 +57,14 @@ func (c *Client) DeviceMinuteSeries(ctx context.Context, creds integration.Crede
 		return nil, err
 	}
 
-	var out []ProductionSample
+	var out []YieldSample
 	for _, w := range subWindows(from, to, legacyMaxSubWindow) {
 		raw, err := c.call(ctx, creds, callOptions{
 			op:     opGetDevicePointMinuteDataList,
 			bearer: true,
 			body: map[string]any{
 				"ps_key_list":       psKeys,
-				"points":            pointIDList,
+				"points":            devicePoints,
 				"start_time_stamp":  formatIsolarTime(w[0]),
 				"end_time_stamp":    formatIsolarTime(w[1]),
 				"minute_interval":   c.minuteInterval,
@@ -97,7 +83,7 @@ func (c *Client) DeviceMinuteSeries(ctx context.Context, creds integration.Crede
 		for psKey, points := range byKey {
 			key := psKey
 			for _, wp := range points {
-				s, mapErr := mapPoint(wp, w[0], w[1])
+				s, mapErr := mapPoint(wp.TimeStamp, wp.Point1, wp.Point24, w[0], w[1])
 				if mapErr != nil {
 					// adapter-patterns.md item 7: skip one bad row rather
 					// than failing the whole call. See plants.go's
@@ -120,7 +106,7 @@ func (c *Client) DeviceMinuteSeries(ctx context.Context, creds integration.Crede
 // DeviceMinuteSeries; psID is refused empty before any call
 // (adapter-patterns.md item 12 — unlike a ps_key LIST, a single empty psID
 // can only mean a caller error, never "fetch nothing").
-func (c *Client) PlantMinuteSeries(ctx context.Context, creds integration.Credentials, psID string, from, to time.Time) ([]ProductionSample, error) {
+func (c *Client) PlantMinuteSeries(ctx context.Context, creds integration.Credentials, psID string, from, to time.Time) ([]YieldSample, error) {
 	if psID == "" {
 		return nil, c.configError(opGetPowerStationPointMinuteDataList)
 	}
@@ -128,7 +114,7 @@ func (c *Client) PlantMinuteSeries(ctx context.Context, creds integration.Creden
 		return nil, err
 	}
 
-	var out []ProductionSample
+	var out []YieldSample
 	for _, w := range subWindows(from, to, legacyMaxSubWindow) {
 		raw, err := c.call(ctx, creds, callOptions{
 			op:     opGetPowerStationPointMinuteDataList,
@@ -137,7 +123,7 @@ func (c *Client) PlantMinuteSeries(ctx context.Context, creds integration.Creden
 				// isolarClient.ts:610: ps_id_list is an ARRAY, even for one
 				// plant — this call has no singular ps_id request field.
 				"ps_id_list":        []string{psID},
-				"points":            pointIDList,
+				"points":            plantPoints,
 				"start_time_stamp":  formatIsolarTime(w[0]),
 				"end_time_stamp":    formatIsolarTime(w[1]),
 				"minute_interval":   c.minuteInterval,
@@ -155,13 +141,11 @@ func (c *Client) PlantMinuteSeries(ctx context.Context, creds integration.Creden
 
 		for _, points := range byKey {
 			for _, wp := range points {
-				s, mapErr := mapPoint(wp, w[0], w[1])
+				s, mapErr := mapPoint(wp.TimeStamp, wp.Point83022, wp.Point83025, w[0], w[1])
 				if mapErr != nil {
 					continue
 				}
-				s.PSID = psID
-				// PSKey/DeviceSN stay nil: this IS the plant-level BLOCKER case.
-				out = append(out, s)
+				out = append(out, s) // PSKey nil: a plant-level sample (R276)
 			}
 		}
 	}
@@ -202,48 +186,25 @@ func subWindows(from, to time.Time, size time.Duration) [][2]time.Time {
 	return out
 }
 
-// mapPoint converts one wirePoint into a ProductionSample, applying the
-// unit conversions 06 §6 requires (Wh→kWh for point 1, W→kW for point 24)
-// and dropping a row whose timestamp does not parse or falls outside
-// [from, to) — adapter-patterns.md item 4's half-open window rule.
-func mapPoint(w wirePoint, from, to time.Time) (ProductionSample, error) {
-	ts, err := normalize.LocalLayout(isolarTimestampLayout, w.TimeStamp)
+// mapPoint converts a yield (Wh) and power (W) pair to kWh/kW (06 §6), dropping
+// a row whose timestamp does not parse or falls outside [from, to).
+func mapPoint(stamp string, yieldWh, powerW *string, from, to time.Time) (YieldSample, error) {
+	ts, err := normalize.LocalLayout(isolarTimestampLayout, stamp)
 	if err != nil {
-		return ProductionSample{}, err
+		return YieldSample{}, err
 	}
 	if ts.Before(from) || !ts.Before(to) {
-		return ProductionSample{}, errOutsideWindow
+		return YieldSample{}, errOutsideWindow
 	}
-
-	yieldWh, err := normalize.OptionalNumber(derefOr(w.Point1, ""))
+	yield, err := normalize.OptionalNumber(derefOr(yieldWh, ""))
 	if err != nil {
-		return ProductionSample{}, err
+		return YieldSample{}, err
 	}
-	powerW, err := normalize.OptionalNumber(derefOr(w.Point24, ""))
+	power, err := normalize.OptionalNumber(derefOr(powerW, ""))
 	if err != nil {
-		return ProductionSample{}, err
+		return YieldSample{}, err
 	}
-	irradiance, err := normalize.OptionalNumber(derefOr(w.Point2001, ""))
-	if err != nil {
-		return ProductionSample{}, err
-	}
-	ambient, err := normalize.OptionalNumber(derefOr(w.Point2009, ""))
-	if err != nil {
-		return ProductionSample{}, err
-	}
-	module, err := normalize.OptionalNumber(derefOr(w.Point2010, ""))
-	if err != nil {
-		return ProductionSample{}, err
-	}
-
-	return ProductionSample{
-		Ts:            ts,
-		ProductionKwh: normalize.WhToKWh(yieldWh),
-		ActivePowerKw: normalize.WToKW(powerW),
-		IrradianceWm2: irradiance,
-		AmbientTempC:  ambient,
-		ModuleTempC:   module,
-	}, nil
+	return YieldSample{Ts: ts, YieldTodayKwh: normalize.WhToKWh(yield), ActivePowerKw: normalize.WToKW(power)}, nil
 }
 
 // errOutsideWindow marks a row mapPoint drops for falling outside

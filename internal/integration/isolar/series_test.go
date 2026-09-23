@@ -23,10 +23,8 @@ func plantMinuteRoute(respond fake.Responder) fake.Route {
 	return fake.Route{Method: http.MethodPost, Path: "/openapi/platform/getPowerStationPointMinuteDataList", Respond: respond}
 }
 
-// TestISolarPlantSeriesHasNoDeviceKey pins the BLOCKER at the adapter
-// boundary: PlantMinuteSeries's samples always carry PSKey == nil and
-// DeviceSN == nil — internal/ingest/production.Store relies on exactly
-// this to decide what gets quarantined.
+// TestISolarPlantSeriesHasNoDeviceKey: PlantMinuteSeries's samples carry
+// PSKey == nil; the sync stores them as plant totals (R276).
 func TestISolarPlantSeriesHasNoDeviceKey(t *testing.T) {
 	srv := fake.NewTLSServer(t, plantMinuteRoute(fake.JSON(http.StatusOK, fake.Fixture(t, "isolar", "isolar_plant_minute.json"))))
 	c := isolar.New(isolarTestPool(t, srv), isolar.Options{Clock: clock.NewFake(fixtureFrom)})
@@ -36,10 +34,8 @@ func TestISolarPlantSeriesHasNoDeviceKey(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, samples, 1)
 	require.Nil(t, samples[0].PSKey, "a plant-level sample must never carry a device key")
-	require.Nil(t, samples[0].DeviceSN)
-	require.Equal(t, "FX3001", samples[0].PSID)
-	require.NotNil(t, samples[0].ProductionKwh)
-	require.True(t, decimal.RequireFromString("5").Equal(*samples[0].ProductionKwh))
+	require.NotNil(t, samples[0].YieldTodayKwh)
+	require.True(t, decimal.RequireFromString("5").Equal(*samples[0].YieldTodayKwh))
 
 	// R41 isolarClient.ts:610: ps_id_list is an ARRAY even for one plant.
 	reqs := srv.Requests()

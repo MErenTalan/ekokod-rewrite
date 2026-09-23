@@ -2,14 +2,13 @@
 // discovery, minute production series and fault alarms (06-integrations.md
 // §6). Unlike the meter adapters (internal/integration/osos, .../gridbox,
 // .../aril, .../pm5340), it does not implement integration.MeterDataSource —
-// it feeds plant_production, power_plant_devices and plant alarms instead
+// it feeds plant production, power_plant_devices and plant faults instead
 // of meter_readings, so its Client exposes its own bespoke method set.
 //
 // This package is PURE (06 §1 rule 2): no import of internal/store,
 // internal/ingest or github.com/jackc/pgx — internal/arch's
-// TestAdaptersDoNotImportTheStore enforces it. The blocker-aware store path
-// that consumes this package's ProductionSample lives in
-// internal/ingest/production, a separate package one layer up.
+// TestAdaptersDoNotImportTheStore enforces it. internal/service/solar
+// (F9) is the one consumer that stores what this package fetches.
 package isolar
 
 import (
@@ -64,19 +63,17 @@ const maxPageBudget = 100
 // request").
 const MaxWindowMinute = 24 * time.Hour
 
-// MaxWindowDay is Provider-defaults' isolar row: "31 d day series". No
-// day-series call exists in this task's brief (only the two minute-series
-// methods), so nothing in this package enforces it yet — it is exported
-// now, per R42's literal instruction ("the adapter exports its MaxWindow
-// per series"), so a future day-series method has a single documented
-// source for this bound instead of a second invented constant.
+// MaxWindowDay is Provider-defaults' isolar row: "31 d day series";
+// PlantDailySeries enforces it.
 const MaxWindowDay = 31 * 24 * time.Hour
 
-// pointIDList is the fixed set of measurement points every minute-series
-// call asks for (06 §6): 1 yield today (Wh), 24 total active power (W),
-// 2001 daily horizontal irradiation (Wh/m²), 2009 ambient temperature (°C),
-// 2010 module temperature (°C).
-const pointIDList = "1,24,2001,2009,2010"
+// Minute-series points (06 §6): an inverter reports 1 yield today (Wh) and
+// 24 active power (W); a plant reports 83022 daily yield (Wh) and 83025
+// active power (W). F2 asked plants for the inverter points (F9 finding).
+const (
+	devicePoints = "1,24"
+	plantPoints  = "83022,83025"
+)
 
 // Endpoints keys this package never hard-codes a value for (R40): every
 // call resolves its path from creds.Endpoints, and the gateway origin,

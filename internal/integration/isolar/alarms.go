@@ -34,12 +34,18 @@ const faultsProcessStatus = "999"
 // job ("isolar.sync_plant is F9's job", BLOCKER item 4) — this Client only
 // fetches.
 type Fault struct {
+	// Ref names one occurrence: ps_id|ps_key|fault_code|create_time (R286);
+	// fault_code alone is a fault TYPE and would dedupe recurrences away.
 	Ref        string
 	PSID       string
 	PSKey      *string
 	Code       string
 	Message    string
 	OccurredAt time.Time
+	Level      *int32
+	Type       *int32
+	DeviceName *string
+	ClosedAt   *time.Time
 }
 
 // Faults fetches every fault alarm across the whole credential (the call
@@ -130,12 +136,33 @@ func mapFault(w wireFault, from, to time.Time) (Fault, error) {
 	if occurredAt.Before(from) || !occurredAt.Before(to) {
 		return Fault{}, errOutsideWindow
 	}
-	return Fault{
-		Ref:        w.FaultCode,
+	f := Fault{
+		Ref:        w.PsID + "|" + derefOr(w.PsKey, "") + "|" + w.FaultCode + "|" + w.CreateTime,
 		PSID:       w.PsID,
 		PSKey:      w.PsKey,
 		Code:       w.FaultCode,
 		Message:    w.FaultName,
 		OccurredAt: occurredAt,
-	}, nil
+		Level:      optionalInt32(w.FaultLevel),
+		Type:       optionalInt32(w.FaultType),
+		DeviceName: w.DeviceName,
+	}
+	if w.OverTime != nil && *w.OverTime != "" {
+		if closed, err := normalize.LocalLayout(isolarTimestampLayout, *w.OverTime); err == nil {
+			f.ClosedAt = &closed
+		}
+	}
+	return f, nil
+}
+
+func optionalInt32(n *json.Number) *int32 {
+	if n == nil {
+		return nil
+	}
+	v, err := n.Int64()
+	if err != nil {
+		return nil
+	}
+	out := int32(v)
+	return &out
 }

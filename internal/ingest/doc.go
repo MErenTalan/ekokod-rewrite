@@ -1,8 +1,8 @@
 // Package ingest will hold the ingestion pipeline that turns
 // internal/integration adapter output into persisted readings (Task 10:
 // fetch planning, deduplication and the store writes) plus its
-// internal/ingest/generation, internal/ingest/production and
-// internal/ingest/backfill subpackages (Tasks 11, 13 and 15).
+// internal/ingest/generation and internal/ingest/backfill subpackages
+// (Tasks 11 and 15; iSolar production moved to internal/service/solar in F9).
 //
 // This file is a placeholder — package clause and doc comment only — so
 // that internal/arch's F2 float and purity guards (TestIntegrationTreesDoNotParseFloats,

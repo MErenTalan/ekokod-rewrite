@@ -106,16 +106,18 @@ func isolarTestCreds(srv *fake.Server) integration.Credentials {
 		Subtype:      "EU",
 		Region:       "EU",
 		Endpoints: map[string]string{
-			isolarEndpointGateway:                      srv.URL,
-			isolarEndpointAuthorizeOrigin:              "https://web3.isolarcloud.eu",
-			isolarEndpointCloudID:                      "3",
-			isolarOpToken:                              "/openapi/apiManage/token",
-			isolarOpRefreshToken:                       "/openapi/apiManage/refreshToken",
-			isolarOpQueryPowerStationList:              "/openapi/platform/queryPowerStationList",
-			isolarOpGetDeviceListByPsID:                "/openapi/platform/getDeviceListByPsId",
-			isolarOpGetDevicePointMinuteDataList:       "/openapi/platform/getDevicePointMinuteDataList",
-			isolarOpGetPowerStationPointMinuteDataList: "/openapi/platform/getPowerStationPointMinuteDataList",
-			isolarOpGetFaultAlarmInfo:                  "/openapi/platform/getFaultAlarmInfo",
+			isolarEndpointGateway:                              srv.URL,
+			isolarEndpointAuthorizeOrigin:                      "https://web3.isolarcloud.eu",
+			isolarEndpointCloudID:                              "3",
+			isolarOpToken:                                      "/openapi/apiManage/token",
+			isolarOpRefreshToken:                               "/openapi/apiManage/refreshToken",
+			isolarOpQueryPowerStationList:                      "/openapi/platform/queryPowerStationList",
+			isolarOpGetDeviceListByPsID:                        "/openapi/platform/getDeviceListByPsId",
+			isolarOpGetDevicePointMinuteDataList:               "/openapi/platform/getDevicePointMinuteDataList",
+			isolarOpGetPowerStationPointMinuteDataList:         "/openapi/platform/getPowerStationPointMinuteDataList",
+			isolarOpGetFaultAlarmInfo:                          "/openapi/platform/getFaultAlarmInfo",
+			"get_device_real_time_data":                        "/openapi/platform/getDeviceRealTimeData",
+			"get_power_station_point_day_month_year_data_list": "/openapi/platform/getPowerStationPointDayMonthYearDataList",
 		},
 		Extra: map[string]integration.Secret{
 			"app_key":       integration.NewSecret([]byte(fixtureAppKey)),
@@ -355,12 +357,12 @@ func TestIdempotentISolarRefetchYieldsIdenticalSamples(t *testing.T) {
 	sortSamples(second)
 	for i := range first {
 		require.True(t, first[i].Ts.Equal(second[i].Ts))
-		requireDecimalPtrEqual(t, first[i].ProductionKwh, second[i].ProductionKwh)
+		requireDecimalPtrEqual(t, first[i].YieldTodayKwh, second[i].YieldTodayKwh)
 		requireDecimalPtrEqual(t, first[i].ActivePowerKw, second[i].ActivePowerKw)
 	}
 }
 
-func sortSamples(s []isolar.ProductionSample) {
+func sortSamples(s []isolar.YieldSample) {
 	for i := 1; i < len(s); i++ {
 		for j := i; j > 0 && s[j].Ts.Before(s[j-1].Ts); j-- {
 			s[j], s[j-1] = s[j-1], s[j]
@@ -390,16 +392,13 @@ func TestISolarUnitsAreNormalised(t *testing.T) {
 	var checked bool
 	for _, s := range samples {
 		if s.Ts.Equal(time.Date(2025, time.December, 31, 21, 5, 0, 0, time.UTC)) {
-			require.NotNil(t, s.ProductionKwh)
-			require.True(t, decimal.RequireFromString("1.5").Equal(*s.ProductionKwh))
+			require.NotNil(t, s.YieldTodayKwh)
+			require.True(t, decimal.RequireFromString("1.5").Equal(*s.YieldTodayKwh))
 			require.NotNil(t, s.ActivePowerKw)
 			require.True(t, decimal.RequireFromString("2.4").Equal(*s.ActivePowerKw))
 			// Every template-required field, per adapter-patterns.md item 1.
 			require.NotNil(t, s.PSKey)
 			require.Equal(t, "FX1001", *s.PSKey)
-			require.NotNil(t, s.IrradianceWm2)
-			require.NotNil(t, s.AmbientTempC)
-			require.NotNil(t, s.ModuleTempC)
 			checked = true
 		}
 	}
@@ -415,7 +414,8 @@ func TestISolarUnitsAreNormalised(t *testing.T) {
 // observed failure output.
 func TestISolarPointsNilNeverZero(t *testing.T) {
 	body := []byte(`{"result_code":"1","result_msg":"success","result_data":{"FX1001":[
-		{"time_stamp":"20260101000500","p1":null,"p24":"","p2001":"-","p2009":"0","p2010":"1.5"}
+		{"time_stamp":"20260101000500","p1":null,"p24":"-"},
+		{"time_stamp":"20260101001000","p1":"","p24":"0"}
 	]}}`)
 	srv := fake.NewTLSServer(t, deviceMinuteRoute(fake.JSON(http.StatusOK, body)))
 	c := isolar.New(isolarTestPool(t, srv), isolar.Options{Clock: clock.NewFake(fixtureFrom)})
@@ -423,15 +423,13 @@ func TestISolarPointsNilNeverZero(t *testing.T) {
 
 	samples, err := c.DeviceMinuteSeries(context.Background(), creds, []string{"FX1001"}, fixtureFrom, fixtureTo)
 	require.NoError(t, err)
-	require.Len(t, samples, 1)
-	s := samples[0]
-	require.Nil(t, s.ProductionKwh, "null p1 must be nil, never a fabricated zero")
-	require.Nil(t, s.ActivePowerKw, "\"\" p24 must be nil")
-	require.Nil(t, s.IrradianceWm2, "\"-\" p2001 must be nil")
-	require.NotNil(t, s.AmbientTempC, "a genuine \"0\" p2009 must stay a real zero, not nil")
-	require.True(t, decimal.NewFromInt(0).Equal(*s.AmbientTempC))
-	require.NotNil(t, s.ModuleTempC)
-	require.True(t, decimal.RequireFromString("1.5").Equal(*s.ModuleTempC))
+	require.Len(t, samples, 2)
+	sortSamples(samples)
+	require.Nil(t, samples[0].YieldTodayKwh, "null p1 must be nil, never a fabricated zero")
+	require.Nil(t, samples[0].ActivePowerKw, "\"-\" p24 must be nil")
+	require.Nil(t, samples[1].YieldTodayKwh, "\"\" p1 must be nil")
+	require.NotNil(t, samples[1].ActivePowerKw, "a genuine \"0\" p24 must stay a real zero, not nil")
+	require.True(t, decimal.Zero.Equal(*samples[1].ActivePowerKw))
 }
 
 // TestISolarHeadersCarrySecretsOnlyInHeaders: the recorded request has
@@ -530,7 +528,7 @@ func TestISolarPlantsAndFaultsMapEveryField(t *testing.T) {
 	faults, err := c.Faults(context.Background(), creds, fixtureFrom, fixtureFrom.Add(48*time.Hour))
 	require.NoError(t, err)
 	require.Len(t, faults, 1)
-	require.Equal(t, "W-01", faults[0].Ref)
+	require.Equal(t, "FX3001|FX2001|W-01|20260102090000", faults[0].Ref, "R286: one ref per occurrence")
 	require.Equal(t, "FX3001", faults[0].PSID)
 	require.NotNil(t, faults[0].PSKey)
 	require.Equal(t, "FX2001", *faults[0].PSKey)
