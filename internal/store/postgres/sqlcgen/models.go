@@ -1820,6 +1820,7 @@ type JobRun struct {
 	Failed     int32
 	Error      *string
 	Detail     []byte
+	TaskID     *string
 }
 
 type MarketPricesHourly struct {

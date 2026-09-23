@@ -288,3 +288,44 @@ func TestOpsListMessagesSearchCombinesWithFilters(t *testing.T) {
 	require.Len(t, got, 1)
 	require.Equal(t, "job", got[0].Kind)
 }
+
+// R237: the screen holds a task id, so the run records one — and the NEWEST
+// run for that id is the one that explains the job being watched.
+func TestOpsRunByTaskIDReturnsTheNewestRunAndStaysInTenant(t *testing.T) {
+	t.Parallel()
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenant := testfixtures.NewTenant(t, ctx, pool, 8009)
+	other := testfixtures.NewTenant(t, ctx, pool, 8010)
+	repo := postgres.NewOpsRepository(pool)
+
+	companyID := tenant.Company.ID
+	taskID := "billing.generate:building:11111111-1111-1111-1111-111111111111:2026-08"
+	first, err := repo.StartRun(ctx, tenant.Scope, model.JobRun{CompanyID: &companyID, JobType: "billing.generate", TaskID: &taskID})
+	require.NoError(t, err)
+	require.NotNil(t, first.TaskID)
+	require.Equal(t, taskID, *first.TaskID)
+
+	_, err = repo.FinishRun(ctx, tenant.Scope, first.ID, "failed", 0, 0, 1, nil,
+		[]byte(`{"code":"tariff_not_found"}`), time.Now().UTC())
+	require.NoError(t, err)
+
+	// A recomputation of the same period reuses the deterministic task id.
+	second, err := repo.StartRun(ctx, tenant.Scope, model.JobRun{CompanyID: &companyID, JobType: "billing.generate", TaskID: &taskID})
+	require.NoError(t, err)
+
+	got, err := repo.RunByTaskID(ctx, tenant.Scope, taskID)
+	require.NoError(t, err)
+	require.Equal(t, second.ID, got.ID, "the newest run wins")
+
+	// Another company's run with the same task id is invisible.
+	otherCompany := other.Company.ID
+	_, err = repo.StartRun(ctx, other.Scope, model.JobRun{CompanyID: &otherCompany, JobType: "billing.generate", TaskID: &taskID})
+	require.NoError(t, err)
+	still, err := repo.RunByTaskID(ctx, tenant.Scope, taskID)
+	require.NoError(t, err)
+	require.Equal(t, second.ID, still.ID)
+
+	_, err = repo.RunByTaskID(ctx, tenant.Scope, "billing.generate:building:unknown:2026-08")
+	require.ErrorIs(t, err, store.ErrNotFound)
+}

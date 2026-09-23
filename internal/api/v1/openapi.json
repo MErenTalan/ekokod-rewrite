@@ -3074,6 +3074,18 @@
               "string"
             ]
           },
+          "error_code": {
+            "enum": [
+              "tariff_not_found",
+              "no_consumption_data",
+              "unresolved_anomaly",
+              "period_not_closed",
+              "ptf_data_missing",
+              "billing_parameters_missing",
+              "billing_parameters_invalid"
+            ],
+            "type": "string"
+          },
           "id": {
             "type": "string"
           },

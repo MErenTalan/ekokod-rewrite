@@ -142,8 +142,11 @@ type JobGenerator struct {
 func (g JobGenerator) Generate(ctx context.Context, p job.BillingGeneratePayload) error {
 	sc := store.SystemScope(p.CompanyID)
 	scopeJSON, _ := json.Marshal(p)
+	// R237: the id is deterministic from the payload, so the run and the task
+	// in Redis carry the same string and the screen can find this row.
+	taskID := job.BillingGenerateTaskID(p)
 	run, err := g.Ops.StartRun(ctx, sc, model.JobRun{CompanyID: &p.CompanyID, JobType: job.TypeBillingGenerate, Scope: scopeJSON,
-		StartedAt: g.Clock.Now().UTC(), Status: "running"})
+		StartedAt: g.Clock.Now().UTC(), Status: "running", TaskID: &taskID})
 	if err != nil {
 		return err
 	}

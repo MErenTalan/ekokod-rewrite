@@ -1480,6 +1480,12 @@ type OpsRepository interface {
 	GetRun(ctx context.Context, s Scope, id uuid.UUID) (model.JobRun, error)
 	ListRuns(ctx context.Context, s Scope, f JobRunFilter) ([]model.JobRun, error)
 
+	// RunByTaskID returns the NEWEST run a queue task produced, or
+	// ErrNotFound. The task id is deterministic per subject and period, so a
+	// recomputation reuses it and only the latest run explains the job the
+	// caller is watching (R237).
+	RunByTaskID(ctx context.Context, s Scope, taskID string) (model.JobRun, error)
+
 	// AppendMessage stores s.CompanyID as company_id; a message whose
 	// CompanyID is nil (a platform message) or names another company is
 	// refused with ErrNotFound.

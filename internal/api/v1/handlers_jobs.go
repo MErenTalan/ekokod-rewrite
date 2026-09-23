@@ -22,6 +22,6 @@ func (h *Handlers) getJob(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return nil, err
 		}
-		return dto.Job{ID: v.ID, Type: v.Type, Status: string(v.Status), CompletedAt: dto.TP(v.CompletedAt)}, nil
+		return dto.Job{ID: v.ID, Type: v.Type, Status: string(v.Status), CompletedAt: dto.TP(v.CompletedAt), ErrorCode: v.ErrorCode}, nil
 	})
 }

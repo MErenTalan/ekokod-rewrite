@@ -72,7 +72,7 @@ update job_runs set
     error = $6::text,
     detail = $7::jsonb
 where id = $8::uuid and company_id is null
-returning id, company_id, job_type, scope, started_at, finished_at, status, processed, skipped, failed, error, detail
+returning id, company_id, job_type, scope, started_at, finished_at, status, processed, skipped, failed, error, detail, task_id
 `
 
 type AdminFinishPlatformRunParams struct {
@@ -111,6 +111,7 @@ func (q *Queries) AdminFinishPlatformRun(ctx context.Context, arg AdminFinishPla
 		&i.Failed,
 		&i.Error,
 		&i.Detail,
+		&i.TaskID,
 	)
 	return i, err
 }
@@ -123,7 +124,7 @@ values (
              gen_random_uuid()),
     null, $2, $3::jsonb, $4
 )
-returning id, company_id, job_type, scope, started_at, finished_at, status, processed, skipped, failed, error, detail
+returning id, company_id, job_type, scope, started_at, finished_at, status, processed, skipped, failed, error, detail, task_id
 `
 
 type AdminStartPlatformRunParams struct {
@@ -162,6 +163,7 @@ func (q *Queries) AdminStartPlatformRun(ctx context.Context, arg AdminStartPlatf
 		&i.Failed,
 		&i.Error,
 		&i.Detail,
+		&i.TaskID,
 	)
 	return i, err
 }

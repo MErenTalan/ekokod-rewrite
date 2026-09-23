@@ -8,13 +8,22 @@
 -- the tenant-scoped, surface.
 
 -- name: OpsStartRun :one
-insert into job_runs (id, company_id, job_type, scope, status)
+insert into job_runs (id, company_id, job_type, scope, status, task_id)
 values (
     coalesce(nullif(sqlc.arg(id)::uuid, '00000000-0000-0000-0000-000000000000'::uuid),
              gen_random_uuid()),
-    sqlc.arg(company_id)::uuid, sqlc.arg(job_type), sqlc.arg(scope)::jsonb, sqlc.arg(status)
+    sqlc.arg(company_id)::uuid, sqlc.arg(job_type), sqlc.arg(scope)::jsonb, sqlc.arg(status),
+    sqlc.narg(task_id)::text
 )
 returning *;
+
+-- name: OpsRunByTaskID :one
+-- The newest run for a task id: the id is deterministic per subject and
+-- period, so a recomputation reuses it.
+select * from job_runs
+where company_id = sqlc.arg(company_id)::uuid and task_id = sqlc.arg(task_id)::text
+order by started_at desc, id
+limit 1;
 
 -- name: OpsFinishRun :one
 update job_runs set

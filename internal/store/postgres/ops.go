@@ -63,7 +63,7 @@ func opsJobRunFromRow(row sqlcgen.JobRun) model.JobRun {
 		ID: row.ID, CompanyID: row.CompanyID, JobType: row.JobType, Scope: row.Scope,
 		StartedAt: row.StartedAt.Time, FinishedAt: finishedAt, Status: row.Status,
 		Processed: row.Processed, Skipped: row.Skipped, Failed: row.Failed,
-		Error: row.Error, Detail: row.Detail,
+		Error: row.Error, Detail: row.Detail, TaskID: row.TaskID,
 	}
 }
 
@@ -92,10 +92,24 @@ func (r *OpsRepository) StartRun(ctx context.Context, s store.Scope, run model.J
 		scope = []byte("{}")
 	}
 	row, err := r.q.OpsStartRun(ctx, sqlcgen.OpsStartRunParams{
-		ID: run.ID, CompanyID: s.CompanyID, JobType: run.JobType, Scope: scope, Status: "running",
+		ID: run.ID, CompanyID: s.CompanyID, JobType: run.JobType, Scope: scope, Status: "running", TaskID: run.TaskID,
 	})
 	if err != nil {
 		return model.JobRun{}, pgerr.Translate(r.pool, "start job run", err)
+	}
+	return opsJobRunFromRow(row), nil
+}
+
+// RunByTaskID is the newest run a queue task produced, or ErrNotFound. It is
+// how a screen watching a job finds the R113 code that explains a failure
+// (R237); the worker's own error text stays where it was written.
+func (r *OpsRepository) RunByTaskID(ctx context.Context, s store.Scope, taskID string) (model.JobRun, error) {
+	if !s.Valid() {
+		return model.JobRun{}, store.ErrInvalidScope
+	}
+	row, err := r.q.OpsRunByTaskID(ctx, sqlcgen.OpsRunByTaskIDParams{CompanyID: s.CompanyID, TaskID: taskID})
+	if err != nil {
+		return model.JobRun{}, pgerr.Translate(r.pool, "job run by task id", err)
 	}
 	return opsJobRunFromRow(row), nil
 }

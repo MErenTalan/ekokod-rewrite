@@ -173,6 +173,10 @@ type JobRun struct {
 	CompanyID *uuid.UUID
 
 	JobType string
+	// TaskID is the queue's own id for the task this run executed, when the
+	// run came from one (migration 00016). It is how a screen watching a job
+	// finds the run that explains it.
+	TaskID *string
 	// Scope describes what the run covered, as jsonb. It is NOT
 	// store.Scope — internal/domain imports nothing from the project, and
 	// the two are different things: this is a record of what a job did, not

@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 
+	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/job"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
 )
@@ -35,6 +36,10 @@ type View struct {
 	Type        string
 	Status      Status
 	CompletedAt *time.Time
+	// ErrorCode is one of billing's R113 codes when a bill computation
+	// failed, and "" otherwise. It is a closed set, so it can be shown to an
+	// operator; the worker's own error text still never leaves (R237).
+	ErrorCode string
 }
 
 // Inspector is the slice of asynq.Inspector this service uses.
@@ -46,6 +51,10 @@ type Inspector interface {
 type Deps struct {
 	Inspector Inspector
 	Analyzers store.AnalyzerRepository
+	// Buildings resolves the subject of a building-scope bill computation.
+	Buildings store.BuildingRepository
+	// Ops reads the job_runs row that explains a failure (R237).
+	Ops store.OpsRepository
 	// Queues are searched in order; default: critical, default, low.
 	Queues []string
 }
@@ -70,6 +79,17 @@ var watchable = map[string]bool{
 	job.TypeIntegrationRefreshAnalyzer: true,
 	job.TypeIntegrationSyncAnalyzers:   true,
 	job.TypeIntegrationBackfill:        true,
+	// R237: the bills screen enqueues this one and must be able to say why it
+	// failed — §7.10 lists the sentences.
+	job.TypeBillingGenerate: true,
+}
+
+// billingCodes is R113's closed set. A code outside it is not repeated to a
+// caller: the point of the field is that everything in it is safe to show.
+var billingCodes = map[string]bool{
+	"tariff_not_found": true, "no_consumption_data": true, "unresolved_anomaly": true,
+	"period_not_closed": true, "ptf_data_missing": true,
+	"billing_parameters_missing": true, "billing_parameters_invalid": true,
 }
 
 // payloadScope is the part of every watchable payload this service reads.
@@ -104,22 +124,35 @@ func (s *Service) Get(ctx context.Context, sc store.Scope, id string) (View, err
 	if !watchable[info.Type] {
 		return View{}, store.ErrNotFound
 	}
+	// The two payload families are decoded separately: the integration tasks
+	// carry bare Go field names, billing.generate carries snake_case tags, and
+	// one struct cannot answer to both spellings.
+	var billingPayload job.BillingGeneratePayload
 	var p payloadScope
-	if err := json.Unmarshal(info.Payload, &p); err != nil || p.CompanyID != sc.CompanyID {
-		return View{}, store.ErrNotFound
-	}
-	ids := p.analyzers()
-	// A job that names no analyzer covers the whole company, so only a
-	// principal who may see the whole company may watch it.
-	if len(ids) == 0 && !sc.AllBuildings {
-		return View{}, store.ErrNotFound
-	}
-	for _, id := range ids {
-		if _, err := s.d.Analyzers.Get(ctx, sc, id); err != nil {
-			if errors.Is(err, store.ErrNotFound) {
-				return View{}, store.ErrNotFound
-			}
+	if info.Type == job.TypeBillingGenerate {
+		if err := json.Unmarshal(info.Payload, &billingPayload); err != nil || billingPayload.CompanyID != sc.CompanyID {
+			return View{}, store.ErrNotFound
+		}
+		if err := s.billingSubjectVisible(ctx, sc, billingPayload); err != nil {
 			return View{}, err
+		}
+	} else {
+		if err := json.Unmarshal(info.Payload, &p); err != nil || p.CompanyID != sc.CompanyID {
+			return View{}, store.ErrNotFound
+		}
+		ids := p.analyzers()
+		// A job that names no analyzer covers the whole company, so only a
+		// principal who may see the whole company may watch it.
+		if len(ids) == 0 && !sc.AllBuildings {
+			return View{}, store.ErrNotFound
+		}
+		for _, id := range ids {
+			if _, err := s.d.Analyzers.Get(ctx, sc, id); err != nil {
+				if errors.Is(err, store.ErrNotFound) {
+					return View{}, store.ErrNotFound
+				}
+				return View{}, err
+			}
 		}
 	}
 	v := View{ID: info.ID, Type: info.Type, Status: statusOf(info.State)}
@@ -127,7 +160,58 @@ func (s *Service) Get(ctx context.Context, sc store.Scope, id string) (View, err
 		completed := info.CompletedAt
 		v.CompletedAt = &completed
 	}
+	if v.Status == Failed && info.Type == job.TypeBillingGenerate {
+		v.ErrorCode = s.billingFailureCode(ctx, sc, billingPayload)
+	}
 	return v, nil
+}
+
+// billingSubjectVisible answers exactly like an unknown id for a subject the
+// caller may not see, so a job id is never an oracle.
+func (s *Service) billingSubjectVisible(ctx context.Context, sc store.Scope, p job.BillingGeneratePayload) error {
+	switch p.Scope {
+	case model.BillScopeCompany:
+		if !sc.AllBuildings {
+			return store.ErrNotFound
+		}
+		return nil
+	case model.BillScopeBuilding:
+		if s.d.Buildings == nil {
+			return store.ErrNotFound
+		}
+		_, err := s.d.Buildings.Get(ctx, sc, p.SubjectID)
+		if errors.Is(err, store.ErrNotFound) {
+			return store.ErrNotFound
+		}
+		return err
+	case model.BillScopeAnalyzer:
+		_, err := s.d.Analyzers.Get(ctx, sc, p.SubjectID)
+		if errors.Is(err, store.ErrNotFound) {
+			return store.ErrNotFound
+		}
+		return err
+	default:
+		return store.ErrNotFound
+	}
+}
+
+// billingFailureCode reads the run the generator wrote and returns its R113
+// code, or "" — never the run's error text (R192).
+func (s *Service) billingFailureCode(ctx context.Context, sc store.Scope, p job.BillingGeneratePayload) string {
+	if s.d.Ops == nil {
+		return ""
+	}
+	run, err := s.d.Ops.RunByTaskID(ctx, sc, job.BillingGenerateTaskID(p))
+	if err != nil || len(run.Detail) == 0 {
+		return ""
+	}
+	var detail struct {
+		Code string `json:"code"`
+	}
+	if err := json.Unmarshal(run.Detail, &detail); err != nil || !billingCodes[detail.Code] {
+		return ""
+	}
+	return detail.Code
 }
 
 func (s *Service) find(id string) (*asynq.TaskInfo, error) {
