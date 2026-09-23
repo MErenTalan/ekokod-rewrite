@@ -147,6 +147,14 @@ func (s *Service) consumption(ctx context.Context, sc store.Scope, ids []uuid.UU
 
 // plants resolves the selection (R269) and reads production, feed-in and targets.
 func (s *Service) plants(ctx context.Context, sc store.Scope, r Request, p period, ys []int) ([]domain.PlantInput, error) {
+	// Plants are company assets and GET /power-plants is A CA CR: a
+	// building-scoped principal sees none here either, and may not name one.
+	if !sc.AllBuildings {
+		if len(r.PlantIDs) > 0 {
+			return nil, store.ErrNotFound
+		}
+		return nil, nil
+	}
 	var list []model.PowerPlant
 	if len(r.PlantIDs) > 0 {
 		for _, id := range r.PlantIDs {

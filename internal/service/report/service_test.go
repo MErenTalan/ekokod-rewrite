@@ -64,7 +64,7 @@ func (f fakePlants) Get(_ context.Context, _ store.Scope, id uuid.UUID) (model.P
 }
 
 func (fakePlants) List(context.Context, store.Scope, store.PlantFilter) ([]model.PowerPlant, error) {
-	return nil, nil
+	return []model.PowerPlant{{ID: plantA, Name: "GES", PlantKind: "grid"}}, nil
 }
 
 func (fakePlants) MonthlyTargets(context.Context, store.Scope, uuid.UUID) ([]model.PlantMonthlyTarget, error) {
@@ -216,4 +216,21 @@ func TestEmailContentBothLocales(t *testing.T) {
 	require.Equal(t, "Merkez - Monthly Energy Report - March 2026", subject)
 	text := report.EmailText(samplePayload(), []string{"Merkez"}, "en")
 	require.True(t, strings.Contains(text, "Total consumption: 1,234.50 kWh"), text)
+}
+
+// GET /power-plants is A CA CR: a building-scoped principal must not learn
+// plant names or production through a report either.
+func TestPreviewGivesBuildingScopeNoPlants(t *testing.T) {
+	t.Parallel()
+	narrow := store.Scope{CompanyID: companyA, BuildingIDs: []uuid.UUID{buildingA}}
+	r := monthly(buildingA)
+	r.PlantIDs = []uuid.UUID{plantA}
+	_, err := newService(t).Preview(t.Context(), narrow, r)
+	require.ErrorIs(t, err, store.ErrNotFound, "naming a plant is refused like an unknown id")
+
+	r.PlantIDs = nil
+	p, err := newService(t).Preview(t.Context(), narrow, r)
+	require.NoError(t, err)
+	require.Empty(t, p.Monthly.Plants)
+	require.Nil(t, p.Monthly.Utility.Value)
 }

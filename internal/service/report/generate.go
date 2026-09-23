@@ -66,6 +66,9 @@ func (q Requests) Enqueue(ctx context.Context, sc store.Scope, r Request) ([]Enq
 			return nil, err
 		}
 	}
+	if len(r.PlantIDs) > 0 && !sc.AllBuildings {
+		return nil, store.ErrNotFound // plants are not a building-scoped principal's to name
+	}
 	for _, id := range r.PlantIDs {
 		if _, err := q.Service.d.Plants.Get(ctx, sc, id); err != nil {
 			return nil, err
