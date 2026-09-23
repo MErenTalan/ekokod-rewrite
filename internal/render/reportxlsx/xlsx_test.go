@@ -116,6 +116,14 @@ func TestYearlyWorkbookHasEverySection(t *testing.T) {
 	for _, locale := range []string{"tr", "en"} {
 		requireSections(t, yearly(), locale)
 	}
+	// Independent of reportview: §7.14's last yearly section, by its own words.
+	raw, err := reportxlsx.Render(yearly(), "Ekokod A.Ş.", []string{"Merkez"}, "tr")
+	require.NoError(t, err)
+	sheets, _ := open(t, raw)
+	text := firstColumn(sheets[reportxlsx.SheetName("tr")])
+	for _, title := range []string{"Nihai karşılaştırma", "Karbon emisyonu", "Güneş enerjisi üretim raporu"} {
+		require.Contains(t, text, title)
+	}
 }
 
 func TestWorkbookMissingIsNoData(t *testing.T) {
