@@ -1,0 +1,149 @@
+{
+  "title": "Tariffs",
+  "subtitle": "Building tariffs, templates, bulk assignment and the icmal import",
+  "tabs": {
+    "building": "Building tariffs",
+    "templates": "Templates",
+    "bulk": "Bulk assignment",
+    "icmal": "İcmal import",
+    "solar": "Solar tariffs",
+    "defaults": "Default tariffs"
+  },
+  "selectBuilding": "Select a building",
+  "buildingRequired": "Select a building to see its tariff history",
+  "newTariff": "New tariff",
+  "editTariff": "Edit tariff",
+  "history": "Tariff history",
+  "historyEmpty": "This building has no tariff yet",
+  "historyNote": "Issued invoices keep the tariff version they were priced with.",
+  "saved": "Tariff saved",
+  "deleted": "Tariff deleted",
+  "deleteTitle": "Delete tariff version",
+  "deleteBody": "This version is deleted; invoices priced with it are unchanged and stay downloadable.",
+  "sections": {
+    "identity": "Identity",
+    "classification": "Classification",
+    "prices": "Prices",
+    "power": "Power",
+    "generation": "Generation",
+    "taxes": "Taxes and funds",
+    "extras": "Extra charges",
+    "ptf": "PTF + YEKDEM"
+  },
+  "fields": {
+    "effectiveFrom": "Effective from",
+    "name": "Tariff name",
+    "currency": "Currency",
+    "energyType": "Energy type",
+    "voltageLevel": "Distribution type",
+    "userGroup": "User group",
+    "priceType": "Price type",
+    "term": "Term",
+    "supplyCompany": "Supply company",
+    "singleTimePrice": "Single-time price (TL/kWh)",
+    "t1Price": "T1 price (TL/kWh)",
+    "t2Price": "T2 price (TL/kWh)",
+    "t3Price": "T3 price (TL/kWh)",
+    "distributionCost": "Distribution cost (TL/kWh)",
+    "reactivePowerPrice": "Reactive power price (TL/kVArh)",
+    "overusePrice": "Overuse price (TL/kWh)",
+    "overuseThreshold": "Daily overuse threshold (kWh/day)",
+    "greenEnergyPrice": "Green energy price (TL/kWh)",
+    "greenEnergyDistributionCost": "Green energy distribution cost (TL/kWh)",
+    "contractedPowerKw": "Contracted power (kW)",
+    "powerUnitPrice": "Power unit price (TL/kW/month)",
+    "generationUsage": "Generation usage",
+    "generationPricePerKwh": "Generation price (TL/kWh)",
+    "vatRate": "VAT rate (%)",
+    "usePtfYekdem": "PTF + YEKDEM",
+    "kbkEnergy": "Energy KBK",
+    "kbkT1": "T1 KBK",
+    "kbkT2": "T2 KBK",
+    "kbkT3": "T3 KBK",
+    "kbkPowerPrice": "Power price KBK",
+    "kbkOverusePrice": "Overuse price KBK",
+    "kbkReactivePower": "Reactive power KBK",
+    "kbkDistributionCost": "Distribution cost KBK (TL/kWh)",
+    "powerPriceSource": "Power price source",
+    "reactivePriceSource": "Reactive price source",
+    "distributionPriceSource": "Distribution price source",
+    "useManualYekdem": "Manual YEKDEM",
+    "year": "Year",
+    "month": "Month",
+    "value": "Value (TL/MWh)",
+    "taxName": "Tax name",
+    "taxRate": "Rate (%)",
+    "extraName": "Name",
+    "extraBasis": "Basis",
+    "extraAmount": "Amount"
+  },
+  "options": {
+    "currency": {
+      "TRY": "Turkish Lira (TL)",
+      "USD": "US Dollar",
+      "EUR": "Euro"
+    },
+    "energyType": {
+      "gridEnergy": "Grid energy",
+      "greenEnergy": "Green energy"
+    },
+    "voltageLevel": {
+      "lv": "Low voltage (LV)",
+      "mv": "Medium voltage (MV)"
+    },
+    "userGroup": {
+      "residential": "Residential",
+      "residentialPlus": "Residential (plus)",
+      "commercial": "Commercial",
+      "commercialPlus": "Commercial (plus)",
+      "industrial": "Industrial",
+      "agricultural": "Agricultural irrigation",
+      "lighting": "Lighting",
+      "martyrsFamilies": "Martyrs' families",
+      "publicLighting": "Public lighting"
+    },
+    "priceType": {
+      "singleTime": "Single-time",
+      "multiTime": "Three-time"
+    },
+    "term": {
+      "monomial": "Monomial",
+      "binomial": "Binomial"
+    },
+    "supplyCompany": {
+      "incumbent": "Incumbent supplier",
+      "private": "Private supplier"
+    },
+    "generationUsage": {
+      "none": "None",
+      "subtractFromConsumption": "Subtract from consumption",
+      "subtractFromTotal": "Subtract from the total"
+    },
+    "priceSource": {
+      "kbk": "KBK coefficient",
+      "fixed": "Fixed price"
+    },
+    "extraBasis": {
+      "perKwh": "Per kWh",
+      "perContractedKw": "Per contracted kW",
+      "perMaxDemandKw": "Per max demand kW",
+      "fixedPerPeriod": "Fixed per period",
+      "pctOfEnergy": "Percentage of the energy charge"
+    }
+  },
+  "ptfCurrencyNote": "PTF + YEKDEM pricing is done in Turkish Lira only.",
+  "ptfDescription": "The energy charge is the hourly PTF + YEKDEM value multiplied by the KBK coefficient.",
+  "addTax": "Add tax",
+  "addExtra": "Add extra charge",
+  "addYekdem": "Add YEKDEM row",
+  "remove": "Remove",
+  "columns": {
+    "effectiveFrom": "Effective",
+    "name": "Name",
+    "priceType": "Price type",
+    "term": "Term",
+    "pricing": "Pricing"
+  },
+  "ptfBadge": "PTF + YEKDEM",
+  "fixedBadge": "Fixed price"
+}

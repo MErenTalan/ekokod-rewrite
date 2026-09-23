@@ -44,6 +44,10 @@
     "notAssignable": "You cannot assign this role",
     "tooManyAnalyzers": "This building has too many analyzers",
     "rangeTooWide": "The date range is too wide",
-    "subjectExclusive": "Choose either a building or an analyzer, not both"
+    "subjectExclusive": "Choose either a building or an analyzer, not both",
+    "mustBeEmpty": "Must be empty on this tariff",
+    "mustBeTry": "PTF + YEKDEM is TRY only",
+    "outOfRange": "Out of range",
+    "duplicate": "This row already exists"
   }
 }

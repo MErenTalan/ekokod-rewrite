@@ -1,0 +1,149 @@
+{
+  "title": "Tarifeler",
+  "subtitle": "Bina tarifeleri, şablonlar, toplu atama ve icmal içe aktarma",
+  "tabs": {
+    "building": "Bina tarifeleri",
+    "templates": "Şablonlar",
+    "bulk": "Toplu atama",
+    "icmal": "İcmal içe aktarma",
+    "solar": "Solar tarifeler",
+    "defaults": "Varsayılan tarifeler"
+  },
+  "selectBuilding": "Bina seçin",
+  "buildingRequired": "Tarife geçmişini görmek için bir bina seçin",
+  "newTariff": "Yeni tarife",
+  "editTariff": "Tarifeyi düzenle",
+  "history": "Tarife geçmişi",
+  "historyEmpty": "Bu binanın henüz tarifesi yok",
+  "historyNote": "Kesilmiş faturalar, kesildikleri andaki tarife sürümünü kullanmaya devam eder.",
+  "saved": "Tarife kaydedildi",
+  "deleted": "Tarife silindi",
+  "deleteTitle": "Tarife sürümünü sil",
+  "deleteBody": "Bu sürüm silinir; bu sürümle kesilmiş faturalar değişmez ve indirilebilir kalır.",
+  "sections": {
+    "identity": "Tanım",
+    "classification": "Sınıflandırma",
+    "prices": "Fiyatlar",
+    "power": "Güç",
+    "generation": "Üretim",
+    "taxes": "Vergiler ve fonlar",
+    "extras": "Ek bedeller",
+    "ptf": "PTF + YEKDEM"
+  },
+  "fields": {
+    "effectiveFrom": "Yürürlük tarihi",
+    "name": "Tarife adı",
+    "currency": "Para birimi",
+    "energyType": "Enerji tipi",
+    "voltageLevel": "Dağıtım tipi",
+    "userGroup": "Abone grubu",
+    "priceType": "Fiyat tipi",
+    "term": "Terim",
+    "supplyCompany": "Tedarik şirketi",
+    "singleTimePrice": "Tek zamanlı fiyat (TL/kWh)",
+    "t1Price": "T1 fiyatı (TL/kWh)",
+    "t2Price": "T2 fiyatı (TL/kWh)",
+    "t3Price": "T3 fiyatı (TL/kWh)",
+    "distributionCost": "Dağıtım bedeli (TL/kWh)",
+    "reactivePowerPrice": "Reaktif güç bedeli (TL/kVArh)",
+    "overusePrice": "Aşım bedeli (TL/kWh)",
+    "overuseThreshold": "Günlük aşım eşiği (kWh/gün)",
+    "greenEnergyPrice": "Yeşil enerji fiyatı (TL/kWh)",
+    "greenEnergyDistributionCost": "Yeşil enerji dağıtım bedeli (TL/kWh)",
+    "contractedPowerKw": "Sözleşme gücü (kW)",
+    "powerUnitPrice": "Güç birim fiyatı (TL/kW/ay)",
+    "generationUsage": "Üretim kullanımı",
+    "generationPricePerKwh": "Üretim fiyatı (TL/kWh)",
+    "vatRate": "KDV oranı (%)",
+    "usePtfYekdem": "PTF + YEKDEM",
+    "kbkEnergy": "Enerji KBK",
+    "kbkT1": "T1 KBK",
+    "kbkT2": "T2 KBK",
+    "kbkT3": "T3 KBK",
+    "kbkPowerPrice": "Güç fiyatı KBK",
+    "kbkOverusePrice": "Aşım fiyatı KBK",
+    "kbkReactivePower": "Reaktif güç KBK",
+    "kbkDistributionCost": "Dağıtım bedeli KBK (TL/kWh)",
+    "powerPriceSource": "Güç fiyatı kaynağı",
+    "reactivePriceSource": "Reaktif fiyat kaynağı",
+    "distributionPriceSource": "Dağıtım fiyatı kaynağı",
+    "useManualYekdem": "Manuel YEKDEM",
+    "year": "Yıl",
+    "month": "Ay",
+    "value": "Değer (TL/MWh)",
+    "taxName": "Vergi adı",
+    "taxRate": "Oran (%)",
+    "extraName": "Ad",
+    "extraBasis": "Matrah",
+    "extraAmount": "Tutar"
+  },
+  "options": {
+    "currency": {
+      "TRY": "Türk Lirası (TL)",
+      "USD": "Amerikan Doları",
+      "EUR": "Euro"
+    },
+    "energyType": {
+      "gridEnergy": "Şebeke enerjisi",
+      "greenEnergy": "Yeşil enerji"
+    },
+    "voltageLevel": {
+      "lv": "Alçak gerilim (AG)",
+      "mv": "Orta gerilim (OG)"
+    },
+    "userGroup": {
+      "residential": "Mesken",
+      "residentialPlus": "Mesken (artı)",
+      "commercial": "Ticarethane",
+      "commercialPlus": "Ticarethane (artı)",
+      "industrial": "Sanayi",
+      "agricultural": "Tarımsal sulama",
+      "lighting": "Aydınlatma",
+      "martyrsFamilies": "Şehit aileleri",
+      "publicLighting": "Genel aydınlatma"
+    },
+    "priceType": {
+      "singleTime": "Tek zamanlı",
+      "multiTime": "Üç zamanlı"
+    },
+    "term": {
+      "monomial": "Tek terimli",
+      "binomial": "Çift terimli"
+    },
+    "supplyCompany": {
+      "incumbent": "Görevli tedarik",
+      "private": "Serbest tedarik"
+    },
+    "generationUsage": {
+      "none": "Yok",
+      "subtractFromConsumption": "Tüketimden düş",
+      "subtractFromTotal": "Toplam tutardan düş"
+    },
+    "priceSource": {
+      "kbk": "KBK katsayısı",
+      "fixed": "Sabit fiyat"
+    },
+    "extraBasis": {
+      "perKwh": "kWh başına",
+      "perContractedKw": "Sözleşme gücü kW başına",
+      "perMaxDemandKw": "Maksimum demant kW başına",
+      "fixedPerPeriod": "Dönem başına sabit",
+      "pctOfEnergy": "Enerji bedelinin yüzdesi"
+    }
+  },
+  "ptfCurrencyNote": "PTF + YEKDEM fiyatlaması yalnızca Türk Lirası ile yapılır.",
+  "ptfDescription": "Enerji bedeli, saatlik PTF + YEKDEM değerlerinin KBK katsayısı ile çarpımından hesaplanır.",
+  "addTax": "Vergi ekle",
+  "addExtra": "Ek bedel ekle",
+  "addYekdem": "YEKDEM satırı ekle",
+  "remove": "Kaldır",
+  "columns": {
+    "effectiveFrom": "Yürürlük",
+    "name": "Ad",
+    "priceType": "Fiyat tipi",
+    "term": "Terim",
+    "pricing": "Fiyatlama"
+  },
+  "ptfBadge": "PTF + YEKDEM",
+  "fixedBadge": "Sabit fiyat"
+}

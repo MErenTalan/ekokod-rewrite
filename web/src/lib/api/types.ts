@@ -31,6 +31,13 @@ export type ReactiveAnalyzer = S['ReactiveAnalyzer'];
 
 export type Bill = S['Bill'];
 export type TariffSummary = S['TariffSummary'];
+export type Tariff = S['Tariff'];
+export type TariffFields = S['TariffFields'];
+export type TariffSummaryItem = S['TariffSummaryItem'];
+export type TariffTax = S['TariffTax'];
+export type TariffExtraCharge = S['TariffExtraCharge'];
+export type TariffManualYekdem = S['TariffManualYekdem'];
+export type ExtraChargeBasis = TariffExtraCharge['basis'];
 export type Job = S['Job'];
 export type JobStatus = Job['status'];
 

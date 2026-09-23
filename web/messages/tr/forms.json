@@ -44,6 +44,10 @@
     "notAssignable": "Bu rolü atayamazsınız",
     "tooManyAnalyzers": "Bu binada çok fazla analizör var",
     "rangeTooWide": "Tarih aralığı çok geniş",
-    "subjectExclusive": "Bina veya analizörden yalnızca birini seçin"
+    "subjectExclusive": "Bina veya analizörden yalnızca birini seçin",
+    "mustBeEmpty": "Bu tarifede boş bırakılmalı",
+    "mustBeTry": "PTF + YEKDEM yalnızca TL ile",
+    "outOfRange": "Aralık dışında",
+    "duplicate": "Bu satır zaten var"
   }
 }
