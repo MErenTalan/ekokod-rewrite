@@ -226,5 +226,59 @@
     "empty": "Eşleşen faktör yok",
     "emptyHint": "Aramayı veya kategoriyi değiştirin.",
     "readOnly": "Faktörleri yalnızca şirket yöneticileri değiştirebilir."
+  },
+  "company": {
+    "intro": "Karbon raporlarının başlığında kullanılan kuruluş bilgileri.",
+    "name": "Şirket adı",
+    "address": "Adres",
+    "sector": "Sektör",
+    "personnel": "Çalışan sayısı",
+    "area": "Toplam alan (m²)",
+    "contact": "İletişim",
+    "edit": "Şirket ayarlarında düzenle",
+    "restricted": "Şirket bilgilerini şirket yöneticileri yönetir. Raporlarda şu şirket adı kullanılır:",
+    "missing": "Belirtilmemiş"
+  },
+  "reference": {
+    "mappingLabel": "Faaliyet eşlemesi",
+    "activity": "Faaliyet",
+    "category": "Ana kategori",
+    "scope": "GHG kapsamı",
+    "iso": "ISO 14064 kategorisi",
+    "ghgTitle": "GHG Protokolü",
+    "ghgIntro": "GHG Protokolü Kurumsal Standardı, bir kuruluşun sera gazı emisyonlarını üç kapsamda raporlar. Bu modül her faaliyetin kapsamını alt kategorisinden otomatik türetir; kullanıcı kapsam girmez.",
+    "ghgScope1": "Kapsam 1 — Kuruluşun sahip olduğu veya kontrol ettiği kaynaklardan doğrudan emisyonlar (yakıt yakma, şirket araçları, kaçak gazlar).",
+    "ghgScope2": "Kapsam 2 — Satın alınan elektrik, ısı, buhar ve soğutmadan kaynaklanan dolaylı emisyonlar.",
+    "ghgScope3": "Kapsam 3 — Değer zincirindeki diğer dolaylı emisyonlar (iş seyahati, çalışan ulaşımı, taşımacılık, satın alınan ürünler, atık).",
+    "isoTitle": "ISO 14064-1",
+    "isoIntro": "ISO 14064-1:2018, emisyonları altı kategoride sınıflandırır. Kategori her faaliyet için alt kategorisinden türetilir.",
+    "iso1": "Kategori 1 — Doğrudan emisyonlar ve uzaklaştırmalar",
+    "iso2": "Kategori 2 — İthal edilen enerjiden dolaylı emisyonlar",
+    "iso3": "Kategori 3 — Taşımacılıktan dolaylı emisyonlar",
+    "iso4": "Kategori 4 — Kuruluşun kullandığı ürünlerden dolaylı emisyonlar",
+    "iso5": "Kategori 5 — Kuruluşun ürünlerinin kullanımından dolaylı emisyonlar",
+    "iso6": "Kategori 6 — Diğer kaynaklardan dolaylı emisyonlar",
+    "standardsTitle": "Raporlama standartları",
+    "standardsIntro": "İki standart birbirini tamamlar: GHG Protokolü hesaplama yöntemini, ISO 14064-1 envanterin nasıl tasarlanıp doğrulanacağını tanımlar.",
+    "standardsLabel": "Standart karşılaştırması",
+    "aspect": "Konu",
+    "rows": {
+      "purpose": "Amaç",
+      "purposeGhg": "Kurumsal emisyon muhasebesi ve raporlaması için yöntem",
+      "purposeIso": "Sera gazı envanterinin tasarımı, yönetimi ve doğrulanması için şartlar",
+      "grouping": "Sınıflandırma",
+      "groupingGhg": "Üç kapsam",
+      "groupingIso": "Altı kategori",
+      "boundary": "Sınırlar",
+      "boundaryGhg": "Operasyonel veya finansal kontrol, pay yaklaşımı",
+      "boundaryIso": "Organizasyonel ve raporlama sınırları, önemlilik değerlendirmesi",
+      "verification": "Doğrulama",
+      "verificationGhg": "Önerilir, zorunlu değildir",
+      "verificationIso": "ISO 14064-3 ile üçüncü taraf doğrulaması öngörülür"
+    }
+  },
+  "documents": {
+    "title": "Belge deposu henüz kullanılamıyor",
+    "hint": "Karbon modülü belgeleri, ISO 50001 modülüyle gelecek yetkilendirilmiş dosya deposunda tutulacak. O zamana kadar faaliyet açıklamalarına belge referansı yazabilirsiniz."
   }
 }
