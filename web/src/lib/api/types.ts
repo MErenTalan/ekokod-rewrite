@@ -42,6 +42,17 @@ export type TariffTax = S['TariffTax'];
 export type TariffExtraCharge = S['TariffExtraCharge'];
 export type TariffManualYekdem = S['TariffManualYekdem'];
 export type ExtraChargeBasis = TariffExtraCharge['basis'];
+export type TariffTemplate = S['TariffTemplate'];
+export type BuildingTariffState = S['BuildingTariffState'];
+export type BulkTariffAssignment = S['BulkTariffAssignment'];
+export type BulkTariffResult = S['BulkTariffResult'];
+export type IcmalImport = S['IcmalImport'];
+export type IcmalAnalysis = S['IcmalAnalysis'];
+export type IcmalCoefficient = S['IcmalCoefficient'];
+export type SolarTariff = S['SolarTariff'];
+export type NationalTariff = S['NationalTariff'];
+export type NationalTariffFields = S['NationalTariffFields'];
+export type SolarTariffFields = S['SolarTariffFields'];
 export type Job = S['Job'];
 export type JobStatus = Job['status'];
 
