@@ -166,6 +166,15 @@ func TestTriggerableIncludesReportTicks(t *testing.T) {
 	require.Equal(t, job.TypeReportDispatchYearly, enq.tasks[1].Type())
 }
 
+// R311: the carbon accrual is operator-triggerable (it accrues yesterday).
+func TestTriggerableIncludesCarbonAccrual(t *testing.T) {
+	require.Contains(t, ops.Triggerable, job.TypeCarbonAccrual)
+	svc, enq, _ := newService(t)
+	_, err := svc.Trigger(context.Background(), companyScope, job.TypeCarbonAccrual)
+	require.NoError(t, err)
+	require.Equal(t, job.TypeCarbonAccrual, enq.tasks[0].Type())
+}
+
 // R288: both iSolar ticks are operator-triggerable.
 func TestTriggerableIncludesIsolarTicks(t *testing.T) {
 	require.Contains(t, ops.Triggerable, job.TypeSolarDispatchSync)

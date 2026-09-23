@@ -288,6 +288,17 @@ func TestWorkerRegistersReportHandlers(t *testing.T) {
 	}
 }
 
+// TestWorkerRegistersCarbonAccrual: the worker serves carbon.daily_accrual (R311).
+func TestWorkerRegistersCarbonAccrual(t *testing.T) {
+	pool := testfixtures.NewIsolatedDB(t)
+	g := buildGraph(t, pool, testfixtures.RedisConfig(t))
+	require.NotNil(t, g.handlers.Carbon)
+	mux := asynq.NewServeMux()
+	job.Register(mux, g.handlers)
+	_, pattern := mux.Handler(asynq.NewTask(job.TypeCarbonAccrual, nil))
+	require.Equal(t, job.TypeCarbonAccrual, pattern)
+}
+
 // TestWorkerRegistersSolarHandlers: the worker serves the iSolar ticks and plant syncs (R288).
 func TestWorkerRegistersSolarHandlers(t *testing.T) {
 	pool := testfixtures.NewIsolatedDB(t)

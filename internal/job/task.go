@@ -66,6 +66,8 @@ type Handlers struct {
 
 	// Solar serves the iSolar sync and fault jobs (R288).
 	Solar SolarJobs
+	// Carbon serves the daily carbon accrual (R311).
+	Carbon CarbonJobs
 }
 
 // Register attaches every handler to the mux. TypeNoop is always
@@ -121,6 +123,9 @@ func Register(mux *asynq.ServeMux, h *Handlers) {
 		mux.HandleFunc(TypeSolarDispatchSync, h.handleSolarDispatch)
 		mux.HandleFunc(TypeSolarSyncPlant, h.handleSolarSync)
 		mux.HandleFunc(TypeSolarFetchAlarms, h.handleSolarAlarms)
+	}
+	if h.Carbon != nil {
+		mux.HandleFunc(TypeCarbonAccrual, h.handleCarbonAccrual)
 	}
 	if h.ReportDispatch != nil {
 		mux.HandleFunc(TypeReportDispatchMonthly, h.handleReportDispatchMonthly)

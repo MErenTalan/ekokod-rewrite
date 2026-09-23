@@ -58,5 +58,5 @@ type JobRun struct {
 // JobTriggerRequest is POST /job-runs/{type}/trigger. The enum IS R220's
 // allow-list, so the generated client cannot offer a type the server refuses.
 type JobTriggerRequest struct {
-	Type string `path:"type" json:"-" validate:"required,oneof=alarm.evaluate billing.dispatch integration.sync_dispatch epias.sync_prices report.dispatch_monthly report.dispatch_yearly isolar.dispatch_sync isolar.fetch_alarms" required:"true" enum:"alarm.evaluate,billing.dispatch,integration.sync_dispatch,epias.sync_prices,report.dispatch_monthly,report.dispatch_yearly,isolar.dispatch_sync,isolar.fetch_alarms"`
+	Type string `path:"type" json:"-" validate:"required,oneof=alarm.evaluate billing.dispatch integration.sync_dispatch epias.sync_prices report.dispatch_monthly report.dispatch_yearly isolar.dispatch_sync isolar.fetch_alarms carbon.daily_accrual" required:"true" enum:"alarm.evaluate,billing.dispatch,integration.sync_dispatch,epias.sync_prices,report.dispatch_monthly,report.dispatch_yearly,isolar.dispatch_sync,isolar.fetch_alarms,carbon.daily_accrual"`
 }

@@ -61,6 +61,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/seed"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/alarms"
 	billingsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/billing"
+	carbonsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/carbon"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/consumption"
 	reportsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/report"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/solar"
@@ -551,6 +552,9 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 			ReportDeliver: reportsvc.Deliverer{Reports: reportRepo, Files: reportFiles, SMTP: postgres.NewSMTPRepository(pool, cipher),
 				Mail: mail.NewSMTPSender(mailDialTimeout, nil), Ops: opsRepo, Clock: clock.System()},
 			Solar: solarService,
+			Carbon: carbonsvc.New(carbonsvc.Deps{Carbon: postgres.NewCarbonRepository(pool), Buildings: buildingRepo,
+				Analyzers: analyzerRepo, Analytics: postgres.NewAnalyticsRepository(pool), Ops: opsRepo,
+				Tenants: admin.NewTenantRepository(pool), Clock: clock.System()}),
 		},
 		closers: closers,
 	}, nil

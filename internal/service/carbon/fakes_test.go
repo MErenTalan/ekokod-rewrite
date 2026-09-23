@@ -380,3 +380,73 @@ func newWorld() *world {
 	}
 	return w
 }
+
+type fakeTenants struct {
+	store.AdminTenantRepository
+	companies []model.Company
+}
+
+func (f *fakeTenants) ListCompanies(_ context.Context, fl store.CompanyFilter) ([]model.Company, error) {
+	if int(fl.Page.Offset) >= len(f.companies) {
+		return nil, nil
+	}
+	return f.companies[fl.Page.Offset:], nil
+}
+
+type fakeAnalyzers struct {
+	store.AnalyzerRepository
+	byBuilding map[uuid.UUID][]uuid.UUID
+}
+
+func (f *fakeAnalyzers) List(_ context.Context, sc store.Scope, fl store.AnalyzerFilter) ([]model.Analyzer, error) {
+	if fl.Page.Offset > 0 || fl.BuildingID == nil || !sc.AllowsBuilding(*fl.BuildingID) {
+		return nil, nil
+	}
+	var out []model.Analyzer
+	for _, id := range f.byBuilding[*fl.BuildingID] {
+		b := *fl.BuildingID
+		out = append(out, model.Analyzer{ID: id, BuildingID: &b})
+	}
+	return out, nil
+}
+
+// fakeAnalytics answers ConsumptionDaily from per-analyzer daily buckets.
+type fakeAnalytics struct {
+	store.AnalyticsRepository
+	buckets []model.ConsumptionBucket
+	ranges  []store.TimeRange
+}
+
+func (f *fakeAnalytics) ConsumptionDaily(_ context.Context, _ store.Scope, ids []uuid.UUID, r store.TimeRange) ([]model.ConsumptionBucket, error) {
+	f.ranges = append(f.ranges, r)
+	var out []model.ConsumptionBucket
+	for _, b := range f.buckets {
+		if containsID(ids, b.AnalyzerID) && !b.Bucket.Before(r.From) && b.Bucket.Before(r.To) {
+			out = append(out, b)
+		}
+	}
+	return out, nil
+}
+
+type fakeOps struct {
+	store.OpsRepository
+	runs     []model.JobRun
+	finished []string
+	messages []model.OperationalMessage
+}
+
+func (f *fakeOps) StartRun(_ context.Context, _ store.Scope, r model.JobRun) (model.JobRun, error) {
+	r.ID = uuid.New()
+	f.runs = append(f.runs, r)
+	return r, nil
+}
+
+func (f *fakeOps) FinishRun(_ context.Context, _ store.Scope, _ uuid.UUID, status string, _, _, _ int32, _ *string, _ []byte, _ time.Time) (model.JobRun, error) {
+	f.finished = append(f.finished, status)
+	return model.JobRun{}, nil
+}
+
+func (f *fakeOps) AppendMessage(_ context.Context, _ store.Scope, m model.OperationalMessage) (model.OperationalMessage, error) {
+	f.messages = append(f.messages, m)
+	return m, nil
+}
