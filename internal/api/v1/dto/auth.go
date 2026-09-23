@@ -24,7 +24,7 @@ func (Permission) Enum() []any {
 		"admin.companies", "alarms.edit", "alarms.evaluate", "alarms.read", "analyzers.refresh",
 		"anomaly.check", "bills.compute", "bills.read", "calendar.edit", "integrations.credentials",
 		"jobs.runs.read", "jobs.trigger", "messages.read", "nav.core", "nav.financial", "nav.solar_plants",
-		"settings.analyzers", "settings.analyzers.edit", "settings.buildings", "settings.company",
+		"reports.email", "reports.generate", "reports.read", "settings.analyzers", "settings.analyzers.edit", "settings.buildings", "settings.company",
 		"settings.company.edit", "settings.integrations", "settings.plants", "settings.smtp",
 		"settings.users", "solar_tariffs.read", "tariffs.bulk.read", "tariffs.defaults", "tariffs.edit",
 		"tariffs.icmal", "tariffs.read", "tariffs.templates.read", "write",

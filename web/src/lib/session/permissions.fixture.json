@@ -16,6 +16,9 @@
     "nav.core",
     "nav.financial",
     "nav.solar_plants",
+    "reports.email",
+    "reports.generate",
+    "reports.read",
     "settings.analyzers",
     "settings.analyzers.edit",
     "settings.buildings",
@@ -43,6 +46,9 @@
     "bills.read",
     "messages.read",
     "nav.core",
+    "reports.email",
+    "reports.generate",
+    "reports.read",
     "settings.analyzers",
     "tariffs.read",
     "write"
@@ -52,6 +58,7 @@
     "bills.read",
     "messages.read",
     "nav.core",
+    "reports.read",
     "settings.analyzers",
     "tariffs.read"
   ],
@@ -70,6 +77,9 @@
     "nav.core",
     "nav.financial",
     "nav.solar_plants",
+    "reports.email",
+    "reports.generate",
+    "reports.read",
     "settings.analyzers",
     "settings.analyzers.edit",
     "settings.buildings",
@@ -92,6 +102,7 @@
     "nav.core",
     "nav.financial",
     "nav.solar_plants",
+    "reports.read",
     "settings.analyzers",
     "settings.buildings",
     "settings.company",
@@ -107,6 +118,7 @@
     "bills.read",
     "messages.read",
     "nav.core",
+    "reports.read",
     "tariffs.read"
   ]
 }

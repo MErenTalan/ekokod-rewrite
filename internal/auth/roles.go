@@ -109,6 +109,11 @@ var permissionTable = map[string]RoleSet{
 	"tariffs.icmal":          Roles(roleA, roleCA),
 	"tariffs.defaults":       Roles(roleA),
 	"solar_tariffs.read":     Roles(roleA, roleCA, roleCR),
+
+	// F8b: 05 §11 reads are `scope`; generating and e-mailing are A CA BA.
+	"reports.read":     AllRoles,
+	"reports.generate": Roles(roleA, roleCA, roleBA),
+	"reports.email":    Roles(roleA, roleCA, roleBA),
 }
 
 // PermissionsFor returns the sorted permissions of a role, nil for an unknown role.

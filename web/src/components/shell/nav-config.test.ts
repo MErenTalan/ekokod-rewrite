@@ -74,6 +74,13 @@ describe('navFor', () => {
     expect(leafIds(navFor(['nav.core', 'bills.read']))).not.toContain('tariffs');
   });
 
+  it('hides reports without reports.read (F8b)', () => {
+    const leaves = navigation.flatMap((e) => (isGroup(e) ? e.children : [e]));
+    expect(leaves.find((l) => l.href === '/ekorm/reports')?.permission).toBe('reports.read');
+    expect(leafIds(navFor(['nav.core']))).not.toContain('reports');
+    expect(leafIds(navFor(['nav.core', 'reports.read']))).toContain('reports');
+  });
+
   it('drops a group left empty and shows nothing without nav.core', () => {
     expect(navFor([])).toEqual([]);
     const onlySolar = navFor(['nav.solar_plants']);

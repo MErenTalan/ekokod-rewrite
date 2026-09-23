@@ -16,7 +16,7 @@ func TestPermissionsMatrix(t *testing.T) {
 			"admin.companies", "alarms.edit", "alarms.evaluate", "alarms.read", "analyzers.refresh",
 			"anomaly.check", "bills.compute", "bills.read", "calendar.edit", "integrations.credentials",
 			"jobs.runs.read", "jobs.trigger", "messages.read", "nav.core", "nav.financial", "nav.solar_plants",
-			"settings.analyzers", "settings.analyzers.edit", "settings.buildings", "settings.company",
+			"reports.email", "reports.generate", "reports.read", "settings.analyzers", "settings.analyzers.edit", "settings.buildings", "settings.company",
 			"settings.company.edit", "settings.integrations", "settings.plants", "settings.smtp",
 			"settings.users", "solar_tariffs.read", "tariffs.bulk.read", "tariffs.defaults", "tariffs.edit",
 			"tariffs.icmal", "tariffs.read", "tariffs.templates.read", "write",
@@ -24,24 +24,24 @@ func TestPermissionsMatrix(t *testing.T) {
 		model.UserRoleCompanyAdmin: {
 			"alarms.edit", "alarms.evaluate", "alarms.read", "analyzers.refresh", "anomaly.check",
 			"bills.compute", "bills.read", "calendar.edit", "integrations.credentials", "jobs.runs.read",
-			"messages.read", "nav.core", "nav.financial", "nav.solar_plants", "settings.analyzers",
+			"messages.read", "nav.core", "nav.financial", "nav.solar_plants", "reports.email", "reports.generate", "reports.read", "settings.analyzers",
 			"settings.analyzers.edit", "settings.buildings", "settings.company", "settings.company.edit",
 			"settings.plants", "settings.users", "solar_tariffs.read", "tariffs.bulk.read", "tariffs.edit",
 			"tariffs.icmal", "tariffs.read", "tariffs.templates.read", "write",
 		},
 		model.UserRoleCompanyReadonlyAdmin: {
 			"alarms.read", "bills.read", "messages.read", "nav.core", "nav.financial", "nav.solar_plants",
-			"settings.analyzers", "settings.buildings", "settings.company", "settings.plants",
+			"reports.read", "settings.analyzers", "settings.buildings", "settings.company", "settings.plants",
 			"settings.users", "solar_tariffs.read", "tariffs.bulk.read", "tariffs.read",
 			"tariffs.templates.read",
 		},
 		model.UserRoleBuildingAdmin: {
 			"alarms.edit", "alarms.read", "analyzers.refresh", "anomaly.check", "bills.compute", "bills.read",
-			"messages.read", "nav.core", "settings.analyzers", "tariffs.read", "write",
+			"messages.read", "nav.core", "reports.email", "reports.generate", "reports.read", "settings.analyzers", "tariffs.read", "write",
 		},
 		model.UserRoleBuildingReadonlyAdmin: {"alarms.read", "bills.read", "messages.read", "nav.core",
-			"settings.analyzers", "tariffs.read"},
-		model.UserRoleDemo: {"alarms.read", "bills.read", "messages.read", "nav.core", "tariffs.read"},
+			"reports.read", "settings.analyzers", "tariffs.read"},
+		model.UserRoleDemo: {"alarms.read", "bills.read", "messages.read", "nav.core", "reports.read", "tariffs.read"},
 	}
 	for _, role := range model.UserRoles() {
 		require.Equal(t, want[role], auth.PermissionsFor(role), role)

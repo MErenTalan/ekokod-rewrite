@@ -55,7 +55,7 @@ export const navigation: NavEntry[] = [
     { id: 'alarmsManual', labelKey: 'manual', href: '/ekorm/alarms', icon: BellRing, permission: 'alarms.read' },
     { id: 'messages', labelKey: 'messages', href: '/ekorm/messages', icon: MessageSquare, permission: 'messages.read' },
     { id: 'alarmsAi', labelKey: 'ai', href: '/ekorm/alarms/ai', icon: Sparkles, disabled: true } ] },
-  { id: 'reports', labelKey: 'reports', href: '/ekorm/reports', icon: FileBarChart },
+  { id: 'reports', labelKey: 'reports', href: '/ekorm/reports', icon: FileBarChart, permission: 'reports.read' },
   { id: 'calendar', labelKey: 'calendar', href: '/ekorm/calendar', icon: CalendarDays },
   { id: 'settings', labelKey: 'settings', href: '/ekorm/settings', icon: Settings },
   { id: 'carbon', labelKey: 'carbonFootprint', href: '/ekorm/carbon', icon: Factory },
