@@ -109,5 +109,13 @@
     "m10": "Eki",
     "m11": "Kas",
     "m12": "Ara"
+  },
+  "selection": {
+    "intro": "Kuruluşunuza uygulanan emisyon kaynaklarını seçin. Seçilenler Veri Girişi sekmesinde kullanılabilir.",
+    "save": "Seçimi kaydet",
+    "saved": "Faaliyet seçimi kaydedildi",
+    "readOnly": "Faaliyet seçimini yalnızca şirket yöneticileri değiştirebilir.",
+    "mapping": "{scope} · {iso}",
+    "selectedCount": "{count} seçili"
   }
 }

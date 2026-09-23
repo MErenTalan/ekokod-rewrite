@@ -13,6 +13,7 @@ import { useSelection } from '@/lib/selection/selection-store';
 import { useSession } from '@/lib/session/session-provider';
 
 import { OverviewPanel } from './overview-panel';
+import { SelectionPanel } from './selection-panel';
 import { NEEDS_BUILDING, resolveTab, TABS, type CarbonTab } from './labels';
 
 /** What a section receives: the selected building (R321) and tab navigation. */
@@ -21,6 +22,7 @@ export type SectionContext = { buildingId: string; go: (tab: CarbonTab) => void 
 /** Each section's content, keyed by tab. */
 const SECTIONS: Partial<Record<CarbonTab, (ctx: SectionContext) => ReactNode>> = {
   overview: (ctx) => <OverviewPanel {...ctx} />,
+  selection: ({ buildingId }) => <SelectionPanel buildingId={buildingId} />,
 };
 
 /** Eko-CM (01 §7.16): one module, its sections as deep-linkable tabs (R320, Q-F8). */

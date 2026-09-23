@@ -109,5 +109,13 @@
     "m10": "Oct",
     "m11": "Nov",
     "m12": "Dec"
+  },
+  "selection": {
+    "intro": "Choose the emission sources that apply to your organisation. Selected ones become available on the Data Entry tab.",
+    "save": "Save selection",
+    "saved": "Activity selection saved",
+    "readOnly": "Only company admins can change the activity selection.",
+    "mapping": "{scope} · {iso}",
+    "selectedCount": "{count} selected"
   }
 }
