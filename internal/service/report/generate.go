@@ -43,6 +43,9 @@ type Requests struct {
 	Service  *Service
 	Reports  store.ReportRepository
 	Enqueuer TaskEnqueuer
+	// Tasks lets a regeneration replace a finished task that still holds
+	// the report's deterministic id; nil keeps the plain dedupe.
+	Tasks    job.TaskInspector
 	Files    Files
 	Clock    clock.Clock
 	MaxRetry int
@@ -82,8 +85,11 @@ func (q Requests) Enqueue(ctx context.Context, sc store.Scope, r Request) ([]Enq
 		}
 		payload := job.ReportGeneratePayload{CompanyID: sc.CompanyID, BuildingID: id, Type: r.Type, Period: p.key(),
 			PlantSelection: r.Selection, PlantIDs: r.PlantIDs}
-		task, terr := job.NewReportGenerateTask(payload, job.TaskOptions{MaxRetry: q.MaxRetry})
-		if err := enqueue(ctx, q.Enqueuer, task, terr); err != nil {
+		task, err := job.NewReportGenerateTask(payload, job.TaskOptions{MaxRetry: q.MaxRetry})
+		if err != nil {
+			return nil, err
+		}
+		if err := job.EnqueueReplacingFinished(ctx, q.Enqueuer, q.Tasks, task, job.ReportGenerateTaskID(payload)); err != nil {
 			return nil, err
 		}
 		out = append(out, Enqueued{BuildingID: id, ReportID: rp.ID, JobID: job.ReportGenerateTaskID(payload)})

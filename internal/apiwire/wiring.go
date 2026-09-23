@@ -138,6 +138,21 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 	if opts.Enqueuer != nil {
 		enqueuer = opts.Enqueuer
 	}
+	// R192: the inspector reads the same queue the job client writes to.
+	redisOpt, err := job.RedisOpt(cfg.Redis)
+	if err != nil {
+		closeAll()
+		return Built{}, fmt.Errorf("apiwire: redis options for the job inspector: %w", err)
+	}
+	inspector := asynq.NewInspector(redisOpt)
+	closeJobs := closeAll
+	closeAll = func() { _ = inspector.Close(); closeJobs() }
+	// A regeneration replaces a finished task holding its id; a test's own
+	// enqueuer has no queue behind it, so it keeps the plain dedupe.
+	var taskInspector job.TaskInspector = inspector
+	if opts.Enqueuer != nil {
+		taskInspector = nil
+	}
 	assetService, err := assets.New(assets.Deps{
 		Buildings: postgres.NewBuildingRepository(pool), Analyzers: postgres.NewAnalyzerRepository(pool),
 		Plants: postgres.NewPlantRepository(pool), Tariffs: postgres.NewTariffRepository(pool),
@@ -188,7 +203,7 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		return Built{}, fmt.Errorf("apiwire: build billing service: %w", err)
 	}
 	billRequests := billingsvc.Requests{
-		Service: billingService, Enqueuer: enqueuer, MaxRetry: cfg.Worker.MaxRetries, Location: istanbul,
+		Service: billingService, Enqueuer: enqueuer, MaxRetry: cfg.Worker.MaxRetries, Location: istanbul, Tasks: taskInspector,
 		Renderer: billingsvc.PDFRenderer{Bills: billRepo, Companies: postgres.NewCompanyRepository(pool),
 			Buildings: postgres.NewBuildingRepository(pool), Analyzers: postgres.NewAnalyzerRepository(pool), Root: cfg.Storage.Root},
 	}
@@ -210,7 +225,7 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		closeAll()
 		return Built{}, fmt.Errorf("apiwire: build report service: %w", err)
 	}
-	reportRequests := reportsvc.Requests{Service: reportService, Reports: postgres.NewReportRepository(pool), Enqueuer: enqueuer,
+	reportRequests := reportsvc.Requests{Service: reportService, Reports: postgres.NewReportRepository(pool), Enqueuer: enqueuer, Tasks: taskInspector,
 		Clock: opts.Clock, MaxRetry: cfg.Worker.MaxRetries,
 		Files: reportsvc.Files{Root: cfg.Storage.Root, Companies: postgres.NewCompanyRepository(pool), Buildings: postgres.NewBuildingRepository(pool)}}
 
@@ -225,15 +240,6 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		return Built{}, err
 	}
 
-	// R192: the inspector reads the same queue the job client writes to.
-	redisOpt, err := job.RedisOpt(cfg.Redis)
-	if err != nil {
-		closeAll()
-		return Built{}, fmt.Errorf("apiwire: redis options for the job inspector: %w", err)
-	}
-	inspector := asynq.NewInspector(redisOpt)
-	closeJobs := closeAll
-	closeAll = func() { _ = inspector.Close(); closeJobs() }
 	jobService, err := jobs.New(jobs.Deps{Inspector: inspector, Analyzers: postgres.NewAnalyzerRepository(pool),
 		Buildings: postgres.NewBuildingRepository(pool), Ops: postgres.NewOpsRepository(pool), Reports: postgres.NewReportRepository(pool)})
 	if err != nil {

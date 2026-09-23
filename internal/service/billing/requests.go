@@ -24,6 +24,9 @@ type Requests struct {
 	Service  *Service
 	Renderer PDFRenderer
 	Enqueuer TaskEnqueuer
+	// Tasks lets a recompute replace a finished task that still holds the
+	// bill's deterministic id (an archived failure); nil keeps the dedupe.
+	Tasks    job.TaskInspector
 	MaxRetry int
 	Location *time.Location
 }
@@ -73,7 +76,10 @@ func (q Requests) Compute(ctx context.Context, sc store.Scope, req ComputeReques
 	for _, subject := range subjects {
 		p := job.BillingGeneratePayload{CompanyID: sc.CompanyID, Scope: req.Scope, SubjectID: subject, PeriodKey: req.PeriodKey, Force: req.Force}
 		task, err := job.NewBillingGenerateTask(p, job.TaskOptions{MaxRetry: q.MaxRetry})
-		if err := enqueue(ctx, q.Enqueuer, task, err); err != nil {
+		if err != nil {
+			return nil, err
+		}
+		if err := job.EnqueueReplacingFinished(ctx, q.Enqueuer, q.Tasks, task, job.BillingGenerateTaskID(p)); err != nil {
 			return nil, err
 		}
 		ids = append(ids, job.BillingGenerateTaskID(p))

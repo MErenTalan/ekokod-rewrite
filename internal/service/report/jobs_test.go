@@ -158,7 +158,11 @@ var now = time.Date(2026, 3, 2, 3, 0, 0, 0, time.UTC) // 06:00 Istanbul, the mon
 
 func requests(t *testing.T, reports *fakeReports, q *fakeEnqueuer) report.Requests {
 	t.Helper()
-	return report.Requests{Service: newService(t), Reports: reports, Enqueuer: q, Clock: clock.NewFake(now),
+	var e report.TaskEnqueuer = q
+	if q == nil {
+		e = &fakeEnqueuer{}
+	}
+	return report.Requests{Service: newService(t), Reports: reports, Enqueuer: e, Clock: clock.NewFake(now),
 		Files: report.Files{Root: t.TempDir(), Companies: fakeCompanies{}, Buildings: fakeBuildings{visible: map[uuid.UUID]string{buildingA: "Merkez"}}}}
 }
 
@@ -358,4 +362,36 @@ func TestFilesReadRefusesPathOutsideCompanyDir(t *testing.T) {
 	rp.Payload = json.RawMessage(`{}`)
 	_, err := files.Read(t.Context(), rp, report.FormatPDF, "tr")
 	require.ErrorIs(t, err, report.ErrNotReady)
+}
+
+type conflictingQueue struct{ tasks []*asynq.Task }
+
+func (c *conflictingQueue) Enqueue(_ context.Context, t *asynq.Task, _ ...asynq.Option) (*asynq.TaskInfo, error) {
+	c.tasks = append(c.tasks, t)
+	if len(c.tasks) == 1 {
+		return nil, asynq.ErrTaskIDConflict
+	}
+	return &asynq.TaskInfo{ID: "id"}, nil
+}
+
+type archivedTasks struct{ deleted int }
+
+func (a *archivedTasks) GetTaskInfo(queue, id string) (*asynq.TaskInfo, error) {
+	return &asynq.TaskInfo{ID: id, Queue: queue, State: asynq.TaskStateArchived}, nil
+}
+
+func (a *archivedTasks) DeleteTask(string, string) error { a.deleted++; return nil }
+
+// A failed generation is archived under the same id: regenerating after the
+// data is fixed must run again, not be swallowed as a duplicate.
+func TestEnqueueRegeneratesAfterAFailedRun(t *testing.T) {
+	t.Parallel()
+	q, tasks := &conflictingQueue{}, &archivedTasks{}
+	req := requests(t, newReports(), nil)
+	req.Enqueuer, req.Tasks = q, tasks
+	_, err := req.Enqueue(t.Context(), store.SystemScope(companyA), report.Request{
+		Type: domain.TypeMonthly, Period: "2026-03", Selection: domain.SelectionAll, BuildingIDs: []uuid.UUID{buildingA}})
+	require.NoError(t, err)
+	require.Equal(t, 1, tasks.deleted)
+	require.Len(t, q.tasks, 2, "enqueued again after the archived task was removed")
 }

@@ -21,6 +21,18 @@ sql() {
 sql "DROP DATABASE IF EXISTS ${db_name} WITH (FORCE)"
 sql "CREATE DATABASE ${db_name}"
 
+# The queue and cache databases are the e2e run's own too: a task archived by
+# an earlier run would otherwise hold its deterministic id against this one.
+redis_flush() {
+  if command -v redis-cli >/dev/null 2>&1; then
+    redis-cli -h localhost -p 56379 -n "$1" FLUSHDB >/dev/null
+  else
+    docker exec ekokod-test-redis redis-cli -n "$1" FLUSHDB >/dev/null
+  fi
+}
+redis_flush 6
+redis_flush 7
+
 export EKOKOD_ENV=development
 export EKOKOD_LOG_FORMAT=text
 export EKOKOD_LOG_LEVEL="${E2E_LOG_LEVEL:-warn}"

@@ -56,7 +56,7 @@ test('generating a report ends ready, downloads, and a mail without SMTP says wh
   await actions.getByRole('button', { name: 'E-posta ile gönder' }).click();
   await page.getByRole('textbox', { name: /Alıcı e-posta adresi/ }).fill('yonetici@firma.com.tr');
   await page.getByRole('button', { name: 'Gönder' }).click();
-  await expect(page.getByText(/SMTP ayarları yok/)).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByText(/SMTP ayarları yok/).first()).toBeVisible({ timeout: 60_000 });
 });
 
 test('the archive lists the seeded report as available', async ({ page }) => {
