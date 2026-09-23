@@ -87,6 +87,12 @@ func Load(ctx context.Context, pool *pgxpool.Pool, log *slog.Logger) (Result, er
 	return load(ctx, admin.NewCatalogueRepository(pool), log)
 }
 
+// LoadEmissionFactors loads only the platform emission factor catalogue
+// (`ekokod seed --only emission-factors`, R317).
+func LoadEmissionFactors(ctx context.Context, pool *pgxpool.Pool, log *slog.Logger) (factors, conversions int64, err error) {
+	return loadEmissionFactors(ctx, admin.NewCatalogueRepository(pool), log)
+}
+
 // load is Load's testable core: catalogue is store.AdminCatalogueRepository
 // rather than a concrete type so a test can substitute a fake if ever
 // needed, though every seed_integration_test.go test in this package uses

@@ -193,3 +193,24 @@ func TestSchedulerCommandExitsCleanlyWhenDisabled(t *testing.T) {
 	err := cli.Execute(ctx, []string{"scheduler"}, &out)
 	require.NoError(t, err)
 }
+
+// R317: --only names a dataset; anything else is refused before any dial.
+func TestSeedOnlyRejectsUnknownDataset(t *testing.T) {
+	var out bytes.Buffer
+	setValidEnv(t, map[string]string{"EKOKOD_ENV": "development"})
+	err := cli.Execute(context.Background(), []string{"seed", "--only", "tariffs"}, &out)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "--only")
+}
+
+// R317: --verify only reads, so production needs no --yes; the fixture DSN is
+// unreachable, so it fails on the dial and never on the guard.
+func TestSeedVerifyIsReadOnlyInProduction(t *testing.T) {
+	var out bytes.Buffer
+	setValidEnv(t, map[string]string{"EKOKOD_ENV": "production"})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err := cli.Execute(ctx, []string{"seed", "--only", "emission-factors", "--verify"}, &out)
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "refusing to seed the production database")
+}

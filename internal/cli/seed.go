@@ -22,7 +22,10 @@ import (
 // re-run repairs a hand-edited platform row back to the shipped value
 // instead of duplicating it or leaving the edit in place.
 func newSeedCmd() *cobra.Command {
-	var yes bool
+	var (
+		yes, verify bool
+		only        string
+	)
 	cmd := &cobra.Command{
 		Use:   "seed",
 		Short: "Load reference datasets idempotently",
@@ -44,7 +47,12 @@ func newSeedCmd() *cobra.Command {
 				return err
 			}
 
-			if cfg.Env == config.EnvProduction && !yes {
+			// R317: one dataset for now; refused before any dial.
+			if only != "" && only != onlyEmissionFactors {
+				return fmt.Errorf("--only accepts %q, got %q", onlyEmissionFactors, only)
+			}
+			// --verify only reads, so it needs no --yes in production.
+			if cfg.Env == config.EnvProduction && !yes && !verify {
 				return fmt.Errorf("refusing to seed the production database without --yes")
 			}
 
@@ -56,6 +64,28 @@ func newSeedCmd() *cobra.Command {
 				return err
 			}
 			defer pool.Close()
+
+			if verify {
+				diff, err := seed.VerifyEmissionFactors(ctx, pool)
+				if err != nil {
+					return fmt.Errorf("seed verify: %w", err)
+				}
+				if _, err := fmt.Fprintln(out, diff.String()); err != nil {
+					return err
+				}
+				if !diff.OK() {
+					return fmt.Errorf("emission factor catalogue does not match the shipped one")
+				}
+				return nil
+			}
+			if only == onlyEmissionFactors {
+				factors, conversions, err := seed.LoadEmissionFactors(ctx, pool, log)
+				if err != nil {
+					return fmt.Errorf("seed: %w", err)
+				}
+				_, err = fmt.Fprintf(out, "emission factors: %d rows (%d conversions)\n", factors, conversions)
+				return err
+			}
 
 			result, err := seed.Load(ctx, pool, log)
 			if err != nil {
@@ -85,9 +115,13 @@ func newSeedCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&yes, "yes", false, "confirm seeding the production database")
+	cmd.Flags().StringVar(&only, "only", "", `load one dataset only ("emission-factors")`)
+	cmd.Flags().BoolVar(&verify, "verify", false, "compare the platform emission factors with the shipped catalogue; writes nothing")
 	cmd.AddCommand(newSeedE2ECmd(), newSeedDemoCmd())
 	return cmd
 }
+
+const onlyEmissionFactors = "emission-factors"
 
 // e2ePasswordEnv is the password every e2e fixture user gets (R183).
 const e2ePasswordEnv = "EKOKOD_E2E_PASSWORD"

@@ -65,6 +65,12 @@ func TestE2EFixturesHaveReadingsAndBill(t *testing.T) {
 	_, err = seed.E2EData(ctx, pool, again, now)
 	require.NoError(t, err)
 
+	// F10a: A1's declaration and four manual carbon records, once.
+	var selected, manual int
+	require.NoError(t, pool.QueryRow(ctx, `select count(*) from carbon_selected_activities where building_id = $1`, fx.BuildingA1).Scan(&selected))
+	require.NoError(t, pool.QueryRow(ctx, `select count(*) from carbon_activities where building_id = $1 and not is_automated`, fx.BuildingA1).Scan(&manual))
+	require.Equal(t, []int{len(seed.E2ECarbonSelection), 4}, []int{selected, manual})
+
 	for _, id := range []uuid.UUID{fx.AnalyzerA1, fx.AnalyzerA2, fx.AnalyzerB1} {
 		var readings int
 		require.NoError(t, pool.QueryRow(ctx, `select count(*) from meter_readings where analyzer_id = $1`, id).Scan(&readings))

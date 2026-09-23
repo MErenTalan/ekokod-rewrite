@@ -53,6 +53,19 @@ func TestCLISeedLoadsRealDatasets(t *testing.T) {
 
 	// A second run converges rather than duplicating or erroring: prints the
 	// SAME counts.
+	// R317: the loaded catalogue verifies against the shipped one.
+	var verify bytes.Buffer
+	require.NoError(t, cli.Execute(context.Background(), []string{"seed", "--only", "emission-factors", "--verify"}, &verify))
+	require.Contains(t, verify.String(), "emission factors: 186/186 match")
+	pool := testfixtures.NewPool(t, dsn)
+	_, err := pool.Exec(context.Background(), `update emission_factors set base_factor = base_factor + 1
+		where company_id is null and key = 'grid_electricity_tr_2022'`)
+	require.NoError(t, err)
+	verify.Reset()
+	err = cli.Execute(context.Background(), []string{"seed", "--only", "emission-factors", "--verify"}, &verify)
+	require.Error(t, err)
+	require.Contains(t, verify.String(), "changed [grid_electricity_tr_2022]")
+
 	var second bytes.Buffer
 	require.NoError(t, cli.Execute(context.Background(), []string{"seed"}, &second))
 	require.Contains(t, second.String(), "emission factors: 186 rows (196 conversions)")
