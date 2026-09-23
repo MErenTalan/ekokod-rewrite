@@ -1,15 +1,18 @@
 // API keys (R300/R301, snake_case) → `carbon` message keys (camelCase).
 
+import type messages from '../../../messages/tr/carbon.json';
+
+type Carbon = typeof messages;
 const camel = (s: string) => s.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase());
 
 /** `cat_stationary` → `mains.stationary`. */
-export const mainKey = (key: string) => `mains.${camel(key.replace(/^cat_/, ''))}` as const;
+export const mainKey = (key: string) => `mains.${camel(key.replace(/^cat_/, ''))}` as `mains.${keyof Carbon['mains']}`;
 /** `sub_space_heating` → `subs.spaceHeating`. */
-export const subKey = (key: string) => `subs.${camel(key.replace(/^sub_/, ''))}` as const;
+export const subKey = (key: string) => `subs.${camel(key.replace(/^sub_/, ''))}` as `subs.${keyof Carbon['subs']}`;
 /** `scope_1` → `scopes.scope1`. */
-export const scopeKey = (key: string) => `scopes.${camel(key)}` as const;
+export const scopeKey = (key: string) => `scopes.${camel(key)}` as `scopes.${keyof Carbon['scopes']}`;
 /** `category_6` → `iso.category6`. */
-export const isoKey = (key: string) => `iso.${camel(key)}` as const;
+export const isoKey = (key: string) => `iso.${camel(key)}` as `iso.${keyof Carbon['iso']}`;
 
 export const TABS = ['overview', 'selection', 'entry', 'status', 'reporting', 'database', 'company', 'ghg', 'iso', 'standards', 'documents'] as const;
 export type CarbonTab = (typeof TABS)[number];

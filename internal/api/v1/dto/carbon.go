@@ -39,7 +39,7 @@ type CarbonOverview struct {
 	ActivityCount   int              `json:"activity_count" required:"true"`
 	RegisteredCount int              `json:"registered_count" required:"true"`
 	PendingCount    int              `json:"pending_count" required:"true"`
-	HighestSource   *CarbonAmount    `json:"highest_source"`
+	HighestSource   *CarbonAmount    `json:"highest_source,omitempty"`
 	ByCategory      []CarbonAmount   `json:"by_category" required:"true"`
 	ByScope         []CarbonAmount   `json:"by_scope" required:"true"`
 	Monthly         []CarbonMonth    `json:"monthly" required:"true"`

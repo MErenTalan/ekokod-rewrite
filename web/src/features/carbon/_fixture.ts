@@ -86,7 +86,7 @@ export const emptyOverview: CarbonOverview = {
   total_kgco2e: '0',
   activity_count: 0,
   pending_count: 0,
-  highest_source: null,
+  highest_source: undefined,
   by_category: mains.map((key) => ({ key, kgco2e: '0' })),
   by_scope: overview.by_scope.map((s) => ({ ...s, kgco2e: '0' })),
   monthly: overview.monthly.map((m) => ({ ...m, current_kgco2e: '0', previous_kgco2e: '0' })),
