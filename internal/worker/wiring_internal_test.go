@@ -287,3 +287,16 @@ func TestWorkerRegistersReportHandlers(t *testing.T) {
 		require.Equal(t, typ, pattern)
 	}
 }
+
+// TestWorkerRegistersSolarHandlers: the worker serves the iSolar ticks and plant syncs (R288).
+func TestWorkerRegistersSolarHandlers(t *testing.T) {
+	pool := testfixtures.NewIsolatedDB(t)
+	g := buildGraph(t, pool, testfixtures.RedisConfig(t))
+	require.NotNil(t, g.handlers.Solar)
+	mux := asynq.NewServeMux()
+	job.Register(mux, g.handlers)
+	for _, typ := range []string{job.TypeSolarDispatchSync, job.TypeSolarSyncPlant, job.TypeSolarFetchAlarms} {
+		_, pattern := mux.Handler(asynq.NewTask(typ, nil))
+		require.Equal(t, typ, pattern)
+	}
+}

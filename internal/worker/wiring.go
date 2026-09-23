@@ -63,6 +63,7 @@ import (
 	billingsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/billing"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/consumption"
 	reportsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/report"
+	"github.com/MErenTalan/ekokod-rewrite/internal/service/solar"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/admin"
 	platformredis "github.com/MErenTalan/ekokod-rewrite/internal/store/redis"
@@ -502,6 +503,16 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 	companyRepo := postgres.NewCompanyRepository(pool)
 	reportFiles := reportsvc.Files{Root: cfg.Storage.Root, Companies: companyRepo, Buildings: buildingRepo}
 
+	// F9 iSolar: sync, faults and forwarding (R276-R288). The worker is the
+	// only process that calls iSolar on a schedule.
+	solarService := solar.New(solar.Deps{
+		Plants: postgres.NewPlantRepository(pool), Production: postgres.NewProductionRepository(pool),
+		Totals: postgres.NewProductionTotalsRepository(pool), Faults: postgres.NewFaultRepository(pool), Ops: opsRepo,
+		AdminSolar: admin.NewSolarRepository(pool), SMTP: postgres.NewSMTPRepository(pool, cipher),
+		Mail: mail.NewSMTPSender(mailDialTimeout, nil), Creds: credService, ISolar: isolarClient,
+		Clock: clock.System(), Enqueuer: jobClient, MaxRetry: cfg.Worker.MaxRetries,
+	})
+
 	return graph{
 		cipher:          cipher,
 		integrationRepo: integrationRepo,
@@ -531,6 +542,7 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 				Ops: opsRepo, Files: reportFiles, Clock: clock.System()},
 			ReportDeliver: reportsvc.Deliverer{Reports: reportRepo, Files: reportFiles, SMTP: postgres.NewSMTPRepository(pool, cipher),
 				Mail: mail.NewSMTPSender(mailDialTimeout, nil), Ops: opsRepo, Clock: clock.System()},
+			Solar: solarService,
 		},
 		closers: closers,
 	}, nil
