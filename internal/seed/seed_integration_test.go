@@ -73,11 +73,12 @@ func TestSeedRunTwiceProducesTheSameRowCounts(t *testing.T) {
 	require.Equal(t, first.Total(), second.Total())
 	require.Equal(t, first, second, "every per-dataset count must be identical between runs")
 
-	// Pin the shipped counts directly (task-12a report: 182 factors, 196
+	// Pin the shipped counts directly (task-12a report: 182 factors + F9's
+	// four equivalences, 196
 	// conversions, 3 integration definitions, 0 tariff rows), so a future
 	// change to the embedded data that silently drops rows is caught here
 	// too, not only by datasets_test.go.
-	require.EqualValues(t, 182, first.EmissionFactors)
+	require.EqualValues(t, 186, first.EmissionFactors)
 	require.EqualValues(t, 196, first.EmissionFactorConversions)
 	require.EqualValues(t, 3, first.IntegrationDefinitions)
 	require.EqualValues(t, 0, first.NationalTariffSchedule)

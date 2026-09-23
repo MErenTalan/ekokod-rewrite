@@ -320,13 +320,29 @@ type Environmental struct {
 	GridFactor       *decimal.Decimal `json:"grid_factor"`
 	GridFactorUnit   *string          `json:"grid_factor_unit"`
 	GridFactorSource *string          `json:"grid_factor_source"`
-	Unavailable      reasons          `json:"unavailable"`
+	// Factors states each seeded equivalence's factor, unit, source and year.
+	Factors     []EquivalenceFactor `json:"factors"`
+	Unavailable reasons             `json:"unavailable"`
+}
+
+// EquivalenceFactor is one equivalence's provenance (R293).
+type EquivalenceFactor struct {
+	Key    string          `json:"key"`
+	Factor decimal.Decimal `json:"factor"`
+	Unit   string          `json:"unit"`
+	Source string          `json:"source"`
+	Year   *int16          `json:"year"`
 }
 
 // BuildEnvironmental computes CO₂ = kWh × grid factor; each equivalence divides
 // or multiplies by its own seeded factor, or is unavailable without it.
 func BuildEnvironmental(in Inputs) Environmental {
-	e := Environmental{Unavailable: reasons{}, GenerationKwh: total(sumBy(in.Daily, gen, nil))}
+	e := Environmental{Unavailable: reasons{}, GenerationKwh: total(sumBy(in.Daily, gen, nil)), Factors: []EquivalenceFactor{}}
+	for _, key := range []string{EquivTree, EquivCoal, EquivCar, EquivHome} {
+		if f, ok := in.Equivalences[key]; ok {
+			e.Factors = append(e.Factors, EquivalenceFactor{Key: key, Factor: f.Value, Unit: f.Unit, Source: f.Source, Year: f.Year})
+		}
+	}
 	if in.GridFactor == nil {
 		for _, f := range []string{"co2_avoided_kg", "trees", "car_km", "grid_factor", "grid_factor_unit", "grid_factor_source"} {
 			e.Unavailable.mark(f, ReasonNoFactor)
@@ -579,6 +595,7 @@ func buildFinancial(in Inputs) Financial {
 	}
 	local := in.Now.In(istanbul)
 	month, year := local.Format("2006-01"), local.Format("2006")
+	first, last := in.From.In(istanbul).Format("2006-01"), in.To.Add(-time.Nanosecond).In(istanbul).Format("2006-01")
 	for _, bill := range in.Bills {
 		if bill.Currency != b.Currency {
 			continue // currencies never add (R253)
@@ -590,7 +607,9 @@ func buildFinancial(in Inputs) Financial {
 		if len(bill.PeriodKey) >= 4 && bill.PeriodKey[:4] == year {
 			f.YearEarnings = add(f.YearEarnings, &credit)
 		}
-		f.TotalSavings = add(f.TotalSavings, &credit)
+		if bill.PeriodKey >= first && bill.PeriodKey <= last {
+			f.TotalSavings = add(f.TotalSavings, &credit) // the range's bills only
+		}
 	}
 	return f
 }

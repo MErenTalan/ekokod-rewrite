@@ -66,6 +66,12 @@ func TestEnvironmentalUsesTheGridFactor(t *testing.T) {
 	e = renewable.BuildEnvironmental(in)
 	require.Nil(t, e.CarKm)
 	require.Equal(t, "no_factor", e.Unavailable["car_km"])
+	keys := []string{}
+	for _, f := range e.Factors {
+		keys = append(keys, f.Key)
+		require.NotEmpty(t, f.Source, "R293: every equivalence states its source")
+	}
+	require.Equal(t, []string{renewable.EquivTree, renewable.EquivCoal, renewable.EquivHome}, keys, "only the seeded ones, in a fixed order")
 }
 
 func TestSystemStatusWorstOfAvailable(t *testing.T) {
@@ -83,6 +89,7 @@ func TestEarningsFromTheBillsGenerationCredit(t *testing.T) {
 	a := renewable.BuildAnalytics(fixture("1", "0", 36))
 	requireDec(t, "120", a.Financial.MonthEarnings, "March's bill")
 	requireDec(t, "430", a.Financial.YearEarnings, "February and March")
+	requireDec(t, "120", a.Financial.TotalSavings, "only March falls in the 1–10 March range")
 	requireDec(t, "2.5", a.Financial.ImportPrice, "the latest bill's energy price")
 	require.Equal(t, "TRY", *a.Financial.Currency)
 	require.Nil(t, a.Financial.RoiPct)

@@ -2599,6 +2599,42 @@
         ],
         "type": "object"
       },
+      "EquivalenceFactor": {
+        "properties": {
+          "factor": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "key": {
+            "enum": [
+              "equiv_tree_co2_kg_per_year",
+              "equiv_coal_kg_per_kwh",
+              "equiv_car_co2_kg_per_km",
+              "equiv_home_heating_kwh_per_year"
+            ],
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "year": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          }
+        },
+        "required": [
+          "key",
+          "factor",
+          "unit",
+          "source",
+          "year"
+        ],
+        "type": "object"
+      },
       "Error": {
         "properties": {
           "error": {
@@ -2629,6 +2665,240 @@
         "required": [
           "code",
           "message"
+        ],
+        "type": "object"
+      },
+      "FinancialBuildingTariff": {
+        "properties": {
+          "building_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "building_name": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "price_type": {
+            "enum": [
+              "single_time",
+              "multi_time"
+            ],
+            "type": "string"
+          },
+          "single": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "t1": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "t2": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "t3": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "required": [
+          "building_id",
+          "building_name",
+          "price_type",
+          "single",
+          "t1",
+          "t2",
+          "t3",
+          "currency"
+        ],
+        "type": "object"
+      },
+      "FinancialCoverage": {
+        "properties": {
+          "consumption_months": {
+            "type": "integer"
+          },
+          "of": {
+            "type": "integer"
+          },
+          "production_months": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "consumption_months",
+          "production_months",
+          "of"
+        ],
+        "type": "object"
+      },
+      "FinancialMonth": {
+        "properties": {
+          "consumption_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "cost": {
+            "items": {
+              "$ref": "#/components/schemas/MoneyAmount"
+            },
+            "type": "array"
+          },
+          "grid_purchase_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "grid_sale_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "month": {
+            "type": "integer"
+          },
+          "net": {
+            "items": {
+              "$ref": "#/components/schemas/MoneyAmount"
+            },
+            "type": "array"
+          },
+          "offset_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "production_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "revenue": {
+            "items": {
+              "$ref": "#/components/schemas/MoneyAmount"
+            },
+            "type": "array"
+          },
+          "revenue_partial": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "month",
+          "consumption_kwh",
+          "cost",
+          "production_kwh",
+          "revenue",
+          "revenue_partial",
+          "offset_kwh",
+          "grid_purchase_kwh",
+          "grid_sale_kwh",
+          "net"
+        ],
+        "type": "object"
+      },
+      "FinancialMonthly": {
+        "properties": {
+          "coverage": {
+            "$ref": "#/components/schemas/FinancialCoverage"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FinancialMonth"
+            },
+            "type": "array"
+          },
+          "total": {
+            "$ref": "#/components/schemas/FinancialMonth"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "coverage"
+        ],
+        "type": "object"
+      },
+      "FinancialPlantFeedIn": {
+        "properties": {
+          "currency": {
+            "type": "string"
+          },
+          "plant_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "plant_name": {
+            "type": "string"
+          },
+          "price": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "required": [
+          "plant_id",
+          "plant_name",
+          "price",
+          "currency"
+        ],
+        "type": "object"
+      },
+      "FinancialSummary": {
+        "properties": {
+          "analyzer_count": {
+            "type": "integer"
+          },
+          "figures": {
+            "$ref": "#/components/schemas/FinancialMonth"
+          },
+          "month": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "of": {
+            "type": "integer"
+          },
+          "plant_count": {
+            "type": "integer"
+          },
+          "tariffs": {
+            "$ref": "#/components/schemas/FinancialTariffs"
+          },
+          "with_data": {
+            "type": "integer"
+          },
+          "year": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "year",
+          "month",
+          "analyzer_count",
+          "plant_count",
+          "figures",
+          "with_data",
+          "of",
+          "tariffs"
+        ],
+        "type": "object"
+      },
+      "FinancialTariffs": {
+        "properties": {
+          "purchase": {
+            "items": {
+              "$ref": "#/components/schemas/FinancialBuildingTariff"
+            },
+            "type": "array"
+          },
+          "purchase_missing": {
+            "type": "boolean"
+          },
+          "sale": {
+            "items": {
+              "$ref": "#/components/schemas/FinancialPlantFeedIn"
+            },
+            "type": "array"
+          },
+          "sale_missing": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "purchase",
+          "sale",
+          "purchase_missing",
+          "sale_missing"
         ],
         "type": "object"
       },
@@ -5357,6 +5627,520 @@
         },
         "type": "object"
       },
+      "RenewableAnalytics": {
+        "properties": {
+          "average_generation_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "consumption_optimisation": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "data_availability_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "efficiency_change_30d_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "financial": {
+            "$ref": "#/components/schemas/RenewableFinancial"
+          },
+          "maintenance_required": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "peak_generation_at": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "peak_generation_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "peak_hour": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "system_efficiency_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "trend": {
+            "items": {
+              "$ref": "#/components/schemas/RenewablePoint"
+            },
+            "type": "array"
+          },
+          "unavailable": {
+            "$ref": "#/components/schemas/Unavailable"
+          }
+        },
+        "required": [
+          "peak_generation_kwh",
+          "peak_generation_at",
+          "average_generation_kwh",
+          "trend",
+          "peak_hour",
+          "data_availability_pct",
+          "system_efficiency_pct",
+          "efficiency_change_30d_pct",
+          "consumption_optimisation",
+          "maintenance_required",
+          "financial",
+          "unavailable"
+        ],
+        "type": "object"
+      },
+      "RenewableEfficiency": {
+        "properties": {
+          "battery_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "grid_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "inverter_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "overall_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "panel_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "recommendations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "trend": {
+            "items": {
+              "$ref": "#/components/schemas/RenewablePoint"
+            },
+            "type": "array"
+          },
+          "unavailable": {
+            "$ref": "#/components/schemas/Unavailable"
+          }
+        },
+        "required": [
+          "overall_pct",
+          "panel_pct",
+          "inverter_pct",
+          "battery_pct",
+          "grid_pct",
+          "trend",
+          "recommendations",
+          "unavailable"
+        ],
+        "type": "object"
+      },
+      "RenewableEnvironmental": {
+        "properties": {
+          "car_km": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "co2_avoided_kg": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "coal_kg": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "factors": {
+            "items": {
+              "$ref": "#/components/schemas/EquivalenceFactor"
+            },
+            "type": "array"
+          },
+          "generation_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "grid_factor": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "grid_factor_source": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "grid_factor_unit": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "homes": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "trees": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "unavailable": {
+            "$ref": "#/components/schemas/Unavailable"
+          }
+        },
+        "required": [
+          "generation_kwh",
+          "co2_avoided_kg",
+          "trees",
+          "coal_kg",
+          "car_km",
+          "homes",
+          "grid_factor",
+          "grid_factor_unit",
+          "grid_factor_source",
+          "factors",
+          "unavailable"
+        ],
+        "type": "object"
+      },
+      "RenewableFinancial": {
+        "properties": {
+          "bill_savings": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "currency": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "export_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "import_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "month_earnings": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "net_today": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "payback_years": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "roi_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "today_export_revenue": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "today_import_cost": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "total_savings": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "unavailable": {
+            "$ref": "#/components/schemas/Unavailable"
+          },
+          "year_earnings": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "required": [
+          "import_price",
+          "export_price",
+          "currency",
+          "today_import_cost",
+          "today_export_revenue",
+          "net_today",
+          "month_earnings",
+          "year_earnings",
+          "total_savings",
+          "roi_pct",
+          "payback_years",
+          "bill_savings",
+          "unavailable"
+        ],
+        "type": "object"
+      },
+      "RenewableForecast": {
+        "properties": {
+          "accuracy_daily_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "accuracy_overall_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "accuracy_weekly_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "consumption_next_24h_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "consumption_next_28d_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "consumption_next_7d_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "estimated_generation_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "net_excess_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "unavailable": {
+            "$ref": "#/components/schemas/Unavailable"
+          },
+          "weather_impact": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "consumption_next_24h_kwh",
+          "consumption_next_7d_kwh",
+          "consumption_next_28d_kwh",
+          "accuracy_daily_pct",
+          "accuracy_weekly_pct",
+          "accuracy_overall_pct",
+          "estimated_generation_kwh",
+          "net_excess_kwh",
+          "weather_impact",
+          "unavailable"
+        ],
+        "type": "object"
+      },
+      "RenewableGridInteraction": {
+        "properties": {
+          "currency": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "direction": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "export_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "frequency_hz": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "import_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "net_today": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "power_factor": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "today_export_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "today_import_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "unavailable": {
+            "$ref": "#/components/schemas/Unavailable"
+          },
+          "voltage_v": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "required": [
+          "direction",
+          "today_import_kwh",
+          "today_export_kwh",
+          "power_factor",
+          "voltage_v",
+          "frequency_hz",
+          "import_price",
+          "export_price",
+          "currency",
+          "net_today",
+          "unavailable"
+        ],
+        "type": "object"
+      },
+      "RenewableOverview": {
+        "properties": {
+          "active_generation_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "average_generation_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "capacitive_generation_kvarh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "inductive_generation_kvarh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "unavailable": {
+            "$ref": "#/components/schemas/Unavailable"
+          }
+        },
+        "required": [
+          "active_generation_kwh",
+          "inductive_generation_kvarh",
+          "capacitive_generation_kvarh",
+          "average_generation_kwh",
+          "unavailable"
+        ],
+        "type": "object"
+      },
+      "RenewablePoint": {
+        "properties": {
+          "kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "ts": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ts",
+          "kwh"
+        ],
+        "type": "object"
+      },
+      "RenewableRealtime": {
+        "properties": {
+          "avg_power_kw": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "current_power_kw": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "max_power_kw": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "series_24h": {
+            "items": {
+              "$ref": "#/components/schemas/RenewablePoint"
+            },
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "producing",
+              "idle",
+              "no_data"
+            ],
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "system_efficiency_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "today_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "unavailable": {
+            "$ref": "#/components/schemas/Unavailable"
+          }
+        },
+        "required": [
+          "current_power_kw",
+          "today_kwh",
+          "max_power_kw",
+          "avg_power_kw",
+          "status",
+          "series_24h",
+          "system_efficiency_pct",
+          "unavailable"
+        ],
+        "type": "object"
+      },
+      "RenewableSystemStatus": {
+        "properties": {
+          "average_efficiency_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "battery": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "grid_connection": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "inverter": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "last_reading_at": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "monitoring": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "overall": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "security": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "solar_panels": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "total_generation_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "unavailable": {
+            "$ref": "#/components/schemas/Unavailable"
+          }
+        },
+        "required": [
+          "overall",
+          "monitoring",
+          "grid_connection",
+          "last_reading_at",
+          "solar_panels",
+          "inverter",
+          "battery",
+          "security",
+          "total_generation_kwh",
+          "average_efficiency_pct",
+          "unavailable"
+        ],
+        "type": "object"
+      },
       "Report": {
         "properties": {
           "building_id": {
@@ -7367,6 +8151,12 @@
           "generation_usage",
           "vat_rate"
         ],
+        "type": "object"
+      },
+      "Unavailable": {
+        "additionalProperties": {
+          "type": "string"
+        },
         "type": "object"
       },
       "User": {
@@ -14665,6 +15455,234 @@
         ]
       }
     },
+    "/api/v1/financial/monthly": {
+      "get": {
+        "operationId": "financial.monthly",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "year",
+            "required": true,
+            "schema": {
+              "maximum": 2100,
+              "minimum": 2000,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinancialMonthly"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Twelve months and the year row; a month without data is null, never zero.",
+        "tags": [
+          "financial"
+        ]
+      }
+    },
+    "/api/v1/financial/summary": {
+      "get": {
+        "operationId": "financial.summary",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "year",
+            "required": true,
+            "schema": {
+              "maximum": 2100,
+              "minimum": 2000,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "month",
+            "schema": {
+              "maximum": 12,
+              "minimum": 1,
+              "type": [
+                "null",
+                "integer"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinancialSummary"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Company-wide consumption, cost, production, revenue and net for a year or month, with the tariffs in force.",
+        "tags": [
+          "financial"
+        ]
+      }
+    },
     "/api/v1/generation": {
       "get": {
         "operationId": "generation.series",
@@ -20347,6 +21365,1030 @@
         "summary": "Update the current user's name, e-mail, phone, locale and UI preferences.",
         "tags": [
           "profile"
+        ]
+      }
+    },
+    "/api/v1/renewable/analytics": {
+      "get": {
+        "operationId": "renewable.analytics",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "analyzer_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "building_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RenewableAnalytics"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Peaks, trend, data availability and the financial gains from bills.",
+        "tags": [
+          "renewable"
+        ]
+      }
+    },
+    "/api/v1/renewable/efficiency": {
+      "get": {
+        "operationId": "renewable.efficiency",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "analyzer_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "building_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RenewableEfficiency"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Efficiency figures; each states why it is unavailable.",
+        "tags": [
+          "renewable"
+        ]
+      }
+    },
+    "/api/v1/renewable/environmental": {
+      "get": {
+        "operationId": "renewable.environmental",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "analyzer_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "building_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RenewableEnvironmental"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "CO₂ avoided at the grid factor and seeded equivalences with their sources.",
+        "tags": [
+          "renewable"
+        ]
+      }
+    },
+    "/api/v1/renewable/forecast": {
+      "get": {
+        "operationId": "renewable.forecast",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "analyzer_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "building_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RenewableForecast"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Consumption forecast sums and accuracy from stored forecast runs.",
+        "tags": [
+          "renewable"
+        ]
+      }
+    },
+    "/api/v1/renewable/grid-interaction": {
+      "get": {
+        "operationId": "renewable.grid_interaction",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "analyzer_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "building_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RenewableGridInteraction"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Today's import and export, power factor and the latest bill's prices.",
+        "tags": [
+          "renewable"
+        ]
+      }
+    },
+    "/api/v1/renewable/overview": {
+      "get": {
+        "operationId": "renewable.overview",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "analyzer_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "building_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RenewableOverview"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Generation totals over the range from the export registers.",
+        "tags": [
+          "renewable"
+        ]
+      }
+    },
+    "/api/v1/renewable/realtime": {
+      "get": {
+        "operationId": "renewable.realtime",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "analyzer_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "building_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RenewableRealtime"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "The last complete hour's generation and the last 24 hours.",
+        "tags": [
+          "renewable"
+        ]
+      }
+    },
+    "/api/v1/renewable/system-status": {
+      "get": {
+        "operationId": "renewable.system_status",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "analyzer_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "building_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RenewableSystemStatus"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Monitoring and grid connection health from the last reading.",
+        "tags": [
+          "renewable"
         ]
       }
     },

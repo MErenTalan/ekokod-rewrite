@@ -219,6 +219,9 @@ func TestBuildingAdminCannotReachOtherBuildingsAnyEndpoint(t *testing.T) {
 		"/generation?analyzer_id=" + a2 + "&granularity=daily&from=2026-09-01&to=2026-09-02",
 		"/energy-balance?analyzer_id=" + b1 + "&granularity=daily&from=2026-09-01&to=2026-09-02",
 		"/tariffs/applicable?building_id=" + h.fx.BuildingA2.String() + "&date=2026-09-01",
+		"/renewable/overview?analyzer_id=" + a2 + "&from=2026-09-01&to=2026-09-02",
+		"/renewable/environmental?building_id=" + h.fx.BuildingA2.String() + "&from=2026-09-01&to=2026-09-02",
+		"/renewable/analytics?analyzer_id=" + b1 + "&from=2026-09-01&to=2026-09-02",
 		"/bills/latest?scope=building&subject_id=" + h.fx.BuildingA2.String(),
 		"/bills/latest?scope=company&subject_id=" + h.fx.CompanyA.String(),
 	} {

@@ -63,10 +63,10 @@ func fixture(k, s string, hours int) renewable.Inputs {
 		Hourly: hourly, Daily: daily, Bills: []model.Bill{bill, march}, LatestBill: &march, LastReadingAt: &last, Forecasts: forecasts,
 		GridFactor: &renewable.Factor{Value: decimal.RequireFromString(v("0.44")), Unit: "kg CO2e/kWh", Source: "TR grid"},
 		Equivalences: map[string]renewable.Factor{
-			renewable.EquivTree: {Value: decimal.RequireFromString(v("21.77")), Unit: "kg CO2/tree-year"},
-			renewable.EquivCoal: {Value: decimal.RequireFromString(v("0.404")), Unit: "kg/kWh"},
-			renewable.EquivCar:  {Value: decimal.RequireFromString(v("0.12")), Unit: "kg CO2/km"},
-			renewable.EquivHome: {Value: decimal.RequireFromString(v("12000")), Unit: "kWh/home-year"},
+			renewable.EquivTree: {Value: decimal.RequireFromString(v("21.77")), Unit: "kg CO2/tree-year", Source: "EEA"},
+			renewable.EquivCoal: {Value: decimal.RequireFromString(v("0.404")), Unit: "kg/kWh", Source: "EEA"},
+			renewable.EquivCar:  {Value: decimal.RequireFromString(v("0.12")), Unit: "kg CO2/km", Source: "EEA"},
+			renewable.EquivHome: {Value: decimal.RequireFromString(v("12000")), Unit: "kWh/home-year", Source: "EEA"},
 		},
 	}
 }

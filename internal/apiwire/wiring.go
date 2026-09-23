@@ -41,10 +41,12 @@ import (
 	billingsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/billing"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/calendar"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/consumption"
+	"github.com/MErenTalan/ekokod-rewrite/internal/service/financial"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/integrations"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/jobs"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/loadprofile"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/ops"
+	"github.com/MErenTalan/ekokod-rewrite/internal/service/renewable"
 	reportsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/report"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/solar"
 	tariffsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/tariff"
@@ -281,6 +283,12 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		weatherDeps.Provider = isweather.New(weatherPool, cfg.External.WeatherBaseURL)
 	}
 	weatherService := weathersvc.New(weatherDeps)
+	renewableService := renewable.New(renewable.Deps{Analyzers: postgres.NewAnalyzerRepository(pool), Buildings: postgres.NewBuildingRepository(pool),
+		Analytics: postgres.NewAnalyticsRepository(pool), Bills: billRepo, Forecasts: postgres.NewForecastRepository(pool),
+		Carbon: postgres.NewCarbonRepository(pool), Clock: opts.Clock})
+	financialService := financial.New(financial.Deps{Bills: billRepo, Plants: postgres.NewPlantRepository(pool),
+		Analytics: postgres.NewAnalyticsRepository(pool), Solar: postgres.NewSolarTariffRepository(pool), Analyzers: postgres.NewAnalyzerRepository(pool),
+		Buildings: postgres.NewBuildingRepository(pool), Tariffs: postgres.NewTariffRepository(pool), Clock: opts.Clock})
 
 	jobService, err := jobs.New(jobs.Deps{Inspector: inspector, Analyzers: postgres.NewAnalyzerRepository(pool),
 		Buildings: postgres.NewBuildingRepository(pool), Ops: postgres.NewOpsRepository(pool), Reports: postgres.NewReportRepository(pool),
@@ -317,7 +325,7 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 	handlers := &v1.Handlers{
 		Calendar: calendarService, Credentials: credentialService, Jobs: jobService, Alarms: alarmService, Ops: opsService,
 		Definitions: integrations.Definitions{Integrations: postgres.NewIntegrationRepository(pool, cipher), Catalogue: admin.NewCatalogueRepository(pool)}, Auth: authService, Tenancy: tenancyService, Assets: assetService, Analysis: analysisService,
-		Tariffs: tariffService, Billing: billingService, BillRequests: billRequests, Reports: reportRequests, Solar: solarService, Weather: weatherService,
+		Tariffs: tariffService, Billing: billingService, BillRequests: billRequests, Reports: reportRequests, Solar: solarService, Weather: weatherService, Renewable: renewableService, Financial: financialService,
 		Clock: opts.Clock, Log: log, ClientIP: clientIP}
 	router := v1.NewRouter(handlers, middlewareFor(cfg, redisClient, authService, auditRepo, admin.NewAuditRepository(pool), clientIP, opts.RedisPrefix, log), log)
 	var once sync.Once

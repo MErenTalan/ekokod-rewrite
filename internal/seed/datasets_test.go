@@ -18,11 +18,16 @@ import (
 // with a throwaway Node script (kept out of the repository per the task
 // brief) and taking len() of the result; cross-checked by counting
 // `key:` occurrences in that line range and by confirming every one of the
-// 182 keys is unique, which this test also asserts. This is the REAL count:
+// 182 keys is unique, which this test also asserts (F9 adds four R293
+// equivalence rows on top). This is the REAL count:
 // the spec (docs/rewrite/04-data-model.md §13) describes the catalogue as
 // "thousands of entries", which this survey does not confirm — see the
 // task-12a report.
-const wantEmissionFactorCount = 182
+const wantEmissionFactorCount = 186
+
+// wantEquivalenceCount rows are F9's renewable equivalences (R293): reference
+// values, not emission factors, so they carry no ISO 14064 category.
+const wantEquivalenceCount = 4
 
 // wantIntegrationDefinitionCount: the legacy code hardcodes exactly the three
 // iSolar regions (ISOLAR_REGIONS in
@@ -73,11 +78,10 @@ func TestEmissionFactorsDecodeAndValidate(t *testing.T) {
 	// iso_category is filled from the legacy `category` field on every
 	// entry (an explicit per-entry ISO 14064 category, category_1..
 	// category_6 — see the task-12a report for why this is used directly
-	// rather than derived from the coarser GHG scope). All 182 entries carry
-	// it, so NULL count is zero; this assertion pins that fact rather than
-	// assuming it.
-	require.Equal(t, wantEmissionFactorCount, isoFilled, "iso_category filled count")
-	require.Zero(t, isoNull, "iso_category NULL count")
+	// rather than derived from the coarser GHG scope). All 182 legacy entries
+	// carry it; only F9's equivalence rows (R293) have none.
+	require.Equal(t, wantEmissionFactorCount-wantEquivalenceCount, isoFilled, "iso_category filled count")
+	require.Equal(t, wantEquivalenceCount, isoNull, "iso_category NULL count: the equivalence rows only")
 }
 
 func TestEmissionFactorsRejectsDuplicateKey(t *testing.T) {
@@ -337,4 +341,23 @@ func mustReadFile(t *testing.T, path string) []byte {
 	raw, err := os.ReadFile(path)
 	require.NoError(t, err)
 	return raw
+}
+
+// R293: the renewable panel's equivalences are seeded platform rows with a
+// source and a year, so a missing or changed factor is data, not code.
+func TestEquivalenceFactorsAreSeededWithASource(t *testing.T) {
+	factors, err := EmissionFactors()
+	require.NoError(t, err)
+	byKey := map[string]EmissionFactor{}
+	for _, f := range factors {
+		byKey[f.Key] = f
+	}
+	for _, key := range []string{"equiv_tree_co2_kg_per_year", "equiv_coal_kg_per_kwh", "equiv_car_co2_kg_per_km", "equiv_home_heating_kwh_per_year"} {
+		f, ok := byKey[key]
+		require.True(t, ok, key)
+		require.Equal(t, "equivalence", f.MainCategory, key)
+		require.NotNil(t, f.Source, key)
+		require.NotNil(t, f.SourceYear, key)
+		require.True(t, f.BaseFactor.IsPositive(), key)
+	}
 }

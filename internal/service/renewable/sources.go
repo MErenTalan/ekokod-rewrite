@@ -65,6 +65,7 @@ var Sources = map[string]map[string]Source{
 		"grid_factor":        m("emission_factors grid_electricity_tr_2022"),
 		"grid_factor_unit":   l("emission_factors base_unit"),
 		"grid_factor_source": l("emission_factors source"),
+		"factors":            l("emission_factors equivalence rows: factor, unit, source, year"),
 	},
 	"efficiency": {
 		"overall_pct": never, "panel_pct": never, "inverter_pct": never, "battery_pct": never, "grid_pct": never,
@@ -100,7 +101,7 @@ var Sources = map[string]map[string]Source{
 		"financial.net_today":            d("today_export_revenue − today_import_cost"),
 		"financial.month_earnings":       m("Σ generation_credit of this month's bills"),
 		"financial.year_earnings":        m("Σ generation_credit of this year's bills"),
-		"financial.total_savings":        m("Σ generation_credit of the range's bills"),
+		"financial.total_savings":        m("Σ generation_credit of bills whose period falls in the range"),
 		"financial.roi_pct":              never,
 		"financial.payback_years":        never,
 		"financial.bill_savings":         never,

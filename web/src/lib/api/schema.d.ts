@@ -782,6 +782,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/financial/monthly": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Twelve months and the year row; a month without data is null, never zero. */
+        get: operations["financial.monthly"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/financial/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Company-wide consumption, cost, production, revenue and net for a year or month, with the tariffs in force. */
+        get: operations["financial.summary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/generation": {
         parameters: {
             query?: never;
@@ -1453,6 +1487,142 @@ export interface paths {
         head?: never;
         /** Update the current user's name, e-mail, phone, locale and UI preferences. */
         patch: operations["profile.update"];
+        trace?: never;
+    };
+    "/api/v1/renewable/analytics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Peaks, trend, data availability and the financial gains from bills. */
+        get: operations["renewable.analytics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/renewable/efficiency": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Efficiency figures; each states why it is unavailable. */
+        get: operations["renewable.efficiency"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/renewable/environmental": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** CO₂ avoided at the grid factor and seeded equivalences with their sources. */
+        get: operations["renewable.environmental"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/renewable/forecast": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Consumption forecast sums and accuracy from stored forecast runs. */
+        get: operations["renewable.forecast"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/renewable/grid-interaction": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Today's import and export, power factor and the latest bill's prices. */
+        get: operations["renewable.grid_interaction"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/renewable/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Generation totals over the range from the export registers. */
+        get: operations["renewable.overview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/renewable/realtime": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The last complete hour's generation and the last 24 hours. */
+        get: operations["renewable.realtime"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/renewable/system-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Monitoring and grid connection health from the last reading. */
+        get: operations["renewable.system_status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/reports": {
@@ -2465,6 +2635,14 @@ export interface components {
         EnergyBalance: {
             items: components["schemas"]["BalanceRow"][];
         };
+        EquivalenceFactor: {
+            factor: components["schemas"]["Decimal"];
+            /** @enum {string} */
+            key: "equiv_tree_co2_kg_per_year" | "equiv_coal_kg_per_kwh" | "equiv_car_co2_kg_per_km" | "equiv_home_heating_kwh_per_year";
+            source: string;
+            unit: string;
+            year: null | number;
+        };
         Error: {
             error: components["schemas"]["ErrorBody"];
         };
@@ -2475,6 +2653,61 @@ export interface components {
             };
             message: string;
             request_id?: string;
+        };
+        FinancialBuildingTariff: {
+            building_id: components["schemas"]["UuidUUID"];
+            building_name: string;
+            currency: string;
+            /** @enum {string} */
+            price_type: "single_time" | "multi_time";
+            single: components["schemas"]["Decimal"];
+            t1: components["schemas"]["Decimal"];
+            t2: components["schemas"]["Decimal"];
+            t3: components["schemas"]["Decimal"];
+        };
+        FinancialCoverage: {
+            consumption_months: number;
+            of: number;
+            production_months: number;
+        };
+        FinancialMonth: {
+            consumption_kwh: components["schemas"]["Decimal"];
+            cost: components["schemas"]["MoneyAmount"][];
+            grid_purchase_kwh: components["schemas"]["Decimal"];
+            grid_sale_kwh: components["schemas"]["Decimal"];
+            month: number;
+            net: components["schemas"]["MoneyAmount"][];
+            offset_kwh: components["schemas"]["Decimal"];
+            production_kwh: components["schemas"]["Decimal"];
+            revenue: components["schemas"]["MoneyAmount"][];
+            revenue_partial: boolean;
+        };
+        FinancialMonthly: {
+            coverage: components["schemas"]["FinancialCoverage"];
+            items: components["schemas"]["FinancialMonth"][];
+            total: components["schemas"]["FinancialMonth"];
+        };
+        FinancialPlantFeedIn: {
+            currency: string;
+            plant_id: components["schemas"]["UuidUUID"];
+            plant_name: string;
+            price: components["schemas"]["Decimal"];
+        };
+        FinancialSummary: {
+            analyzer_count: number;
+            figures: components["schemas"]["FinancialMonth"];
+            month: null | number;
+            of: number;
+            plant_count: number;
+            tariffs: components["schemas"]["FinancialTariffs"];
+            with_data: number;
+            year: number;
+        };
+        FinancialTariffs: {
+            purchase: components["schemas"]["FinancialBuildingTariff"][];
+            purchase_missing: boolean;
+            sale: components["schemas"]["FinancialPlantFeedIn"][];
+            sale_missing: boolean;
         };
         ForgotPasswordRequest: {
             /** Format: email */
@@ -3134,6 +3367,121 @@ export interface components {
             t3_export?: components["schemas"]["Decimal"];
             t3_import?: components["schemas"]["Decimal"];
         };
+        RenewableAnalytics: {
+            average_generation_kwh: components["schemas"]["Decimal"];
+            consumption_optimisation: null | string;
+            data_availability_pct: components["schemas"]["Decimal"];
+            efficiency_change_30d_pct: components["schemas"]["Decimal"];
+            financial: components["schemas"]["RenewableFinancial"];
+            maintenance_required: null | string;
+            /** Format: date-time */
+            peak_generation_at: null | string;
+            peak_generation_kwh: components["schemas"]["Decimal"];
+            peak_hour: null | number;
+            system_efficiency_pct: components["schemas"]["Decimal"];
+            trend: components["schemas"]["RenewablePoint"][];
+            unavailable: components["schemas"]["Unavailable"];
+        };
+        RenewableEfficiency: {
+            battery_pct: components["schemas"]["Decimal"];
+            grid_pct: components["schemas"]["Decimal"];
+            inverter_pct: components["schemas"]["Decimal"];
+            overall_pct: components["schemas"]["Decimal"];
+            panel_pct: components["schemas"]["Decimal"];
+            recommendations: string[];
+            trend: components["schemas"]["RenewablePoint"][];
+            unavailable: components["schemas"]["Unavailable"];
+        };
+        RenewableEnvironmental: {
+            car_km: components["schemas"]["Decimal"];
+            co2_avoided_kg: components["schemas"]["Decimal"];
+            coal_kg: components["schemas"]["Decimal"];
+            factors: components["schemas"]["EquivalenceFactor"][];
+            generation_kwh: components["schemas"]["Decimal"];
+            grid_factor: components["schemas"]["Decimal"];
+            grid_factor_source: null | string;
+            grid_factor_unit: null | string;
+            homes: components["schemas"]["Decimal"];
+            trees: components["schemas"]["Decimal"];
+            unavailable: components["schemas"]["Unavailable"];
+        };
+        RenewableFinancial: {
+            bill_savings: components["schemas"]["Decimal"];
+            currency: null | string;
+            export_price: components["schemas"]["Decimal"];
+            import_price: components["schemas"]["Decimal"];
+            month_earnings: components["schemas"]["Decimal"];
+            net_today: components["schemas"]["Decimal"];
+            payback_years: components["schemas"]["Decimal"];
+            roi_pct: components["schemas"]["Decimal"];
+            today_export_revenue: components["schemas"]["Decimal"];
+            today_import_cost: components["schemas"]["Decimal"];
+            total_savings: components["schemas"]["Decimal"];
+            unavailable: components["schemas"]["Unavailable"];
+            year_earnings: components["schemas"]["Decimal"];
+        };
+        RenewableForecast: {
+            accuracy_daily_pct: components["schemas"]["Decimal"];
+            accuracy_overall_pct: components["schemas"]["Decimal"];
+            accuracy_weekly_pct: components["schemas"]["Decimal"];
+            consumption_next_24h_kwh: components["schemas"]["Decimal"];
+            consumption_next_28d_kwh: components["schemas"]["Decimal"];
+            consumption_next_7d_kwh: components["schemas"]["Decimal"];
+            estimated_generation_kwh: components["schemas"]["Decimal"];
+            net_excess_kwh: components["schemas"]["Decimal"];
+            unavailable: components["schemas"]["Unavailable"];
+            weather_impact: null | string;
+        };
+        RenewableGridInteraction: {
+            currency: null | string;
+            direction: null | string;
+            export_price: components["schemas"]["Decimal"];
+            frequency_hz: components["schemas"]["Decimal"];
+            import_price: components["schemas"]["Decimal"];
+            net_today: components["schemas"]["Decimal"];
+            power_factor: components["schemas"]["Decimal"];
+            today_export_kwh: components["schemas"]["Decimal"];
+            today_import_kwh: components["schemas"]["Decimal"];
+            unavailable: components["schemas"]["Unavailable"];
+            voltage_v: components["schemas"]["Decimal"];
+        };
+        RenewableOverview: {
+            active_generation_kwh: components["schemas"]["Decimal"];
+            average_generation_kwh: components["schemas"]["Decimal"];
+            capacitive_generation_kvarh: components["schemas"]["Decimal"];
+            inductive_generation_kvarh: components["schemas"]["Decimal"];
+            unavailable: components["schemas"]["Unavailable"];
+        };
+        RenewablePoint: {
+            kwh: components["schemas"]["Decimal"];
+            /** Format: date-time */
+            ts: string;
+        };
+        RenewableRealtime: {
+            avg_power_kw: components["schemas"]["Decimal"];
+            current_power_kw: components["schemas"]["Decimal"];
+            max_power_kw: components["schemas"]["Decimal"];
+            series_24h: components["schemas"]["RenewablePoint"][];
+            /** @enum {null|string} */
+            status: "producing" | "idle" | "no_data" | null;
+            system_efficiency_pct: components["schemas"]["Decimal"];
+            today_kwh: components["schemas"]["Decimal"];
+            unavailable: components["schemas"]["Unavailable"];
+        };
+        RenewableSystemStatus: {
+            average_efficiency_pct: components["schemas"]["Decimal"];
+            battery: null | string;
+            grid_connection: null | string;
+            inverter: null | string;
+            /** Format: date-time */
+            last_reading_at: null | string;
+            monitoring: null | string;
+            overall: null | string;
+            security: null | string;
+            solar_panels: null | string;
+            total_generation_kwh: components["schemas"]["Decimal"];
+            unavailable: components["schemas"]["Unavailable"];
+        };
         Report: {
             building_id: components["schemas"]["UuidUUID"];
             building_name: string;
@@ -3640,6 +3988,9 @@ export interface components {
             vat_rate: components["schemas"]["Decimal"];
             /** @enum {string} */
             voltage_level: "lv" | "mv";
+        };
+        Unavailable: {
+            [key: string]: string;
         };
         User: {
             /** Format: date-time */
@@ -8651,6 +9002,161 @@ export interface operations {
             };
         };
     };
+    "financial.monthly": {
+        parameters: {
+            query: {
+                year: number;
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinancialMonthly"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "financial.summary": {
+        parameters: {
+            query: {
+                year: number;
+                month?: null | number;
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinancialSummary"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     "generation.series": {
         parameters: {
             query: {
@@ -12720,6 +13226,646 @@ export interface operations {
             };
             /** @description Unprocessable Entity */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "renewable.analytics": {
+        parameters: {
+            query: {
+                analyzer_id?: components["schemas"]["UuidUUID"];
+                building_id?: components["schemas"]["UuidUUID"];
+                from: components["schemas"]["Date"];
+                to: components["schemas"]["Date"];
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenewableAnalytics"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "renewable.efficiency": {
+        parameters: {
+            query: {
+                analyzer_id?: components["schemas"]["UuidUUID"];
+                building_id?: components["schemas"]["UuidUUID"];
+                from: components["schemas"]["Date"];
+                to: components["schemas"]["Date"];
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenewableEfficiency"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "renewable.environmental": {
+        parameters: {
+            query: {
+                analyzer_id?: components["schemas"]["UuidUUID"];
+                building_id?: components["schemas"]["UuidUUID"];
+                from: components["schemas"]["Date"];
+                to: components["schemas"]["Date"];
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenewableEnvironmental"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "renewable.forecast": {
+        parameters: {
+            query: {
+                analyzer_id?: components["schemas"]["UuidUUID"];
+                building_id?: components["schemas"]["UuidUUID"];
+                from: components["schemas"]["Date"];
+                to: components["schemas"]["Date"];
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenewableForecast"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "renewable.grid_interaction": {
+        parameters: {
+            query: {
+                analyzer_id?: components["schemas"]["UuidUUID"];
+                building_id?: components["schemas"]["UuidUUID"];
+                from: components["schemas"]["Date"];
+                to: components["schemas"]["Date"];
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenewableGridInteraction"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "renewable.overview": {
+        parameters: {
+            query: {
+                analyzer_id?: components["schemas"]["UuidUUID"];
+                building_id?: components["schemas"]["UuidUUID"];
+                from: components["schemas"]["Date"];
+                to: components["schemas"]["Date"];
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenewableOverview"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "renewable.realtime": {
+        parameters: {
+            query: {
+                analyzer_id?: components["schemas"]["UuidUUID"];
+                building_id?: components["schemas"]["UuidUUID"];
+                from: components["schemas"]["Date"];
+                to: components["schemas"]["Date"];
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenewableRealtime"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "renewable.system_status": {
+        parameters: {
+            query: {
+                analyzer_id?: components["schemas"]["UuidUUID"];
+                building_id?: components["schemas"]["UuidUUID"];
+                from: components["schemas"]["Date"];
+                to: components["schemas"]["Date"];
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenewableSystemStatus"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

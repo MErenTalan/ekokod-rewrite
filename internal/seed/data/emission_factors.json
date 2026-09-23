@@ -5434,5 +5434,85 @@
         "label": "Ton"
       }
     ]
+  },
+  {
+    "key": "equiv_tree_co2_kg_per_year",
+    "label": "Bir ağacın yıllık CO₂ tutumu",
+    "main_category": "equivalence",
+    "sub_categories": [],
+    "category_path": [
+      "equivalence"
+    ],
+    "base_factor": "21.77",
+    "base_unit": "kg CO2/ağaç-yıl",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": null,
+    "iso_category": null,
+    "status": "reference",
+    "source": "European Environment Agency (olgun ağaç için yaygın kullanılan değer)",
+    "source_year": 2023,
+    "source_url": "https://www.eea.europa.eu/",
+    "conversions": []
+  },
+  {
+    "key": "equiv_coal_kg_per_kwh",
+    "label": "Kömürle üretilen 1 kWh için yakılan kömür",
+    "main_category": "equivalence",
+    "sub_categories": [],
+    "category_path": [
+      "equivalence"
+    ],
+    "base_factor": "0.517",
+    "base_unit": "kg kömür/kWh",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": null,
+    "iso_category": null,
+    "status": "reference",
+    "source": "U.S. EIA, How much coal is used to generate a kWh of electricity? (1,14 lb/kWh)",
+    "source_year": 2022,
+    "source_url": "https://www.eia.gov/tools/faqs/faq.php?id=667&t=2",
+    "conversions": []
+  },
+  {
+    "key": "equiv_car_co2_kg_per_km",
+    "label": "Binek aracın km başına CO₂ salımı",
+    "main_category": "equivalence",
+    "sub_categories": [],
+    "category_path": [
+      "equivalence"
+    ],
+    "base_factor": "0.108",
+    "base_unit": "kg CO2/km",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": null,
+    "iso_category": null,
+    "status": "reference",
+    "source": "European Environment Agency, CO2 emissions from new passenger cars",
+    "source_year": 2022,
+    "source_url": "https://www.eea.europa.eu/",
+    "conversions": []
+  },
+  {
+    "key": "equiv_home_heating_kwh_per_year",
+    "label": "Bir hanenin yıllık elektrik tüketimi",
+    "main_category": "equivalence",
+    "sub_categories": [],
+    "category_path": [
+      "equivalence"
+    ],
+    "base_factor": "2300",
+    "base_unit": "kWh/hane-yıl",
+    "fuel_type": null,
+    "vehicle_type": null,
+    "scope": null,
+    "iso_category": null,
+    "status": "reference",
+    "source": "TÜİK/EPDK Türkiye ortalama hane elektrik tüketimi (yaklaşık)",
+    "source_year": 2023,
+    "source_url": "https://www.epdk.gov.tr/",
+    "conversions": []
   }
 ]

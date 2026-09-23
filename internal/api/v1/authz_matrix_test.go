@@ -78,7 +78,18 @@ var expectedAccess = map[string]string{
 	"DELETE /plants/{id}/isolar-link":    "A CA",
 	"PUT /plants/{id}/alarm-recipients":  "A CA",
 	// 05 §9 (F9): a plant's weather is company-level inside the service (R291).
-	"GET /weather": "A CA CR BA BR D",
+	"GET /weather":                    "A CA CR BA BR D",
+	"GET /renewable/overview":         "A CA CR BA BR D",
+	"GET /renewable/realtime":         "A CA CR BA BR D",
+	"GET /renewable/grid-interaction": "A CA CR BA BR D",
+	"GET /renewable/environmental":    "A CA CR BA BR D",
+	"GET /renewable/efficiency":       "A CA CR BA BR D",
+	"GET /renewable/forecast":         "A CA CR BA BR D",
+	"GET /renewable/analytics":        "A CA CR BA BR D",
+	"GET /renewable/system-status":    "A CA CR BA BR D",
+	// 05 §9 (F9): financial analysis is company-level (R294).
+	"GET /financial/summary": "A CA CR",
+	"GET /financial/monthly": "A CA CR",
 	// 05 §5, §16, R166
 	"GET /consumption":                         "A CA CR BA BR D",
 	"GET /consumption/summary":                 "A CA CR BA BR D",
