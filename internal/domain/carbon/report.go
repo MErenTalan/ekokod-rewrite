@@ -95,3 +95,45 @@ func Report94(records []Record, from, to time.Time, factor decimal.Decimal) *Fig
 	f.NetT = f.ConsumptionT.Sub(f.ReductionT)
 	return &f
 }
+
+// ReportPayload is R312's snapshot, stored in carbon_reports.payload and
+// rendered on demand: later catalogue or activity changes never alter it.
+type ReportPayload struct {
+	ReportType  string          `json:"report_type"` // ghg | iso
+	Company     string          `json:"company"`
+	Building    string          `json:"building"`
+	Address     *string         `json:"address,omitempty"`
+	From        string          `json:"from"` // YYYY-MM-DD
+	To          string          `json:"to"`
+	GeneratedAt time.Time       `json:"generated_at"`
+	Groups      []PayloadGroup  `json:"groups"`
+	TotalKgCO2e decimal.Decimal `json:"total_kgco2e"`
+	Pending     int             `json:"pending_count"`
+	Figures94   *Payload94      `json:"figures_94"`
+}
+
+// PayloadGroup is one report group with its lines.
+type PayloadGroup struct {
+	Key         string          `json:"key"`
+	TotalKgCO2e decimal.Decimal `json:"total_kgco2e"`
+	Lines       []PayloadLine   `json:"lines"`
+}
+
+// PayloadLine is one sub-category's emission in a group.
+type PayloadLine struct {
+	Sub    string          `json:"sub_category"`
+	KgCO2e decimal.Decimal `json:"kgco2e"`
+}
+
+// Payload94 is §9.4 with the grid factor it used (R313).
+type Payload94 struct {
+	ConsumptionKwh    decimal.Decimal `json:"consumption_kwh"`
+	GenerationKwh     decimal.Decimal `json:"generation_kwh"`
+	GridFactor        decimal.Decimal `json:"grid_factor"`
+	GridFactorUnit    string          `json:"grid_factor_unit"`
+	GridFactorSource  *string         `json:"grid_factor_source,omitempty"`
+	GridFactorYear    *int16          `json:"grid_factor_year,omitempty"`
+	ConsumptionT      decimal.Decimal `json:"consumption_emission_t"`
+	ProductionReductT decimal.Decimal `json:"production_reduction_t"`
+	NetT              decimal.Decimal `json:"net_emission_t"`
+}

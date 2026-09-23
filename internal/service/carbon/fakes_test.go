@@ -450,3 +450,16 @@ func (f *fakeOps) AppendMessage(_ context.Context, _ store.Scope, m model.Operat
 	f.messages = append(f.messages, m)
 	return m, nil
 }
+
+type fakeCompanies struct {
+	store.CompanyRepository
+	names map[uuid.UUID]string
+}
+
+func (f *fakeCompanies) Get(_ context.Context, sc store.Scope, id uuid.UUID) (model.Company, error) {
+	name, ok := f.names[id]
+	if !ok || id != sc.CompanyID {
+		return model.Company{}, store.ErrNotFound
+	}
+	return model.Company{ID: id, Name: name}, nil
+}

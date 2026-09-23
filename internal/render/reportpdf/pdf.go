@@ -65,14 +65,24 @@ func draw(doc reportview.Document, w drawer) {
 // Render builds the PDF.
 func Render(d Document) ([]byte, error) {
 	view := reportview.Build(d.Payload, d.CompanyName, d.BuildingNames, d.Locale)
+	return renderPDF(view, view.Title+" "+d.Payload.Period, d.GeneratedAt, d.Uncompressed)
+}
+
+// RenderView builds the PDF of any laid-out document (the carbon reports,
+// R312) with the same page code, fonts and determinism.
+func RenderView(view reportview.Document, title string, at time.Time) ([]byte, error) {
+	return renderPDF(view, title, at, false)
+}
+
+func renderPDF(view reportview.Document, title string, at time.Time, uncompressed bool) ([]byte, error) {
 	pdf := fpdf.New("P", "mm", "A4", "")
-	pdf.SetCompression(!d.Uncompressed)
+	pdf.SetCompression(!uncompressed)
 	pdf.SetCatalogSort(true)
-	pdf.SetCreationDate(d.GeneratedAt)
-	pdf.SetModificationDate(d.GeneratedAt)
+	pdf.SetCreationDate(at)
+	pdf.SetModificationDate(at)
 	pdf.AddUTF8FontFromBytes("Go", "", goregular.TTF)
 	pdf.AddUTF8FontFromBytes("Go", "B", gobold.TTF)
-	pdf.SetTitle(view.Title+" "+d.Payload.Period, true)
+	pdf.SetTitle(title, true)
 	pdf.SetAutoPageBreak(true, 14)
 	pdf.AddPage()
 	draw(view, &page{pdf: pdf, locale: view.Locale})
