@@ -135,17 +135,28 @@ func TestInvalidCronIsRejected(t *testing.T) {
 	require.Contains(t, err.Error(), "EKOKOD_SCHEDULE_BILLING")
 }
 
-func TestWeatherAPIKeyRequiredWhenProviderSet(t *testing.T) {
-	env := valid()
-	env["EKOKOD_WEATHER_PROVIDER"] = "openweather"
-	_, err := config.Load(lookupFrom(env))
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "EKOKOD_WEATHER_API_KEY")
-
-	env["EKOKOD_WEATHER_API_KEY"] = "k"
-	cfg, err := config.Load(lookupFrom(env))
+// R291: Open-Meteo needs no key; an unknown provider is refused, and the base
+// URL must be https like every provider's.
+func TestWeatherProviderIsOpenMeteoOrNothing(t *testing.T) {
+	cfg, err := config.Load(lookupFrom(valid()))
 	require.NoError(t, err)
-	require.Equal(t, "openweather", cfg.External.WeatherProvider)
+	require.Empty(t, cfg.External.WeatherProvider, "air-gapped by default")
+	require.Equal(t, "https://api.open-meteo.com", cfg.External.WeatherBaseURL)
+
+	env := valid()
+	env["EKOKOD_WEATHER_PROVIDER"] = "open-meteo"
+	cfg, err = config.Load(lookupFrom(env))
+	require.NoError(t, err, "no API key needed")
+	require.Equal(t, "open-meteo", cfg.External.WeatherProvider)
+
+	env["EKOKOD_WEATHER_PROVIDER"] = "openweather"
+	_, err = config.Load(lookupFrom(env))
+	require.ErrorContains(t, err, "EKOKOD_WEATHER_PROVIDER")
+
+	env["EKOKOD_WEATHER_PROVIDER"] = "open-meteo"
+	env["EKOKOD_WEATHER_BASE_URL"] = "http://api.open-meteo.com"
+	_, err = config.Load(lookupFrom(env))
+	require.ErrorContains(t, err, "EKOKOD_WEATHER_BASE_URL")
 }
 
 func TestSMSFlagRequiresNothingButDefaultsOff(t *testing.T) {

@@ -91,6 +91,8 @@ export type PlantRevenue = S['PlantRevenue'];
 export type RevenuePeriod = S['RevenuePeriod'];
 export type MoneyAmount = S['MoneyAmount'];
 export type ISolarAccountPlant = S['ISolarAccountPlant'];
+export type Weather = S['Weather'];
+export type WeatherDay = S['WeatherDay'];
 
 export type IntegrationDefinition = S['IntegrationDefinition'];
 export type IntegrationCredential = S['IntegrationCredential'];

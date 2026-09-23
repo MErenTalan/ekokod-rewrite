@@ -27,6 +27,9 @@ const (
 	// credential read from config, never a tenant's integration_credentials
 	// row. ModelProvider reports ok=false for it.
 	ProviderEPIAS Provider = "epias"
+	// ProviderWeather is the platform weather provider (06 §8); like EPİAŞ it
+	// has no tenant credential and no enum row.
+	ProviderWeather Provider = "weather"
 )
 
 // ModelProvider maps p to the SQL enum integration_provider. ok is false

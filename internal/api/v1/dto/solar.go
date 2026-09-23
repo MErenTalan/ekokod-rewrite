@@ -161,3 +161,42 @@ type AlarmRecipientsRequest struct {
 type AlarmRecipients struct {
 	Emails []string `json:"emails" required:"true"`
 }
+
+// WeatherRequest is GET /weather: exactly one of plant_id and building_id (R291).
+type WeatherRequest struct {
+	PlantID    *uuid.UUID `query:"plant_id" json:"-"`
+	BuildingID *uuid.UUID `query:"building_id" json:"-"`
+}
+
+// WeatherCurrent is now; wind km/h, pressure hPa, visibility km.
+type WeatherCurrent struct {
+	TemperatureC     *Decimal `json:"temperature_c"`
+	HumidityPct      *Decimal `json:"humidity_pct"`
+	WindKmh          *Decimal `json:"wind_kmh"`
+	PressureHpa      *Decimal `json:"pressure_hpa"`
+	VisibilityKm     *Decimal `json:"visibility_km"`
+	UVIndex          *Decimal `json:"uv_index"`
+	PrecipitationPct *Decimal `json:"precipitation_pct"`
+	WeatherCode      *int32   `json:"weather_code"`
+}
+
+// WeatherDay is one forecast day with its generation potential.
+type WeatherDay struct {
+	Date             Date     `json:"date" required:"true"`
+	MinC             *Decimal `json:"min_c"`
+	MaxC             *Decimal `json:"max_c"`
+	WeatherCode      *int32   `json:"weather_code"`
+	PrecipitationPct *Decimal `json:"precipitation_pct"`
+	UVIndexMax       *Decimal `json:"uv_index_max"`
+	ShortwaveMJ      *Decimal `json:"shortwave_mj_m2"`
+	Potential        *string  `json:"potential" enum:"high,medium,low"`
+}
+
+// Weather is GET /weather; it never carries a location name.
+type Weather struct {
+	Available      bool            `json:"available" required:"true"`
+	Reason         string          `json:"reason,omitempty" enum:"weather_not_configured,location_not_configured,weather_unavailable"`
+	Current        *WeatherCurrent `json:"current,omitempty"`
+	Days           []WeatherDay    `json:"days" required:"true"`
+	PotentialBasis string          `json:"potential_basis,omitempty"`
+}

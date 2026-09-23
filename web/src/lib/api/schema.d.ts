@@ -1787,6 +1787,23 @@ export interface paths {
         patch: operations["users.update"];
         trace?: never;
     };
+    "/api/v1/weather": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Current conditions and seven days for a plant's or building's coordinates; never a default city. */
+        get: operations["weather.get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3674,6 +3691,35 @@ export interface components {
         VacationsPutRequest: {
             periods?: components["schemas"]["VacationPeriod"][];
             weekend_days?: number[];
+        };
+        Weather: {
+            available: boolean;
+            current?: components["schemas"]["WeatherCurrent"];
+            days: components["schemas"]["WeatherDay"][];
+            potential_basis?: string;
+            /** @enum {string} */
+            reason?: "weather_not_configured" | "location_not_configured" | "weather_unavailable";
+        };
+        WeatherCurrent: {
+            humidity_pct?: components["schemas"]["Decimal"];
+            precipitation_pct?: components["schemas"]["Decimal"];
+            pressure_hpa?: components["schemas"]["Decimal"];
+            temperature_c?: components["schemas"]["Decimal"];
+            uv_index?: components["schemas"]["Decimal"];
+            visibility_km?: components["schemas"]["Decimal"];
+            weather_code?: null | number;
+            wind_kmh?: components["schemas"]["Decimal"];
+        };
+        WeatherDay: {
+            date: components["schemas"]["Date"];
+            max_c?: components["schemas"]["Decimal"];
+            min_c?: components["schemas"]["Decimal"];
+            /** @enum {null|string} */
+            potential?: "high" | "medium" | "low" | null;
+            precipitation_pct?: components["schemas"]["Decimal"];
+            shortwave_mj_m2?: components["schemas"]["Decimal"];
+            uv_index_max?: components["schemas"]["Decimal"];
+            weather_code?: null | number;
         };
     };
     responses: never;
@@ -15179,6 +15225,84 @@ export interface operations {
             };
             /** @description Unprocessable Entity */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "weather.get": {
+        parameters: {
+            query?: {
+                plant_id?: components["schemas"]["UuidUUID"];
+                building_id?: components["schemas"]["UuidUUID"];
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Weather"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

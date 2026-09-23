@@ -27,6 +27,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/isolar"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/osos"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/pm5340"
+	isweather "github.com/MErenTalan/ekokod-rewrite/internal/integration/weather"
 	"github.com/MErenTalan/ekokod-rewrite/internal/job"
 	"github.com/MErenTalan/ekokod-rewrite/internal/mail"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
@@ -48,6 +49,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/solar"
 	tariffsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/tariff"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/tenancy"
+	weathersvc "github.com/MErenTalan/ekokod-rewrite/internal/service/weather"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/admin"
 	platformredis "github.com/MErenTalan/ekokod-rewrite/internal/store/redis"
@@ -69,6 +71,8 @@ type Options struct {
 	ISolar    credentials.ISolarTokens
 	// Solar replaces the iSolar client behind the plant link routes (F9).
 	Solar solar.Adapter
+	// Weather replaces the weather provider (R291).
+	Weather weathersvc.Provider
 }
 
 // Enqueuer is the job client the services enqueue through.
@@ -263,6 +267,21 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 
 	billRequests.Plants = solarService
 
+	// R291: weather only when a provider is configured; air-gapped says so.
+	weatherDeps := weathersvc.Deps{Cache: platformredis.NewCache(redisClient, opts.RedisPrefix+"weather:"),
+		Plants: postgres.NewPlantRepository(pool), Buildings: postgres.NewBuildingRepository(pool)}
+	if opts.Weather != nil {
+		weatherDeps.Provider = opts.Weather
+	} else if cfg.External.WeatherProvider == "open-meteo" {
+		weatherPool, err := httpx.NewPool(httpx.PoolOptions{PinnedCerts: cfg.External.PinnedCerts})
+		if err != nil {
+			closeAll()
+			return Built{}, fmt.Errorf("apiwire: build weather pool: %w", err)
+		}
+		weatherDeps.Provider = isweather.New(weatherPool, cfg.External.WeatherBaseURL)
+	}
+	weatherService := weathersvc.New(weatherDeps)
+
 	jobService, err := jobs.New(jobs.Deps{Inspector: inspector, Analyzers: postgres.NewAnalyzerRepository(pool),
 		Buildings: postgres.NewBuildingRepository(pool), Ops: postgres.NewOpsRepository(pool), Reports: postgres.NewReportRepository(pool),
 		Plants: postgres.NewPlantRepository(pool)})
@@ -298,7 +317,7 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 	handlers := &v1.Handlers{
 		Calendar: calendarService, Credentials: credentialService, Jobs: jobService, Alarms: alarmService, Ops: opsService,
 		Definitions: integrations.Definitions{Integrations: postgres.NewIntegrationRepository(pool, cipher), Catalogue: admin.NewCatalogueRepository(pool)}, Auth: authService, Tenancy: tenancyService, Assets: assetService, Analysis: analysisService,
-		Tariffs: tariffService, Billing: billingService, BillRequests: billRequests, Reports: reportRequests, Solar: solarService,
+		Tariffs: tariffService, Billing: billingService, BillRequests: billRequests, Reports: reportRequests, Solar: solarService, Weather: weatherService,
 		Clock: opts.Clock, Log: log, ClientIP: clientIP}
 	router := v1.NewRouter(handlers, middlewareFor(cfg, redisClient, authService, auditRepo, admin.NewAuditRepository(pool), clientIP, opts.RedisPrefix, log), log)
 	var once sync.Once

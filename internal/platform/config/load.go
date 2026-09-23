@@ -485,7 +485,15 @@ func Load(lookup func(string) (string, bool)) (*Config, error) {
 		MapTileURL:      l.str("EKOKOD_MAP_TILE_URL", ""),
 		ISolarRedirect:  l.str("EKOKOD_ISOLAR_REDIRECT_URL", ""),
 	}
-	if c.External.WeatherProvider != "" {
+	// R291: Open-Meteo is the one provider and needs no key; the key stays
+	// readable (masked) for a future keyed provider.
+	switch c.External.WeatherProvider {
+	case "", "open-meteo":
+	default:
+		l.fail("EKOKOD_WEATHER_PROVIDER", errors.New(`must be empty or "open-meteo"`))
+	}
+	c.External.WeatherBaseURL = l.httpsURL("EKOKOD_WEATHER_BASE_URL", "https://api.open-meteo.com")
+	if raw, ok := l.raw("EKOKOD_WEATHER_API_KEY"); ok && raw != "" {
 		c.External.WeatherAPIKey = string(l.secret("EKOKOD_WEATHER_API_KEY", 1))
 	} else {
 		l.record("EKOKOD_WEATHER_API_KEY", maskSecret(""), true, false)

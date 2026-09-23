@@ -7563,6 +7563,113 @@
           }
         },
         "type": "object"
+      },
+      "Weather": {
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "current": {
+            "$ref": "#/components/schemas/WeatherCurrent"
+          },
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/WeatherDay"
+            },
+            "type": "array"
+          },
+          "potential_basis": {
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "weather_not_configured",
+              "location_not_configured",
+              "weather_unavailable"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "available",
+          "days"
+        ],
+        "type": "object"
+      },
+      "WeatherCurrent": {
+        "properties": {
+          "humidity_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "precipitation_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "pressure_hpa": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "temperature_c": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "uv_index": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "visibility_km": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "weather_code": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "wind_kmh": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "type": "object"
+      },
+      "WeatherDay": {
+        "properties": {
+          "date": {
+            "$ref": "#/components/schemas/Date"
+          },
+          "max_c": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "min_c": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "potential": {
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "precipitation_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "shortwave_mj_m2": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "uv_index_max": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "weather_code": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          }
+        },
+        "required": [
+          "date"
+        ],
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -23701,6 +23808,118 @@
         "summary": "Update a user; role, status and e-mail changes end their sessions.",
         "tags": [
           "users"
+        ]
+      }
+    },
+    "/api/v1/weather": {
+      "get": {
+        "operationId": "weather.get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "plant_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "building_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Weather"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Current conditions and seven days for a plant's or building's coordinates; never a default city.",
+        "tags": [
+          "renewable"
         ]
       }
     }

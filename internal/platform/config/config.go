@@ -165,13 +165,15 @@ type External struct {
 	// this is the only seam through which a test can point a REAL
 	// worker.Build-constructed EPİAŞ client at a fake.NewTLSServer instead
 	// of substituting Handlers.Prices at the test layer.
-	EPIASCASURL     string
-	EPIASBaseURL    string
-	MLURL           string
-	MLAPIKey        string
-	MLTimeout       time.Duration
+	EPIASCASURL  string
+	EPIASBaseURL string
+	MLURL        string
+	MLAPIKey     string
+	MLTimeout    time.Duration
+	// WeatherProvider is "" (air-gapped, weather unavailable) or "open-meteo" (R291).
 	WeatherProvider string
 	WeatherAPIKey   string
+	WeatherBaseURL  string
 	MapTileURL      string
 	ISolarRedirect  string
 	PinnedCerts     map[string]string // host -> base64(DER)

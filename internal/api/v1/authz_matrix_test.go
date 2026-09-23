@@ -77,6 +77,8 @@ var expectedAccess = map[string]string{
 	"POST /plants/{id}/isolar-link":      "A CA",
 	"DELETE /plants/{id}/isolar-link":    "A CA",
 	"PUT /plants/{id}/alarm-recipients":  "A CA",
+	// 05 §9 (F9): a plant's weather is company-level inside the service (R291).
+	"GET /weather": "A CA CR BA BR D",
 	// 05 §5, §16, R166
 	"GET /consumption":                         "A CA CR BA BR D",
 	"GET /consumption/summary":                 "A CA CR BA BR D",

@@ -20,6 +20,7 @@ import { useScopeParams } from '@/lib/selection/selection-store';
 import { useSession } from '@/lib/session/session-provider';
 
 import { useJob } from '../jobs/use-job';
+import { WeatherPanelView } from '../weather/weather-panel';
 import { ALARM_PAGE, AlarmsTabView } from './alarms-tab';
 import { ConnectionStatus } from './connection-status';
 import { DevicesTabView } from './devices-tab';
@@ -63,6 +64,8 @@ export function SolarPlantsPage() {
   const history = $api.useQuery('get', '/api/v1/plants/{id}/production',
     { params: { path, query: { ...scope, granularity: 'month', from: `${Number(today.slice(0, 4)) - 1}${today.slice(4, 8)}01`, to: tomorrow } } },
     { enabled });
+
+  const weather = $api.useQuery('get', '/api/v1/weather', { params: { query: { ...scope, plant_id: id } } }, { enabled });
 
   const [query, setQuery] = useState('');
   const devices = $api.useQuery('get', '/api/v1/plants/{id}/devices', { params: { path, query: { ...scope, q: query || undefined } } }, { enabled });
@@ -129,7 +132,8 @@ export function SolarPlantsPage() {
         items={[
           { value: 'overview', label: t('tabs.overview'), content: (
             <OverviewTabView realtime={realtime.data} revenue={revenue.data} monthDaily={monthDaily.data} history={history.data}
-              loading={realtime.isPending || monthDaily.isPending} />
+              loading={realtime.isPending || monthDaily.isPending}
+              aside={<WeatherPanelView weather={weather.data} loading={weather.isPending} />} />
           ) },
           { value: 'devices', label: t('tabs.devices'), content: (
             <DevicesTabView devices={devices.data?.items ?? []} query={query} onQueryChange={setQuery} />

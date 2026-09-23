@@ -25,6 +25,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/solar"
 	tariffsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/tariff"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/tenancy"
+	weathersvc "github.com/MErenTalan/ekokod-rewrite/internal/service/weather"
 )
 
 //go:embed openapi.json
@@ -49,6 +50,7 @@ type Handlers struct {
 	BillRequests billingsvc.Requests
 	Reports      reportsvc.Requests
 	Solar        *solar.Service
+	Weather      *weathersvc.Service
 	Calendar     *calendar.Service
 	Jobs         *jobs.Service
 	Alarms       *alarms.Service

@@ -1,0 +1,38 @@
+{
+  "title": "Weather",
+  "description": "Current conditions and a seven-day forecast for the stored coordinates",
+  "now": "Now",
+  "humidity": "Humidity",
+  "wind": "Wind",
+  "pressure": "Pressure",
+  "visibility": "Visibility",
+  "uv": "UV index",
+  "precipitation": "Chance of precipitation",
+  "forecast": "7-day forecast",
+  "potential": "Generation potential",
+  "potentialBasis": "Potential is derived from the day's shortwave radiation sum: 20 MJ/m² or more is high, 10–20 medium, below that low.",
+  "potentials": {
+    "high": "High",
+    "medium": "Medium",
+    "low": "Low"
+  },
+  "conditions": {
+    "clear": "Clear",
+    "partlyCloudy": "Partly cloudy",
+    "fog": "Fog",
+    "rain": "Rain",
+    "snow": "Snow",
+    "showers": "Showers",
+    "storm": "Storm",
+    "unknown": "Unknown"
+  },
+  "noData": "no data",
+  "reasons": {
+    "weatherNotConfigured": "Weather is not configured",
+    "weatherNotConfiguredDescription": "This installation has no external weather service; the panel shows no data.",
+    "locationNotConfigured": "Location not configured",
+    "locationNotConfiguredDescription": "Enter a latitude and longitude on the record and the weather appears here.",
+    "weatherUnavailable": "Weather is unavailable right now",
+    "weatherUnavailableDescription": "The service did not answer; try again shortly."
+  }
+}
