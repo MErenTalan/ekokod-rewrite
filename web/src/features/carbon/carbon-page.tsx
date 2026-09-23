@@ -12,6 +12,7 @@ import { ScopePicker } from '@/features/scope/scope-picker';
 import { useSelection } from '@/lib/selection/selection-store';
 import { useSession } from '@/lib/session/session-provider';
 
+import { DatabasePanel } from './database-panel';
 import { EntryPanel } from './entry-panel';
 import { OverviewPanel } from './overview-panel';
 import { ReportingPanel } from './reporting-panel';
@@ -29,6 +30,7 @@ const SECTIONS: Partial<Record<CarbonTab, (ctx: SectionContext) => ReactNode>> =
   entry: (ctx) => <EntryPanel {...ctx} />,
   status: ({ buildingId }) => <StatusPanel buildingId={buildingId} />,
   reporting: ({ buildingId }) => <ReportingPanel buildingId={buildingId} />,
+  database: () => <DatabasePanel />,
 };
 
 /** Eko-CM (01 §7.16): one module, its sections as deep-linkable tabs (R320, Q-F8). */
