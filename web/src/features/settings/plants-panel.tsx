@@ -43,7 +43,7 @@ export function PlantsPanel() {
   const analyzers = $api.useQuery('get', '/api/v1/analyzers', { params: { query: { ...scope, limit: 500 } } }, { enabled: canEdit });
   const credentials = $api.useQuery('get', '/api/v1/integration-credentials', { params: { query: scope } }, { enabled: canLink });
   const isolarCredentials = useMemo(
-    () => (credentials.data?.items ?? []).filter((c) => c.provider === 'isolar').map((c) => ({ value: c.id, label: `iSolarCloud (${c.subtype})` })),
+    () => (credentials.data?.items ?? []).filter((c) => c.provider === 'isolar' && c.is_active).map((c) => ({ value: c.id, label: `iSolarCloud (${c.subtype})` })),
     [credentials.data],
   );
   useEffect(() => {

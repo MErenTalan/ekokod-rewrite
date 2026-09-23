@@ -17,7 +17,8 @@
     "isolarAuth": "iSolarCloud yetkilendirmesi geçersiz; Şirket sekmesinden yeniden bağlayın.",
     "isolarUnavailable": "iSolarCloud şu an yanıt vermiyor; bir sonraki denemede yeniden alınacak.",
     "isolarNotLinked": "Santral iSolarCloud'a bağlı değil.",
-    "credentialMissing": "Santralin iSolarCloud kimlik bilgisi yok; bağlantıyı yeniden kurun."
+    "credentialMissing": "Santralin iSolarCloud kimlik bilgisi yok; bağlantıyı yeniden kurun.",
+    "credentialInactive": "Santralin iSolarCloud kimlik bilgisi devre dışı; etkinleştirin veya başka biriyle bağlayın."
   },
   "tabs": {
     "overview": "Genel bakış",

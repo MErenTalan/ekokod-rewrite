@@ -18,10 +18,11 @@ import (
 
 // Closed sync failure codes (R288); nothing else leaves the worker.
 const (
-	CodeISolarAuth        = "isolar_auth"
-	CodeISolarUnavailable = "isolar_unavailable"
-	CodeNotLinked         = "isolar_not_linked"
-	CodeCredentialMissing = "credential_missing"
+	CodeISolarAuth         = "isolar_auth"
+	CodeISolarUnavailable  = "isolar_unavailable"
+	CodeNotLinked          = "isolar_not_linked"
+	CodeCredentialMissing  = "credential_missing"
+	CodeCredentialInactive = "credential_inactive"
 )
 
 // dailyChunk is MaxWindowDay in days (31); R281's backfill runs in these chunks.
@@ -121,7 +122,7 @@ func (s *Service) syncPlant(ctx context.Context, sc store.Scope, plantID uuid.UU
 	if plant.IsolarCredentialID == nil {
 		return res, &syncError{code: CodeCredentialMissing}
 	}
-	creds, err := s.d.Creds.Open(ctx, sc, *plant.IsolarCredentialID)
+	creds, err := s.openActive(ctx, sc, *plant.IsolarCredentialID)
 	if err != nil {
 		return res, err
 	}

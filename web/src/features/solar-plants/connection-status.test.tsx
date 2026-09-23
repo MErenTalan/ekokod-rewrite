@@ -18,6 +18,11 @@ describe('ConnectionStatus', () => {
     expect(r.getByText(/yetkilendirmesi geçersiz/)).toBeVisible();
   });
 
+  it('names a deactivated credential', () => {
+    const r = renderWithProviders(<ConnectionStatus realtime={{ ...demoRealtime, connection: 'error', connection_error: 'credential_inactive' }} />);
+    expect(r.getByText(/kimlik bilgisi devre dışı/)).toBeVisible();
+  });
+
   it('ignores a code outside the closed set', () => {
     const r = renderWithProviders(<ConnectionStatus realtime={{ ...demoRealtime, connection: 'error', connection_error: 'boom: secret' }} />);
     expect(r.queryByText(/boom/)).toBeNull();

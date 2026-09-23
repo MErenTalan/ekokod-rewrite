@@ -109,7 +109,7 @@ func (o openerFunc) Open(ctx context.Context, sc store.Scope, id uuid.UUID) (int
 
 func okOpener() openerFunc {
 	return func(context.Context, store.Scope, uuid.UUID) (integration.Credentials, error) {
-		return integration.Credentials{Provider: integration.ProviderISolar}, nil
+		return integration.Credentials{Provider: integration.ProviderISolar, IsActive: true}, nil
 	}
 }
 

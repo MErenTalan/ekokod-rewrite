@@ -115,7 +115,7 @@ func (s *Service) fetchCompanyAlarms(ctx context.Context, companyID uuid.UUID) {
 // storeCredentialFaults fetches one credential's account-wide faults and
 // keeps only those naming one of this company's plants.
 func (s *Service) storeCredentialFaults(ctx context.Context, sc store.Scope, credID uuid.UUID, plants []model.PowerPlant, now time.Time) error {
-	creds, err := s.d.Creds.Open(ctx, sc, credID)
+	creds, err := s.openActive(ctx, sc, credID)
 	if err != nil {
 		return err
 	}

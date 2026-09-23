@@ -105,6 +105,7 @@ var closedCodes = map[string]bool{
 	"smtp_not_configured": true, "delivery_failed": true,
 	// The iSolar sync's (R288).
 	"isolar_auth": true, "isolar_unavailable": true, "isolar_not_linked": true, "credential_missing": true,
+	"credential_inactive": true,
 }
 
 // payloadScope is the part of every watchable payload this service reads.

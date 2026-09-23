@@ -499,6 +499,15 @@ func TestGetSolarSyncScopedByPlant(t *testing.T) {
 	}
 }
 
+func TestGetSolarSyncInactiveCredentialCode(t *testing.T) {
+	t.Parallel()
+	id := job.SolarSyncTaskID(job.SolarSyncPayload{PlantID: plantA})
+	ops := &fakeOps{runs: map[string]model.JobRun{id: {CompanyID: &companyA, Status: "failed", Detail: json.RawMessage(`{"code":"credential_inactive"}`)}}}
+	v, err := solarService(t, emptyInspector(), ops).Get(t.Context(), scopeA(), id)
+	require.NoError(t, err)
+	require.Equal(t, "credential_inactive", v.ErrorCode)
+}
+
 func TestGetGoneSolarSyncFromRunWithClosedCode(t *testing.T) {
 	t.Parallel()
 	id := job.SolarSyncTaskID(job.SolarSyncPayload{PlantID: plantA})

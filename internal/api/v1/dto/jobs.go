@@ -16,5 +16,5 @@ type Job struct {
 	CompletedAt *time.Time `json:"completed_at,omitempty"`
 	// ErrorCode is R113's closed set for a failed bill computation, so the
 	// bills screen can print §7.10's sentence. Never free text (R237).
-	ErrorCode string `json:"error_code,omitempty" enum:"tariff_not_found,no_consumption_data,unresolved_anomaly,period_not_closed,ptf_data_missing,billing_parameters_missing,billing_parameters_invalid,report_building_not_found,report_not_ready,smtp_not_configured,delivery_failed,isolar_auth,isolar_unavailable,isolar_not_linked,credential_missing"`
+	ErrorCode string `json:"error_code,omitempty" enum:"tariff_not_found,no_consumption_data,unresolved_anomaly,period_not_closed,ptf_data_missing,billing_parameters_missing,billing_parameters_invalid,report_building_not_found,report_not_ready,smtp_not_configured,delivery_failed,isolar_auth,isolar_unavailable,isolar_not_linked,credential_missing,credential_inactive"`
 }

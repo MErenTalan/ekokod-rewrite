@@ -68,6 +68,7 @@ describe('PlantsPanel iSolar link (R281)', () => {
   const linkRoutes = {
     ...ROUTES,
     'GET /api/v1/integration-credentials': { items: [
+      { id: 'c-off', provider: 'isolar', subtype: 'CN', definition_id: 'd', has_secret: true, extra_keys: [], is_active: false, updated_at: '' },
       { id: 'c-iso', provider: 'isolar', subtype: 'EU', definition_id: 'd', has_secret: true, extra_keys: [], is_active: true, updated_at: '' },
       { id: 'c-osos', provider: 'osos', subtype: 'Baskent', definition_id: 'd2', has_secret: true, extra_keys: [], is_active: true, updated_at: '' },
     ] },
@@ -82,7 +83,7 @@ describe('PlantsPanel iSolar link (R281)', () => {
           : Response.json({ error: { code: 'validation_failed' } }, { status: 422 })),
   };
 
-  it('links a plant through the account list and only offers iSolar credentials', async () => {
+  it('links a plant through the account list and only offers active iSolar credentials', async () => {
     api = mockApi(linkRoutes);
     const r = renderWithProviders(
       <SessionProvider me={me('company_admin')}>

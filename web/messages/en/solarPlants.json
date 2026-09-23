@@ -17,7 +17,8 @@
     "isolarAuth": "The iSolarCloud authorisation is invalid; reconnect it on the Company tab.",
     "isolarUnavailable": "iSolarCloud is not answering; the next attempt will fetch it again.",
     "isolarNotLinked": "The plant is not linked to iSolarCloud.",
-    "credentialMissing": "The plant has no iSolarCloud credential; link it again."
+    "credentialMissing": "The plant has no iSolarCloud credential; link it again.",
+    "credentialInactive": "The plant's iSolarCloud credential is deactivated; activate it or link another."
   },
   "tabs": {
     "overview": "Overview",

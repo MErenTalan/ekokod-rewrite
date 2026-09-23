@@ -11,6 +11,7 @@ const TONE = { connected: 'success', error: 'danger', never_synced: 'neutral' } 
 const LABEL = { connected: 'connected', error: 'error', never_synced: 'neverSynced' } as const;
 export const SYNC_ERRORS = {
   isolar_auth: 'isolarAuth', isolar_unavailable: 'isolarUnavailable', isolar_not_linked: 'isolarNotLinked', credential_missing: 'credentialMissing',
+  credential_inactive: 'credentialInactive',
 } as const;
 
 /** §7.7's connection indicator (R282): the chip plus the closed error code's sentence. */

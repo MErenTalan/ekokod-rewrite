@@ -37,12 +37,24 @@ type AccountPlant struct {
 	LinkedPlantID *uuid.UUID
 }
 
-// openISolar opens a company iSolar credential; anything else is not_isolar,
-// including another company's id, so the answer never confirms it exists.
+// openISolar opens an active company iSolar credential; anything else is
+// not_isolar (R280), including another company's id, so the answer never
+// confirms it exists.
 func (s *Service) openISolar(ctx context.Context, sc store.Scope, credentialID uuid.UUID) (integration.Credentials, error) {
-	creds, err := s.d.Creds.Open(ctx, sc, credentialID)
-	if errors.Is(err, store.ErrNotFound) || (err == nil && creds.Provider != integration.ProviderISolar) {
+	creds, err := s.openActive(ctx, sc, credentialID)
+	var se *syncError
+	if errors.Is(err, store.ErrNotFound) || errors.As(err, &se) || (err == nil && creds.Provider != integration.ProviderISolar) {
 		return integration.Credentials{}, validation("credential_id", "not_isolar")
+	}
+	return creds, err
+}
+
+// openActive opens a credential and refuses one an operator deactivated,
+// before any network call and without retry (X-M3's ingest gate).
+func (s *Service) openActive(ctx context.Context, sc store.Scope, credentialID uuid.UUID) (integration.Credentials, error) {
+	creds, err := s.d.Creds.Open(ctx, sc, credentialID)
+	if err == nil && !creds.IsActive {
+		return integration.Credentials{}, &syncError{code: CodeCredentialInactive}
 	}
 	return creds, err
 }
