@@ -181,8 +181,7 @@ func (g Generator) Generate(ctx context.Context, p job.ReportGeneratePayload) er
 		return finish("success", 0, nil, map[string]any{"report_id": rp.ID})
 	}
 	code := ""
-	switch {
-	case errors.Is(genErr, store.ErrNotFound):
+	if errors.Is(genErr, store.ErrNotFound) {
 		code = "report_building_not_found"
 	}
 	text := secret.Redact(genErr.Error(), nil)

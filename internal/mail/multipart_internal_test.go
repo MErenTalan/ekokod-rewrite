@@ -2,6 +2,7 @@ package mail
 
 import (
 	"bytes"
+	"errors"
 	"encoding/base64"
 	"io"
 	"mime"
@@ -65,7 +66,7 @@ func parts(t *testing.T, raw []byte) (string, []part) {
 		mr := multipart.NewReader(r, boundary)
 		for {
 			p, err := mr.NextRawPart()
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				return
 			}
 			require.NoError(t, err)
