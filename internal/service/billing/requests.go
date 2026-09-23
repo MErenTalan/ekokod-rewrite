@@ -29,6 +29,13 @@ type Requests struct {
 	Tasks    job.TaskInspector
 	MaxRetry int
 	Location *time.Location
+	// Plants fills the dashboard's plant section (R290); nil leaves it unavailable.
+	Plants PlantSection
+}
+
+// PlantSection is the solar module's side of the dashboard.
+type PlantSection interface {
+	BillPlants(ctx context.Context, sc store.Scope, year, month int) (billing.DashboardPlants, error)
 }
 
 // ComputeRequest is POST /bills/compute.

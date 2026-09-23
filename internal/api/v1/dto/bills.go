@@ -170,8 +170,26 @@ type BillDashboardNetting struct {
 
 // BillDashboardPlants is R235: the section exists, its data source does not.
 type BillDashboardPlants struct {
-	Available bool   `json:"available" required:"true"`
-	Reason    string `json:"reason,omitempty"`
+	Available          bool                    `json:"available" required:"true"`
+	Reason             string                  `json:"reason,omitempty" enum:"plants_not_in_scope"`
+	Rows               []BillDashboardPlantRow `json:"rows" required:"true"`
+	TotalProductionKwh *Decimal                `json:"total_production_kwh"`
+	TotalInvoice       []MoneyAmount           `json:"total_invoice" required:"true"`
+}
+
+// BillDashboardPlantRow is one plant of the section (R290): the netting
+// analyzer's columns only when one is set; invoice_amount is the sale value.
+type BillDashboardPlantRow struct {
+	PlantID            uuid.UUID  `json:"plant_id" required:"true"`
+	PlantName          string     `json:"plant_name" required:"true"`
+	AnalyzerName       *string    `json:"analyzer_name"`
+	InstallationNumber *string    `json:"installation_number"`
+	ProductionKwh      *Decimal   `json:"production_kwh"`
+	ProductionPrice    *Decimal   `json:"production_price"`
+	Currency           *string    `json:"currency" enum:"TRY,USD,EUR"`
+	ConsumptionPrice   *Decimal   `json:"consumption_price"`
+	InvoiceAmount      *Decimal   `json:"invoice_amount"`
+	BillID             *uuid.UUID `json:"bill_id"`
 }
 
 // BillDashboard is GET /bills/dashboard.

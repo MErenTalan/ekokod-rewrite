@@ -104,13 +104,35 @@ func Render(d Document) ([]byte, error) {
 		pdf.CellFormat(0, 6, l.efficiency+": "+efficiency, "", 1, "L", false, 0, "")
 	}
 
-	// R235: the plant section of §7.10 has no data source before F9. Saying so
-	// is the house style for anything the data cannot answer (R165).
-	pdf.Ln(2)
-	pdf.SetFont("Go", "B", 10)
-	pdf.CellFormat(0, 6, l.plants, "", 1, "L", false, 0, "")
-	pdf.SetFont("Go", "", 9)
-	pdf.CellFormat(0, 6, l.plantsNote, "", 1, "L", false, 0, "")
+	// R290: the plant section, only when the reader may see plants.
+	if p := d.Result.Plants; p.Available {
+		opt := func(v *decimal.Decimal) string {
+			if v == nil {
+				return l.noData
+			}
+			return num(*v)
+		}
+		pdf.Ln(2)
+		pdf.SetFont("Go", "B", 10)
+		pdf.CellFormat(0, 6, l.plants, "", 1, "L", false, 0, "")
+		pdf.SetFont("Go", "", 9)
+		for _, r := range p.Rows {
+			sale := l.noData
+			if r.InvoiceAmount != nil && r.ProductionCurrency != nil {
+				sale = money(*r.InvoiceAmount) + " " + string(*r.ProductionCurrency)
+			}
+			line := fmt.Sprintf("%s — %s %s kWh · %s %s · %s %s", r.PlantName, l.production, opt(r.ProductionKwh), l.feedIn,
+				opt(r.ProductionPrice), l.sale, sale)
+			if r.InstallationNumber != nil {
+				line += " · " + *r.InstallationNumber
+			}
+			pdf.CellFormat(0, 6, line, "", 1, "L", false, 0, "")
+		}
+		pdf.CellFormat(0, 6, l.totalProduction+": "+opt(p.TotalProductionKwh)+" kWh", "", 1, "L", false, 0, "")
+		for _, m := range p.TotalInvoice {
+			pdf.CellFormat(0, 6, l.totalSale+": "+money(m.Amount)+" "+string(m.Currency), "", 1, "L", false, 0, "")
+		}
+	}
 
 	var buf bytes.Buffer
 	if err := pdf.Output(&buf); err != nil {

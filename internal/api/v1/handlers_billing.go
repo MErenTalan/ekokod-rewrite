@@ -348,7 +348,7 @@ func (h *Handlers) billPDF(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) billDashboard(w http.ResponseWriter, r *http.Request) {
 	serve(w, r, http.StatusOK, func(req dto.BillDashboardRequest) (any, error) {
-		res, err := h.Billing.Dashboard(r.Context(), mw.ScopeFrom(r), billingsvc.DashboardInput{Year: req.Year, Month: req.Month})
+		res, err := h.BillRequests.Dashboard(r.Context(), mw.ScopeFrom(r), billingsvc.DashboardInput{Year: req.Year, Month: req.Month})
 		if err != nil {
 			return nil, billingErr(err)
 		}
@@ -379,15 +379,13 @@ func (h *Handlers) billDashboardExport(w http.ResponseWriter, r *http.Request) {
 	writeFile(w, contentType, name, body)
 }
 
-// dashboardDTO maps the pure aggregate onto the wire. The plant section is
-// always unavailable: 01 §7.10 describes it, and nothing in the schema can
-// answer it before F9 (R235).
+// dashboardDTO maps the aggregate onto the wire, the plant section included (R290).
 func dashboardDTO(res domainbilling.DashboardResult, period string) dto.BillDashboard {
 	out := dto.BillDashboard{
 		Period:    period,
 		Buildings: make([]dto.BillDashboardBuilding, 0, len(res.Buildings)),
 		Netting:   make([]dto.BillDashboardNetting, 0, len(res.Netting)),
-		Plants:    dto.BillDashboardPlants{Available: false, Reason: "no_plant_production_source"},
+		Plants:    dashboardPlantsDTO(res.Plants),
 	}
 	for _, b := range res.Buildings {
 		building := dto.BillDashboardBuilding{
@@ -450,4 +448,23 @@ func (h *Handlers) billHourly(w http.ResponseWriter, r *http.Request) {
 			Kbk: dto.D(row.Kbk), UnitPrice: dto.D(row.UnitPrice), Cost: dto.D(row.Cost)}
 	}
 	kit.WriteJSON(w, http.StatusOK, out)
+}
+
+func dashboardPlantsDTO(p domainbilling.DashboardPlants) dto.BillDashboardPlants {
+	out := dto.BillDashboardPlants{Available: p.Available, Reason: p.Reason, Rows: make([]dto.BillDashboardPlantRow, len(p.Rows)),
+		TotalProductionKwh: dto.DP(p.TotalProductionKwh), TotalInvoice: make([]dto.MoneyAmount, len(p.TotalInvoice))}
+	for i, r := range p.Rows {
+		row := dto.BillDashboardPlantRow{PlantID: r.PlantID, PlantName: r.PlantName, AnalyzerName: r.AnalyzerName,
+			InstallationNumber: r.InstallationNumber, ProductionKwh: dto.DP(r.ProductionKwh), ProductionPrice: dto.DP(r.ProductionPrice),
+			ConsumptionPrice: dto.DP(r.ConsumptionPrice), InvoiceAmount: dto.DP(r.InvoiceAmount), BillID: r.BillID}
+		if r.ProductionCurrency != nil {
+			c := string(*r.ProductionCurrency)
+			row.Currency = &c
+		}
+		out.Rows[i] = row
+	}
+	for i, m := range p.TotalInvoice {
+		out.TotalInvoice[i] = dto.MoneyAmount{Currency: string(m.Currency), Amount: dto.D(m.Amount)}
+	}
+	return out
 }

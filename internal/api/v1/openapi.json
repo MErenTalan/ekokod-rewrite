@@ -1152,17 +1152,90 @@
         ],
         "type": "object"
       },
+      "BillDashboardPlantRow": {
+        "properties": {
+          "analyzer_name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "bill_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "consumption_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "currency": {
+            "enum": [
+              "TRY",
+              "USD",
+              "EUR"
+            ],
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "installation_number": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "invoice_amount": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "plant_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "plant_name": {
+            "type": "string"
+          },
+          "production_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "production_price": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "required": [
+          "plant_id",
+          "plant_name"
+        ],
+        "type": "object"
+      },
       "BillDashboardPlants": {
         "properties": {
           "available": {
             "type": "boolean"
           },
           "reason": {
+            "enum": [
+              "plants_not_in_scope"
+            ],
             "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/BillDashboardPlantRow"
+            },
+            "type": "array"
+          },
+          "total_invoice": {
+            "items": {
+              "$ref": "#/components/schemas/MoneyAmount"
+            },
+            "type": "array"
+          },
+          "total_production_kwh": {
+            "$ref": "#/components/schemas/Decimal"
           }
         },
         "required": [
-          "available"
+          "available",
+          "rows",
+          "total_invoice"
         ],
         "type": "object"
       },

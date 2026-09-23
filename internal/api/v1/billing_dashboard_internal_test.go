@@ -22,12 +22,26 @@ func dashboardFixture() domain.DashboardResult {
 	return domain.BuildDashboard([]domain.DashboardRow{row}, nil, nil)
 }
 
-func TestDashboardDTOAlwaysSaysThePlantSectionHasNoSource(t *testing.T) {
-	// R235: the section 01 §7.10 describes has no data source until F9, and
-	// the API says so rather than returning an empty table that reads as zero.
-	got := dashboardDTO(dashboardFixture(), "2026-08")
-	require.False(t, got.Plants.Available)
-	require.Equal(t, "no_plant_production_source", got.Plants.Reason)
+func TestDashboardDTOCarriesThePlantSection(t *testing.T) {
+	// R290 (supersedes R235): missing figures stay null, currencies stay apart.
+	res := dashboardFixture()
+	kwh, price, amount := decimal.RequireFromString("1200"), decimal.RequireFromString("1.8"), decimal.RequireFromString("2160.00")
+	try := model.CurrencyTRY
+	res.Plants = domain.DashboardPlants{Available: true, Rows: []domain.DashboardPlantRow{
+		{PlantID: uuid.New(), PlantName: "Konya GES", ProductionKwh: &kwh, ProductionPrice: &price, ProductionCurrency: &try, InvoiceAmount: &amount},
+		{PlantID: uuid.New(), PlantName: "Boş GES"},
+	}, TotalProductionKwh: &kwh, TotalInvoice: []domain.DashboardMoney{{Currency: model.CurrencyTRY, Amount: amount}}}
+	got := dashboardDTO(res, "2026-08")
+	require.True(t, got.Plants.Available)
+	require.Len(t, got.Plants.Rows, 2)
+	require.Equal(t, "2160", got.Plants.Rows[0].InvoiceAmount.String())
+	require.Nil(t, got.Plants.Rows[1].ProductionKwh)
+	require.Equal(t, "TRY", got.Plants.TotalInvoice[0].Currency)
+
+	out := dashboardDTO(domain.DashboardResult{Plants: domain.DashboardPlants{Reason: "plants_not_in_scope"}}, "2026-08")
+	require.False(t, out.Plants.Available)
+	require.Equal(t, "plants_not_in_scope", out.Plants.Reason)
+	require.NotNil(t, out.Plants.Rows, "an empty list, never null")
 }
 
 func TestDashboardDTOCarriesEveryColumnOf710(t *testing.T) {

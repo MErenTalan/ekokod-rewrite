@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/shopspring/decimal"
 	"github.com/xuri/excelize/v2"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/billing"
@@ -23,7 +24,10 @@ type labels struct {
 	efficiency, unavailable  string
 	netConsumption           string
 	netProduction            string
-	plants, plantsNote       string
+	plants                   string
+	plantColumns             []string
+	noData, totalProduction  string
+	totalSale                string
 }
 
 var catalogue = map[string]labels{
@@ -34,8 +38,10 @@ var catalogue = map[string]labels{
 		consumption: "Toplam tüketim (kWh)", production: "Toplam üretim (kWh)", net: "Net (kWh)", status: "Durum",
 		invoice: "Toplam fatura", efficiency: "Verimlilik (%)", unavailable: "Hesaplanamadı",
 		netConsumption: "Net tüketim", netProduction: "Net üretim",
-		plants:     "GES santralleri",
-		plantsNote: "Santral üretimi için veri kaynağı henüz yok; santral satırları F9 ile gelecek.",
+		plants: "GES santralleri",
+		plantColumns: []string{"Santral", "Analizör", "Tesisat no", "Üretim (kWh)", "Tüketim fiyatı (/kWh)",
+			"Üretim fiyatı (/kWh)", "Satış tutarı"},
+		noData: "veri yok", totalProduction: "Toplam üretim (kWh)", totalSale: "Toplam satış",
 	},
 	"en": {
 		billsSheet: "Invoices", summarySheet: "Summary",
@@ -44,8 +50,10 @@ var catalogue = map[string]labels{
 		consumption: "Total consumption (kWh)", production: "Total production (kWh)", net: "Net (kWh)", status: "Status",
 		invoice: "Total invoice", efficiency: "Efficiency (%)", unavailable: "Not available",
 		netConsumption: "Net consumption", netProduction: "Net production",
-		plants:     "Solar plants (GES)",
-		plantsNote: "No data source for plant production yet; plant rows arrive with F9.",
+		plants: "Solar plants (GES)",
+		plantColumns: []string{"Plant", "Analyzer", "Installation no", "Production (kWh)", "Consumption price (/kWh)",
+			"Production price (/kWh)", "Sale amount"},
+		noData: "no data", totalProduction: "Total production (kWh)", totalSale: "Total sale",
 	},
 }
 
@@ -126,9 +134,8 @@ func writeSummary(f *excelize.File, l labels, res billing.DashboardResult, perio
 			[]any{},
 		)
 	}
-	// R235: the section 01 §7.10 describes has no data source before F9. The
-	// export names it and says so rather than leaving a silent hole.
-	rows = append(rows, []any{l.plants, l.plantsNote})
+	// R290: the plant section, only when the caller may see plants.
+	rows = append(rows, plantRows(res.Plants, l)...)
 	return write(f, l.summarySheet, rows)
 }
 
@@ -151,4 +158,36 @@ func write(f *excelize.File, sheet string, rows [][]any) error {
 		}
 	}
 	return nil
+}
+
+func plantRows(p billing.DashboardPlants, l labels) [][]any {
+	if !p.Available {
+		return nil
+	}
+	orDash := func(v *string) string {
+		if v == nil {
+			return "—"
+		}
+		return *v
+	}
+	orNone := func(v *decimal.Decimal) string {
+		if v == nil {
+			return l.noData
+		}
+		return v.String()
+	}
+	rows := [][]any{{l.plants}, toAny(l.plantColumns)}
+	for _, r := range p.Rows {
+		sale := l.noData
+		if r.InvoiceAmount != nil && r.ProductionCurrency != nil {
+			sale = r.InvoiceAmount.String() + " " + string(*r.ProductionCurrency)
+		}
+		rows = append(rows, []any{r.PlantName, orDash(r.AnalyzerName), orDash(r.InstallationNumber), orNone(r.ProductionKwh),
+			orNone(r.ConsumptionPrice), orNone(r.ProductionPrice), sale})
+	}
+	rows = append(rows, []any{l.totalProduction, orNone(p.TotalProductionKwh)})
+	for _, m := range p.TotalInvoice {
+		rows = append(rows, []any{l.totalSale, m.Amount.String() + " " + string(m.Currency)})
+	}
+	return rows
 }

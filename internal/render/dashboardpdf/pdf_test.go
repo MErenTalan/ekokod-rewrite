@@ -98,3 +98,18 @@ func TestRenderGoldenHash(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, strings.TrimSpace(string(want)), got)
 }
+
+// R290: the plant rows are drawn when the section is available.
+func TestPlantRowsArePrinted(t *testing.T) {
+	without, err := dashboardpdf.Render(document())
+	require.NoError(t, err)
+	doc := document()
+	kwh, price, amount := d("1200"), d("1.8"), d("2160.00")
+	try := model.CurrencyTRY
+	doc.Result.Plants = billing.DashboardPlants{Available: true, Rows: []billing.DashboardPlantRow{
+		{PlantID: uuid.New(), PlantName: "Konya GES", ProductionKwh: &kwh, ProductionPrice: &price, ProductionCurrency: &try, InvoiceAmount: &amount},
+	}, TotalProductionKwh: &kwh, TotalInvoice: []billing.DashboardMoney{{Currency: model.CurrencyTRY, Amount: amount}}}
+	with, err := dashboardpdf.Render(doc)
+	require.NoError(t, err)
+	require.Greater(t, len(with), len(without))
+}

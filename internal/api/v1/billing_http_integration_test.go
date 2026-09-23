@@ -216,9 +216,8 @@ func TestBillDashboardTotalsAreTheSumOfItsRows(t *testing.T) {
 	require.Len(t, body.Netting, 1)
 	require.Equal(t, total.String(), body.Netting[0].TotalInvoice.String())
 	require.Equal(t, "net_consumption", body.Netting[0].NetStatus)
-	// R235: the section exists in §7.10 and has no data source before F9.
-	require.False(t, body.Plants.Available)
-	require.Equal(t, "no_plant_production_source", body.Plants.Reason)
+	// R290 (supersedes R235): a company admin gets the plant section.
+	require.True(t, body.Plants.Available)
 }
 
 func TestBillDashboardIsScopedLikeEveryOtherRead(t *testing.T) {
@@ -231,10 +230,36 @@ func TestBillDashboardIsScopedLikeEveryOtherRead(t *testing.T) {
 	h.as(seed.E2EBuildingAdminEmail).do(http.MethodGet, "/bills/dashboard?year=2026&month=8", nil).json(t, &body)
 	require.Len(t, body.Buildings, 1, "a building admin sees only their own building")
 	require.Equal(t, h.fx.BuildingA1, body.Buildings[0].BuildingID)
+	require.False(t, body.Plants.Available, "R290: plants are company-level")
+	require.Equal(t, "plants_not_in_scope", body.Plants.Reason)
+	require.Empty(t, body.Plants.Rows)
 
 	var foreign dto.BillDashboard
+	h.plantFor(h.fx.CompanyA, "A GES", "PS-DASH-A")
 	h.as(seed.E2ECompanyBAdminEmail).do(http.MethodGet, "/bills/dashboard?year=2026&month=8", nil).json(t, &foreign)
 	require.Empty(t, foreign.Buildings, "another company's invoices are not visible")
+	require.Empty(t, foreign.Plants.Rows, "nor its plants")
+}
+
+// R290: a plant row over the wire, with production, feed-in and sale value.
+func TestBillDashboardPlantRowsOverTheWire(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	plant := h.plantFor(h.fx.CompanyA, "A GES", "PS-DASH-A")
+	_, err := postgres.NewSolarTariffRepository(h.pool).Create(t.Context(), store.SystemScope(h.fx.CompanyA), model.SolarTariff{
+		CompanyID: h.fx.CompanyA, PlantID: plant, EffectiveFrom: time.Date(2026, 1, 1, 0, 0, 0, 0, ist),
+		FeedInTariff: decimal.RequireFromString("2.0"), Currency: model.CurrencyTRY})
+	require.NoError(t, err)
+	var body dto.BillDashboard
+	h.as(seed.E2ECompanyAdminEmail).do(http.MethodGet, "/bills/dashboard?year=2026&month=9", nil).json(t, &body)
+	require.Len(t, body.Plants.Rows, 1)
+	row := body.Plants.Rows[0]
+	require.Equal(t, "A GES", row.PlantName)
+	require.Nil(t, row.AnalyzerName)
+	require.Equal(t, "12.5", row.ProductionKwh.String())
+	require.Equal(t, "25", row.InvoiceAmount.String())
+	require.Equal(t, "TRY", *row.Currency)
+	require.Equal(t, "25", body.Plants.TotalInvoice[0].Amount.String())
 }
 
 func TestBillDashboardShowsABuildingInvoiceThatDivergesFromItsRows(t *testing.T) {

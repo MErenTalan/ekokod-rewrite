@@ -261,6 +261,8 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		Enqueuer: enqueuer, Inspector: taskInspector, MaxRetry: cfg.Worker.MaxRetries,
 	})
 
+	billRequests.Plants = solarService
+
 	jobService, err := jobs.New(jobs.Deps{Inspector: inspector, Analyzers: postgres.NewAnalyzerRepository(pool),
 		Buildings: postgres.NewBuildingRepository(pool), Ops: postgres.NewOpsRepository(pool), Reports: postgres.NewReportRepository(pool),
 		Plants: postgres.NewPlantRepository(pool)})

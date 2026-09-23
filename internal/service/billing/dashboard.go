@@ -134,10 +134,21 @@ func (l dashboardLabels) row(b model.Bill) domain.DashboardRow {
 	return row
 }
 
+// Dashboard is Service.Dashboard plus the plant section, the one aggregate the
+// screen and both exports read (R239, R290).
+func (q Requests) Dashboard(ctx context.Context, sc store.Scope, in DashboardInput) (domain.DashboardResult, error) {
+	res, err := q.Service.Dashboard(ctx, sc, in)
+	if err != nil || q.Plants == nil {
+		return res, err
+	}
+	res.Plants, err = q.Plants.BillPlants(ctx, sc, in.Year, in.Month)
+	return res, err
+}
+
 // DashboardExport renders the same aggregate the screen shows (R239), so the
 // file and the page cannot disagree. It returns the body and the file name.
 func (q Requests) DashboardExport(ctx context.Context, sc store.Scope, in DashboardInput, format, locale string) ([]byte, string, error) {
-	res, err := q.Service.Dashboard(ctx, sc, in)
+	res, err := q.Dashboard(ctx, sc, in)
 	if err != nil {
 		return nil, "", err
 	}

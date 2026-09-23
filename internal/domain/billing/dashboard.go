@@ -90,6 +90,40 @@ const (
 type DashboardResult struct {
 	Buildings []DashboardBuilding
 	Netting   []DashboardNetting
+	// Plants is R290's section, filled by the solar module; the zero value is
+	// "not available" with no reason.
+	Plants DashboardPlants
+}
+
+// DashboardPlantRow is one plant of the bills dashboard (R290). Analyzer and
+// bill fields come from the optional netting analyzer; missing is nil, never zero.
+type DashboardPlantRow struct {
+	PlantID            uuid.UUID
+	PlantName          string
+	AnalyzerName       *string
+	InstallationNumber *string
+	ProductionKwh      *decimal.Decimal
+	ProductionPrice    *decimal.Decimal
+	ProductionCurrency *model.CurrencyCode
+	ConsumptionPrice   *decimal.Decimal
+	// InvoiceAmount is the sale value: production × feed-in.
+	InvoiceAmount *decimal.Decimal
+	BillID        *uuid.UUID
+}
+
+// DashboardMoney is one currency's amount; currencies never add (R253).
+type DashboardMoney struct {
+	Currency model.CurrencyCode
+	Amount   decimal.Decimal
+}
+
+// DashboardPlants is the plant section and its totals.
+type DashboardPlants struct {
+	Available          bool
+	Reason             string
+	Rows               []DashboardPlantRow
+	TotalProductionKwh *decimal.Decimal
+	TotalInvoice       []DashboardMoney
 }
 
 // BuildDashboard groups the period's analyzer rows by building, sums them, and

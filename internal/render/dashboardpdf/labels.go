@@ -4,7 +4,8 @@ type labels struct {
 	title, period, subtotal, buildingBill, divergence string
 	netting, consumption, production, net, invoice    string
 	netConsumption, netProduction                     string
-	efficiency, unavailable, plants, plantsNote       string
+	efficiency, unavailable, plants, noData           string
+	totalProduction, totalSale, sale, feedIn          string
 	columns                                           []string
 }
 
@@ -15,8 +16,8 @@ var catalogue = map[string]labels{
 		netting:    "Netleşme", consumption: "tüketim", production: "üretim", net: "net", invoice: "fatura",
 		netConsumption: "net tüketim", netProduction: "net üretim",
 		efficiency: "Verimlilik", unavailable: "hesaplanamadı", plants: "GES santralleri",
-		plantsNote: "Santral üretimi için veri kaynağı henüz yok; santral satırları F9 ile gelecek.",
-		columns:    []string{"Dönem", "Bina", "Sayaç", "Tesisat no", "ETSO", "Tüketim (kWh)", "Üretim (kWh)", "Birim fiyat", "Fatura"},
+		noData: "veri yok", totalProduction: "Toplam üretim", totalSale: "Toplam satış", sale: "satış", feedIn: "üretim fiyatı",
+		columns: []string{"Dönem", "Bina", "Sayaç", "Tesisat no", "ETSO", "Tüketim (kWh)", "Üretim (kWh)", "Birim fiyat", "Fatura"},
 	},
 	"en": {
 		title: "Invoice Dashboard", period: "Period", subtotal: "Subtotal", buildingBill: "Building invoice",
@@ -24,7 +25,7 @@ var catalogue = map[string]labels{
 		netting:    "Netting", consumption: "consumption", production: "production", net: "net", invoice: "invoice",
 		netConsumption: "net consumption", netProduction: "net production",
 		efficiency: "Efficiency", unavailable: "not available", plants: "Solar plants (GES)",
-		plantsNote: "No data source for plant production yet; plant rows arrive with F9.",
-		columns:    []string{"Period", "Building", "Meter", "Installation no", "ETSO", "Consumption (kWh)", "Production (kWh)", "Unit price", "Invoice"},
+		noData: "no data", totalProduction: "Total production", totalSale: "Total sale", sale: "sale", feedIn: "production price",
+		columns: []string{"Period", "Building", "Meter", "Installation no", "ETSO", "Consumption (kWh)", "Production (kWh)", "Unit price", "Invoice"},
 	},
 }

@@ -91,20 +91,45 @@ func TestWorkbookCarriesASubtotalPerBuilding(t *testing.T) {
 	require.Equal(t, []string{"375.75", "500"}, subtotals)
 }
 
-func TestSummarySheetSaysThePlantSectionHasNoSourceYet(t *testing.T) {
-	// The file must not be quietly missing a section the screen shows (R235).
-	body, err := dashboardxlsx.Render(result(), "2026-08", "tr")
+func withPlants(r billing.DashboardResult) billing.DashboardResult {
+	kwh, price, amount, cprice := d("1200"), d("1.8"), d("2160.00"), d("3.12")
+	name, number := "Sayaç 1", "40001"
+	try := model.CurrencyTRY
+	total := d("1200")
+	r.Plants = billing.DashboardPlants{Available: true, Rows: []billing.DashboardPlantRow{
+		{PlantID: uuid.New(), PlantName: "Konya GES", AnalyzerName: &name, InstallationNumber: &number, ProductionKwh: &kwh,
+			ProductionPrice: &price, ProductionCurrency: &try, ConsumptionPrice: &cprice, InvoiceAmount: &amount},
+		{PlantID: uuid.New(), PlantName: "Veri Yok GES"},
+	}, TotalProductionKwh: &total, TotalInvoice: []billing.DashboardMoney{{Currency: model.CurrencyTRY, Amount: amount}}}
+	return r
+}
+
+func summary(t *testing.T, r billing.DashboardResult) string {
+	t.Helper()
+	body, err := dashboardxlsx.Render(r, "2026-08", "tr")
 	require.NoError(t, err)
 	rows, err := open(t, body).GetRows("Özet")
 	require.NoError(t, err)
-
 	var flat []string
-	for _, r := range rows {
-		flat = append(flat, strings.Join(r, " "))
+	for _, row := range rows {
+		flat = append(flat, strings.Join(row, " | "))
 	}
-	joined := strings.Join(flat, "\n")
+	return strings.Join(flat, "\n")
+}
+
+// R290: the file lists the plant rows the screen shows, with their totals.
+func TestSummarySheetListsPlantRows(t *testing.T) {
+	joined := summary(t, withPlants(result()))
 	require.Contains(t, joined, "875.75", "the netting total belongs in the summary")
-	require.Contains(t, joined, "GES", "the plant section is named even though it has no data")
+	require.Contains(t, joined, "Konya GES | Sayaç 1 | 40001 | 1200 | 3.12 | 1.8 | 2160 TRY")
+	require.Contains(t, joined, "Veri Yok GES | — | — | veri yok", "missing is not zero")
+	require.Contains(t, joined, "Toplam üretim (kWh) | 1200")
+}
+
+func TestSummaryOmitsPlantsOutOfScope(t *testing.T) {
+	r := result()
+	r.Plants = billing.DashboardPlants{Reason: "plants_not_in_scope"}
+	require.NotContains(t, summary(t, r), "GES")
 }
 
 func TestEveryDataRowCarriesTheSameColumnCount(t *testing.T) {

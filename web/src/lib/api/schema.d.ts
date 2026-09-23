@@ -2082,9 +2082,26 @@ export interface components {
             total_invoice: components["schemas"]["Decimal"];
             total_production: components["schemas"]["Decimal"];
         };
+        BillDashboardPlantRow: {
+            analyzer_name?: null | string;
+            bill_id?: components["schemas"]["UuidUUID"];
+            consumption_price?: components["schemas"]["Decimal"];
+            /** @enum {null|string} */
+            currency?: "TRY" | "USD" | "EUR" | null;
+            installation_number?: null | string;
+            invoice_amount?: components["schemas"]["Decimal"];
+            plant_id: components["schemas"]["UuidUUID"];
+            plant_name: string;
+            production_kwh?: components["schemas"]["Decimal"];
+            production_price?: components["schemas"]["Decimal"];
+        };
         BillDashboardPlants: {
             available: boolean;
-            reason?: string;
+            /** @enum {string} */
+            reason?: "plants_not_in_scope";
+            rows: components["schemas"]["BillDashboardPlantRow"][];
+            total_invoice: components["schemas"]["MoneyAmount"][];
+            total_production_kwh?: components["schemas"]["Decimal"];
         };
         BillDashboardRow: {
             analyzer_id?: components["schemas"]["UuidUUID"];
