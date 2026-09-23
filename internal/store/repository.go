@@ -1803,6 +1803,18 @@ type BillableBuilding struct {
 	CutoffDay             int
 }
 
+// CompanyPlant names one plant and its company.
+type CompanyPlant struct {
+	CompanyID, PlantID uuid.UUID
+}
+
+// AdminSolarRepository is the iSolar ticks' cross-tenant discovery (R288).
+type AdminSolarRepository interface {
+	// LinkedPlants is every live iSolar-linked plant of a live company,
+	// ordered by (company, plant).
+	LinkedPlants(ctx context.Context) ([]CompanyPlant, error)
+}
+
 // AdminBillingRepository is the billing dispatcher's cross-tenant discovery.
 type AdminBillingRepository interface {
 	// BillableBuildings is every non-deleted building of a non-deleted company

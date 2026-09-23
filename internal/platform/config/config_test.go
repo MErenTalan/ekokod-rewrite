@@ -373,3 +373,16 @@ func TestSessionLifetimeDefaultsAndOrdering(t *testing.T) {
 	_, err = config.Load(lookupFrom(env))
 	require.ErrorContains(t, err, "EKOKOD_REFRESH_TOKEN_REMEMBER_TTL")
 }
+
+// R288: the two iSolar ticks default to every 15 minutes and hourly at :10.
+func TestISolarScheduleDefaults(t *testing.T) {
+	cfg, err := config.Load(lookupFrom(valid()))
+	require.NoError(t, err)
+	require.Equal(t, "*/15 * * * *", cfg.Schedule.ISolarSync)
+	require.Equal(t, "10 * * * *", cfg.Schedule.ISolarAlarms)
+
+	env := valid()
+	env["EKOKOD_SCHEDULE_ISOLAR_SYNC"] = "not a cron"
+	_, err = config.Load(lookupFrom(env))
+	require.ErrorContains(t, err, "EKOKOD_SCHEDULE_ISOLAR_SYNC")
+}

@@ -165,3 +165,16 @@ func TestTriggerableIncludesReportTicks(t *testing.T) {
 	require.Equal(t, job.TypeReportDispatchMonthly, enq.tasks[0].Type())
 	require.Equal(t, job.TypeReportDispatchYearly, enq.tasks[1].Type())
 }
+
+// R288: both iSolar ticks are operator-triggerable.
+func TestTriggerableIncludesIsolarTicks(t *testing.T) {
+	require.Contains(t, ops.Triggerable, job.TypeSolarDispatchSync)
+	require.Contains(t, ops.Triggerable, job.TypeSolarFetchAlarms)
+	svc, enq, _ := newService(t)
+	for _, kind := range []string{job.TypeSolarDispatchSync, job.TypeSolarFetchAlarms} {
+		_, err := svc.Trigger(context.Background(), companyScope, kind)
+		require.NoError(t, err)
+	}
+	require.Equal(t, job.TypeSolarDispatchSync, enq.tasks[0].Type())
+	require.Equal(t, job.TypeSolarFetchAlarms, enq.tasks[1].Type())
+}

@@ -142,6 +142,9 @@ type Schedule struct {
 	ReportsYearly  string
 	// Demo extends the synthetic demo company's readings (R186).
 	Demo string
+	// ISolarSync and ISolarAlarms are the iSolar ticks (R288).
+	ISolarSync   string
+	ISolarAlarms string
 }
 
 // Storage configures where and how uploaded files are stored.

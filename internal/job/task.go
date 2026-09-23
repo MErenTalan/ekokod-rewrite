@@ -63,6 +63,9 @@ type Handlers struct {
 	ReportDispatch ReportDispatcher
 	ReportGenerate ReportGenerator
 	ReportDeliver  ReportDeliverer
+
+	// Solar serves the iSolar sync and fault jobs (R288).
+	Solar SolarJobs
 }
 
 // Register attaches every handler to the mux. TypeNoop is always
@@ -113,6 +116,11 @@ func Register(mux *asynq.ServeMux, h *Handlers) {
 	}
 	if h.AlarmNotify != nil {
 		mux.HandleFunc(TypeAlarmNotify, h.handleAlarmNotify)
+	}
+	if h.Solar != nil {
+		mux.HandleFunc(TypeSolarDispatchSync, h.handleSolarDispatch)
+		mux.HandleFunc(TypeSolarSyncPlant, h.handleSolarSync)
+		mux.HandleFunc(TypeSolarFetchAlarms, h.handleSolarAlarms)
 	}
 	if h.ReportDispatch != nil {
 		mux.HandleFunc(TypeReportDispatchMonthly, h.handleReportDispatchMonthly)

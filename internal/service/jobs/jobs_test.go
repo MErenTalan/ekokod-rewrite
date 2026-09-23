@@ -455,3 +455,61 @@ func TestGetReportCodesAreClosed(t *testing.T) {
 		require.Equal(t, want, v.ErrorCode, detail)
 	}
 }
+
+type fakePlants struct {
+	store.PlantRepository
+	visible map[uuid.UUID]bool
+}
+
+func (f fakePlants) Get(_ context.Context, _ store.Scope, id uuid.UUID) (model.PowerPlant, error) {
+	if f.visible[id] {
+		return model.PowerPlant{ID: id}, nil
+	}
+	return model.PowerPlant{}, store.ErrNotFound
+}
+
+var plantA = uuid.MustParse("88888888-8888-8888-8888-888888888888")
+
+func solarService(t *testing.T, insp *fakeInspector, ops *fakeOps) *jobs.Service {
+	t.Helper()
+	s, err := jobs.New(jobs.Deps{Inspector: insp, Analyzers: fakeAnalyzers{}, Ops: ops,
+		Plants: fakePlants{visible: map[uuid.UUID]bool{plantA: true}}})
+	require.NoError(t, err)
+	return s
+}
+
+// R288: a plant sync is watchable by the company's plant roles only.
+func TestGetSolarSyncScopedByPlant(t *testing.T) {
+	t.Parallel()
+	buildingOnly := store.Scope{CompanyID: companyA, BuildingIDs: []uuid.UUID{buildingA}}
+	for _, c := range []struct {
+		plant uuid.UUID
+		scope store.Scope
+		ok    bool
+	}{{plantA, scopeA(), true}, {uuid.New(), scopeA(), false}, {plantA, buildingOnly, false}} {
+		p := job.SolarSyncPayload{CompanyID: companyA, PlantID: c.plant}
+		id := job.SolarSyncTaskID(p)
+		insp := &fakeInspector{tasks: map[string]map[string]*asynq.TaskInfo{job.QueueDefault: {id: taskInfo(id, job.QueueDefault, job.TypeSolarSyncPlant, asynq.TaskStateActive, p)}}}
+		_, err := solarService(t, insp, &fakeOps{}).Get(t.Context(), c.scope, id)
+		if c.ok {
+			require.NoError(t, err)
+		} else {
+			require.ErrorIs(t, err, store.ErrNotFound)
+		}
+	}
+}
+
+func TestGetGoneSolarSyncFromRunWithClosedCode(t *testing.T) {
+	t.Parallel()
+	id := job.SolarSyncTaskID(job.SolarSyncPayload{PlantID: plantA})
+	ops := &fakeOps{runs: map[string]model.JobRun{id: {CompanyID: &companyA, Status: "failed", Detail: json.RawMessage(`{"code":"isolar_auth"}`)}}}
+	v, err := solarService(t, emptyInspector(), ops).Get(t.Context(), scopeA(), id)
+	require.NoError(t, err)
+	require.Equal(t, jobs.Failed, v.Status)
+	require.Equal(t, "isolar_auth", v.ErrorCode)
+
+	hidden := job.SolarSyncTaskID(job.SolarSyncPayload{PlantID: uuid.New()})
+	ops.runs[hidden] = model.JobRun{CompanyID: &companyA, Status: "success"}
+	_, err = solarService(t, emptyInspector(), ops).Get(t.Context(), scopeA(), hidden)
+	require.ErrorIs(t, err, store.ErrNotFound)
+}

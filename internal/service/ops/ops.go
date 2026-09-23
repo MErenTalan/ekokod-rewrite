@@ -40,6 +40,9 @@ var Triggerable = []string{
 	// R268: the report ticks, so an operator can re-run a missed month or year.
 	job.TypeReportDispatchMonthly,
 	job.TypeReportDispatchYearly,
+	// R288: the iSolar ticks.
+	job.TypeSolarDispatchSync,
+	job.TypeSolarFetchAlarms,
 }
 
 // TaskEnqueuer is the job client seam.
@@ -130,6 +133,10 @@ func (s *Service) taskFor(sc store.Scope, jobType string) (*asynq.Task, error) {
 		return job.NewReportDispatchTask("monthly", opts)
 	case job.TypeReportDispatchYearly:
 		return job.NewReportDispatchTask("yearly", opts)
+	case job.TypeSolarDispatchSync:
+		return job.NewSolarDispatchTask(opts)
+	case job.TypeSolarFetchAlarms:
+		return job.NewSolarAlarmsTask(opts)
 	}
 	// Unreachable: Trigger checked the allow-list first. Refusing rather than
 	// falling through keeps a new list entry from silently enqueuing nothing.

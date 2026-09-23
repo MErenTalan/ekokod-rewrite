@@ -83,14 +83,15 @@ func TestSchedulerEntriesIncludeIngestionAndPrices(t *testing.T) {
 	cfg := &config.Config{
 		Timezone: time.UTC,
 		Schedule: config.Schedule{Ingestion: "0 3 * * *", EPIAS: "0 14 * * *", Billing: "0 6 * * *",
-			Demo: "15 * * * *", Alarms: "0 * * * *", ReportsMonthly: "0 6 2 * *", ReportsYearly: "0 7 3 1 *"},
+			Demo: "15 * * * *", Alarms: "0 * * * *", ReportsMonthly: "0 6 2 * *", ReportsYearly: "0 7 3 1 *",
+			ISolarSync: "*/15 * * * *", ISolarAlarms: "10 * * * *"},
 		Worker: config.Worker{MaxRetries: 5},
 	}
 	s := &Scheduler{cfg: cfg, log: slog.New(slog.DiscardHandler)}
 
 	entries, err := s.entries()
 	require.NoError(t, err)
-	require.Len(t, entries, 8)
+	require.Len(t, entries, 10)
 
 	require.Equal(t, "@every 1h", entries[0].Cron)
 	require.Equal(t, job.TypeNoop, entries[0].Task.Type())
@@ -115,4 +116,10 @@ func TestSchedulerEntriesIncludeIngestionAndPrices(t *testing.T) {
 	require.Equal(t, job.TypeReportDispatchMonthly, entries[6].Task.Type())
 	require.Equal(t, cfg.Schedule.ReportsYearly, entries[7].Cron)
 	require.Equal(t, job.TypeReportDispatchYearly, entries[7].Task.Type())
+
+	// F9 R288: the two iSolar ticks.
+	require.Equal(t, cfg.Schedule.ISolarSync, entries[8].Cron)
+	require.Equal(t, job.TypeSolarDispatchSync, entries[8].Task.Type())
+	require.Equal(t, cfg.Schedule.ISolarAlarms, entries[9].Cron)
+	require.Equal(t, job.TypeSolarFetchAlarms, entries[9].Task.Type())
 }

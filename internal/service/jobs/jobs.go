@@ -58,6 +58,8 @@ type Deps struct {
 	Ops store.OpsRepository
 	// Reports resolves the report a delivery sends (R267).
 	Reports store.ReportRepository
+	// Plants resolves a plant sync's plant (R288).
+	Plants store.PlantRepository
 	// Queues are searched in order; default: critical, default, low.
 	Queues []string
 }
@@ -88,6 +90,8 @@ var watchable = map[string]bool{
 	// R267: the reports screen watches generation and delivery.
 	job.TypeReportGenerate: true,
 	job.TypeReportDeliver:  true,
+	// R288: the solar screen's "update data" watches its plant sync.
+	job.TypeSolarSyncPlant: true,
 }
 
 // billingCodes is R113's closed set. A code outside it is not repeated to a
@@ -99,6 +103,8 @@ var closedCodes = map[string]bool{
 	// The reports' own (R266, R267).
 	"report_building_not_found": true, "report_not_ready": true,
 	"smtp_not_configured": true, "delivery_failed": true,
+	// The iSolar sync's (R288).
+	"isolar_auth": true, "isolar_unavailable": true, "isolar_not_linked": true, "credential_missing": true,
 }
 
 // payloadScope is the part of every watchable payload this service reads.
@@ -171,6 +177,10 @@ func runTaskID(info *asynq.TaskInfo) (string, bool) {
 		var p job.ReportDeliverPayload
 		err := json.Unmarshal(info.Payload, &p)
 		return job.ReportDeliverTaskID(p), err == nil
+	case job.TypeSolarSyncPlant:
+		var p job.SolarSyncPayload
+		err := json.Unmarshal(info.Payload, &p)
+		return job.SolarSyncTaskID(p), err == nil
 	}
 	return "", false
 }
@@ -196,6 +206,12 @@ func (s *Service) visible(ctx context.Context, sc store.Scope, info *asynq.TaskI
 			return store.ErrNotFound
 		}
 		return s.reportVisible(ctx, sc, p.ReportID)
+	case job.TypeSolarSyncPlant:
+		var p job.SolarSyncPayload
+		if err := json.Unmarshal(info.Payload, &p); err != nil || p.CompanyID != sc.CompanyID {
+			return store.ErrNotFound
+		}
+		return s.plantVisible(ctx, sc, p.PlantID)
 	}
 	var p payloadScope
 	if err := json.Unmarshal(info.Payload, &p); err != nil || p.CompanyID != sc.CompanyID {
@@ -220,6 +236,15 @@ func (s *Service) buildingVisible(ctx context.Context, sc store.Scope, id uuid.U
 		return store.ErrNotFound
 	}
 	_, err := s.d.Buildings.Get(ctx, sc, id)
+	return err
+}
+
+// plantVisible: plants are company-level, so a building-scoped caller never sees one.
+func (s *Service) plantVisible(ctx context.Context, sc store.Scope, id uuid.UUID) error {
+	if s.d.Plants == nil || !sc.AllBuildings {
+		return store.ErrNotFound
+	}
+	_, err := s.d.Plants.Get(ctx, sc, id)
 	return err
 }
 
@@ -318,6 +343,14 @@ var goneVisible = map[string]func(s *Service, ctx context.Context, sc store.Scop
 			return "", store.ErrNotFound
 		}
 		return job.TypeReportDeliver, s.reportVisible(ctx, sc, report)
+	},
+	// isolar.sync_plant:<plant>:<backfill_days>
+	job.TypeSolarSyncPlant: func(s *Service, ctx context.Context, sc store.Scope, parts []string) (string, error) {
+		plant, err := uuid.Parse(partAt(parts, 1, 3))
+		if err != nil {
+			return "", store.ErrNotFound
+		}
+		return job.TypeSolarSyncPlant, s.plantVisible(ctx, sc, plant)
 	},
 }
 

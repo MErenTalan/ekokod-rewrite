@@ -83,6 +83,14 @@ func (s *Scheduler) entries() ([]Entry, error) {
 	if err != nil {
 		return nil, err
 	}
+	solarSync, err := job.NewSolarDispatchTask(retryOpts)
+	if err != nil {
+		return nil, err
+	}
+	solarAlarms, err := job.NewSolarAlarmsTask(retryOpts)
+	if err != nil {
+		return nil, err
+	}
 	return []Entry{
 		{Cron: "@every 1h", Task: noop},
 		{Cron: s.cfg.Schedule.Ingestion, Task: syncDispatch},
@@ -92,6 +100,8 @@ func (s *Scheduler) entries() ([]Entry, error) {
 		{Cron: s.cfg.Schedule.Alarms, Task: alarmDispatch},
 		{Cron: s.cfg.Schedule.ReportsMonthly, Task: reportsMonthly},
 		{Cron: s.cfg.Schedule.ReportsYearly, Task: reportsYearly},
+		{Cron: s.cfg.Schedule.ISolarSync, Task: solarSync},
+		{Cron: s.cfg.Schedule.ISolarAlarms, Task: solarAlarms},
 	}, nil
 }
 
