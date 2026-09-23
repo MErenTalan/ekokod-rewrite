@@ -62,6 +62,15 @@ describe('navFor', () => {
     expect(leafIds(navFor(['nav.core']))).not.toContain('messages');
   });
 
+  // R320: the carbon module lives at /ekorm/carbon-footprint behind carbon.read.
+  it('points the carbon leaf at the module and gates it (R320)', () => {
+    const leaves = navigation.flatMap((e) => (isGroup(e) ? e.children : [e]));
+    const carbon = leaves.find((l) => l.id === 'carbon');
+    expect(carbon?.href).toBe('/ekorm/carbon-footprint');
+    expect(carbon?.permission).toBe('carbon.read');
+    expect(leafIds(navFor(['nav.core']))).not.toContain('carbon');
+  });
+
   // R246: all six roles hold both permissions today, so navFor's output is
   // unchanged. Declaring them is what makes a later narrowing move the
   // navigation with it — and what keeps a principal who loses one off the

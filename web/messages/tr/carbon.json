@@ -1,0 +1,64 @@
+{
+  "title": "Karbon Ayak İzi",
+  "subtitle": "GHG Protokolü ve ISO 14064'e göre kurumsal karbon muhasebesi.",
+  "noAccess": "Bu modüle erişiminiz yok",
+  "noAccessHint": "Karbon ayak izi verileri yetkili kullanıcılara gösterilir.",
+  "chooseBuilding": "Önce bir bina seçin",
+  "chooseBuildingHint": "Bu bölüm seçili binanın kayıtlarıyla çalışır.",
+  "tabs": {
+    "overview": "Genel Bakış",
+    "selection": "Faaliyet Seçimi",
+    "entry": "Veri Girişi",
+    "status": "Faaliyet Durumu",
+    "reporting": "Raporlama",
+    "database": "Emisyon Faktörleri",
+    "company": "Şirket Bilgileri",
+    "ghg": "GHG Protokolü",
+    "iso": "ISO 14064",
+    "standards": "Raporlama Standartları",
+    "documents": "Belgeler"
+  },
+  "mains": {
+    "stationary": "Sabit Yanma",
+    "mobility": "Hareketlilik",
+    "logistics": "Taşımacılık",
+    "gasEmissions": "Gaz Salımları",
+    "electricity": "Elektrik",
+    "externalEnergy": "Harici Enerji Kaynakları",
+    "products": "Ürün ve Hizmetler",
+    "waste": "Atık"
+  },
+  "subs": {
+    "spaceHeating": "Ortam Isıtması",
+    "processCombustion": "Proses Amaçlı Yanma",
+    "otherCombustion": "Diğer Yanma",
+    "passengerTransport": "Personel Taşımacılığı",
+    "businessTravel": "İş Seyahati",
+    "employeeCommuting": "Çalışanların İşe Geliş Gidişleri",
+    "inboundFreight": "Gelen Mal Taşıma",
+    "outboundFreight": "Giden Mal Taşıma",
+    "processEmissions": "Proses Emisyonları",
+    "fugitiveEmissions": "Kaçak Gaz Emisyonları",
+    "gridElectricity": "Şebekeden Elektrik Tüketimi",
+    "elecGeneration": "Elektrik Üretimi",
+    "purchasedHc": "Satın Alınan Isıtma / Soğutma",
+    "purchasedSteam": "Satın Alınan Buhar",
+    "purchasedGoods": "Satın Alınan Ürün ve Hizmetler",
+    "eolSoldProducts": "Satılan Ürünlerin Yaşam Sonu",
+    "capitalGoods": "Sermaye Malları",
+    "wasteDisposal": "Atık Bertarafı"
+  },
+  "scopes": {
+    "scope1": "Kapsam 1",
+    "scope2": "Kapsam 2",
+    "scope3": "Kapsam 3"
+  },
+  "iso": {
+    "category1": "Kategori 1",
+    "category2": "Kategori 2",
+    "category3": "Kategori 3",
+    "category4": "Kategori 4",
+    "category5": "Kategori 5",
+    "category6": "Kategori 6"
+  }
+}

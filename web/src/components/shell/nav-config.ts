@@ -58,7 +58,7 @@ export const navigation: NavEntry[] = [
   { id: 'reports', labelKey: 'reports', href: '/ekorm/reports', icon: FileBarChart, permission: 'reports.read' },
   { id: 'calendar', labelKey: 'calendar', href: '/ekorm/calendar', icon: CalendarDays },
   { id: 'settings', labelKey: 'settings', href: '/ekorm/settings', icon: Settings },
-  { id: 'carbon', labelKey: 'carbonFootprint', href: '/ekorm/carbon', icon: Factory },
+  { id: 'carbon', labelKey: 'carbonFootprint', href: '/ekorm/carbon-footprint', icon: Factory, permission: 'carbon.read' },
   { id: 'iso50001', labelKey: 'iso50001', href: '/ekorm/iso-50001', icon: BadgeCheck },
   { id: 'savingActions', labelKey: 'savingActions', href: '/ekorm/saving-actions', icon: PiggyBank, disabled: true },
   { id: 'contact', labelKey: 'contact', href: '/ekorm/contact', icon: Mail },

@@ -1,0 +1,64 @@
+{
+  "title": "Carbon Footprint",
+  "subtitle": "Corporate carbon accounting under the GHG Protocol and ISO 14064.",
+  "noAccess": "You have no access to this module",
+  "noAccessHint": "Carbon footprint data is shown to authorised users.",
+  "chooseBuilding": "Select a building first",
+  "chooseBuildingHint": "This section works with the selected building's records.",
+  "tabs": {
+    "overview": "Overview",
+    "selection": "Activity Selection",
+    "entry": "Data Entry",
+    "status": "Activity Status",
+    "reporting": "Reporting",
+    "database": "Emission Factors",
+    "company": "Company Details",
+    "ghg": "GHG Protocol",
+    "iso": "ISO 14064",
+    "standards": "Reporting Standards",
+    "documents": "Documents"
+  },
+  "mains": {
+    "stationary": "Stationary combustion",
+    "mobility": "Mobility",
+    "logistics": "Logistics",
+    "gasEmissions": "Gas emissions",
+    "electricity": "Electricity",
+    "externalEnergy": "External energy sources",
+    "products": "Products and services",
+    "waste": "Waste"
+  },
+  "subs": {
+    "spaceHeating": "Space heating",
+    "processCombustion": "Process combustion",
+    "otherCombustion": "Other combustion",
+    "passengerTransport": "Passenger transport",
+    "businessTravel": "Business travel",
+    "employeeCommuting": "Employee commuting",
+    "inboundFreight": "Inbound freight",
+    "outboundFreight": "Outbound freight",
+    "processEmissions": "Process emissions",
+    "fugitiveEmissions": "Fugitive emissions",
+    "gridElectricity": "Grid electricity",
+    "elecGeneration": "Electricity generation",
+    "purchasedHc": "Purchased heating / cooling",
+    "purchasedSteam": "Purchased steam",
+    "purchasedGoods": "Purchased goods and services",
+    "eolSoldProducts": "End-of-life of sold products",
+    "capitalGoods": "Capital goods",
+    "wasteDisposal": "Waste disposal"
+  },
+  "scopes": {
+    "scope1": "Scope 1",
+    "scope2": "Scope 2",
+    "scope3": "Scope 3"
+  },
+  "iso": {
+    "category1": "Category 1",
+    "category2": "Category 2",
+    "category3": "Category 3",
+    "category4": "Category 4",
+    "category5": "Category 5",
+    "category6": "Category 6"
+  }
+}

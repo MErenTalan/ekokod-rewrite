@@ -146,3 +146,15 @@ export type ReportMonthPoint = S['ReportMonthPoint'];
 export type ReportSummary = S['ReportSummary'];
 export type ReportPage = S['ReportPage'];
 export type ReportGenerateItem = S['ReportGenerateItem'];
+
+// F10 carbon (05 §12).
+export type CarbonOverview = S['CarbonOverview'];
+export type CarbonAmount = S['CarbonAmount'];
+export type CarbonMonth = S['CarbonMonth'];
+export type CarbonActivity = S['CarbonActivity'];
+export type CarbonActivityCreateRequest = S['CarbonActivityCreateRequest'];
+export type CarbonCatalogue = S['CarbonCatalogue'];
+export type CarbonCatalogueMain = S['CarbonCatalogueMain'];
+export type CarbonReportSummary = S['CarbonReportSummary'];
+export type EmissionFactorView = S['EmissionFactorView'];
+export type EmissionFactorConversion = S['EmissionFactorConversion'];
