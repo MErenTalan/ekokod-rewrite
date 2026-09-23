@@ -23,7 +23,7 @@ const TONE: Record<string, JobView['status']> = {
  * ever. A 404 means the job is gone or was never ours: that is a failure to the
  * screen, never a retry loop.
  */
-export function useJob(jobId: string | null, label: string): { job: JobView | null } {
+export function useJob(jobId: string | null, label: string): { job: JobView | null; errorCode?: string } {
   const t = useTranslations('domain.job');
   const scope = useScopeParams();
   const [startedAt, setStartedAt] = useState<number | null>(null);
@@ -65,6 +65,9 @@ export function useJob(jobId: string | null, label: string): { job: JobView | nu
         status,
         message: status === 'succeeded' ? t('refreshQueued') : undefined,
       },
+      // R237's closed code set, for a screen that must name the data
+      // condition that stopped the job (§7.10's sentences).
+      errorCode: query.data?.error_code,
     };
   }, [jobId, label, expired, query.error, query.data, t]);
 }

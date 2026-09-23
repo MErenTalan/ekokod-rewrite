@@ -1,0 +1,77 @@
+{
+  "title": "Faturalar",
+  "subtitle": "Seçilen ayın fatura panosu ve fatura oluşturma",
+  "monthSelection": "Ay seçimi",
+  "noMonth": "Bir ay seçin",
+  "noMonthDescription": "Fatura panosu seçtiğiniz ayın faturalarını gösterir.",
+  "noData": "Seçilen ayda fatura yok",
+  "noDataDescription": "Bu ay için hesaplanmış fatura bulunamadı.",
+  "retry": "Yeniden dene",
+  "buildings": {
+    "title": "Binalar",
+    "description": "Bina başına analizör faturaları ve toplamları"
+  },
+  "columns": {
+    "period": "Dönem",
+    "building": "Bina",
+    "analyzer": "Sayaç",
+    "installationNumber": "Tesisat no",
+    "etso": "ETSO",
+    "consumption": "Tüketim (kWh)",
+    "production": "Üretim (kWh)",
+    "consumptionPrice": "Tüketim fiyatı (TL/kWh)",
+    "productionPrice": "Üretim fiyatı (TL/kWh)",
+    "invoice": "Fatura",
+    "actions": "İndir"
+  },
+  "subtotal": "Ara toplam",
+  "total": "Toplam",
+  "buildingBill": "Bina faturası",
+  "divergenceNote": "Bina faturası, analizör faturalarının toplamından farklı: bina tarifesi toplam tüketime bir kez uygulanır.",
+  "downloadPdf": "Fatura PDF",
+  "downloadHourly": "Saatlik PTF detayı (Excel)",
+  "downloadAll": "Hepsini indir",
+  "downloadAllPdf": "Panoyu PDF indir",
+  "netting": {
+    "title": "Netleşme",
+    "consumption": "Toplam tüketim",
+    "production": "Toplam üretim",
+    "net": "Net",
+    "invoice": "Toplam fatura",
+    "efficiency": "Verimlilik",
+    "efficiencyUnavailable": "Tüketim olmadan oran hesaplanamaz",
+    "netConsumption": "Net tüketim",
+    "netProduction": "Net üretim",
+    "period": "Dönem",
+    "companyBill": "Şirket faturası"
+  },
+  "plants": {
+    "title": "GES santralleri",
+    "unavailable": "Santral üretimi için veri kaynağı henüz yok",
+    "unavailableDescription": "Santral satırları, santral üretimi sisteme bağlandığında (F9) gelecek. O zamana kadar burada uydurma bir rakam gösterilmez."
+  },
+  "generate": {
+    "title": "Fatura oluştur",
+    "description": "Seçilen dönem için fatura hesaplatın ve PDF olarak indirin",
+    "analyzers": "Sayaçlar",
+    "analyzerOption": "{installation} · {customer}",
+    "analyzerBill": "Sayaç faturası",
+    "buildingBill": "Bina faturası",
+    "companyBill": "Şirket faturası",
+    "running": "Hesaplanıyor",
+    "ready": "Fatura hazır",
+    "downloadReady": "Faturayı indir"
+  },
+  "errors": {
+    "noAnalyzerSelected": "En az bir sayaç seçin",
+    "noBuildingSelected": "Bir bina seçin",
+    "noMonthSelected": "Bir ay seçin",
+    "invalidMonthFormat": "Ay biçimi geçersiz (YYYY-AA)",
+    "noTariffForBuilding": "Bina için tarife bulunamadı",
+    "noConsumptionData": "Seçilen dönemde tüketim verisi yok",
+    "unresolvedAnomaly": "Çözülmemiş tüketim anomalisi var",
+    "periodNotClosed": "Dönem henüz kapanmadı",
+    "ptfDataMissing": "Döneme ait PTF verisi eksik",
+    "generationFailed": "Fatura oluşturulamadı"
+  }
+}

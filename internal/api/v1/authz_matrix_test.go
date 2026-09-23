@@ -86,6 +86,15 @@ var expectedAccess = map[string]string{
 	"PATCH /tariffs/{id}":     "A CA",
 	"DELETE /tariffs/{id}":    "A CA",
 	// 05 §7 (F6a subset, R179)
+	"GET /tariff-templates":              "A CA CR",
+	"POST /tariff-templates":             "A CA",
+	"PATCH /tariff-templates/{id}":       "A CA",
+	"DELETE /tariff-templates/{id}":      "A CA",
+	"POST /tariff-templates/{id}/apply":  "A CA",
+	"GET /buildings/bulk-tariff/current": "A CA CR",
+	"POST /buildings/bulk-tariff":        "A CA",
+	"GET /buildings/bulk-tariff/history": "A CA CR",
+
 	"GET /bills":                    "A CA CR BA BR D",
 	"GET /bills/dashboard":          "A CA CR BA BR D",
 	"GET /bills/dashboard/export":   "A CA CR BA BR D",

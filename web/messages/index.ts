@@ -19,6 +19,7 @@ import trSettings from './tr/settings.json';
 import trAlarms from './tr/alarms.json';
 import trMessages from './tr/messages.json';
 import trTariffs from './tr/tariffs.json';
+import trBills from './tr/bills.json';
 import enApp from './en/app.json';
 import enHealth from './en/health.json';
 import enUnits from './en/units.json';
@@ -39,6 +40,7 @@ import enSettings from './en/settings.json';
 import enAlarms from './en/alarms.json';
 import enMessages from './en/messages.json';
 import enTariffs from './en/tariffs.json';
+import enBills from './en/bills.json';
 
 const tr = {
   app: trApp,
@@ -61,6 +63,7 @@ const tr = {
   alarms: trAlarms,
   messages: trMessages,
   tariffs: trTariffs,
+  bills: trBills,
 };
 const en = {
   app: enApp,
@@ -83,6 +86,7 @@ const en = {
   alarms: enAlarms,
   messages: enMessages,
   tariffs: enTariffs,
+  bills: enBills,
 };
 
 export type Messages = typeof tr;
