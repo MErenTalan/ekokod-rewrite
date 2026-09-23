@@ -377,7 +377,7 @@ func solarRoutes() []Route {
 		{Method: http.MethodPost, Pattern: "/national-tariff-schedule", OperationID: "national_tariff.upsert", Tag: "tariffs",
 			Access: RoleGated, Roles: auth.Roles(roleA), Entity: "national_tariff", PlatformAudit: true,
 			Summary: "Publish a default tariff row, keyed by date, user group, voltage level and term.",
-			Request: dto.NationalTariffFields{}, Status: http.StatusCreated, Handler: (*Handlers).upsertNationalTariff},
+			Request: dto.NationalTariffFields{}, Status: http.StatusNoContent, Handler: (*Handlers).upsertNationalTariff},
 		{Method: http.MethodDelete, Pattern: "/national-tariff-schedule/{id}", OperationID: "national_tariff.delete",
 			Tag: "tariffs", Access: RoleGated, Roles: auth.Roles(roleA), Entity: "national_tariff", PlatformAudit: true,
 			Summary: "Remove a published default tariff row.", Request: dto.IDPath{}, Status: http.StatusNoContent,
@@ -479,8 +479,12 @@ func (h *Handlers) listNationalTariffs(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// upsertNationalTariff answers 204: the row is identified by the natural key
+// the caller already holds (effective_from, user_group, voltage_level, term),
+// and the upsert has no id to return — echoing a zero uuid would name a row
+// that does not exist.
 func (h *Handlers) upsertNationalTariff(w http.ResponseWriter, r *http.Request) {
-	serve(w, r, http.StatusCreated, func(req dto.NationalTariffFields) (any, error) {
+	serve(w, r, http.StatusNoContent, func(req dto.NationalTariffFields) (any, error) {
 		entry := model.NationalTariffScheduleEntry{
 			EffectiveFrom: req.EffectiveFrom.Time, UserGroup: model.DistributionUserGroup(req.UserGroup),
 			VoltageLevel: model.VoltageLevel(req.VoltageLevel), Term: model.TariffTerm(req.Term),
@@ -488,10 +492,7 @@ func (h *Handlers) upsertNationalTariff(w http.ResponseWriter, r *http.Request) 
 			DistributionPrice: dv(req.DistributionPrice), PowerPrice: dp(req.PowerPrice), OverusePrice: dp(req.OverusePrice),
 			DailyThresholdKwh: dp(req.DailyThresholdKwh), VatRate: dv(req.VatRate), Source: req.Source,
 		}
-		if err := h.Tariffs.UpsertDefault(r.Context(), entry); err != nil {
-			return nil, billingErr(err)
-		}
-		return nationalTariffDTO(entry), nil
+		return nil, billingErr(h.Tariffs.UpsertDefault(r.Context(), entry))
 	})
 }
 

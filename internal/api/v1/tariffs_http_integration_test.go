@@ -260,7 +260,8 @@ func TestNationalScheduleIsPublicToReadAndAdminToWrite(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, h.as(seed.E2ECompanyAdminEmail).do(http.MethodPost, "/national-tariff-schedule", row).status)
 
 	admin := h.as(seed.E2EAdminEmail)
-	require.Equal(t, http.StatusCreated, admin.do(http.MethodPost, "/national-tariff-schedule", row).status)
+	// 204: the row is named by its natural key, so there is no id to echo.
+	require.Equal(t, http.StatusNoContent, admin.do(http.MethodPost, "/national-tariff-schedule", row).status)
 
 	var page dto.Page[dto.NationalTariff]
 	h.client(uaChrome).do(http.MethodGet, "/national-tariff-schedule?user_group=commercial&voltage_level=lv", nil).json(t, &page)
@@ -268,7 +269,7 @@ func TestNationalScheduleIsPublicToReadAndAdminToWrite(t *testing.T) {
 
 	// The natural key is unique, so publishing the same row twice edits it.
 	row["energy_price"] = "3.2"
-	require.Equal(t, http.StatusCreated, admin.do(http.MethodPost, "/national-tariff-schedule", row).status)
+	require.Equal(t, http.StatusNoContent, admin.do(http.MethodPost, "/national-tariff-schedule", row).status)
 	var after dto.Page[dto.NationalTariff]
 	h.client(uaChrome).do(http.MethodGet, "/national-tariff-schedule?user_group=commercial&voltage_level=lv", nil).json(t, &after)
 	require.Len(t, after.Items, len(page.Items), "an upsert edits rather than accumulates")
