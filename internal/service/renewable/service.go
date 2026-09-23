@@ -184,6 +184,8 @@ func (s *Service) factors(ctx context.Context, sc store.Scope) (*Factor, map[str
 			f.Source = *r.Source
 		}
 		if key == GridFactorKey {
+			// base_factor is kg CO2e per base_unit of activity.
+			f.Unit = "kg CO2e/" + r.BaseUnit
 			grid = &f
 			continue
 		}

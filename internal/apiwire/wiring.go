@@ -263,6 +263,7 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		Plants: postgres.NewPlantRepository(pool), Production: postgres.NewProductionRepository(pool),
 		Totals: postgres.NewProductionTotalsRepository(pool), Faults: postgres.NewFaultRepository(pool),
 		Solar: postgres.NewSolarTariffRepository(pool), Analytics: postgres.NewAnalyticsRepository(pool),
+		Analyzers: postgres.NewAnalyzerRepository(pool), Bills: billRepo,
 		Ops: postgres.NewOpsRepository(pool), Creds: credentialService, ISolar: solarAdapter, Clock: opts.Clock,
 		Enqueuer: enqueuer, Inspector: taskInspector, MaxRetry: cfg.Worker.MaxRetries,
 	})

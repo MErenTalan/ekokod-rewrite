@@ -2955,7 +2955,7 @@ export interface components {
             /** Format: date-time */
             completed_at?: null | string;
             /** @enum {string} */
-            error_code?: "tariff_not_found" | "no_consumption_data" | "unresolved_anomaly" | "period_not_closed" | "ptf_data_missing" | "billing_parameters_missing" | "billing_parameters_invalid" | "report_building_not_found" | "report_not_ready" | "smtp_not_configured" | "delivery_failed";
+            error_code?: "tariff_not_found" | "no_consumption_data" | "unresolved_anomaly" | "period_not_closed" | "ptf_data_missing" | "billing_parameters_missing" | "billing_parameters_invalid" | "report_building_not_found" | "report_not_ready" | "smtp_not_configured" | "delivery_failed" | "isolar_auth" | "isolar_unavailable" | "isolar_not_linked" | "credential_missing";
             id: string;
             /** @enum {string} */
             status: "queued" | "running" | "succeeded" | "failed";

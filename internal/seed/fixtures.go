@@ -173,6 +173,9 @@ func E2EData(ctx context.Context, pool *pgxpool.Pool, f Fixtures, now time.Time)
 	if err := ensureReports(ctx, pool, f, now); err != nil {
 		return total, err
 	}
+	if err := ensureSolar(ctx, pool, f, now); err != nil {
+		return total, err
+	}
 	return total, ensureAlarms(ctx, pool, f, now)
 }
 

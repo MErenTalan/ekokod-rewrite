@@ -9,7 +9,7 @@ import { shortDateTime } from './format';
 
 const TONE = { connected: 'success', error: 'danger', never_synced: 'neutral' } as const;
 const LABEL = { connected: 'connected', error: 'error', never_synced: 'neverSynced' } as const;
-const ERRORS = {
+export const SYNC_ERRORS = {
   isolar_auth: 'isolarAuth', isolar_unavailable: 'isolarUnavailable', isolar_not_linked: 'isolarNotLinked', credential_missing: 'credentialMissing',
 } as const;
 
@@ -24,8 +24,8 @@ export function ConnectionStatus({ realtime }: { realtime?: PlantRealtime }) {
       {realtime.last_sync_at ? (
         <span className="text-foreground-muted type-caption">{t('lastSync', { time: shortDateTime(realtime.last_sync_at) })}</span>
       ) : null}
-      {code && code in ERRORS ? (
-        <span className="text-foreground type-caption">{t(`syncErrors.${ERRORS[code as keyof typeof ERRORS]}`)}</span>
+      {code && code in SYNC_ERRORS ? (
+        <span className="text-foreground type-caption">{t(`syncErrors.${SYNC_ERRORS[code as keyof typeof SYNC_ERRORS]}`)}</span>
       ) : null}
     </div>
   );

@@ -41,13 +41,17 @@ test('says the building invoice differs from its rows instead of hiding it (R234
   await expect(page.getByRole('note')).toContainText('bina tarifesi toplam tüketime bir kez uygulanır');
 });
 
-test('names the plant section and says its data source does not exist yet (R235)', async ({ page }) => {
+test('lists each plant with its production and, when set, the netting analyzer (R290)', async ({ page }) => {
   await login(page, USERS.companyAdmin.email);
   await openSeededMonth(page);
 
   // The sidebar has a "GES Santralleri" entry of its own; this is the section.
   await expect(page.getByRole('heading', { name: 'GES santralleri' })).toBeVisible();
-  await expect(page.getByText(/veri kaynağı henüz yok/i)).toBeVisible();
+  const plants = page.getByRole('table', { name: 'GES santralleri' });
+  const linked = plants.getByRole('row', { name: /E2E Arazi GES/ });
+  await expect(linked).toContainText('E2E-A1');
+  await expect(linked).toContainText('₺'); // production × the feed-in tariff
+  await expect(plants.getByRole('row', { name: /E2E Çatı GES/ })).toBeVisible();
 });
 
 test('downloads the whole dashboard as a workbook', async ({ page }) => {

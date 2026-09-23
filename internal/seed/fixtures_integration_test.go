@@ -112,7 +112,7 @@ func TestE2EFixturesHaveReadingsAndBill(t *testing.T) {
 	require.Equal(t, 1, templates, "one template after two seed runs")
 	require.Equal(t, 1, assignments)
 	require.Equal(t, 1, imports)
-	require.Equal(t, 1, solar)
+	require.Equal(t, 2, solar, "the rooftop plant's and, since F9, the linked grid plant's")
 	require.GreaterOrEqual(t, schedule, 2)
 
 	// F8b: a utility-scale plant with a yearly target and monthly production
@@ -137,4 +137,48 @@ func TestE2EFixturesHaveReadingsAndBill(t *testing.T) {
 		fx.BuildingA1).Scan(&reports, &status))
 	require.Equal(t, 1, reports)
 	require.Equal(t, "completed", status)
+}
+
+// F9: the grid plant is linked, has live inverters, sixty days of totals,
+// faults, a netting analyzer and a feed-in tariff; a second run changes nothing.
+func TestE2EFixturesLinkASolarPlant(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	hasher := auth.Hasher{Pepper: []byte("pepper-0123456789abcdef-0123456789"), Cost: bcrypt.MinCost}
+	now := time.Date(2026, 9, 17, 9, 0, 0, 0, time.UTC)
+	fx, err := seed.E2EFixtures(ctx, pool, hasher, "Guvenli!Sifre-42", now)
+	require.NoError(t, err)
+	for range 2 {
+		_, err = seed.E2EData(ctx, pool, fx, now)
+		require.NoError(t, err)
+	}
+
+	sc := store.SystemScope(fx.CompanyA)
+	plants := postgres.NewPlantRepository(pool)
+	linked, err := plants.ListLinked(ctx, sc)
+	require.NoError(t, err)
+	require.Len(t, linked, 1)
+	plant := linked[0]
+	require.Equal(t, seed.E2EISolarPsID, *plant.IsolarPsID)
+	require.Equal(t, fx.AnalyzerA1, *plant.NettingAnalyzerID)
+
+	devices, err := plants.Devices(ctx, sc, plant.ID)
+	require.NoError(t, err)
+	snapshots := 0
+	for _, d := range devices {
+		if d.SnapshotAt != nil && d.ActivePowerKw != nil {
+			snapshots++
+		}
+	}
+	require.Equal(t, 2, snapshots)
+
+	var days, faults, tariffs int
+	require.NoError(t, pool.QueryRow(ctx, `select count(*) from plant_production_totals where plant_id = $1 and ts >= $2`,
+		plant.ID, now.AddDate(0, 0, -61)).Scan(&days))
+	require.Equal(t, 60, days)
+	require.NoError(t, pool.QueryRow(ctx, `select count(*) from plant_faults where plant_id = $1`, plant.ID).Scan(&faults))
+	require.Equal(t, 2, faults)
+	require.NoError(t, pool.QueryRow(ctx, `select count(*) from solar_tariffs where plant_id = $1`, plant.ID).Scan(&tariffs))
+	require.Equal(t, 1, tariffs)
 }

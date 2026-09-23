@@ -3943,7 +3943,11 @@
               "report_building_not_found",
               "report_not_ready",
               "smtp_not_configured",
-              "delivery_failed"
+              "delivery_failed",
+              "isolar_auth",
+              "isolar_unavailable",
+              "isolar_not_linked",
+              "credential_missing"
             ],
             "type": "string"
           },

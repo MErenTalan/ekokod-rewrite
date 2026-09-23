@@ -73,6 +73,17 @@ describe('SolarPlantsPage', () => {
     expect((await screen.findAllByText(/Santral verileri/)).length).toBeGreaterThan(0);
   });
 
+  it('a failed sync names its reason, not only "Başarısız" (R288)', async () => {
+    const user = userEvent.setup();
+    api = mockApi({
+      ...routes(),
+      'GET /api/v1/jobs/isolar.sync_plant%3Ap-1%3A0': { id: 'isolar.sync_plant:p-1:0', type: 'isolar.sync_plant', status: 'failed', error_code: 'credential_missing' },
+    });
+    render();
+    await user.click(await screen.findByRole('button', { name: /Verileri güncelle/ }));
+    expect(await screen.findByText(/Santralin iSolarCloud kimlik bilgisi yok/)).toBeVisible();
+  });
+
   it('offers no sync to a read-only admin', async () => {
     api = mockApi(routes());
     render('company_readonly_admin');

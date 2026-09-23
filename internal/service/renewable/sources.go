@@ -63,7 +63,7 @@ var Sources = map[string]map[string]Source{
 		"car_km":             d("co2_avoided_kg ÷ equiv_car_co2_kg_per_km"),
 		"homes":              d("generation_kwh ÷ equiv_home_heating_kwh_per_year"),
 		"grid_factor":        m("emission_factors grid_electricity_tr_2022"),
-		"grid_factor_unit":   l("emission_factors base_unit"),
+		"grid_factor_unit":   l("kg CO2e per emission_factors base_unit"),
 		"grid_factor_source": l("emission_factors source"),
 		"factors":            l("emission_factors equivalence rows: factor, unit, source, year"),
 	},

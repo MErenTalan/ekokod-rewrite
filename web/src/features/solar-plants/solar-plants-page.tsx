@@ -22,7 +22,7 @@ import { useSession } from '@/lib/session/session-provider';
 import { useJob } from '../jobs/use-job';
 import { WeatherPanelView } from '../weather/weather-panel';
 import { ALARM_PAGE, AlarmsTabView } from './alarms-tab';
-import { ConnectionStatus } from './connection-status';
+import { ConnectionStatus, SYNC_ERRORS } from './connection-status';
 import { DevicesTabView } from './devices-tab';
 import { rangeTooLong } from './format';
 import { HistoryTabView, type Granularity } from './history-tab';
@@ -87,7 +87,12 @@ export function SolarPlantsPage() {
 
   const [jobId, setJobId] = useState<string | null>(null);
   const sync = useApiMutation('post', '/api/v1/plants/{id}/sync');
-  const { job } = useJob(jobId, t('syncJob'));
+  const { job: syncJob, errorCode } = useJob(jobId, t('syncJob'));
+  // R288: a failed sync says why, in the closed code's sentence.
+  const job =
+    syncJob && syncJob.status === 'failed' && errorCode && errorCode in SYNC_ERRORS
+      ? { ...syncJob, message: t(`syncErrors.${SYNC_ERRORS[errorCode as keyof typeof SYNC_ERRORS]}`) }
+      : syncJob;
   useEffect(() => {
     if (job?.status === 'succeeded') {
       void realtime.refetch();

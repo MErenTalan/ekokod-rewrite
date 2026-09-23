@@ -47,7 +47,7 @@ func TestCLISeedLoadsRealDatasets(t *testing.T) {
 
 	var first bytes.Buffer
 	require.NoError(t, cli.Execute(context.Background(), []string{"seed"}, &first))
-	require.Contains(t, first.String(), "emission factors: 182 rows (196 conversions)")
+	require.Contains(t, first.String(), "emission factors: 186 rows (196 conversions)")
 	require.Contains(t, first.String(), "integration definitions: 3 rows")
 	require.Contains(t, first.String(), "national tariff schedule: 0 rows (source data not in repository)")
 
@@ -55,7 +55,7 @@ func TestCLISeedLoadsRealDatasets(t *testing.T) {
 	// SAME counts.
 	var second bytes.Buffer
 	require.NoError(t, cli.Execute(context.Background(), []string{"seed"}, &second))
-	require.Contains(t, second.String(), "emission factors: 182 rows (196 conversions)")
+	require.Contains(t, second.String(), "emission factors: 186 rows (196 conversions)")
 	require.Contains(t, second.String(), "integration definitions: 3 rows")
 	require.Contains(t, second.String(), "national tariff schedule: 0 rows (source data not in repository)")
 }

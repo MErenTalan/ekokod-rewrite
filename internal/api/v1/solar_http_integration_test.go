@@ -161,3 +161,25 @@ func (fakeSolar) DeviceRealtime(context.Context, integration.Credentials, int32,
 func (fakeSolar) Faults(context.Context, integration.Credentials, time.Time, time.Time) ([]isolar.Fault, error) {
 	return nil, nil
 }
+
+// R290 through the real wiring: a plant with a netting analyzer adds the
+// analyzer's columns to the bills dashboard (the e2e run found the API's
+// solar service built without the analyzer and bill readers).
+func TestBillsDashboardNamesTheNettingAnalyzer(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	ctx := context.Background()
+	sc := store.SystemScope(h.fx.CompanyA)
+	id := h.plantFor(h.fx.CompanyA, "Netting GES", "PS-NET")
+	plants := postgres.NewPlantRepository(h.pool)
+	p, err := plants.Get(ctx, sc, id)
+	require.NoError(t, err)
+	p.NettingAnalyzerID = &h.fx.AnalyzerA1
+	_, err = plants.Update(ctx, sc, p)
+	require.NoError(t, err)
+
+	res := h.as(seed.E2ECompanyAdminEmail).do(http.MethodGet, "/bills/dashboard?year=2026&month=9", nil)
+	require.Equal(t, http.StatusOK, res.status, string(res.body))
+	require.Contains(t, string(res.body), "Netting GES")
+	require.Contains(t, string(res.body), `"installation_number":"E2E-A1"`)
+}

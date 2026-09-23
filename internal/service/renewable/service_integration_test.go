@@ -113,3 +113,35 @@ func TestRenewableLoadsTheSubjectsBills(t *testing.T) {
 	require.Len(t, in.Bills, 1)
 	require.Equal(t, model.BillScopeBuilding, in.Bills[0].Scope)
 }
+
+// R262/R293: the grid factor is kg CO2e per activity unit, and the company's
+// own row wins over the platform's.
+func TestRenewableFactorsCompanyFirstWithUnits(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
+	for _, row := range []struct {
+		company *uuid.UUID
+		key     string
+		factor  string
+		unit    string
+	}{
+		{nil, renewable.GridFactorKey, "0.469", "kWh"},
+		{&tenant.Company.ID, renewable.GridFactorKey, "0.41", "kWh"},
+		{nil, renewable.EquivTree, "21.77", "kg CO2/ağaç-yıl"},
+	} {
+		_, err := pool.Exec(ctx, `insert into emission_factors (company_id, key, label, main_category, base_factor, base_unit, source, source_year)
+			values ($1, $2, $2, 'test', $3, $4, 'Kaynak', 2023)`, row.company, row.key, row.factor, row.unit)
+		require.NoError(t, err)
+	}
+	svc := renewable.New(renewable.Deps{Analyzers: postgres.NewAnalyzerRepository(pool), Buildings: postgres.NewBuildingRepository(pool),
+		Analytics: postgres.NewAnalyticsRepository(pool), Bills: postgres.NewBillRepository(pool), Forecasts: postgres.NewForecastRepository(pool),
+		Carbon: postgres.NewCarbonRepository(pool), Clock: clock.NewFake(loadNow)})
+	in, err := svc.Load(ctx, tenant.Scope, query(&tenant.Analyzers[0].ID, nil))
+	require.NoError(t, err)
+	require.NotNil(t, in.GridFactor)
+	require.Equal(t, "0.41", in.GridFactor.Value.String(), "the company's own factor first")
+	require.Equal(t, "kg CO2e/kWh", in.GridFactor.Unit, "the factor is per activity unit, not the unit itself")
+	require.Equal(t, "kg CO2/ağaç-yıl", in.Equivalences[renewable.EquivTree].Unit)
+}
