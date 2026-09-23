@@ -151,3 +151,76 @@ func TestReportUpdateStatusIsScoped(t *testing.T) {
 	require.Equal(t, model.ReportStatusError, updated.Status)
 	require.Equal(t, &errMsg, updated.ErrorMessage)
 }
+
+func TestReportListFiltersByYear(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 320)
+	repo := postgres.NewReportRepository(pool)
+	b := tenant.Buildings[0].ID
+	for _, period := range []string{"2025-11", "2026-01", "2026-02"} {
+		_, err := repo.Upsert(ctx, tenant.AdminScope, reportFixtureRow(tenant.Company.ID, b, period))
+		require.NoError(t, err)
+	}
+	yearly := reportFixtureRow(tenant.Company.ID, b, "2026")
+	yearly.Type = model.ReportTypeYearly
+	_, err := repo.Upsert(ctx, tenant.AdminScope, yearly)
+	require.NoError(t, err)
+	// A '20260' prefix must not match: the year is the whole period or its prefix before '-'.
+	odd := reportFixtureRow(tenant.Company.ID, b, "2025")
+	odd.Type = model.ReportTypeYearly
+	_, err = repo.Upsert(ctx, tenant.AdminScope, odd)
+	require.NoError(t, err)
+
+	year := 2026
+	got, err := repo.List(ctx, tenant.AdminScope, store.ReportFilter{Year: &year})
+	require.NoError(t, err)
+	var periods []string
+	for _, r := range got {
+		periods = append(periods, r.Period)
+	}
+	require.ElementsMatch(t, []string{"2026-01", "2026-02", "2026"}, periods)
+}
+
+func TestReportCountMatchesList(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 330)
+	repo := postgres.NewReportRepository(pool)
+	for i, period := range []string{"2026-01", "2026-02", "2026-03"} {
+		_, err := repo.Upsert(ctx, tenant.AdminScope, reportFixtureRow(tenant.Company.ID, tenant.Buildings[i%2].ID, period))
+		require.NoError(t, err)
+	}
+	for _, f := range []store.ReportFilter{{}, {BuildingID: &tenant.Buildings[0].ID}, {Page: store.Page{Limit: 1}}} {
+		n, err := repo.Count(ctx, tenant.AdminScope, f)
+		require.NoError(t, err)
+		f.Page = store.Page{}
+		list, err := repo.List(ctx, tenant.AdminScope, f)
+		require.NoError(t, err)
+		require.Equal(t, int64(len(list)), n, "count ignores paging and matches the unpaged list")
+	}
+}
+
+func TestReportCountIsScoped(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 340)
+	other := testfixtures.NewTenant(t, ctx, pool, 341)
+	repo := postgres.NewReportRepository(pool)
+	_, err := repo.Upsert(ctx, tenant.AdminScope, reportFixtureRow(tenant.Company.ID, tenant.Buildings[0].ID, "2026-01"))
+	require.NoError(t, err)
+	_, err = repo.Upsert(ctx, tenant.AdminScope, reportFixtureRow(tenant.Company.ID, tenant.Buildings[1].ID, "2026-01"))
+	require.NoError(t, err)
+	_, err = repo.Upsert(ctx, other.AdminScope, reportFixtureRow(other.Company.ID, other.Buildings[0].ID, "2026-01"))
+	require.NoError(t, err)
+
+	n, err := repo.Count(ctx, tenant.AdminScope, store.ReportFilter{})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), n, "another company's report is not counted")
+	n, err = repo.Count(ctx, tenant.Scope, store.ReportFilter{})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), n, "an out-of-scope building's report is not counted")
+}

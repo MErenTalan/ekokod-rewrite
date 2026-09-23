@@ -1069,14 +1069,18 @@ type ReportFilter struct {
 	BuildingID *uuid.UUID
 	Type       *model.ReportType
 	Period     *string
-	Statuses   []model.ReportStatus
-	Page       Page
+	// Year keeps the yearly report 'YYYY' and the monthly reports 'YYYY-MM'.
+	Year     *int
+	Statuses []model.ReportStatus
+	Page     Page
 }
 
 // ReportRepository reads and writes generated building reports.
 type ReportRepository interface {
 	Get(ctx context.Context, s Scope, id uuid.UUID) (model.Report, error)
 	List(ctx context.Context, s Scope, f ReportFilter) ([]model.Report, error)
+	// Count is List's total without paging (the archive's report count).
+	Count(ctx context.Context, s Scope, f ReportFilter) (int64, error)
 
 	// Upsert is keyed on (building_id, type, period), which is unique:
 	// regenerating a period REPLACES its report rather than accumulating a

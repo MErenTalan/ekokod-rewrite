@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -70,19 +71,11 @@ func (r *ReportRepository) List(ctx context.Context, s store.Scope, f store.Repo
 	if !s.Valid() {
 		return nil, store.ErrInvalidScope
 	}
-	ids, all := s.BuildingFilter()
 	limit, offset := reportPageLimits(f.Page)
-	var reportType sqlcgen.NullReportType
-	if f.Type != nil {
-		reportType = sqlcgen.NullReportType{ReportType: sqlcgen.ReportType(*f.Type), Valid: true}
-	}
-	statuses := make([]string, 0, len(f.Statuses))
-	for _, st := range f.Statuses {
-		statuses = append(statuses, string(st))
-	}
+	p := reportFilterParams(s, f)
 	rows, err := r.q.ReportList(ctx, sqlcgen.ReportListParams{
-		CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: ids, BuildingID: f.BuildingID,
-		ReportType: reportType, Period: f.Period, Statuses: statuses, LimitVal: limit, OffsetVal: offset,
+		CompanyID: p.CompanyID, AllBuildings: p.AllBuildings, BuildingIds: p.BuildingIds, BuildingID: p.BuildingID,
+		ReportType: p.ReportType, Period: p.Period, Year: p.Year, Statuses: p.Statuses, LimitVal: limit, OffsetVal: offset,
 	})
 	if err != nil {
 		return nil, pgerr.Translate(r.pool, "list reports", err)
@@ -92,6 +85,40 @@ func (r *ReportRepository) List(ctx context.Context, s store.Scope, f store.Repo
 		out = append(out, reportFromRow(row))
 	}
 	return out, nil
+}
+
+// Count is List's total without paging.
+func (r *ReportRepository) Count(ctx context.Context, s store.Scope, f store.ReportFilter) (int64, error) {
+	if !s.Valid() {
+		return 0, store.ErrInvalidScope
+	}
+	n, err := r.q.ReportCount(ctx, reportFilterParams(s, f))
+	if err != nil {
+		return 0, pgerr.Translate(r.pool, "count reports", err)
+	}
+	return n, nil
+}
+
+// reportFilterParams is the predicate set List and Count share.
+func reportFilterParams(s store.Scope, f store.ReportFilter) sqlcgen.ReportCountParams {
+	ids, all := s.BuildingFilter()
+	var reportType sqlcgen.NullReportType
+	if f.Type != nil {
+		reportType = sqlcgen.NullReportType{ReportType: sqlcgen.ReportType(*f.Type), Valid: true}
+	}
+	statuses := make([]string, 0, len(f.Statuses))
+	for _, st := range f.Statuses {
+		statuses = append(statuses, string(st))
+	}
+	var year *string
+	if f.Year != nil {
+		y := strconv.Itoa(*f.Year)
+		year = &y
+	}
+	return sqlcgen.ReportCountParams{
+		CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: ids, BuildingID: f.BuildingID,
+		ReportType: reportType, Period: f.Period, Year: year, Statuses: statuses,
+	}
 }
 
 // Upsert is keyed on (building_id, type, period): regenerating a period

@@ -1800,6 +1800,17 @@ func TestScopeIsolation(t *testing.T) {
 			func(s store.Scope) ([]model.Report, error) { return repo.List(ctx, s, store.ReportFilter{}) },
 			tenantA.Scope, tenantA.AdminScope, af.reportID,
 			func(r model.Report) uuid.UUID { return r.ID }, "ReportRepository.List narrow-scope")
+
+		// Count answers the archive's total: another tenant's and an
+		// out-of-scope building's reports never add to it.
+		narrow, err := repo.Count(ctx, tenantA.Scope, store.ReportFilter{})
+		require.NoError(t, err)
+		wide, err := repo.Count(ctx, tenantA.AdminScope, store.ReportFilter{})
+		require.NoError(t, err)
+		require.Less(t, narrow, wide, "ReportRepository.Count narrow-scope counts the out-of-scope building's report")
+		foreign, err := repo.Count(ctx, tenantB.AdminScope, store.ReportFilter{BuildingID: &af.buildingID})
+		require.NoError(t, err)
+		require.Zero(t, foreign, "ReportRepository.Count cross-tenant")
 	})
 
 	// --- AlarmRepository (company-only: alarms carries no building_id) ----------------

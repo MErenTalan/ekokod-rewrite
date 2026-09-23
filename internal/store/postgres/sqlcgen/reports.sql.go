@@ -12,6 +12,47 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const reportCount = `-- name: ReportCount :one
+select count(*) from reports
+where reports.company_id = $1
+  and ($2::boolean or reports.building_id = any($3::uuid[]))
+  and ($4::uuid is null or reports.building_id = $4)
+  and ($5::report_type is null or reports.type = $5)
+  and ($6::text is null or reports.period = $6)
+  and ($7::text is null or reports.period = $7::text
+       or reports.period like $7::text || '-%')
+  and (cardinality($8::text[]) = 0 or reports.status::text = any($8::text[]))
+  and exists (select 1 from buildings b where b.id = reports.building_id and b.deleted_at is null)
+`
+
+type ReportCountParams struct {
+	CompanyID    uuid.UUID
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
+	BuildingID   *uuid.UUID
+	ReportType   NullReportType
+	Period       *string
+	Year         *string
+	Statuses     []string
+}
+
+// ReportList's predicates without paging: the archive's total (R275).
+func (q *Queries) ReportCount(ctx context.Context, arg ReportCountParams) (int64, error) {
+	row := q.db.QueryRow(ctx, reportCount,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
+		arg.BuildingID,
+		arg.ReportType,
+		arg.Period,
+		arg.Year,
+		arg.Statuses,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const reportGet = `-- name: ReportGet :one
 
 select id, company_id, building_id, type, period, plant_selection, payload, pdf_path, excel_path, email_subject, email_body, status, error_message, processed_at, created_at, updated_at from reports
@@ -67,12 +108,15 @@ where reports.company_id = $1
   and ($4::uuid is null or reports.building_id = $4)
   and ($5::report_type is null or reports.type = $5)
   and ($6::text is null or reports.period = $6)
+  -- A year matches its yearly report ('YYYY') and its monthly ones ('YYYY-MM').
+  and ($7::text is null or reports.period = $7::text
+       or reports.period like $7::text || '-%')
   -- Statuses is compared as text[], not report_status[]: pgx has no codec
   -- for an array of this custom enum, and fails even on an empty slice.
-  and (cardinality($7::text[]) = 0 or reports.status::text = any($7::text[]))
+  and (cardinality($8::text[]) = 0 or reports.status::text = any($8::text[]))
   and exists (select 1 from buildings b where b.id = reports.building_id and b.deleted_at is null)
 order by reports.created_at desc, reports.id
-limit $9 offset $8
+limit $10 offset $9
 `
 
 type ReportListParams struct {
@@ -82,6 +126,7 @@ type ReportListParams struct {
 	BuildingID   *uuid.UUID
 	ReportType   NullReportType
 	Period       *string
+	Year         *string
 	Statuses     []string
 	OffsetVal    int32
 	LimitVal     int32
@@ -95,6 +140,7 @@ func (q *Queries) ReportList(ctx context.Context, arg ReportListParams) ([]Repor
 		arg.BuildingID,
 		arg.ReportType,
 		arg.Period,
+		arg.Year,
 		arg.Statuses,
 		arg.OffsetVal,
 		arg.LimitVal,

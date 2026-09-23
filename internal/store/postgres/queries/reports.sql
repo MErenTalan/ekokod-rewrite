@@ -16,12 +16,28 @@ where reports.company_id = sqlc.arg(company_id)
   and (sqlc.narg(building_id)::uuid is null or reports.building_id = sqlc.narg(building_id))
   and (sqlc.narg(report_type)::report_type is null or reports.type = sqlc.narg(report_type))
   and (sqlc.narg(period)::text is null or reports.period = sqlc.narg(period))
+  -- A year matches its yearly report ('YYYY') and its monthly ones ('YYYY-MM').
+  and (sqlc.narg(year)::text is null or reports.period = sqlc.narg(year)::text
+       or reports.period like sqlc.narg(year)::text || '-%')
   -- Statuses is compared as text[], not report_status[]: pgx has no codec
   -- for an array of this custom enum, and fails even on an empty slice.
   and (cardinality(sqlc.arg(statuses)::text[]) = 0 or reports.status::text = any(sqlc.arg(statuses)::text[]))
   and exists (select 1 from buildings b where b.id = reports.building_id and b.deleted_at is null)
 order by reports.created_at desc, reports.id
 limit sqlc.arg(limit_val) offset sqlc.arg(offset_val);
+
+-- name: ReportCount :one
+-- ReportList's predicates without paging: the archive's total (R275).
+select count(*) from reports
+where reports.company_id = sqlc.arg(company_id)
+  and (sqlc.arg(all_buildings)::boolean or reports.building_id = any(sqlc.arg(building_ids)::uuid[]))
+  and (sqlc.narg(building_id)::uuid is null or reports.building_id = sqlc.narg(building_id))
+  and (sqlc.narg(report_type)::report_type is null or reports.type = sqlc.narg(report_type))
+  and (sqlc.narg(period)::text is null or reports.period = sqlc.narg(period))
+  and (sqlc.narg(year)::text is null or reports.period = sqlc.narg(year)::text
+       or reports.period like sqlc.narg(year)::text || '-%')
+  and (cardinality(sqlc.arg(statuses)::text[]) = 0 or reports.status::text = any(sqlc.arg(statuses)::text[]))
+  and exists (select 1 from buildings b where b.id = reports.building_id and b.deleted_at is null);
 
 -- Critical Finding 1 (task-11a fix round 1): building_id is NOT NULL on
 -- reports, and is a stored foreign key — Scope.AllowsBuilding is an
