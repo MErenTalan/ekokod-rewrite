@@ -43,10 +43,14 @@ export type ArchiveTabViewProps = {
   buildings: Option[];
   onFilters: (f: ArchiveFilters) => void;
   onDownload: (reportId: string, format: 'pdf' | 'excel') => void;
+  /** The API has more pages than those shown (R275). */
+  hasMore?: boolean;
+  loadingMore?: boolean;
+  onLoadMore?: () => void;
 };
 
 /** The reports archive of 01 §7.14. */
-export function ArchiveTabView({ items, total, loading, filters, buildings, onFilters, onDownload }: ArchiveTabViewProps) {
+export function ArchiveTabView({ items, total, loading, filters, buildings, onFilters, onDownload, hasMore = false, loadingMore = false, onLoadMore }: ArchiveTabViewProps) {
   const t = useTranslations('reports.archive');
   const actions = useTranslations('reports.actions');
   const locale = useLocale() as Locale;
@@ -119,6 +123,11 @@ export function ArchiveTabView({ items, total, loading, filters, buildings, onFi
           </Card>
         ))
       )}
+      {hasMore && onLoadMore ? (
+        <Button variant="secondary" className="self-center" loading={loadingMore} onClick={onLoadMore}>
+          {t('loadMore')}
+        </Button>
+      ) : null}
     </div>
   );
 }

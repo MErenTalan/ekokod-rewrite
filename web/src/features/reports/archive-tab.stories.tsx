@@ -19,3 +19,5 @@ type Story = StoryObj<typeof meta>;
 export const Default: Story = {};
 export const Empty: Story = { args: { items: [], total: 0 } };
 export const Loading: Story = { args: { loading: true } };
+/** R275: the archive is paged; the next page is one action away. */
+export const HasMore: Story = { args: { total: 900, hasMore: true, onLoadMore: () => {} } };

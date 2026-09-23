@@ -196,7 +196,8 @@
     },
     "empty": "Rapor bulunamadı",
     "emptyDescription": "Filtreleri değiştirin ya da Aylık/Yıllık sekmesinden bir rapor oluşturun.",
-    "loading": "Raporlar yükleniyor"
+    "loading": "Raporlar yükleniyor",
+    "loadMore": "Daha fazla yükle"
   },
   "retry": "Yeniden dene"
 }

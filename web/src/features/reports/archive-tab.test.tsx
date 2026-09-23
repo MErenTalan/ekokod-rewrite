@@ -45,6 +45,14 @@ describe('ArchiveTabView', () => {
     expect(props.onDownload).toHaveBeenCalledWith('r-2', 'excel');
   });
 
+  // R275: the API pages the archive; more than one page must stay reachable.
+  it('offers the next page when the archive has more than it shows', async () => {
+    const onLoadMore = vi.fn();
+    const { user } = renderWithProviders(<ArchiveTabView {...view({ total: 900, hasMore: true, onLoadMore })} />);
+    await user.click(screen.getByRole('button', { name: 'Daha fazla yükle' }));
+    expect(onLoadMore).toHaveBeenCalled();
+  });
+
   it('says what to do when nothing matches', () => {
     renderWithProviders(<ArchiveTabView {...view({ items: [], total: 0 })} />);
     expect(screen.getByText('Rapor bulunamadı')).toBeVisible();

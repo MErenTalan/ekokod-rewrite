@@ -196,7 +196,8 @@
     },
     "empty": "No report found",
     "emptyDescription": "Change the filters, or generate a report from the Monthly or Yearly tab.",
-    "loading": "Loading reports"
+    "loading": "Loading reports",
+    "loadMore": "Load more"
   },
   "retry": "Try again"
 }

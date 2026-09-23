@@ -186,21 +186,35 @@ function ArchiveTab() {
   const scope = useScopeParams();
   const [filters, setFilters] = useState<ArchiveFilters>({ type: 'all', buildingId: 'all' });
   const buildings = $api.useQuery('get', '/api/v1/buildings', { params: { query: { ...scope, limit: 500 } } });
-  const list = $api.useQuery('get', '/api/v1/reports', {
-    params: {
-      query: {
-        ...scope,
-        limit: 500,
-        type: filters.type === 'all' ? undefined : filters.type,
-        building_id: filters.buildingId === 'all' ? undefined : filters.buildingId,
+  // R275: the archive is paged; every page stays reachable through the cursor.
+  const list = $api.useInfiniteQuery(
+    'get',
+    '/api/v1/reports',
+    {
+      params: {
+        query: {
+          ...scope,
+          limit: 200,
+          type: filters.type === 'all' ? undefined : filters.type,
+          building_id: filters.buildingId === 'all' ? undefined : filters.buildingId,
+        },
       },
     },
-  });
+    {
+      pageParamName: 'cursor',
+      initialPageParam: undefined,
+      getNextPageParam: (last: { next_cursor?: string | null }) => last.next_cursor ?? undefined,
+    },
+  );
+  const pages = list.data?.pages ?? [];
   return (
     <ArchiveTabView
-      items={list.data?.items ?? []}
-      total={list.data?.total ?? 0}
+      items={pages.flatMap((p) => p.items)}
+      total={pages[0]?.total ?? 0}
       loading={list.isPending}
+      hasMore={list.hasNextPage}
+      loadingMore={list.isFetchingNextPage}
+      onLoadMore={() => void list.fetchNextPage()}
       filters={filters}
       buildings={(buildings.data?.items ?? []).map((b) => ({ value: b.id, label: b.name }))}
       onFilters={setFilters}

@@ -27,11 +27,12 @@ const ROUTES = {
         ? { version: 1, type: 'yearly', period: '2025', yearly: demoYearly }
         : { version: 1, type: 'monthly', period: '2026-08', monthly: demoMonthly },
     ),
+  // Two pages: the first names a cursor, the second is the rest.
   'GET /api/v1/reports': (req: Request) =>
     Response.json(
-      new URL(req.url).searchParams.get('type') === 'yearly'
-        ? { items: [], next_cursor: null, total: 0 }
-        : { items: demoArchive, next_cursor: null, total: demoArchive.length },
+      new URL(req.url).searchParams.get('cursor') === 'p2'
+        ? { items: demoArchive.slice(2), next_cursor: null, total: demoArchive.length }
+        : { items: demoArchive.slice(0, 2), next_cursor: 'p2', total: demoArchive.length },
     ),
   'POST /api/v1/reports/generate': Response.json(
     { items: [{ building_id: 'b-1', report_id: 'r-9', job_id: 'report.generate:b-1:monthly:2026-08' }] },
@@ -112,7 +113,10 @@ describe('ReportsPage', () => {
     const { user } = render();
     await user.click(await screen.findByRole('tab', { name: 'Rapor arşivi' }));
     expect(await screen.findByText('Toplam rapor: 4')).toBeVisible();
-    expect(screen.getByRole('heading', { name: '2025 raporları' })).toBeVisible();
+    expect(screen.queryByRole('listitem', { name: /Ağustos 2026/ })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Daha fazla yükle' }));
+    expect(await screen.findByRole('listitem', { name: /Ağustos 2026/ })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Daha fazla yükle' })).toBeNull();
   });
 
   it('never lists plants for a building admin (GET /power-plants is A CA CR)', async () => {
