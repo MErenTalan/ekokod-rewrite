@@ -290,6 +290,14 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		return graph{}, fmt.Errorf("worker: build job client: %w", err)
 	}
 	closers = append(closers, namedCloser{"job-client", func() { _ = jobClient.Close() }})
+	// The solar dispatch replaces an archived sync under its fixed id (R288).
+	redisOpt, err := job.RedisOpt(cfg.Redis)
+	if err != nil {
+		closeAll()
+		return graph{}, fmt.Errorf("worker: redis options for the job inspector: %w", err)
+	}
+	inspector := asynq.NewInspector(redisOpt)
+	closers = append(closers, namedCloser{"job-inspector", func() { _ = inspector.Close() }})
 
 	syncer := marketdata.New(epiasClient, adminMarketDataRepo, adminJournalRepo, clock.System(), log)
 
@@ -510,7 +518,7 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		Totals: postgres.NewProductionTotalsRepository(pool), Faults: postgres.NewFaultRepository(pool), Ops: opsRepo,
 		AdminSolar: admin.NewSolarRepository(pool), SMTP: postgres.NewSMTPRepository(pool, cipher),
 		Mail: mail.NewSMTPSender(mailDialTimeout, nil), Creds: credService, ISolar: isolarClient,
-		Clock: clock.System(), Enqueuer: jobClient, MaxRetry: cfg.Worker.MaxRetries,
+		Clock: clock.System(), Enqueuer: jobClient, Inspector: inspector, MaxRetry: cfg.Worker.MaxRetries,
 	})
 
 	return graph{

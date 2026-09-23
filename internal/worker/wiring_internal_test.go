@@ -190,7 +190,7 @@ func TestBuildGraphOpensNamedClosersForRedisAndJobClient(t *testing.T) {
 	for i, c := range g.closers {
 		names[i] = c.name
 	}
-	require.Equal(t, []string{"redis", "job-client"}, names)
+	require.Equal(t, []string{"redis", "job-client", "job-inspector"}, names)
 }
 
 // TestConsumptionRefreshEnqueuerAppliesConfiguredMaxRetry proves

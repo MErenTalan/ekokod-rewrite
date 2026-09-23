@@ -334,8 +334,12 @@ func (s *Service) backfill(ctx context.Context, sc store.Scope, creds integratio
 }
 
 // DispatchSync enqueues a sync for every linked plant (R288); a plant whose
-// previous sync is still queued or running keeps it.
+// previous sync is still queued or running keeps it. A finally failed sync
+// is archived under the same id, so the inspector is required to replace it.
 func (s *Service) DispatchSync(ctx context.Context) (int, error) {
+	if s.d.Inspector == nil {
+		return 0, errors.New("solar: dispatch needs a task inspector to replace archived syncs")
+	}
 	plants, err := s.d.AdminSolar.LinkedPlants(ctx)
 	if err != nil {
 		return 0, err
