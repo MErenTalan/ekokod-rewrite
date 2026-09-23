@@ -124,29 +124,19 @@
   - Git-ignored stand-ins live in the ledger folder's `shim/` (`psql`, `rediscli`, `pgq`). Build them into a bin dir and put it first on `PATH`.
   - E2E still needs Postgres to be unstuck, because it refreshes aggregates.
 
-## F9 remaining
-1. **Re-run the gates the hang left unverified** (all touched by `9c746ca`):
-   - `-race` integration: `internal/api/v1`, `internal/apiwire`, `internal/seed`, `internal/cli/...`, `internal/service/{renewable,solar,jobs,financial}`.
-   - `internal/arch`.
-   - Lint: `golangci-lint run --concurrency 2 --build-tags=integration ./internal/...`. Read the output on its own, never through `tail` in an `&&` chain.
-   - `make check-generate` and `make openapi` must show no diff.
-   - Web: lint, typecheck, `pnpm test --maxWorkers=2` and `check:i18n-parity`. Last green full run: 234 files / 927 tests, before the solar sync fix; the solar folder passed 27/27 after it.
-2. **Task 16:**
-   - Run `pnpm build`, then the four specs `solar-plants`, `renewable`, `financial` and `bills`, then the **full e2e suite** with the worker.
-   - For reference: the first run failed 8 of 13; 5 of those 8 were one API panic, now fixed.
-   - Then run the a11y stories for `Features/Renewable`, `Features/Financial` and `Features/SolarPlants`.
-   - Fix what fails, commit, then run `task-done … 16 757c73f -- <e2e command>`.
-3. **Task 17 — whole-phase self-review:**
-   - Generate the package with `review-package` (executing-plans skill): `../subagent-driven-development/scripts/review-package PLAN $(git merge-base phase/f8b-reports HEAD) HEAD`.
-   - Review it yourself against `code-reviewer.md`: tenancy/authorisation first, then a11y and design rules.
-   - Write `Final review: self-review (no subagent tool)` in the ledger.
-   - Do one fix pass. Each fix goes RED→GREEN and ends with a green suite. Minors go to the ledger as `Final: minor (deferred)`.
-   - Run the verification block, rewrite the F9 sections of this file as done, and commit.
-4. **Points to judge in the self-review** (noted, not yet judged):
-   - **Solar wiring:** the worker's `solar.New` wiring against the API's. The API was missing `Analyzers`/`Bills`; check that every call site gives each method the deps it uses.
-   - **Recipient limit:** `R298` says 0–20 recipients, but Task 6 ruled 50 (see the ledger).
-   - **Scope of `analytics.financial`:** renewable earnings read bills, and a BA reads bills only within their scope. Confirm nothing leaks across buildings through `building_id`.
-   - **Grid factor unit (F8b):** the yearly report shows the grid factor as "0,469 kWh" (`yearly-report.tsx:191`, unit = base_unit). F9 fixed only the renewable panel (`kg CO2e/kWh`). Probably a deferred minor; fixing it changes the PDF golden hash.
+## F9 remaining (updated 2026-09-24 ~01:50)
+**Code and self-review are done. Only the gates that need Docker are still pending.**
+- **Done this session** (commits `dba8c58`, `2c2f820`, `5e55688`, `76ab358`):
+  - i18n parity fix.
+  - Deactivated iSolar credential now stops link, sync and fault fetch (new closed code `credential_inactive`).
+  - Worker wires an asynq inspector, so an archived plant sync is replaced by the `*/15` dispatch.
+  - 4 a11y fixes.
+  - Self-review written to the ledger (`Final:` lines, 4 deferred minors).
+- **Green this session:** Go lint, check-generate/openapi, Go unit tests, web lint/typecheck/i18n/unit tests, `pnpm build`, F9 a11y stories (292/292).
+- **PENDING — needs Docker/Postgres healthy:**
+  1. `-race` integration: `internal/api/v1`, `internal/apiwire`, `internal/seed`, `internal/cli/...`, `internal/service/{renewable,solar,jobs,financial}`, `internal/worker` (`TestBuildGraphOpensNamedClosers` now expects `job-inspector`).
+  2. E2E: `solar-plants`, `renewable`, `financial`, `bills`, then the full suite with the worker.
+  3. Then `task-done PLAN 16 757c73f -- <e2e cmd>` and mark Task 17 complete in the ledger.
 
 ## What F9 built (short)
 - **Data:**
