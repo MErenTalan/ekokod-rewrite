@@ -13,6 +13,7 @@ import { useScopeParams } from '@/lib/selection/selection-store';
 import { useSession } from '@/lib/session/session-provider';
 
 import { MonthlyReportView } from './monthly-report';
+import { YearlyReportView } from './yearly-report';
 import { ReportSelectionView, type PlantOption, type ReportKind, type ReportSelection } from './report-selection';
 import { useReportPreview } from './use-report-preview';
 
@@ -49,6 +50,7 @@ function ReportTab({ kind }: { kind: ReportKind }) {
 
   const preview = useReportPreview(kind, selection);
   const monthly = preview.data?.monthly;
+  const yearly = preview.data?.yearly;
 
   let body;
   if (selection.buildingIds.length === 0 || selection.period === null) {
@@ -65,6 +67,8 @@ function ReportTab({ kind }: { kind: ReportKind }) {
     body = <Skeleton className="h-96 w-full" />;
   } else if (kind === 'monthly' && monthly) {
     body = <MonthlyReportView payload={monthly} />;
+  } else if (kind === 'yearly' && yearly) {
+    body = <YearlyReportView payload={yearly} />;
   }
 
   return (

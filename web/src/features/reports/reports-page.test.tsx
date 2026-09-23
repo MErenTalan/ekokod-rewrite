@@ -66,6 +66,7 @@ describe('ReportsPage', () => {
       expect(lastPreview().get('type')).toBe('yearly');
     });
     expect(lastPreview().get('period')).toMatch(/^\d{4}$/);
+    expect(await screen.findByRole('table', { name: 'Karbon emisyonu' })).toBeVisible();
   });
 
   it('never lists plants for a building admin (GET /power-plants is A CA CR)', async () => {
