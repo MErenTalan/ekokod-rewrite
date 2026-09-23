@@ -3,7 +3,23 @@ import type { Analyzer, BillDashboard } from '@/lib/api/types';
 /** Story and test data for the bills screen; never fetched (R196). */
 export const demoDashboard: BillDashboard = {
   period: '2026-08',
-  plants: { available: false, reason: 'no_plant_production_source' },
+  plants: {
+    available: true,
+    rows: [
+      {
+        plant_id: 'p-1', plant_name: 'Konya GES', analyzer_name: 'Mahsup Sayacı', installation_number: '40009',
+        production_kwh: '1200', production_price: '1.8', currency: 'TRY', consumption_price: '3.12',
+        invoice_amount: '2160.00', bill_id: 'bill-1',
+      },
+      {
+        plant_id: 'p-2', plant_name: 'Arazi GES', analyzer_name: undefined, installation_number: undefined,
+        production_kwh: undefined, production_price: undefined, currency: undefined, consumption_price: undefined,
+        invoice_amount: undefined, bill_id: undefined,
+      },
+    ],
+    total_production_kwh: '1200',
+    total_invoice: [{ currency: 'TRY', amount: '2160.00' }],
+  },
   buildings: [
     {
       building_id: 'b-1',

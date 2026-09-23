@@ -19,6 +19,7 @@ import { DashboardTableView } from './dashboard-table';
 import { GenerateCardView, type GenerateRequest } from './generate-card';
 import { messageKeyForErrorCode } from './generation-status';
 import { NettingSummaryView } from './netting-summary';
+import { PlantsSectionView } from './plants-section';
 
 const ANALYZER_LIMIT = 500;
 
@@ -150,7 +151,11 @@ export function BillsPage() {
                 }
               />
               {dashboard.data ? (
-                <NettingSummaryView netting={dashboard.data.netting} plants={dashboard.data.plants} />
+                <>
+                  <NettingSummaryView netting={dashboard.data.netting} />
+                  <PlantsSectionView plants={dashboard.data.plants}
+                    onDownloadPdf={(id) => download(`/api/v1/bills/${id}/pdf`, {}, `fatura-${id}.pdf`)} />
+                </>
               ) : null}
             </>
           )}

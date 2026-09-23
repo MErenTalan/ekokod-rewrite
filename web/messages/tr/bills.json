@@ -47,8 +47,23 @@
   },
   "plants": {
     "title": "GES santralleri",
-    "unavailable": "Santral üretimi için veri kaynağı henüz yok",
-    "unavailableDescription": "Santral satırları, santral üretimi sisteme bağlandığında (F9) gelecek. O zamana kadar burada uydurma bir rakam gösterilmez."
+    "description": "Şirketin santralleri, bu ayın üretimi ve satış tutarı. Analizör sütunları yalnızca bir mahsuplaşma analizörü seçilmişse dolar.",
+    "columns": {
+      "plant": "Santral",
+      "analyzer": "Mahsuplaşma analizörü",
+      "installationNumber": "Tesisat no",
+      "production": "Üretim (kWh)",
+      "consumptionPrice": "Tüketim fiyatı (/kWh)",
+      "productionPrice": "Üretim fiyatı (/kWh)",
+      "sale": "Satış tutarı",
+      "currency": "Para birimi"
+    },
+    "noData": "veri yok",
+    "totalProduction": "Toplam üretim",
+    "totalSale": "Toplam satış",
+    "download": "Faturayı indir",
+    "empty": "Şirkete kayıtlı santral yok",
+    "emptyDescription": "Santraller Ayarlar › GES santralleri sekmesinden eklenir."
   },
   "generate": {
     "title": "Fatura oluştur",

@@ -46,9 +46,24 @@
     "companyBill": "Company invoice"
   },
   "plants": {
-    "title": "Solar plants",
-    "unavailable": "No data source for plant production yet",
-    "unavailableDescription": "Plant rows arrive when plant production is connected (F9). Until then no invented figure is shown here."
+    "title": "Solar plants (GES)",
+    "description": "The company's plants, this month's production and sale value. Analyzer columns fill only when a netting analyzer is chosen.",
+    "columns": {
+      "plant": "Plant",
+      "analyzer": "Netting analyzer",
+      "installationNumber": "Installation no",
+      "production": "Production (kWh)",
+      "consumptionPrice": "Consumption price (/kWh)",
+      "productionPrice": "Production price (/kWh)",
+      "sale": "Sale amount",
+      "currency": "Currency"
+    },
+    "noData": "no data",
+    "totalProduction": "Total production",
+    "totalSale": "Total sale",
+    "download": "Download bill",
+    "empty": "The company has no plants",
+    "emptyDescription": "Plants are added under Settings › Solar plants."
   },
   "generate": {
     "title": "Generate an invoice",

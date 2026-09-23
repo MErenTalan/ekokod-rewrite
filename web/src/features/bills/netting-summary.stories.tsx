@@ -6,7 +6,7 @@ import { NettingSummaryView } from './netting-summary';
 const meta = {
   title: 'Features/Bills/NettingSummary',
   component: NettingSummaryView,
-  args: { netting: demoDashboard.netting, plants: demoDashboard.plants },
+  args: { netting: demoDashboard.netting },
 } satisfies Meta<typeof NettingSummaryView>;
 export default meta;
 type Story = StoryObj<typeof meta>;

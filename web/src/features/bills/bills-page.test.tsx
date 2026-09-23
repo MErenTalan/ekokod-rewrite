@@ -61,12 +61,14 @@ describe('BillsPage', () => {
     expect(queryOf(api.calls, 'GET', '/api/v1/bills/dashboard').get('month')).toBe('8');
   });
 
-  it('says the plant section has no data source instead of showing an empty table', async () => {
+  it('lists the plant section beside the netting (R290)', async () => {
     const user = userEvent.setup();
     api = mockApi(ROUTES);
     render();
     await pickAugust(user);
-    expect(await screen.findByText(/veri kaynağı henüz yok/i)).toBeVisible();
+    // R290: the plant section lists the company's plants beside the netting.
+    expect(await screen.findByRole('region', { name: 'GES santralleri' })).toBeVisible();
+    expect(screen.getByText('Konya GES')).toBeVisible();
   });
 
   it('offers no generation card to a principal without bills.compute', async () => {

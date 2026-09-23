@@ -4,22 +4,16 @@ import { useTranslations } from 'next-intl';
 
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
-import { EmptyState } from '@/components/ui/empty-state';
 import { StatTile } from '@/components/ui/stat-tile';
 import { formatNumber } from '@/lib/format';
-import type { BillDashboard, BillDashboardNetting } from '@/lib/api/types';
+import type { BillDashboardNetting } from '@/lib/api/types';
 
 export type NettingSummaryViewProps = {
   netting: BillDashboardNetting[];
-  plants: BillDashboard['plants'];
 };
 
-/**
- * The netting summary of 01 §7.10, one block per currency (R253), plus the
- * plant section — which has no data source before F9 and says so rather than
- * showing an empty table that reads as zero (R235).
- */
-export function NettingSummaryView({ netting, plants }: NettingSummaryViewProps) {
+/** The netting summary of 01 §7.10, one block per currency (R253). */
+export function NettingSummaryView({ netting }: NettingSummaryViewProps) {
   const t = useTranslations('bills');
   const num = (v: string) => formatNumber(v, { maxFractionDigits: 2 });
   const money = (v: string) => formatNumber(v, { minFractionDigits: 2, maxFractionDigits: 2 });
@@ -53,13 +47,6 @@ export function NettingSummaryView({ netting, plants }: NettingSummaryViewProps)
           )}
         </Card>
       ))}
-
-      <Card className="flex flex-col gap-2">
-        <h3 className="type-h3">{t('plants.title')}</h3>
-        {plants.available ? null : (
-          <EmptyState title={t('plants.unavailable')} description={t('plants.unavailableDescription')} />
-        )}
-      </Card>
     </div>
   );
 }
