@@ -2,6 +2,7 @@ package v1
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -12,6 +13,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/api/v1/kit"
 	"github.com/MErenTalan/ekokod-rewrite/internal/api/v1/mw"
 	"github.com/MErenTalan/ekokod-rewrite/internal/auth"
+	domainbilling "github.com/MErenTalan/ekokod-rewrite/internal/domain/billing"
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	domaintariff "github.com/MErenTalan/ekokod-rewrite/internal/domain/tariff"
 	perr "github.com/MErenTalan/ekokod-rewrite/internal/platform/errors"
@@ -48,6 +50,14 @@ func billingRoutes() []Route {
 			Roles: auth.Roles(roleA, roleCA, roleBA), Entity: "bill",
 			Summary: "Enqueue bill computation; recomputation supersedes.", Request: dto.BillComputeRequest{},
 			Response: dto.BillComputeAccepted{}, Status: http.StatusAccepted, Handler: (*Handlers).computeBills},
+		{Method: http.MethodGet, Pattern: "/bills/dashboard", OperationID: "bills.dashboard", Tag: "bills", Access: RoleGated, Roles: all,
+			Summary: "The month's invoice dashboard: analyzer rows per building, their totals and the netting summary.",
+			Request: dto.BillDashboardRequest{}, Response: dto.BillDashboard{}, Status: http.StatusOK,
+			Handler: (*Handlers).billDashboard},
+		{Method: http.MethodGet, Pattern: "/bills/dashboard/export", OperationID: "bills.dashboard.export", Tag: "bills",
+			Access: RoleGated, Roles: all, Summary: "The whole dashboard as one XLSX or PDF.",
+			Request: dto.BillDashboardExportRequest{}, Status: http.StatusOK, RawContentType: "application/octet-stream",
+			Handler: (*Handlers).billDashboardExport},
 		{Method: http.MethodGet, Pattern: "/bills/latest", OperationID: "bills.latest", Tag: "bills", Access: RoleGated, Roles: all,
 			Summary: "The most recent bill of a subject.", Request: dto.BillLatestRequest{}, Response: dto.Bill{}, Status: http.StatusOK,
 			Handler: (*Handlers).latestBill},
@@ -334,6 +344,84 @@ func (h *Handlers) billPDF(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeFile(w, "application/pdf", "fatura-"+b.PeriodKey+"-"+b.ID.String()[:8]+".pdf", pdf)
+}
+
+func (h *Handlers) billDashboard(w http.ResponseWriter, r *http.Request) {
+	serve(w, r, http.StatusOK, func(req dto.BillDashboardRequest) (any, error) {
+		res, err := h.Billing.Dashboard(r.Context(), mw.ScopeFrom(r), billingsvc.DashboardInput{Year: req.Year, Month: req.Month})
+		if err != nil {
+			return nil, billingErr(err)
+		}
+		return dashboardDTO(res, fmt.Sprintf("%04d-%02d", req.Year, req.Month)), nil
+	})
+}
+
+func (h *Handlers) billDashboardExport(w http.ResponseWriter, r *http.Request) {
+	var req dto.BillDashboardExportRequest
+	if err := kit.Bind(r, &req); err != nil {
+		kit.WriteError(w, r, err)
+		return
+	}
+	format := req.Format
+	if format == "" {
+		format = "xlsx"
+	}
+	body, name, err := h.BillRequests.DashboardExport(r.Context(), mw.ScopeFrom(r),
+		billingsvc.DashboardInput{Year: req.Year, Month: req.Month}, format, kit.Locale(r))
+	if err != nil {
+		kit.WriteError(w, r, billingErr(err))
+		return
+	}
+	contentType := xlsxType
+	if format == "pdf" {
+		contentType = "application/pdf"
+	}
+	writeFile(w, contentType, name, body)
+}
+
+// dashboardDTO maps the pure aggregate onto the wire. The plant section is
+// always unavailable: 01 §7.10 describes it, and nothing in the schema can
+// answer it before F9 (R235).
+func dashboardDTO(res domainbilling.DashboardResult, period string) dto.BillDashboard {
+	out := dto.BillDashboard{
+		Period:    period,
+		Buildings: make([]dto.BillDashboardBuilding, 0, len(res.Buildings)),
+		Netting:   make([]dto.BillDashboardNetting, 0, len(res.Netting)),
+		Plants:    dto.BillDashboardPlants{Available: false, Reason: "no_plant_production_source"},
+	}
+	for _, b := range res.Buildings {
+		building := dto.BillDashboardBuilding{
+			BuildingID: b.BuildingID, BuildingName: b.BuildingName, Rows: make([]dto.BillDashboardRow, 0, len(b.Rows)),
+			TotalConsumption: dto.D(b.TotalConsumption), TotalProduction: dto.D(b.TotalProduction),
+			TotalInvoice: dto.D(b.TotalInvoice), Currency: string(b.Currency), DivergesFromRows: b.DivergesFromRows,
+		}
+		for _, row := range b.Rows {
+			building.Rows = append(building.Rows, dashboardRowDTO(row))
+		}
+		if b.BuildingBill != nil {
+			bill := dashboardRowDTO(*b.BuildingBill)
+			building.BuildingBill = &bill
+		}
+		out.Buildings = append(out.Buildings, building)
+	}
+	for _, n := range res.Netting {
+		out.Netting = append(out.Netting, dto.BillDashboardNetting{
+			Currency: string(n.Currency), TotalConsumption: dto.D(n.TotalConsumption), TotalProduction: dto.D(n.TotalProduction),
+			Net: dto.D(n.Net), NetStatus: n.NetStatus, TotalInvoice: dto.D(n.TotalInvoice),
+			EfficiencyPct: dto.DP(n.EfficiencyPct), PeriodKey: n.PeriodKey, CompanyBillID: n.CompanyBillID,
+		})
+	}
+	return out
+}
+
+func dashboardRowDTO(row domainbilling.DashboardRow) dto.BillDashboardRow {
+	return dto.BillDashboardRow{
+		BillID: row.BillID, BuildingID: row.BuildingID, AnalyzerID: row.AnalyzerID, BuildingName: row.BuildingName,
+		AnalyzerName: row.AnalyzerName, InstallationNumber: row.InstallationNumber, EtsoCode: row.EtsoCode,
+		PeriodKey: row.PeriodKey, Consumption: dto.D(row.Consumption), Production: dto.D(row.Production),
+		ConsumptionPrice: dto.DP(row.ConsumptionPrice), ProductionPrice: dto.DP(row.ProductionPrice),
+		Invoice: dto.D(row.Invoice), Currency: string(row.Currency),
+	}
 }
 
 func (h *Handlers) billHourly(w http.ResponseWriter, r *http.Request) {

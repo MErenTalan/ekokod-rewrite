@@ -995,6 +995,213 @@
         ],
         "type": "object"
       },
+      "BillDashboard": {
+        "properties": {
+          "buildings": {
+            "items": {
+              "$ref": "#/components/schemas/BillDashboardBuilding"
+            },
+            "type": "array"
+          },
+          "netting": {
+            "items": {
+              "$ref": "#/components/schemas/BillDashboardNetting"
+            },
+            "type": "array"
+          },
+          "period": {
+            "type": "string"
+          },
+          "plants": {
+            "$ref": "#/components/schemas/BillDashboardPlants"
+          }
+        },
+        "required": [
+          "period",
+          "buildings",
+          "plants",
+          "netting"
+        ],
+        "type": "object"
+      },
+      "BillDashboardBuilding": {
+        "properties": {
+          "building_bill": {
+            "$ref": "#/components/schemas/BillDashboardRow"
+          },
+          "building_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "building_name": {
+            "type": "string"
+          },
+          "currency": {
+            "enum": [
+              "TRY",
+              "USD",
+              "EUR"
+            ],
+            "type": "string"
+          },
+          "diverges_from_rows": {
+            "type": "boolean"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/BillDashboardRow"
+            },
+            "type": "array"
+          },
+          "total_consumption": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "total_invoice": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "total_production": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "required": [
+          "building_id",
+          "building_name",
+          "rows",
+          "total_consumption",
+          "total_production",
+          "total_invoice",
+          "currency",
+          "diverges_from_rows"
+        ],
+        "type": "object"
+      },
+      "BillDashboardNetting": {
+        "properties": {
+          "company_bill_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "currency": {
+            "enum": [
+              "TRY",
+              "USD",
+              "EUR"
+            ],
+            "type": "string"
+          },
+          "efficiency_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "net": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "net_status": {
+            "enum": [
+              "net_consumption",
+              "net_production"
+            ],
+            "type": "string"
+          },
+          "period_key": {
+            "type": "string"
+          },
+          "total_consumption": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "total_invoice": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "total_production": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "required": [
+          "currency",
+          "total_consumption",
+          "total_production",
+          "net",
+          "net_status",
+          "total_invoice",
+          "period_key"
+        ],
+        "type": "object"
+      },
+      "BillDashboardPlants": {
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "available"
+        ],
+        "type": "object"
+      },
+      "BillDashboardRow": {
+        "properties": {
+          "analyzer_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "analyzer_name": {
+            "type": "string"
+          },
+          "bill_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "building_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "building_name": {
+            "type": "string"
+          },
+          "consumption": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "consumption_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "currency": {
+            "enum": [
+              "TRY",
+              "USD",
+              "EUR"
+            ],
+            "type": "string"
+          },
+          "etso_code": {
+            "type": "string"
+          },
+          "installation_number": {
+            "type": "string"
+          },
+          "invoice": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "period_key": {
+            "type": "string"
+          },
+          "production": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "production_price": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "required": [
+          "bill_id",
+          "building_name",
+          "analyzer_name",
+          "installation_number",
+          "etso_code",
+          "period_key",
+          "consumption",
+          "production",
+          "invoice",
+          "currency"
+        ],
+        "type": "object"
+      },
       "BillDetail": {
         "properties": {
           "active_import": {
@@ -7858,6 +8065,245 @@
           }
         ],
         "summary": "Enqueue bill computation; recomputation supersedes.",
+        "tags": [
+          "bills"
+        ]
+      }
+    },
+    "/api/v1/bills/dashboard": {
+      "get": {
+        "operationId": "bills.dashboard",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "year",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "month",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillDashboard"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "The month's invoice dashboard: analyzer rows per building, their totals and the netting summary.",
+        "tags": [
+          "bills"
+        ]
+      }
+    },
+    "/api/v1/bills/dashboard/export": {
+      "get": {
+        "operationId": "bills.dashboard.export",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "year",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "month",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "schema": {
+              "enum": [
+                "xlsx",
+                "pdf"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "The whole dashboard as one XLSX or PDF.",
         "tags": [
           "bills"
         ]

@@ -87,6 +87,8 @@ var expectedAccess = map[string]string{
 	"DELETE /tariffs/{id}":    "A CA",
 	// 05 §7 (F6a subset, R179)
 	"GET /bills":                    "A CA CR BA BR D",
+	"GET /bills/dashboard":          "A CA CR BA BR D",
+	"GET /bills/dashboard/export":   "A CA CR BA BR D",
 	"POST /bills/compute":           "A CA BA",
 	"GET /bills/latest":             "A CA CR BA BR D",
 	"GET /bills/{id}":               "A CA CR BA BR D",

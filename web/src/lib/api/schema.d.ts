@@ -348,6 +348,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/bills/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The month's invoice dashboard: analyzer rows per building, their totals and the netting summary. */
+        get: operations["bills.dashboard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bills/dashboard/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The whole dashboard as one XLSX or PDF. */
+        get: operations["bills.dashboard.export"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/bills/latest": {
         parameters: {
             query?: never;
@@ -1495,6 +1529,58 @@ export interface components {
             period: string;
             /** @enum {string} */
             scope: "analyzer" | "building" | "company";
+        };
+        BillDashboard: {
+            buildings: components["schemas"]["BillDashboardBuilding"][];
+            netting: components["schemas"]["BillDashboardNetting"][];
+            period: string;
+            plants: components["schemas"]["BillDashboardPlants"];
+        };
+        BillDashboardBuilding: {
+            building_bill?: components["schemas"]["BillDashboardRow"];
+            building_id: components["schemas"]["UuidUUID"];
+            building_name: string;
+            /** @enum {string} */
+            currency: "TRY" | "USD" | "EUR";
+            diverges_from_rows: boolean;
+            rows: components["schemas"]["BillDashboardRow"][];
+            total_consumption: components["schemas"]["Decimal"];
+            total_invoice: components["schemas"]["Decimal"];
+            total_production: components["schemas"]["Decimal"];
+        };
+        BillDashboardNetting: {
+            company_bill_id?: components["schemas"]["UuidUUID"];
+            /** @enum {string} */
+            currency: "TRY" | "USD" | "EUR";
+            efficiency_pct?: components["schemas"]["Decimal"];
+            net: components["schemas"]["Decimal"];
+            /** @enum {string} */
+            net_status: "net_consumption" | "net_production";
+            period_key: string;
+            total_consumption: components["schemas"]["Decimal"];
+            total_invoice: components["schemas"]["Decimal"];
+            total_production: components["schemas"]["Decimal"];
+        };
+        BillDashboardPlants: {
+            available: boolean;
+            reason?: string;
+        };
+        BillDashboardRow: {
+            analyzer_id?: components["schemas"]["UuidUUID"];
+            analyzer_name: string;
+            bill_id: components["schemas"]["UuidUUID"];
+            building_id?: components["schemas"]["UuidUUID"];
+            building_name: string;
+            consumption: components["schemas"]["Decimal"];
+            consumption_price?: components["schemas"]["Decimal"];
+            /** @enum {string} */
+            currency: "TRY" | "USD" | "EUR";
+            etso_code: string;
+            installation_number: string;
+            invoice: components["schemas"]["Decimal"];
+            period_key: string;
+            production: components["schemas"]["Decimal"];
+            production_price?: components["schemas"]["Decimal"];
         };
         BillDetail: {
             active_import: components["schemas"]["Decimal"];
@@ -4520,6 +4606,163 @@ export interface operations {
             };
             /** @description Unprocessable Entity */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "bills.dashboard": {
+        parameters: {
+            query: {
+                year: number;
+                month: number;
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillDashboard"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "bills.dashboard.export": {
+        parameters: {
+            query: {
+                year: number;
+                month: number;
+                format?: "xlsx" | "pdf";
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
