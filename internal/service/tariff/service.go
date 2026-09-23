@@ -46,10 +46,24 @@ type Deps struct {
 	Icmal     store.IcmalRepository
 	// BulkAssignments records R241's history; nil disables the recording.
 	BulkAssignments store.BulkAssignmentRepository
-	Prices          store.PriceRepository
-	Params          store.BillingParameterRepository
-	Clock           clock.Clock
-	Log             *slog.Logger
+	// SolarTariffs and Plants serve the §7.11 solar tab (R244).
+	SolarTariffs store.SolarTariffRepository
+	Plants       store.PlantRepository
+	// Catalogue is the platform default-tariff catalogue (R243), admin only.
+	Catalogue DefaultCatalogue
+	Prices    store.PriceRepository
+	Params    store.BillingParameterRepository
+	Clock     clock.Clock
+	Log       *slog.Logger
+}
+
+// DefaultCatalogue is the slice of the admin catalogue repository the default
+// tariff tab needs. It is an interface here so the tenant-facing service does
+// not depend on the admin package.
+type DefaultCatalogue interface {
+	ListNationalTariffSchedule(ctx context.Context, f store.NationalTariffFilter) ([]model.NationalTariffScheduleEntry, error)
+	UpsertNationalTariffSchedule(ctx context.Context, entries []model.NationalTariffScheduleEntry) (int64, error)
+	DeleteNationalTariffScheduleEntry(ctx context.Context, id uuid.UUID) error
 }
 
 // Service is the tariff service.

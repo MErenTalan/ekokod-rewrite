@@ -168,7 +168,8 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		Buildings: postgres.NewBuildingRepository(pool), Analyzers: postgres.NewAnalyzerRepository(pool),
 		Icmal: postgres.NewIcmalRepository(pool), Prices: postgres.NewPriceRepository(pool),
 		Params: postgres.NewBillingParameterRepository(pool), BulkAssignments: postgres.NewBulkAssignmentRepository(pool),
-		Clock: opts.Clock, Log: log,
+		SolarTariffs: postgres.NewSolarTariffRepository(pool), Plants: postgres.NewPlantRepository(pool),
+		Catalogue: admin.NewCatalogueRepository(pool), Clock: opts.Clock, Log: log,
 	})
 	if err != nil {
 		closeAll()

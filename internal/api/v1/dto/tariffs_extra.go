@@ -147,3 +147,60 @@ type IcmalApplyRequest struct {
 	ID            uuid.UUID           `path:"id" json:"-"`
 	Confirmations []IcmalConfirmation `json:"confirmations" validate:"required,min=1,max=500,dive" required:"true"`
 }
+
+// SolarTariffFields is one plant feed-in price (01 §7.11, tab 2).
+type SolarTariffFields struct {
+	PlantID       uuid.UUID `json:"plant_id" validate:"required" required:"true"`
+	EffectiveFrom Date      `json:"effective_from" validate:"required" required:"true"`
+	FeedInTariff  *Decimal  `json:"feed_in_tariff" validate:"required" required:"true"`
+	PurchasePrice *Decimal  `json:"purchase_price,omitempty"`
+	Currency      string    `json:"currency,omitempty" validate:"omitempty,oneof=TRY USD EUR" enum:"TRY,USD,EUR"`
+	Notes         *string   `json:"notes,omitempty" validate:"omitempty,max=2000"`
+}
+
+// SolarTariff is a stored plant price.
+type SolarTariff struct {
+	ID uuid.UUID `json:"id" required:"true"`
+	SolarTariffFields
+	CreatedAt time.Time `json:"created_at" required:"true"`
+}
+
+// SolarTariffListRequest is GET /solar-tariffs.
+type SolarTariffListRequest struct {
+	PlantID uuid.UUID `query:"plant_id" json:"-" validate:"required" required:"true"`
+	PageRequest
+}
+
+// NationalTariffFields is one row of the platform default catalogue (R243).
+type NationalTariffFields struct {
+	EffectiveFrom     Date     `json:"effective_from" validate:"required" required:"true"`
+	UserGroup         string   `json:"user_group" validate:"required,oneof=residential residential_plus commercial commercial_plus industrial agricultural lighting martyrs_families public_lighting" required:"true" enum:"residential,residential_plus,commercial,commercial_plus,industrial,agricultural,lighting,martyrs_families,public_lighting"`
+	VoltageLevel      string   `json:"voltage_level" validate:"required,oneof=lv mv" required:"true" enum:"lv,mv"`
+	Term              string   `json:"term" validate:"required,oneof=monomial binomial" required:"true" enum:"monomial,binomial"`
+	EnergyPrice       *Decimal `json:"energy_price" validate:"required" required:"true"`
+	T1Price           *Decimal `json:"t1_price,omitempty"`
+	T2Price           *Decimal `json:"t2_price,omitempty"`
+	T3Price           *Decimal `json:"t3_price,omitempty"`
+	DistributionPrice *Decimal `json:"distribution_price" validate:"required" required:"true"`
+	PowerPrice        *Decimal `json:"power_price,omitempty"`
+	OverusePrice      *Decimal `json:"overuse_price,omitempty"`
+	DailyThresholdKwh *Decimal `json:"daily_threshold_kwh,omitempty"`
+	VatRate           *Decimal `json:"vat_rate" validate:"required" required:"true"`
+	Source            *string  `json:"source,omitempty" validate:"omitempty,max=200"`
+}
+
+// NationalTariff is a stored catalogue row.
+type NationalTariff struct {
+	ID uuid.UUID `json:"id" required:"true"`
+	NationalTariffFields
+	CreatedAt time.Time `json:"created_at" required:"true"`
+}
+
+// NationalTariffListRequest is GET /national-tariff-schedule; it is public,
+// so it carries no scope at all.
+type NationalTariffListRequest struct {
+	UserGroup    string `query:"user_group" json:"-" validate:"omitempty,oneof=residential residential_plus commercial commercial_plus industrial agricultural lighting martyrs_families public_lighting"`
+	VoltageLevel string `query:"voltage_level" json:"-" validate:"omitempty,oneof=lv mv"`
+	Term         string `query:"term" json:"-" validate:"omitempty,oneof=monomial binomial"`
+	PageRequest
+}

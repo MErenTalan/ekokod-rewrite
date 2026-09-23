@@ -349,3 +349,154 @@ func (h *Handlers) applyIcmalImport(w http.ResponseWriter, r *http.Request) {
 		return bulkResult(defs), nil
 	})
 }
+
+// solarRoutes and defaultRoutes are the last two tabs of 01 §7.11: plant
+// feed-in prices (R244) and the platform default catalogue (R243). The
+// catalogue's GET is public because 05 §6 lists it so — it is the schedule the
+// public bill calculator reads — and its writes are admin only.
+func solarRoutes() []Route {
+	aca := auth.Roles(roleA, roleCA)
+	acacr := auth.Roles(roleA, roleCA, roleCR)
+	return []Route{
+		{Method: http.MethodGet, Pattern: "/solar-tariffs", OperationID: "solar_tariffs.list", Tag: "tariffs",
+			Access: RoleGated, Roles: acacr, Summary: "A plant's feed-in tariff history.",
+			Request: dto.SolarTariffListRequest{}, Response: dto.Page[dto.SolarTariff]{}, Status: http.StatusOK,
+			Handler: (*Handlers).listSolarTariffs},
+		{Method: http.MethodPost, Pattern: "/solar-tariffs", OperationID: "solar_tariffs.create", Tag: "tariffs",
+			Access: RoleGated, Roles: aca, Entity: "solar_tariff", Summary: "Add a feed-in tariff to a plant.",
+			Request: dto.SolarTariffFields{}, Response: dto.SolarTariff{}, Status: http.StatusCreated,
+			Handler: (*Handlers).createSolarTariff},
+		{Method: http.MethodDelete, Pattern: "/solar-tariffs/{id}", OperationID: "solar_tariffs.delete", Tag: "tariffs",
+			Access: RoleGated, Roles: aca, Entity: "solar_tariff", Summary: "Soft-delete a feed-in tariff.",
+			Request: dto.IDPath{}, Status: http.StatusNoContent, Handler: (*Handlers).deleteSolarTariff},
+
+		{Method: http.MethodGet, Pattern: "/national-tariff-schedule", OperationID: "national_tariff.list", Tag: "tariffs",
+			Access: Public, Summary: "The published national tariff schedule.",
+			Request: dto.NationalTariffListRequest{}, Response: dto.Page[dto.NationalTariff]{}, Status: http.StatusOK,
+			Handler: (*Handlers).listNationalTariffs},
+		{Method: http.MethodPost, Pattern: "/national-tariff-schedule", OperationID: "national_tariff.upsert", Tag: "tariffs",
+			Access: RoleGated, Roles: auth.Roles(roleA), Entity: "national_tariff", PlatformAudit: true,
+			Summary: "Publish a default tariff row, keyed by date, user group, voltage level and term.",
+			Request: dto.NationalTariffFields{}, Status: http.StatusCreated, Handler: (*Handlers).upsertNationalTariff},
+		{Method: http.MethodDelete, Pattern: "/national-tariff-schedule/{id}", OperationID: "national_tariff.delete",
+			Tag: "tariffs", Access: RoleGated, Roles: auth.Roles(roleA), Entity: "national_tariff", PlatformAudit: true,
+			Summary: "Remove a published default tariff row.", Request: dto.IDPath{}, Status: http.StatusNoContent,
+			Handler: (*Handlers).deleteNationalTariff},
+	}
+}
+
+func solarTariffDTO(t model.SolarTariff) dto.SolarTariff {
+	return dto.SolarTariff{
+		ID: t.ID,
+		SolarTariffFields: dto.SolarTariffFields{
+			PlantID: t.PlantID, EffectiveFrom: dto.Date{Time: t.EffectiveFrom}, FeedInTariff: dto.DP(&t.FeedInTariff),
+			PurchasePrice: dto.DP(t.PurchasePrice), Currency: string(t.Currency), Notes: t.Notes,
+		},
+		CreatedAt: dto.T(t.CreatedAt),
+	}
+}
+
+func (h *Handlers) listSolarTariffs(w http.ResponseWriter, r *http.Request) {
+	serve(w, r, http.StatusOK, func(req dto.SolarTariffListRequest) (any, error) {
+		page, limit, err := kit.ResolvePage(req.PageRequest, pageCap)
+		if err != nil {
+			return nil, err
+		}
+		list, err := h.Tariffs.ListSolarTariffs(r.Context(), mw.ScopeFrom(r), req.PlantID, page)
+		if err != nil {
+			return nil, billingErr(err)
+		}
+		items := make([]dto.SolarTariff, 0, len(list))
+		for _, t := range list {
+			items = append(items, solarTariffDTO(t))
+		}
+		return kit.PageOf(items, page, limit), nil
+	})
+}
+
+func (h *Handlers) createSolarTariff(w http.ResponseWriter, r *http.Request) {
+	serve(w, r, http.StatusCreated, func(req dto.SolarTariffFields) (any, error) {
+		created, err := h.Tariffs.CreateSolarTariff(r.Context(), mw.ScopeFrom(r), model.SolarTariff{
+			PlantID: req.PlantID, EffectiveFrom: req.EffectiveFrom.Time, FeedInTariff: dv(req.FeedInTariff),
+			PurchasePrice: dp(req.PurchasePrice), Currency: model.CurrencyCode(req.Currency), Notes: req.Notes,
+		})
+		if err != nil {
+			return nil, billingErr(err)
+		}
+		return solarTariffDTO(created), nil
+	})
+}
+
+func (h *Handlers) deleteSolarTariff(w http.ResponseWriter, r *http.Request) {
+	serve(w, r, http.StatusNoContent, func(req dto.IDPath) (any, error) {
+		return nil, billingErr(h.Tariffs.DeleteSolarTariff(r.Context(), mw.ScopeFrom(r), req.ID))
+	})
+}
+
+func nationalTariffDTO(e model.NationalTariffScheduleEntry) dto.NationalTariff {
+	return dto.NationalTariff{
+		ID: e.ID,
+		NationalTariffFields: dto.NationalTariffFields{
+			EffectiveFrom: dto.Date{Time: e.EffectiveFrom}, UserGroup: string(e.UserGroup),
+			VoltageLevel: string(e.VoltageLevel), Term: string(e.Term), EnergyPrice: dto.DP(&e.EnergyPrice),
+			T1Price: dto.DP(e.T1Price), T2Price: dto.DP(e.T2Price), T3Price: dto.DP(e.T3Price),
+			DistributionPrice: dto.DP(&e.DistributionPrice), PowerPrice: dto.DP(e.PowerPrice),
+			OverusePrice: dto.DP(e.OverusePrice), DailyThresholdKwh: dto.DP(e.DailyThresholdKwh),
+			VatRate: dto.DP(&e.VatRate), Source: e.Source,
+		},
+		CreatedAt: dto.T(e.CreatedAt),
+	}
+}
+
+func (h *Handlers) listNationalTariffs(w http.ResponseWriter, r *http.Request) {
+	serve(w, r, http.StatusOK, func(req dto.NationalTariffListRequest) (any, error) {
+		page, limit, err := kit.ResolvePage(req.PageRequest, pageCap)
+		if err != nil {
+			return nil, err
+		}
+		filter := store.NationalTariffFilter{Page: page}
+		if req.UserGroup != "" {
+			group := model.DistributionUserGroup(req.UserGroup)
+			filter.UserGroup = &group
+		}
+		if req.VoltageLevel != "" {
+			level := model.VoltageLevel(req.VoltageLevel)
+			filter.VoltageLevel = &level
+		}
+		if req.Term != "" {
+			term := model.TariffTerm(req.Term)
+			filter.Term = &term
+		}
+		list, err := h.Tariffs.ListDefaults(r.Context(), filter)
+		if err != nil {
+			return nil, billingErr(err)
+		}
+		items := make([]dto.NationalTariff, 0, len(list))
+		for _, e := range list {
+			items = append(items, nationalTariffDTO(e))
+		}
+		return kit.PageOf(items, page, limit), nil
+	})
+}
+
+func (h *Handlers) upsertNationalTariff(w http.ResponseWriter, r *http.Request) {
+	serve(w, r, http.StatusCreated, func(req dto.NationalTariffFields) (any, error) {
+		entry := model.NationalTariffScheduleEntry{
+			EffectiveFrom: req.EffectiveFrom.Time, UserGroup: model.DistributionUserGroup(req.UserGroup),
+			VoltageLevel: model.VoltageLevel(req.VoltageLevel), Term: model.TariffTerm(req.Term),
+			EnergyPrice: dv(req.EnergyPrice), T1Price: dp(req.T1Price), T2Price: dp(req.T2Price), T3Price: dp(req.T3Price),
+			DistributionPrice: dv(req.DistributionPrice), PowerPrice: dp(req.PowerPrice), OverusePrice: dp(req.OverusePrice),
+			DailyThresholdKwh: dp(req.DailyThresholdKwh), VatRate: dv(req.VatRate), Source: req.Source,
+		}
+		if err := h.Tariffs.UpsertDefault(r.Context(), entry); err != nil {
+			return nil, billingErr(err)
+		}
+		return nationalTariffDTO(entry), nil
+	})
+}
+
+func (h *Handlers) deleteNationalTariff(w http.ResponseWriter, r *http.Request) {
+	serve(w, r, http.StatusNoContent, func(req dto.IDPath) (any, error) {
+		return nil, billingErr(h.Tariffs.DeleteDefault(r.Context(), req.ID))
+	})
+}

@@ -192,3 +192,80 @@ func TestIcmalIsRefusedForAReadonlyAdmin(t *testing.T) {
 	res := h.as(seed.E2ECompanyReadonlyEmail).upload(t, "/icmal-imports", "icmal.csv", icmalWorkbook(t))
 	require.Equal(t, http.StatusForbidden, res.status, string(res.body))
 }
+
+// plant creates one solar plant for the company and returns its id; the e2e
+// fixtures have no plant yet (the solar screens arrive in F9).
+func (c *client) plant(t *testing.T, name string) uuid.UUID {
+	t.Helper()
+	res := c.do(http.MethodPost, "/power-plants", map[string]any{"name": name, "plant_kind": "rooftop"})
+	require.Equal(t, http.StatusCreated, res.status, string(res.body))
+	var created struct {
+		ID uuid.UUID `json:"id"`
+	}
+	res.json(t, &created)
+	return created.ID
+}
+
+func TestSolarTariffHistoryAndScope(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	ca := h.as(seed.E2ECompanyAdminEmail)
+	plantID := ca.plant(t, "Çatı GES")
+
+	create := map[string]any{"plant_id": plantID.String(), "effective_from": "2026-01-01",
+		"feed_in_tariff": "2.500000", "purchase_price": "3.100000", "currency": "TRY", "notes": "YEKDEM sözleşmesi"}
+	res := ca.do(http.MethodPost, "/solar-tariffs", create)
+	require.Equal(t, http.StatusCreated, res.status, string(res.body))
+	var created dto.SolarTariff
+	res.json(t, &created)
+	require.Equal(t, "2.5", created.FeedInTariff.String())
+
+	var page dto.Page[dto.SolarTariff]
+	ca.do(http.MethodGet, "/solar-tariffs?plant_id="+plantID.String(), nil).json(t, &page)
+	require.Len(t, page.Items, 1)
+
+	// R244: a plant outside the caller's scope answers like an unknown one.
+	require.Equal(t, http.StatusNotFound,
+		h.as(seed.E2ECompanyBAdminEmail).do(http.MethodGet, "/solar-tariffs?plant_id="+plantID.String(), nil).status)
+	require.Equal(t, http.StatusForbidden,
+		h.as(seed.E2ECompanyReadonlyEmail).do(http.MethodPost, "/solar-tariffs", create).status)
+
+	require.Equal(t, http.StatusNoContent, ca.do(http.MethodDelete, "/solar-tariffs/"+created.ID.String(), nil).status)
+	ca.do(http.MethodGet, "/solar-tariffs?plant_id="+plantID.String(), nil).json(t, &page)
+	require.Empty(t, page.Items, "a soft-deleted price leaves the history")
+}
+
+func TestSolarTariffRefusesANegativeFeedIn(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	ca := h.as(seed.E2ECompanyAdminEmail)
+	res := ca.do(http.MethodPost, "/solar-tariffs", map[string]any{
+		"plant_id": ca.plant(t, "Çatı GES").String(), "effective_from": "2026-01-01", "feed_in_tariff": "-1"})
+	require.Equal(t, http.StatusUnprocessableEntity, res.status, string(res.body))
+}
+
+func TestNationalScheduleIsPublicToReadAndAdminToWrite(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	row := map[string]any{"effective_from": "2026-01-01", "user_group": "commercial", "voltage_level": "lv",
+		"term": "monomial", "energy_price": "3.1", "distribution_price": "2.4", "vat_rate": "20", "source": "EPDK"}
+
+	// 05 §6 lists the read as public: it is what the public bill calculator
+	// (F12) will read, and it carries no tenant data at all.
+	require.Equal(t, http.StatusOK, h.client(uaChrome).do(http.MethodGet, "/national-tariff-schedule", nil).status)
+	require.Equal(t, http.StatusForbidden, h.as(seed.E2ECompanyAdminEmail).do(http.MethodPost, "/national-tariff-schedule", row).status)
+
+	admin := h.as(seed.E2EAdminEmail)
+	require.Equal(t, http.StatusCreated, admin.do(http.MethodPost, "/national-tariff-schedule", row).status)
+
+	var page dto.Page[dto.NationalTariff]
+	h.client(uaChrome).do(http.MethodGet, "/national-tariff-schedule?user_group=commercial&voltage_level=lv", nil).json(t, &page)
+	require.NotEmpty(t, page.Items)
+
+	// The natural key is unique, so publishing the same row twice edits it.
+	row["energy_price"] = "3.2"
+	require.Equal(t, http.StatusCreated, admin.do(http.MethodPost, "/national-tariff-schedule", row).status)
+	var after dto.Page[dto.NationalTariff]
+	h.client(uaChrome).do(http.MethodGet, "/national-tariff-schedule?user_group=commercial&voltage_level=lv", nil).json(t, &after)
+	require.Len(t, after.Items, len(page.Items), "an upsert edits rather than accumulates")
+}

@@ -2763,11 +2763,51 @@
         ],
         "type": "object"
       },
+      "GithubComMErenTalanEkokodRewriteInternalApiV1DtoNationalTariffPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NationalTariff"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
       "GithubComMErenTalanEkokodRewriteInternalApiV1DtoPlantPage": {
         "properties": {
           "items": {
             "items": {
               "$ref": "#/components/schemas/Plant"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "GithubComMErenTalanEkokodRewriteInternalApiV1DtoSolarTariffPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SolarTariff"
             },
             "type": "array"
           },
@@ -3841,6 +3881,171 @@
         ],
         "type": "object"
       },
+      "NationalTariff": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "daily_threshold_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "distribution_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "effective_from": {
+            "$ref": "#/components/schemas/Date"
+          },
+          "energy_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "overuse_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "power_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "source": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "t1_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "t2_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "t3_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "term": {
+            "enum": [
+              "monomial",
+              "binomial"
+            ],
+            "type": "string"
+          },
+          "user_group": {
+            "enum": [
+              "residential",
+              "residential_plus",
+              "commercial",
+              "commercial_plus",
+              "industrial",
+              "agricultural",
+              "lighting",
+              "martyrs_families",
+              "public_lighting"
+            ],
+            "type": "string"
+          },
+          "vat_rate": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "voltage_level": {
+            "enum": [
+              "lv",
+              "mv"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "effective_from",
+          "user_group",
+          "voltage_level",
+          "term",
+          "energy_price",
+          "distribution_price",
+          "vat_rate",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "NationalTariffFields": {
+        "properties": {
+          "daily_threshold_kwh": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "distribution_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "effective_from": {
+            "$ref": "#/components/schemas/Date"
+          },
+          "energy_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "overuse_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "power_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "source": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "t1_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "t2_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "t3_price": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "term": {
+            "enum": [
+              "monomial",
+              "binomial"
+            ],
+            "type": "string"
+          },
+          "user_group": {
+            "enum": [
+              "residential",
+              "residential_plus",
+              "commercial",
+              "commercial_plus",
+              "industrial",
+              "agricultural",
+              "lighting",
+              "martyrs_families",
+              "public_lighting"
+            ],
+            "type": "string"
+          },
+          "vat_rate": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "voltage_level": {
+            "enum": [
+              "lv",
+              "mv"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "effective_from",
+          "user_group",
+          "voltage_level",
+          "term",
+          "energy_price",
+          "distribution_price",
+          "vat_rate"
+        ],
+        "type": "object"
+      },
       "PeriodValue": {
         "properties": {
           "active_import": {
@@ -4758,6 +4963,87 @@
         },
         "required": [
           "items"
+        ],
+        "type": "object"
+      },
+      "SolarTariff": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "currency": {
+            "enum": [
+              "TRY",
+              "USD",
+              "EUR"
+            ],
+            "type": "string"
+          },
+          "effective_from": {
+            "$ref": "#/components/schemas/Date"
+          },
+          "feed_in_tariff": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "notes": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "plant_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "purchase_price": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "required": [
+          "id",
+          "plant_id",
+          "effective_from",
+          "feed_in_tariff",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "SolarTariffFields": {
+        "properties": {
+          "currency": {
+            "enum": [
+              "TRY",
+              "USD",
+              "EUR"
+            ],
+            "type": "string"
+          },
+          "effective_from": {
+            "$ref": "#/components/schemas/Date"
+          },
+          "feed_in_tariff": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "notes": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "plant_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "purchase_price": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "required": [
+          "plant_id",
+          "effective_from",
+          "feed_in_tariff"
         ],
         "type": "object"
       },
@@ -15976,6 +16262,326 @@
         ]
       }
     },
+    "/api/v1/national-tariff-schedule": {
+      "get": {
+        "operationId": "national_tariff.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "user_group",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "voltage_level",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "term",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "maximum": 500,
+              "minimum": 1,
+              "type": [
+                "null",
+                "integer"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GithubComMErenTalanEkokodRewriteInternalApiV1DtoNationalTariffPage"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "The published national tariff schedule.",
+        "tags": [
+          "tariffs"
+        ]
+      },
+      "post": {
+        "operationId": "national_tariff.upsert",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NationalTariffFields"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Publish a default tariff row, keyed by date, user group, voltage level and term.",
+        "tags": [
+          "tariffs"
+        ]
+      }
+    },
+    "/api/v1/national-tariff-schedule/{id}": {
+      "delete": {
+        "operationId": "national_tariff.delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Remove a published default tariff row.",
+        "tags": [
+          "tariffs"
+        ]
+      }
+    },
     "/api/v1/openapi.json": {
       "get": {
         "operationId": "system.openapi",
@@ -17168,6 +17774,375 @@
         "summary": "Send a test message with the stored settings.",
         "tags": [
           "smtp"
+        ]
+      }
+    },
+    "/api/v1/solar-tariffs": {
+      "get": {
+        "operationId": "solar_tariffs.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "plant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "maximum": 500,
+              "minimum": 1,
+              "type": [
+                "null",
+                "integer"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GithubComMErenTalanEkokodRewriteInternalApiV1DtoSolarTariffPage"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "A plant's feed-in tariff history.",
+        "tags": [
+          "tariffs"
+        ]
+      },
+      "post": {
+        "operationId": "solar_tariffs.create",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SolarTariffFields"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SolarTariff"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Add a feed-in tariff to a plant.",
+        "tags": [
+          "tariffs"
+        ]
+      }
+    },
+    "/api/v1/solar-tariffs/{id}": {
+      "delete": {
+        "operationId": "solar_tariffs.delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Soft-delete a feed-in tariff.",
+        "tags": [
+          "tariffs"
         ]
       }
     },

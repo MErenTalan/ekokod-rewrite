@@ -336,6 +336,10 @@ func (noOps) FinishRun(context.Context, store.Scope, uuid.UUID, string, int32, i
 	panic("consumption: Task 7's Billing.Consumption must never call OpsRepository.FinishRun")
 }
 
+func (noOps) RunByTaskID(context.Context, store.Scope, string) (model.JobRun, error) {
+	return model.JobRun{}, store.ErrNotFound
+}
+
 func (noOps) GetRun(context.Context, store.Scope, uuid.UUID) (model.JobRun, error) {
 	panic("consumption: Task 7's Billing.Consumption must never call OpsRepository.GetRun")
 }
@@ -637,6 +641,10 @@ func (f *fakeOps) StartRun(context.Context, store.Scope, model.JobRun) (model.Jo
 func (f *fakeOps) FinishRun(context.Context, store.Scope, uuid.UUID, string, int32, int32, int32, *string, []byte, time.Time) (model.JobRun, error) {
 	panic("fakeOps: FinishRun unused by this fix round's tests")
 }
+func (f *fakeOps) RunByTaskID(context.Context, store.Scope, string) (model.JobRun, error) {
+	return model.JobRun{}, store.ErrNotFound
+}
+
 func (f *fakeOps) GetRun(context.Context, store.Scope, uuid.UUID) (model.JobRun, error) {
 	panic("fakeOps: GetRun unused by this fix round's tests")
 }

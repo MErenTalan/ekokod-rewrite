@@ -151,3 +151,18 @@ returning effective_from, reactive_penalty_basis, reactive_exempt_below_kw,
   tiering_voltage_levels::text[] as tiering_voltage_levels,
   tiering_supply_companies::text[] as tiering_supply_companies,
   ptf_missing_hour_tolerance, demand_overrun_multiplier, money_rounding_mode, created_at;
+
+-- The admin default-tariff tab (R243) reads and removes rows of the same
+-- platform-wide catalogue the seeder upserts. There is no company_id here, so
+-- no scope narrows it: only an admin route reaches this surface.
+-- name: AdminListNationalTariffSchedule :many
+select * from national_tariff_schedule
+where (sqlc.narg(user_group)::distribution_user_group is null or user_group = sqlc.narg(user_group))
+  and (sqlc.narg(voltage_level)::voltage_level is null or voltage_level = sqlc.narg(voltage_level))
+  and (sqlc.narg(term)::tariff_term is null or term = sqlc.narg(term))
+  and (sqlc.narg(effective_on)::date is null or effective_from <= sqlc.narg(effective_on))
+order by effective_from desc, id
+limit sqlc.arg(limit_val)::int offset sqlc.arg(offset_val)::int;
+
+-- name: AdminDeleteNationalTariffScheduleEntry :execrows
+delete from national_tariff_schedule where id = sqlc.arg(id)::uuid;

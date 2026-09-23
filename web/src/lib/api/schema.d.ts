@@ -1177,6 +1177,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/national-tariff-schedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The published national tariff schedule. */
+        get: operations["national_tariff.list"];
+        put?: never;
+        /** Publish a default tariff row, keyed by date, user group, voltage level and term. */
+        post: operations["national_tariff.upsert"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/national-tariff-schedule/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a published default tariff row. */
+        delete: operations["national_tariff.delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/openapi.json": {
         parameters: {
             query?: never;
@@ -1279,6 +1314,41 @@ export interface paths {
         /** Send a test message with the stored settings. */
         post: operations["smtp.test"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/solar-tariffs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A plant's feed-in tariff history. */
+        get: operations["solar_tariffs.list"];
+        put?: never;
+        /** Add a feed-in tariff to a plant. */
+        post: operations["solar_tariffs.create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/solar-tariffs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Soft-delete a feed-in tariff. */
+        delete: operations["solar_tariffs.delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2124,8 +2194,16 @@ export interface components {
             items: components["schemas"]["Message"][];
             next_cursor?: null | string;
         };
+        GithubComMErenTalanEkokodRewriteInternalApiV1DtoNationalTariffPage: {
+            items: components["schemas"]["NationalTariff"][];
+            next_cursor?: null | string;
+        };
         GithubComMErenTalanEkokodRewriteInternalApiV1DtoPlantPage: {
             items: components["schemas"]["Plant"][];
+            next_cursor?: null | string;
+        };
+        GithubComMErenTalanEkokodRewriteInternalApiV1DtoSolarTariffPage: {
+            items: components["schemas"]["SolarTariff"][];
             next_cursor?: null | string;
         };
         GithubComMErenTalanEkokodRewriteInternalApiV1DtoTariffSummaryItemPage: {
@@ -2397,6 +2475,47 @@ export interface components {
             token_type: "Bearer";
             user: components["schemas"]["Me"];
         };
+        NationalTariff: {
+            /** Format: date-time */
+            created_at: string;
+            daily_threshold_kwh?: components["schemas"]["Decimal"];
+            distribution_price: components["schemas"]["Decimal"];
+            effective_from: components["schemas"]["Date"];
+            energy_price: components["schemas"]["Decimal"];
+            id: components["schemas"]["UuidUUID"];
+            overuse_price?: components["schemas"]["Decimal"];
+            power_price?: components["schemas"]["Decimal"];
+            source?: null | string;
+            t1_price?: components["schemas"]["Decimal"];
+            t2_price?: components["schemas"]["Decimal"];
+            t3_price?: components["schemas"]["Decimal"];
+            /** @enum {string} */
+            term: "monomial" | "binomial";
+            /** @enum {string} */
+            user_group: "residential" | "residential_plus" | "commercial" | "commercial_plus" | "industrial" | "agricultural" | "lighting" | "martyrs_families" | "public_lighting";
+            vat_rate: components["schemas"]["Decimal"];
+            /** @enum {string} */
+            voltage_level: "lv" | "mv";
+        };
+        NationalTariffFields: {
+            daily_threshold_kwh?: components["schemas"]["Decimal"];
+            distribution_price: components["schemas"]["Decimal"];
+            effective_from: components["schemas"]["Date"];
+            energy_price: components["schemas"]["Decimal"];
+            overuse_price?: components["schemas"]["Decimal"];
+            power_price?: components["schemas"]["Decimal"];
+            source?: null | string;
+            t1_price?: components["schemas"]["Decimal"];
+            t2_price?: components["schemas"]["Decimal"];
+            t3_price?: components["schemas"]["Decimal"];
+            /** @enum {string} */
+            term: "monomial" | "binomial";
+            /** @enum {string} */
+            user_group: "residential" | "residential_plus" | "commercial" | "commercial_plus" | "industrial" | "agricultural" | "lighting" | "martyrs_families" | "public_lighting";
+            vat_rate: components["schemas"]["Decimal"];
+            /** @enum {string} */
+            voltage_level: "lv" | "mv";
+        };
         PeriodValue: {
             active_import: components["schemas"]["Decimal"];
             /** Format: date-time */
@@ -2617,6 +2736,27 @@ export interface components {
         };
         SessionList: {
             items: components["schemas"]["Session"][];
+        };
+        SolarTariff: {
+            /** Format: date-time */
+            created_at: string;
+            /** @enum {string} */
+            currency?: "TRY" | "USD" | "EUR";
+            effective_from: components["schemas"]["Date"];
+            feed_in_tariff: components["schemas"]["Decimal"];
+            id: components["schemas"]["UuidUUID"];
+            notes?: null | string;
+            plant_id: components["schemas"]["UuidUUID"];
+            purchase_price?: components["schemas"]["Decimal"];
+        };
+        SolarTariffFields: {
+            /** @enum {string} */
+            currency?: "TRY" | "USD" | "EUR";
+            effective_from: components["schemas"]["Date"];
+            feed_in_tariff: components["schemas"]["Decimal"];
+            notes?: null | string;
+            plant_id: components["schemas"]["UuidUUID"];
+            purchase_price?: components["schemas"]["Decimal"];
         };
         Tariff: {
             building_id?: components["schemas"]["UuidUUID"];
@@ -10089,6 +10229,240 @@ export interface operations {
             };
         };
     };
+    "national_tariff.list": {
+        parameters: {
+            query?: {
+                user_group?: string;
+                voltage_level?: string;
+                term?: string;
+                limit?: null | number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GithubComMErenTalanEkokodRewriteInternalApiV1DtoNationalTariffPage"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "national_tariff.upsert": {
+        parameters: {
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["NationalTariffFields"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "national_tariff.delete": {
+        parameters: {
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path: {
+                id: components["schemas"]["UuidUUID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     "system.openapi": {
         parameters: {
             query?: never;
@@ -10928,6 +11302,277 @@ export interface operations {
                 "application/json": components["schemas"]["SMTPTestRequest"];
             };
         };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "solar_tariffs.list": {
+        parameters: {
+            query: {
+                plant_id: components["schemas"]["UuidUUID"];
+                limit?: null | number;
+                cursor?: string;
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GithubComMErenTalanEkokodRewriteInternalApiV1DtoSolarTariffPage"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "solar_tariffs.create": {
+        parameters: {
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SolarTariffFields"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SolarTariff"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "solar_tariffs.delete": {
+        parameters: {
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path: {
+                id: components["schemas"]["UuidUUID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description No Content */
             204: {

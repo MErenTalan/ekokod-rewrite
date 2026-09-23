@@ -21,6 +21,18 @@ func (q *Queries) AdminDeleteFactorConversions(ctx context.Context, factorID uui
 	return err
 }
 
+const adminDeleteNationalTariffScheduleEntry = `-- name: AdminDeleteNationalTariffScheduleEntry :execrows
+delete from national_tariff_schedule where id = $1::uuid
+`
+
+func (q *Queries) AdminDeleteNationalTariffScheduleEntry(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, adminDeleteNationalTariffScheduleEntry, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const adminInsertFactorConversions = `-- name: AdminInsertFactorConversions :exec
 insert into emission_factor_conversions (factor_id, unit, multiplier, label)
 select $1, elem->>'unit', (elem->>'multiplier')::numeric, elem->>'label'
@@ -35,6 +47,72 @@ type AdminInsertFactorConversionsParams struct {
 func (q *Queries) AdminInsertFactorConversions(ctx context.Context, arg AdminInsertFactorConversionsParams) error {
 	_, err := q.db.Exec(ctx, adminInsertFactorConversions, arg.FactorID, arg.Conversions)
 	return err
+}
+
+const adminListNationalTariffSchedule = `-- name: AdminListNationalTariffSchedule :many
+select id, effective_from, user_group, voltage_level, term, energy_price, t1_price, t2_price, t3_price, distribution_price, power_price, overuse_price, daily_threshold_kwh, vat_rate, source, created_at from national_tariff_schedule
+where ($1::distribution_user_group is null or user_group = $1)
+  and ($2::voltage_level is null or voltage_level = $2)
+  and ($3::tariff_term is null or term = $3)
+  and ($4::date is null or effective_from <= $4)
+order by effective_from desc, id
+limit $6::int offset $5::int
+`
+
+type AdminListNationalTariffScheduleParams struct {
+	UserGroup    NullDistributionUserGroup
+	VoltageLevel NullVoltageLevel
+	Term         NullTariffTerm
+	EffectiveOn  pgtype.Date
+	OffsetVal    int32
+	LimitVal     int32
+}
+
+// The admin default-tariff tab (R243) reads and removes rows of the same
+// platform-wide catalogue the seeder upserts. There is no company_id here, so
+// no scope narrows it: only an admin route reaches this surface.
+func (q *Queries) AdminListNationalTariffSchedule(ctx context.Context, arg AdminListNationalTariffScheduleParams) ([]NationalTariffSchedule, error) {
+	rows, err := q.db.Query(ctx, adminListNationalTariffSchedule,
+		arg.UserGroup,
+		arg.VoltageLevel,
+		arg.Term,
+		arg.EffectiveOn,
+		arg.OffsetVal,
+		arg.LimitVal,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []NationalTariffSchedule
+	for rows.Next() {
+		var i NationalTariffSchedule
+		if err := rows.Scan(
+			&i.ID,
+			&i.EffectiveFrom,
+			&i.UserGroup,
+			&i.VoltageLevel,
+			&i.Term,
+			&i.EnergyPrice,
+			&i.T1Price,
+			&i.T2Price,
+			&i.T3Price,
+			&i.DistributionPrice,
+			&i.PowerPrice,
+			&i.OverusePrice,
+			&i.DailyThresholdKwh,
+			&i.VatRate,
+			&i.Source,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const adminPlatformFactorOwnerForShare = `-- name: AdminPlatformFactorOwnerForShare :one

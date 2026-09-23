@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shopspring/decimal"
 
@@ -364,4 +366,108 @@ func (r *CatalogueRepository) DeleteIntegrationDefinition(ctx context.Context, i
 		return store.ErrConflict
 	}
 	return store.ErrNotFound
+}
+
+// ListNationalTariffSchedule reads the platform catalogue the admin
+// default-tariff tab edits (R243). The table has no company_id, so no scope
+// narrows it: only an admin route reaches this method.
+func (r *CatalogueRepository) ListNationalTariffSchedule(ctx context.Context, f store.NationalTariffFilter) ([]model.NationalTariffScheduleEntry, error) {
+	limit, offset := f.Page.Limit, f.Page.Offset
+	if limit <= 0 {
+		limit = 100
+	}
+	params := sqlcgen.AdminListNationalTariffScheduleParams{LimitVal: limit, OffsetVal: offset}
+	if f.UserGroup != nil {
+		params.UserGroup = sqlcgen.NullDistributionUserGroup{DistributionUserGroup: sqlcgen.DistributionUserGroup(*f.UserGroup), Valid: true}
+	}
+	if f.VoltageLevel != nil {
+		params.VoltageLevel = sqlcgen.NullVoltageLevel{VoltageLevel: sqlcgen.VoltageLevel(*f.VoltageLevel), Valid: true}
+	}
+	if f.Term != nil {
+		params.Term = sqlcgen.NullTariffTerm{TariffTerm: sqlcgen.TariffTerm(*f.Term), Valid: true}
+	}
+	if f.EffectiveOn != nil {
+		y, m, d := f.EffectiveOn.Date()
+		params.EffectiveOn = pgtype.Date{Time: time.Date(y, m, d, 0, 0, 0, 0, time.UTC), Valid: true}
+	}
+	rows, err := r.q.AdminListNationalTariffSchedule(ctx, params)
+	if err != nil {
+		return nil, pgerr.Translate(r.pool, "list national tariff schedule", err)
+	}
+	out := make([]model.NationalTariffScheduleEntry, 0, len(rows))
+	for _, row := range rows {
+		entry, err := catalogueNationalTariffEntry(row)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, entry)
+	}
+	return out, nil
+}
+
+// DeleteNationalTariffScheduleEntry removes one published row; ErrNotFound
+// when it is already gone, so a double delete is not silently "successful".
+func (r *CatalogueRepository) DeleteNationalTariffScheduleEntry(ctx context.Context, id uuid.UUID) error {
+	n, err := r.q.AdminDeleteNationalTariffScheduleEntry(ctx, id)
+	if err != nil {
+		return pgerr.Translate(r.pool, "delete national tariff schedule entry", err)
+	}
+	if n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
+func catalogueNationalTariffEntry(row sqlcgen.NationalTariffSchedule) (model.NationalTariffScheduleEntry, error) {
+	dec := func(name string, v pgtype.Numeric) (decimal.Decimal, error) {
+		d, err := pgnum.NumericToDecimal(v)
+		if err != nil {
+			return decimal.Zero, fmt.Errorf("national_tariff_schedule.%s: %w", name, err)
+		}
+		return d, nil
+	}
+	decPtr := func(name string, v pgtype.Numeric) (*decimal.Decimal, error) {
+		if !v.Valid {
+			return nil, nil
+		}
+		d, err := dec(name, v)
+		if err != nil {
+			return nil, err
+		}
+		return &d, nil
+	}
+	energy, err := dec("energy_price", row.EnergyPrice)
+	if err != nil {
+		return model.NationalTariffScheduleEntry{}, err
+	}
+	distribution, err := dec("distribution_price", row.DistributionPrice)
+	if err != nil {
+		return model.NationalTariffScheduleEntry{}, err
+	}
+	vat, err := dec("vat_rate", row.VatRate)
+	if err != nil {
+		return model.NationalTariffScheduleEntry{}, err
+	}
+	out := model.NationalTariffScheduleEntry{
+		ID: row.ID, EffectiveFrom: row.EffectiveFrom.Time, UserGroup: model.DistributionUserGroup(row.UserGroup),
+		VoltageLevel: model.VoltageLevel(row.VoltageLevel), Term: model.TariffTerm(row.Term),
+		EnergyPrice: energy, DistributionPrice: distribution, VatRate: vat, Source: row.Source,
+		CreatedAt: row.CreatedAt.Time,
+	}
+	for _, f := range []struct {
+		name string
+		src  pgtype.Numeric
+		dst  **decimal.Decimal
+	}{
+		{"t1_price", row.T1Price, &out.T1Price}, {"t2_price", row.T2Price, &out.T2Price},
+		{"t3_price", row.T3Price, &out.T3Price}, {"power_price", row.PowerPrice, &out.PowerPrice},
+		{"overuse_price", row.OverusePrice, &out.OverusePrice}, {"daily_threshold_kwh", row.DailyThresholdKwh, &out.DailyThresholdKwh},
+	} {
+		v, err := decPtr(f.name, f.src)
+		if err != nil {
+			return model.NationalTariffScheduleEntry{}, err
+		}
+		*f.dst = v
+	}
+	return out, nil
 }
