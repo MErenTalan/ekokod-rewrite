@@ -97,4 +97,9 @@ describe('F9 routes (R295)', () => {
     expect(href('financial')).toBe('/ekorm/financial-analysis');
     expect(href('renewable')).toBe('/ekorm/renewable-energy');
   });
+
+  it('gates the renewable screen on renewable.read (R296)', () => {
+    expect(leafIds(navFor(['nav.core']))).not.toContain('renewable');
+    expect(leafIds(navFor(['nav.core', 'renewable.read']))).toContain('renewable');
+  });
 });

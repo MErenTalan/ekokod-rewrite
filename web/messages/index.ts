@@ -23,6 +23,7 @@ import trBills from './tr/bills.json';
 import trReports from './tr/reports.json';
 import trSolarPlants from './tr/solarPlants.json';
 import trWeather from './tr/weather.json';
+import trRenewable from './tr/renewable.json';
 import enApp from './en/app.json';
 import enHealth from './en/health.json';
 import enUnits from './en/units.json';
@@ -47,6 +48,7 @@ import enBills from './en/bills.json';
 import enReports from './en/reports.json';
 import enSolarPlants from './en/solarPlants.json';
 import enWeather from './en/weather.json';
+import enRenewable from './en/renewable.json';
 
 const tr = {
   app: trApp,
@@ -73,6 +75,7 @@ const tr = {
   reports: trReports,
   solarPlants: trSolarPlants,
   weather: trWeather,
+  renewable: trRenewable,
 };
 const en = {
   app: enApp,
@@ -99,6 +102,7 @@ const en = {
   reports: enReports,
   solarPlants: enSolarPlants,
   weather: enWeather,
+  renewable: enRenewable,
 };
 
 export type Messages = typeof tr;

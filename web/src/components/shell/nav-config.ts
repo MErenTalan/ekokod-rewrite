@@ -44,7 +44,7 @@ export const navigation: NavEntry[] = [
     { id: 'forecast', labelKey: 'forecast', href: '/ekorm/forecast', icon: TrendingUp },
     { id: 'solarPlants', labelKey: 'solarPlants', href: '/ekorm/solar-plants', icon: Sun, permission: 'nav.solar_plants' },
     { id: 'financial', labelKey: 'financialAnalysis', href: '/ekorm/financial-analysis', icon: Wallet, permission: 'nav.financial' },
-    { id: 'renewable', labelKey: 'renewableEnergy', href: '/ekorm/renewable-energy', icon: Leaf },
+    { id: 'renewable', labelKey: 'renewableEnergy', href: '/ekorm/renewable-energy', icon: Leaf, permission: 'renewable.read' },
     { id: 'water', labelKey: 'water', href: '/ekorm/water', icon: Droplets, disabled: true },
     { id: 'gas', labelKey: 'gas', href: '/ekorm/gas', icon: Flame, disabled: true },
     { id: 'evDrivers', labelKey: 'evDrivers', href: '/ekorm/ev-drivers', icon: PlugZap, disabled: true } ] },
