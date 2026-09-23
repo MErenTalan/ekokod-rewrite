@@ -13,22 +13,22 @@ import (
 func TestPermissionsMatrix(t *testing.T) {
 	want := map[model.UserRole][]string{
 		model.UserRoleAdmin: {
-			"admin.companies", "alarms.edit", "alarms.evaluate", "alarms.read", "analyzers.refresh", "anomaly.check", "bills.compute", "bills.read", "calendar.edit", "financial.read", "integrations.credentials", "jobs.runs.read", "jobs.trigger", "messages.read", "nav.core", "nav.financial", "nav.solar_plants", "plants.manage", "plants.read", "renewable.read", "reports.email", "reports.generate", "reports.read", "settings.analyzers", "settings.analyzers.edit", "settings.buildings", "settings.company", "settings.company.edit", "settings.integrations", "settings.plants", "settings.smtp", "settings.users", "solar_tariffs.read", "tariffs.bulk.read", "tariffs.defaults", "tariffs.edit", "tariffs.icmal", "tariffs.read", "tariffs.templates.read", "write",
+			"admin.companies", "alarms.edit", "alarms.evaluate", "alarms.read", "analyzers.refresh", "anomaly.check", "bills.compute", "bills.read", "calendar.edit", "carbon.edit", "carbon.read", "financial.read", "integrations.credentials", "jobs.runs.read", "jobs.trigger", "messages.read", "nav.core", "nav.financial", "nav.solar_plants", "plants.manage", "plants.read", "renewable.read", "reports.email", "reports.generate", "reports.read", "settings.analyzers", "settings.analyzers.edit", "settings.buildings", "settings.company", "settings.company.edit", "settings.integrations", "settings.plants", "settings.smtp", "settings.users", "solar_tariffs.read", "tariffs.bulk.read", "tariffs.defaults", "tariffs.edit", "tariffs.icmal", "tariffs.read", "tariffs.templates.read", "write",
 		},
 		model.UserRoleCompanyAdmin: {
-			"alarms.edit", "alarms.evaluate", "alarms.read", "analyzers.refresh", "anomaly.check", "bills.compute", "bills.read", "calendar.edit", "financial.read", "integrations.credentials", "jobs.runs.read", "messages.read", "nav.core", "nav.financial", "nav.solar_plants", "plants.manage", "plants.read", "renewable.read", "reports.email", "reports.generate", "reports.read", "settings.analyzers", "settings.analyzers.edit", "settings.buildings", "settings.company", "settings.company.edit", "settings.plants", "settings.users", "solar_tariffs.read", "tariffs.bulk.read", "tariffs.edit", "tariffs.icmal", "tariffs.read", "tariffs.templates.read", "write",
+			"alarms.edit", "alarms.evaluate", "alarms.read", "analyzers.refresh", "anomaly.check", "bills.compute", "bills.read", "calendar.edit", "carbon.edit", "carbon.read", "financial.read", "integrations.credentials", "jobs.runs.read", "messages.read", "nav.core", "nav.financial", "nav.solar_plants", "plants.manage", "plants.read", "renewable.read", "reports.email", "reports.generate", "reports.read", "settings.analyzers", "settings.analyzers.edit", "settings.buildings", "settings.company", "settings.company.edit", "settings.plants", "settings.users", "solar_tariffs.read", "tariffs.bulk.read", "tariffs.edit", "tariffs.icmal", "tariffs.read", "tariffs.templates.read", "write",
 		},
 		model.UserRoleCompanyReadonlyAdmin: {
-			"alarms.read", "bills.read", "financial.read", "messages.read", "nav.core", "nav.financial", "nav.solar_plants", "plants.read", "renewable.read", "reports.read", "settings.analyzers", "settings.buildings", "settings.company", "settings.plants", "settings.users", "solar_tariffs.read", "tariffs.bulk.read", "tariffs.read", "tariffs.templates.read",
+			"alarms.read", "bills.read", "carbon.read", "financial.read", "messages.read", "nav.core", "nav.financial", "nav.solar_plants", "plants.read", "renewable.read", "reports.read", "settings.analyzers", "settings.buildings", "settings.company", "settings.plants", "settings.users", "solar_tariffs.read", "tariffs.bulk.read", "tariffs.read", "tariffs.templates.read",
 		},
 		model.UserRoleBuildingAdmin: {
-			"alarms.edit", "alarms.read", "analyzers.refresh", "anomaly.check", "bills.compute", "bills.read", "messages.read", "nav.core", "renewable.read", "reports.email", "reports.generate", "reports.read", "settings.analyzers", "tariffs.read", "write",
+			"alarms.edit", "alarms.read", "analyzers.refresh", "anomaly.check", "bills.compute", "bills.read", "carbon.read", "messages.read", "nav.core", "renewable.read", "reports.email", "reports.generate", "reports.read", "settings.analyzers", "tariffs.read", "write",
 		},
 		model.UserRoleBuildingReadonlyAdmin: {
-			"alarms.read", "bills.read", "messages.read", "nav.core", "renewable.read", "reports.read", "settings.analyzers", "tariffs.read",
+			"alarms.read", "bills.read", "carbon.read", "messages.read", "nav.core", "renewable.read", "reports.read", "settings.analyzers", "tariffs.read",
 		},
 		model.UserRoleDemo: {
-			"alarms.read", "bills.read", "messages.read", "nav.core", "renewable.read", "reports.read", "tariffs.read",
+			"alarms.read", "bills.read", "carbon.read", "messages.read", "nav.core", "renewable.read", "reports.read", "tariffs.read",
 		},
 	}
 	for _, role := range model.UserRoles() {

@@ -83,6 +83,10 @@ func (h *harness) foreign(t *testing.T) foreignIDs {
 		"reports": {reportA2, reportB},
 		// F9: plants are company-level, so a building admin never reaches one.
 		"plants": {h.plantFor(h.fx.CompanyA, "Sweep GES A", "PS-SWEEP-A").String(), h.plantFor(h.fx.CompanyB, "Sweep GES B", "PS-SWEEP-B").String()},
+		// F10a: activities and reports of A2 and of company B, and company B's own factor.
+		"carbon": {h.carbonActivityFor(h.fx.CompanyA, h.fx.BuildingA2), h.carbonActivityFor(h.fx.CompanyB, h.fx.BuildingB1),
+			h.carbonReportFor(h.fx.CompanyA, h.fx.BuildingA2), h.carbonReportFor(h.fx.CompanyB, h.fx.BuildingB1),
+			h.carbonFactorFor(h.fx.CompanyB)},
 	}
 }
 

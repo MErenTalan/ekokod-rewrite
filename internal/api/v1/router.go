@@ -18,6 +18,7 @@ import (
 	authsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/auth"
 	billingsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/billing"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/calendar"
+	carbonsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/carbon"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/financial"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/integrations"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/jobs"
@@ -55,6 +56,7 @@ type Handlers struct {
 	Weather      *weathersvc.Service
 	Renewable    *renewable.Service
 	Financial    *financial.Service
+	Carbon       *carbonsvc.Service
 	Calendar     *calendar.Service
 	Jobs         *jobs.Service
 	Alarms       *alarms.Service

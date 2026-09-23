@@ -40,6 +40,7 @@ import (
 	authsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/auth"
 	billingsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/billing"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/calendar"
+	carbonsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/carbon"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/consumption"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/financial"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/integrations"
@@ -327,6 +328,8 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		Calendar: calendarService, Credentials: credentialService, Jobs: jobService, Alarms: alarmService, Ops: opsService,
 		Definitions: integrations.Definitions{Integrations: postgres.NewIntegrationRepository(pool, cipher), Catalogue: admin.NewCatalogueRepository(pool)}, Auth: authService, Tenancy: tenancyService, Assets: assetService, Analysis: analysisService,
 		Tariffs: tariffService, Billing: billingService, BillRequests: billRequests, Reports: reportRequests, Solar: solarService, Weather: weatherService, Renewable: renewableService, Financial: financialService,
+		Carbon: carbonsvc.New(carbonsvc.Deps{Carbon: postgres.NewCarbonRepository(pool), Buildings: postgres.NewBuildingRepository(pool),
+			Companies: postgres.NewCompanyRepository(pool), Clock: opts.Clock}),
 		Clock: opts.Clock, Log: log, ClientIP: clientIP}
 	router := v1.NewRouter(handlers, middlewareFor(cfg, redisClient, authService, auditRepo, admin.NewAuditRepository(pool), clientIP, opts.RedisPrefix, log), log)
 	var once sync.Once

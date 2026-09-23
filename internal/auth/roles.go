@@ -120,6 +120,10 @@ var permissionTable = map[string]RoleSet{
 	"plants.manage":  Roles(roleA, roleCA),
 	"financial.read": Roles(roleA, roleCA, roleCR),
 	"renewable.read": AllRoles,
+
+	// F10a R314: carbon reads follow 05 §12's scope marker; writes are A CA.
+	"carbon.read": AllRoles,
+	"carbon.edit": Roles(roleA, roleCA),
 }
 
 // PermissionsFor returns the sorted permissions of a role, nil for an unknown role.

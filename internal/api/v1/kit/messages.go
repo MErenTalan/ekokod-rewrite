@@ -39,6 +39,7 @@ var messages = map[string][2]string{ // code → {tr, en}
 	"smtp_test_failed":               {"Test e-postası gönderilemedi.", "The test e-mail could not be sent."},
 	"report_not_ready":               {"Rapor henüz hazır değil.", "The report is not ready yet."},
 	"job_already_queued":             {"Bu iş bu saat için zaten kuyrukta.", "This job is already queued for this hour."},
+	"carbon_activity_automated":      {"Otomatik oluşturulan karbon kaydı düzenlenemez veya silinemez; yalnızca onaylanabilir ya da reddedilebilir.", "An automated carbon record cannot be edited or deleted; it can only be approved or rejected."},
 	"isolar_plant_already_linked":    {"Bu iSolar santrali başka bir santrale bağlı.", "This iSolar plant is linked to another plant."},
 	"isolar_not_linked":              {"Santral iSolarCloud'a bağlı değil.", "The plant is not linked to iSolarCloud."},
 	"building_has_analyzers":         {"Analizör bağlı bir bina silinemez.", "A building with analyzers attached cannot be deleted."},
