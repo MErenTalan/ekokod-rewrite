@@ -350,3 +350,108 @@ func TestGetGoneTaskOfOtherCompanyIsNotFound(t *testing.T) {
 	_, err := billingService(t, emptyInspector(), ops, buildingA).Get(t.Context(), scopeA(), id)
 	require.ErrorIs(t, err, store.ErrNotFound)
 }
+
+// fakeReports answers Get only for the visible reports.
+type fakeReports struct {
+	store.ReportRepository
+	visible map[uuid.UUID]bool
+}
+
+func (f fakeReports) Get(_ context.Context, _ store.Scope, id uuid.UUID) (model.Report, error) {
+	if f.visible[id] {
+		return model.Report{ID: id}, nil
+	}
+	return model.Report{}, store.ErrNotFound
+}
+
+var reportA = uuid.MustParse("77777777-7777-7777-7777-777777777777")
+
+func reportService(t *testing.T, insp *fakeInspector, ops *fakeOps) *jobs.Service {
+	t.Helper()
+	s, err := jobs.New(jobs.Deps{Inspector: insp, Analyzers: fakeAnalyzers{}, Ops: ops,
+		Buildings: fakeBuildings{visible: map[uuid.UUID]bool{buildingA: true}},
+		Reports:   fakeReports{visible: map[uuid.UUID]bool{reportA: true}}})
+	require.NoError(t, err)
+	return s
+}
+
+func generatePayload(building uuid.UUID) job.ReportGeneratePayload {
+	return job.ReportGeneratePayload{CompanyID: companyA, BuildingID: building, Type: "monthly", Period: "2026-03", PlantSelection: "all"}
+}
+
+func TestGetReportGenerateScopedByBuilding(t *testing.T) {
+	t.Parallel()
+	for building, visible := range map[uuid.UUID]bool{buildingA: true, buildingB: false} {
+		p := generatePayload(building)
+		id := job.ReportGenerateTaskID(p)
+		insp := &fakeInspector{tasks: map[string]map[string]*asynq.TaskInfo{job.QueueDefault: {id: taskInfo(id, job.QueueDefault, job.TypeReportGenerate, asynq.TaskStateActive, p)}}}
+		v, err := reportService(t, insp, &fakeOps{}).Get(t.Context(), scopeA(), id)
+		if !visible {
+			require.ErrorIs(t, err, store.ErrNotFound, "a building outside the scope answers like an unknown id")
+			continue
+		}
+		require.NoError(t, err)
+		require.Equal(t, jobs.Running, v.Status)
+	}
+	p := generatePayload(buildingA)
+	p.CompanyID = companyB
+	id := job.ReportGenerateTaskID(p)
+	insp := &fakeInspector{tasks: map[string]map[string]*asynq.TaskInfo{job.QueueDefault: {id: taskInfo(id, job.QueueDefault, job.TypeReportGenerate, asynq.TaskStatePending, p)}}}
+	_, err := reportService(t, insp, &fakeOps{}).Get(t.Context(), scopeA(), id)
+	require.ErrorIs(t, err, store.ErrNotFound, "another company's job")
+}
+
+func TestGetReportDeliverScopedByReport(t *testing.T) {
+	t.Parallel()
+	for report, visible := range map[uuid.UUID]bool{reportA: true, uuid.New(): false} {
+		p := job.ReportDeliverPayload{CompanyID: companyA, ReportID: report, To: []string{"a@b.test"}, RequestID: uuid.New()}
+		id := job.ReportDeliverTaskID(p)
+		insp := &fakeInspector{tasks: map[string]map[string]*asynq.TaskInfo{job.QueueDefault: {id: taskInfo(id, job.QueueDefault, job.TypeReportDeliver, asynq.TaskStatePending, p)}}}
+		_, err := reportService(t, insp, &fakeOps{}).Get(t.Context(), scopeA(), id)
+		if visible {
+			require.NoError(t, err)
+		} else {
+			require.ErrorIs(t, err, store.ErrNotFound)
+		}
+	}
+}
+
+func TestGetGoneReportTaskFromRun(t *testing.T) {
+	t.Parallel()
+	gen := job.ReportGenerateTaskID(generatePayload(buildingA))
+	del := job.ReportDeliverTaskID(job.ReportDeliverPayload{ReportID: reportA, RequestID: uuid.New()})
+	ops := &fakeOps{runs: map[string]model.JobRun{
+		gen: {CompanyID: &companyA, Status: "success"},
+		del: {CompanyID: &companyA, Status: "failed", Detail: json.RawMessage(`{"code":"smtp_not_configured"}`)},
+	}}
+	v, err := reportService(t, emptyInspector(), ops).Get(t.Context(), scopeA(), gen)
+	require.NoError(t, err)
+	require.Equal(t, jobs.Succeeded, v.Status)
+	v, err = reportService(t, emptyInspector(), ops).Get(t.Context(), scopeA(), del)
+	require.NoError(t, err)
+	require.Equal(t, jobs.Failed, v.Status)
+	require.Equal(t, "smtp_not_configured", v.ErrorCode)
+
+	hidden := job.ReportGenerateTaskID(generatePayload(buildingB))
+	ops.runs[hidden] = model.JobRun{CompanyID: &companyA, Status: "success"}
+	_, err = reportService(t, emptyInspector(), ops).Get(t.Context(), scopeA(), hidden)
+	require.ErrorIs(t, err, store.ErrNotFound)
+}
+
+func TestGetReportCodesAreClosed(t *testing.T) {
+	t.Parallel()
+	p := generatePayload(buildingA)
+	id := job.ReportGenerateTaskID(p)
+	for detail, want := range map[string]string{
+		`{"code":"report_building_not_found"}`:   "report_building_not_found",
+		`{"code":"delivery_failed"}`:             "delivery_failed",
+		`{"code":"pq: relation does not exist"}`: "",
+	} {
+		insp := &fakeInspector{tasks: map[string]map[string]*asynq.TaskInfo{job.QueueDefault: {id: taskInfo(id, job.QueueDefault, job.TypeReportGenerate, asynq.TaskStateArchived, p)}}}
+		ops := &fakeOps{runs: map[string]model.JobRun{id: {CompanyID: &companyA, Status: "failed", Detail: json.RawMessage(detail)}}}
+		v, err := reportService(t, insp, ops).Get(t.Context(), scopeA(), id)
+		require.NoError(t, err)
+		require.Equal(t, jobs.Failed, v.Status)
+		require.Equal(t, want, v.ErrorCode, detail)
+	}
+}
