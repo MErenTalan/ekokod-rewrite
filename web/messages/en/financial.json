@@ -27,7 +27,7 @@
     "production": "Production",
     "revenue": "Production revenue",
     "net": "Net cost",
-    "coverage": "{withData} of {of} months have data",
+    "coverage": "{withData} of {of} months have data{suffix, select, other {}}",
     "coverageMonth": "No invoices for this month",
     "partial": "Some plants have no feed-in tariff; revenue is incomplete."
   },

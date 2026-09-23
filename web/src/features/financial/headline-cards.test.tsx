@@ -14,4 +14,9 @@ describe('HeadlineCards', () => {
     expect(r.getByText("12 ayın 9'u veri içeriyor")).toBeVisible();
     expect(r.getByText('Bazı santrallerin satış tarifesi yok; gelir eksik.')).toBeVisible();
   });
+
+  it('the English coverage line has no Turkish suffix', () => {
+    const r = renderWithProviders(<HeadlineCards summary={summary} />, { locale: 'en' });
+    expect(r.getByText('9 of 12 months have data')).toBeVisible();
+  });
 });
