@@ -46,7 +46,7 @@ test('generating a report ends ready, downloads, and a mail without SMTP says wh
   await page.getByRole('button', { name: 'Raporu oluştur' }).click();
 
   const actions = page.getByRole('table', { name: 'İndir ve gönder' });
-  await expect(actions.getByText('Hazır')).toBeVisible({ timeout: 60_000 });
+  await expect(actions.getByText('Hazır', { exact: true })).toBeVisible({ timeout: 60_000 });
 
   const [pdf] = await Promise.all([page.waitForEvent('download'), actions.getByRole('button', { name: 'PDF indir' }).click()]);
   expect(pdf.suggestedFilename()).toMatch(/^rapor-\d{4}-\d{2}\.pdf$/);

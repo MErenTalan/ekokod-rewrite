@@ -3,6 +3,7 @@ package v1
 import (
 	"encoding/json"
 	"net/http"
+	"reflect"
 
 	"github.com/google/uuid"
 
@@ -110,8 +111,7 @@ func (h *Handlers) getReport(w http.ResponseWriter, r *http.Request) {
 		}
 		out := dto.Report{ReportSummary: reportSummary(it)}
 		// A pending report's payload is {}: it has no figures to show yet.
-		var p dto.ReportPayload
-		if err := json.Unmarshal(it.Report.Payload, &p); err == nil && (p.Monthly != nil || p.Yearly != nil) {
+		if p, err := storedPayloadDTO(it.Report.Payload); err == nil && (p.Monthly != nil || p.Yearly != nil) {
 			out.Payload = &p
 		}
 		return out, nil
@@ -165,6 +165,39 @@ func payloadDTO(p domain.Payload) (dto.ReportPayload, error) {
 	if err != nil {
 		return dto.ReportPayload{}, err
 	}
+	return storedPayloadDTO(raw)
+}
+
+// storedPayloadDTO decodes a payload and turns every null array into an
+// empty one: Go writes a nil slice as null, the contract marks the arrays
+// required, and a screen reading a null's length crashes.
+func storedPayloadDTO(raw []byte) (dto.ReportPayload, error) {
 	var out dto.ReportPayload
-	return out, json.Unmarshal(raw, &out)
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return dto.ReportPayload{}, err
+	}
+	fillSlices(reflect.ValueOf(&out).Elem())
+	return out, nil
+}
+
+func fillSlices(v reflect.Value) {
+	switch v.Kind() {
+	case reflect.Pointer:
+		if !v.IsNil() {
+			fillSlices(v.Elem())
+		}
+	case reflect.Struct:
+		for i := range v.NumField() {
+			if v.Type().Field(i).IsExported() {
+				fillSlices(v.Field(i))
+			}
+		}
+	case reflect.Slice:
+		if v.IsNil() {
+			v.Set(reflect.MakeSlice(v.Type(), 0, 0))
+		}
+		for i := range v.Len() {
+			fillSlices(v.Index(i))
+		}
+	}
 }

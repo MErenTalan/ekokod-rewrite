@@ -2,6 +2,7 @@ package v1
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 
 	"github.com/google/uuid"
@@ -41,6 +42,9 @@ func subset(t *testing.T, path string, want, got any) {
 			subset(t, path, w[i], g[i])
 		}
 	default:
+		if arr, ok := got.([]any); ok && want == nil && len(arr) == 0 {
+			return // a null array is sent as [] (TestReportPayloadHasNoNullArrays)
+		}
 		require.Equal(t, want, got, path)
 	}
 }
@@ -83,4 +87,48 @@ func TestReportPayloadDTOKeepsEveryField(t *testing.T) {
 	roundTrip(t, domain.Payload{Version: 1, Type: domain.TypeYearly, Period: "2026", Yearly: &y})
 	y.Carbon, y.CarbonReason = nil, "grid_factor_missing"
 	roundTrip(t, domain.Payload{Version: 1, Type: domain.TypeYearly, Period: "2026", Yearly: &y})
+}
+
+// requireNoNilSlices walks v and fails on any nil slice: the contract marks
+// the payload's arrays required, and a screen reading `.length` of a null
+// crashes (found by the F8b e2e run on a year without invoices).
+func requireNoNilSlices(t *testing.T, path string, v reflect.Value) {
+	t.Helper()
+	switch v.Kind() {
+	case reflect.Pointer:
+		if !v.IsNil() {
+			requireNoNilSlices(t, path, v.Elem())
+		}
+	case reflect.Struct:
+		for i := range v.NumField() {
+			if v.Type().Field(i).IsExported() {
+				requireNoNilSlices(t, path+"."+v.Type().Field(i).Name, v.Field(i))
+			}
+		}
+	case reflect.Slice:
+		require.False(t, v.IsNil(), "%s is null on the wire", path)
+		for i := range v.Len() {
+			requireNoNilSlices(t, path, v.Index(i))
+		}
+	}
+}
+
+func TestReportPayloadHasNoNullArrays(t *testing.T) {
+	t.Parallel()
+	empty := domain.BuildingInput{ID: uuid.New(), Name: "Boş"}
+	m := domain.BuildMonthly(domain.MonthlyInput{Year: 2026, Month: 1, Selection: domain.SelectionAll, Buildings: []domain.BuildingInput{empty}})
+	y := domain.BuildYearly(domain.YearlyInput{Year: 2026, Selection: domain.SelectionAll, Buildings: []domain.BuildingInput{empty}})
+	for _, p := range []domain.Payload{
+		{Version: 1, Type: domain.TypeMonthly, Period: "2026-01", Monthly: &m},
+		{Version: 1, Type: domain.TypeYearly, Period: "2026", Yearly: &y},
+	} {
+		out, err := payloadDTO(p)
+		require.NoError(t, err)
+		requireNoNilSlices(t, "payload", reflect.ValueOf(out))
+		stored, err := json.Marshal(p)
+		require.NoError(t, err)
+		decoded, err := storedPayloadDTO(stored)
+		require.NoError(t, err)
+		requireNoNilSlices(t, "stored", reflect.ValueOf(decoded))
+	}
 }
