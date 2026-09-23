@@ -783,6 +783,87 @@ func (q *Queries) TariffBuildingVisible(ctx context.Context, arg TariffBuildingV
 	return visible, err
 }
 
+const tariffBulkAssignmentCreate = `-- name: TariffBulkAssignmentCreate :one
+insert into tariff_bulk_assignments (company_id, template_id, tariff_name, effective_from, building_ids, created_by)
+values ($1::uuid, $2::uuid, $3::text,
+        $4::date, $5::uuid[], $6::uuid)
+returning id, company_id, template_id, tariff_name, effective_from, building_ids, created_by, created_at
+`
+
+type TariffBulkAssignmentCreateParams struct {
+	CompanyID     uuid.UUID
+	TemplateID    *uuid.UUID
+	TariffName    *string
+	EffectiveFrom pgtype.Date
+	BuildingIds   []uuid.UUID
+	CreatedBy     *uuid.UUID
+}
+
+func (q *Queries) TariffBulkAssignmentCreate(ctx context.Context, arg TariffBulkAssignmentCreateParams) (TariffBulkAssignment, error) {
+	row := q.db.QueryRow(ctx, tariffBulkAssignmentCreate,
+		arg.CompanyID,
+		arg.TemplateID,
+		arg.TariffName,
+		arg.EffectiveFrom,
+		arg.BuildingIds,
+		arg.CreatedBy,
+	)
+	var i TariffBulkAssignment
+	err := row.Scan(
+		&i.ID,
+		&i.CompanyID,
+		&i.TemplateID,
+		&i.TariffName,
+		&i.EffectiveFrom,
+		&i.BuildingIds,
+		&i.CreatedBy,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const tariffBulkAssignmentList = `-- name: TariffBulkAssignmentList :many
+select id, company_id, template_id, tariff_name, effective_from, building_ids, created_by, created_at from tariff_bulk_assignments
+where company_id = $1::uuid
+order by created_at desc, id
+limit $3::int offset $2::int
+`
+
+type TariffBulkAssignmentListParams struct {
+	CompanyID uuid.UUID
+	OffsetVal int32
+	LimitVal  int32
+}
+
+func (q *Queries) TariffBulkAssignmentList(ctx context.Context, arg TariffBulkAssignmentListParams) ([]TariffBulkAssignment, error) {
+	rows, err := q.db.Query(ctx, tariffBulkAssignmentList, arg.CompanyID, arg.OffsetVal, arg.LimitVal)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TariffBulkAssignment
+	for rows.Next() {
+		var i TariffBulkAssignment
+		if err := rows.Scan(
+			&i.ID,
+			&i.CompanyID,
+			&i.TemplateID,
+			&i.TariffName,
+			&i.EffectiveFrom,
+			&i.BuildingIds,
+			&i.CreatedBy,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const tariffCreate = `-- name: TariffCreate :one
 insert into tariffs (
   id, company_id, building_id, name, effective_from, currency, energy_type,

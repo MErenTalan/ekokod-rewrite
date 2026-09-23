@@ -39,7 +39,8 @@ func newEnv(t *testing.T, seed int64) env {
 		Tariffs: postgres.NewTariffRepository(pool), Templates: postgres.NewTariffTemplateRepository(pool),
 		Buildings: postgres.NewBuildingRepository(pool), Analyzers: postgres.NewAnalyzerRepository(pool),
 		Icmal: postgres.NewIcmalRepository(pool), Prices: postgres.NewPriceRepository(pool), Params: postgres.NewBillingParameterRepository(pool),
-		Clock: clock.NewFake(time.Date(2026, 2, 1, 12, 0, 0, 0, time.UTC)), Log: testfixtures.DiscardLogger(),
+		BulkAssignments: postgres.NewBulkAssignmentRepository(pool),
+		Clock:           clock.NewFake(time.Date(2026, 2, 1, 12, 0, 0, 0, time.UTC)), Log: testfixtures.DiscardLogger(),
 	})
 	require.NoError(t, err)
 	return env{ctx: ctx, pool: pool, tenant: testfixtures.NewTenant(t, ctx, pool, seed), svc: svc}
@@ -150,7 +151,7 @@ func TestApplyTemplateCarriesPowerAndTaxes(t *testing.T) {
 	tpl, err := e.svc.CreateTemplate(e.ctx, e.tenant.AdminScope, "OG binomial", nil, fixedInput(nil), true)
 	require.NoError(t, err)
 	ids := []uuid.UUID{e.tenant.Buildings[0].ID, e.tenant.Buildings[1].ID}
-	defs, err := e.svc.ApplyTemplate(e.ctx, e.tenant.AdminScope, tpl.ID, ids, time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC))
+	defs, err := e.svc.ApplyTemplate(e.ctx, e.tenant.AdminScope, tpl.ID, ids, time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC), uuid.Nil)
 	require.NoError(t, err)
 	require.Len(t, defs, 2)
 	for i, d := range defs {
@@ -167,10 +168,10 @@ func TestBulkAssignIsAllOrNothing(t *testing.T) {
 	e := newEnv(t, 8006)
 	other := testfixtures.NewTenant(t, e.ctx, e.pool, 8106)
 	before := e.tariffCount(t)
-	_, err := e.svc.BulkAssign(e.ctx, e.tenant.AdminScope, fixedInput(nil), []uuid.UUID{e.tenant.Buildings[0].ID, other.Buildings[0].ID})
+	_, err := e.svc.BulkAssign(e.ctx, e.tenant.AdminScope, fixedInput(nil), []uuid.UUID{e.tenant.Buildings[0].ID, other.Buildings[0].ID}, uuid.Nil)
 	require.ErrorIs(t, err, store.ErrNotFound)
 	require.Equal(t, before, e.tariffCount(t), "nothing written")
-	defs, err := e.svc.BulkAssign(e.ctx, e.tenant.AdminScope, fixedInput(nil), []uuid.UUID{e.tenant.Buildings[0].ID, e.tenant.Buildings[1].ID})
+	defs, err := e.svc.BulkAssign(e.ctx, e.tenant.AdminScope, fixedInput(nil), []uuid.UUID{e.tenant.Buildings[0].ID, e.tenant.Buildings[1].ID}, uuid.Nil)
 	require.NoError(t, err, "positive control")
 	require.Len(t, defs, 2)
 	require.Equal(t, before+2, e.tariffCount(t))
@@ -340,4 +341,65 @@ func TestImportIsolatesTenants(t *testing.T) {
 	theirs, err := e.svc.Import(e.ctx, other.AdminScope, other.Users[model.UserRoleCompanyAdmin].ID, "icmal.csv", content)
 	require.NoError(t, err)
 	require.Len(t, theirs.Unmatched, 37, "tenant A's ETSO links are invisible to tenant B")
+}
+
+// R241: 05 §6 asks for a bulk-assignment history and the schema had none.
+func TestBulkAssignRecordsWhatItWrote(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t, 8011)
+	actor := e.tenant.Users[model.UserRoleCompanyAdmin].ID
+	ids := []uuid.UUID{e.tenant.Buildings[0].ID, e.tenant.Buildings[1].ID}
+	defs, err := e.svc.BulkAssign(e.ctx, e.tenant.AdminScope, fixedInput(nil), ids, actor)
+	require.NoError(t, err)
+	require.Len(t, defs, 2)
+
+	hist, err := e.svc.BulkHistory(e.ctx, e.tenant.AdminScope, store.Page{Limit: 10})
+	require.NoError(t, err)
+	require.Len(t, hist, 1, "one assignment, one row")
+	require.ElementsMatch(t, ids, hist[0].BuildingIDs)
+	require.NotNil(t, hist[0].CreatedBy)
+	require.Equal(t, actor, *hist[0].CreatedBy)
+	require.Nil(t, hist[0].TemplateID, "this one came from no template")
+}
+
+func TestBulkAssignRefusesForeignBuildingAndRecordsNothing(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t, 8012)
+	other := testfixtures.NewTenant(t, e.ctx, e.pool, 8112)
+	_, err := e.svc.BulkAssign(e.ctx, e.tenant.AdminScope, fixedInput(nil),
+		[]uuid.UUID{e.tenant.Buildings[0].ID, other.Buildings[0].ID}, uuid.Nil)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	hist, err := e.svc.BulkHistory(e.ctx, e.tenant.AdminScope, store.Page{Limit: 10})
+	require.NoError(t, err)
+	require.Empty(t, hist, "the history must not claim the buildings that would have succeeded")
+}
+
+func TestApplyTemplateRecordsTheTemplateItUsedExactlyOnce(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t, 8013)
+	tpl, err := e.svc.CreateTemplate(e.ctx, e.tenant.AdminScope, "OG binomial", nil, fixedInput(nil), true)
+	require.NoError(t, err)
+	ids := []uuid.UUID{e.tenant.Buildings[0].ID, e.tenant.Buildings[1].ID}
+	_, err = e.svc.ApplyTemplate(e.ctx, e.tenant.AdminScope, tpl.ID, ids,
+		time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC), e.tenant.Users[model.UserRoleCompanyAdmin].ID)
+	require.NoError(t, err)
+
+	hist, err := e.svc.BulkHistory(e.ctx, e.tenant.AdminScope, store.Page{Limit: 10})
+	require.NoError(t, err)
+	require.Len(t, hist, 1, "an apply is one assignment, not two")
+	require.NotNil(t, hist[0].TemplateID)
+	require.Equal(t, tpl.ID, *hist[0].TemplateID)
+}
+
+func TestBulkHistoryIsScopedToItsCompany(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t, 8014)
+	other := testfixtures.NewTenant(t, e.ctx, e.pool, 8114)
+	_, err := e.svc.BulkAssign(e.ctx, e.tenant.AdminScope, fixedInput(nil), []uuid.UUID{e.tenant.Buildings[0].ID}, uuid.Nil)
+	require.NoError(t, err)
+
+	hist, err := e.svc.BulkHistory(e.ctx, other.AdminScope, store.Page{Limit: 10})
+	require.NoError(t, err)
+	require.Empty(t, hist)
 }

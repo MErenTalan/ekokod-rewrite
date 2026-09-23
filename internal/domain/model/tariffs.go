@@ -150,6 +150,22 @@ type TariffTemplate struct {
 	UpdatedAt time.Time
 }
 
+// TariffBulkAssignment records one bulk assignment. Mirrors table
+// `tariff_bulk_assignments` (migration 00017). BuildingIDs lists the buildings
+// that actually received a version: a call that failed halfway records what
+// happened, never what was asked for (R241).
+type TariffBulkAssignment struct {
+	ID        uuid.UUID
+	CompanyID uuid.UUID
+	// TemplateID is set when the assignment came from a template.
+	TemplateID    *uuid.UUID
+	TariffName    *string
+	EffectiveFrom time.Time
+	BuildingIDs   []uuid.UUID
+	CreatedBy     *uuid.UUID
+	CreatedAt     time.Time
+}
+
 // SolarTariff prices a plant's generation, effective from a date. Mirrors
 // table `solar_tariffs` (migration 00006). It resolves by EffectiveFrom the
 // same way Tariff does.

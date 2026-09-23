@@ -44,10 +44,12 @@ type Deps struct {
 	Buildings store.BuildingRepository
 	Analyzers store.AnalyzerRepository
 	Icmal     store.IcmalRepository
-	Prices    store.PriceRepository
-	Params    store.BillingParameterRepository
-	Clock     clock.Clock
-	Log       *slog.Logger
+	// BulkAssignments records R241's history; nil disables the recording.
+	BulkAssignments store.BulkAssignmentRepository
+	Prices          store.PriceRepository
+	Params          store.BillingParameterRepository
+	Clock           clock.Clock
+	Log             *slog.Logger
 }
 
 // Service is the tariff service.
@@ -193,7 +195,19 @@ func (s *Service) CurrentForBuildings(ctx context.Context, sc store.Scope, on ti
 
 // BulkAssign creates one version of in per building, all or nothing: every
 // building must be visible before anything is written.
-func (s *Service) BulkAssign(ctx context.Context, sc store.Scope, in Input, buildingIDs []uuid.UUID) ([]Definition, error) {
+func (s *Service) BulkAssign(ctx context.Context, sc store.Scope, in Input, buildingIDs []uuid.UUID, by uuid.UUID) ([]Definition, error) {
+	defs, err := s.bulkAssign(ctx, sc, in, buildingIDs)
+	if err != nil {
+		return nil, err
+	}
+	s.recordAssignment(ctx, sc, defs, nil, by, in.Tariff.EffectiveFrom)
+	return defs, nil
+}
+
+// bulkAssign writes the versions without recording history, so a caller that
+// knows more about the assignment (ApplyTemplate knows its template) records
+// it once rather than twice.
+func (s *Service) bulkAssign(ctx context.Context, sc store.Scope, in Input, buildingIDs []uuid.UUID) ([]Definition, error) {
 	if len(buildingIDs) == 0 {
 		return nil, ErrInvalidRequest
 	}

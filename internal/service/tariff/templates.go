@@ -54,7 +54,7 @@ func (s *Service) ListTemplates(ctx context.Context, sc store.Scope, f store.Tar
 
 // ApplyTemplate creates a version of the template for every building,
 // effective from effectiveFrom, carrying its power fields, taxes and extras.
-func (s *Service) ApplyTemplate(ctx context.Context, sc store.Scope, templateID uuid.UUID, buildingIDs []uuid.UUID, effectiveFrom time.Time) ([]Definition, error) {
+func (s *Service) ApplyTemplate(ctx context.Context, sc store.Scope, templateID uuid.UUID, buildingIDs []uuid.UUID, effectiveFrom time.Time, by uuid.UUID) ([]Definition, error) {
 	tpl, err := s.deps.Templates.Get(ctx, sc, templateID)
 	if err != nil {
 		return nil, err
@@ -64,5 +64,12 @@ func (s *Service) ApplyTemplate(ctx context.Context, sc store.Scope, templateID 
 		return nil, fmt.Errorf("%w: template payload: %w", ErrInvalidRequest, err)
 	}
 	in.Tariff.EffectiveFrom = effectiveFrom
-	return s.BulkAssign(ctx, sc, in, buildingIDs)
+	// The unrecorded path: this call records once, with the template that
+	// produced the versions — which is what the history is asked for.
+	defs, err := s.bulkAssign(ctx, sc, in, buildingIDs)
+	if err != nil {
+		return nil, err
+	}
+	s.recordAssignment(ctx, sc, defs, &templateID, by, effectiveFrom)
+	return defs, nil
 }

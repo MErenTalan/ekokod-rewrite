@@ -1732,6 +1732,37 @@
         ],
         "type": "object"
       },
+      "BuildingTariffState": {
+        "properties": {
+          "building_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "building_name": {
+            "type": "string"
+          },
+          "effective_from": {
+            "$ref": "#/components/schemas/Date"
+          },
+          "tariff_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "tariff_name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "use_ptf_yekdem": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "building_id",
+          "building_name",
+          "use_ptf_yekdem"
+        ],
+        "type": "object"
+      },
       "BuildingUpdateRequest": {
         "properties": {
           "address": {
@@ -1792,6 +1823,84 @@
             "$ref": "#/components/schemas/Decimal"
           }
         },
+        "type": "object"
+      },
+      "BulkTariffAssignment": {
+        "properties": {
+          "building_ids": {
+            "items": {
+              "$ref": "#/components/schemas/UuidUUID"
+            },
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "created_by": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "effective_from": {
+            "$ref": "#/components/schemas/Date"
+          },
+          "id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "tariff_name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "template_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          }
+        },
+        "required": [
+          "id",
+          "effective_from",
+          "building_ids",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "BulkTariffRequest": {
+        "properties": {
+          "building_ids": {
+            "items": {
+              "$ref": "#/components/schemas/UuidUUID"
+            },
+            "type": "array"
+          },
+          "tariff": {
+            "$ref": "#/components/schemas/TariffFields"
+          }
+        },
+        "required": [
+          "building_ids",
+          "tariff"
+        ],
+        "type": "object"
+      },
+      "BulkTariffResult": {
+        "properties": {
+          "building_ids": {
+            "items": {
+              "$ref": "#/components/schemas/UuidUUID"
+            },
+            "type": "array"
+          },
+          "tariff_ids": {
+            "items": {
+              "$ref": "#/components/schemas/UuidUUID"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "building_ids",
+          "tariff_ids"
+        ],
         "type": "object"
       },
       "CalendarEvent": {
@@ -2554,6 +2663,46 @@
         ],
         "type": "object"
       },
+      "GithubComMErenTalanEkokodRewriteInternalApiV1DtoBuildingTariffStatePage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BuildingTariffState"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "GithubComMErenTalanEkokodRewriteInternalApiV1DtoBulkTariffAssignmentPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BulkTariffAssignment"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
       "GithubComMErenTalanEkokodRewriteInternalApiV1DtoCompanyPage": {
         "properties": {
           "items": {
@@ -2639,6 +2788,26 @@
           "items": {
             "items": {
               "$ref": "#/components/schemas/TariffSummaryItem"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "GithubComMErenTalanEkokodRewriteInternalApiV1DtoTariffTemplatePage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TariffTemplate"
             },
             "type": "array"
           },
@@ -4911,6 +5080,110 @@
         "required": [
           "name",
           "rate"
+        ],
+        "type": "object"
+      },
+      "TariffTemplate": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "is_default": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "tariff": {
+            "$ref": "#/components/schemas/TariffFields"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "tariff",
+          "created_at",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "TariffTemplateApplyRequest": {
+        "properties": {
+          "building_ids": {
+            "items": {
+              "$ref": "#/components/schemas/UuidUUID"
+            },
+            "type": "array"
+          },
+          "effective_from": {
+            "$ref": "#/components/schemas/Date"
+          }
+        },
+        "required": [
+          "building_ids",
+          "effective_from"
+        ],
+        "type": "object"
+      },
+      "TariffTemplateFields": {
+        "properties": {
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "is_default": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "tariff": {
+            "$ref": "#/components/schemas/TariffFields"
+          }
+        },
+        "required": [
+          "name",
+          "tariff"
+        ],
+        "type": "object"
+      },
+      "TariffTemplateUpdateRequest": {
+        "properties": {
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "is_default": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "tariff": {
+            "$ref": "#/components/schemas/TariffFields"
+          }
+        },
+        "required": [
+          "name",
+          "tariff"
         ],
         "type": "object"
       },
@@ -9036,6 +9309,367 @@
         "summary": "Create a building.",
         "tags": [
           "buildings"
+        ]
+      }
+    },
+    "/api/v1/buildings/bulk-tariff": {
+      "post": {
+        "operationId": "bulk_tariff.assign",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkTariffRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkTariffResult"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Assign one tariff definition to many buildings.",
+        "tags": [
+          "tariffs"
+        ]
+      }
+    },
+    "/api/v1/buildings/bulk-tariff/current": {
+      "get": {
+        "operationId": "bulk_tariff.current",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "maximum": 500,
+              "minimum": 1,
+              "type": [
+                "null",
+                "integer"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GithubComMErenTalanEkokodRewriteInternalApiV1DtoBuildingTariffStatePage"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Every building's tariff in force today.",
+        "tags": [
+          "tariffs"
+        ]
+      }
+    },
+    "/api/v1/buildings/bulk-tariff/history": {
+      "get": {
+        "operationId": "bulk_tariff.history",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "maximum": 500,
+              "minimum": 1,
+              "type": [
+                "null",
+                "integer"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GithubComMErenTalanEkokodRewriteInternalApiV1DtoBulkTariffAssignmentPage"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Bulk assignment history, newest first.",
+        "tags": [
+          "tariffs"
         ]
       }
     },
@@ -15952,6 +16586,635 @@
         "summary": "Send a test message with the stored settings.",
         "tags": [
           "smtp"
+        ]
+      }
+    },
+    "/api/v1/tariff-templates": {
+      "get": {
+        "operationId": "tariff_templates.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "maximum": 500,
+              "minimum": 1,
+              "type": [
+                "null",
+                "integer"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GithubComMErenTalanEkokodRewriteInternalApiV1DtoTariffTemplatePage"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "The company's tariff templates.",
+        "tags": [
+          "tariffs"
+        ]
+      },
+      "post": {
+        "operationId": "tariff_templates.create",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TariffTemplateFields"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TariffTemplate"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Create a tariff template.",
+        "tags": [
+          "tariffs"
+        ]
+      }
+    },
+    "/api/v1/tariff-templates/{id}": {
+      "delete": {
+        "operationId": "tariff_templates.delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Delete a tariff template.",
+        "tags": [
+          "tariffs"
+        ]
+      },
+      "patch": {
+        "operationId": "tariff_templates.update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TariffTemplateUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TariffTemplate"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Replace a tariff template.",
+        "tags": [
+          "tariffs"
+        ]
+      }
+    },
+    "/api/v1/tariff-templates/{id}/apply": {
+      "post": {
+        "operationId": "tariff_templates.apply",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TariffTemplateApplyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkTariffResult"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Apply a template to a set of buildings.",
+        "tags": [
+          "tariffs"
         ]
       }
     },

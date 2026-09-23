@@ -410,3 +410,15 @@ where exists (
     and t.deleted_at is null
 )
 returning *;
+
+-- name: TariffBulkAssignmentCreate :one
+insert into tariff_bulk_assignments (company_id, template_id, tariff_name, effective_from, building_ids, created_by)
+values (sqlc.arg(company_id)::uuid, sqlc.narg(template_id)::uuid, sqlc.narg(tariff_name)::text,
+        sqlc.arg(effective_from)::date, sqlc.arg(building_ids)::uuid[], sqlc.narg(created_by)::uuid)
+returning *;
+
+-- name: TariffBulkAssignmentList :many
+select * from tariff_bulk_assignments
+where company_id = sqlc.arg(company_id)::uuid
+order by created_at desc, id
+limit sqlc.arg(limit_val)::int offset sqlc.arg(offset_val)::int;

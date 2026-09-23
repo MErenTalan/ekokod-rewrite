@@ -907,6 +907,14 @@ type TariffTemplateRepository interface {
 	Delete(ctx context.Context, s Scope, id uuid.UUID) error
 }
 
+// BulkAssignmentRepository records and reads bulk tariff assignments (R241).
+// The record is written after the assignment and lists the buildings that
+// actually received a version.
+type BulkAssignmentRepository interface {
+	Create(ctx context.Context, s Scope, a model.TariffBulkAssignment) (model.TariffBulkAssignment, error)
+	List(ctx context.Context, s Scope, p Page) ([]model.TariffBulkAssignment, error)
+}
+
 // SolarTariffFilter narrows a solar tariff listing.
 type SolarTariffFilter struct {
 	PlantID        *uuid.UUID

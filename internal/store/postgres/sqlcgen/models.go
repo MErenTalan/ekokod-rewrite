@@ -2115,6 +2115,17 @@ type Tariff struct {
 	DistributionPriceSource     PriceSource
 }
 
+type TariffBulkAssignment struct {
+	ID            uuid.UUID
+	CompanyID     uuid.UUID
+	TemplateID    *uuid.UUID
+	TariffName    *string
+	EffectiveFrom pgtype.Date
+	BuildingIds   []uuid.UUID
+	CreatedBy     *uuid.UUID
+	CreatedAt     pgtype.Timestamptz
+}
+
 type TariffExtraCharge struct {
 	ID        uuid.UUID
 	TariffID  uuid.UUID

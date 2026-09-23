@@ -1302,3 +1302,69 @@ func icmalRowFromRow(row sqlcgen.IcmalRow) (model.IcmalRow, error) {
 	}
 	return out, nil
 }
+
+// ---------------------------------------------------------------------------
+// BulkAssignmentRepository (migration 00017)
+// ---------------------------------------------------------------------------
+
+// BulkAssignmentRepository records and reads bulk tariff assignments (R241).
+//
+// Isolation: every query filters company_id = the Scope's company. The row
+// names buildings, but it is a record of what happened, not a grant: a
+// building-scoped principal has no read here (05 §6 gives the history to
+// A CA CR), so the building list is never narrowed.
+type BulkAssignmentRepository struct {
+	q    *sqlcgen.Queries
+	pool *pgxpool.Pool
+}
+
+// NewBulkAssignmentRepository builds a BulkAssignmentRepository over pool.
+func NewBulkAssignmentRepository(pool *pgxpool.Pool) *BulkAssignmentRepository {
+	return &BulkAssignmentRepository{q: sqlcgen.New(pool), pool: pool}
+}
+
+var _ store.BulkAssignmentRepository = (*BulkAssignmentRepository)(nil)
+
+// Create records one assignment.
+func (r *BulkAssignmentRepository) Create(ctx context.Context, s store.Scope, a model.TariffBulkAssignment) (model.TariffBulkAssignment, error) {
+	if !s.Valid() {
+		return model.TariffBulkAssignment{}, store.ErrInvalidScope
+	}
+	if a.CompanyID != uuid.Nil && a.CompanyID != s.CompanyID {
+		return model.TariffBulkAssignment{}, store.ErrNotFound
+	}
+	row, err := r.q.TariffBulkAssignmentCreate(ctx, sqlcgen.TariffBulkAssignmentCreateParams{
+		CompanyID: s.CompanyID, TemplateID: a.TemplateID, TariffName: a.TariffName,
+		EffectiveFrom: tariffTimeToDate(a.EffectiveFrom), BuildingIds: a.BuildingIDs, CreatedBy: a.CreatedBy,
+	})
+	if err != nil {
+		return model.TariffBulkAssignment{}, pgerr.Translate(r.pool, "create bulk assignment", err)
+	}
+	return bulkAssignmentFromRow(row), nil
+}
+
+// List returns the company's assignments, newest first.
+func (r *BulkAssignmentRepository) List(ctx context.Context, s store.Scope, p store.Page) ([]model.TariffBulkAssignment, error) {
+	if !s.Valid() {
+		return nil, store.ErrInvalidScope
+	}
+	rows, err := r.q.TariffBulkAssignmentList(ctx, sqlcgen.TariffBulkAssignmentListParams{
+		CompanyID: s.CompanyID, LimitVal: p.Limit, OffsetVal: p.Offset,
+	})
+	if err != nil {
+		return nil, pgerr.Translate(r.pool, "list bulk assignments", err)
+	}
+	out := make([]model.TariffBulkAssignment, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, bulkAssignmentFromRow(row))
+	}
+	return out, nil
+}
+
+func bulkAssignmentFromRow(row sqlcgen.TariffBulkAssignment) model.TariffBulkAssignment {
+	return model.TariffBulkAssignment{
+		ID: row.ID, CompanyID: row.CompanyID, TemplateID: row.TemplateID, TariffName: row.TariffName,
+		EffectiveFrom: tariffDateToTime(row.EffectiveFrom), BuildingIDs: row.BuildingIds,
+		CreatedBy: row.CreatedBy, CreatedAt: row.CreatedAt.Time,
+	}
+}
