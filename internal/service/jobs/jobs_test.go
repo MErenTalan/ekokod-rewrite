@@ -200,9 +200,11 @@ type fakeOps struct {
 	asks []string
 }
 
-func (f *fakeOps) RunByTaskID(_ context.Context, _ store.Scope, taskID string) (model.JobRun, error) {
+// RunByTaskID is company-scoped like the real query: a run whose CompanyID is
+// set answers only its own company.
+func (f *fakeOps) RunByTaskID(_ context.Context, sc store.Scope, taskID string) (model.JobRun, error) {
 	f.asks = append(f.asks, taskID)
-	if run, ok := f.runs[taskID]; ok {
+	if run, ok := f.runs[taskID]; ok && (run.CompanyID == nil || *run.CompanyID == sc.CompanyID) {
 		return run, nil
 	}
 	return model.JobRun{}, store.ErrNotFound
@@ -283,4 +285,68 @@ func TestBillingGenerateIsScopedToItsSubject(t *testing.T) {
 	scoped := store.Scope{CompanyID: companyA, BuildingIDs: []uuid.UUID{buildingA}}
 	_, err = billingService(t, insp, &fakeOps{}, buildingA).Get(t.Context(), scoped, "bg-5")
 	require.ErrorIs(t, err, store.ErrNotFound, "a company-wide job needs a company-wide scope")
+}
+
+// R267: billing.generate carries no asynq.Retention (R53), so a finished task
+// is deleted and only its job_runs row remains. These ids are the real
+// deterministic ones, because a deleted task leaves nothing else to parse.
+func goneBillingID(subject uuid.UUID) string {
+	return job.BillingGenerateTaskID(job.BillingGeneratePayload{CompanyID: companyA, Scope: model.BillScopeBuilding,
+		SubjectID: subject, PeriodKey: "2026-08"})
+}
+
+func emptyInspector() *fakeInspector {
+	return &fakeInspector{tasks: map[string]map[string]*asynq.TaskInfo{}}
+}
+
+func TestGetAnswersSucceededFromRunWhenTaskIsGone(t *testing.T) {
+	t.Parallel()
+	id := goneBillingID(buildingA)
+	ops := &fakeOps{runs: map[string]model.JobRun{id: {CompanyID: &companyA, Status: "success"}}}
+	v, err := billingService(t, emptyInspector(), ops, buildingA).Get(t.Context(), scopeA(), id)
+	require.NoError(t, err)
+	require.Equal(t, jobs.Succeeded, v.Status)
+	require.Equal(t, job.TypeBillingGenerate, v.Type)
+	require.Empty(t, v.ErrorCode)
+}
+
+func TestGetAnswersFailedWithCodeFromRunWhenTaskIsGone(t *testing.T) {
+	t.Parallel()
+	id := goneBillingID(buildingA)
+	ops := &fakeOps{runs: map[string]model.JobRun{id: {CompanyID: &companyA, Status: "failed",
+		Detail: json.RawMessage(`{"code":"no_consumption_data"}`)}}}
+	v, err := billingService(t, emptyInspector(), ops, buildingA).Get(t.Context(), scopeA(), id)
+	require.NoError(t, err)
+	require.Equal(t, jobs.Failed, v.Status)
+	require.Equal(t, "no_consumption_data", v.ErrorCode)
+
+	ops.runs[id] = model.JobRun{CompanyID: &companyA, Status: "running"}
+	v, err = billingService(t, emptyInspector(), ops, buildingA).Get(t.Context(), scopeA(), id)
+	require.NoError(t, err)
+	require.Equal(t, jobs.Running, v.Status)
+}
+
+func TestGetGoneTaskWithoutRunIsNotFound(t *testing.T) {
+	t.Parallel()
+	_, err := billingService(t, emptyInspector(), &fakeOps{}, buildingA).Get(t.Context(), scopeA(), goneBillingID(buildingA))
+	require.ErrorIs(t, err, store.ErrNotFound)
+	_, err = billingService(t, emptyInspector(), &fakeOps{}, buildingA).Get(t.Context(), scopeA(), "integration.backfill:whatever")
+	require.ErrorIs(t, err, store.ErrNotFound, "only types that record their task id fall back")
+}
+
+func TestGetGoneTaskOfInvisibleBuildingIsNotFound(t *testing.T) {
+	t.Parallel()
+	id := goneBillingID(buildingB)
+	ops := &fakeOps{runs: map[string]model.JobRun{id: {CompanyID: &companyA, Status: "success"}}}
+	_, err := billingService(t, emptyInspector(), ops, buildingA).Get(t.Context(), scopeA(), id)
+	require.ErrorIs(t, err, store.ErrNotFound)
+	require.Empty(t, ops.asks, "visibility is checked before the run is read")
+}
+
+func TestGetGoneTaskOfOtherCompanyIsNotFound(t *testing.T) {
+	t.Parallel()
+	id := goneBillingID(buildingA)
+	ops := &fakeOps{runs: map[string]model.JobRun{id: {CompanyID: &companyB, Status: "success"}}}
+	_, err := billingService(t, emptyInspector(), ops, buildingA).Get(t.Context(), scopeA(), id)
+	require.ErrorIs(t, err, store.ErrNotFound)
 }

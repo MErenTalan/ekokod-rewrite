@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -118,6 +119,9 @@ func (s *Service) Get(ctx context.Context, sc store.Scope, id string) (View, err
 		return View{}, store.ErrInvalidScope
 	}
 	info, err := s.find(id)
+	if errors.Is(err, store.ErrNotFound) {
+		return s.fromRun(ctx, sc, id)
+	}
 	if err != nil {
 		return View{}, err
 	}
@@ -202,16 +206,70 @@ func (s *Service) billingFailureCode(ctx context.Context, sc store.Scope, p job.
 		return ""
 	}
 	run, err := s.d.Ops.RunByTaskID(ctx, sc, job.BillingGenerateTaskID(p))
-	if err != nil || len(run.Detail) == 0 {
+	if err != nil {
+		return ""
+	}
+	return closedCode(run.Detail)
+}
+
+// closedCode returns the run's code only when it is in the closed set.
+func closedCode(raw []byte) string {
+	if len(raw) == 0 {
 		return ""
 	}
 	var detail struct {
 		Code string `json:"code"`
 	}
-	if err := json.Unmarshal(run.Detail, &detail); err != nil || !billingCodes[detail.Code] {
+	if err := json.Unmarshal(raw, &detail); err != nil || !billingCodes[detail.Code] {
 		return ""
 	}
 	return detail.Code
+}
+
+// goneVisible re-derives visibility from the deterministic id of a watchable
+// task whose worker records job_runs.task_id. It exists because such tasks
+// carry no asynq.Retention (R53): once finished, the id is all that is left.
+var goneVisible = map[string]func(s *Service, ctx context.Context, sc store.Scope, parts []string) (string, error){
+	// billing.generate:<scope>:<subject>:<period>
+	job.TypeBillingGenerate: func(s *Service, ctx context.Context, sc store.Scope, parts []string) (string, error) {
+		if len(parts) != 4 {
+			return "", store.ErrNotFound
+		}
+		subject, err := uuid.Parse(parts[2])
+		if err != nil {
+			return "", store.ErrNotFound
+		}
+		p := job.BillingGeneratePayload{CompanyID: sc.CompanyID, Scope: model.BillScope(parts[1]), SubjectID: subject, PeriodKey: parts[3]}
+		return job.TypeBillingGenerate, s.billingSubjectVisible(ctx, sc, p)
+	},
+}
+
+// fromRun answers for a finished task from its newest job_runs row (R267).
+// Visibility is checked first, and the run lookup is company-scoped, so the
+// answer for a foreign or invisible id stays the plain 404.
+func (s *Service) fromRun(ctx context.Context, sc store.Scope, id string) (View, error) {
+	parts := strings.Split(id, ":")
+	visible, ok := goneVisible[parts[0]]
+	if !ok || s.d.Ops == nil {
+		return View{}, store.ErrNotFound
+	}
+	jobType, err := visible(s, ctx, sc, parts)
+	if err != nil {
+		return View{}, err
+	}
+	run, err := s.d.Ops.RunByTaskID(ctx, sc, id)
+	if err != nil {
+		return View{}, err
+	}
+	v := View{ID: id, Type: jobType, Status: Running, CompletedAt: run.FinishedAt}
+	switch run.Status {
+	case "success":
+		v.Status = Succeeded
+	case "failed":
+		v.Status = Failed
+		v.ErrorCode = closedCode(run.Detail)
+	}
+	return v, nil
 }
 
 func (s *Service) find(id string) (*asynq.TaskInfo, error) {
