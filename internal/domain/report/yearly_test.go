@@ -76,6 +76,8 @@ func TestYearlyHandComputedFixture(t *testing.T) {
 	eq(t, "32.8767", y.DailyConsumption.Value, "daily consumption")
 	eq(t, "3.2877", y.DailyRooftop.Value, "daily rooftop")
 	eq(t, "23.0137", y.DailyProduction.Value, "daily production")
+	// 7200 / 365 = 19.726027… → 19.7260
+	eq(t, "19.726", y.DailyUtility.Value, "daily utility-scale production")
 
 	// targets: 8000 (yearly) + 12 × 150 (monthly) = 9800; actual 6000 + 1200
 	// = 7200 → 73.469… → 73.5 %. Per plant: 75 % and 66.7 %.

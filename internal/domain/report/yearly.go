@@ -119,6 +119,7 @@ func BuildYearly(in YearlyInput) Yearly {
 	out.DailyConsumption = perDay(out.Consumption, days)
 	out.DailyRooftop = perDay(out.Rooftop, days)
 	out.DailyProduction = perDay(out.Production, days)
+	out.DailyUtility = perDay(out.Utility, days)
 	out.Partial = out.Consumption.Partial || out.Production.Partial
 
 	prevCons, _, _ := totals(y - 1)

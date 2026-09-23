@@ -256,6 +256,9 @@ type Yearly struct {
 	DailyConsumption Figure        `json:"daily_consumption"`
 	DailyRooftop     Figure        `json:"daily_rooftop"`
 	DailyProduction  Figure        `json:"daily_production"`
+	// DailyUtility is the solar section's daily average: over the same
+	// plants as its target, so the two are comparable.
+	DailyUtility Figure `json:"daily_utility"`
 
 	Target         *decimal.Decimal `json:"target"`
 	AchievementPct *decimal.Decimal `json:"achievement_pct"`
