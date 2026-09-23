@@ -22,6 +22,8 @@ const me = (role: keyof typeof fixture): MeResponse => ({
 
 const ROUTES = {
   'GET /api/v1/tariffs': { items: demoTariffSummaries, total: 2 },
+  'GET /api/v1/buildings': { items: [{ id: 'b-1', company_id: 'c-own', name: 'A1 Fabrika', bill_cutoff_day: 1, created_at: '', updated_at: '' }], total: 1 },
+  'GET /api/v1/analyzers': { items: [], next_cursor: null },
   'GET /api/v1/tariff-templates': { items: demoTemplates, total: 1 },
   'GET /api/v1/buildings/bulk-tariff/current': { items: demoBuildingStates, total: 2 },
   'GET /api/v1/buildings/bulk-tariff/history': { items: demoAssignments, total: 2 },

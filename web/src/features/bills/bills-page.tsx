@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 
 import { PageHeader } from '@/components/shell/page-header';
+import { ScopePicker } from '@/features/scope/scope-picker';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { MonthPicker } from '@/components/ui/month-picker';
@@ -29,6 +30,7 @@ export function BillsPage() {
   const { buildingId } = useSelection();
 
   const [month, setMonth] = useState<string | null>(null);
+  const [activeOnly, setActiveOnly] = useState(false);
   const [jobID, setJobID] = useState<string | null>(null);
 
   const canCompute = can('bills.compute');
@@ -80,6 +82,9 @@ export function BillsPage() {
         <EmptyState title={t('noMonth')} description={t('noMonthDescription')} />
       ) : (
         <>
+          {/* The building invoice of §7.10 needs a building, so the screen
+              carries the same picker the consumption screens do. */}
+          {canCompute ? <ScopePicker activeOnly={activeOnly} onActiveOnlyChange={setActiveOnly} /> : null}
           {canCompute ? (
             <GenerateCardView
               analyzers={analyzers.data?.items ?? []}

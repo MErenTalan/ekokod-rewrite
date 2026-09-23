@@ -20,6 +20,7 @@ const me = (role: keyof typeof fixture): MeResponse => ({
 const ROUTES = {
   'GET /api/v1/bills/dashboard': demoDashboard,
   'GET /api/v1/analyzers': { items: demoAnalyzers, next_cursor: null },
+  'GET /api/v1/buildings': { items: [{ id: 'b-1', company_id: 'c-own', name: 'A1 Fabrika', bill_cutoff_day: 1, created_at: '', updated_at: '' }], total: 1 },
   'POST /api/v1/bills/compute': Response.json({ job_ids: ['billing.generate:company:c-own:2026-08'] }, { status: 202 }),
   // openapi-fetch percent-encodes the colons in the deterministic task id.
   'GET /api/v1/jobs/billing.generate%3Acompany%3Ac-own%3A2026-08': {

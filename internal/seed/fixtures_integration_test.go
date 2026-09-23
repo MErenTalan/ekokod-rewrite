@@ -75,11 +75,43 @@ func TestE2EFixturesHaveReadingsAndBill(t *testing.T) {
 		`select count(*) from consumption_daily where analyzer_id = $1`, fx.AnalyzerA1).Scan(&daily))
 	require.Greater(t, daily, 70, "the daily aggregate is materialised for the seeded range")
 
-	var bills int
+	// One building invoice and one analyzer invoice for A1, after two runs:
+	// the count per scope is what proves the seed is idempotent, and F8a's
+	// dashboard needs the analyzer row next to the building one.
+	var buildingBills int
 	var total decimal.Decimal
 	require.NoError(t, pool.QueryRow(ctx,
-		`select count(*), coalesce(max(total_cost), 0) from bills where building_id = $1 and status <> 'superseded'`,
-		fx.BuildingA1).Scan(&bills, &total))
-	require.Equal(t, 1, bills, "exactly one bill after two seed runs")
+		`select count(*), coalesce(max(total_cost), 0) from bills
+		 where building_id = $1 and scope = 'building' and status <> 'superseded'`,
+		fx.BuildingA1).Scan(&buildingBills, &total))
+	require.Equal(t, 1, buildingBills, "exactly one building bill after two seed runs")
 	require.Equal(t, "48250.75", total.String())
+
+	var analyzerBills int
+	require.NoError(t, pool.QueryRow(ctx,
+		`select count(*) from bills where analyzer_id = $1 and scope = 'analyzer' and status <> 'superseded'`,
+		fx.AnalyzerA1).Scan(&analyzerBills))
+	require.Equal(t, 1, analyzerBills, "exactly one analyzer bill after two seed runs")
+
+	// 02 §6.11 prices the building invoice over the aggregate, so the seeded
+	// figures differ on purpose: the dashboard's divergence note (R234) is
+	// exercised by real data rather than by a hand-made fixture.
+	var analyzerSum decimal.Decimal
+	require.NoError(t, pool.QueryRow(ctx,
+		`select coalesce(sum(total_cost), 0) from bills
+		 where company_id = $1 and scope = 'analyzer' and status <> 'superseded'`,
+		fx.CompanyA).Scan(&analyzerSum))
+	require.NotEqual(t, total.String(), analyzerSum.String())
+
+	var templates, assignments, imports, solar, schedule int
+	require.NoError(t, pool.QueryRow(ctx, `select count(*) from tariff_templates where company_id = $1`, fx.CompanyA).Scan(&templates))
+	require.NoError(t, pool.QueryRow(ctx, `select count(*) from tariff_bulk_assignments where company_id = $1`, fx.CompanyA).Scan(&assignments))
+	require.NoError(t, pool.QueryRow(ctx, `select count(*) from icmal_imports where company_id = $1`, fx.CompanyA).Scan(&imports))
+	require.NoError(t, pool.QueryRow(ctx, `select count(*) from solar_tariffs where company_id = $1`, fx.CompanyA).Scan(&solar))
+	require.NoError(t, pool.QueryRow(ctx, `select count(*) from national_tariff_schedule`).Scan(&schedule))
+	require.Equal(t, 1, templates, "one template after two seed runs")
+	require.Equal(t, 1, assignments)
+	require.Equal(t, 1, imports)
+	require.Equal(t, 1, solar)
+	require.GreaterOrEqual(t, schedule, 2)
 }

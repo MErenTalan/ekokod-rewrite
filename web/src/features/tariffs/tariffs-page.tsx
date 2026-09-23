@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 
 import { PageHeader } from '@/components/shell/page-header';
+import { ScopePicker } from '@/features/scope/scope-picker';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -37,6 +38,7 @@ export function TariffsPage() {
   const { buildingId } = useSelection();
 
   const [tab, setTab] = useState('building');
+  const [activeOnly, setActiveOnly] = useState(false);
   const [draft, setDraft] = useState<TariffDraft | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
@@ -197,11 +199,7 @@ export function TariffsPage() {
       tariff: draftFrom({ ...template.tariff, id: '', created_at: '', updated_at: '' } as never),
     });
 
-  const items: TabItem[] = [];
-  items.push({
-    value: 'building',
-    label: t('tabs.building'),
-    content: !buildingId ? (
+  const buildingTabContent = !buildingId ? (
       <EmptyState title={t('selectBuilding')} description={t('buildingRequired')} />
     ) : draft ? (
       <TariffFormView
@@ -221,6 +219,19 @@ export function TariffsPage() {
         onEdit={setEditing}
         onDelete={setDeleting}
       />
+    );
+
+  const items: TabItem[] = [];
+  items.push({
+    value: 'building',
+    label: t('tabs.building'),
+    content: (
+      <div className="flex flex-col gap-4">
+        {/* §7.11 is per building, so the screen carries the same picker the
+            consumption screens do rather than depending on another page. */}
+        <ScopePicker activeOnly={activeOnly} onActiveOnlyChange={setActiveOnly} />
+        {buildingTabContent}
+      </div>
     ),
   });
   if (canTemplates) {
