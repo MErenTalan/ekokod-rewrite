@@ -86,6 +86,9 @@ var expectedAccess = map[string]string{
 	"PATCH /tariffs/{id}":     "A CA",
 	"DELETE /tariffs/{id}":    "A CA",
 	// 05 §7 (F6a subset, R179)
+	"POST /icmal-imports":                "A CA",
+	"GET /icmal-imports/{id}":            "A CA",
+	"POST /icmal-imports/{id}/apply":     "A CA",
 	"GET /tariff-templates":              "A CA CR",
 	"POST /tariff-templates":             "A CA",
 	"PATCH /tariff-templates/{id}":       "A CA",

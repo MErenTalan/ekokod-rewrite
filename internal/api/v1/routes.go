@@ -45,6 +45,10 @@ type Route struct {
 	PlatformAudit bool
 	AuthLimit     AuthLimitMode
 	Multipart     bool
+	// MaxBody overrides the default request-body cap for this route. It
+	// exists for the icmal upload: a spreadsheet does not fit in the 1 MiB
+	// that is right for JSON (R240's upload row).
+	MaxBody int64
 
 	Request, Response any
 	Status            int
@@ -69,7 +73,7 @@ func (rt Route) Mutating() bool {
 // Table is every /api/v1 route.
 func Table() []Route {
 	return slices.Concat(systemRoutes(), authRoutes(), tenancyRoutes(), assetRoutes(), analysisRoutes(), billingRoutes(),
-		tariffRoutes(), calendarRoutes(), jobRoutes(), alarmRoutes(), opsRoutes())
+		tariffRoutes(), icmalRoutes(), calendarRoutes(), jobRoutes(), alarmRoutes(), opsRoutes())
 }
 
 func systemRoutes() []Route {

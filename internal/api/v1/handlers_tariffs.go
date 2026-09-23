@@ -2,6 +2,8 @@ package v1
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -11,6 +13,8 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/api/v1/mw"
 	"github.com/MErenTalan/ekokod-rewrite/internal/auth"
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
+	"github.com/MErenTalan/ekokod-rewrite/internal/domain/tariff/icmal"
+	perr "github.com/MErenTalan/ekokod-rewrite/internal/platform/errors"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/assets"
 	tariffsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/tariff"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
@@ -215,5 +219,133 @@ func (h *Handlers) bulkTariffHistory(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 		return kit.PageOf(items, page, limit), nil
+	})
+}
+
+// icmalMaxBody is the upload cap for a supplier's icmal workbook. 1 MiB is
+// right for JSON and far too small for a spreadsheet with a year of rows.
+const icmalMaxBody = 10 << 20
+
+func icmalRoutes() []Route {
+	aca := auth.Roles(roleA, roleCA)
+	return []Route{
+		{Method: http.MethodPost, Pattern: "/icmal-imports", OperationID: "icmal.create", Tag: "tariffs", Access: RoleGated,
+			Roles: aca, Entity: "icmal_import", Multipart: true, NoIdempotency: true, MaxBody: icmalMaxBody,
+			Summary: "Upload and analyse an icmal; writes no tariff.", Response: dto.IcmalImport{},
+			Status: http.StatusCreated, Handler: (*Handlers).createIcmalImport},
+		{Method: http.MethodGet, Pattern: "/icmal-imports/{id}", OperationID: "icmal.get", Tag: "tariffs", Access: RoleGated,
+			Roles: aca, Summary: "A stored icmal analysis.", Request: dto.IDPath{}, Response: dto.IcmalImport{},
+			Status: http.StatusOK, Handler: (*Handlers).getIcmalImport},
+		{Method: http.MethodPost, Pattern: "/icmal-imports/{id}/apply", OperationID: "icmal.apply", Tag: "tariffs",
+			Access: RoleGated, Roles: aca, Entity: "tariff",
+			Summary: "Write the confirmed coefficients into a new tariff version per building.",
+			Request: dto.IcmalApplyRequest{}, Response: dto.BulkTariffResult{}, Status: http.StatusOK,
+			Handler: (*Handlers).applyIcmalImport},
+	}
+}
+
+func icmalCoefficientDTO(c icmal.Coefficient) dto.IcmalCoefficient {
+	return dto.IcmalCoefficient{Value: dto.DP(c.Value), Samples: c.Samples, StdDev: dto.DP(c.StdDev),
+		Stable: c.Stable, BackCalcErrorPct: dto.DP(c.BackCalcErrorPct)}
+}
+
+func icmalWarningsDTO(warnings []icmal.Warning) []dto.IcmalWarning {
+	out := make([]dto.IcmalWarning, 0, len(warnings))
+	for _, w := range warnings {
+		out = append(out, dto.IcmalWarning{Row: w.Row, Code: w.Code, Text: w.Text})
+	}
+	return out
+}
+
+func icmalImportDTO(res tariffsvc.ImportResult) dto.IcmalImport {
+	out := dto.IcmalImport{
+		ID: res.Import.ID, FileName: res.Import.FileName, Status: res.Import.Status, RowCount: int(res.Import.RowCount),
+		Analyses: make([]dto.IcmalAnalysis, 0, len(res.Analyses)), Unmatched: res.Unmatched,
+		Warnings: icmalWarningsDTO(res.Warnings), CreatedAt: dto.T(res.Import.CreatedAt),
+	}
+	if out.Unmatched == nil {
+		out.Unmatched = []string{}
+	}
+	for _, a := range res.Analyses {
+		item := dto.IcmalAnalysis{
+			EtsoCode: a.EtsoCode, Periods: a.Periods, EnergyKbk: icmalCoefficientDTO(a.EnergyKbk),
+			DistributionTlPerKwh: icmalCoefficientDTO(a.DistributionTlPerKwh), PowerUnitPrice: icmalCoefficientDTO(a.PowerUnitPrice),
+			ImpliedContractedPowerKw: dto.DP(a.ImpliedContractedPowerKw), ReactiveUnitPrice: icmalCoefficientDTO(a.ReactiveUnitPrice),
+			ReactiveKbk: icmalCoefficientDTO(a.ReactiveKbk), VatRate: icmalCoefficientDTO(a.VatRate),
+			Taxes: map[string]dto.IcmalCoefficient{}, IsMultiTime: a.IsMultiTime, Term: a.Term, VoltageLevel: a.VoltageLevel,
+			WithinTolerance: a.WithinTolerance, OveruseRequiresManualEntry: a.OveruseRequiresManualEntry,
+			Warnings: icmalWarningsDTO(a.Warnings),
+		}
+		if item.Periods == nil {
+			item.Periods = []string{}
+		}
+		for name, c := range a.Taxes {
+			item.Taxes[name] = icmalCoefficientDTO(c)
+		}
+		if id, ok := res.Buildings[a.EtsoCode]; ok {
+			building := id
+			item.BuildingID = &building
+		}
+		out.Analyses = append(out.Analyses, item)
+	}
+	return out
+}
+
+func (h *Handlers) createIcmalImport(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(icmalMaxBody); err != nil {
+		kit.WriteError(w, r, kit.ErrBodyTooLarge)
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		kit.WriteError(w, r, perr.Validation.WithParams(map[string]any{"file": []string{"required"}}))
+		return
+	}
+	defer func() { _ = file.Close() }()
+	content, err := io.ReadAll(file)
+	if err != nil {
+		kit.WriteError(w, r, kit.ErrBodyTooLarge)
+		return
+	}
+	res, err := h.Tariffs.Import(r.Context(), mw.ScopeFrom(r), actingUser(r), header.Filename, content)
+	if err != nil {
+		// A file that cannot be parsed is the operator's problem to fix, and
+		// naming the field is what lets the screen say so.
+		if errors.Is(err, tariffsvc.ErrInvalidRequest) {
+			kit.WriteError(w, r, perr.Validation.WithParams(map[string]any{"file": []string{"unreadable"}}))
+			return
+		}
+		kit.WriteError(w, r, billingErr(err))
+		return
+	}
+	kit.WriteJSON(w, http.StatusCreated, icmalImportDTO(res))
+}
+
+func (h *Handlers) getIcmalImport(w http.ResponseWriter, r *http.Request) {
+	serve(w, r, http.StatusOK, func(req dto.IDPath) (any, error) {
+		res, err := h.Tariffs.GetImport(r.Context(), mw.ScopeFrom(r), req.ID)
+		if err != nil {
+			return nil, billingErr(err)
+		}
+		return icmalImportDTO(res), nil
+	})
+}
+
+func (h *Handlers) applyIcmalImport(w http.ResponseWriter, r *http.Request) {
+	serve(w, r, http.StatusOK, func(req dto.IcmalApplyRequest) (any, error) {
+		confirmations := make([]tariffsvc.ApplyConfirmation, 0, len(req.Confirmations))
+		for _, c := range req.Confirmations {
+			confirmation := tariffsvc.ApplyConfirmation{BuildingID: c.BuildingID, EtsoCode: c.EtsoCode, EffectiveFrom: c.EffectiveFrom.Time}
+			if c.Base != nil {
+				base := tariffInput(*c.Base)
+				confirmation.Base = &base
+			}
+			confirmations = append(confirmations, confirmation)
+		}
+		defs, err := h.Tariffs.ApplyImport(r.Context(), mw.ScopeFrom(r), req.ID, confirmations)
+		if err != nil {
+			return nil, billingErr(err)
+		}
+		return bulkResult(defs), nil
 	})
 }

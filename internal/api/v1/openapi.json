@@ -2929,6 +2929,229 @@
         },
         "type": "object"
       },
+      "IcmalAnalysis": {
+        "properties": {
+          "building_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "distribution_tl_per_kwh": {
+            "$ref": "#/components/schemas/IcmalCoefficient"
+          },
+          "energy_kbk": {
+            "$ref": "#/components/schemas/IcmalCoefficient"
+          },
+          "etso_code": {
+            "type": "string"
+          },
+          "implied_contracted_power_kw": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "is_multi_time": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "overuse_requires_manual_entry": {
+            "type": "boolean"
+          },
+          "periods": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "power_unit_price": {
+            "$ref": "#/components/schemas/IcmalCoefficient"
+          },
+          "reactive_kbk": {
+            "$ref": "#/components/schemas/IcmalCoefficient"
+          },
+          "reactive_unit_price": {
+            "$ref": "#/components/schemas/IcmalCoefficient"
+          },
+          "taxes": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/IcmalCoefficient"
+            },
+            "type": "object"
+          },
+          "term": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "vat_rate": {
+            "$ref": "#/components/schemas/IcmalCoefficient"
+          },
+          "voltage_level": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/IcmalWarning"
+            },
+            "type": "array"
+          },
+          "within_tolerance": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "etso_code",
+          "periods",
+          "energy_kbk",
+          "distribution_tl_per_kwh",
+          "power_unit_price",
+          "reactive_unit_price",
+          "reactive_kbk",
+          "vat_rate",
+          "taxes",
+          "within_tolerance",
+          "overuse_requires_manual_entry",
+          "warnings"
+        ],
+        "type": "object"
+      },
+      "IcmalApplyRequest": {
+        "properties": {
+          "confirmations": {
+            "items": {
+              "$ref": "#/components/schemas/IcmalConfirmation"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "confirmations"
+        ],
+        "type": "object"
+      },
+      "IcmalCoefficient": {
+        "properties": {
+          "back_calc_error_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "samples": {
+            "type": "integer"
+          },
+          "stable": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "std_dev": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "value": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "required": [
+          "samples"
+        ],
+        "type": "object"
+      },
+      "IcmalConfirmation": {
+        "properties": {
+          "base": {
+            "$ref": "#/components/schemas/TariffFields"
+          },
+          "building_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "effective_from": {
+            "$ref": "#/components/schemas/Date"
+          },
+          "etso_code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "building_id",
+          "etso_code",
+          "effective_from"
+        ],
+        "type": "object"
+      },
+      "IcmalImport": {
+        "properties": {
+          "analyses": {
+            "items": {
+              "$ref": "#/components/schemas/IcmalAnalysis"
+            },
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "file_name": {
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "row_count": {
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "analysed",
+              "applied"
+            ],
+            "type": "string"
+          },
+          "unmatched": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/IcmalWarning"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "file_name",
+          "status",
+          "row_count",
+          "analyses",
+          "unmatched",
+          "warnings",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "IcmalWarning": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "row": {
+            "type": "integer"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "row",
+          "code",
+          "text"
+        ],
+        "type": "object"
+      },
       "IntegrationCredential": {
         "properties": {
           "definition_id": {
@@ -12722,6 +12945,365 @@
         "summary": "Generation series from the export registers.",
         "tags": [
           "consumption"
+        ]
+      }
+    },
+    "/api/v1/icmal-imports": {
+      "post": {
+        "operationId": "icmal.create",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IcmalImport"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Upload and analyse an icmal; writes no tariff.",
+        "tags": [
+          "tariffs"
+        ]
+      }
+    },
+    "/api/v1/icmal-imports/{id}": {
+      "get": {
+        "operationId": "icmal.get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IcmalImport"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "A stored icmal analysis.",
+        "tags": [
+          "tariffs"
+        ]
+      }
+    },
+    "/api/v1/icmal-imports/{id}/apply": {
+      "post": {
+        "operationId": "icmal.apply",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IcmalApplyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkTariffResult"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Write the confirmed coefficients into a new tariff version per building.",
+        "tags": [
+          "tariffs"
         ]
       }
     },

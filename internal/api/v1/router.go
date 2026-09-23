@@ -79,11 +79,16 @@ func NewRouterForTable(routes []Route, h *Handlers, m Middleware, log *slog.Logg
 		kit.Logger = log
 	}
 	r := chi.NewRouter()
-	r.Use(mw.BodyLimit(maxBody))
 	r.NotFound(func(w http.ResponseWriter, req *http.Request) { kit.WriteError(w, req, perr.NotFound) })
 	r.MethodNotAllowed(func(w http.ResponseWriter, req *http.Request) { kit.WriteError(w, req, kit.ErrMethodNotAllowed) })
 	for _, rt := range routes {
-		chain := []func(http.Handler) http.Handler{mw.ContentType(rt.Multipart)}
+		// One body limit per route, applied first: an inner MaxBytesReader
+		// cannot lift an outer one, so a global r.Use would cap every upload.
+		limit := int64(maxBody)
+		if rt.MaxBody > 0 {
+			limit = rt.MaxBody
+		}
+		chain := []func(http.Handler) http.Handler{mw.BodyLimit(limit), mw.ContentType(rt.Multipart)}
 		switch rt.AuthLimit {
 		case AuthLimitByEmail:
 			chain = append(chain, m.AuthLimit(rt.OperationID, true))

@@ -29,12 +29,17 @@ type ImportResult struct {
 	Analyses  []icmal.Analysis
 	Unmatched []string // ETSO codes with no (or more than one) building
 	Warnings  []icmal.Warning
+	// Buildings maps an ETSO code to the ONE building it matched. The review
+	// screen needs it to say which building each derivation belongs to, and
+	// it is stored so re-reading an import answers the same question.
+	Buildings map[string]uuid.UUID
 }
 
 type storedResult struct {
-	Analyses  []icmal.Analysis `json:"analyses"`
-	Unmatched []string         `json:"unmatched"`
-	Warnings  []icmal.Warning  `json:"warnings"`
+	Analyses  []icmal.Analysis     `json:"analyses"`
+	Unmatched []string             `json:"unmatched"`
+	Warnings  []icmal.Warning      `json:"warnings"`
+	Buildings map[string]uuid.UUID `json:"buildings,omitempty"`
 }
 
 var thousand = decimal.NewFromInt(1000)
@@ -63,7 +68,7 @@ func (s *Service) Import(ctx context.Context, sc store.Scope, uploadedBy uuid.UU
 			buildingsByEtso[*a.EtsoCode] = append(buildingsByEtso[*a.EtsoCode], *a.BuildingID)
 		}
 	}
-	res := ImportResult{Warnings: parsed.Warnings}
+	res := ImportResult{Warnings: parsed.Warnings, Buildings: map[string]uuid.UUID{}}
 	latest := map[string]string{}
 	unmatched := map[string]bool{}
 	for i, r := range parsed.Rows {
@@ -77,6 +82,7 @@ func (s *Service) Import(ctx context.Context, sc store.Scope, uploadedBy uuid.UU
 		switch b := buildingsByEtso[etso]; len(b) {
 		case 1:
 			parsed.Rows[i].BuildingID = &b[0]
+			res.Buildings[etso] = b[0]
 		case 0:
 			unmatched[etso] = true
 		default:
@@ -129,7 +135,8 @@ func (s *Service) Import(ctx context.Context, sc store.Scope, uploadedBy uuid.UU
 			return ImportResult{}, err
 		}
 	}
-	raw, err := json.Marshal(storedResult{Analyses: res.Analyses, Unmatched: res.Unmatched, Warnings: res.Warnings})
+	raw, err := json.Marshal(storedResult{Analyses: res.Analyses, Unmatched: res.Unmatched, Warnings: res.Warnings,
+		Buildings: res.Buildings})
 	if err != nil {
 		return ImportResult{}, err
 	}
@@ -192,7 +199,7 @@ func (s *Service) GetImport(ctx context.Context, sc store.Scope, id uuid.UUID) (
 		if err := json.Unmarshal(imp.Result, &stored); err != nil {
 			return ImportResult{}, fmt.Errorf("icmal import result: %w", err)
 		}
-		res.Analyses, res.Unmatched, res.Warnings = stored.Analyses, stored.Unmatched, stored.Warnings
+		res.Analyses, res.Unmatched, res.Warnings, res.Buildings = stored.Analyses, stored.Unmatched, stored.Warnings, stored.Buildings
 	}
 	return res, nil
 }
