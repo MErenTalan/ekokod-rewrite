@@ -96,6 +96,19 @@ var permissionTable = map[string]RoleSet{
 	"messages.read":   AllRoles,
 	"jobs.runs.read":  Roles(roleA, roleCA),
 	"jobs.trigger":    Roles(roleA),
+
+	// F8a R246. Reads follow 05 §6/§7's `scope` marker — the scope filter,
+	// not the permission, narrows what a building admin sees. Every tariff
+	// write (versions, templates, bulk assignment, solar tariffs) rides on
+	// tariffs.edit because 05 §6 gives them all the same A CA row.
+	"bills.read":             AllRoles,
+	"tariffs.read":           AllRoles,
+	"tariffs.edit":           Roles(roleA, roleCA),
+	"tariffs.templates.read": Roles(roleA, roleCA, roleCR),
+	"tariffs.bulk.read":      Roles(roleA, roleCA, roleCR),
+	"tariffs.icmal":          Roles(roleA, roleCA),
+	"tariffs.defaults":       Roles(roleA),
+	"solar_tariffs.read":     Roles(roleA, roleCA, roleCR),
 }
 
 // PermissionsFor returns the sorted permissions of a role, nil for an unknown role.

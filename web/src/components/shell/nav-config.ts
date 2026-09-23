@@ -49,7 +49,8 @@ export const navigation: NavEntry[] = [
     { id: 'gas', labelKey: 'gas', href: '/ekorm/gas', icon: Flame, disabled: true },
     { id: 'evDrivers', labelKey: 'evDrivers', href: '/ekorm/ev-drivers', icon: PlugZap, disabled: true } ] },
   { id: 'billsTariffs', labelKey: 'billsAndTariffs', icon: Receipt, children: [
-    { id: 'bills', labelKey: 'bills', href: '/ekorm/bills', icon: FileText }, { id: 'tariffs', labelKey: 'tariffs', href: '/ekorm/tariffs', icon: Tags } ] },
+    { id: 'bills', labelKey: 'bills', href: '/ekorm/bills', icon: FileText, permission: 'bills.read' },
+    { id: 'tariffs', labelKey: 'tariffs', href: '/ekorm/tariffs', icon: Tags, permission: 'tariffs.read' } ] },
   { id: 'alarms', labelKey: 'alarms', icon: Bell, children: [
     { id: 'alarmsManual', labelKey: 'manual', href: '/ekorm/alarms', icon: BellRing, permission: 'alarms.read' },
     { id: 'messages', labelKey: 'messages', href: '/ekorm/messages', icon: MessageSquare, permission: 'messages.read' },

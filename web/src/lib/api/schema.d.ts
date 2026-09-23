@@ -2068,7 +2068,7 @@ export interface components {
             period_start: string;
         };
         /** @enum {string} */
-        Permission: "admin.companies" | "alarms.edit" | "alarms.evaluate" | "alarms.read" | "analyzers.refresh" | "anomaly.check" | "bills.compute" | "calendar.edit" | "integrations.credentials" | "jobs.runs.read" | "jobs.trigger" | "messages.read" | "nav.core" | "nav.financial" | "nav.solar_plants" | "settings.analyzers" | "settings.analyzers.edit" | "settings.buildings" | "settings.company" | "settings.company.edit" | "settings.integrations" | "settings.plants" | "settings.smtp" | "settings.users" | "write";
+        Permission: "admin.companies" | "alarms.edit" | "alarms.evaluate" | "alarms.read" | "analyzers.refresh" | "anomaly.check" | "bills.compute" | "bills.read" | "calendar.edit" | "integrations.credentials" | "jobs.runs.read" | "jobs.trigger" | "messages.read" | "nav.core" | "nav.financial" | "nav.solar_plants" | "settings.analyzers" | "settings.analyzers.edit" | "settings.buildings" | "settings.company" | "settings.company.edit" | "settings.integrations" | "settings.plants" | "settings.smtp" | "settings.users" | "solar_tariffs.read" | "tariffs.bulk.read" | "tariffs.defaults" | "tariffs.edit" | "tariffs.icmal" | "tariffs.read" | "tariffs.templates.read" | "write";
         Plant: {
             address?: null | string;
             /** Format: date-time */

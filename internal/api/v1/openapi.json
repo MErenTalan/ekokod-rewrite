@@ -3255,6 +3255,7 @@
           "analyzers.refresh",
           "anomaly.check",
           "bills.compute",
+          "bills.read",
           "calendar.edit",
           "integrations.credentials",
           "jobs.runs.read",
@@ -3272,6 +3273,13 @@
           "settings.plants",
           "settings.smtp",
           "settings.users",
+          "solar_tariffs.read",
+          "tariffs.bulk.read",
+          "tariffs.defaults",
+          "tariffs.edit",
+          "tariffs.icmal",
+          "tariffs.read",
+          "tariffs.templates.read",
           "write"
         ],
         "type": "string"

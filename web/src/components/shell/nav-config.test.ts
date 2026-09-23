@@ -62,6 +62,18 @@ describe('navFor', () => {
     expect(leafIds(navFor(['nav.core']))).not.toContain('messages');
   });
 
+  // R246: all six roles hold both permissions today, so navFor's output is
+  // unchanged. Declaring them is what makes a later narrowing move the
+  // navigation with it — and what keeps a principal who loses one off the
+  // screen that would 403 anyway.
+  it('gates the bills and tariffs leaves on their own permissions (R246)', () => {
+    const leaves = navigation.flatMap((e) => (isGroup(e) ? e.children : [e]));
+    expect(leaves.find((l) => l.href === '/ekorm/bills')?.permission).toBe('bills.read');
+    expect(leaves.find((l) => l.href === '/ekorm/tariffs')?.permission).toBe('tariffs.read');
+    expect(leafIds(navFor(['nav.core', 'tariffs.read']))).not.toContain('bills');
+    expect(leafIds(navFor(['nav.core', 'bills.read']))).not.toContain('tariffs');
+  });
+
   it('drops a group left empty and shows nothing without nav.core', () => {
     expect(navFor([])).toEqual([]);
     const onlySolar = navFor(['nav.solar_plants']);
