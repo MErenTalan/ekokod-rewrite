@@ -1979,6 +1979,9 @@ func TestScopeIsolation(t *testing.T) {
 			func(s store.Scope) ([]model.CarbonReport, error) { return repo.ListReports(ctx, s, nil, store.Page{}) },
 			tenantA.AdminScope, tenantB.AdminScope, bf.carbonReportID,
 			func(r model.CarbonReport) uuid.UUID { return r.ID }, "CarbonRepository.ListReports cross-tenant")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.CarbonReport, error) { return repo.Report(ctx, s, bf.carbonReportID) },
+			tenantA.AdminScope, tenantB.AdminScope, "CarbonRepository.Report cross-tenant")
 
 		narrowSelected, err := repo.SelectedActivities(ctx, tenantA.Scope, af.buildingID)
 		require.NoError(t, err)
@@ -2000,6 +2003,9 @@ func TestScopeIsolation(t *testing.T) {
 			func(s store.Scope) ([]model.CarbonReport, error) { return repo.ListReports(ctx, s, nil, store.Page{}) },
 			tenantA.Scope, tenantA.AdminScope, af.carbonReportID,
 			func(r model.CarbonReport) uuid.UUID { return r.ID }, "CarbonRepository.ListReports narrow-scope")
+		scopeIsoAssertGetNotFound(t,
+			func(s store.Scope) (model.CarbonReport, error) { return repo.Report(ctx, s, af.carbonReportID) },
+			tenantA.Scope, tenantA.AdminScope, "CarbonRepository.Report narrow-scope")
 	})
 
 	// --- ISO50001Repository (building-scoped project, with no-company_id

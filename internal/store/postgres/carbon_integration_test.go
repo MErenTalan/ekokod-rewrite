@@ -690,3 +690,94 @@ func TestCarbonCrossTenantAdminScopeReadAndMutationIsolation(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, selectedB)
 }
+
+// --- F10a Task 2: reset, report read, overlap (R304, R312, R318, R319) ------
+
+func TestCarbonDeleteCompanyFactorsKeepsPlatformOthersAndActivitySnapshots(t *testing.T) {
+	t.Parallel()
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 4070)
+	tenantB := testfixtures.NewTenant(t, ctx, pool, 4071)
+	repo := postgres.NewCarbonRepository(pool)
+
+	var platformID uuid.UUID
+	require.NoError(t, pool.QueryRow(ctx, `insert into emission_factors
+		(company_id, key, label, main_category, base_factor, base_unit)
+		values (null, 'grid', 'Grid', 'cat_electricity', 0.469, 'kWh') returning id`).Scan(&platformID))
+	aID, bID := tenantA.Company.ID, tenantB.Company.ID
+	ownA, err := repo.UpsertFactor(ctx, tenantA.AdminScope, model.EmissionFactor{CompanyID: &aID, Key: "grid", Label: "A grid",
+		MainCategory: "cat_electricity", BaseFactor: carbonDec("0.5"), BaseUnit: "kWh"})
+	require.NoError(t, err)
+	_, err = repo.UpsertFactor(ctx, tenantB.AdminScope, model.EmissionFactor{CompanyID: &bID, Key: "grid", Label: "B grid",
+		MainCategory: "cat_electricity", BaseFactor: carbonDec("0.6"), BaseUnit: "kWh"})
+	require.NoError(t, err)
+
+	act := carbonActivityFixture(aID, tenantA.Buildings[0].ID)
+	act.FactorID, act.FactorKey, act.FactorValue = &ownA.ID, &ownA.Key, &ownA.BaseFactor
+	created, err := repo.CreateActivity(ctx, tenantA.AdminScope, act)
+	require.NoError(t, err)
+
+	n, err := repo.DeleteCompanyFactors(ctx, tenantA.AdminScope)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+
+	_, err = repo.Factor(ctx, tenantA.AdminScope, platformID)
+	require.NoError(t, err, "the platform row stays")
+	listB, err := repo.ListFactors(ctx, tenantB.AdminScope, store.EmissionFactorFilter{})
+	require.NoError(t, err)
+	require.Len(t, listB, 1, "another company's own row stays")
+
+	// R318: the activity survives with its snapshot; only the link is gone.
+	got, err := repo.Activity(ctx, tenantA.AdminScope, created.ID)
+	require.NoError(t, err)
+	require.Nil(t, got.FactorID)
+	require.Equal(t, "grid", *got.FactorKey)
+	require.True(t, got.FactorValue.Equal(carbonDec("0.5")))
+	require.True(t, got.EmissionKgco2e.Equal(created.EmissionKgco2e))
+
+	_, err = repo.DeleteCompanyFactors(ctx, store.Scope{})
+	require.ErrorIs(t, err, store.ErrInvalidScope)
+}
+
+func TestCarbonReportReadIsScoped(t *testing.T) {
+	t.Parallel()
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 4072)
+	tenantB := testfixtures.NewTenant(t, ctx, pool, 4073)
+	repo := postgres.NewCarbonRepository(pool)
+
+	onOther, err := repo.CreateReport(ctx, tenantA.AdminScope, model.CarbonReport{CompanyID: tenantA.Company.ID,
+		BuildingID: tenantA.Buildings[1].ID, Name: "x", ReportType: "iso", Period: "2026", Payload: []byte(`{"a":1}`)})
+	require.NoError(t, err)
+
+	got, err := repo.Report(ctx, tenantA.AdminScope, onOther.ID)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"a":1}`, string(got.Payload))
+
+	_, err = repo.Report(ctx, tenantA.Scope, onOther.ID)
+	require.ErrorIs(t, err, store.ErrNotFound, "a building admin outside the report's building")
+	_, err = repo.Report(ctx, tenantB.AdminScope, onOther.ID)
+	require.ErrorIs(t, err, store.ErrNotFound, "another company")
+}
+
+func TestCarbonListActivitiesOverlap(t *testing.T) {
+	t.Parallel()
+	pool := testfixtures.NewIsolatedDB(t)
+	ctx := context.Background()
+	tenant := testfixtures.NewTenant(t, ctx, pool, 4074)
+	repo := postgres.NewCarbonRepository(pool)
+	d := func(m time.Month, day int) time.Time { return time.Date(2026, m, day, 0, 0, 0, 0, time.UTC) }
+	for _, span := range [][2]time.Time{{d(1, 1), d(1, 31)}, {d(1, 20), d(2, 10)}, {d(3, 1), d(3, 1)}} {
+		a := carbonActivityFixture(tenant.Company.ID, tenant.Buildings[0].ID)
+		a.PeriodStart, a.PeriodEnd = span[0], span[1]
+		_, err := repo.CreateActivity(ctx, tenant.Scope, a)
+		require.NoError(t, err)
+	}
+	from, to := d(2, 1), d(2, 28)
+	list, err := repo.ListActivities(ctx, tenant.Scope, store.CarbonActivityFilter{OverlapFrom: &from, OverlapTo: &to})
+	require.NoError(t, err)
+	require.Len(t, list, 1, "only the record spanning into February")
+	require.Equal(t, d(1, 20), list[0].PeriodStart)
+}

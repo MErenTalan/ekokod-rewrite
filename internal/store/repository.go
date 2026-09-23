@@ -1251,6 +1251,9 @@ type CarbonActivityFilter struct {
 	PeriodFrom  *time.Time
 	PeriodTo    *time.Time
 	IsAutomated *bool
+	// OverlapFrom/OverlapTo select activities overlapping the window (R319).
+	OverlapFrom *time.Time
+	OverlapTo   *time.Time
 	Page        Page
 }
 
@@ -1312,7 +1315,14 @@ type CarbonRepository interface {
 
 	SetActivityStatus(ctx context.Context, s Scope, id uuid.UUID, status model.CarbonStatus, at time.Time) (model.CarbonActivity, error)
 
+	// DeleteCompanyFactors deletes s.CompanyID's own factors (R304); platform
+	// rows and other companies' rows are untouched, and activities keep their
+	// snapshot with factor_id set null (R318).
+	DeleteCompanyFactors(ctx context.Context, s Scope) (int64, error)
+
 	CreateReport(ctx context.Context, s Scope, r model.CarbonReport) (model.CarbonReport, error)
+	// Report reads one report within s, else ErrNotFound.
+	Report(ctx context.Context, s Scope, id uuid.UUID) (model.CarbonReport, error)
 	ListReports(ctx context.Context, s Scope, buildingID *uuid.UUID, p Page) ([]model.CarbonReport, error)
 }
 

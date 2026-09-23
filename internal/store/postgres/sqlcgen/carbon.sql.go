@@ -262,6 +262,19 @@ func (q *Queries) CarbonDeleteActivity(ctx context.Context, arg CarbonDeleteActi
 	return result.RowsAffected(), nil
 }
 
+const carbonDeleteCompanyFactors = `-- name: CarbonDeleteCompanyFactors :execrows
+delete from emission_factors where company_id = $1::uuid
+`
+
+// R304: only the company's own rows; platform rows have company_id null.
+func (q *Queries) CarbonDeleteCompanyFactors(ctx context.Context, companyID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, carbonDeleteCompanyFactors, companyID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const carbonDeleteConversions = `-- name: CarbonDeleteConversions :exec
 delete from emission_factor_conversions c
 using emission_factors f
@@ -430,6 +443,44 @@ func (q *Queries) CarbonGetFactor(ctx context.Context, arg CarbonGetFactorParams
 	return i, err
 }
 
+const carbonGetReport = `-- name: CarbonGetReport :one
+select cr.id, cr.company_id, cr.building_id, cr.name, cr.report_type, cr.period, cr.payload, cr.pdf_path, cr.created_at from carbon_reports cr
+join buildings b on b.id = cr.building_id
+where cr.id = $1::uuid
+  and cr.company_id = $2::uuid
+  and b.deleted_at is null
+  and ($3::boolean or cr.building_id = any($4::uuid[]))
+`
+
+type CarbonGetReportParams struct {
+	ID           uuid.UUID
+	CompanyID    uuid.UUID
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
+}
+
+func (q *Queries) CarbonGetReport(ctx context.Context, arg CarbonGetReportParams) (CarbonReport, error) {
+	row := q.db.QueryRow(ctx, carbonGetReport,
+		arg.ID,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
+	)
+	var i CarbonReport
+	err := row.Scan(
+		&i.ID,
+		&i.CompanyID,
+		&i.BuildingID,
+		&i.Name,
+		&i.ReportType,
+		&i.Period,
+		&i.Payload,
+		&i.PdfPath,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const carbonInsertConversions = `-- name: CarbonInsertConversions :exec
 insert into emission_factor_conversions (factor_id, unit, multiplier, label)
 select f.id, elem->>'unit', (elem->>'multiplier')::numeric, elem->>'label'
@@ -499,8 +550,11 @@ where ca.company_id = $1::uuid
   and ($8::date is null or ca.period_start >= $8::date)
   and ($9::date is null or ca.period_end <= $9::date)
   and ($10::boolean is null or ca.is_automated = $10::boolean)
-order by ca.period_start desc, ca.id
-limit $12::int offset $11::int
+  -- R319: overlap with [overlap_from, overlap_to].
+  and ($11::date is null or ca.period_end >= $11::date)
+  and ($12::date is null or ca.period_start <= $12::date)
+order by ca.period_start desc, ca.created_at desc, ca.id
+limit $14::int offset $13::int
 `
 
 type CarbonListActivitiesParams struct {
@@ -514,6 +568,8 @@ type CarbonListActivitiesParams struct {
 	PeriodFrom        pgtype.Date
 	PeriodTo          pgtype.Date
 	IsAutomated       *bool
+	OverlapFrom       pgtype.Date
+	OverlapTo         pgtype.Date
 	OffsetVal         int32
 	LimitVal          int32
 }
@@ -530,6 +586,8 @@ func (q *Queries) CarbonListActivities(ctx context.Context, arg CarbonListActivi
 		arg.PeriodFrom,
 		arg.PeriodTo,
 		arg.IsAutomated,
+		arg.OverlapFrom,
+		arg.OverlapTo,
 		arg.OffsetVal,
 		arg.LimitVal,
 	)

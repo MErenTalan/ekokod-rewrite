@@ -196,7 +196,10 @@ where ca.company_id = sqlc.arg(company_id)::uuid
   and (sqlc.narg(period_from)::date is null or ca.period_start >= sqlc.narg(period_from)::date)
   and (sqlc.narg(period_to)::date is null or ca.period_end <= sqlc.narg(period_to)::date)
   and (sqlc.narg(is_automated)::boolean is null or ca.is_automated = sqlc.narg(is_automated)::boolean)
-order by ca.period_start desc, ca.id
+  -- R319: overlap with [overlap_from, overlap_to].
+  and (sqlc.narg(overlap_from)::date is null or ca.period_end >= sqlc.narg(overlap_from)::date)
+  and (sqlc.narg(overlap_to)::date is null or ca.period_start <= sqlc.narg(overlap_to)::date)
+order by ca.period_start desc, ca.created_at desc, ca.id
 limit sqlc.arg(limit_val)::int offset sqlc.arg(offset_val)::int;
 
 -- name: CarbonCreateActivity :one
@@ -400,3 +403,15 @@ where cr.company_id = sqlc.arg(company_id)::uuid
   and (sqlc.narg(building_id)::uuid is null or cr.building_id = sqlc.narg(building_id)::uuid)
 order by cr.created_at desc, cr.id
 limit sqlc.arg(limit_val)::int offset sqlc.arg(offset_val)::int;
+
+-- name: CarbonDeleteCompanyFactors :execrows
+-- R304: only the company's own rows; platform rows have company_id null.
+delete from emission_factors where company_id = sqlc.arg(company_id)::uuid;
+
+-- name: CarbonGetReport :one
+select cr.* from carbon_reports cr
+join buildings b on b.id = cr.building_id
+where cr.id = sqlc.arg(id)::uuid
+  and cr.company_id = sqlc.arg(company_id)::uuid
+  and b.deleted_at is null
+  and (sqlc.arg(all_buildings)::boolean or cr.building_id = any(sqlc.arg(building_ids)::uuid[]));

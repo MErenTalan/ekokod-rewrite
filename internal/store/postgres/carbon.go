@@ -437,6 +437,8 @@ func (r *CarbonRepository) ListActivities(ctx context.Context, s store.Scope, f 
 		PeriodFrom:        carbonDateParam(f.PeriodFrom),
 		PeriodTo:          carbonDateParam(f.PeriodTo),
 		IsAutomated:       f.IsAutomated,
+		OverlapFrom:       carbonDateParam(f.OverlapFrom),
+		OverlapTo:         carbonDateParam(f.OverlapTo),
 		OffsetVal:         offset,
 		LimitVal:          limit,
 	})
@@ -649,4 +651,31 @@ func (r *CarbonRepository) inTx(ctx context.Context, fn func(qtx *sqlcgen.Querie
 		return pgerr.Translate(r.pool, "commit transaction", err)
 	}
 	return nil
+}
+
+// DeleteCompanyFactors is R304's reset: the company's own factors only.
+func (r *CarbonRepository) DeleteCompanyFactors(ctx context.Context, s store.Scope) (int64, error) {
+	if !s.Valid() {
+		return 0, store.ErrInvalidScope
+	}
+	n, err := r.q.CarbonDeleteCompanyFactors(ctx, s.CompanyID)
+	if err != nil {
+		return 0, pgerr.Translate(r.pool, "delete company emission factors", err)
+	}
+	return n, nil
+}
+
+// Report reads one carbon report within s.
+func (r *CarbonRepository) Report(ctx context.Context, s store.Scope, id uuid.UUID) (model.CarbonReport, error) {
+	if !s.Valid() {
+		return model.CarbonReport{}, store.ErrInvalidScope
+	}
+	buildingIDs, allBuildings := s.BuildingFilter()
+	row, err := r.q.CarbonGetReport(ctx, sqlcgen.CarbonGetReportParams{
+		ID: id, CompanyID: s.CompanyID, AllBuildings: allBuildings, BuildingIds: buildingIDs,
+	})
+	if err != nil {
+		return model.CarbonReport{}, pgerr.Translate(r.pool, "get carbon report", err)
+	}
+	return carbonReportFromRow(row), nil
 }
