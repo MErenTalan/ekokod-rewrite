@@ -1,0 +1,139 @@
+{
+  "title": "GES Santralleri",
+  "subtitle": "iSolarCloud'a bağlı santrallerin anlık ve geçmiş üretimi",
+  "plant": "Santral",
+  "noLinked": "iSolarCloud'a bağlı santral yok",
+  "noLinkedDescription": "Bir santrali iSolarCloud hesabına bağladığınızda üretimi burada görünür.",
+  "goToSettings": "Ayarlar › GES santralleri",
+  "sync": "Verileri güncelle",
+  "syncJob": "Santral verileri",
+  "connection": {
+    "connected": "Bağlı",
+    "error": "Bağlantı hatası",
+    "neverSynced": "Henüz eşitlenmedi"
+  },
+  "lastSync": "Son eşitleme: {time}",
+  "syncErrors": {
+    "isolarAuth": "iSolarCloud yetkilendirmesi geçersiz; Şirket sekmesinden yeniden bağlayın.",
+    "isolarUnavailable": "iSolarCloud şu an yanıt vermiyor; bir sonraki denemede yeniden alınacak.",
+    "isolarNotLinked": "Santral iSolarCloud'a bağlı değil.",
+    "credentialMissing": "Santralin iSolarCloud kimlik bilgisi yok; bağlantıyı yeniden kurun."
+  },
+  "tabs": {
+    "overview": "Genel bakış",
+    "devices": "Cihazlar",
+    "history": "Geçmiş",
+    "alarms": "Alarmlar"
+  },
+  "noData": "veri yok",
+  "summary": {
+    "activePower": "Anlık güç",
+    "utilisation": "Kapasite kullanımı",
+    "today": "Bugünkü üretim",
+    "month": "Bu ayki üretim",
+    "year": "Bu yılki üretim",
+    "total": "Toplam üretim",
+    "stale": "Eski veri",
+    "staleReason": "İnverterlerin son okuması {time} tarihli; iki saatten eski.",
+    "asOf": "Son okuma: {time}"
+  },
+  "revenue": {
+    "title": "Gelir",
+    "daily": "Günlük gelir",
+    "monthly": "Aylık gelir",
+    "yearly": "Yıllık gelir",
+    "total": "Toplam gelir",
+    "since": "{date} tarihinden beri",
+    "partialReason": "{days} günün GES tarifesi yok; bu günler gelire katılmadı.",
+    "unavailable": "GES tarifesi tanımlı değil",
+    "unavailableDescription": "Gelir, santralin GES tarifesiyle hesaplanır. Tarifeler › GES tarifeleri sekmesinden ekleyin."
+  },
+  "charts": {
+    "monthDaily": "Bu ayın günlük üretimi",
+    "monthDailyDescription": "Bu aydaki her günün üretimi",
+    "history": "Üretim geçmişi",
+    "historyDescription": "Son on iki ayın aylık üretimi",
+    "production": "Üretim",
+    "day": "Gün",
+    "month": "Ay",
+    "hour": "Saat",
+    "empty": "Bu dönem için üretim verisi yok",
+    "emptyDescription": "Santral eşitlendiğinde üretim burada görünür."
+  },
+  "devices": {
+    "count": "{count} cihaz",
+    "search": "Cihaz ara",
+    "searchDescription": "Ad veya seri numarasıyla",
+    "name": "Cihaz",
+    "serial": "Seri no",
+    "type": "Tür",
+    "status": "Durum",
+    "power": "Anlık güç (kW)",
+    "today": "Bugün (kWh)",
+    "total": "Toplam (kWh)",
+    "lastUpdate": "Son güncelleme",
+    "empty": "Cihaz bulunamadı",
+    "emptyDescription": "Santral eşitlendiğinde cihaz listesi iSolarCloud'dan alınır.",
+    "types": {
+      "inverter": "İnverter",
+      "storageInverter": "Depolamalı inverter",
+      "meteo": "Meteoroloji istasyonu",
+      "meter": "Sayaç",
+      "other": "Diğer"
+    },
+    "statuses": {
+      "normal": "Normal",
+      "alarm": "Alarm",
+      "fault": "Arıza",
+      "offline": "Çevrimdışı",
+      "unknown": "Bilinmiyor"
+    }
+  },
+  "history": {
+    "title": "Geçmiş üretim",
+    "description": "Seçilen dönemin üretimi",
+    "granularity": "Ayrıntı",
+    "hour": "Saatlik",
+    "day": "Günlük",
+    "month": "Aylık",
+    "range": "Tarih aralığı",
+    "export": "Excel indir",
+    "tooLong": {
+      "hour": "Saatlik görünüm en fazla 31 gün gösterebilir.",
+      "day": "Günlük görünüm en fazla 366 gün gösterebilir.",
+      "month": "Aylık görünüm en fazla 10 yıl gösterebilir."
+    },
+    "mixed": "Karışık kaynak",
+    "mixedReason": "Bu aralıkta bazı günler santral sayacından, bazıları inverter toplamından ya da gün sonu toplamından geliyor."
+  },
+  "alarms": {
+    "title": "iSolarCloud alarmları",
+    "when": "Zaman",
+    "device": "Cihaz",
+    "message": "Mesaj",
+    "level": "Seviye",
+    "type": "Tür",
+    "closed": "Kapandı",
+    "open": "Açık",
+    "untranslated": "Çevrilemedi",
+    "untranslatedHint": "Bu arıza metni sözlükte yok; iSolarCloud'un kendi metni gösteriliyor.",
+    "empty": "Alarm kaydı yok",
+    "emptyDescription": "Son yedi günde iSolarCloud'dan alarm gelmedi.",
+    "levels": {
+      "critical": "Kritik",
+      "major": "Önemli",
+      "minor": "Minör",
+      "warning": "Uyarı",
+      "other": "Bilinmeyen"
+    },
+    "types": {
+      "fault": "Arıza",
+      "alarm": "Alarm",
+      "notice": "Bildirim",
+      "suggestion": "Öneri",
+      "other": "Bilinmeyen"
+    },
+    "shown": "{total} kaydın {shown} tanesi gösteriliyor",
+    "more": "Daha fazla yükle"
+  }
+}

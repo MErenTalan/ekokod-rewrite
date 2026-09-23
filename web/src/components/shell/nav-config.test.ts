@@ -88,3 +88,13 @@ describe('navFor', () => {
     expect(leafIds(onlySolar)).toEqual(['solarPlants']);
   });
 });
+
+describe('F9 routes (R295)', () => {
+  it('uses the 01 §5 paths for the generation screens', () => {
+    const leaves = navigation.flatMap((e) => ('children' in e ? e.children : [e]));
+    const href = (id: string) => leaves.find((l) => l.id === id)?.href;
+    expect(href('solarPlants')).toBe('/ekorm/solar-plants');
+    expect(href('financial')).toBe('/ekorm/financial-analysis');
+    expect(href('renewable')).toBe('/ekorm/renewable-energy');
+  });
+});

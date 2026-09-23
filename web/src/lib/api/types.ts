@@ -81,6 +81,16 @@ export type PlantDetail = S['PlantDetail'];
 export type PlantDevice = S['PlantDevice'];
 export type PlantCreateRequest = S['PlantCreateRequest'];
 export type PlantUpdateRequest = S['PlantUpdateRequest'];
+export type PlantRealtime = S['PlantRealtime'];
+export type PlantProductionSeries = S['PlantProductionSeries'];
+export type PlantProductionPoint = S['PlantProductionPoint'];
+export type PlantDeviceView = S['PlantDeviceView'];
+export type PlantFault = S['PlantFault'];
+export type PlantFaultPage = S['PlantFaultPage'];
+export type PlantRevenue = S['PlantRevenue'];
+export type RevenuePeriod = S['RevenuePeriod'];
+export type MoneyAmount = S['MoneyAmount'];
+export type ISolarAccountPlant = S['ISolarAccountPlant'];
 
 export type IntegrationDefinition = S['IntegrationDefinition'];
 export type IntegrationCredential = S['IntegrationCredential'];

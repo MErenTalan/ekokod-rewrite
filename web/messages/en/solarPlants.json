@@ -1,0 +1,139 @@
+{
+  "title": "Solar Power Plants",
+  "subtitle": "Live and historical production of plants linked to iSolarCloud",
+  "plant": "Plant",
+  "noLinked": "No plant is linked to iSolarCloud",
+  "noLinkedDescription": "Link a plant to an iSolarCloud account and its production appears here.",
+  "goToSettings": "Settings › Solar plants",
+  "sync": "Update data",
+  "syncJob": "Plant data",
+  "connection": {
+    "connected": "Connected",
+    "error": "Connection error",
+    "neverSynced": "Not synced yet"
+  },
+  "lastSync": "Last sync: {time}",
+  "syncErrors": {
+    "isolarAuth": "The iSolarCloud authorisation is invalid; reconnect it on the Company tab.",
+    "isolarUnavailable": "iSolarCloud is not answering; the next attempt will fetch it again.",
+    "isolarNotLinked": "The plant is not linked to iSolarCloud.",
+    "credentialMissing": "The plant has no iSolarCloud credential; link it again."
+  },
+  "tabs": {
+    "overview": "Overview",
+    "devices": "Devices",
+    "history": "History",
+    "alarms": "Alarms"
+  },
+  "noData": "no data",
+  "summary": {
+    "activePower": "Active power",
+    "utilisation": "Capacity utilisation",
+    "today": "Yield today",
+    "month": "Yield this month",
+    "year": "Yield this year",
+    "total": "Total yield",
+    "stale": "Stale data",
+    "staleReason": "The inverters' last reading is from {time}, more than two hours ago.",
+    "asOf": "Last reading: {time}"
+  },
+  "revenue": {
+    "title": "Revenue",
+    "daily": "Daily revenue",
+    "monthly": "Monthly revenue",
+    "yearly": "Yearly revenue",
+    "total": "Total revenue",
+    "since": "since {date}",
+    "partialReason": "{days} days have no solar tariff and are not counted.",
+    "unavailable": "No solar tariff",
+    "unavailableDescription": "Revenue is priced at the plant's solar tariff. Add one under Tariffs › Solar tariffs."
+  },
+  "charts": {
+    "monthDaily": "Daily production this month",
+    "monthDailyDescription": "Each day's production this month",
+    "history": "Production history",
+    "historyDescription": "Monthly production over the last twelve months",
+    "production": "Production",
+    "day": "Day",
+    "month": "Month",
+    "hour": "Hour",
+    "empty": "No production data for this period",
+    "emptyDescription": "Production appears here once the plant has synced."
+  },
+  "devices": {
+    "count": "{count} devices",
+    "search": "Search devices",
+    "searchDescription": "By name or serial number",
+    "name": "Device",
+    "serial": "Serial no",
+    "type": "Type",
+    "status": "Status",
+    "power": "Active power (kW)",
+    "today": "Today (kWh)",
+    "total": "Total (kWh)",
+    "lastUpdate": "Last update",
+    "empty": "No devices found",
+    "emptyDescription": "The device list is fetched from iSolarCloud when the plant syncs.",
+    "types": {
+      "inverter": "Inverter",
+      "storageInverter": "Storage inverter",
+      "meteo": "Weather station",
+      "meter": "Meter",
+      "other": "Other"
+    },
+    "statuses": {
+      "normal": "Normal",
+      "alarm": "Alarm",
+      "fault": "Fault",
+      "offline": "Offline",
+      "unknown": "Unknown"
+    }
+  },
+  "history": {
+    "title": "Production history",
+    "description": "Production over the chosen period",
+    "granularity": "Resolution",
+    "hour": "Hourly",
+    "day": "Daily",
+    "month": "Monthly",
+    "range": "Date range",
+    "export": "Download Excel",
+    "tooLong": {
+      "hour": "The hourly view shows at most 31 days.",
+      "day": "The daily view shows at most 366 days.",
+      "month": "The monthly view shows at most 10 years."
+    },
+    "mixed": "Mixed sources",
+    "mixedReason": "Some days in this range come from the plant meter, others from the inverter sum or an end-of-day total."
+  },
+  "alarms": {
+    "title": "iSolarCloud alarms",
+    "when": "Time",
+    "device": "Device",
+    "message": "Message",
+    "level": "Level",
+    "type": "Type",
+    "closed": "Closed",
+    "open": "Open",
+    "untranslated": "Untranslated",
+    "untranslatedHint": "This fault text is not in the dictionary; iSolarCloud's own text is shown.",
+    "empty": "No alarms",
+    "emptyDescription": "iSolarCloud reported no alarms in the last seven days.",
+    "levels": {
+      "critical": "Critical",
+      "major": "Major",
+      "minor": "Minor",
+      "warning": "Warning",
+      "other": "Unknown"
+    },
+    "types": {
+      "fault": "Fault",
+      "alarm": "Alarm",
+      "notice": "Notice",
+      "suggestion": "Suggestion",
+      "other": "Unknown"
+    },
+    "shown": "Showing {shown} of {total}",
+    "more": "Load more"
+  }
+}
