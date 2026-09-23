@@ -103,3 +103,17 @@ export type AlarmEvaluationAnalyzer = S['AlarmEvaluationAnalyzer'];
 export type AlarmEvaluationBreach = S['AlarmEvaluationBreach'];
 export type OperationalMessage = S['Message'];
 export type JobRun = S['JobRun'];
+
+// F8b reports (05 §11).
+export type ReportPayload = S['ReportPayload'];
+export type ReportMonthly = S['ReportMonthly'];
+export type ReportYearly = S['ReportYearly'];
+export type ReportFigure = S['ReportFigure'];
+export type ReportMoney = S['ReportMoney'];
+export type ReportPriceRange = S['ReportPriceRange'];
+export type ReportDelta = S['ReportDelta'];
+export type ReportCurrencyDelta = S['ReportCurrencyDelta'];
+export type ReportMonthPoint = S['ReportMonthPoint'];
+export type ReportSummary = S['ReportSummary'];
+export type ReportPage = S['ReportPage'];
+export type ReportGenerateItem = S['ReportGenerateItem'];

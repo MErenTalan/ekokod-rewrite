@@ -1,0 +1,202 @@
+{
+  "title": "Raporlar",
+  "subtitle": "Aylık ve yıllık enerji raporları, dosyaları ve arşivi",
+  "tabs": {
+    "monthly": "Aylık rapor",
+    "yearly": "Yıllık rapor",
+    "archive": "Rapor arşivi"
+  },
+  "selection": {
+    "title": "Rapor seçimi",
+    "buildings": "Binalar",
+    "buildingsHint": "Seçilen binaların rakamları birleştirilir.",
+    "selectAll": "Tümünü seç",
+    "searchBuildings": "Bina ara",
+    "noBuildings": "Bina bulunamadı",
+    "month": "Rapor dönemi",
+    "year": "Yıl",
+    "plantSelection": "Santral seçimi",
+    "plantAll": "Tüm santraller",
+    "plantRooftop": "Yalnızca çatı GES",
+    "plantGrid": "Yalnızca arazi GES",
+    "plants": "Santraller",
+    "searchPlants": "Santral ara",
+    "noPlants": "Santral bulunamadı",
+    "plantCount": "{count, plural, =0 {Santral seçilmedi: tüm santraller dahil} one {# santral seçili} other {# santral seçili}}",
+    "rooftopIncluded": "Çatı GES üretimi dahil edilecek."
+  },
+  "noSelection": "Bir bina seçin",
+  "noSelectionDescription": "Rapor, seçtiğiniz binaların ve dönemin rakamlarından hazırlanır.",
+  "loadFailed": "Rapor rakamları alınamadı",
+  "loadFailedDescription": "Seçimi değiştirip yeniden deneyin.",
+  "noData": "Bu dönem için veri yok",
+  "noDataDescription": "Seçilen binalarda bu döneme ait tüketim, üretim veya fatura bulunamadı. Başka bir dönem seçin.",
+  "value": {
+    "noData": "veri yok",
+    "notSelected": "seçim dışı",
+    "coverage": "{withData} / {of} {subject}",
+    "buildings": "bina",
+    "plants": "santral",
+    "perKwh": "TL/kWh"
+  },
+  "partial": "Bu dönem henüz kapanmadı ya da tazelenmedi; rakamlar kesinleşmedi.",
+  "omittedCurrencies": "Grafikte gösterilmeyen para birimleri: {currencies}",
+  "monthly": {
+    "infoTitle": "Bilgi tablosu",
+    "rows": {
+      "period": "Rapor dönemi",
+      "buildings": "Bina(lar)",
+      "tariff": "Elektrik tarifesi",
+      "purchasePrice": "Elektrik alış fiyatı",
+      "averagePurchasePrice": "Ortalama alış fiyatı",
+      "rooftopFeedIn": "Çatı GES satış fiyatı",
+      "utilityFeedIn": "Arazi GES satış fiyatı",
+      "consumption": "Aylık toplam tüketim",
+      "dailyConsumption": "Günlük ortalama tüketim",
+      "rooftop": "Çatı GES aylık üretimi",
+      "utility": "Arazi GES aylık üretimi",
+      "production": "Toplam üretim",
+      "dailyProduction": "Günlük ortalama üretim",
+      "bill": "Elektrik faturası",
+      "reactivePenalty": "Reaktif ceza"
+    },
+    "billPeriodNote": "Fatura, binanın kesim gününe göre dönemlenir.",
+    "cards": {
+      "consumption": "Toplam tüketim",
+      "production": "Toplam üretim",
+      "bill": "Toplam fatura",
+      "reactivePenalty": "Reaktif ceza",
+      "comparison": "geçen yılın aynı ayına göre"
+    },
+    "consumptionChart": "Aylık elektrik tüketimi",
+    "consumptionChartDescription": "Seçilen yılın ayları ile bir önceki yılın ayları",
+    "billChart": "Aylık elektrik faturası",
+    "billChartDescription": "Seçilen yılın ayları ile bir önceki yılın ayları",
+    "chartEmpty": "Grafik için veri yok",
+    "chartEmptyDescription": "Bu yıl ve geçen yıl için veri bulunamadı.",
+    "month": "Ay"
+  },
+  "yearly": {
+    "consumptionTable": "Elektrik tüketimi ve çatı GES üretimi",
+    "columns": {
+      "month": "Ay",
+      "consumption": "Aylık elektrik tüketimi (kWh/ay)",
+      "rooftop": "Çatı GES üretimi (kWh/ay)",
+      "bill": "Aylık elektrik faturası",
+      "reactivePenalty": "Reaktif ceza"
+    },
+    "total": "Yıllık toplam",
+    "dailyConsumption": "Günlük ortalama tüketim (kWh/gün)",
+    "dailyRooftop": "Çatı GES günlük ortalama üretim (kWh/gün)",
+    "solarTitle": "Güneş enerjisi üretim raporu",
+    "solar": {
+      "total": "Toplam yıllık üretim",
+      "target": "Hedeflenen üretim",
+      "achievement": "Hedef gerçekleşme oranı",
+      "daily": "Günlük ortalama üretim",
+      "plant": "Santral",
+      "production": "Üretim",
+      "noTarget": "Hedef tanımlı değil"
+    },
+    "cards": {
+      "consumption": "Yıllık tüketim",
+      "production": "Yıllık üretim",
+      "bill": "Yıllık fatura",
+      "achievement": "Hedef gerçekleşme",
+      "comparison": "geçen yıla göre"
+    },
+    "historyChart": "Yıllık elektrik tüketimi ve üretimi",
+    "historyChartDescription": "Son üç yılın toplamları",
+    "billChart": "Yıllık elektrik faturası",
+    "billChartDescription": "Son üç yılın toplamları",
+    "targetChart": "Hedeflenen ve gerçekleşen üretim",
+    "targetChartDescription": "Santral bazında yıllık hedef ile gerçekleşen üretim",
+    "year": "Yıl",
+    "series": {
+      "consumption": "Yıllık tüketim",
+      "production": "Yıllık üretim",
+      "bill": "Yıllık fatura",
+      "target": "Hedef",
+      "actual": "Gerçekleşen"
+    },
+    "comparisonTitle": "Nihai karşılaştırma",
+    "comparisonDescription": "Yıllık tüketim ile yıllık üretimin karşılaştırması",
+    "comparison": {
+      "consumption": "Yıllık tüketim",
+      "production": "Yıllık üretim",
+      "solarShare": "GES ile karşılanan",
+      "gridShare": "Şebekeden alınan"
+    },
+    "carbonTitle": "Karbon emisyonu",
+    "carbon": {
+      "consumption": "Elektrik tüketiminden kaynaklanan emisyon",
+      "reduction": "Elektrik üretiminden kaynaklanan emisyon azaltımı",
+      "net": "Nihai emisyon",
+      "factor": "Kullanılan emisyon faktörü",
+      "note": "Faktör Türkiye şebeke ortalamasıdır.",
+      "sourceYear": "Kaynak yılı: {year}",
+      "unavailable": "Şebeke emisyon faktörü tanımlı değil; karbon bölümü hesaplanamadı.",
+      "unit": "ton/yıl"
+    }
+  },
+  "actions": {
+    "title": "İndir ve gönder",
+    "description": "Rapor her bina için ayrı hazırlanır; hazır olan her binanın PDF, Excel ve e-posta işlemleri aşağıda.",
+    "generate": "Raporu oluştur",
+    "generating": "Rapor hazırlanıyor…",
+    "queued": "Sırada",
+    "running": "Hazırlanıyor",
+    "ready": "Hazır",
+    "failed": "Hazırlanamadı",
+    "pdf": "PDF indir",
+    "excel": "Excel indir",
+    "email": "E-posta ile gönder",
+    "building": "Bina",
+    "status": "Durum",
+    "errors": {
+      "buildingNotFound": "Bina bulunamadı.",
+      "generic": "Rapor hazırlanamadı. Daha sonra yeniden deneyin."
+    }
+  },
+  "email": {
+    "title": "Raporu e-posta ile gönder",
+    "address": "Alıcı e-posta adresi",
+    "invalid": "Geçerli bir e-posta adresi girin.",
+    "summaryPeriod": "Dönem",
+    "summaryBuilding": "Bina",
+    "send": "Gönder",
+    "sending": "Gönderiliyor…",
+    "cancel": "Vazgeç",
+    "queued": "E-posta gönderim sırasına alındı.",
+    "sent": "Rapor e-postası gönderildi.",
+    "errors": {
+      "smtpNotConfigured": "Şirketin SMTP ayarları yok; e-posta gönderilemedi. Ayarlar > SMTP bölümünden tanımlayın.",
+      "reportNotReady": "Rapor henüz hazır değil.",
+      "deliveryFailed": "E-posta gönderilemedi. SMTP ayarlarını kontrol edin.",
+      "generic": "E-posta gönderilemedi."
+    }
+  },
+  "archive": {
+    "filterType": "Rapor türü",
+    "allTypes": "Tümü",
+    "monthly": "Aylık",
+    "yearly": "Yıllık",
+    "filterBuilding": "Bina",
+    "allBuildings": "Tüm binalar",
+    "total": "Toplam rapor: {count}",
+    "yearTitle": "{year} raporları",
+    "yearlyReport": "Yıllık rapor",
+    "monthlyReports": "Aylık raporlar",
+    "monthCount": "{count, plural, one {# ay} other {# ay}}",
+    "noYearly": "Bu yıl için yıllık rapor yok.",
+    "status": {
+      "completed": "Mevcut",
+      "pending": "Hazırlanıyor",
+      "error": "Hata"
+    },
+    "empty": "Rapor bulunamadı",
+    "emptyDescription": "Filtreleri değiştirin ya da Aylık/Yıllık sekmesinden bir rapor oluşturun.",
+    "loading": "Raporlar yükleniyor"
+  },
+  "retry": "Yeniden dene"
+}
