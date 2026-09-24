@@ -21,3 +21,8 @@
 *.tar
 *.tar.gz
 coverage.out
+
+# ML service (F13)
+ml/.venv/
+__pycache__/
+.pytest_cache/
