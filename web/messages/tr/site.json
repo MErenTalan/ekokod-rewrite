@@ -406,7 +406,9 @@
     "read": "Yazıyı oku",
     "by": "Yazar: {author}",
     "back": "Tüm yazılar",
-    "turkishOnly": "Bu yazı yalnızca Türkçe olarak yayımlanmıştır."
+    "turkishOnly": "Bu yazı yalnızca Türkçe olarak yayımlanmıştır.",
+    "contents": "İçindekiler",
+    "published": "{date} tarihinde yayımlandı"
   },
   "calculator": {
     "title": "Elektrik fatura hesaplama",

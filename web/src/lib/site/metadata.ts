@@ -6,10 +6,10 @@ import { siteUrl } from './seo';
 export type MetaKey = 'home' | 'about' | 'references' | 'documents' | 'toolkit' | 'pricing' | 'requestDemo' | 'contact' | 'blog' | 'calculator';
 
 /** Title, description, canonical URL and Open Graph for one public page. */
-export async function pageMetadata(key: MetaKey, path: string, extra: { image?: string; type?: 'website' | 'article' } = {}): Promise<Metadata> {
+export async function pageMetadata(key: MetaKey, path: string, extra: { image?: string; type?: 'website' | 'article'; title?: string; description?: string } = {}): Promise<Metadata> {
   const [t, locale] = await Promise.all([getTranslations('site.meta'), getLocale()]);
-  const title = t(`${key}.title`);
-  const description = t(`${key}.description`);
+  const title = extra.title ?? t(`${key}.title`);
+  const description = extra.description ?? t(`${key}.description`);
   return {
     metadataBase: new URL(siteUrl()),
     title: key === 'home' ? { absolute: title } : title,

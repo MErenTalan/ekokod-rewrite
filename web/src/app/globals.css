@@ -14,6 +14,24 @@
 }
 
 @layer components {
+  /* Blog article body (F12b): the Markdown's own elements, styled from tokens. */
+  .site-prose { color: var(--color-foreground); @apply type-body-lg; }
+  .site-prose > * + * { margin-top: 1rem; }
+  .site-prose h2 { @apply type-h1; margin-top: 2.5rem; scroll-margin-top: 6rem; }
+  .site-prose h3 { @apply type-h2; margin-top: 2rem; scroll-margin-top: 6rem; }
+  .site-prose a { color: var(--color-primary); text-decoration: underline; text-underline-offset: 2px; }
+  .site-prose ul { list-style: disc; padding-inline-start: 1.5rem; }
+  .site-prose ol { list-style: decimal; padding-inline-start: 1.5rem; }
+  .site-prose li + li { margin-top: 0.25rem; }
+  .site-prose img { margin: 2rem auto; max-width: 100%; height: auto; border-radius: var(--radius-lg); }
+  .site-prose .table-scroll { overflow-x: auto; }
+  .site-prose table { width: 100%; border-collapse: collapse; @apply type-body; }
+  .site-prose th, .site-prose td { border: 1px solid var(--color-border-strong); padding: 0.5rem; text-align: start; vertical-align: top; }
+  .site-prose th { background: var(--color-surface-sunken); font-weight: 600; }
+  .site-prose hr { border-color: var(--color-border); margin-block: 2.5rem; }
+  .site-prose .footnotes { color: var(--color-foreground-muted); @apply type-small; }
+  .site-prose sup a { text-decoration: none; }
+
   /* Card-grid stagger (07 §8, plan D26): each card enters --duration-stagger-step after the one before it. */
   @media (prefers-reduced-motion: no-preference) {
     .stagger-item {

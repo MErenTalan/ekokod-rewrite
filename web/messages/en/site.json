@@ -406,7 +406,9 @@
     "read": "Read the article",
     "by": "By {author}",
     "back": "All articles",
-    "turkishOnly": "This article is published in Turkish only."
+    "turkishOnly": "This article is published in Turkish only.",
+    "contents": "Contents",
+    "published": "Published {date}"
   },
   "calculator": {
     "title": "Electricity bill calculator",

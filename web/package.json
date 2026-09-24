@@ -26,6 +26,7 @@
     "date-fns": "4.4.0",
     "lucide-react": "1.46.0",
     "maplibre-gl": "6.10.0",
+    "marked": "18.0.14",
     "next": "15.5.25",
     "next-intl": "4.14.2",
     "openapi-fetch": "0.17.0",
