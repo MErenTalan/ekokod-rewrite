@@ -52,10 +52,31 @@ describe('middleware', () => {
     expect(res.headers.get('x-middleware-request-x-ekokod-path')).toBe('/ekorm/consumption?x=1');
   });
 
-  it('redirects / to /ekorm', async () => {
-    const res = await middleware(request('/'));
-    expect(res.status).toBe(307);
-    expect(res.headers.get('location')).toBe('https://app.test/ekorm');
+  it.each(['/', '/about', '/references', '/documents', '/toolkit', '/pricing', '/request-demo', '/contact', '/blog', '/blog/elektrik-faturam-neden-yuksek-1', '/bill-calculator'])(
+    'serves the public page %s without a session (F12b)',
+    async (path) => {
+      const res = await middleware(request(path));
+      expect(res.headers.get('location')).toBeNull();
+      expect(res.headers.get('x-middleware-next')).toBe('1');
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not treat a public prefix as a public page', async () => {
+    const res = await middleware(request('/about-us'));
+    expect(res.headers.get('location')).toContain('/auth/login');
+  });
+
+  it.each([
+    ['/site', '/'],
+    ['/site/billCalculate', '/bill-calculator'],
+    ['/site/request-demo', '/request-demo'],
+    ['/site/blog/detail/elektrik-faturam-neden-yuksek-2', '/blog/elektrik-faturam-neden-yuksek-2'],
+    ['/site/unknown', '/'],
+  ])('moves the legacy URL %s to %s permanently', async (from, to) => {
+    const res = await middleware(request(from));
+    expect(res.status).toBe(308);
+    expect(res.headers.get('location')).toBe(`https://app.test${to}`);
   });
 
   it('lets auth pages through without cookies', async () => {

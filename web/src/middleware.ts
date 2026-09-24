@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { authRedirectFor, errorCode, HOME_PATH } from '@/lib/api/errors';
+import { authRedirectFor, errorCode } from '@/lib/api/errors';
+import { isPublicPath, legacyRedirect } from '@/lib/site/paths';
 
 export const ACCESS_COOKIE = 'ekokod_at';
 export const REFRESH_COOKIE = 'ekokod_rt';
@@ -48,7 +49,10 @@ function withPath(request: NextRequest, path: string): Headers {
 /** Guards every page: a missing access cookie is refreshed server-side before the render (R168). */
 export async function middleware(request: NextRequest): Promise<NextResponse> {
   const { pathname, search } = request.nextUrl;
-  if (pathname === '/') return redirectTo(request, HOME_PATH);
+  const moved = legacyRedirect(pathname);
+  if (moved) return NextResponse.redirect(new URL(moved, request.url), 308);
+  // F12b: the marketing site needs no session; `/` is its homepage now (R167 retired).
+  if (isPublicPath(pathname)) return NextResponse.next();
   if (pathname.startsWith('/auth/') || pathname === '/auth') return NextResponse.next();
   const next = pathname + search;
   // R208: a server component cannot read its own URL, so the guarded path travels
