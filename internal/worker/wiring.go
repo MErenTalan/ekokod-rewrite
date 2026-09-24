@@ -54,6 +54,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/job"
 	"github.com/MErenTalan/ekokod-rewrite/internal/mail"
 	"github.com/MErenTalan/ekokod-rewrite/internal/marketdata"
+	"github.com/MErenTalan/ekokod-rewrite/internal/ml"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/crypto"
@@ -63,6 +64,7 @@ import (
 	billingsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/billing"
 	carbonsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/carbon"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/consumption"
+	forecastsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/forecast"
 	reportsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/report"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/solar"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
@@ -555,6 +557,10 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 			Carbon: carbonsvc.New(carbonsvc.Deps{Carbon: postgres.NewCarbonRepository(pool), Buildings: buildingRepo,
 				Analyzers: analyzerRepo, Analytics: postgres.NewAnalyticsRepository(pool), Ops: opsRepo,
 				Tenants: admin.NewTenantRepository(pool), Clock: clock.System()}),
+			Forecast: forecastsvc.New(forecastsvc.Deps{Analyzers: analyzerRepo, Analytics: postgres.NewAnalyticsRepository(pool),
+				Calendar: postgres.NewCalendarRepository(pool), Forecasts: postgres.NewForecastRepository(pool), Ops: opsRepo,
+				Tenants: admin.NewTenantRepository(pool), ML: ml.New(cfg.External.MLURL, cfg.External.MLAPIKey, cfg.External.MLTimeout),
+				Clock: clock.System()}),
 		},
 		closers: closers,
 	}, nil

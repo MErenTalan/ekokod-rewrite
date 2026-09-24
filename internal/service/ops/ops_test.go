@@ -169,6 +169,7 @@ func TestTriggerableIncludesReportTicks(t *testing.T) {
 // R311: the carbon accrual is operator-triggerable (it accrues yesterday).
 func TestTriggerableIncludesCarbonAccrual(t *testing.T) {
 	require.Contains(t, ops.Triggerable, job.TypeCarbonAccrual)
+	require.Contains(t, ops.Triggerable, job.TypeForecastRun)
 	svc, enq, _ := newService(t)
 	_, err := svc.Trigger(context.Background(), companyScope, job.TypeCarbonAccrual)
 	require.NoError(t, err)

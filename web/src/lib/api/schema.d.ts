@@ -14052,7 +14052,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                type: "alarm.evaluate" | "billing.dispatch" | "integration.sync_dispatch" | "epias.sync_prices" | "report.dispatch_monthly" | "report.dispatch_yearly" | "isolar.dispatch_sync" | "isolar.fetch_alarms" | "carbon.daily_accrual";
+                type: "alarm.evaluate" | "billing.dispatch" | "integration.sync_dispatch" | "epias.sync_prices" | "report.dispatch_monthly" | "report.dispatch_yearly" | "isolar.dispatch_sync" | "isolar.fetch_alarms" | "carbon.daily_accrual" | "forecast.run";
             };
             cookie?: never;
         };

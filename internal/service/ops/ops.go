@@ -45,6 +45,8 @@ var Triggerable = []string{
 	job.TypeSolarFetchAlarms,
 	// R311: the carbon accrual, for yesterday.
 	job.TypeCarbonAccrual,
+	// F13b R376: the forecast run.
+	job.TypeForecastRun,
 }
 
 // TaskEnqueuer is the job client seam.
@@ -141,6 +143,8 @@ func (s *Service) taskFor(sc store.Scope, jobType string) (*asynq.Task, error) {
 		return job.NewSolarAlarmsTask(opts)
 	case job.TypeCarbonAccrual:
 		return job.NewCarbonAccrualTask(job.CarbonAccrualPayload{}, opts)
+	case job.TypeForecastRun:
+		return job.NewForecastRunTask(opts)
 	}
 	// Unreachable: Trigger checked the allow-list first. Refusing rather than
 	// falling through keeps a new list entry from silently enqueuing nothing.

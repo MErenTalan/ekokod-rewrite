@@ -22568,7 +22568,8 @@
                 "report.dispatch_yearly",
                 "isolar.dispatch_sync",
                 "isolar.fetch_alarms",
-                "carbon.daily_accrual"
+                "carbon.daily_accrual",
+                "forecast.run"
               ],
               "type": "string"
             }

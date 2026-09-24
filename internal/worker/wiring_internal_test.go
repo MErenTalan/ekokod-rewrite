@@ -299,6 +299,17 @@ func TestWorkerRegistersCarbonAccrual(t *testing.T) {
 	require.Equal(t, job.TypeCarbonAccrual, pattern)
 }
 
+// TestWorkerRegistersForecastRun: the worker serves forecast.run (F13b R376).
+func TestWorkerRegistersForecastRun(t *testing.T) {
+	pool := testfixtures.NewIsolatedDB(t)
+	g := buildGraph(t, pool, testfixtures.RedisConfig(t))
+	require.NotNil(t, g.handlers.Forecast)
+	mux := asynq.NewServeMux()
+	job.Register(mux, g.handlers)
+	_, pattern := mux.Handler(asynq.NewTask(job.TypeForecastRun, nil))
+	require.Equal(t, job.TypeForecastRun, pattern)
+}
+
 // TestWorkerRegistersSolarHandlers: the worker serves the iSolar ticks and plant syncs (R288).
 func TestWorkerRegistersSolarHandlers(t *testing.T) {
 	pool := testfixtures.NewIsolatedDB(t)
