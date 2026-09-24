@@ -234,8 +234,13 @@ func (t *transformer) buildingsStep() error {
 		id := ID("buildings", hex)
 		t.buildingCompany[hex] = company
 		t.companyBuildings[company] = append(t.companyBuildings[company], hex)
-		if u := hexID(b["user_in_charge"]); u != "" {
-			t.inCharge[u] = append(t.inCharge[u], hex)
+		// Tenancy: a user of another company is never linked to this building.
+		inCharge := hexID(b["user_in_charge"])
+		if !t.users[inCharge] || t.userCompany[inCharge] != company {
+			inCharge = ""
+		}
+		if inCharge != "" {
+			t.inCharge[inCharge] = append(t.inCharge[inCharge], hex)
 		}
 		lat, _ := num(b["lat"])
 		lon, _ := num(b["long"])
@@ -247,8 +252,8 @@ func (t *transformer) buildingsStep() error {
 			cutoff = n.IntPart()
 		}
 		var responsible any
-		if u := hexID(b["user_in_charge"]); t.users[u] {
-			responsible = ID("users", u).String()
+		if inCharge != "" {
+			responsible = ID("users", inCharge).String()
 		}
 		zeroIsNull := func(v any) any {
 			if s, ok := v.(string); ok && (s == "0" || s == "") {

@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/admin"
 )
@@ -18,8 +19,10 @@ import (
 var loadOrder = []string{
 	"integration_definitions", "companies", "company_weekend_days", "company_vacations", "calendar_events",
 	"users", "user_password_history", "buildings", "building_contacts", "analyzers",
+	// Credentials before plants: a linked plant references its iSolar credential (08 §6 lists them after).
+	"integration_credentials", "smtp_settings",
 	"power_plants", "power_plant_monthly_targets", "power_plant_devices", "power_plant_alarm_recipients",
-	"integration_credentials", "smtp_settings", "tariffs", "tariff_taxes", "tariff_manual_yekdem", "tariff_templates", "solar_tariffs",
+	"tariffs", "tariff_taxes", "tariff_manual_yekdem", "tariff_templates", "solar_tariffs",
 	"alarms", "alarm_analyzers", "alarm_channels", "alarm_events",
 	"emission_factors", "emission_factor_conversions", "carbon_selected_activities", "carbon_activities", "carbon_reports",
 	"iso50001_projects", "iso50001_clause_dates", "iso50001_notes",
@@ -56,6 +59,15 @@ type LoadReport struct {
 func Load(ctx context.Context, db Target, dir string) (LoadReport, error) {
 	if _, err := os.Stat(filepath.Join(dir, "summary.json")); err != nil {
 		return LoadReport{}, fmt.Errorf("legacy: %s is not a transform output (no summary.json): %w", dir, err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return LoadReport{}, err
+	}
+	for _, e := range entries {
+		if err := LoadKnows(e.Name()); err != nil {
+			return LoadReport{}, err
+		}
 	}
 	withheld, err := unconfirmedAnalyzers(filepath.Join(dir, "manual_multipliers.csv"))
 	if err != nil {
@@ -174,4 +186,22 @@ func unconfirmedAnalyzers(path string) (map[string]bool, error) {
 		out[r[1]] = true
 	}
 	return out, nil
+}
+
+// sideFiles are transform/artifacts outputs that are not tables.
+var sideFiles = map[string]bool{"rejects.ndjson": true, "notes.ndjson": true, "artifact_refs.ndjson": true}
+
+// LoadKnows refuses an NDJSON file that is neither a loaded table nor a known
+// side file: load would otherwise skip it silently (R416).
+func LoadKnows(name string) error {
+	table, ok := strings.CutSuffix(name, ".ndjson")
+	if !ok || sideFiles[name] {
+		return nil
+	}
+	for _, t := range loadOrder {
+		if t == table {
+			return nil
+		}
+	}
+	return fmt.Errorf("legacy: %s is not a table load knows: refusing to skip it silently", name)
 }

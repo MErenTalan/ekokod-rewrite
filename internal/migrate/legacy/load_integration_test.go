@@ -132,3 +132,17 @@ func TestLoadRefusesADirectoryThatIsNotATransform(t *testing.T) {
 	_, err := legacy.Load(context.Background(), admin.NewLegacyLoader(testfixtures.NewIsolatedDB(t)), t.TempDir())
 	require.ErrorContains(t, err, "not a transform output")
 }
+
+// TestLoadOrderSatisfiesEveryForeignKey loads the fixture whose plant is linked
+// to an iSolar credential: credentials must precede plants (R415).
+func TestLoadOrderSatisfiesEveryForeignKey(t *testing.T) {
+	t.Parallel()
+	pool := testfixtures.NewIsolatedDB(t)
+	dir, _, _ := transformWith(t, crossTenantSource(t), nil)
+	rep, err := legacy.Load(context.Background(), admin.NewLegacyLoader(pool), dir)
+	require.NoError(t, err)
+	require.Equal(t, 2, rep.Tables["power_plants"].Loaded)
+	var linked int
+	require.NoError(t, pool.QueryRow(context.Background(), `select count(*) from power_plants where isolar_credential_id is not null`).Scan(&linked))
+	require.Equal(t, 1, linked)
+}
