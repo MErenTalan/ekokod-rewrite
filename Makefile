@@ -182,9 +182,8 @@ generate: ## Regenerate sqlc types from the migrations and internal/store/postgr
 # also produces an empty string, so without it this guard PASSES precisely when
 # it cannot run. The `git diff --exit-code` it replaced failed loudly in that
 # case, and losing that would have been a straight regression.
-api-docs: ## Regenerate docs/api/openapi.json and docs/api/reference.md from the route table (F15c R482)
+api-docs: ## Regenerate docs/api/reference.md from the route table (F15c R482; the JSON is `make openapi`'s)
 	mkdir -p docs/api
-	go run ./cmd/ekokod tool openapi > docs/api/openapi.json
 	go run ./cmd/ekokod tool openapi --format markdown > docs/api/reference.md
 
 check-api-docs: api-docs ## Fail if the committed API reference is not what the route table produces
