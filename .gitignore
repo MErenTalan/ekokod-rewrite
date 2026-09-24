@@ -30,3 +30,4 @@ __pycache__/
 # F14c: rehearsal output (scripts/migration-rehearsal.sh)
 /reports/
 /rehearsal/
+/backups/

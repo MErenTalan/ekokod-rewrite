@@ -194,6 +194,7 @@ check-generate: ## Fail if the committed sqlcgen output is not what sqlc produce
 offline-bundle: ## Build the air-gapped install bundle
 	./scripts/offline-bundle.sh
 
+.PHONY: backup restore test-restore
 .PHONY: web-install web-lint web-test web-build web-audit web-a11y web-e2e
 
 ml-test: ## Run the ML service tests (uv)
@@ -219,6 +220,15 @@ web-e2e: ## Playwright e2e against the real API (needs test-db-up and test-redis
 
 web-audit: ## Fail on high-severity frontend dependency vulnerabilities
 	cd web && pnpm audit --audit-level=high
+
+backup: ## Back up the compose install: database + artifacts into backups/<stamp>/ (F15c R475)
+	./scripts/backup.sh
+
+restore: ## Restore a backup into the compose install: make restore BACKUP=backups/<stamp> (F15c R476)
+	./scripts/restore.sh --yes $${BACKUP:?set BACKUP=backups/<stamp>}
+
+test-restore: ## Back up a seeded test DB and restore it onto a throwaway TimescaleDB, then serve from it (F15c R477)
+	go build -o bin/ekokod ./cmd/ekokod && ./scripts/test-restore.sh
 
 migration-rehearsal: ## One timed rehearsal of the legacy migration into a scratch DB (F14c R444; docs/runbook-migration.md)
 	bash scripts/migration-rehearsal.sh
