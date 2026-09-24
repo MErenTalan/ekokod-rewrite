@@ -33,6 +33,12 @@ func (m *MemSource) Add(collection string, docs ...bson.D) {
 	}
 }
 
+// Replace swaps a collection's documents.
+func (m *MemSource) Replace(collection string, docs ...bson.D) {
+	delete(m.docs, collection)
+	m.Add(collection, docs...)
+}
+
 // Collections lists the collections that have documents.
 func (m *MemSource) Collections(context.Context) ([]string, error) {
 	out := make([]string, 0, len(m.docs))
