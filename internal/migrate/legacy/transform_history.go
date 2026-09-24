@@ -103,6 +103,9 @@ func (t *transformer) bills(collection, scope, ownerHex, buildingHex string, his
 			"payload": payload}); err != nil {
 			return err
 		}
+		if err := t.artifactRef("legacy_bills:"+scope+":"+ref, company, "legacy_bill", id.String(), "", str(rec, "pdfPath"), ""); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -143,6 +146,11 @@ func (t *transformer) reportsStep() error {
 			"report_type": str(r, "reportType"), "period": str(r, "period"), "payload": raw, "pdf_path": strOrNil(str(r, "pdfPath")),
 			"excel_path": strOrNil(str(r, "excelPath")), "created_at": ts(bdate(r["createdAt"]))}); err != nil {
 			return err
+		}
+		for _, f := range [][2]string{{"pdf", str(r, "pdfPath")}, {"excel", str(r, "excelPath")}} {
+			if err := t.artifactRef("reports:"+hex+":"+f[0], company, "legacy_report", id.String(), "", f[1], ""); err != nil {
+				return err
+			}
 		}
 		return t.w.legacyID("reports", hex, "legacy_reports", id)
 	})

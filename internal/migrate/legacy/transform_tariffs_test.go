@@ -181,7 +181,7 @@ func tariffBuildings(bills bson.D) []bson.D {
 		{Key: "reactivePowerKbk", Value: 1.0}, {Key: "distributionCostTlPerKwh", Value: 0.9}, {Key: "useManualYekdem", Value: true},
 		{Key: "manualYekdem", Value: bson.A{bson.D{{Key: "year", Value: int32(2026)}, {Key: "month", Value: int32(3)}, {Key: "value", Value: 1500.0}}}}}
 	return []bson.D{
-		{{Key: "_id", Value: oid(buildingHex)}, {Key: "company_id", Value: oid(companyHex)}, {Key: "name", Value: "Merkez"}, {Key: "billHistory", Value: bills},
+		{{Key: "_id", Value: oid(buildingHex)}, {Key: "company_id", Value: oid(companyHex)}, {Key: "name", Value: "Merkez"}, {Key: "billHistory", Value: bills}, {Key: "user_in_charge", Value: oid("64f000000000000000000d01")},
 			{Key: "tariffs", Value: bson.A{
 				embedded("01-01-2025", "single_time", price("power_price", 2.5, "vat_rate", 20.0, "other_taxes_rate", 3.35, "contracted_power", 100.0, "power_unit_price", 10.0)),
 				embedded("2025-07-01", "single_time", price("single_time_price", 2.6)),

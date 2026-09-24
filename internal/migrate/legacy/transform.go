@@ -53,7 +53,7 @@ var tables = []string{
 	"alarms", "alarm_analyzers", "alarm_channels", "alarm_events",
 	"emission_factors", "emission_factor_conversions", "carbon_selected_activities", "carbon_activities", "carbon_reports",
 	"iso50001_projects", "iso50001_clause_dates", "iso50001_notes",
-	"legacy_ids",
+	"legacy_ids", "artifact_refs",
 }
 
 type writer struct {
@@ -200,7 +200,10 @@ type transformer struct {
 	users            map[string]bool
 	buildingCompany  map[string]string
 	analyzerBuilding map[string]string
-	isolarCredential map[string]string // company hex → its ISOLAR credential id
+	isolarCredential map[string]string   // company hex → its ISOLAR credential id
+	userCompany      map[string]string   // user hex → company hex
+	companyBuildings map[string][]string // company hex → building hexes
+	inCharge         map[string][]string // user hex → buildings it is in charge of
 	companySubtypes  map[string]map[string]string
 	solarTariffDocs  []bson.M        // standalone solar tariffs, written with the plants (R424)
 	solarDates       map[string]bool // plant hex:date with a plant-owned solar tariff
@@ -213,9 +216,10 @@ func (t *transformer) run() error {
 	t.definitions, t.companies, t.users = map[string]uuid.UUID{}, map[string]bool{}, map[string]bool{}
 	t.buildingCompany, t.companySubtypes = map[string]string{}, map[string]map[string]string{}
 	t.analyzerBuilding, t.isolarCredential = map[string]string{}, map[string]string{}
+	t.userCompany, t.companyBuildings, t.inCharge = map[string]string{}, map[string][]string{}, map[string][]string{}
 	for _, step := range []func() error{t.integrations, t.companiesStep, t.usersStep, t.buildingsStep, t.analyzersStep,
 		t.tariffsStep, t.templatesStep, t.smtpStep, t.epiasStep, t.plantsStep, t.alarmsStep,
-		t.billHistoryStep, t.reportsStep, t.logsStep} {
+		t.billHistoryStep, t.reportsStep, t.logsStep, t.carbonStep, t.isoStep} {
 		if err := step(); err != nil {
 			return err
 		}

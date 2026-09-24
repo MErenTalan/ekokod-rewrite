@@ -197,6 +197,7 @@ func (t *transformer) usersStep() error {
 		}
 		id := ID("users", hex)
 		t.users[hex] = true
+		t.userCompany[hex] = hexID(u["company"])
 		t.rj.Accept("users")
 		if err := t.w.row("users", map[string]any{"id": id.String(), "company_id": ID("companies", hexID(u["company"])).String(), "name": str(u, "name"),
 			"email": strings.ToLower(strings.TrimSpace(str(u, "email"))), "phone": strOrNil(str(u, "phone")), "password_hash": "legacy$" + str(u, "password"),
@@ -232,6 +233,10 @@ func (t *transformer) buildingsStep() error {
 		}
 		id := ID("buildings", hex)
 		t.buildingCompany[hex] = company
+		t.companyBuildings[company] = append(t.companyBuildings[company], hex)
+		if u := hexID(b["user_in_charge"]); u != "" {
+			t.inCharge[u] = append(t.inCharge[u], hex)
+		}
 		lat, _ := num(b["lat"])
 		lon, _ := num(b["long"])
 		floors, _ := num(b["floors"])
