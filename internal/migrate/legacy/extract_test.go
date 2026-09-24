@@ -89,6 +89,9 @@ func gunzipLines(t *testing.T, path string) []string {
 	defer func() { _ = f.Close() }()
 	gz, err := gzip.NewReader(f)
 	require.NoError(t, err)
+	// Two runs in the same second would hide a timestamp; the header itself must carry none.
+	require.True(t, gz.ModTime.IsZero(), "gzip header has no mtime")
+	require.Empty(t, gz.Name, "gzip header has no file name")
 	var out []string
 	sc := bufio.NewScanner(gz)
 	for sc.Scan() {
