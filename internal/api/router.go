@@ -39,7 +39,6 @@ func NewRouter(d Deps) http.Handler {
 	r.Get("/health/live", liveHandler())
 	r.Get("/health/ready", readyHandler(d.ReadyChecks))
 	r.Get("/version", versionHandler(d.Build))
-	r.Handle("/metrics", middleware.MetricsHandler())
 	if d.V1 != nil {
 		r.Mount("/api/v1", d.V1)
 	}

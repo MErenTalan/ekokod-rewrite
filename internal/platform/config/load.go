@@ -397,6 +397,12 @@ func Load(lookup func(string) (string, bool)) (*Config, error) {
 		RateLimitAuth:  l.rateLimit("EKOKOD_RATE_LIMIT_AUTH", "5/15min"),
 	}
 
+	c.Metrics = Metrics{
+		APIAddr:       l.str("EKOKOD_API_METRICS_ADDR", "127.0.0.1:9464"),
+		WorkerAddr:    l.str("EKOKOD_WORKER_METRICS_ADDR", "127.0.0.1:9465"),
+		SchedulerAddr: l.str("EKOKOD_SCHEDULER_METRICS_ADDR", "127.0.0.1:9466"),
+	}
+
 	c.DB = DB{
 		URL:              l.requiredDSN("EKOKOD_DB_URL"),
 		MaxConns:         l.intVal("EKOKOD_DB_MAX_CONNS", 25),

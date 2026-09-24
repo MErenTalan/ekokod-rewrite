@@ -10,13 +10,16 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/stretchr/testify/require"
+
 	"github.com/MErenTalan/ekokod-rewrite/internal/api"
 	v1 "github.com/MErenTalan/ekokod-rewrite/internal/api/v1"
 	"github.com/MErenTalan/ekokod-rewrite/internal/api/v1/mw"
 	"github.com/MErenTalan/ekokod-rewrite/internal/buildinfo"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/health"
-	"github.com/stretchr/testify/require"
 )
 
 func testConfig(t *testing.T) *config.Config {
@@ -91,15 +94,23 @@ func TestVersionEndpoint(t *testing.T) {
 	require.Contains(t, rec.Body.String(), "version")
 }
 
-func TestMetricsEndpointExposesHTTPMetrics(t *testing.T) {
+// F15b R460: the public router never serves /metrics; the internal listener does,
+// and the HTTP histogram is still recorded.
+func TestMetricsAreNotOnThePublicRouter(t *testing.T) {
 	router := newTestRouter(t)
-
 	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health/live", nil))
 
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", nil))
-	require.Equal(t, http.StatusOK, rec.Code)
-	require.Contains(t, rec.Body.String(), "ekokod_http_request_duration_seconds")
+	require.Equal(t, http.StatusNotFound, rec.Code)
+
+	families, err := prometheus.DefaultGatherer.Gather()
+	require.NoError(t, err)
+	var found bool
+	for _, f := range families {
+		found = found || f.GetName() == "ekokod_http_request_duration_seconds"
+	}
+	require.True(t, found, "the HTTP histogram is still recorded for the internal listener")
 }
 
 func TestRequestIDIsEchoedAndGenerated(t *testing.T) {

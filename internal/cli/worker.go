@@ -5,11 +5,14 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/MErenTalan/ekokod-rewrite/internal/platform/metrics"
+
+	"github.com/spf13/cobra"
+
 	"github.com/MErenTalan/ekokod-rewrite/internal/job"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 	"github.com/MErenTalan/ekokod-rewrite/internal/worker"
-	"github.com/spf13/cobra"
 )
 
 func newWorkerCmd() *cobra.Command {
@@ -29,6 +32,9 @@ func newWorkerCmd() *cobra.Command {
 				return err
 			}
 			defer pool.Close()
+			if err := metrics.Serve(ctx, cfg.Metrics.WorkerAddr, log); err != nil {
+				return fmt.Errorf("metrics listener: %w", err)
+			}
 
 			built, err := worker.Build(ctx, cfg, pool, log)
 			if err != nil {

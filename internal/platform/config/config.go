@@ -57,6 +57,8 @@ type Config struct {
 	// PublicForms routes the public site's forms to the operator (F12a Q-H6).
 	PublicForms PublicForms
 	Ingest      Ingest
+	// Metrics are each process's internal /metrics listener (F15b R460, Q-M3).
+	Metrics Metrics
 
 	// ConsumptionRefreshEnabled gates internal/ingest's consumption.refresh
 	// enqueue call site (R73).
@@ -228,4 +230,9 @@ func (c *Config) String() string {
 type PublicForms struct {
 	CompanyID string
 	To        string
+}
+
+// Metrics addresses: one internal listener per process; empty disables it.
+type Metrics struct {
+	APIAddr, WorkerAddr, SchedulerAddr string
 }
