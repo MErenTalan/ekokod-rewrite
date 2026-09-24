@@ -50,7 +50,7 @@ export function PredictPage() {
   const onRun = () => {
     if (!analyzerId) return;
     setUnavailable(false);
-    run.mutate({ body: { analyzer_id: analyzerId, horizon_hours: horizon } }, {
+    run.mutate({ params: { query: scope }, body: { analyzer_id: analyzerId, horizon_hours: horizon } }, {
       onSuccess: (res) => setRan(res ?? null),
       onError: (err) => setUnavailable(errorCodeOf(err) === 'forecast_unavailable'),
     });

@@ -22,6 +22,7 @@ import {
   Sun,
   Tags,
   TrendingUp,
+  BrainCircuit,
   Wallet,
   Zap,
   type LucideIcon,
@@ -41,7 +42,8 @@ export const navigation: NavEntry[] = [
   { id: 'dataAnalysis', labelKey: 'dataAnalysis', icon: LineChart, children: [
     { id: 'consumption', labelKey: 'consumption', href: '/ekorm/consumption', icon: Zap },
     { id: 'loadProfile', labelKey: 'loadProfile', href: '/ekorm/load-profile', icon: Activity },
-    { id: 'forecast', labelKey: 'forecast', href: '/ekorm/forecast', icon: TrendingUp },
+    { id: 'forecast', labelKey: 'forecast', href: '/ekorm/forecast', icon: TrendingUp, permission: 'forecast.read' },
+    { id: 'ai', labelKey: 'aiAnalysis', href: '/ekorm/ai', icon: BrainCircuit, permission: 'forecast.run' },
     { id: 'solarPlants', labelKey: 'solarPlants', href: '/ekorm/solar-plants', icon: Sun, permission: 'nav.solar_plants' },
     { id: 'financial', labelKey: 'financialAnalysis', href: '/ekorm/financial-analysis', icon: Wallet, permission: 'nav.financial' },
     { id: 'renewable', labelKey: 'renewableEnergy', href: '/ekorm/renewable-energy', icon: Leaf, permission: 'renewable.read' },

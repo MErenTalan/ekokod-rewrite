@@ -7,6 +7,8 @@ import { findTrail, isActive, isGroup, navFor, navigation, type NavEntry } from 
 const leafIds = (entries: NavEntry[]) => entries.flatMap((e) => (isGroup(e) ? e.children : [e])).map((l) => l.id);
 const ALL = leafIds(navigation);
 const WITHOUT_RESTRICTED = ALL.filter((id) => id !== 'solarPlants' && id !== 'financial');
+// F13c Q-I16: AI Analysis runs the model, so only forecast.run holders see it.
+const READ_ONLY = (ids: string[]) => ids.filter((id) => id !== 'ai');
 
 describe('nav config', () => {
   it('finds the group and leaf for a route and its sub-routes', () => {
@@ -39,10 +41,10 @@ describe('navFor', () => {
   it.each([
     ['admin', ALL],
     ['company_admin', ALL],
-    ['company_readonly_admin', ALL],
+    ['company_readonly_admin', READ_ONLY(ALL)],
     ['building_admin', WITHOUT_RESTRICTED],
-    ['building_readonly_admin', WITHOUT_RESTRICTED],
-    ['demo', WITHOUT_RESTRICTED],
+    ['building_readonly_admin', READ_ONLY(WITHOUT_RESTRICTED)],
+    ['demo', READ_ONLY(WITHOUT_RESTRICTED)],
   ] as const)('%s sees exactly its navigation', (role, want) => {
     expect(leafIds(navFor(fixture[role]))).toEqual(want);
   });
