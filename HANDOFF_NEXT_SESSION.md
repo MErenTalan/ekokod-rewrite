@@ -81,16 +81,20 @@
 
 ---
 
-## START HERE — exact state (2026-09-24 ~02:25)
+## START HERE — exact state (2026-09-24 ~03:00)
 
 | Branch / worktree | Head | State |
 |---|---|---|
 | `phase/f9-solar` (`/home/personal/ekokod-f9-phase`) | `fa70092` | F9 code + self-review done; Docker-bound gates PENDING (see "F9 remaining") |
-| **`phase/f10-carbon`** (`/home/personal/ekokod-f10-phase`) | this commit | **F10a (carbon backend) Tasks 1–8 done + self-review**; F10b (screens + e2e) next |
+| **`phase/f10-carbon`** (`/home/personal/ekokod-f10-phase`) | this commit | **F10 done (F10a backend + F10b screens)**; Docker-bound gates PENDING |
 
-- F10a plan: `docs/superpowers/plans/2026-09-24-f10a-carbon-backend.md` (R300–R319, Q-F1…Q-F7).
-- F10a ledger: `.superpowers/sdd/2026-09-24-f10a-carbon-backend/progress.md` (rulings, mutations, PENDING list).
-- **Docker is still hung** (since 00:25). Every integration/e2e test written since then is PENDING; the list is in both ledgers' `PENDING` lines. When Docker is back: run F9's pending gates, then F10a's, before anything else.
+- F10a plan `docs/superpowers/plans/2026-09-24-f10a-carbon-backend.md` (R300–R319, Q-F1…Q-F7); ledger `.superpowers/sdd/2026-09-24-f10a-carbon-backend/progress.md`.
+- F10b plan `docs/superpowers/plans/2026-09-24-f10b-carbon-screens.md` (R320–R327, Q-F8…Q-F12); ledger `.superpowers/sdd/2026-09-24-f10b-carbon-screens/progress.md`.
+- **Docker is still hung** (since 00:25). PENDING, in this order once it is back:
+  1. F9's list ("F9 remaining" below).
+  2. F10a integration: `internal/store/postgres` (carbon + scope isolation), `internal/api/v1` (carbon HTTP + tenancy sweep), `internal/cli`, `internal/seed`, `internal/worker`, `internal/scheduler`.
+  3. e2e: `carbon.spec.ts`, `responsive.spec.ts`, then the full suite with the worker.
+- F11 (ISO 50001) is next, from `phase/f10-carbon`.
 
 ## Docker hang (read before any integration/e2e)
 - **What happened (at ~00:25):**
