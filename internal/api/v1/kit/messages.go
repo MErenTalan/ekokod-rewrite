@@ -40,6 +40,8 @@ var messages = map[string][2]string{ // code → {tr, en}
 	"report_not_ready":               {"Rapor henüz hazır değil.", "The report is not ready yet."},
 	"job_already_queued":             {"Bu iş bu saat için zaten kuyrukta.", "This job is already queued for this hour."},
 	"carbon_activity_automated":      {"Otomatik oluşturulan karbon kaydı düzenlenemez veya silinemez; yalnızca onaylanabilir ya da reddedilebilir.", "An automated carbon record cannot be edited or deleted; it can only be approved or rejected."},
+	"forms_not_configured":           {"İletişim formu bu kurulumda etkin değil; lütfen e-posta veya telefonla ulaşın.", "The contact form is not enabled on this installation; please write or call."},
+	"delivery_failed":                {"Mesajınız şu an iletilemedi; lütfen e-posta veya telefonla ulaşın.", "Your message could not be delivered right now; please write or call."},
 	"file_too_large":                 {"Dosya boyutu 30 MB sınırını aşamaz.", "The file cannot be larger than 30 MB."},
 	"isolar_plant_already_linked":    {"Bu iSolar santrali başka bir santrale bağlı.", "This iSolar plant is linked to another plant."},
 	"isolar_not_linked":              {"Santral iSolarCloud'a bağlı değil.", "The plant is not linked to iSolarCloud."},

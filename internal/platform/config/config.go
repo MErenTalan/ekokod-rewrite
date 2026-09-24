@@ -54,7 +54,9 @@ type Config struct {
 	Storage   Storage
 	External  External
 	Features  Features
-	Ingest    Ingest
+	// PublicForms routes the public site's forms to the operator (F12a Q-H6).
+	PublicForms PublicForms
+	Ingest      Ingest
 
 	// ConsumptionRefreshEnabled gates internal/ingest's consumption.refresh
 	// enqueue call site (R73).
@@ -218,4 +220,12 @@ func (c *Config) String() string {
 		fmt.Fprintf(&b, "%s=%s (%s)\n", r.Name, r.Value, r.Source)
 	}
 	return b.String()
+}
+
+// PublicForms names the operator company whose SMTP settings deliver the
+// public contact and demo forms, and the mailbox they go to. Both empty
+// means the forms answer "not configured" (on-premise installs).
+type PublicForms struct {
+	CompanyID string
+	To        string
 }

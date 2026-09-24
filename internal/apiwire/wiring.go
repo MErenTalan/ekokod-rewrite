@@ -3,6 +3,7 @@
 package apiwire
 
 import (
+	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 
 	"context"
@@ -48,6 +49,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/jobs"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/loadprofile"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/ops"
+	"github.com/MErenTalan/ekokod-rewrite/internal/service/publicforms"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/renewable"
 	reportsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/report"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/solar"
@@ -104,6 +106,8 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 	}
 	closeAll := func() { _ = redisClient.Close() }
 
+	// F12a Q-H6: config validated the uuid; an empty one leaves the forms unconfigured.
+	formsCompany, _ := uuid.Parse(cfg.PublicForms.CompanyID)
 	cipher, err := crypto.NewCipher(cfg.Security.EncryptionKey)
 	if err != nil {
 		closeAll()
@@ -334,6 +338,8 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 			Buildings: postgres.NewBuildingRepository(pool), Clock: opts.Clock,
 			Store: storage.Store{Root: cfg.Storage.Root, Max: cfg.Storage.UploadMax, Allowed: cfg.Storage.AllowedTypes}}),
 		UploadMax: cfg.Storage.UploadMax,
+		PublicForms: publicforms.New(publicforms.Deps{SMTP: postgres.NewSMTPRepository(pool, cipher), Mail: opts.Mail,
+			CompanyID: formsCompany, To: cfg.PublicForms.To}),
 		Carbon: carbonsvc.New(carbonsvc.Deps{Carbon: postgres.NewCarbonRepository(pool), Buildings: postgres.NewBuildingRepository(pool),
 			Companies: postgres.NewCompanyRepository(pool), Clock: opts.Clock}),
 		Clock: opts.Clock, Log: log, ClientIP: clientIP}

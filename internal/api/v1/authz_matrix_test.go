@@ -214,6 +214,8 @@ var expectedAccess = map[string]string{
 	"GET /iso50001/{building_id}/export":                  "A CA CR BA BR D",
 	// 05 §17 (F12a)
 	"POST /public/bill-calculator": "public",
+	"POST /public/contact":         "public",
+	"POST /public/demo-request":    "public",
 	// 05 §18
 	"POST /mobile/auth/login":   "public",
 	"POST /mobile/auth/refresh": "public",

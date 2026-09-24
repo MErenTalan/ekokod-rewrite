@@ -39,3 +39,27 @@ type PublicBill struct {
 	Basis        string           `json:"basis" required:"true" enum:"total,bands"`
 	Tariff       PublicBillTariff `json:"tariff" required:"true"`
 }
+
+// PublicContactRequest is POST /public/contact (R353). `website` is a
+// honeypot a person never sees; `elapsed_ms` is the time spent on the form.
+type PublicContactRequest struct {
+	Name      string `json:"name" validate:"required,max=120" required:"true"`
+	Email     string `json:"email" validate:"required,max=254" required:"true" format:"email"`
+	Phone     string `json:"phone,omitempty" validate:"max=40"`
+	Subject   string `json:"subject,omitempty" validate:"max=200"`
+	Message   string `json:"message" validate:"required,max=5000" required:"true"`
+	Website   string `json:"website,omitempty" validate:"max=500"`
+	ElapsedMs int    `json:"elapsed_ms" validate:"min=0"`
+}
+
+// PublicDemoRequest is POST /public/demo-request (R353).
+type PublicDemoRequest struct {
+	Name      string `json:"name" validate:"required,max=120" required:"true"`
+	Email     string `json:"email" validate:"required,max=254" required:"true" format:"email"`
+	Phone     string `json:"phone" validate:"required,max=40" required:"true"`
+	Company   string `json:"company" validate:"required,max=200" required:"true"`
+	Role      string `json:"role,omitempty" validate:"max=120"`
+	Message   string `json:"message,omitempty" validate:"max=2000"`
+	Website   string `json:"website,omitempty" validate:"max=500"`
+	ElapsedMs int    `json:"elapsed_ms" validate:"min=0"`
+}

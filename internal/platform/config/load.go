@@ -11,6 +11,8 @@ import (
 
 	"github.com/robfig/cron/v3"
 	"github.com/shopspring/decimal"
+
+	"github.com/google/uuid"
 )
 
 type loader struct {
@@ -507,6 +509,17 @@ func Load(lookup func(string) (string, bool)) (*Config, error) {
 		l.record("EKOKOD_PINNED_CERTS", fmt.Sprintf("%d pinned host(s)", len(certs)), false, true)
 	} else {
 		l.record("EKOKOD_PINNED_CERTS", "(none)", false, false)
+	}
+
+	c.PublicForms = PublicForms{
+		CompanyID: l.str("EKOKOD_PUBLIC_FORMS_COMPANY_ID", ""),
+		To:        l.str("EKOKOD_PUBLIC_FORMS_TO", ""),
+	}
+	if _, err := uuid.Parse(c.PublicForms.CompanyID); c.PublicForms.CompanyID != "" && err != nil {
+		l.fail("EKOKOD_PUBLIC_FORMS_COMPANY_ID", errors.New("must be a company uuid"))
+	}
+	if (c.PublicForms.CompanyID == "") != (c.PublicForms.To == "") {
+		l.fail("EKOKOD_PUBLIC_FORMS_TO", errors.New("set EKOKOD_PUBLIC_FORMS_COMPANY_ID and EKOKOD_PUBLIC_FORMS_TO together"))
 	}
 
 	c.Features = Features{
