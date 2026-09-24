@@ -229,3 +229,21 @@ jobs:
         with:
           name: playwright-e2e-report
           path: web/playwright-report
+
+  ml:
+    name: ML service
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: ml
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: 0.12.18
+      - run: uv sync --frozen
+      - run: uv run pytest -q
+      # R366: the built image carries no database client.
+      - run: docker build -t ekokod-ml:ci .
+      - run: docker run --rm --entrypoint python ekokod-ml:ci -m ekokod_ml.nodb

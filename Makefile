@@ -138,9 +138,9 @@ check-script-modes: ## Fail if a committed scripts/*.sh file lacks the executabl
 		exit 1; \
 	fi
 
-ci: lint check-generate check-script-modes test build web-lint web-test web-build web-audit ## Everything CI runs, except integration tests, govulncheck and shellcheck
+ci: lint check-generate check-script-modes test build web-lint web-test web-build web-audit ml-test ## Everything CI runs, except integration tests, govulncheck and shellcheck
 
-.PHONY: up down dev logs ps migrate seed generate check-generate offline-bundle env-docker
+.PHONY: up down dev logs ps migrate seed generate check-generate offline-bundle env-docker ml-test
 
 env-docker: ## Generate .env.docker with fresh development secrets (idempotent)
 	./scripts/gen-env-docker.sh
@@ -195,6 +195,9 @@ offline-bundle: ## Build the air-gapped install bundle
 	./scripts/offline-bundle.sh
 
 .PHONY: web-install web-lint web-test web-build web-audit web-a11y web-e2e
+
+ml-test: ## Run the ML service tests (uv)
+	cd ml && uv run pytest -q
 
 web-install:
 	cd web && pnpm install --frozen-lockfile
