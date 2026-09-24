@@ -103,7 +103,7 @@ func AnalyzerReadings(doc bson.M, provider string, dec MultiplierDecision, now t
 	var out Readings
 	legacyID := hexID(doc["_id"])
 	analyzerID := ID("analyzers", legacyID)
-	values, _ := doc["energyValues"].(bson.M)
+	values := asDoc(doc["energyValues"])
 	for _, a := range arrays {
 		rows := asArray(values[a.key])
 		byTs := map[time.Time]model.MeterReading{}
@@ -178,7 +178,7 @@ func asArray(v any) []any {
 // rowJSON renders one embedded document as relaxed JSON for the provider mappers.
 func rowJSON(v any) (json.RawMessage, error) {
 	switch v.(type) {
-	case bson.D, bson.M:
+	case bson.D, bson.M, map[string]any:
 	default:
 		return nil, fmt.Errorf("not a document: %T", v)
 	}

@@ -1,6 +1,7 @@
 package legacy_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -125,4 +126,20 @@ func TestGridboxRowsUseTheProviderMultipliedRegister(t *testing.T) {
 	res := legacy.AnalyzerReadings(doc, "GRIDBOX", legacy.DecideMultiplier("GRIDBOX", "40", ""), now)
 	require.Len(t, res.Readings, 1)
 	require.True(t, decimal.NewFromInt(4000).Equal(*res.Readings[0].ActiveImport))
+}
+
+// Documents read back from an extract carry bson.D sub-documents, not bson.M.
+func TestReadingsFromAnExtractedDocument(t *testing.T) {
+	src := legacy.NewMemSource()
+	src.Add("analyzers", bson.D{{Key: "_id", Value: oid("64f0000000000000000000a1")}, {Key: "subIntegration", Value: "Baskent"},
+		{Key: "energyValues", Value: bson.D{{Key: "loadProfile", Value: bson.A{ososRow("24/09/2026 10:00:00", "100")}}}}})
+	dir := t.TempDir()
+	_, err := legacy.Extract(context.Background(), src, dir)
+	require.NoError(t, err)
+	var got int
+	require.NoError(t, legacy.ReadExtract(dir, "analyzers", func(doc bson.M) error {
+		got = len(legacy.AnalyzerReadings(doc, "OSOS", legacy.DecideMultiplier("OSOS", "", ""), now).Readings)
+		return nil
+	}))
+	require.Equal(t, 1, got)
 }
