@@ -3,6 +3,7 @@
 package v1_test
 
 import (
+	"log/slog"
 	"net/http"
 	"testing"
 	"time"
@@ -51,6 +52,9 @@ func (h *harness) carbonFactorFor(company uuid.UUID) string {
 func TestCarbonFlowForCompanyAdmin(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
+	// The master catalogue is seed.Load's, not E2EFixtures'.
+	_, _, err := seed.LoadEmissionFactors(t.Context(), h.pool, slog.New(slog.DiscardHandler))
+	require.NoError(t, err)
 	ca := h.as(seed.E2ECompanyAdminEmail)
 	b := h.fx.BuildingA1.String()
 
@@ -62,9 +66,13 @@ func TestCarbonFlowForCompanyAdmin(t *testing.T) {
 	require.NotEmpty(t, factors.Items)
 	f := factors.Items[0]
 
-	res = ca.do(http.MethodPost, "/carbon/activities", map[string]any{"building_id": b, "sub_category": "sub_waste_disposal",
+	activity := map[string]any{"building_id": b, "sub_category": "sub_waste_disposal",
 		"factor_key": f.Key, "quantity": "2", "unit": f.BaseUnit, "period_start": "2026-08-01", "period_end": "2026-08-31",
-		"emission_kgco2e": "1"}) // an emission from the client is ignored
+		"emission_kgco2e": "1"}
+	res = ca.do(http.MethodPost, "/carbon/activities", activity)
+	require.Equal(t, http.StatusBadRequest, res.status, "the client can never state the emission: %s", res.body)
+	delete(activity, "emission_kgco2e")
+	res = ca.do(http.MethodPost, "/carbon/activities", activity)
 	require.Equal(t, http.StatusCreated, res.status, string(res.body))
 	var a dto.CarbonActivity
 	res.json(t, &a)

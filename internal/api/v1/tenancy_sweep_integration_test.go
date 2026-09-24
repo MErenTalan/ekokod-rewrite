@@ -149,6 +149,7 @@ func validBodies(h *harness) map[string]any {
 			"analyzer_ids": []string{h.fx.AnalyzerA1.String()},
 			"settings":     map[string]any{"communication_threshold_hours": 6},
 		},
+		"iso50001.notes.update": map[string]any{"clause_id": "5.1", "body": "Sweep"},
 	}
 }
 

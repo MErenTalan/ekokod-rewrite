@@ -462,17 +462,9 @@ func Load(lookup func(string) (string, bool)) (*Config, error) {
 	}
 
 	c.Storage = Storage{
-		Root:      l.required("EKOKOD_STORAGE_ROOT"),
-		UploadMax: l.positiveInt64("EKOKOD_UPLOAD_MAX_BYTES", 31457280),
-		AllowedTypes: l.csv("EKOKOD_UPLOAD_ALLOWED_TYPES", []string{
-			"application/pdf",
-			"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-			"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-			"application/vnd.ms-excel",
-			"text/csv",
-			"image/png",
-			"image/jpeg",
-		}),
+		Root:         l.required("EKOKOD_STORAGE_ROOT"),
+		UploadMax:    l.positiveInt64("EKOKOD_UPLOAD_MAX_BYTES", 31457280),
+		AllowedTypes: l.csv("EKOKOD_UPLOAD_ALLOWED_TYPES", DefaultUploadTypes()),
 	}
 
 	c.External = External{
@@ -550,4 +542,17 @@ func Load(lookup func(string) (string, bool)) (*Config, error) {
 		return nil, fmt.Errorf("invalid configuration:\n  %w", errors.Join(l.errs...))
 	}
 	return c, nil
+}
+
+// DefaultUploadTypes is the upload allow-list when EKOKOD_UPLOAD_ALLOWED_TYPES is unset.
+func DefaultUploadTypes() []string {
+	return []string{
+		"application/pdf",
+		"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+		"application/vnd.ms-excel",
+		"text/csv",
+		"image/png",
+		"image/jpeg",
+	}
 }

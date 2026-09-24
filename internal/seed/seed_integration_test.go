@@ -75,13 +75,13 @@ func TestSeedRunTwiceProducesTheSameRowCounts(t *testing.T) {
 
 	// Pin the shipped counts directly (task-12a report: 182 factors + F9's
 	// four equivalences, 196
-	// conversions, 3 integration definitions, 0 tariff rows), so a future
+	// conversions, 3 integration definitions, F12's 17 schedule rows (R350)), so a future
 	// change to the embedded data that silently drops rows is caught here
 	// too, not only by datasets_test.go.
 	require.EqualValues(t, 186, first.EmissionFactors)
 	require.EqualValues(t, 196, first.EmissionFactorConversions)
 	require.EqualValues(t, 3, first.IntegrationDefinitions)
-	require.EqualValues(t, 0, first.NationalTariffSchedule)
+	require.EqualValues(t, 17, first.NationalTariffSchedule)
 }
 
 // TestSeedRepairsAModifiedRow proves seeding is idempotent by CONVERGENCE,

@@ -145,7 +145,7 @@ func newHarness(t *testing.T, tune ...func(*config.Config)) *harness {
 			RateLimitAuth: config.RateLimit{Limit: 1000, Window: 15 * time.Minute},
 		},
 		Redis:   testfixtures.SharedRedisConfig(t),
-		Storage: config.Storage{Root: t.TempDir()},
+		Storage: config.Storage{Root: t.TempDir(), UploadMax: 31457280, AllowedTypes: config.DefaultUploadTypes()},
 		Security: config.Security{
 			EncryptionKey:           []byte("0123456789abcdef0123456789abcdef"),
 			JWTSigningKey:           []byte("jwt-signing-key-0123456789abcdef-0123"),
