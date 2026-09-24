@@ -194,16 +194,38 @@ func TestIntegrationDefinitionsRejectsUnknownField(t *testing.T) {
 	t.Logf("got expected failure: %v", err)
 }
 
-// TestNationalTariffScheduleShipsEmpty pins the controller ruling: the
-// production dataset file is an empty array because the source data is
-// MongoDB-only and not in this repository. This must return an empty,
-// non-nil slice and no error, never a placeholder row.
-func TestNationalTariffScheduleShipsEmpty(t *testing.T) {
+// TestNationalTariffScheduleShipsLegacyCalculatorTable pins F12a Q-H1/Q-H2:
+// the shipped schedule is the legacy public calculator's active constant
+// table, 17 rows, with the low/high daily-use prices as base and *_plus rows.
+func TestNationalTariffScheduleShipsLegacyCalculatorTable(t *testing.T) {
 	t.Parallel()
 	rows, err := NationalTariffSchedule()
 	require.NoError(t, err)
-	require.NotNil(t, rows)
-	require.Empty(t, rows)
+	require.Len(t, rows, 17)
+	find := func(group, level, term string) NationalTariffScheduleEntry {
+		for _, r := range rows {
+			if string(r.UserGroup) == group && string(r.VoltageLevel) == level && string(r.Term) == term {
+				return r
+			}
+		}
+		t.Fatalf("no row %s/%s/%s", group, level, term)
+		return NationalTariffScheduleEntry{}
+	}
+	res := find("residential", "lv", "monomial")
+	require.Equal(t, "0.494065", res.EnergyPrice.StringFixed(6))
+	require.Equal(t, "8", res.DailyThresholdKwh.String())
+	require.Equal(t, "1.895808", find("residential_plus", "lv", "monomial").EnergyPrice.StringFixed(6))
+	com := find("commercial", "lv", "monomial")
+	require.Equal(t, "30", com.DailyThresholdKwh.String())
+	require.Equal(t, "3.454688", find("commercial_plus", "lv", "monomial").EnergyPrice.StringFixed(6))
+	bi := find("commercial", "mv", "binomial")
+	require.Equal(t, "89.14752", bi.PowerPrice.String())
+	require.Equal(t, "178.29504", bi.OverusePrice.String())
+	require.Nil(t, find("lighting", "lv", "monomial").T1Price, "lighting has no time-of-use prices")
+	for _, r := range rows {
+		require.Equal(t, "20", r.VatRate.String())
+		require.Equal(t, "2025-01-01", r.EffectiveFrom.Format("2006-01-02"))
+	}
 }
 
 // TestNationalTariffScheduleFixtureDecodesAndValidates exercises the SAME

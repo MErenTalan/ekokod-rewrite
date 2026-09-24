@@ -31,7 +31,7 @@ The site pages, blog and SEO are **F12b**.
 
 | Id | Rule |
 |---|---|
-| R350 | **Seed:** 16 rows (`internal/seed/data/national_tariff_schedule.json`); `seed` prints `national tariff schedule: 16 rows`. |
+| R350 | **Seed:** 17 rows (`internal/seed/data/national_tariff_schedule.json`); `seed` prints `national tariff schedule: 17 rows`. |
 | R351 | **Calculator input:** group ∈ {residential, commercial, industrial, agricultural, lighting}, voltage ∈ {lv, mv}, term ∈ {monomial, binomial} (binomial only on mv), `multi_time` bool, `start ≤ end` ≤ 366 days, consumption values ≥ 0 and < 10⁹, demand/contract ≥ 0.<br>No row in force → 422 `start: no_tariff`. Lighting has no T prices → multi-time is refused (`multi_time: not_available`). |
 | R352 | **Output:** `{energy, distribution, power, overuse, vat_base, vat, total, vat_rate, days, band_rule, tariff: {effective_from, group_used, source}}`, each money value rounded to 2 dp (half-up) after an unrounded sum. `group_used` names the `*_plus` switch. |
 | R353 | **Forms:** contact `{name ≤ 120, email, phone? ≤ 40, subject? ≤ 200, message 10–5000, website (honeypot, must be empty), elapsed_ms ≥ 2000}`; demo `{name, email, phone, company ≤ 200, role? ≤ 120, message? ≤ 2000, website, elapsed_ms}`. A honeypot or too-fast submission answers **202 with no mail** (the bot sees success). A valid one answers 202 after the mail is sent; SMTP failure → 502 `delivery_failed`. |

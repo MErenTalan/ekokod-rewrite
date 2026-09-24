@@ -49,7 +49,7 @@ func TestCLISeedLoadsRealDatasets(t *testing.T) {
 	require.NoError(t, cli.Execute(context.Background(), []string{"seed"}, &first))
 	require.Contains(t, first.String(), "emission factors: 186 rows (196 conversions)")
 	require.Contains(t, first.String(), "integration definitions: 3 rows")
-	require.Contains(t, first.String(), "national tariff schedule: 0 rows (source data not in repository)")
+	require.Contains(t, first.String(), "national tariff schedule: 17 rows")
 
 	// A second run converges rather than duplicating or erroring: prints the
 	// SAME counts.
@@ -70,5 +70,5 @@ func TestCLISeedLoadsRealDatasets(t *testing.T) {
 	require.NoError(t, cli.Execute(context.Background(), []string{"seed"}, &second))
 	require.Contains(t, second.String(), "emission factors: 186 rows (196 conversions)")
 	require.Contains(t, second.String(), "integration definitions: 3 rows")
-	require.Contains(t, second.String(), "national tariff schedule: 0 rows (source data not in repository)")
+	require.Contains(t, second.String(), "national tariff schedule: 17 rows")
 }
