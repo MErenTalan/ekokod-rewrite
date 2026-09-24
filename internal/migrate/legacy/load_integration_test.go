@@ -39,9 +39,12 @@ func fingerprint(t *testing.T, pool *pgxpool.Pool, tables []string) map[string]s
 func transformedDir(t *testing.T, cipher *crypto.Cipher) string {
 	t.Helper()
 	extract := t.TempDir()
-	_, err := legacy.Extract(context.Background(), transformSource(t), extract)
+	_, err := legacy.Extract(context.Background(), tariffSource(t), extract)
 	require.NoError(t, err)
-	out, _ := runTransform(t, extract, cipher)
+	out := t.TempDir()
+	_, err = legacy.Transform(extract, out, legacy.TransformOptions{Keys: legacy.Keys{Primary: "legacy-secret-key"}, Cipher: cipher, Now: now,
+		Answers: map[string]map[string]string{legacy.AnswerTariffClass: {building2Hex: "og/industrial/binomial/private"}}})
+	require.NoError(t, err)
 	return out
 }
 
@@ -77,6 +80,14 @@ func TestLoadIsIdempotent(t *testing.T) {
 	require.Zero(t, readings)
 	_, err = os.Stat(filepath.Join(dir, "load_report.json"))
 	require.NoError(t, err)
+	for table, want := range map[string]int{"tariffs": 3, "tariff_taxes": 2, "tariff_manual_yekdem": 1, "tariff_templates": 1, "smtp_settings": 1,
+		"market_prices_hourly": 2, "yekdem_monthly": 1} {
+		require.Equal(t, want, first.Tables[table].Loaded, table)
+	}
+	smtp := postgres.NewSMTPRepository(pool, cipher)
+	pass, err := smtp.OpenPassword(ctx, store.SystemScope(legacy.ID("companies", companyHex)))
+	require.NoError(t, err, "the migrated SMTP password opens through the repository (R419)")
+	require.Equal(t, "Şifre!2024", string(pass))
 
 	// The re-sealed secret opens through the repository, under its own AAD.
 	company := legacy.ID("companies", companyHex)

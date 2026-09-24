@@ -187,6 +187,8 @@ func rowJSON(v any) (json.RawMessage, error) {
 
 func hexID(v any) string {
 	switch id := v.(type) {
+	case nil:
+		return "" // an absent reference, never the text "<nil>"
 	case bson.ObjectID:
 		return id.Hex()
 	case string:

@@ -51,6 +51,10 @@ func smtpPasswordAAD(companyID uuid.UUID) []byte {
 	return []byte(companyID.String())
 }
 
+// SMTPPasswordAAD is smtpPasswordAAD for the legacy migration, which seals
+// migrated passwords exactly as this repository will open them (R419).
+func SMTPPasswordAAD(companyID uuid.UUID) []byte { return smtpPasswordAAD(companyID) }
+
 func smtpSettingsFromRow(row sqlcgen.SmtpSetting) model.SMTPSettings {
 	return model.SMTPSettings{
 		CompanyID: row.CompanyID, Host: row.Host, Port: row.Port, Secure: row.Secure,

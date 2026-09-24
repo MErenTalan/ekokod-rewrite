@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
+	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/crypto"
 )
@@ -25,19 +26,34 @@ type TransformOptions struct {
 	Confirmations map[string]string
 	// Now bounds plausible reading timestamps; a fixed value keeps reruns identical.
 	Now time.Time
+	// Answers are the operator's answers.csv (kind → legacy id → answer).
+	Answers map[string]map[string]string
+	// LogsDays is Q-J10's logs retention window (days before Now); 0 means 180.
+	LogsDays int
 }
 
 // TransformResult summarises one run.
 type TransformResult struct {
 	Summary map[string]Tally `json:"summary"`
 	Manual  int              `json:"manual_multipliers"`
+	// Asked counts the other facts waiting for an answer, per kind (manual_<kind>.csv).
+	Asked map[string]int `json:"asked,omitempty"`
+	// Notes counts deliberate changes (notes.ndjson), e.g. monomial_power_dropped.
+	Notes map[string]int `json:"notes,omitempty"`
 }
 
-// tables is the output order; it is also load's (F14b) dependency order.
+// tables are the transform's output files (load orders them itself, R415).
 var tables = []string{
 	"integration_definitions", "companies", "company_weekend_days", "company_vacations", "calendar_events",
 	"integration_credentials", "users", "user_password_history", "buildings", "building_contacts",
-	"analyzers", "meter_readings", "consumption_anomalies", "legacy_ids",
+	"analyzers", "meter_readings", "consumption_anomalies",
+	"tariffs", "tariff_taxes", "tariff_manual_yekdem", "tariff_templates", "smtp_settings", "market_prices_hourly", "yekdem_monthly",
+	"legacy_bills", "legacy_reports", "operational_messages",
+	"power_plants", "power_plant_monthly_targets", "power_plant_devices", "power_plant_alarm_recipients", "solar_tariffs", "plant_production_totals",
+	"alarms", "alarm_analyzers", "alarm_channels", "alarm_events",
+	"emission_factors", "emission_factor_conversions", "carbon_selected_activities", "carbon_activities", "carbon_reports",
+	"iso50001_projects", "iso50001_clause_dates", "iso50001_notes",
+	"legacy_ids",
 }
 
 type writer struct {
@@ -128,12 +144,21 @@ func Transform(extractDir, outDir string, opt TransformOptions) (TransformResult
 	}
 	defer func() { _ = rf.Close() }()
 	rj := NewRejections(rf)
-	t := &transformer{dir: extractDir, w: w, rj: rj, opt: opt, resealer: Resealer{Keys: opt.Keys, Cipher: opt.Cipher}}
+	nf, err := os.Create(filepath.Join(outDir, "notes.ndjson")) //nolint:gosec // staging directory
+	if err != nil {
+		return TransformResult{}, err
+	}
+	notesOut := bufio.NewWriter(nf)
+	t := &transformer{dir: extractDir, w: w, rj: rj, opt: opt, resealer: Resealer{Keys: opt.Keys, Cipher: opt.Cipher},
+		asked: map[string][]manualItem{}, notes: map[string]int{}, notesOut: notesOut}
 	runErr := t.run()
-	if err := errors.Join(runErr, w.close()); err != nil {
+	if err := errors.Join(runErr, w.close(), notesOut.Flush(), nf.Close()); err != nil {
 		return TransformResult{}, err
 	}
 	if err := t.writeManual(filepath.Join(outDir, "manual_multipliers.csv")); err != nil {
+		return TransformResult{}, err
+	}
+	if err := t.writeAsked(outDir); err != nil {
 		return TransformResult{}, err
 	}
 	for collection, read := range t.read {
@@ -141,7 +166,10 @@ func Transform(extractDir, outDir string, opt TransformOptions) (TransformResult
 			return TransformResult{}, err
 		}
 	}
-	res := TransformResult{Summary: rj.Summary(), Manual: len(t.manual)}
+	res := TransformResult{Summary: rj.Summary(), Manual: len(t.manual), Notes: t.notes, Asked: map[string]int{}}
+	for kind, items := range t.asked {
+		res.Asked[kind] = len(items)
+	}
 	summary, err := json.MarshalIndent(res, "", "  ")
 	if err != nil {
 		return res, err
@@ -163,12 +191,16 @@ type transformer struct {
 	resealer Resealer
 	read     map[string]int
 	manual   []manualRow
+	asked    map[string][]manualItem
+	notes    map[string]int
+	notesOut *bufio.Writer
 
 	definitions     map[string]uuid.UUID // "OSOS:Baskent" → definition id
 	companies       map[string]bool
 	users           map[string]bool
 	buildingCompany map[string]string
 	companySubtypes map[string]map[string]string
+	solarTariffDocs []bson.M // standalone solar tariffs, written with the plants (R424)
 }
 
 func (t *transformer) count(collection string) { t.read[collection]++ }
@@ -177,7 +209,8 @@ func (t *transformer) run() error {
 	t.read = map[string]int{}
 	t.definitions, t.companies, t.users = map[string]uuid.UUID{}, map[string]bool{}, map[string]bool{}
 	t.buildingCompany, t.companySubtypes = map[string]string{}, map[string]map[string]string{}
-	for _, step := range []func() error{t.integrations, t.companiesStep, t.usersStep, t.buildingsStep, t.analyzersStep} {
+	for _, step := range []func() error{t.integrations, t.companiesStep, t.usersStep, t.buildingsStep, t.analyzersStep,
+		t.tariffsStep, t.templatesStep, t.smtpStep, t.epiasStep, t.solarTariffsPending} {
 		if err := step(); err != nil {
 			return err
 		}
@@ -201,4 +234,12 @@ func (t *transformer) writeManual(path string) error {
 		return err
 	}
 	return f.Close()
+}
+
+// solarTariffsPending accounts standalone solar tariffs until plants are migrated.
+func (t *transformer) solarTariffsPending() error {
+	for _, d := range t.solarTariffDocs {
+		t.rj.Reject("tariffs", hexID(d["_id"]), "energy_source", "solar_tariff", nil)
+	}
+	return nil
 }

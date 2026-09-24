@@ -124,7 +124,8 @@ func newLegacyExtractCmd() *cobra.Command {
 }
 
 func newLegacyTransformCmd() *cobra.Command {
-	var extract, out, confirmations, now string
+	var extract, out, confirmations, answers, now string
+	var logsDays int
 	cmd := &cobra.Command{
 		Use:   "transform",
 		Short: "Normalise and validate the extract into COPY-ready files with rejections (08 §5)",
@@ -152,6 +153,12 @@ func newLegacyTransformCmd() *cobra.Command {
 					return err
 				}
 			}
+			if answers != "" {
+				if opt.Answers, err = legacy.ReadAnswers(answers); err != nil {
+					return err
+				}
+			}
+			opt.LogsDays = logsDays
 			res, err := legacy.Transform(extract, out, opt)
 			if err != nil {
 				return err
@@ -165,6 +172,8 @@ func newLegacyTransformCmd() *cobra.Command {
 	cmd.Flags().StringVar(&out, "out", "", "staging directory for the transformed files")
 	cmd.Flags().StringVar(&confirmations, "confirmations", "", "manual_multipliers.csv with the answer column filled (raw|multiplied)")
 	cmd.Flags().StringVar(&now, "now", "", "RFC 3339 instant bounding plausible readings; fix it to make reruns identical")
+	cmd.Flags().StringVar(&answers, "answers", "", "answers.csv (kind,legacy_id,answer) for the manual_<kind>.csv questions")
+	cmd.Flags().IntVar(&logsDays, "logs-days", 180, "legacy logs older than this many days before --now are not migrated (Q-J10)")
 	return cmd
 }
 
