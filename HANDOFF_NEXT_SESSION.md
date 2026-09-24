@@ -1,4 +1,4 @@
-# Handoff — ekokod rewrite: F1–F13 code COMPLETE (Docker-bound gates of F9–F13 pending), F14 next
+# Handoff — ekokod rewrite: F1–F13 COMPLETE, F14a (legacy pipeline core) done, F14b next (Docker-bound gates of F9–F14 pending)
 
 > **STATUS (2026-09-24, ~00:50 Istanbul):** F9 (solar plants, renewable energy, financial analysis)
 > is on `phase/f9-solar` in `/home/personal/ekokod-f9-phase`, branched from `phase/f8b-reports`.
@@ -25,11 +25,10 @@
 > ve etrafından dolaş. Bunlar: push, merge, `main`'e dokunmak, başka projenin
 > container/port/süreçlerine dokunmak, Docker'ı yeniden başlatmak.
 >
-> **Durum:** F1–F8 tamam. F9 `phase/f9-solar` dalında (`/home/personal/ekokod-f9-phase`).
-> Task 1–15 tamam. Task 16 yarım: ilk e2e koşusu üç gerçek hata buldu, düzeltildi (`9c746ca`).
-> Task 17 başlamadı. Önceki oturumun sonunda Docker daemon yanıt vermeyi kesti ve test
-> Postgres'indeki `refresh_continuous_aggregate` çağrıları askıda kaldı. Hiçbir şey push edilmedi,
-> `main`'e dokunulmadı.
+> **Durum:** F1–F13 kodu tamam, F14a (legacy inventory/extract/transform) tamam; F14b sırada.
+> Son dal: `phase/f14-migration` (`/home/personal/ekokod-f14-phase`). Docker daemon hâlâ askıda:
+> F9–F14'ün Docker'a bağlı kapıları (integration testleri, e2e, image build) PENDING — listesi
+> bu dosyanın "START HERE" bölümünde. Hiçbir şey push edilmedi, `main`'e dokunulmadı.
 >
 > **Çalışma düzeni (kesin):** paralel agent YOK, subagent YOK, Workflow YOK. Her fazı bu oturumda
 > kendin yürüt (`superpowers:executing-plans` + TDD). Her task sonunda diff'i oku ve guard'ın
@@ -37,11 +36,11 @@
 > yetki/tenancy, sonra erişilebilirlik ve tasarım) ve worker'lı gerçek e2e koş.
 >
 > **Sıra:**
-> 1. `/home/personal/ekokod-f9-phase/HANDOFF_NEXT_SESSION.md`'i baştan sona oku. Önce "START HERE",
->    "Docker hang" ve "F9 remaining" bölümlerini. Ledger:
->    `/home/personal/ekokod-f9-phase/.superpowers/sdd/2026-09-23-f9-solar-renewable-financial/progress.md`
->    (Task 16 satırları). Plan: `docs/superpowers/plans/2026-09-23-f9-solar-renewable-financial.md`.
-> 2. **F9'u bitir:**
+> 1. `/home/personal/ekokod-f14-phase/HANDOFF_NEXT_SESSION.md`'i baştan sona oku; önce "START HERE" ve
+>    "Docker hang". Docker ayağa kalktıysa PENDING kapıları sırayla koş (F9 → F14).
+> 2. **F14b'yi planla ve uygula** (F14a planı ve ledger'ı: `docs/superpowers/plans/2026-09-24-f14a-legacy-pipeline.md`,
+>    `.superpowers/sdd/2026-09-24-f14a-legacy-pipeline/progress.md`), sonra **F14c**, sonra **F15**.
+> 2b. (Eski sıra, yalnızca referans:) **F9'u bitir:**
 >    - Ortamı kontrol et ("Docker hang" bölümü).
 >    - Doğrulanmamış kapıları koş.
 >    - Task 16'yı tamamla: yeni e2e spec'leri, worker'lı tam e2e, yeni story'lerin a11y koşusu. Ardından `task-done` çalıştır.
@@ -89,7 +88,8 @@
 | `phase/f10-carbon` (`/home/personal/ekokod-f10-phase`) | `f95a67d` | F10 done (carbon backend + screens); Docker-bound gates PENDING |
 | `phase/f11-iso50001` (`/home/personal/ekokod-f11-phase`) | `32f7427` | F11 done (ISO 50001 backend + screens); Docker-bound gates PENDING |
 | `phase/f12-site` (`/home/personal/ekokod-f12-phase`) | `9c61937` | **F12 done** (F12a backend + F12b public site); API-backed public e2e PENDING (Docker) |
-| **`phase/f13-ml`** (`/home/personal/ekokod-f13-phase`) | this commit | **F13 done** (ML service, Go forecasting, Predict + AI screens); Docker-bound gates PENDING |
+| `phase/f13-ml` (`/home/personal/ekokod-f13-phase`) | `5efd328` | **F13 done** (ML service, Go forecasting, Predict + AI screens); Docker-bound gates PENDING |
+| **`phase/f14-migration`** (`/home/personal/ekokod-f14-phase`) | this commit | **F14a done** (legacy inventory/extract/transform); **F14b next** (load, comparison tables, remaining collections, artifacts) |
 
 - Plans and ledgers:
   - F10a `docs/superpowers/plans/2026-09-24-f10a-carbon-backend.md` (R300–R319);
@@ -119,7 +119,11 @@
   - Web: `/ekorm/forecast` (Predict), `/ekorm/ai` (AI Analysis, `forecast.run` only), `/ekorm/predict` redirects.
   - PENDING (Docker): `docker build ml` + in-image nodb; `go test -tags=integration ./internal/api/v1 -run 'Forecast|AnomalyCheck'`; `./internal/worker -run ForecastRun`; e2e `tests/e2e/predict.spec.ts`.
   - Known pre-existing minor: the Messages page trigger list shows 4 of 10 triggerable jobs.
-- **F14 (migration/cutover tooling) is next** — branch `phase/f14-migration` from `phase/f13-ml`.
+- F14 is split: **F14a** (done) `docs/superpowers/plans/2026-09-24-f14a-legacy-pipeline.md` (R400–R412, Q-J1…Q-J6); **F14b** load + `legacy_ids`/`legacy_bills`/`legacy_reports` migration + the remaining collections (tariffs, plants, alarms, carbon, ISO 50001, EPİAŞ, SMTP, logs, templates) + `migrate legacy artifacts`; **F14c** `ekokod recompute …`, `migrate legacy reconcile` (HTML/CSV, attributed reasons), `docs/runbook-migration.md`, `make migration-rehearsal`.
+  - `internal/migrate/legacy`: ids (UUIDv5), normalisation (dates/numbers/enums), rejection ledger with the input = accepted + rejected invariant, legacy crypto (aes-256-cbc, fallback key) + re-sealing under the credential AAD, read-only `Source` (Mongo adapter behind a write-refusing command monitor; `MemSource`; `ExtractSource`), deterministic extract + manifest, inventory, transform (integrations, companies + weekend/vacations/events/credentials, users with `legacy$` bcrypt, buildings + contacts, analyzers, meter readings via the ingestion mappers `osos.MapStoredRow`/`gridbox.MapStoredRow`, index drops → `consumption_anomalies`).
+  - CLI: `ekokod migrate legacy inventory [--uri --db | --from-extract DIR] [--artifacts a,b] [--json f]`, `extract --uri --db --out`, `transform --extract --out [--confirmations manual_multipliers.csv] [--now RFC3339]` (needs `EKOKOD_LEGACY_ENCRYPTION_KEY`, optional `EKOKOD_LEGACY_ENCRYPTION_KEY_FALLBACK`).
+  - Key rulings: legacy ARIL values were stored pre-multiplied; legacy OSOS never applied `meterMultiplier`, so OSOS × m>1 is **undetermined** → `manual_multipliers.csv`, `multiplier_confirmed=false` on the analyzer row (F14b load must refuse those readings until answered). Two-digit years are ambiguous; d/m/y reads day-first (legacy never wrote month-first). `ekokod migrate` stays the schema migrator; legacy lives under `migrate legacy`.
+  - BLOCKED here (not faked): no legacy dump/Mongo/Docker → the MongoSource integration test, a real inventory, and the **three rehearsals** of 09 §F14.
 
 ## Docker hang (read before any integration/e2e)
 - **What happened (at ~00:25):**
