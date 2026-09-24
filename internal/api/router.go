@@ -5,6 +5,7 @@ package api
 import (
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/api/middleware"
 	"github.com/MErenTalan/ekokod-rewrite/internal/buildinfo"
@@ -27,6 +28,7 @@ type Deps struct {
 func NewRouter(d Deps) http.Handler {
 	r := chi.NewRouter()
 
+	r.Use(middleware.SecurityHeaders(strings.HasPrefix(d.Cfg.HTTP.PublicURL, "https://")))
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recoverer(d.Log))
 	r.Use(middleware.Logger(d.Log))
