@@ -12,6 +12,7 @@ class Prediction:
     p10: list[float]
     p90: list[float]
     used_covariates: list[str] = field(default_factory=list)
+    version: str | None = None  # set when a trained artifact, not the model default, produced it
 
 
 class Forecaster(Protocol):

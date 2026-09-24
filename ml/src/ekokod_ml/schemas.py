@@ -110,3 +110,25 @@ class AnomalyResponse(BaseModel):
     method: str
     model_id: str
     model_version: str
+
+
+class TrainSeries(BaseModel):
+    series_id: str = Field(min_length=1, max_length=200)
+    history: list[Point] = Field(max_length=MAX_HISTORY)
+    covariates: Covariates = Field(default_factory=Covariates)
+
+
+class TrainRequest(BaseModel):
+    """R365: a pooled random forest over many series."""
+
+    model: Literal["random_forest"]
+    granularity: Granularity
+    series: list[TrainSeries] = Field(min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def _series(self) -> Self:
+        self._points = [_check_series(s.history, STEP[self.granularity]) for s in self.series]
+        return self
+
+    def points(self) -> list[list[Point]]:
+        return self._points

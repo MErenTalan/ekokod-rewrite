@@ -22,9 +22,6 @@ class RandomForest:
     id = "random_forest"
     version = "1.0.0"
 
-    def __init__(self, trees: int = 60):
-        self.trees = trees
-
     def available(self) -> bool:
         return True
 
@@ -32,10 +29,18 @@ class RandomForest:
         model = RandomForestRegressor(n_estimators=self.trees, min_samples_leaf=2, random_state=0, n_jobs=1)
         return model.fit(X, target)
 
-    def forecast(self, req: ForecastRequest, points: list[Point], model: RandomForestRegressor | None = None) -> Prediction:
+    def __init__(self, trees: int = 60):
+        self.trees = trees
+        self.pooled: dict[str, dict] = {}  # granularity → {model, version, trained_at, covariates}
+
+    def forecast(self, req: ForecastRequest, points: list[Point]) -> Prediction:
         ts, y = timeline(points, req.step)
         cov = Covariate(req.covariates)
         lags = LAGS[req.granularity]
+        art = self.pooled.get(req.granularity)
+        # Q-I5: the pooled artifact only serves requests with the covariate set it was trained on.
+        model = art["model"] if art and art["covariates"] == cov.used else None
+        version = art["version"] if model is not None else None
         if model is None:
             X, target = design(y, ts, cov, lags)
             if len(target) < 24:
@@ -53,4 +58,4 @@ class RandomForest:
             p10.append(float(np.quantile(per_tree, 0.1)))
             p90.append(float(np.quantile(per_tree, 0.9)))
             ext.append(m)
-        return Prediction(median=median, p10=p10, p90=p90, used_covariates=cov.used)
+        return Prediction(median=median, p10=p10, p90=p90, used_covariates=cov.used, version=version)

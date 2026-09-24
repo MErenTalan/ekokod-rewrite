@@ -13,6 +13,7 @@ class Settings:
     min_history_hourly: int = 336
     min_history_daily: int = 28
     chronos_url: str = ""
+    chronos_api_key: str = ""
     chronos_timeout: float = 30.0
 
     @classmethod
@@ -28,4 +29,5 @@ class Settings:
             disabled_models=disabled,
             min_history_hourly=int(os.environ.get("ML_MIN_HISTORY_HOURS", cls.min_history_hourly)),
             chronos_url=os.environ.get("ML_CHRONOS_URL", ""),
+            chronos_api_key=os.environ.get("ML_CHRONOS_API_KEY", ""),
         )
