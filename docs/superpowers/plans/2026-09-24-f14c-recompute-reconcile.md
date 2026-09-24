@@ -24,7 +24,7 @@
 | Q-K4 | `recompute forecasts` when the ML service is down. | The failure is collected and printed; exit code 1 only when every company failed | — |
 | Q-K5 | Reasons beyond 08 §8's list. | Four more, each a deliberate rule of the rewrite, never `unexplained`: `monomial_power_charge_dropped` (R125 / F14b note), `reactive_not_applicable` (02 §6.6: monomial, residential/lighting, generation in the period), `automated_carbon_recomputed` (legacy daily carbon used an emission rate of 1), `multiplier_unconfirmed` (Q-J13 withheld readings). The runbook lists all twelve | The PO sees four more reasons to accept |
 | Q-K6 | Which consumption figure is "legacy monthly consumption per analyzer"? | Legacy `consumptions` is discarded (08 §4); the only legacy figure left is the analyzer bill history's `totalActiveKWh`, compared with the recomputed analyzer bill's `active_import` for the same period key | — |
-| Q-K7 | Report location and format. | `--out reports/` → `reconciliation.html` (all companies, one section each, overall pass/fail on top) and `reconciliation.csv` (one row per difference); exit code 2 when any `unexplained` exists (cutover blocker, 08 §8) | — |
+| Q-K7 | Report location and format. | `--out reports/` → `reconciliation.html` (all companies, one section each, overall pass/fail on top) and `reconciliation.csv` (one row per difference) and `reconciliation.json`; the command fails (non-zero exit) when any `unexplained` exists (cutover blocker, 08 §8) | — |
 
 ## Rulings (R430–R444)
 

@@ -69,6 +69,11 @@ func transformWith(t *testing.T, src *legacy.MemSource, answers map[string]map[s
 	extract := t.TempDir()
 	_, err := legacy.Extract(context.Background(), src, extract)
 	require.NoError(t, err)
+	return transformFrom(t, extract, answers)
+}
+
+func transformFrom(t *testing.T, extract string, answers map[string]map[string]string) (string, legacy.TransformResult, *crypto.Cipher) {
+	t.Helper()
 	cipher, err := crypto.NewCipher(make([]byte, 32))
 	require.NoError(t, err)
 	out := t.TempDir()

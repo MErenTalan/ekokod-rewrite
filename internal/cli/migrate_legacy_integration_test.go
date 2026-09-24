@@ -53,4 +53,15 @@ func TestMigrateLegacyPipelineThroughTheCLI(t *testing.T) {
 	require.Equal(t, []int{1, 1}, []int{bills, files}, "twice through the pipeline, once in the database")
 	_, err = os.Stat(filepath.Join(dir, "load_report.json"))
 	require.NoError(t, err)
+
+	// Nothing recomputed yet: the legacy invoice has no counterpart, which blocks cutover.
+	reports := t.TempDir()
+	var out bytes.Buffer
+	err = cli.Execute(context.Background(), []string{"migrate", "legacy", "reconcile", "--dir", dir, "--extract", extract, "--out", reports}, &out)
+	require.ErrorContains(t, err, "cutover is blocked")
+	require.Contains(t, out.String(), "pass=false")
+	for _, f := range []string{"reconciliation.html", "reconciliation.csv", "reconciliation.json"} {
+		_, err := os.Stat(filepath.Join(reports, f))
+		require.NoError(t, err, f)
+	}
 }

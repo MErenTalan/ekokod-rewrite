@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -21,8 +23,8 @@ import (
 
 // newMigrateLegacyCmd is 08 §11's legacy toolkit (F14a Q-J1): inventory, extract, transform.
 func newMigrateLegacyCmd() *cobra.Command {
-	cmd := &cobra.Command{Use: "legacy", Short: "Move the legacy system's data in: inventory, extract, transform, artifacts, load (08-migration.md)"}
-	cmd.AddCommand(newLegacyInventoryCmd(), newLegacyExtractCmd(), newLegacyTransformCmd(), newLegacyArtifactsCmd(), newLegacyLoadCmd())
+	cmd := &cobra.Command{Use: "legacy", Short: "Move the legacy system's data in: inventory, extract, transform, artifacts, load, reconcile (08-migration.md)"}
+	cmd.AddCommand(newLegacyInventoryCmd(), newLegacyExtractCmd(), newLegacyTransformCmd(), newLegacyArtifactsCmd(), newLegacyLoadCmd(), newLegacyReconcileCmd())
 	return cmd
 }
 
@@ -246,6 +248,69 @@ func newLegacyLoadCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&dir, "dir", "", "a transform output directory")
+	return cmd
+}
+
+func newLegacyReconcileCmd() *cobra.Command {
+	var dir, extract, out string
+	cmd := &cobra.Command{
+		Use:   "reconcile",
+		Short: "Compare the migrated and recomputed data with the legacy figures: HTML + CSV with attributed reasons (08 §8)",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if dir == "" || extract == "" {
+				return errors.New("--dir and --extract are required")
+			}
+			cfg, err := config.FromEnv()
+			if err != nil {
+				return err
+			}
+			ctx := cmd.Context()
+			pool, err := postgres.NewPool(ctx, cfg.DB, newCommandLogger(cfg, os.Stderr))
+			if err != nil {
+				return err
+			}
+			defer pool.Close()
+			in, err := legacy.GatherReconcile(ctx, admin.NewReconcileRepository(pool), dir, extract, time.Now())
+			if err != nil {
+				return err
+			}
+			rep := legacy.Reconcile(in)
+			if err := os.MkdirAll(out, 0o750); err != nil {
+				return err
+			}
+			for name, render := range map[string]func(io.Writer, legacy.Report) error{
+				"reconciliation.html": legacy.RenderHTML, "reconciliation.csv": legacy.RenderCSV,
+				"reconciliation.json": func(w io.Writer, r legacy.Report) error {
+					enc := json.NewEncoder(w)
+					enc.SetIndent("", "  ")
+					return enc.Encode(r)
+				},
+			} {
+				f, err := os.Create(filepath.Join(out, name)) //nolint:gosec // the operator's report directory
+				if err != nil {
+					return err
+				}
+				if err := errors.Join(render(f, rep), f.Close()); err != nil {
+					return err
+				}
+			}
+			blocking := 0
+			for _, c := range rep.Companies {
+				blocking += c.Reasons[legacy.Unexplained]
+			}
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "reconciliation: pass=%t, %d companies, %d unexplained — %s\n", rep.Pass, len(rep.Companies),
+				blocking, filepath.Join(out, "reconciliation.html")); err != nil {
+				return err
+			}
+			if !rep.Pass {
+				return errors.New("reconciliation found unexplained differences: cutover is blocked (08 §8)")
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&dir, "dir", "", "the loaded transform directory")
+	cmd.Flags().StringVar(&extract, "extract", "", "the extract directory (manifest, carbon history)")
+	cmd.Flags().StringVar(&out, "out", "reports", "where reconciliation.{html,csv,json} are written")
 	return cmd
 }
 
