@@ -5,6 +5,11 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/hibiken/asynq"
+	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/admin"
+
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/metrics"
 
 	"github.com/spf13/cobra"
@@ -67,6 +72,18 @@ func newWorkerCmd() *cobra.Command {
 				return err
 			}
 			job.Register(mux, built.Handlers)
+			// F15b R461–R463: job outcomes, queue depth and integration health for the metrics listener.
+			mux.Use(metrics.JobMiddleware)
+			redisOpt, err := job.RedisOpt(cfg.Redis)
+			if err != nil {
+				return err
+			}
+			inspector := asynq.NewInspector(redisOpt)
+			defer func() { _ = inspector.Close() }()
+			prometheus.MustRegister(
+				metrics.QueueCollector{Inspector: inspector, Queues: []string{job.QueueCritical, job.QueueDefault, job.QueueLow}, Log: log},
+				metrics.IntegrationCollector{Runs: admin.NewOpsHealthRepository(pool), Log: log},
+			)
 
 			// asynq.Server.Run(handler) is Start(handler) + waitForSignals()
 			// + Shutdown(): it installs asynq's own SIGINT/SIGTERM/SIGTSTP
