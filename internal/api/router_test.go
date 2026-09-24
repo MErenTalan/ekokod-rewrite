@@ -10,11 +10,16 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/stretchr/testify/require"
+
 	"github.com/MErenTalan/ekokod-rewrite/internal/api"
+	v1 "github.com/MErenTalan/ekokod-rewrite/internal/api/v1"
+	"github.com/MErenTalan/ekokod-rewrite/internal/api/v1/mw"
 	"github.com/MErenTalan/ekokod-rewrite/internal/buildinfo"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/health"
-	"github.com/stretchr/testify/require"
 )
 
 func testConfig(t *testing.T) *config.Config {
@@ -89,15 +94,23 @@ func TestVersionEndpoint(t *testing.T) {
 	require.Contains(t, rec.Body.String(), "version")
 }
 
-func TestMetricsEndpointExposesHTTPMetrics(t *testing.T) {
+// F15b R460: the public router never serves /metrics; the internal listener does,
+// and the HTTP histogram is still recorded.
+func TestMetricsAreNotOnThePublicRouter(t *testing.T) {
 	router := newTestRouter(t)
-
 	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health/live", nil))
 
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", nil))
-	require.Equal(t, http.StatusOK, rec.Code)
-	require.Contains(t, rec.Body.String(), "ekokod_http_request_duration_seconds")
+	require.Equal(t, http.StatusNotFound, rec.Code)
+
+	families, err := prometheus.DefaultGatherer.Gather()
+	require.NoError(t, err)
+	var found bool
+	for _, f := range families {
+		found = found || f.GetName() == "ekokod_http_request_duration_seconds"
+	}
+	require.True(t, found, "the HTTP histogram is still recorded for the internal listener")
 }
 
 func TestRequestIDIsEchoedAndGenerated(t *testing.T) {
@@ -130,4 +143,42 @@ func TestCORSAllowsTheConfiguredOriginOnly(t *testing.T) {
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	require.Empty(t, rec.Header().Get("Access-Control-Allow-Origin"))
+}
+
+func TestAPIV1MountedWithErrorEnvelope(t *testing.T) {
+	router := api.NewRouter(api.Deps{
+		Cfg: testConfig(t), Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Build: buildinfo.Get(),
+		V1: v1.NewRouterForTable(v1.Table(), &v1.Handlers{}, identityMiddleware(), nil),
+	})
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/nope", nil))
+	require.Equal(t, http.StatusNotFound, rec.Code)
+	var body struct {
+		Error struct {
+			Code      string `json:"code"`
+			Message   string `json:"message"`
+			RequestID string `json:"request_id"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.Equal(t, "not_found", body.Error.Code)
+	require.NotEmpty(t, body.Error.RequestID)
+
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/v1/openapi.json", nil))
+	require.Equal(t, http.StatusMethodNotAllowed, rec.Code)
+
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/openapi.json", nil))
+	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func identityMiddleware() v1.Middleware {
+	id := func(next http.Handler) http.Handler { return next }
+	return v1.Middleware{
+		Authn: id, PrincipalLimit: id, Scope: id,
+		AuthLimit:   func(string, bool) func(http.Handler) http.Handler { return id },
+		Idempotency: func(string) func(http.Handler) http.Handler { return id },
+		Audit:       func(mw.AuditInfo) func(http.Handler) http.Handler { return id },
+	}
 }

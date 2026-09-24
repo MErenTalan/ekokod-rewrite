@@ -1,0 +1,79 @@
+{
+  "picker": {
+    "building": "Building",
+    "analyzer": "Analyzer",
+    "searchBuilding": "Search buildings",
+    "searchAnalyzer": "Search analyzers",
+    "noBuildings": "No buildings found",
+    "noAnalyzers": "No analyzers found",
+    "activeOnly": "Active only",
+    "chooseBuildingFirst": "Choose a building first"
+  },
+  "period": {
+    "granularity": "Granularity",
+    "hourly": "Hourly",
+    "daily": "Daily",
+    "monthly": "Monthly",
+    "yearly": "Yearly",
+    "range": "Period",
+    "apply": "Apply"
+  },
+  "metric": {
+    "noValue": "No value"
+  },
+  "reactive": {
+    "title": "Reactive energy status",
+    "inductive": "Inductive ratio",
+    "capacitive": "Capacitive ratio",
+    "withinLimit": "Within limit",
+    "overLimit": "Limit exceeded",
+    "noData": "No data",
+    "penaltyApplied": "Reactive penalty applied",
+    "penaltyNotApplied": "No reactive penalty",
+    "limit": "Limit {value}"
+  },
+  "invoice": {
+    "description": "Item",
+    "quantity": "Quantity",
+    "unitPrice": "Unit price",
+    "amount": "Amount",
+    "penalty": "Penalty"
+  },
+  "export": {
+    "menu": "Export",
+    "csv": "CSV",
+    "excel": "Excel",
+    "pdf": "PDF",
+    "email": "Send by e-mail",
+    "started": "{format} export started"
+  },
+  "job": {
+    "queued": "Queued",
+    "running": "Running",
+    "succeeded": "Completed",
+    "failed": "Failed",
+    "statusLine": "{label}: {status}",
+    "progress": "{label} progress",
+    "stillRunning": "The job is still running; you can leave this screen.",
+    "refreshQueued": "The pull has started; the values appear within a few minutes."
+  },
+  "quality": {
+    "estimated": "Estimated",
+    "incomplete": "Incomplete data",
+    "suspect": "Suspect",
+    "coverage": "Data coverage {value}"
+  },
+  "refresh": {
+    "hourly": "Refresh hourly values",
+    "energy": "Refresh energy values",
+    "chooseAnalyzer": "Choose an analyzer to refresh"
+  },
+  "bill": {
+    "status": {
+      "draft": "Draft",
+      "issued": "Issued",
+      "flagged": "Needs review",
+      "superseded": "Superseded"
+    }
+  }
+}

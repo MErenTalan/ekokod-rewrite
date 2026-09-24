@@ -1,0 +1,93 @@
+{
+  "nav": {
+    "label": "Main navigation",
+    "dashboard": "Dashboard",
+    "dataAnalysis": "Data Analysis",
+    "consumption": "Consumption",
+    "loadProfile": "Load Profile",
+    "forecast": "Consumption Forecast",
+    "solarPlants": "Solar Power Plants",
+    "financialAnalysis": "Financial Analysis",
+    "renewableEnergy": "Renewable Energy",
+    "water": "Water",
+    "gas": "Gas",
+    "evDrivers": "EV Drivers",
+    "billsAndTariffs": "Bills and Tariffs",
+    "bills": "Bills",
+    "tariffs": "Tariffs",
+    "alarms": "Alarms",
+    "manual": "Manual",
+    "messages": "Messages",
+    "ai": "AI",
+    "reports": "Reports",
+    "calendar": "Calendar",
+    "settings": "Settings",
+    "carbonFootprint": "Carbon Footprint",
+    "iso50001": "ISO 50001 Module",
+    "savingActions": "Saving Actions",
+    "contact": "Contact",
+    "aiAnalysis": "AI Analysis"
+  },
+  "notYetAvailable": "This section is not available yet",
+  "skipToContent": "Skip to content",
+  "home": "ekokod home",
+  "search": "Search",
+  "searchPlaceholder": "Search buildings, analyzers or reports",
+  "notificationsCount": "Notifications ({count} new)",
+  "language": "Language",
+  "languages": {
+    "tr": "Türkçe",
+    "en": "English"
+  },
+  "theme": {
+    "label": "Theme",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System",
+    "toggle": "Theme: {mode}"
+  },
+  "customizer": {
+    "title": "Display settings",
+    "open": "Open display settings",
+    "layout": "Layout Type",
+    "vertical": "Vertical",
+    "horizontal": "Horizontal",
+    "container": "Container Option",
+    "full": "Full",
+    "boxed": "Boxed",
+    "sidebarCollapsed": "Collapse sidebar",
+    "card": "Card Style",
+    "border": "Border",
+    "shadow": "Shadow",
+    "radius": "Border Radius",
+    "reset": "Reset to default"
+  },
+  "userMenu": {
+    "label": "User menu: {name}",
+    "profile": "Profile",
+    "displaySettings": "Display settings",
+    "logout": "Logout",
+    "logoutFailed": "Could not sign out. Please try again."
+  },
+  "filters": "Filters",
+  "filtersCount": "Filters ({count})",
+  "applyFilters": "Apply Filters",
+  "toggleSidebar": "Toggle menu",
+  "collapseSidebar": "Collapse or expand sidebar",
+  "roles": {
+    "admin": "Administrator",
+    "companyAdmin": "Company administrator",
+    "companyReadonlyAdmin": "Company read-only administrator",
+    "buildingAdmin": "Building administrator",
+    "buildingReadonlyAdmin": "Building read-only administrator",
+    "demo": "Demo user"
+  },
+  "companySwitcher": {
+    "label": "Company",
+    "placeholder": "Select a company",
+    "own": "My company ({name})",
+    "search": "Search companies",
+    "empty": "No company found"
+  },
+  "soon": "Soon"
+}

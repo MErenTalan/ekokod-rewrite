@@ -1,0 +1,474 @@
+{
+  "brand": "EkoKod",
+  "nav": {
+    "label": "Site menu",
+    "home": "Home",
+    "about": "About",
+    "references": "References",
+    "documents": "Documents",
+    "toolkit": "Software",
+    "pricing": "Pricing",
+    "blog": "Blog",
+    "contact": "Contact",
+    "calculator": "Bill calculator",
+    "requestDemo": "Request a demo",
+    "login": "Sign in",
+    "platform": "Go to platform",
+    "openMenu": "Open menu",
+    "menu": "Menu"
+  },
+  "announcement": {
+    "text": "New: estimate your electricity bill, power charge included, for free.",
+    "link": "Try the bill calculator"
+  },
+  "footer": {
+    "label": "Site footer",
+    "tagline": "Resource and carbon management software for energy, water and fuel use in buildings.",
+    "company": "Company",
+    "product": "Product",
+    "resources": "Resources",
+    "contactTitle": "Contact",
+    "copyright": "© {year} EkoKod. All rights reserved."
+  },
+  "contactInfo": {
+    "address": "Address",
+    "addressValue": "Konya Teknokent, Akademi Mah. Gürbulut Sk. No: 67, Selçuklu / Konya, Türkiye",
+    "phone": "Phone",
+    "phoneValue": "+90 506 315 41 98",
+    "email": "E-mail",
+    "emailValue": "info@ekokod.com",
+    "hours": "Opening hours",
+    "hoursValue": "Monday – Friday, 09:00 – 18:00",
+    "map": "Open in map",
+    "mapHint": "Opens OpenStreetMap in a new tab"
+  },
+  "meta": {
+    "siteName": "EkoKod",
+    "home": {
+      "title": "EkoKod — Building resource and carbon management",
+      "description": "Monitor energy, water and fuel use, verify your bills and calculate your carbon footprint with EKO-RM."
+    },
+    "about": {
+      "title": "About",
+      "description": "EkoKod's mission, vision, partners and sustainability journey."
+    },
+    "references": {
+      "title": "References",
+      "description": "EkoKod's work with public, academic and energy-sector organisations."
+    },
+    "documents": {
+      "title": "Documents",
+      "description": "EkoKod user guide, technical documents and training material."
+    },
+    "toolkit": {
+      "title": "Software",
+      "description": "Features of the EKO-RM resource management and EKO-CM carbon management software."
+    },
+    "pricing": {
+      "title": "Pricing",
+      "description": "EkoKod packages and feature comparison."
+    },
+    "requestDemo": {
+      "title": "Request a demo",
+      "description": "Request a demo to try EkoKod with your own buildings."
+    },
+    "contact": {
+      "title": "Contact",
+      "description": "Get in touch with EkoKod: address, phone, e-mail and contact form."
+    },
+    "blog": {
+      "title": "Blog",
+      "description": "Articles on electricity bills, energy efficiency and carbon management."
+    },
+    "calculator": {
+      "title": "Electricity bill calculator",
+      "description": "Estimate a bill from the national tariff schedule, including energy, distribution, power and overrun charges and VAT."
+    }
+  },
+  "home": {
+    "hero": {
+      "title": "Manage energy, water and fuel use in one place",
+      "intro": "EKO-RM prepares the roadmap to your sustainability goals. With EKO-RM you can:",
+      "points": {
+        "bills": "Recalculate your bills and catch incorrect ones.",
+        "consumption": "Monitor consumption and forecast future use with AI.",
+        "carbon": "Calculate your carbon footprint.",
+        "alarms": "Hear about abnormal consumption immediately through alarms.",
+        "loadProfile": "Build your load profile, find problems and save."
+      },
+      "primary": "Request a demo",
+      "secondary": "Calculate your bill"
+    },
+    "banner": {
+      "title": "A new era in building resource management",
+      "description": "Buildings account for about 40% of global carbon emissions and energy use. EkoKod makes that consumption measurable and manageable."
+    },
+    "strip": {
+      "text": "Get in touch for expert solutions in building resource management.",
+      "action": "Contact us now"
+    },
+    "features": {
+      "title": "What can you do with EKO-RM?",
+      "description": "From the smallest site to the most complex, EKO-RM helps buildings that use electricity, water and gas use them efficiently, and gives energy, plant and purchasing managers objective data for their decisions."
+    },
+    "carbon": {
+      "title": "What can you do with EKO-CM?",
+      "description": "EKO-CM is an integrated carbon management platform that helps organisations monitor and analyse their carbon emissions and reach their sustainability goals."
+    },
+    "references": {
+      "title": "Our references",
+      "all": "All references"
+    },
+    "documents": {
+      "title": "Documents",
+      "all": "All documents"
+    },
+    "news": {
+      "title": "News",
+      "watch": "Watch the presentation",
+      "opensNew": "(opens in a new tab)",
+      "items": {
+        "forum": {
+          "title": "Our General Manager, Assoc. Prof. Dr. Gül Nihal Güğül, spoke at the start-up session of the 11th Energy Efficiency Forum and Fair.",
+          "body": "The talk presented our work on building resource management and energy efficiency."
+        },
+        "stand": {
+          "title": "Our stand at the 11th Energy Efficiency Forum and Fair drew great interest.",
+          "body": "We discussed our ISO 50001, consumption and anomaly detection, carbon footprint and solar generation modules with public and private sector visitors."
+        },
+        "mayors": {
+          "title": "We were honoured to host mayors and their teams at our stand.",
+          "body": "We discussed how we can help municipalities reach their energy efficiency goals."
+        }
+      },
+      "photo": "{title} — photo {n}",
+      "date": "October 2025"
+    },
+    "toolkit": {
+      "title": "Our software",
+      "action": "Explore the features"
+    },
+    "leadership": {
+      "title": "Management",
+      "name": "Assoc. Prof. Dr. Gül Nihal Güğül",
+      "role": "General Manager"
+    },
+    "faq": {
+      "title": "Frequently asked questions",
+      "items": {
+        "data": {
+          "q": "Where does the consumption data come from?",
+          "a": "Meter data is pulled automatically every day from the distribution companies' automated meter reading systems (OSOS) and the supported integrations."
+        },
+        "bills": {
+          "q": "How does bill verification work?",
+          "a": "Every line of the bill is recalculated from your tariff and measured consumption, so you can compare energy, distribution, power, overrun and reactive charges with your real bill."
+        },
+        "carbon": {
+          "q": "Which standards does the carbon calculation follow?",
+          "a": "Results are reported by ISO 14064 category and GHG Protocol scope (Scope 1, 2 and 3)."
+        },
+        "install": {
+          "q": "Can we install it on our own servers?",
+          "a": "Yes. EkoKod runs in the cloud or on your own servers."
+        }
+      }
+    },
+    "pricing": {
+      "title": "Choose the package that fits",
+      "description": "Packages from a single building to multiple sites.",
+      "action": "Compare packages"
+    },
+    "demo": {
+      "title": "See EkoKod with your own building",
+      "description": "Fill in a short form and our team will get in touch.",
+      "action": "Request a demo"
+    },
+    "contact": {
+      "title": "Don't hesitate to get in touch",
+      "action": "Go to the contact page"
+    }
+  },
+  "features": {
+    "realTime": "Real-time monitoring of energy, water and fuel use",
+    "carbon": "Carbon footprint assessment",
+    "anomalies": "Anomaly detection and troubleshooting",
+    "predict": "AI forecasts of future consumption trends",
+    "penalty": "Warnings that help avoid reactive power penalties",
+    "bills": "Bill calculation for error checking",
+    "profiles": "Hourly, daily and seasonal load profiles"
+  },
+  "carbonFeatures": {
+    "scope": "Scope 1, 2 and 3 greenhouse gas emissions",
+    "iso": "Emission calculations for ISO 14064 categories 1–6",
+    "isoghg": "Reporting aligned with ISO 14064 and the GHG Protocol",
+    "emissionFactor": "Management of current emission factors",
+    "corporate": "Corporate carbon footprint reports",
+    "compare": "Period-over-period emission analysis"
+  },
+  "references": {
+    "title": "Our references",
+    "description": "Our work with public, academic and energy-sector organisations.",
+    "logoAlt": "{name} logo",
+    "items": {
+      "ministry": {
+        "name": "Ministry of Energy and Natural Resources",
+        "story": "Energy consumption analysis with EkoKod is under way in the ministry's buildings."
+      },
+      "hacettepe": {
+        "name": "Hacettepe University",
+        "story": "Preliminary work to measure resource use across the campus is under way; installation is planned for 2026."
+      },
+      "arti": {
+        "name": "Artı Enerji",
+        "story": "Electricity generation and consumption at the head office are monitored over OSOS, with reactive power control."
+      },
+      "yalovares": {
+        "name": "Yalovares",
+        "story": "Joint R&D with EkoKod continues to optimise the output of the Karacabey hybrid solar-wind plant."
+      }
+    }
+  },
+  "documents": {
+    "title": "Documents",
+    "description": "User guides, technical documents and training material for the EkoKod software.",
+    "request": "Request by contacting us",
+    "requestSubject": "Document request: {title}",
+    "groups": {
+      "general": "General",
+      "technical": "Technical documents",
+      "training": "Training material"
+    },
+    "items": {
+      "userGuide": {
+        "title": "EkoKod User Guide",
+        "description": "A step-by-step guide to every screen of the platform."
+      },
+      "articles": {
+        "title": "Articles",
+        "description": "Our articles on energy efficiency and bill components.",
+        "action": "Open the blog"
+      },
+      "needsForm": {
+        "title": "Needs Assessment Form",
+        "description": "The form we use to find the right package for your site."
+      },
+      "specification": {
+        "title": "Technical Specification",
+        "description": "The software's technical features and system requirements."
+      },
+      "api": {
+        "title": "API Documentation",
+        "description": "Reference for building your own applications on the EkoKod API."
+      },
+      "videos": {
+        "title": "Training Videos",
+        "description": "Step-by-step videos on using the software."
+      },
+      "quickStart": {
+        "title": "Quick Start Guide",
+        "description": "The basics for getting started with EkoKod quickly."
+      }
+    }
+  },
+  "toolkit": {
+    "title": "Software",
+    "description": "Sustainability goals are reached by controlling and managing resources.",
+    "rm": {
+      "title": "Resource Management Software (EKO-RM)",
+      "description": "Energy and water use is read automatically from meters, anomalies are detected and reactive power is kept under control."
+    },
+    "cm": {
+      "title": "Carbon Management Software (EKO-CM)",
+      "description": "Accurate calculation and management of carbon emissions is the basis of a sustainable future."
+    }
+  },
+  "about": {
+    "title": "About EkoKod",
+    "intro": "EKO-RM, built to manage energy, water and fuel use in buildings, provides a roadmap to sustainability goals.",
+    "mission": {
+      "title": "Our mission",
+      "text": "Buildings account for about 40% of global carbon emissions and energy use. Building resource management, to cut consumption and promote sustainability, is our mission."
+    },
+    "product": {
+      "title": "The EKO-RM software",
+      "text": "Built by our R&D team, which specialises in building resource management from AI forecasting models to building-integrated renewable energy systems."
+    },
+    "partners": {
+      "title": "Our partners",
+      "text": "We work with public, commercial and academic organisations to develop energy, water and fuel saving strategies for sustainable cities:",
+      "list": {
+        "energy": "Ministry of Energy and Natural Resources, Ankara",
+        "environment": "Ministry of Environment, Urbanisation and Climate Change",
+        "selcuk": "Selçuk University, Konya",
+        "arti": "Artı Enerji, Ankara"
+      }
+    },
+    "vision": {
+      "title": "Our vision",
+      "text": "To minimise energy, water and fuel use while keeping comfort, through effective building resource management."
+    },
+    "process": {
+      "title": "Our sustainability journey",
+      "steps": {
+        "measure": {
+          "title": "Measure",
+          "text": "Meter data is collected automatically every day."
+        },
+        "analyse": {
+          "title": "Analyse",
+          "text": "Consumption, load profiles and bills are examined line by line."
+        },
+        "act": {
+          "title": "Act",
+          "text": "Alarms and reports turn savings opportunities into action."
+        },
+        "report": {
+          "title": "Report",
+          "text": "Carbon footprint and ISO 50001 progress are documented."
+        }
+      }
+    },
+    "metrics": {
+      "title": "EkoKod in numbers",
+      "founded": "Founded",
+      "references": "Reference organisations",
+      "products": "Products: EKO-RM and EKO-CM"
+    }
+  },
+  "pricing": {
+    "title": "Pricing",
+    "description": "Every package is quoted to your needs.",
+    "price": "Get a quote",
+    "popular": "Most popular",
+    "includes": "Included",
+    "action": "Contact us",
+    "packages": {
+      "standard": {
+        "title": "Standard",
+        "description": "For small and medium-sized buildings."
+      },
+      "premium": {
+        "title": "Premium",
+        "description": "For managing several buildings."
+      },
+      "enterprise": {
+        "title": "Enterprise",
+        "description": "A tailored solution for large projects.",
+        "custom": "Contact us for pricing and customisation for your organisation."
+      }
+    },
+    "extras": {
+      "customReports": "Custom reporting",
+      "multiBuilding": "Multi-site management",
+      "analytics": "Advanced analytics",
+      "api": "API integration"
+    }
+  },
+  "forms": {
+    "name": "Full name",
+    "email": "E-mail",
+    "phone": "Phone",
+    "subject": "Subject",
+    "message": "Your message",
+    "company": "Company",
+    "role": "Your role",
+    "send": "Send",
+    "sending": "Sending…",
+    "sent": "Your message has been sent. We will get back to you shortly.",
+    "sendAnother": "Send another message",
+    "failed": "Your message could not be sent. Please try again later or write to us at {email}.",
+    "notConfigured": "The contact form is not available right now. Please write to us at {email}.",
+    "tooMany": "Too many attempts. Please try again in a little while.",
+    "contactTitle": "Write to us",
+    "demoTitle": "Demo request form",
+    "messageShort": "Write at least 10 characters.",
+    "errorSummary": "Fix the following before sending"
+  },
+  "demo": {
+    "title": "Request a demo",
+    "description": "EkoKod offers solutions that cut energy, water and fuel use and assess the carbon footprint of sustainable, cost-effective buildings. Let's build savings strategies specific to your building together."
+  },
+  "contact": {
+    "title": "Contact",
+    "description": "Reach us with questions, partnership proposals and quote requests."
+  },
+  "blog": {
+    "title": "Blog",
+    "description": "Our latest articles",
+    "filter": "Category",
+    "categories": {
+      "all": "All",
+      "electricity": "Electricity",
+      "naturalGas": "Natural gas"
+    },
+    "empty": "No articles in this category yet.",
+    "read": "Read the article",
+    "by": "By {author}",
+    "back": "All articles",
+    "turkishOnly": "This article is published in Turkish only.",
+    "contents": "Contents",
+    "published": "Published {date}"
+  },
+  "calculator": {
+    "title": "Electricity bill calculator",
+    "description": "Estimate the energy, distribution, power and overrun charges and VAT of your bill using the prices in the national tariff schedule.",
+    "group": "Subscriber group",
+    "groups": {
+      "residential": "Residential",
+      "commercial": "Commercial (public, private and other)",
+      "industrial": "Industrial",
+      "agricultural": "Agricultural irrigation",
+      "lighting": "Lighting"
+    },
+    "voltage": "Subscriber definition",
+    "voltages": {
+      "lv": "Low voltage (LV)",
+      "mv": "Medium voltage (MV)"
+    },
+    "term": "Term",
+    "terms": {
+      "monomial": "Single term",
+      "binomial": "Double term"
+    },
+    "binomialHint": "Double term exists only at medium voltage.",
+    "tariff": "Tariff",
+    "tariffs": {
+      "single": "Single time",
+      "multi": "Multi time (T1/T2/T3)"
+    },
+    "start": "Start date",
+    "end": "End date",
+    "total": "Total consumption (kWh)",
+    "t1": "T1 day (kWh)",
+    "t2": "T2 peak (kWh)",
+    "t3": "T3 night (kWh)",
+    "demand": "Measured demand (kW)",
+    "contract": "Contracted power (kW)",
+    "calculate": "Calculate",
+    "result": "Bill breakdown",
+    "resultEmpty": "Enter the details and press Calculate.",
+    "lines": {
+      "energy": "Energy charge",
+      "distribution": "Distribution charge",
+      "power": "Power charge",
+      "overuse": "Power overrun charge",
+      "vatBase": "VAT base",
+      "vat": "VAT ({rate}%)",
+      "total": "Total bill"
+    },
+    "days": "{days}-day period",
+    "tariffUsed": "Tariff used: effective {effective}, {group}",
+    "plusGroup": "The daily consumption threshold was exceeded, so the high-use price applies.",
+    "rulesTitle": "Calculation rules",
+    "rules": {
+      "bands": "A multi-time tariff needs T1, T2 and T3 together; if a total is also entered it must equal their sum. A single-time tariff uses the total, or the sum of the T values when only they are entered.",
+      "power": "The power charge is the monthly price × contracted power × days / 30. If measured demand exceeds the contracted power, the excess is added at the overrun price.",
+      "vat": "VAT is charged on energy, distribution, power and overrun together. Other items such as the municipal consumption tax are not included; the result is an estimate."
+    },
+    "basis": {
+      "total": "Energy was priced on the total consumption.",
+      "bands": "Energy was priced on T1, T2 and T3 at their own prices."
+    }
+  }
+}

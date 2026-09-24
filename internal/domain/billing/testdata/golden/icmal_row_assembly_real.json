@@ -1,0 +1,190 @@
+{
+  "description": "anonymised real icmal line 31 (OG binomial, power + overrun): matrah 820028.45, KDV 164005.69",
+  "input": {
+    "PeriodKey": "2026-01",
+    "Period": {
+      "From": "2026-01-01T00:00:00+03:00",
+      "To": "2026-01-31T00:00:00+03:00"
+    },
+    "Days": 30,
+    "Tariff": {
+      "ID": "00000000-0000-0000-0000-000000000000",
+      "CompanyID": "00000000-0000-0000-0000-000000000000",
+      "BuildingID": null,
+      "Name": null,
+      "EffectiveFrom": "2025-01-01T00:00:00Z",
+      "Currency": "TRY",
+      "EnergyType": "grid_energy",
+      "VoltageLevel": "lv",
+      "UserGroup": "commercial",
+      "PriceType": "single_time",
+      "Term": "binomial",
+      "SupplyCompany": "private",
+      "SingleTimePrice": "3.25351702581770511695",
+      "T1Price": null,
+      "T2Price": null,
+      "T3Price": null,
+      "OverusePrice": "3.5",
+      "OveruseThresholdKwhPerDay": null,
+      "DistributionCost": "1.26329299272747998868",
+      "ReactivePowerPrice": "1",
+      "GreenEnergyPrice": null,
+      "GreenEnergyDistributionCost": null,
+      "ContractedPowerKw": "300",
+      "PowerUnitPrice": "43.37003333333333333333",
+      "GenerationUsage": "none",
+      "GenerationPricePerKwh": null,
+      "VatRate": "20",
+      "UsePtfYekdem": false,
+      "KbkEnergy": null,
+      "KbkT1": null,
+      "KbkT2": null,
+      "KbkT3": null,
+      "KbkPowerPrice": null,
+      "KbkOverusePrice": null,
+      "KbkReactivePower": null,
+      "KbkDistributionCostTlPerKwh": null,
+      "UseManualYekdem": false,
+      "PowerPriceSource": "",
+      "ReactivePriceSource": "",
+      "DistributionPriceSource": "",
+      "CreatedBy": null,
+      "CreatedAt": "0001-01-01T00:00:00Z",
+      "UpdatedAt": "0001-01-01T00:00:00Z",
+      "DeletedAt": null
+    },
+    "Taxes": [
+      {
+        "ID": "00000000-0000-0000-0000-000000000000",
+        "TariffID": "00000000-0000-0000-0000-000000000000",
+        "Name": "BTV",
+        "Rate": "5",
+        "SortOrder": 0
+      }
+    ],
+    "ExtraCharges": null,
+    "Params": {
+      "EffectiveFrom": "2000-01-01T00:00:00Z",
+      "ReactivePenaltyBasis": "whole_quantity",
+      "ReactiveExemptBelowKw": "9",
+      "ReactiveExemptTerms": [
+        "monomial"
+      ],
+      "ReactiveExemptUserGroups": [
+        "residential",
+        "lighting"
+      ],
+      "ReactiveGenerationExemptKwh": "1",
+      "ReactiveBands": [
+        {
+          "MinKw": "9",
+          "MaxKw": "30",
+          "Inductive": "0.33",
+          "Capacitive": "0.2"
+        },
+        {
+          "MinKw": "30",
+          "MaxKw": null,
+          "Inductive": "0.2",
+          "Capacitive": "0.15"
+        }
+      ],
+      "TieringGroups": {
+        "commercial": "30",
+        "residential": "8"
+      },
+      "TieringMode": "split_at_threshold",
+      "TieringVoltageLevels": [
+        "lv"
+      ],
+      "TieringSupplyCompanies": [
+        "incumbent"
+      ],
+      "PTFMissingHourTolerance": "0.02",
+      "DemandOverrunMultiplier": "2",
+      "MoneyRoundingMode": "half_up",
+      "CreatedAt": "0001-01-01T00:00:00Z"
+    },
+    "Quantities": {
+      "ActiveImport": "169833.84",
+      "T1": null,
+      "T2": null,
+      "T3": null,
+      "ReactiveInductive": "2870.4",
+      "ReactiveCapacitive": "4504.32",
+      "ActiveExport": "0",
+      "ActiveExportKnownSum": "0",
+      "ActiveExportPartial": false,
+      "MaxDemandKw": "441.59996034128019269835",
+      "IndexStart": null,
+      "IndexEnd": null
+    },
+    "InstalledPowerKw": "50",
+    "Pricing": null
+  },
+  "expected": {
+    "lines": [
+      {
+        "code": "energy",
+        "quantity": "169833.84",
+        "unit_price": "3.25351702581770511695",
+        "rate_pct": null,
+        "amount": "552557.29"
+      },
+      {
+        "code": "distribution",
+        "quantity": "169833.84",
+        "unit_price": "1.26329299272747998868",
+        "rate_pct": null,
+        "amount": "214549.9"
+      },
+      {
+        "code": "power",
+        "quantity": "300",
+        "unit_price": "43.37003333333333333333",
+        "rate_pct": null,
+        "amount": "13011.01"
+      },
+      {
+        "code": "demand_overrun",
+        "quantity": "141.59996034128019269835",
+        "unit_price": "86.74006666666666666666",
+        "rate_pct": null,
+        "amount": "12282.39"
+      },
+      {
+        "code": "tax:BTV",
+        "quantity": null,
+        "unit_price": null,
+        "rate_pct": "5",
+        "amount": "27627.86"
+      },
+      {
+        "code": "vat",
+        "quantity": null,
+        "unit_price": null,
+        "rate_pct": "20",
+        "amount": "164005.69"
+      }
+    ],
+    "net_consumption": "169833.84",
+    "low_tier_kwh": "0",
+    "high_tier_kwh": "0",
+    "energy_cost": "552557.29",
+    "distribution_cost": "214549.9",
+    "power_cost": "13011.01",
+    "demand_overrun_cost": "12282.39",
+    "reactive_penalty": "0",
+    "extra_charges_cost": "0",
+    "other_taxes_cost": "27627.86",
+    "vat_base": "820028.45",
+    "vat_cost": "164005.69",
+    "generation_credit": "0",
+    "total_cost": "984034.14",
+    "flags": [],
+    "tiered_applied": false,
+    "reactive_applied": false,
+    "reactive_exempt": false,
+    "demand_data_available": true
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "items": {
+    "FX0001": [
+      {
+        "valueList": [
+          {
+            "meter_date": "01/08/2026 11:00:00",
+            "activeConsumption": "12,500",
+            "activeGeneration": "0,000"
+          },
+          {
+            "meter_date": "01/08/2026 12:00:00",
+            "activeConsumption": "13,000",
+            "activeGeneration": "0,000"
+          }
+        ]
+      }
+    ]
+  }
+}

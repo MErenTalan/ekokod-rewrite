@@ -1,0 +1,121 @@
+package energy_test
+
+import (
+	"testing"
+	"time"
+
+	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/require"
+
+	"github.com/MErenTalan/ekokod-rewrite/internal/domain/energy"
+)
+
+func TestDifferenceEmitsNothingWhenABoundaryIsMissing(t *testing.T) {
+	w := win(t0, time.Hour)
+
+	dEnd := energy.Difference(w, nil, readingAt(t0.Add(time.Hour), "100"))
+	require.False(t, dEnd.Emitted)
+	require.Nil(t, dEnd.Values, "M-1: !Emitted must leave Values nil, never an empty non-nil map")
+	require.Nil(t, dEnd.Suspect, "M-1: !Emitted must leave Suspect nil, never an empty non-nil map")
+
+	dStart := energy.Difference(w, readingAt(t0, "90"), nil)
+	require.False(t, dStart.Emitted)
+	require.Nil(t, dStart.Values)
+	require.Nil(t, dStart.Suspect)
+}
+
+func TestDifferenceEmitsNothingWhenBothBoundariesAreTheSameReading(t *testing.T) {
+	w := win(t0, time.Hour)
+
+	r := readingAt(t0, "100")
+	same := energy.Difference(w, r, r)
+	require.False(t, same.Emitted, "identical boundary readings must not become a zero row")
+	require.Nil(t, same.Values)
+	require.Nil(t, same.Suspect)
+
+	// Two DISTINCT *Reading values carrying the same TS and Kind (the shape
+	// produced when a converter selects "the reading at ts" separately for
+	// each boundary) must be treated identically to the one-pointer case
+	// above. A pointer-identity check (`start == end`) would let these two
+	// separately allocated Readings slip through as an emitted zero row,
+	// which §3.1 forbids.
+	start := &energy.Reading{TS: t0, Kind: energy.KindLoadProfile, Values: vals("100.0000", "10.0000")}
+	end := &energy.Reading{TS: t0, Kind: energy.KindLoadProfile, Values: vals("150.0000", "20.0000")}
+	distinct := energy.Difference(w, start, end)
+	require.False(t, distinct.Emitted, "distinct pointers with the same TS and Kind must still be treated as the same reading")
+	require.Nil(t, distinct.Values)
+	require.Nil(t, distinct.Suspect)
+}
+
+func TestDifferenceOnReversedBoundariesEmitsNothing(t *testing.T) {
+	// end.TS before start.TS is a caller bug (Difference's documented
+	// precondition is !end.TS.Before(start.TS)), not a meter event. A
+	// caller passing boundaries out of order must get "no row", never a
+	// negative-delta suspicion that would write a spurious anomaly
+	// downstream.
+	start := readingAt(t0.Add(time.Hour), "100.0000")
+	end := readingAt(t0, "50.0000")
+	d := energy.Difference(win(t0, time.Hour), start, end)
+	require.False(t, d.Emitted)
+	require.Nil(t, d.Values)
+	require.Nil(t, d.Suspect)
+}
+
+func TestDifferenceSubtractsPerRegisterAndKeepsNilNil(t *testing.T) {
+	w := win(t0, time.Hour)
+	start := &energy.Reading{TS: t0, Kind: energy.KindLoadProfile, Values: map[energy.Register]*decimal.Decimal{
+		// A 4-decimal-place fixture, so a delta.Round(3) mutation changes
+		// the asserted string ("12.2525" would become "12.253" or similar)
+		// instead of coincidentally matching.
+		energy.ActiveImport: dec("1000.1234"), energy.T1Import: dec("400.0000"),
+	}}
+	end := &energy.Reading{TS: t0.Add(time.Hour), Kind: energy.KindBilling, Values: map[energy.Register]*decimal.Decimal{
+		energy.ActiveImport: dec("1012.3759"), // T1Import absent at the end boundary
+		// T2Import is absent at the start boundary but carries a large
+		// value at the end. A mutation that treats a nil start register as
+		// zero would wrongly return the full end register value here
+		// instead of leaving it nil.
+		energy.T2Import: dec("5000.0000"),
+	}}
+	d := energy.Difference(w, start, end)
+	require.True(t, d.Emitted)
+
+	// Window and Source are asserted, and Source is distinguished from
+	// start.Kind by using a KindBilling end reading.
+	require.True(t, w.From.Equal(d.Window.From), "got %s", d.Window.From)
+	require.True(t, w.To.Equal(d.Window.To), "got %s", d.Window.To)
+	require.Equal(t, energy.KindBilling, d.Source, "Source is the end reading's kind")
+
+	requireValue(t, d, energy.ActiveImport, "12.2525")
+	require.Nil(t, d.Values[energy.T1Import], "an unreported register at the end is nil, never zero")
+	require.Nil(t, d.Values[energy.T2Import], "an unreported register at the start is nil, never the full end value")
+	require.Nil(t, d.Values[energy.ActiveExport], "a register absent on both sides is nil")
+	require.Len(t, d.Values, 12)
+	require.Empty(t, d.Suspect, "an unreported register is not suspect")
+}
+
+func TestDifferenceLeavesANegativeDeltaSuspectAndNeverReturnsTheEndValue(t *testing.T) {
+	start := readingAt(t0, "999000.0000")
+	end := readingAt(t0.Add(time.Hour), "12.5000")
+	d := energy.Difference(win(t0, time.Hour), start, end)
+	require.True(t, d.Emitted)
+	require.Nil(t, d.Values[energy.ActiveImport], "removed-behaviour 1: never the end register value")
+	require.Equal(t, energy.ReasonNegativeDelta, d.Suspect[energy.ActiveImport].Reason)
+	requireDelta(t, d.Suspect[energy.ActiveImport], "-998987.5")
+}
+
+// R92(1): amends the identical-boundary rule — a same-instant pair never
+// emits even when the two readings are different kinds (a zero-width
+// window measures nothing regardless of what produced each reading).
+func TestDifferenceEmitsNothingWhenBoundariesShareAnInstantOfDifferentKinds(t *testing.T) {
+	w := win(t0, time.Hour)
+	start := readingAt(t0, "1010")
+	end := &energy.Reading{
+		TS: t0, Kind: energy.KindReset,
+		Values: map[energy.Register]*decimal.Decimal{energy.ActiveImport: dec("5000")},
+	}
+	d := energy.Difference(w, start, end)
+	require.False(t, d.Emitted, "R92(1): a same-instant pair never emits, whatever the kinds")
+	require.Nil(t, d.Values)
+	require.Nil(t, d.Suspect)
+}

@@ -10,13 +10,17 @@ import (
 	"os"
 	"time"
 
+	"github.com/MErenTalan/ekokod-rewrite/internal/platform/metrics"
+
+	"github.com/spf13/cobra"
+
 	"github.com/MErenTalan/ekokod-rewrite/internal/api"
+	"github.com/MErenTalan/ekokod-rewrite/internal/apiwire"
 	"github.com/MErenTalan/ekokod-rewrite/internal/buildinfo"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/health"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 	ekoredis "github.com/MErenTalan/ekokod-rewrite/internal/store/redis"
-	"github.com/spf13/cobra"
 )
 
 // shutdownGrace bounds how long the api process waits for in-flight
@@ -50,6 +54,9 @@ func newAPICmd() *cobra.Command {
 				return err
 			}
 			defer pool.Close()
+			if err := metrics.Serve(ctx, cfg.Metrics.APIAddr, log); err != nil {
+				return fmt.Errorf("metrics listener: %w", err)
+			}
 
 			cache, err := ekoredis.New(ctx, cfg.Redis, log)
 			if err != nil {
@@ -57,7 +64,14 @@ func newAPICmd() *cobra.Command {
 			}
 			defer func() { _ = cache.Close() }()
 
+			surface, err := apiwire.Build(ctx, cfg, pool, log, apiwire.Options{})
+			if err != nil {
+				return err
+			}
+			defer surface.Close()
+
 			router := api.NewRouter(api.Deps{
+				V1:    surface.V1,
 				Cfg:   cfg,
 				Log:   log,
 				Build: buildinfo.Get(),

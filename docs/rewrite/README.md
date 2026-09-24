@@ -1,3 +1,7 @@
+> **Status (2026-09-24):** implemented. Phases F0–F15 are built in this repository. The documents below
+> are the specification the code was built from; later rulings amend them in `docs/superpowers/plans/`.
+> Start from the repository [README](../../README.md).
+
 # BCEM Energy — Full Rewrite Documentation Set
 
 This folder is the **complete, self-contained specification** for rebuilding the BCEM Energy

@@ -2,10 +2,13 @@ package postgres
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"embed"
+	"encoding/hex"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"log/slog"
 	"sync"
@@ -94,6 +97,34 @@ func MigrateDownAll(ctx context.Context, dsn string, log *slog.Logger) error {
 	return nil
 }
 
+// MigrateDownN rolls back exactly n applied migrations, most recent first —
+// `goose down` run n times, in one call. It exists for
+// TestF2IntervalColumnSurvivesCompressedChunk (task-5-brief.md step 1),
+// which must roll back 00013 then 00012 ONLY, proving the pair's own
+// add-column/drop-column round-trips, without also tearing down every
+// earlier migration's tables the way MigrateDownAll would (which would lose
+// the very row the test is trying to re-read). n <= 0 is a no-op.
+func MigrateDownN(ctx context.Context, dsn string, log *slog.Logger, n int) error {
+	db, err := provider(dsn)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = db.Close() }()
+
+	before, _ := goose.GetDBVersionContext(ctx, db)
+	for range n {
+		if err := goose.DownContext(ctx, db, migrationsDir); err != nil {
+			return scrubErr(dsn, "roll back one migration", err)
+		}
+	}
+	after, err := goose.GetDBVersionContext(ctx, db)
+	if err != nil {
+		return scrubErr(dsn, "read schema version", err)
+	}
+	log.Info("migrations rolled back", slog.Int64("from", before), slog.Int64("to", after), slog.Int("steps", n))
+	return nil
+}
+
 // MigrateStatus writes the migration status table to out.
 func MigrateStatus(ctx context.Context, dsn string, out io.Writer) error {
 	db, err := provider(dsn)
@@ -159,4 +190,53 @@ func highestEmbeddedVersion() (int64, error) {
 		}
 	}
 	return highest, nil
+}
+
+// MigrationsFingerprint returns a short, deterministic hex digest over every
+// embedded migration file's name and contents.
+//
+// It exists for testfixtures' shared isolated-database template (F4 Task
+// 0): that template's name folds this in, so a server shared across test
+// PROCESSES — where no in-memory sync.Once can protect against a template
+// another process (or an older branch's build, left running) already
+// built — never clones a template migrated with a different, stale
+// migration set. Change any migration file and the fingerprint changes, so
+// the template name changes, so a fresh template gets built rather than a
+// stale one silently reused.
+//
+// embed.FS.ReadDir returns entries already sorted by filename (documented
+// behaviour), so hashing in that order is deterministic across processes
+// without this function sorting again itself.
+func MigrationsFingerprint() (string, error) {
+	return fingerprintFS(migrationsFS, migrationsDir)
+}
+
+// fingerprintFS is MigrationsFingerprint's pure implementation, taking the
+// filesystem and directory as parameters so a unit test can hand it a
+// small in-memory fs.FS (fstest.MapFS) instead of needing to change the
+// real embedded migrations to prove the fingerprint reacts to content.
+func fingerprintFS(fsys fs.FS, dir string) (string, error) {
+	entries, err := fs.ReadDir(fsys, dir)
+	if err != nil {
+		return "", fmt.Errorf("read embedded migrations dir: %w", err)
+	}
+
+	h := sha256.New()
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		data, err := fs.ReadFile(fsys, dir+"/"+entry.Name())
+		if err != nil {
+			return "", fmt.Errorf("read embedded migration %s: %w", entry.Name(), err)
+		}
+		// A NUL separator between fields/entries: no migration filename or
+		// contents can contain one, so this can never let two different
+		// (name, content) sequences hash the same.
+		h.Write([]byte(entry.Name()))
+		h.Write([]byte{0})
+		h.Write(data)
+		h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil))[:16], nil
 }

@@ -1,0 +1,10 @@
+{
+  "kWh": "kilowatt-hour",
+  "MWh": "megawatt-hour",
+  "kW": "kilowatt",
+  "kVArh": "kilovar-hour",
+  "TRY": "Turkish lira",
+  "tCO2e": "tonnes of CO₂ equivalent",
+  "kgCO2e": "kilograms of CO₂ equivalent",
+  "percent": "percent"
+}

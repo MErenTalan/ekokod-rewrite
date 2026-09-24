@@ -1,0 +1,159 @@
+package energy_test
+
+import (
+	"testing"
+	"time"
+
+	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/require"
+
+	"github.com/MErenTalan/ekokod-rewrite/internal/domain/energy"
+)
+
+// t0 is an arbitrary, fixed instant every test in this package anchors its
+// windows and readings to.
+var t0 = time.Date(2025, 6, 1, 10, 0, 0, 0, time.UTC)
+
+// dec parses a decimal literal into a *decimal.Decimal, failing the test
+// binary at init-adjacent call time (via decimal.RequireFromString) if the
+// literal is malformed — every literal in this package's tests is a fixed
+// constant, so a parse failure here is a typo in the test, not a runtime
+// condition to handle gracefully.
+func dec(s string) *decimal.Decimal {
+	d := decimal.RequireFromString(s)
+	return &d
+}
+
+// readingAt builds a load-profile reading at ts with active_import set to
+// activeImport and every other register absent.
+func readingAt(ts time.Time, activeImport string) *energy.Reading {
+	return &energy.Reading{
+		TS:   ts,
+		Kind: energy.KindLoadProfile,
+		Values: map[energy.Register]*decimal.Decimal{
+			energy.ActiveImport: dec(activeImport),
+		},
+	}
+}
+
+// resetAt builds a meter-reset reading at ts (02 §3.2, KindReset) carrying
+// only active_import — a reset row is evidence of a physical register
+// reset, never a full multi-register reading, so callers must not expect
+// other registers to be populated.
+func resetAt(ts time.Time, value string) *energy.Reading {
+	return &energy.Reading{
+		TS:   ts,
+		Kind: energy.KindReset,
+		Values: map[energy.Register]*decimal.Decimal{
+			energy.ActiveImport: dec(value),
+		},
+	}
+}
+
+// demandAt builds a load-profile reading at ts carrying only MaxDemandKw —
+// max_demand is not a cumulative register (02 §3.5) and is never part of
+// Reading.Values.
+func demandAt(ts time.Time, kw string) energy.Reading {
+	return energy.Reading{
+		TS:          ts,
+		Kind:        energy.KindLoadProfile,
+		MaxDemandKw: dec(kw),
+	}
+}
+
+// demandAtKind builds a reading at ts of the given kind carrying only
+// MaxDemandKw, for tests that need a demand-only fixture of a kind other
+// than load_profile (demandAt's fixed kind) — used to exercise
+// MaxDemandKinds's allowlist against billing, current_index and reset rows.
+func demandAtKind(ts time.Time, kind energy.Kind, kw string) energy.Reading {
+	return energy.Reading{
+		TS:          ts,
+		Kind:        kind,
+		MaxDemandKw: dec(kw),
+	}
+}
+
+// win builds a half-open Window of length d starting at from.
+func win(from time.Time, d time.Duration) energy.Window {
+	return energy.Window{From: from, To: from.Add(d)}
+}
+
+// vals builds a Values map carrying exactly active_import and t1_import,
+// for tests that need more than one register without readingAt's
+// single-register shape.
+func vals(active, t1 string) map[energy.Register]*decimal.Decimal {
+	return map[energy.Register]*decimal.Decimal{
+		energy.ActiveImport: dec(active),
+		energy.T1Import:     dec(t1),
+	}
+}
+
+// requireDecimal fails the test cleanly if got is nil (rather than letting a
+// later got.String() panic with a nil pointer dereference), then compares
+// got's value against want by value.
+func requireDecimal(t *testing.T, got *decimal.Decimal, want string) {
+	t.Helper()
+	require.NotNil(t, got)
+	require.Equal(t, want, got.String())
+}
+
+// requireValue asserts that reg's derived value on d is non-nil and equals
+// want, then returns nothing further to dereference. Without this, a
+// mutation that wrongly makes a register suspect surfaces as a nil-pointer
+// panic that aborts the whole test binary — every later test in the binary
+// then runs (or fails) with no signal at all, rather than this one
+// assertion failing cleanly.
+func requireValue(t *testing.T, d energy.Derivation, reg energy.Register, want string) {
+	t.Helper()
+	v := d.Values[reg]
+	require.NotNil(t, v, "expected a derived value for %s, got nil (suspect: %+v)", reg, d.Suspect[reg])
+	require.Equal(t, want, v.String())
+}
+
+// requireDelta asserts that s.Delta is non-nil and equals want, the same
+// nil-safety requireValue gives Values entries.
+func requireDelta(t *testing.T, s energy.Suspicion, want string) {
+	t.Helper()
+	require.NotNil(t, s.Delta, "expected a non-nil Suspicion.Delta")
+	require.Equal(t, want, s.Delta.String())
+}
+
+// requireReadingValue asserts that r is non-nil and its value for reg is
+// non-nil and equals want, the same nil-safety requireValue gives a
+// Derivation's Values entries — for a *Reading returned from SelectBoundary.
+func requireReadingValue(t *testing.T, r *energy.Reading, reg energy.Register, want string, msgAndArgs ...interface{}) {
+	t.Helper()
+	require.NotNil(t, r, "expected a non-nil reading")
+	v := r.Value(reg)
+	require.NotNil(t, v, "expected a value for %s, got nil", reg)
+	require.Equal(t, want, v.String(), msgAndArgs...)
+}
+
+// istanbul loads the Europe/Istanbul location, failing the test immediately
+// if it cannot be resolved (it always can: internal/domain/energy blank-
+// imports time/tzdata precisely so this never depends on the host's system
+// tzdata). Every test in this package that needs the location uses this
+// helper instead of loading it inline.
+func istanbul(t *testing.T) *time.Location {
+	t.Helper()
+	loc, err := time.LoadLocation("Europe/Istanbul")
+	require.NoError(t, err)
+	return loc
+}
+
+// TestHelperResetAtAndDemandAtShapes pins resetAt and demandAt's shapes
+// (resetAt: reset kind carrying only active_import; demandAt: load_profile
+// kind carrying only MaxDemandKw), since neither is exercised elsewhere in
+// this package's own tests.
+func TestHelperResetAtAndDemandAtShapes(t *testing.T) {
+	r := resetAt(t0, "0.0000")
+	require.Equal(t, energy.KindReset, r.Kind)
+	require.Equal(t, "0", r.Value(energy.ActiveImport).String())
+	require.Nil(t, r.Value(energy.T1Import), "resetAt carries only active_import")
+
+	d := demandAt(t0, "7.5")
+	require.Equal(t, energy.KindLoadProfile, d.Kind)
+	require.NotNil(t, d.MaxDemandKw)
+	require.Equal(t, "7.5", d.MaxDemandKw.String())
+	require.Nil(t, d.Values, "demandAt carries no cumulative registers")
+}

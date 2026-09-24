@@ -80,7 +80,8 @@ configuration.** No secret has a default.
 | `BCEM_PASSWORD_PEPPER` | ✅ | | Server-side bcrypt pepper |
 | `BCEM_DEVICE_FINGERPRINT_SECRET` | ✅ | | HMAC key for device binding |
 | `BCEM_ACCESS_TOKEN_TTL` | | `15m` | |
-| `BCEM_REFRESH_TOKEN_TTL` | | `24h` | `720h` when "remember me" is used |
+| `BCEM_REFRESH_TOKEN_TTL` | | `24h` | Web session lifetime without "remember me" |
+| `BCEM_REFRESH_TOKEN_REMEMBER_TTL` | | `720h` | "Remember me" and mobile session lifetime; must be ≥ `REFRESH_TOKEN_TTL` (F6a R141) |
 | `BCEM_BCRYPT_COST` | | `12` | |
 | `BCEM_PASSWORD_HISTORY_SIZE` | | `5` | |
 | `BCEM_LEGACY_ENCRYPTION_KEY` | migration only | | The legacy `ENCRYPTION_SECRET_KEY`, used once during migration |
@@ -90,8 +91,11 @@ configuration.** No secret has a default.
 | Variable | Required | Default | Purpose |
 |----------|:--------:|---------|---------|
 | `BCEM_WORKER_CONCURRENCY` | | `10` | |
-| `BCEM_JOB_MAX_RETRIES` | | `5` | |
+| `BCEM_JOB_MAX_RETRIES` | | `5` | Must be zero or greater |
 | `BCEM_JOB_TIMEOUT` | | `30m` | Per-task ceiling |
+| `BCEM_INGEST_SANITY_MULTIPLE` | | `10` | Register-jump rejection multiple (R13); must be > 1 |
+| `BCEM_INGEST_FUTURE_TOLERANCE` | | `15m` | How far into the future a reading's timestamp may sit |
+| `BCEM_INGEST_INITIAL_LOOKBACK` | | `720h` | First-ever fetch lookback (30 days, R18) |
 | `BCEM_SCHEDULER_ENABLED` | | `true` | Set false on secondary instances |
 | `BCEM_SCHEDULE_INGESTION` | | `0 3 * * *` | |
 | `BCEM_SCHEDULE_EPIAS` | | `0 14 * * *` | |
@@ -99,6 +103,7 @@ configuration.** No secret has a default.
 | `BCEM_SCHEDULE_BILLING` | | `0 5 * * *` | |
 | `BCEM_SCHEDULE_FORECAST` | | `0 4 * * *` | |
 | `BCEM_SCHEDULE_CARBON` | | `30 4 * * *` | |
+| `BCEM_SCHEDULE_DEMO` | | `15 * * * *` | Extends the synthetic demo company's readings (F6a R186) |
 | `BCEM_SCHEDULE_REPORTS_MONTHLY` | | `0 6 2 * *` | |
 | `BCEM_SCHEDULE_REPORTS_YEARLY` | | `0 7 3 1 *` | |
 
@@ -116,6 +121,8 @@ configuration.** No secret has a default.
 |----------|:--------:|---------|---------|
 | `BCEM_EPIAS_USERNAME` | ✅ | | EPİAŞ transparency platform |
 | `BCEM_EPIAS_PASSWORD` | ✅ | | |
+| `BCEM_EPIAS_CAS_URL` | | `https://giris.epias.com.tr/cas/v1/tickets` | EPİAŞ CAS ticket endpoint; must be https (M3, F2 final review B) |
+| `BCEM_EPIAS_BASE_URL` | | `https://seffaflik.epias.com.tr/electricity-service` | EPİAŞ electricity-service base URL; must be https |
 | `BCEM_ML_URL` | | `http://ml:8000` | Python service |
 | `BCEM_ML_API_KEY` | ✅ | | Shared secret for the ML service |
 | `BCEM_ML_TIMEOUT` | | `60s` | |

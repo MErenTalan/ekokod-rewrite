@@ -27,26 +27,118 @@ linters:
   settings:
     depguard:
       rules:
+        # ALLOW-list, not deny: list-mode strict means every import of a
+        # file under internal/domain is refused UNLESS it matches an entry
+        # below. This mirrors internal/arch/arch_test.go's
+        # domainAllowedImports exactly (F1 final review pass B, I2) — CHANGE
+        # BOTH OR NEITHER. Before this, `deny` named 6 exact packages; the
+        # review's mutation probe added an internal/domain/model import of
+        # github.com/jackc/pgx/v5 and it passed both checks, because a
+        # denylist has no way to refuse a package nobody thought to name.
+        # depguard's list-mode=strict is what makes this rule stronger than
+        # the arch test alone: it catches an offending import at
+        # `golangci-lint run` speed, before a test binary even builds.
         domain-is-pure:
           files:
             - "**/internal/domain/**"
+            # F3 Task 1: internal/domain/energy is the tree's first package
+            # with its own tests, and a domain test file legitimately needs
+            # "testing" and testify — neither is production arithmetic code,
+            # and the equivalent Go-level guard (TestDomainHasNoIOImports's
+            # loadPackages, internal/arch/arch_test.go) already excludes
+            # test files by never passing packages.Config.Tests: true. This
+            # exclusion keeps the lint rule and the Go guard checking the
+            # same set of files.
+            - "!**/internal/domain/**/*_test.go"
+          list-mode: strict
+          allow:
+            # the domain layer's own tree — subpackages import each other.
+            - github.com/MErenTalan/ekokod-rewrite/internal/domain
+            # stdlib: computation and data-structure packages only, exact
+            # match (trailing $) so this can never widen into a whole
+            # stdlib subtree such as encoding/* or net/*.
+            - bytes$
+            - cmp$
+            - encoding/json$
+            - errors$
+            - fmt$
+            - maps$
+            - math$
+            - net/netip$
+            - slices$
+            - sort$
+            - strconv$
+            - strings$
+            - time$
+            - unicode$
+            - unicode/utf8$
+            # F3 Task 1: a blank import that embeds the IANA zone database
+            # and does no I/O of its own (see arch_test.go's
+            # domainAllowedImports comment on the same entry). Paired with
+            # that map — change both or neither.
+            - time/tzdata$
+            # third-party: exactly what the domain layer is built on.
+            - github.com/google/uuid
+            - github.com/shopspring/decimal
           deny:
-            - pkg: "net/http"
-              desc: "internal/domain performs no I/O"
-            - pkg: "database/sql"
-              desc: "internal/domain performs no I/O"
-            - pkg: "os"
-              desc: "internal/domain performs no I/O"
-            - pkg: "log/slog"
-              desc: "internal/domain does not log"
+            # Kept for the friendlier message on the two paths someone is
+            # likeliest to reach for by habit; list-mode strict already
+            # refuses these (and everything else not in allow) on its own.
             - pkg: "github.com/MErenTalan/ekokod-rewrite/internal/store"
-              desc: "internal/domain imports nothing from the project"
+              desc: "internal/domain imports nothing from the project outside internal/domain"
             - pkg: "github.com/MErenTalan/ekokod-rewrite/internal/api"
-              desc: "internal/domain imports nothing from the project"
+              desc: "internal/domain imports nothing from the project outside internal/domain"
+        # Money and energy are numeric/decimal end to end, never float64.
+        # This rule was written in F0 against internal/domain/billing and
+        # internal/domain/tariff before either existed. It now covers the two
+        # whole trees, recursively: every package under internal/domain and
+        # every package under internal/store, including packages not yet
+        # written, so no future package needs an edit here to be covered.
+        #
+        # Scope note: depguard matches IMPORTS, not declarations. It cannot
+        # see a `Total float64` struct field, and no configuration of it can.
+        # What it covers is the ARITHMETIC route into float money — math/big
+        # (big.Float, and big.Rat used as a stand-in for decimal).
+        #
+        # The field-level half is TestNoFloatFieldsInModelOrStore in
+        # internal/arch/arch_test.go. Its floatGuardPatterns are
+        # ./internal/domain/..., ./internal/store/..., ./internal/integration/...,
+        # ./internal/ingest/..., ./internal/marketdata/..., ./internal/credentials/...
+        # and ./internal/service/... — the same seven recursive trees as the
+        # globs below — and it fails on any struct field that is or contains
+        # float32/float64 through pointers, containers, aliases, defined
+        # types, generic type arguments, this module's structs and
+        # pgtype/database/sql value wrappers (pgtype.Float8, sql.NullFloat64).
+        # A second guard, TestIntegrationTreesDoNotParseFloats, covers the
+        # same five trees (the four F2 trees plus internal/service, added by
+        # F3 Task 1) for the two routes a float can enter without ever being
+        # a struct field: strconv.ParseFloat and a JSON decode into a float
+        # or an untyped interface.
+        # Change both or neither.
+        # internal/integration/fake/server.go (F2 task-4; integration commit
+        # ruling) is excluded by name, the same way
+        # internal/integration/fake/sanitise.go is named in arch_test.go's
+        # f2guardCallFloatSkip: it is the TLS test harness's self-signed
+        # certificate generator, and its one math/big use is
+        # crypto/rand.Int's own required big.Int argument type for a
+        # certificate serial number — never money, energy or a provider
+        # value, and nothing this rule exists to catch. No other file is,
+        # or should ever be, exempt; a future math/big use anywhere else
+        # under these trees still fails.
         no-float-money:
           files:
-            - "**/internal/domain/billing/**"
-            - "**/internal/domain/tariff/**"
+            - "**/internal/domain/**"
+            - "**/internal/store/**"
+            - "**/internal/integration/**"
+            - "!**/internal/integration/fake/server.go"
+            - "**/internal/ingest/**"
+            - "**/internal/marketdata/**"
+            - "**/internal/credentials/**"
+            # F3 Task 1 (R76): the new service layer computes and holds the
+            # same energy and money values internal/domain does, one layer
+            # up. Paired with arch_test.go's floatGuardPatterns — change
+            # both or neither.
+            - "**/internal/service/**"
           deny:
             - pkg: "math/big"
               desc: "use github.com/shopspring/decimal for monetary arithmetic"

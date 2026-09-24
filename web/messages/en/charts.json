@@ -1,0 +1,16 @@
+{
+  "showTable": "Show data table",
+  "hideTable": "Hide data table",
+  "downsampled": "Showing {shown} of {total} points",
+  "tooManySeries": "This chart shows at most 6 series; narrow the selection or use the table view.",
+  "noData": "No data",
+  "sparklineSummary": "First {first}, last {last}, lowest {min}, highest {max}",
+  "forecastBand": "Forecast range (p10–p90)",
+  "target": "Target",
+  "legend": "Legend",
+  "valueAt": "{x}: {value}",
+  "seriesWithUnit": "{label} ({unit})",
+  "value": "Value",
+  "bucket": "{from} – {to}",
+  "threshold": "Threshold"
+}

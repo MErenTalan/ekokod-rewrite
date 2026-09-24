@@ -1,0 +1,91 @@
+{
+  "title": "ISO 50001 Enerji Yönetim Sistemi",
+  "subtitle": "TS EN ISO 50001:2018 için rehberli uyum çalışma alanı.",
+  "noAccess": "Bu modüle erişiminiz yok",
+  "noAccessHint": "ISO 50001 çalışma alanı yetkili kullanıcılara gösterilir.",
+  "chooseBuilding": "Önce bir bina seçin",
+  "chooseBuildingHint": "ISO 50001 projesi her bina için ayrı yürütülür.",
+  "tabs": {
+    "summary": "Proje Ana Sayfa",
+    "checklist": "Dosya Yükleme Sayfası"
+  },
+  "footer": {
+    "standard": "Tüm maddeler TS EN ISO 50001:2018 standardına dayanmaktadır.",
+    "guidance": "Bu araç yalnızca rehberlik amaçlıdır."
+  },
+  "progress": {
+    "title": "Proje İlerlemesi",
+    "value": "Tamamlanan: {done} / {total} alt madde"
+  },
+  "gantt": {
+    "title": "Proje Zaman Çizelgesi",
+    "noData": "Gantt tablosu için yeterli tarih verisi bulunmuyor.",
+    "start": "Proje Başlangıcı",
+    "end": "Proje Bitişi",
+    "today": "Bugün",
+    "range": "{start} – {end}",
+    "label": "Madde zaman çizelgesi",
+    "status": {
+      "notStarted": "Başlanmadı",
+      "inProgress": "Devam Ediyor",
+      "completed": "Tamamlandı",
+      "expired": "Süresi Doldu"
+    }
+  },
+  "summary": {
+    "title": "Proje İlerleme Özeti",
+    "notes": "{count, plural, one {# not} other {# not}}",
+    "files": "{count, plural, one {# dosya} other {# dosya}}",
+    "noNotes": "Not eklenmedi.",
+    "noFiles": "Dosya yüklenmedi.",
+    "download": "ISO 50001 Klasörünü İndir",
+    "downloading": "İndiriliyor…",
+    "downloadError": "Klasör oluşturulurken bir hata oluştu.",
+    "updateCalendar": "Takvimi Güncelle",
+    "setDates": "Tarihleri Ayarla"
+  },
+  "calendar": {
+    "title": "Proje Tarihlerini Belirle",
+    "subtitle": "Her ana başlığın başlangıç ve bitiş tarihlerini seçin.",
+    "save": "Tarihleri Kaydet",
+    "saved": "Tarihler kaydedildi",
+    "errorAll": "Lütfen her başlık için başlangıç ve bitiş tarihlerini seçin.",
+    "errorStart": "Başlangıç tarihi bitiş tarihinden sonra olamaz."
+  },
+  "checklist": {
+    "subheadings": "Alt Başlıklar",
+    "template": "Örnek Şablon & Doküman",
+    "downloadTemplate": "{name} indir"
+  },
+  "notes": {
+    "title": "Notlar",
+    "noteTitle": "Başlık",
+    "body": "Not",
+    "add": "Notu Listeye Ekle",
+    "existing": "Eklenen Notlar",
+    "none": "Henüz not eklenmedi.",
+    "edit": "Düzenle",
+    "update": "Güncelle",
+    "cancel": "Vazgeç",
+    "delete": "Sil",
+    "deleteTitle": "Not silinsin mi?",
+    "deleteConfirm": "“{title}” notu silinecek. Bu işlem geri alınamaz.",
+    "untitled": "Başlıksız not",
+    "saved": "Not kaydedildi",
+    "deleted": "Not silindi",
+    "readOnly": "Not eklemeyi yetkili kullanıcılar yapabilir."
+  },
+  "files": {
+    "title": "Kanıt Dosyaları",
+    "upload": "Gerekli Dosyaları Yükle",
+    "hint": "PDF, Excel, Word, CSV, PNG veya JPEG; en fazla 30 MB.",
+    "none": "Henüz dosya eklenmedi.",
+    "download": "{name} indir",
+    "delete": "{name} sil",
+    "deleteTitle": "Dosya silinsin mi?",
+    "deleteConfirm": "“{name}” dosyasını silmek istediğine emin misin?",
+    "uploaded": "Dosya yüklendi",
+    "deleted": "Dosya silindi",
+    "label": "Yüklenen Dosyalar"
+  }
+}

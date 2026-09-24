@@ -1,0 +1,42 @@
+version: "2"
+sql:
+  - engine: postgresql
+    # sqlc parses the goose migrations directly — it ignores the TimescaleDB
+    # statements it does not understand (create_hypertable, the compression
+    # ALTER TABLE, add_compression_policy, add_continuous_aggregate_policy) and
+    # still builds a correct catalogue from the plain DDL around them. There is
+    # therefore no separate schema dump to keep in sync.
+    #
+    # timescale-shims.sql MUST come first: it declares the Timescale functions
+    # the continuous aggregates in 00005 are built on, so that sqlc can type
+    # their result columns. Without it sqlc guesses, and energy columns come out
+    # as int32. See the file's own header.
+    schema:
+      - internal/store/postgres/timescale-shims.sql
+      - internal/store/postgres/migrations
+    queries: internal/store/postgres/queries
+    gen:
+      go:
+        package: sqlcgen
+        out: internal/store/postgres/sqlcgen
+        sql_package: pgx/v5
+        emit_pointers_for_null_types: true
+        # Every primary and foreign key in the schema is a uuid, and
+        # store.Scope carries google/uuid values (CompanyID uuid.UUID,
+        # BuildingIDs []uuid.UUID). Without this override the generated layer
+        # speaks pgtype.UUID and every repository in F1 converts at every
+        # boundary, forever. pgx/v5 encodes and decodes google/uuid.UUID with
+        # no codec registration -- its underlying type is [16]byte, which
+        # pgx's UUID codec handles through its underlying-type wrapper -- and
+        # uuid_roundtrip_integration_test.go proves that against a real
+        # database, including that a NULL uuid arrives as nil and NOT as
+        # uuid.Nil (which store.Scope treats as an invalid id).
+        overrides:
+          - db_type: "uuid"
+            go_type: "github.com/google/uuid.UUID"
+          - db_type: "uuid"
+            nullable: true
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+              pointer: true

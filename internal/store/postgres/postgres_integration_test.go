@@ -5,43 +5,21 @@ package postgres_test
 import (
 	"context"
 	"errors"
-	"io"
-	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
+	"github.com/MErenTalan/ekokod-rewrite/internal/platform/secret"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
+	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
 	"github.com/stretchr/testify/require"
-	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 )
 
-// startPostgres boots TimescaleDB and returns its DSN.
-func startPostgres(t *testing.T) string {
-	t.Helper()
-	ctx := context.Background()
-
-	container, err := tcpostgres.Run(ctx, "timescale/timescaledb:2.30.0-pg16",
-		tcpostgres.WithDatabase("ekokod"),
-		tcpostgres.WithUsername("ekokod"),
-		tcpostgres.WithPassword("ekokod"),
-		tcpostgres.BasicWaitStrategies(),
-		tcpostgres.WithSQLDriver("pgx"),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = container.Terminate(context.Background()) })
-
-	dsn, err := container.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-	return dsn
-}
-
-func discardLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
-
 func TestMigrateUpDownUp(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	dsn := startPostgres(t)
-	log := discardLogger()
+	dsn := testfixtures.NewEmptyDB(t)
+	log := testfixtures.DiscardLogger()
 
 	require.NoError(t, postgres.MigrateUp(ctx, dsn, log))
 
@@ -62,12 +40,13 @@ func TestMigrateUpDownUp(t *testing.T) {
 }
 
 func TestTimescaleExtensionIsInstalled(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	dsn := startPostgres(t)
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
+	dsn := testfixtures.NewEmptyDB(t)
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
 
 	pool, err := postgres.NewPool(ctx, config.DB{URL: dsn, MaxConns: 4, MinConns: 1,
-		MaxConnLifetime: time.Hour, StatementTimeout: 10 * time.Second}, discardLogger())
+		MaxConnLifetime: time.Hour, StatementTimeout: 10 * time.Second}, testfixtures.DiscardLogger())
 	require.NoError(t, err)
 	t.Cleanup(pool.Close)
 
@@ -78,11 +57,12 @@ func TestTimescaleExtensionIsInstalled(t *testing.T) {
 }
 
 func TestPoolCheckReportsHealth(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	dsn := startPostgres(t)
+	dsn := testfixtures.NewEmptyDB(t)
 
 	pool, err := postgres.NewPool(ctx, config.DB{URL: dsn, MaxConns: 4, MinConns: 1,
-		MaxConnLifetime: time.Hour, StatementTimeout: 10 * time.Second}, discardLogger())
+		MaxConnLifetime: time.Hour, StatementTimeout: 10 * time.Second}, testfixtures.DiscardLogger())
 	require.NoError(t, err)
 
 	check := postgres.PoolCheck(pool)
@@ -94,9 +74,10 @@ func TestPoolCheckReportsHealth(t *testing.T) {
 }
 
 func TestMigrationsCheckReportsPendingThenCurrent(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	dsn := startPostgres(t)
-	log := discardLogger()
+	dsn := testfixtures.NewEmptyDB(t)
+	log := testfixtures.DiscardLogger()
 
 	pool, err := postgres.NewPool(ctx, config.DB{URL: dsn, MaxConns: 4, MinConns: 1,
 		MaxConnLifetime: time.Hour, StatementTimeout: 10 * time.Second}, log)
@@ -116,11 +97,12 @@ func TestMigrationsCheckReportsPendingThenCurrent(t *testing.T) {
 }
 
 func TestStatementTimeoutIsApplied(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	dsn := startPostgres(t)
+	dsn := testfixtures.NewEmptyDB(t)
 
 	pool, err := postgres.NewPool(ctx, config.DB{URL: dsn, MaxConns: 2, MinConns: 1,
-		MaxConnLifetime: time.Hour, StatementTimeout: 250 * time.Millisecond}, discardLogger())
+		MaxConnLifetime: time.Hour, StatementTimeout: 250 * time.Millisecond}, testfixtures.DiscardLogger())
 	require.NoError(t, err)
 	t.Cleanup(pool.Close)
 
@@ -136,9 +118,10 @@ func TestStatementTimeoutIsApplied(t *testing.T) {
 // database depends on, cascading through every hypertable built on
 // timescaledb.
 func TestDownMigrationLeavesExtensionsInstalled(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	dsn := startPostgres(t)
-	log := discardLogger()
+	dsn := testfixtures.NewEmptyDB(t)
+	log := testfixtures.DiscardLogger()
 
 	require.NoError(t, postgres.MigrateUp(ctx, dsn, log))
 	require.NoError(t, postgres.MigrateDownAll(ctx, dsn, log))
@@ -160,23 +143,67 @@ func TestDownMigrationLeavesExtensionsInstalled(t *testing.T) {
 // package that used to escape scrubbing. It matters more than the others:
 // MigrationsCheck is wired into readyHandler, which serialises the error text
 // into the unauthenticated /health/ready body that the web health page then
-// renders. scrubPoolErr flattens the driver error to redacted text rather
-// than wrapping it with %w, so an unwrappable error is the observable proof
-// that the value went through the scrubber.
+// renders.
+//
+// CHANGED in task 8a. This test used to assert errors.Unwrap(err) == nil,
+// treating an unwrappable error as "the observable proof that the value went
+// through the scrubber". That proxy was crude, but it was doing real work:
+// nothing else in the package produced an unwrappable error, so it was a
+// unique fingerprint of scrubPoolErr. Making scrubbed errors traversable
+// (see secret.Wrap) was correct, but it destroyed that fingerprint, and the
+// first replacement written for it did not restore one — every assertion
+// below is also satisfied by a naive fmt.Errorf("read schema version: %w").
+//
+// That gap mattered specifically here. The failure is induced with
+// pool.Close(), so the driver text is "closed pool", which never contained a
+// credential to begin with: the NotContains assertions below are VACUOUS on
+// this path and pass whether or not any redaction ran. They are kept because
+// they cost nothing and would catch a future change to how the error is
+// induced, but they are not what protects the readiness body.
+//
+// secret.IsScrubbed is the restored fingerprint, and it is a positive one: a
+// plain %w wrap cannot satisfy it. If health.go's scrubPoolErr call were
+// reverted to a bare wrap tomorrow, this test fails. The redaction itself —
+// mask present, credential absent, on a cause that really does carry the
+// credential — is proved without a container in
+// scrub_internal_test.go:TestScrubPoolErrRedactsTheCredentialOnTheReadinessPath,
+// because only a synthetic cause can make that assertion non-vacuous.
+//
+// What this test uniquely proves is the wiring: that the REAL MigrationsCheck
+// path, against a REAL database, returns a scrubbed, traversable error.
+// Unwrapping deliberately yields unredacted text; only the logging and HTTP
+// paths, which print err.Error(), are bound by the redaction.
 func TestMigrationsCheckErrorIsScrubbed(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	dsn := startPostgres(t)
+	dsn := testfixtures.NewEmptyDB(t)
 
 	pool, err := postgres.NewPool(ctx, config.DB{URL: dsn, MaxConns: 2, MinConns: 1,
-		MaxConnLifetime: time.Hour, StatementTimeout: 10 * time.Second}, discardLogger())
+		MaxConnLifetime: time.Hour, StatementTimeout: 10 * time.Second}, testfixtures.DiscardLogger())
 	require.NoError(t, err)
 
-	require.NoError(t, postgres.MigrateUp(ctx, dsn, discardLogger()))
+	require.NoError(t, postgres.MigrateUp(ctx, dsn, testfixtures.DiscardLogger()))
 	pool.Close() // every subsequent query fails outside the undefined-table path
 
 	err = postgres.MigrationsCheck(pool).Fn(ctx)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "read schema version")
-	require.Nil(t, errors.Unwrap(err), "the error must be flattened by scrubPoolErr, not wrapped with %%w")
+
+	// The load-bearing assertion: this error came out of the scrubber, not
+	// out of a bare fmt.Errorf("%w"). Nothing else in the package can
+	// satisfy it.
+	require.True(t, secret.IsScrubbed(err),
+		"the readiness path must return a scrubbed error: a plain %w wrap would put the driver text, credential and all, into the unauthenticated /health/ready body")
+
+	// Vacuous on this particular induced failure ("closed pool" carries no
+	// credential), kept only as a cheap tripwire if the inducement changes.
+	// The real redaction proof is the unit test named in the doc comment.
 	require.NotContains(t, err.Error(), "ekokod:ekokod", "no credential may reach the readiness body")
+	require.NotContains(t, err.Error(), "ekokod", "no credential fragment may reach the readiness body")
+
+	cause := errors.Unwrap(err)
+	require.Error(t, cause, "the driver error must stay reachable: errors.Is must work through a scrubbed error")
+	require.Contains(t, cause.Error(), "closed pool",
+		"the reachable cause must be the driver's own error, not a copy of the redacted wrapper")
+	require.ErrorIs(t, err, cause, "errors.Is must traverse the scrubbed wrapper")
 }

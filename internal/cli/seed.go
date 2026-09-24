@@ -1,23 +1,31 @@
 package cli
 
 import (
+	"time"
+
 	"fmt"
-	"sort"
-	"strings"
+	"os"
+
+	"github.com/MErenTalan/ekokod-rewrite/internal/auth"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
+	"github.com/MErenTalan/ekokod-rewrite/internal/seed"
+	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 	"github.com/spf13/cobra"
 )
 
-// seedDatasets grows in F1 (emission factors, GHG↔ISO mapping, integration
-// definitions, national tariff schedule, ISO 50001 clause texts). Each
-// loader must be idempotent: seed may be run more than once against the
-// same database.
-var seedDatasets = map[string]func(cmd *cobra.Command, cfg *config.Config) error{}
-
+// newSeedCmd loads the F1 reference-data catalogues — the platform emission
+// factor master catalogue, the integration provider catalogue, and the
+// national tariff schedule (see internal/seed) — through
+// store.AdminCatalogueRepository. seed.Load is idempotent BY CONVERGENCE, so
+// this command may be run any number of times against the same database: a
+// re-run repairs a hand-edited platform row back to the shipped value
+// instead of duplicating it or leaving the edit in place.
 func newSeedCmd() *cobra.Command {
-	var only string
-	var yes bool
+	var (
+		yes, verify bool
+		only        string
+	)
 	cmd := &cobra.Command{
 		Use:   "seed",
 		Short: "Load reference datasets idempotently",
@@ -29,9 +37,8 @@ func newSeedCmd() *cobra.Command {
 
 			// Print exactly what this is about to run against before doing
 			// anything else, and before ever opening a connection: seed
-			// writes to a database, must never silently run against the
-			// wrong one, and F0 has zero datasets to seed, so there is no
-			// reason to pay for a connection when there is nothing to load.
+			// writes to a database and must never silently run against the
+			// wrong one.
 			out := cmd.OutOrStdout()
 			if _, err := fmt.Fprintf(out, "target environment: %s\n", cfg.Env); err != nil {
 				return err
@@ -40,55 +47,122 @@ func newSeedCmd() *cobra.Command {
 				return err
 			}
 
-			if cfg.Env == config.EnvProduction && !yes {
+			// R317: one dataset for now; refused before any dial.
+			if only != "" && only != onlyEmissionFactors {
+				return fmt.Errorf("--only accepts %q, got %q", onlyEmissionFactors, only)
+			}
+			// --verify only reads, so it needs no --yes in production.
+			if cfg.Env == config.EnvProduction && !yes && !verify {
 				return fmt.Errorf("refusing to seed the production database without --yes")
 			}
 
-			if only != "" {
-				loader, ok := seedDatasets[only]
-				if !ok {
-					return fmt.Errorf("unknown dataset %q; available: %s", only, availableDatasets())
-				}
-				return loader(cmd, cfg)
-			}
-			if len(seedDatasets) == 0 {
-				_, err := fmt.Fprintln(out, "no reference datasets are defined yet")
+			log := newCommandLogger(cfg, os.Stderr)
+			ctx := cmd.Context()
+
+			pool, err := postgres.NewPool(ctx, cfg.DB, log)
+			if err != nil {
 				return err
 			}
-			// Iterate in sorted-name order, not map order (Go map
-			// iteration order is randomised on every run), so seed's
-			// output and load order are deterministic.
-			for _, name := range sortedNames() {
-				if _, err := fmt.Fprintf(out, "seeding %s\n", name); err != nil {
+			defer pool.Close()
+
+			if verify {
+				diff, err := seed.VerifyEmissionFactors(ctx, pool)
+				if err != nil {
+					return fmt.Errorf("seed verify: %w", err)
+				}
+				if _, err := fmt.Fprintln(out, diff.String()); err != nil {
 					return err
 				}
-				if err := seedDatasets[name](cmd, cfg); err != nil {
-					return fmt.Errorf("seed %s: %w", name, err)
+				if !diff.OK() {
+					return fmt.Errorf("emission factor catalogue does not match the shipped one")
+				}
+				return nil
+			}
+			if only == onlyEmissionFactors {
+				factors, conversions, err := seed.LoadEmissionFactors(ctx, pool, log)
+				if err != nil {
+					return fmt.Errorf("seed: %w", err)
+				}
+				_, err = fmt.Fprintf(out, "emission factors: %d rows (%d conversions)\n", factors, conversions)
+				return err
+			}
+
+			result, err := seed.Load(ctx, pool, log)
+			if err != nil {
+				return fmt.Errorf("seed: %w", err)
+			}
+
+			if _, err := fmt.Fprintf(out, "emission factors: %d rows (%d conversions)\n",
+				result.EmissionFactors, result.EmissionFactorConversions); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(out, "integration definitions: %d rows\n",
+				result.IntegrationDefinitions); err != nil {
+				return err
+			}
+			if result.NationalTariffSchedule == 0 {
+				if _, err := fmt.Fprintln(out, "national tariff schedule: 0 rows (source data not in repository)"); err != nil {
+					return err
+				}
+			} else {
+				if _, err := fmt.Fprintf(out, "national tariff schedule: %d rows\n",
+					result.NationalTariffSchedule); err != nil {
+					return err
 				}
 			}
+
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&only, "only", "", "seed a single dataset by name")
 	cmd.Flags().BoolVar(&yes, "yes", false, "confirm seeding the production database")
+	cmd.Flags().StringVar(&only, "only", "", `load one dataset only ("emission-factors")`)
+	cmd.Flags().BoolVar(&verify, "verify", false, "compare the platform emission factors with the shipped catalogue; writes nothing")
+	cmd.AddCommand(newSeedE2ECmd(), newSeedDemoCmd())
 	return cmd
 }
 
-func availableDatasets() string {
-	names := sortedNames()
-	if len(names) == 0 {
-		return "(none)"
-	}
-	return strings.Join(names, ", ")
-}
+const onlyEmissionFactors = "emission-factors"
 
-func sortedNames() []string {
-	names := make([]string, 0, len(seedDatasets))
-	for name := range seedDatasets {
-		names = append(names, name)
+// e2ePasswordEnv is the password every e2e fixture user gets (R183).
+const e2ePasswordEnv = "EKOKOD_E2E_PASSWORD"
+
+func newSeedE2ECmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "e2e",
+		Short: "Create the deterministic e2e/test tenants and users (never in production)",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			cfg, err := config.FromEnv()
+			if err != nil {
+				return err
+			}
+			if cfg.Env == config.EnvProduction {
+				return fmt.Errorf("refusing to create e2e fixtures in production")
+			}
+			password := os.Getenv(e2ePasswordEnv)
+			if password == "" {
+				return fmt.Errorf("%s is required", e2ePasswordEnv)
+			}
+			ctx := cmd.Context()
+			pool, err := postgres.NewPool(ctx, cfg.DB, newCommandLogger(cfg, os.Stderr))
+			if err != nil {
+				return err
+			}
+			defer pool.Close()
+			now := time.Now()
+			f, err := seed.E2EFixtures(ctx, pool, auth.Hasher{Pepper: cfg.Security.PasswordPepper, Cost: cfg.Security.BcryptCost}, password, now)
+			if err != nil {
+				return fmt.Errorf("seed e2e: %w", err)
+			}
+			// R194: the screens the e2e suite drives need real readings and a bill.
+			readings, err := seed.E2EData(ctx, pool, f, now)
+			if err != nil {
+				return fmt.Errorf("seed e2e data: %w", err)
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "e2e fixtures ready: company A %s, company B %s, %d users, %d readings\n",
+				f.CompanyA, f.CompanyB, len(f.Users), readings)
+			return err
+		},
 	}
-	sort.Strings(names)
-	return names
 }
 
 // dbURLDisplay returns the already-masked EKOKOD_DB_URL row from
@@ -136,4 +210,34 @@ func dbURLDisplay(cfg *config.Config) string {
 		}
 	}
 	return "(unknown)"
+}
+
+// demoPasswordEnv is the demo user's password, needed only when the demo
+// company is created (R138).
+const demoPasswordEnv = "EKOKOD_DEMO_PASSWORD"
+
+func newSeedDemoCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "demo",
+		Short: "Create the synthetic demo company or extend its readings to now",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			cfg, err := config.FromEnv()
+			if err != nil {
+				return err
+			}
+			ctx := cmd.Context()
+			pool, err := postgres.NewPool(ctx, cfg.DB, newCommandLogger(cfg, os.Stderr))
+			if err != nil {
+				return err
+			}
+			defer pool.Close()
+			res, err := seed.Demo(ctx, pool, auth.Hasher{Pepper: cfg.Security.PasswordPepper, Cost: cfg.Security.BcryptCost},
+				os.Getenv(demoPasswordEnv), time.Now())
+			if err != nil {
+				return fmt.Errorf("seed demo: %w", err)
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "demo company ready (created=%t, readings added=%d)\n", res.Created, res.Readings)
+			return err
+		},
+	}
 }

@@ -4,34 +4,21 @@ package job_test
 
 import (
 	"context"
-	"io"
-	"log/slog"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/MErenTalan/ekokod-rewrite/internal/job"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
+	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
 	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/require"
-	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
 )
 
-func startRedis(t *testing.T) config.Redis {
-	t.Helper()
-	ctx := context.Background()
-
-	container, err := tcredis.Run(ctx, "redis:7.4.11-alpine")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = container.Terminate(context.Background()) })
-
-	uri, err := container.ConnectionString(ctx)
-	require.NoError(t, err)
-	return config.Redis{URL: uri, CacheDB: 0, QueueDB: 1}
-}
-
 func TestNoopTaskRoundTrip(t *testing.T) {
-	cfg := startRedis(t)
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	cfg := testfixtures.RedisConfig(t)
+	log := testfixtures.DiscardLogger()
 
 	server, mux, err := job.NewServer(cfg, config.Worker{Concurrency: 2, MaxRetries: 1, Timeout: time.Minute}, log, nil)
 	require.NoError(t, err)
@@ -68,8 +55,36 @@ func TestNoopTaskRoundTrip(t *testing.T) {
 }
 
 func TestQueueUsesTheConfiguredDatabase(t *testing.T) {
-	cfg := startRedis(t)
+	cfg := testfixtures.RedisConfig(t)
 	opt, err := job.RedisOpt(cfg)
 	require.NoError(t, err)
 	require.Equal(t, cfg.QueueDB, opt.DB, "the queue must not share the cache database")
+}
+
+// R192: /jobs/{id} can only answer for a finished task while asynq still keeps
+// it, so the three jobs a screen starts must carry a retention window.
+func TestWatchableTasksAreRetained(t *testing.T) {
+	cfg := testfixtures.RedisConfig(t)
+	client, err := job.NewClient(cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client.Close() })
+
+	companyID, credentialID, analyzerID := uuid.New(), uuid.New(), uuid.New()
+	refresh, err := job.NewRefreshAnalyzerTask(job.RefreshAnalyzerPayload{
+		CompanyID: companyID, CredentialID: credentialID, AnalyzerID: analyzerID, Mode: job.RefreshModeHourly,
+	}, job.TaskOptions{MaxRetry: 1})
+	require.NoError(t, err)
+	sync, err := job.NewSyncAnalyzersTask(job.SyncAnalyzersPayload{CompanyID: companyID, CredentialID: credentialID}, job.TaskOptions{MaxRetry: 1})
+	require.NoError(t, err)
+	backfill, err := job.NewBackfillTask(job.BackfillPayload{
+		CompanyID: companyID, CredentialID: credentialID,
+		From: time.Now().Add(-48 * time.Hour), To: time.Now(),
+	}, job.TaskOptions{MaxRetry: 1})
+	require.NoError(t, err)
+
+	for _, task := range []*asynq.Task{refresh, sync, backfill} {
+		info, eerr := client.Enqueue(context.Background(), task)
+		require.NoError(t, eerr, task.Type())
+		require.Equal(t, time.Hour, info.Retention, "%s must be retained for /jobs/{id}", task.Type())
+	}
 }

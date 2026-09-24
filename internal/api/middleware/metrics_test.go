@@ -6,9 +6,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/MErenTalan/ekokod-rewrite/internal/api/middleware"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/require"
+
+	"github.com/MErenTalan/ekokod-rewrite/internal/api/middleware"
 )
 
 // TestMetricsRecordsUnmatchedRoutesUnderAConstantLabel guards against
@@ -28,7 +31,7 @@ func TestMetricsRecordsUnmatchedRoutesUnderAConstantLabel(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, rec.Code)
 
 	scrape := httptest.NewRecorder()
-	middleware.MetricsHandler().ServeHTTP(scrape, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", nil))
+	promhttp.Handler().ServeHTTP(scrape, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", nil))
 	body := scrape.Body.String()
 
 	require.Contains(t, body, `route="unmatched"`,

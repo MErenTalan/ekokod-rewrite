@@ -1,0 +1,13 @@
+{
+  "tilesUnavailable": "Map tiles could not be loaded; locations are shown as a list.",
+  "showList": "Show location list",
+  "hideList": "Hide location list",
+  "active": "Active",
+  "passive": "Passive",
+  "coordinates": "Coordinates",
+  "name": "Name",
+  "status": "Status",
+  "select": "Select",
+  "selectMarker": "Select {name}",
+  "markerLabel": "{name} — {status}"
+}

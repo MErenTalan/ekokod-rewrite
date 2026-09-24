@@ -4,6 +4,22 @@ on:
   push:
     branches: [main]
   pull_request:
+  # F1 final review pass B, I5: the Makefile's test-perf comment and the F1
+  # plan both claimed "CI runs this on a schedule, not per push" while no
+  # schedule trigger existed anywhere in this file — the 1M-row chunk-layout
+  # and EXPLAIN acceptance test (internal/store/postgres,
+  # TestOneMillionReadingsChunkLayout, gated by EKOKOD_PERF=1) was exercised
+  # only when someone remembered to run `make test-perf` locally. These two
+  # triggers make the claim true: schedule for the unattended nightly run,
+  # workflow_dispatch so it can also be run on demand from a specific commit
+  # (e.g. to bisect a regression) without waiting for the next scheduled
+  # tick. The push/pull_request jobs below are UNCHANGED: they still run on
+  # every push and pull_request exactly as before, and (harmlessly) also on
+  # a scheduled/manual run — only the new perf job below is restricted, via
+  # its own `if:`, to the schedule/workflow_dispatch triggers.
+  schedule:
+    - cron: "17 3 * * *" # daily, 03:17 UTC — an off-peak, non-round minute
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -23,6 +39,13 @@ jobs:
       - name: shellcheck
         run: shellcheck scripts/*.sh
 
+      # I6: shellcheck above parses script CONTENTS; it has never looked at
+      # file MODES, which is how scripts/gen-env-docker.sh and
+      # scripts/offline-bundle.sh were committed non-executable (100644)
+      # without CI noticing.
+      - name: Script file modes
+        run: make check-script-modes
+
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -40,13 +63,26 @@ jobs:
       # golangci-lint-action's v6 major only supports golangci-lint v1.x;
       # v2 support was only added in v7 ("The GitHub Action v7 supports
       # golangci-lint v2 only"). Rather than track a second, action-side
-      # version pin, install the same pinned binary the Makefile uses so
+      # version pin, install the same pinned binaries the Makefile uses so
       # CI and local `make lint` are provably identical.
-      - name: Install pinned lint/vuln tools
+      - name: Install pinned developer tools
         run: make tools
 
       - name: golangci-lint
         run: golangci-lint run
+
+      # sqlcgen/ is committed so a fresh clone builds without sqlc installed,
+      # which means it can go stale against the migrations. `make tools`
+      # installs the same pinned sqlc the Makefile's generate target uses, so
+      # this regenerates with exactly the local toolchain and fails on a diff.
+      #
+      # It runs through the Makefile so that CI and `make ci` are provably the
+      # same check. See the note on check-generate for why it is a porcelain
+      # status check rather than `git diff --exit-code`: diff is blind to a new
+      # generated file that was never committed, which is exactly what Tasks
+      # 9-11 will each produce.
+      - name: sqlc is current
+        run: make check-generate
 
       - name: Import-boundary check
         run: go test ./internal/arch/... -v
@@ -66,6 +102,13 @@ jobs:
   integration:
     name: Integration tests
     runs-on: ubuntu-latest
+    # M6 (final review B): pins testcontainers-go's own readiness probes to
+    # loopback (see Makefile's test-integration target for the full
+    # rationale) — a GitHub-hosted runner's Docker daemon is a single-tenant
+    # VM, so this env is a defensive match with the Makefile target rather
+    # than a fix for an observed CI flake.
+    env:
+      TESTCONTAINERS_HOST_OVERRIDE: 127.0.0.1
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -74,11 +117,35 @@ jobs:
           cache: true
 
       - name: Integration tests (testcontainers)
-        run: go test ./... -tags=integration -race -count=1 -timeout 20m
+        run: go test ./... -tags=integration -race -count=1 -timeout 20m -parallel 8
+
+  perf:
+    name: Performance / acceptance suite (scheduled)
+    runs-on: ubuntu-latest
+    # Only the schedule and manual triggers run this job: it is the slow
+    # (~85s) 1,000,000-row acceptance test, deliberately kept off the
+    # per-push and per-PR critical path (I5's own point is that it still
+    # runs SOMEWHERE, unattended, not that it should gate every push).
+    if: github.event_name != 'push' && github.event_name != 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      # make test-perf sets EKOKOD_PERF=1 itself (see the Makefile); this
+      # step's only job is to invoke exactly the same target a developer
+      # runs locally, so CI and `make test-perf` are provably the same
+      # check, same as `make check-generate` and `golangci-lint run` above.
+      - name: Performance / acceptance suite
+        run: make test-perf
 
   web:
     name: Frontend
     runs-on: ubuntu-latest
+    # The full Storybook a11y sweep (every story × theme × locale) needs more than the default budget.
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: web
@@ -96,7 +163,87 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
+      - run: pnpm check:api
       - run: pnpm check:i18n-parity
+      - run: pnpm check:contrast
       - run: pnpm test
       - run: pnpm build
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm storybook:build
+        env:
+          NODE_OPTIONS: --max-old-space-size=3072
+      - run: pnpm test:a11y
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: web/playwright-report
       - run: pnpm audit --audit-level=high
+
+  e2e:
+    name: End-to-end (real API)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # R171: scripts/e2e-api.sh creates a fresh database in this Postgres and uses this Redis,
+    # at the same ports the local test containers use (make test-db-up / test-redis-up).
+    services:
+      postgres:
+        image: timescale/timescaledb:2.30.0-pg16
+        env:
+          POSTGRES_DB: ekokod
+          POSTGRES_USER: ekokod
+          POSTGRES_PASSWORD: ekokod
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U ekokod" --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:7.4.11-alpine
+        ports:
+          - 56379:6379
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 20
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.3.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm build
+      - run: pnpm test:e2e --workers=1
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-e2e-report
+          path: web/playwright-report
+
+  ml:
+    name: ML service
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: ml
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: 0.12.18
+      - run: uv sync --frozen
+      - run: uv run pytest -q
+      # R366: the built image carries no database client.
+      - run: docker build -t ekokod-ml:ci .
+      - run: docker run --rm --entrypoint python ekokod-ml:ci -m ekokod_ml.nodb

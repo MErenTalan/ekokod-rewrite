@@ -1,1 +1,51 @@
 @import 'tailwindcss';
+@import '../styles/tokens.css';
+@layer base {
+  html { background: var(--color-background); color: var(--color-foreground); }
+  body { @apply type-body antialiased; min-height: 100dvh; }
+  :focus-visible { outline: 2px solid var(--color-ring); outline-offset: 2px; }
+  button:not(:disabled), [role='button']:not([aria-disabled='true']), a[href], summary, select, label[for],
+  [role='tab'], [role='menuitem'], [role='option'] { cursor: pointer; }
+  :disabled, [aria-disabled='true'] { cursor: not-allowed; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+  }
+}
+
+@layer components {
+  /* Blog article body (F12b): the Markdown's own elements, styled from tokens. */
+  .site-prose { color: var(--color-foreground); @apply type-body-lg; }
+  .site-prose > * + * { margin-top: 1rem; }
+  .site-prose h2 { @apply type-h1; margin-top: 2.5rem; scroll-margin-top: 6rem; }
+  .site-prose h3 { @apply type-h2; margin-top: 2rem; scroll-margin-top: 6rem; }
+  .site-prose a { color: var(--color-primary); text-decoration: underline; text-underline-offset: 2px; }
+  .site-prose ul { list-style: disc; padding-inline-start: 1.5rem; }
+  .site-prose ol { list-style: decimal; padding-inline-start: 1.5rem; }
+  .site-prose li + li { margin-top: 0.25rem; }
+  .site-prose img { margin: 2rem auto; max-width: 100%; height: auto; border-radius: var(--radius-lg); }
+  .site-prose .table-scroll { overflow-x: auto; }
+  .site-prose table { width: 100%; border-collapse: collapse; @apply type-body; }
+  .site-prose th, .site-prose td { border: 1px solid var(--color-border-strong); padding: 0.5rem; text-align: start; vertical-align: top; }
+  .site-prose th { background: var(--color-surface-sunken); font-weight: 600; }
+  .site-prose hr { border-color: var(--color-border); margin-block: 2.5rem; }
+  .site-prose .footnotes { color: var(--color-foreground-muted); @apply type-small; }
+  .site-prose sup a { text-decoration: none; }
+  /* Footnote links are tiny inline targets; on touch screens they grow to 44×44 (07 §9). */
+  @media (pointer: coarse) {
+    .site-prose sup a, .site-prose .footnotes a { display: inline-flex; min-width: 44px; min-height: 44px; align-items: center; justify-content: center; }
+  }
+
+  /* Card-grid stagger (07 §8, plan D26): each card enters --duration-stagger-step after the one before it. */
+  @media (prefers-reduced-motion: no-preference) {
+    .stagger-item {
+      animation: stagger-in var(--duration-dialog-in) ease-out backwards;
+      animation-delay: calc(var(--i, 0) * var(--duration-stagger-step));
+    }
+  }
+}
+
+@keyframes stagger-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}

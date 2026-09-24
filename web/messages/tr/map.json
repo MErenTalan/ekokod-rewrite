@@ -1,0 +1,13 @@
+{
+  "tilesUnavailable": "Harita altlığı yüklenemedi; konumlar liste olarak gösteriliyor.",
+  "showList": "Konum listesini göster",
+  "hideList": "Konum listesini gizle",
+  "active": "Aktif",
+  "passive": "Pasif",
+  "coordinates": "Koordinatlar",
+  "name": "Ad",
+  "status": "Durum",
+  "select": "Seç",
+  "selectMarker": "{name} seç",
+  "markerLabel": "{name} — {status}"
+}

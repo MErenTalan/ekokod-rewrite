@@ -1,0 +1,203 @@
+{
+  "title": "Reports",
+  "subtitle": "Monthly and yearly energy reports, their files and the archive",
+  "tabs": {
+    "monthly": "Monthly report",
+    "yearly": "Yearly report",
+    "archive": "Reports archive"
+  },
+  "selection": {
+    "title": "Report selection",
+    "buildings": "Buildings",
+    "buildingsHint": "The selected buildings' figures are combined.",
+    "selectAll": "Select all",
+    "searchBuildings": "Search buildings",
+    "noBuildings": "No building found",
+    "month": "Report period",
+    "year": "Year",
+    "plantSelection": "Plant selection",
+    "plantAll": "All plants",
+    "plantRooftop": "Rooftop PV only",
+    "plantGrid": "Utility-scale PV only",
+    "plants": "Plants",
+    "searchPlants": "Search plants",
+    "noPlants": "No plant found",
+    "plantCount": "{count, plural, =0 {No plant selected: every plant included} one {# plant selected} other {# plants selected}}",
+    "rooftopIncluded": "Rooftop PV production will be included."
+  },
+  "noSelection": "Select a building",
+  "noSelectionDescription": "The report is built from the figures of the buildings and period you select.",
+  "loadFailed": "The report figures could not be loaded",
+  "loadFailedDescription": "Change the selection and try again.",
+  "noData": "No data for this period",
+  "noDataDescription": "No consumption, production or invoice was found for the selected buildings in this period. Choose another period.",
+  "value": {
+    "noData": "no data",
+    "notSelected": "not selected",
+    "coverage": "{withData} of {of} {subject}",
+    "buildings": "buildings",
+    "plants": "plants",
+    "perKwh": "TL/kWh"
+  },
+  "partial": "This period has not closed or been refreshed yet; its figures are provisional.",
+  "omittedCurrencies": "Currencies not shown in the chart: {currencies}",
+  "monthly": {
+    "infoTitle": "Information",
+    "rows": {
+      "period": "Report period",
+      "buildings": "Building(s)",
+      "tariff": "Electricity tariff",
+      "purchasePrice": "Purchase price",
+      "averagePurchasePrice": "Average purchase price",
+      "rooftopFeedIn": "Rooftop PV feed-in price",
+      "utilityFeedIn": "Utility-scale PV feed-in price",
+      "consumption": "Monthly total consumption",
+      "dailyConsumption": "Daily average consumption",
+      "rooftop": "Rooftop PV monthly production",
+      "utility": "Utility-scale PV monthly production",
+      "production": "Total production",
+      "dailyProduction": "Daily average production",
+      "bill": "Electricity bill",
+      "reactivePenalty": "Reactive penalty"
+    },
+    "billPeriodNote": "An invoice's period follows the building's cutoff day.",
+    "cards": {
+      "consumption": "Total consumption",
+      "production": "Total production",
+      "bill": "Total bill",
+      "reactivePenalty": "Reactive penalty",
+      "comparison": "vs. the same month last year"
+    },
+    "consumptionChart": "Monthly electricity consumption",
+    "consumptionChartDescription": "The selected year's months against the previous year's",
+    "billChart": "Monthly electricity bill",
+    "billChartDescription": "The selected year's months against the previous year's",
+    "chartEmpty": "No data for this chart",
+    "chartEmptyDescription": "No data was found for this year or last year.",
+    "month": "Month"
+  },
+  "yearly": {
+    "consumptionTable": "Electricity consumption and rooftop PV production",
+    "columns": {
+      "month": "Month",
+      "consumption": "Monthly electricity consumption (kWh/month)",
+      "rooftop": "Rooftop PV production (kWh/month)",
+      "bill": "Monthly electricity bill",
+      "reactivePenalty": "Reactive penalty"
+    },
+    "total": "Yearly total",
+    "dailyConsumption": "Average daily consumption (kWh/day)",
+    "dailyRooftop": "Average daily rooftop PV production (kWh/day)",
+    "solarTitle": "Solar production report",
+    "solar": {
+      "total": "Total yearly production",
+      "target": "Target production",
+      "achievement": "Target achievement rate",
+      "daily": "Average daily production",
+      "plant": "Plant",
+      "production": "Production",
+      "noTarget": "No target set"
+    },
+    "cards": {
+      "consumption": "Yearly consumption",
+      "production": "Yearly production",
+      "bill": "Yearly bill",
+      "achievement": "Target achievement",
+      "comparison": "vs. last year"
+    },
+    "historyChart": "Yearly electricity consumption and production",
+    "historyChartDescription": "Totals of the last three years",
+    "billChart": "Yearly electricity bill",
+    "billChartDescription": "Totals of the last three years",
+    "targetChart": "Target vs. actual production",
+    "targetChartDescription": "Each plant's yearly target against its actual production",
+    "year": "Year",
+    "series": {
+      "consumption": "Yearly consumption",
+      "production": "Yearly production",
+      "bill": "Yearly bill",
+      "target": "Target",
+      "actual": "Actual"
+    },
+    "comparisonTitle": "Final comparison",
+    "comparisonDescription": "Yearly consumption against yearly production",
+    "comparison": {
+      "consumption": "Yearly consumption",
+      "production": "Yearly production",
+      "solarShare": "Met by solar",
+      "gridShare": "Taken from the grid"
+    },
+    "carbonTitle": "Carbon emissions",
+    "carbon": {
+      "consumption": "Emissions from electricity consumption",
+      "reduction": "Emission reduction from electricity generation",
+      "net": "Net emissions",
+      "factor": "Emission factor used",
+      "note": "The factor is the Turkey grid average.",
+      "sourceYear": "Source year: {year}",
+      "unavailable": "No grid emission factor is configured; the carbon section cannot be computed.",
+      "unit": "t/year"
+    }
+  },
+  "actions": {
+    "title": "Download and send",
+    "description": "A report is prepared per building; each building's PDF, Excel and e-mail actions appear below once it is ready.",
+    "generate": "Generate the report",
+    "generating": "Preparing the report…",
+    "queued": "Queued",
+    "running": "Preparing",
+    "ready": "Ready",
+    "failed": "Could not be prepared",
+    "pdf": "Download PDF",
+    "excel": "Download Excel",
+    "email": "Send by e-mail",
+    "building": "Building",
+    "status": "Status",
+    "errors": {
+      "buildingNotFound": "The building was not found.",
+      "generic": "The report could not be prepared. Try again later."
+    }
+  },
+  "email": {
+    "title": "Send the report by e-mail",
+    "address": "Recipient e-mail address",
+    "invalid": "Enter a valid e-mail address.",
+    "summaryPeriod": "Period",
+    "summaryBuilding": "Building",
+    "send": "Send",
+    "sending": "Sending…",
+    "cancel": "Cancel",
+    "queued": "The e-mail is queued for sending.",
+    "sent": "The report e-mail was sent.",
+    "errors": {
+      "smtpNotConfigured": "The company has no SMTP settings; the e-mail could not be sent. Configure them under Settings > SMTP.",
+      "reportNotReady": "The report is not ready yet.",
+      "deliveryFailed": "The e-mail could not be sent. Check the SMTP settings.",
+      "generic": "The e-mail could not be sent."
+    }
+  },
+  "archive": {
+    "filterType": "Report type",
+    "allTypes": "All",
+    "monthly": "Monthly",
+    "yearly": "Yearly",
+    "filterBuilding": "Building",
+    "allBuildings": "All buildings",
+    "total": "Total reports: {count}",
+    "yearTitle": "{year} reports",
+    "yearlyReport": "Yearly report",
+    "monthlyReports": "Monthly reports",
+    "monthCount": "{count, plural, one {# month} other {# months}}",
+    "noYearly": "No yearly report for this year.",
+    "status": {
+      "completed": "Available",
+      "pending": "Preparing",
+      "error": "Error"
+    },
+    "empty": "No report found",
+    "emptyDescription": "Change the filters, or generate a report from the Monthly or Yearly tab.",
+    "loading": "Loading reports",
+    "loadMore": "Load more"
+  },
+  "retry": "Try again"
+}

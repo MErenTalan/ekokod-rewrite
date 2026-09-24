@@ -1,0 +1,7 @@
+{
+  "status": {
+    "success": false,
+    "code": "CAS_AUTHENTICATION_FAILED",
+    "message": "FIXTURE-invalid-credentials"
+  }
+}

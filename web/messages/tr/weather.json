@@ -1,0 +1,38 @@
+{
+  "title": "Hava durumu",
+  "description": "Kayıtlı koordinatlar için anlık durum ve yedi günlük tahmin",
+  "now": "Şimdi",
+  "humidity": "Nem",
+  "wind": "Rüzgâr",
+  "pressure": "Basınç",
+  "visibility": "Görüş",
+  "uv": "UV indeksi",
+  "precipitation": "Yağış olasılığı",
+  "forecast": "7 günlük tahmin",
+  "potential": "Üretim potansiyeli",
+  "potentialBasis": "Potansiyel, günlük kısa dalga ışınım toplamından hesaplanır: 20 MJ/m² ve üzeri yüksek, 10–20 orta, altı düşük.",
+  "potentials": {
+    "high": "Yüksek",
+    "medium": "Orta",
+    "low": "Düşük"
+  },
+  "conditions": {
+    "clear": "Açık",
+    "partlyCloudy": "Parçalı bulutlu",
+    "fog": "Sisli",
+    "rain": "Yağmurlu",
+    "snow": "Karlı",
+    "showers": "Sağanak",
+    "storm": "Fırtınalı",
+    "unknown": "Bilinmiyor"
+  },
+  "noData": "veri yok",
+  "reasons": {
+    "weatherNotConfigured": "Hava durumu hizmeti yapılandırılmamış",
+    "weatherNotConfiguredDescription": "Bu kurulumda dış hava durumu servisi kapalı; panel veri göstermez.",
+    "locationNotConfigured": "Konum ayarlı değil",
+    "locationNotConfiguredDescription": "Kayda enlem ve boylam girildiğinde hava durumu burada görünür.",
+    "weatherUnavailable": "Hava durumu şu an alınamıyor",
+    "weatherUnavailableDescription": "Servis yanıt vermedi; biraz sonra yeniden deneyin."
+  }
+}

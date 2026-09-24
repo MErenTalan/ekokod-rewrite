@@ -1,0 +1,9 @@
+{
+  "items": [],
+  "limit": 500,
+  "cursorNext": null,
+  "hasMore": false,
+  "total": 0,
+  "sort": "asc",
+  "filters": {}
+}

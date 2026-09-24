@@ -1,0 +1,23 @@
+{
+  "breadcrumb": "İçerik haritası",
+  "close": "Kapat",
+  "pageOf": "Sayfa {page} / {count}",
+  "previousPage": "Önceki sayfa",
+  "nextPage": "Sonraki sayfa",
+  "rowsPerPage": "Sayfa başına satır",
+  "totalItems": "{count} kayıt",
+  "loading": "Yükleniyor...",
+  "dismiss": "Kapat",
+  "stepOf": "Adım {current} / {total}",
+  "stepCompleted": "Tamamlandı",
+  "stepCurrent": "Şu anki adım",
+  "notifications": "Bildirimler ({hotkey})",
+  "progressIndeterminate": "Devam ediyor",
+  "threshold": "Eşik",
+  "notification": "Bildirim",
+  "saved": "Kaydedildi",
+  "loadFailed": "Veriler yüklenemedi",
+  "saveFailed": "Kaydedilemedi",
+  "deleted": "Silindi",
+  "created": "Oluşturuldu"
+}

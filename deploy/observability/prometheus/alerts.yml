@@ -1,0 +1,39 @@
+# F15b R464: alert thresholds. Tune them with the first weeks of production data.
+groups:
+  - name: ekokod
+    rules:
+      - alert: EkokodAPILatencyHigh
+        expr: histogram_quantile(0.95, sum by (le) (rate(ekokod_http_request_duration_seconds_bucket{route!="unmatched"}[5m]))) > 1
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "API p95 latency above 1 s for 10 minutes" }
+      - alert: EkokodAPIErrorRateHigh
+        expr: sum(rate(ekokod_http_request_duration_seconds_count{status=~"5.."}[5m])) / sum(rate(ekokod_http_request_duration_seconds_count[5m])) > 0.02
+        for: 5m
+        labels: { severity: critical }
+        annotations: { summary: "More than 2 % of API requests fail with 5xx" }
+      - alert: EkokodJobFailureRateHigh
+        expr: sum(rate(ekokod_job_runs_total{outcome="failure"}[30m])) / sum(rate(ekokod_job_runs_total[30m])) > 0.10
+        for: 30m
+        labels: { severity: warning }
+        annotations: { summary: "More than 10 % of jobs fail" }
+      - alert: EkokodQueueBacklog
+        expr: sum(ekokod_queue_tasks{state="pending"}) > 500
+        for: 15m
+        labels: { severity: warning }
+        annotations: { summary: "More than 500 tasks pending for 15 minutes" }
+      - alert: EkokodQueueRetries
+        expr: sum(ekokod_queue_tasks{state="retry"}) > 50
+        for: 30m
+        labels: { severity: warning }
+        annotations: { summary: "More than 50 tasks waiting to retry" }
+      - alert: EkokodIntegrationStale
+        expr: time() - ekokod_integration_last_success_timestamp_seconds > 26 * 3600
+        for: 15m
+        labels: { severity: critical }
+        annotations: { summary: "No successful reading pull for {{ $labels.provider }} in 26 hours (daily pull at 03:00)" }
+      - alert: EkokodProcessDown
+        expr: up{job=~"ekokod-(api|worker|scheduler)"} == 0 or absent(up{job="ekokod-worker"})
+        for: 5m
+        labels: { severity: critical }
+        annotations: { summary: "An ekokod process is not being scraped" }

@@ -1,0 +1,82 @@
+{
+  "title": "Alarmlar",
+  "addNew": "Yeni Alarm Ekle",
+  "editAlarm": "Alarm Düzenle",
+  "name": "Ad",
+  "type": "Tip",
+  "appliedAnalyzers": "Uygulanan Analizörler",
+  "actions": "İşlemler",
+  "details": "Detaylar",
+  "state": "Durum",
+  "active": "Aktif",
+  "passive": "Pasif",
+  "all": "Tümü",
+  "empty": "Henüz alarm kuralı yok.",
+  "emptyFiltered": "Filtre kriterlerine uygun alarm bulunamadı.",
+  "saved": "Alarm kaydedildi.",
+  "deleted": "Alarm silindi.",
+  "deleteTitle": "Alarmı sil",
+  "deleteConfirm": "{name} kuralı silinecek. Geçmiş kayıtları görüntülenmeye devam eder.",
+  "selectAnalyzer": "Analizör seçiniz",
+  "types": {
+    "reactiveLimit": "Reaktif Limit Algılama Alarmı",
+    "dataCommunication": "Veri İletişim Alarmı",
+    "power": "Güç Alarmı",
+    "invoiceIncrease": "Fatura Alarmı"
+  },
+  "fields": {
+    "inductiveRatio": "Endüktif Oran (%)",
+    "capacitiveRatio": "Kapasitif Oran (%)",
+    "activeConsumptionMax": "Aktif Tüketim Maks (kWh)",
+    "activeConsumptionMin": "Aktif Tüketim Min (kWh)",
+    "communicationThresholdHours": "İletişim Kesinti Eşiği (saat)",
+    "powerMax": "Güç Maks (kW)",
+    "powerMin": "Güç Min (kW)",
+    "invoiceThresholdPct": "Fatura Artış Eşiği (%)",
+    "inLast": "Son",
+    "hours": "saat",
+    "days": "gün"
+  },
+  "invoiceThresholdDescription": "Son fatura bir önceki faturadan bu yüzdeden fazla artarsa alarm tetiklenir.",
+  "powerDescription": "Güç, analizörün son iki gün içindeki en güncel maksimum talep değeriyle karşılaştırılır.",
+  "notification": {
+    "frequency": "Alarm Bildirim Sıklığı",
+    "channel": "Alarm Bildirim Tipi",
+    "email": "E-posta",
+    "sms": "SMS",
+    "emailRecipients": "E-posta Alıcıları (virgülle ayırın)",
+    "smsNumbers": "SMS Numaraları (virgülle ayırın)",
+    "smsInactive": "SMS bildirimi henüz etkin değil: numaralar kaydedilir, ancak gönderim yapılmaz."
+  },
+  "errors": {
+    "required": "Bu alan zorunludur.",
+    "invalid": "Geçersiz değer.",
+    "atLeastOne": "En az bir alarm limiti girilmelidir."
+  },
+  "events": {
+    "title": "Alarm Logları",
+    "empty": "Log kaydı bulunamadı.",
+    "triggeredAt": "Zaman",
+    "message": "Mesaj",
+    "delivery": "Bildirim",
+    "delivered": "Gönderildi",
+    "failed": "Gönderilemedi",
+    "pending": "Bekliyor",
+    "settingsTitle": "Kural ayarları",
+    "emptyDescription": "Bu kural henüz tetiklenmedi."
+  },
+  "evaluate": {
+    "action": "Şimdi değerlendir",
+    "title": "Deneme değerlendirmesi",
+    "noNotification": "Bu bir denemedir: bildirim gönderilmedi ve kayıt oluşturulmadı.",
+    "fired": "Tetiklendi",
+    "quiet": "Tetiklenmedi",
+    "noVerdict": "Karar verilemedi: {fields}",
+    "noVerdictHint": "Karar verilemeyen bir eşik uygun demek değildir; veri eksiktir.",
+    "analyzer": "Analizör",
+    "result": "Sonuç"
+  },
+  "emptyDescription": "İzlemek istediğiniz analizörler için bir kural ekleyin.",
+  "emptyFilteredDescription": "Farklı bir durum filtresi deneyin.",
+  "analyzersEmpty": "Analizör bulunamadı."
+}

@@ -1,0 +1,82 @@
+{
+  "title": "Alarms",
+  "addNew": "Add alarm",
+  "editAlarm": "Edit alarm",
+  "name": "Name",
+  "type": "Type",
+  "appliedAnalyzers": "Applied analyzers",
+  "actions": "Actions",
+  "details": "Details",
+  "state": "State",
+  "active": "Active",
+  "passive": "Passive",
+  "all": "All",
+  "empty": "No alarm rules yet.",
+  "emptyFiltered": "No alarm matches the filters.",
+  "saved": "Alarm saved.",
+  "deleted": "Alarm deleted.",
+  "deleteTitle": "Delete alarm",
+  "deleteConfirm": "The rule {name} will be deleted. Its history stays visible.",
+  "selectAnalyzer": "Select analyzers",
+  "types": {
+    "reactiveLimit": "Reactive limit alarm",
+    "dataCommunication": "Data communication alarm",
+    "power": "Power alarm",
+    "invoiceIncrease": "Invoice alarm"
+  },
+  "fields": {
+    "inductiveRatio": "Inductive ratio (%)",
+    "capacitiveRatio": "Capacitive ratio (%)",
+    "activeConsumptionMax": "Active consumption max (kWh)",
+    "activeConsumptionMin": "Active consumption min (kWh)",
+    "communicationThresholdHours": "Communication threshold (hours)",
+    "powerMax": "Power max (kW)",
+    "powerMin": "Power min (kW)",
+    "invoiceThresholdPct": "Invoice increase threshold (%)",
+    "inLast": "In the last",
+    "hours": "hours",
+    "days": "days"
+  },
+  "invoiceThresholdDescription": "Fires when the latest invoice exceeds the previous one by more than this percentage.",
+  "powerDescription": "Power is compared against the analyzer's most recent maximum demand within the last two days.",
+  "notification": {
+    "frequency": "Notification frequency",
+    "channel": "Notification channels",
+    "email": "E-mail",
+    "sms": "SMS",
+    "emailRecipients": "E-mail recipients (comma separated)",
+    "smsNumbers": "SMS numbers (comma separated)",
+    "smsInactive": "SMS notification is not active yet: numbers are stored, but nothing is sent."
+  },
+  "errors": {
+    "required": "This field is required.",
+    "invalid": "Invalid value.",
+    "atLeastOne": "At least one alarm limit is required."
+  },
+  "events": {
+    "title": "Alarm log",
+    "empty": "No log entries.",
+    "triggeredAt": "Time",
+    "message": "Message",
+    "delivery": "Notification",
+    "delivered": "Sent",
+    "failed": "Not sent",
+    "pending": "Pending",
+    "settingsTitle": "Rule settings",
+    "emptyDescription": "This rule has not fired yet."
+  },
+  "evaluate": {
+    "action": "Evaluate now",
+    "title": "Dry run",
+    "noNotification": "This is a dry run: nothing was sent and nothing was recorded.",
+    "fired": "Fired",
+    "quiet": "Did not fire",
+    "noVerdict": "Could not be decided: {fields}",
+    "noVerdictHint": "A threshold that could not be decided is not the same as one that is within limits; the data is missing.",
+    "analyzer": "Analyzer",
+    "result": "Result"
+  },
+  "emptyDescription": "Add a rule for the analyzers you want to monitor.",
+  "emptyFilteredDescription": "Try a different state filter.",
+  "analyzersEmpty": "No analyzers found."
+}

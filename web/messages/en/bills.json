@@ -1,0 +1,92 @@
+{
+  "title": "Bills",
+  "subtitle": "The selected month's invoice dashboard and ad-hoc generation",
+  "monthSelection": "Month",
+  "noMonth": "Select a month",
+  "noMonthDescription": "The dashboard shows the invoices of the month you select.",
+  "noData": "No invoice for the selected month",
+  "noDataDescription": "No computed invoice was found for this month.",
+  "retry": "Try again",
+  "buildings": {
+    "title": "Buildings",
+    "description": "Analyzer invoices per building and their totals"
+  },
+  "columns": {
+    "period": "Period",
+    "building": "Building",
+    "analyzer": "Meter",
+    "installationNumber": "Installation no",
+    "etso": "ETSO",
+    "consumption": "Consumption (kWh)",
+    "production": "Production (kWh)",
+    "consumptionPrice": "Consumption price (TL/kWh)",
+    "productionPrice": "Production price (TL/kWh)",
+    "invoice": "Invoice",
+    "actions": "Download"
+  },
+  "subtotal": "Subtotal",
+  "total": "Total",
+  "buildingBill": "Building invoice",
+  "divergenceNote": "The building invoice differs from the sum of the analyzer invoices: the building tariff is applied once to the aggregate.",
+  "downloadPdf": "Invoice PDF",
+  "downloadHourly": "Hourly PTF detail (Excel)",
+  "downloadAll": "Download all",
+  "downloadAllPdf": "Download the dashboard as PDF",
+  "netting": {
+    "title": "Netting",
+    "consumption": "Total consumption",
+    "production": "Total production",
+    "net": "Net",
+    "invoice": "Total invoice",
+    "efficiency": "Efficiency",
+    "efficiencyUnavailable": "No ratio exists without consumption",
+    "netConsumption": "Net consumption",
+    "netProduction": "Net production",
+    "period": "Period",
+    "companyBill": "Company invoice"
+  },
+  "plants": {
+    "title": "Solar plants (GES)",
+    "description": "The company's plants, this month's production and sale value. Analyzer columns fill only when a netting analyzer is chosen.",
+    "columns": {
+      "plant": "Plant",
+      "analyzer": "Netting analyzer",
+      "installationNumber": "Installation no",
+      "production": "Production (kWh)",
+      "consumptionPrice": "Consumption price (/kWh)",
+      "productionPrice": "Production price (/kWh)",
+      "sale": "Sale amount",
+      "currency": "Currency"
+    },
+    "noData": "no data",
+    "totalProduction": "Total production",
+    "totalSale": "Total sale",
+    "download": "Download bill",
+    "empty": "The company has no plants",
+    "emptyDescription": "Plants are added under Settings › Solar plants."
+  },
+  "generate": {
+    "title": "Generate an invoice",
+    "description": "Compute the invoice for the selected period and download it as a PDF",
+    "analyzers": "Meters",
+    "analyzerOption": "{installation} · {customer}",
+    "analyzerBill": "Analyzer invoice",
+    "buildingBill": "Building invoice",
+    "companyBill": "Company invoice",
+    "running": "Computing",
+    "ready": "Invoice ready",
+    "downloadReady": "Download the invoice"
+  },
+  "errors": {
+    "noAnalyzerSelected": "Select at least one meter",
+    "noBuildingSelected": "Select a building",
+    "noMonthSelected": "Select a month",
+    "invalidMonthFormat": "Invalid month format (YYYY-MM)",
+    "noTariffForBuilding": "No tariff found for the building",
+    "noConsumptionData": "No consumption data for the selected period",
+    "unresolvedAnomaly": "There is an unresolved consumption anomaly",
+    "periodNotClosed": "The period is not closed yet",
+    "ptfDataMissing": "PTF data is missing for the period",
+    "generationFailed": "The invoice could not be generated"
+  }
+}

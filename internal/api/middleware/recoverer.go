@@ -17,9 +17,7 @@ func Recoverer(log *slog.Logger) func(http.Handler) http.Handler {
 						slog.String("stack", string(debug.Stack())),
 						slog.String("path", r.URL.Path))
 
-					w.Header().Set("Content-Type", "application/json; charset=utf-8")
-					w.WriteHeader(http.StatusInternalServerError)
-					_, _ = w.Write([]byte(`{"code":"internal","message_key":"errors.generic.internal"}`))
+					writeEnvelope(w, http.StatusInternalServerError, "internal", "Beklenmeyen bir hata oluştu.")
 				}
 			}()
 			next.ServeHTTP(w, r)

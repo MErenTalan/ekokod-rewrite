@@ -9,7 +9,6 @@ import (
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 var requestDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
@@ -44,9 +43,6 @@ func Metrics(next http.Handler) http.Handler {
 			Observe(time.Since(started).Seconds())
 	})
 }
-
-// MetricsHandler serves the Prometheus scrape endpoint.
-func MetricsHandler() http.Handler { return promhttp.Handler() }
 
 func chiRoutePattern(r *http.Request) string {
 	if rctx := chi.RouteContext(r.Context()); rctx != nil {

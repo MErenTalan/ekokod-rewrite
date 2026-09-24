@@ -5,9 +5,19 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/hibiken/asynq"
+	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/admin"
+
+	"github.com/MErenTalan/ekokod-rewrite/internal/platform/metrics"
+
+	"github.com/spf13/cobra"
+
 	"github.com/MErenTalan/ekokod-rewrite/internal/job"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
-	"github.com/spf13/cobra"
+	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
+	"github.com/MErenTalan/ekokod-rewrite/internal/worker"
 )
 
 func newWorkerCmd() *cobra.Command {
@@ -20,6 +30,22 @@ func newWorkerCmd() *cobra.Command {
 				return err
 			}
 			log := newCommandLogger(cfg, os.Stderr)
+			ctx := cmd.Context()
+
+			pool, err := postgres.NewPool(ctx, cfg.DB, log)
+			if err != nil {
+				return err
+			}
+			defer pool.Close()
+			if err := metrics.Serve(ctx, cfg.Metrics.WorkerAddr, log); err != nil {
+				return fmt.Errorf("metrics listener: %w", err)
+			}
+
+			built, err := worker.Build(ctx, cfg, pool, log)
+			if err != nil {
+				return err
+			}
+			defer built.Close()
 
 			// asynq never dials its broker eagerly and, once Start
 			// succeeds, surfaces no error at all if the broker later goes
@@ -45,7 +71,19 @@ func newWorkerCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			job.Register(mux, &job.Handlers{Log: log})
+			job.Register(mux, built.Handlers)
+			// F15b R461–R463: job outcomes, queue depth and integration health for the metrics listener.
+			mux.Use(metrics.JobMiddleware)
+			redisOpt, err := job.RedisOpt(cfg.Redis)
+			if err != nil {
+				return err
+			}
+			inspector := asynq.NewInspector(redisOpt)
+			defer func() { _ = inspector.Close() }()
+			prometheus.MustRegister(
+				metrics.QueueCollector{Inspector: inspector, Queues: []string{job.QueueCritical, job.QueueDefault, job.QueueLow}, Log: log},
+				metrics.IntegrationCollector{Runs: admin.NewOpsHealthRepository(pool), Log: log},
+			)
 
 			// asynq.Server.Run(handler) is Start(handler) + waitForSignals()
 			// + Shutdown(): it installs asynq's own SIGINT/SIGTERM/SIGTSTP

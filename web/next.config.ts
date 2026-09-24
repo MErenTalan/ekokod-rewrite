@@ -7,6 +7,10 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   reactStrictMode: true,
   poweredByHeader: false,
+  // Metadata renders in <head> for every client, not streamed after it (Lighthouse/SEO saw no description).
+  htmlLimitedBots: /.*/,
+  // The blog reads its Markdown at request time; standalone output must ship it (F12b).
+  outputFileTracingIncludes: { '/blog/[slug]': ['./content/blog/**'] },
 };
 
 export default withNextIntl(nextConfig);

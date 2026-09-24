@@ -3,12 +3,16 @@ package cli
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
+
+	"github.com/MErenTalan/ekokod-rewrite/internal/platform/metrics"
+
+	"github.com/spf13/cobra"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/scheduler"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
-	"github.com/spf13/cobra"
 )
 
 func newSchedulerCmd() *cobra.Command {
@@ -38,6 +42,9 @@ func newSchedulerCmd() *cobra.Command {
 				return err
 			}
 			defer pool.Close()
+			if err := metrics.Serve(cmd.Context(), cfg.Metrics.SchedulerAddr, log); err != nil {
+				return fmt.Errorf("metrics listener: %w", err)
+			}
 
 			err = scheduler.New(cfg, pool, log).Run(cmd.Context())
 			if isCleanShutdown(err) {

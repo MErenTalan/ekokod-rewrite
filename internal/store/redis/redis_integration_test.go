@@ -4,36 +4,19 @@ package redis_test
 
 import (
 	"context"
-	"io"
-	"log/slog"
 	"testing"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	ekoredis "github.com/MErenTalan/ekokod-rewrite/internal/store/redis"
+	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
 	"github.com/stretchr/testify/require"
-	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
 )
-
-func startRedis(t *testing.T) string {
-	t.Helper()
-	ctx := context.Background()
-
-	container, err := tcredis.Run(ctx, "redis:7.4.11-alpine")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = container.Terminate(context.Background()) })
-
-	uri, err := container.ConnectionString(ctx)
-	require.NoError(t, err)
-	return uri
-}
-
-func discardLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
 
 func TestNewConnectsAndSelectsTheCacheDB(t *testing.T) {
 	ctx := context.Background()
-	uri := startRedis(t)
+	uri := testfixtures.StartRedis(t)
 
-	client, err := ekoredis.New(ctx, config.Redis{URL: uri, CacheDB: 2, QueueDB: 1}, discardLogger())
+	client, err := ekoredis.New(ctx, config.Redis{URL: uri, CacheDB: 2, QueueDB: 1}, testfixtures.DiscardLogger())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = client.Close() })
 
@@ -43,9 +26,9 @@ func TestNewConnectsAndSelectsTheCacheDB(t *testing.T) {
 
 func TestCheckReportsHealth(t *testing.T) {
 	ctx := context.Background()
-	uri := startRedis(t)
+	uri := testfixtures.StartRedis(t)
 
-	client, err := ekoredis.New(ctx, config.Redis{URL: uri, CacheDB: 0, QueueDB: 1}, discardLogger())
+	client, err := ekoredis.New(ctx, config.Redis{URL: uri, CacheDB: 0, QueueDB: 1}, testfixtures.DiscardLogger())
 	require.NoError(t, err)
 
 	check := ekoredis.Check(client)
@@ -68,7 +51,7 @@ func TestCheckOnNilClientReportsUnhealthy(t *testing.T) {
 func TestNewNeverLeaksThePasswordOnParseError(t *testing.T) {
 	_, err := ekoredis.New(context.Background(),
 		config.Redis{URL: "redis://user:s3cr3t pass@localhost:6379/0", CacheDB: 0, QueueDB: 1},
-		discardLogger())
+		testfixtures.DiscardLogger())
 	require.Error(t, err)
 	require.NotContains(t, err.Error(), "s3cr3t", "the redis password must never appear in an error message")
 }
@@ -79,7 +62,7 @@ func TestNewNeverLeaksThePasswordOnParseError(t *testing.T) {
 func TestNewNeverLeaksThePasswordOnPingFailure(t *testing.T) {
 	_, err := ekoredis.New(context.Background(),
 		config.Redis{URL: "redis://user:s3cr3tpassword@127.0.0.1:1/0", CacheDB: 0, QueueDB: 1},
-		discardLogger())
+		testfixtures.DiscardLogger())
 	require.Error(t, err)
 	require.NotContains(t, err.Error(), "s3cr3tpassword", "the redis password must never appear in an error message")
 }

@@ -10,6 +10,9 @@ import (
 	"time"
 
 	"github.com/robfig/cron/v3"
+	"github.com/shopspring/decimal"
+
+	"github.com/google/uuid"
 )
 
 type loader struct {
@@ -49,6 +52,26 @@ func (l *loader) required(name string) string {
 	v, fromEnv := l.raw(name)
 	if !fromEnv {
 		l.fail(name, errors.New("is required but not set"))
+	}
+	l.record(name, v, false, fromEnv)
+	return v
+}
+
+// httpsURL reads an optional URL that defaults to def
+// when unset, and fails when the resolved value's scheme is not https —
+// TLS verification is never disabled anywhere in this codebase (06 §1 rule
+// 7), and a provider base URL is exactly the kind of value an operator
+// could otherwise silently downgrade to plain http.
+func (l *loader) httpsURL(name, def string) string {
+	v, fromEnv := l.raw(name)
+	if !fromEnv {
+		v = def
+	}
+	u, err := url.Parse(v)
+	if err != nil || u.Scheme != "https" {
+		l.fail(name, errors.New("must be an https URL"))
+		l.record(name, v, false, fromEnv)
+		return v
 	}
 	l.record(name, v, false, fromEnv)
 	return v
@@ -272,6 +295,27 @@ func parseDuration(v string) (time.Duration, error) {
 	return d, nil
 }
 
+// decimalVal reads a decimal.Decimal, defaulting to def when unset. An
+// unparsable value fails and falls back to def, matching every other
+// loader method's shape — money/multiplier values are decimal.Decimal
+// throughout F2 (Global Constraints: "never float64"), so this is the one
+// place config itself parses a decimal string rather than delegating to
+// strconv.
+func (l *loader) decimalVal(name string, def decimal.Decimal) decimal.Decimal {
+	v, fromEnv := l.raw(name)
+	if !fromEnv {
+		l.record(name, def.String(), false, false)
+		return def
+	}
+	d, err := decimal.NewFromString(v)
+	if err != nil {
+		l.fail(name, fmt.Errorf("must be a decimal number, got %q", v))
+		d = def
+	}
+	l.record(name, v, false, true)
+	return d
+}
+
 func (l *loader) enum(name, def string, allowed ...string) string {
 	v := l.str(name, def)
 	for _, a := range allowed {
@@ -353,6 +397,12 @@ func Load(lookup func(string) (string, bool)) (*Config, error) {
 		RateLimitAuth:  l.rateLimit("EKOKOD_RATE_LIMIT_AUTH", "5/15min"),
 	}
 
+	c.Metrics = Metrics{
+		APIAddr:       l.str("EKOKOD_API_METRICS_ADDR", "127.0.0.1:9464"),
+		WorkerAddr:    l.str("EKOKOD_WORKER_METRICS_ADDR", "127.0.0.1:9465"),
+		SchedulerAddr: l.str("EKOKOD_SCHEDULER_METRICS_ADDR", "127.0.0.1:9466"),
+	}
+
 	c.DB = DB{
 		URL:              l.requiredDSN("EKOKOD_DB_URL"),
 		MaxConns:         l.intVal("EKOKOD_DB_MAX_CONNS", 25),
@@ -376,23 +426,30 @@ func Load(lookup func(string) (string, bool)) (*Config, error) {
 		DeviceFingerprintSecret: l.secret("EKOKOD_DEVICE_FINGERPRINT_SECRET", 32),
 		AccessTokenTTL:          l.positiveDuration("EKOKOD_ACCESS_TOKEN_TTL", 15*time.Minute),
 		RefreshTokenTTL:         l.positiveDuration("EKOKOD_REFRESH_TOKEN_TTL", 24*time.Hour),
+		RefreshTokenRememberTTL: l.positiveDuration("EKOKOD_REFRESH_TOKEN_REMEMBER_TTL", 720*time.Hour),
 		BcryptCost:              l.intVal("EKOKOD_BCRYPT_COST", 12),
 		PasswordHistorySize:     l.intVal("EKOKOD_PASSWORD_HISTORY_SIZE", 5),
 		LegacyEncryptionKey:     l.optionalSecret("EKOKOD_LEGACY_ENCRYPTION_KEY"),
+	}
+	if c.Security.RefreshTokenRememberTTL < c.Security.RefreshTokenTTL {
+		l.fail("EKOKOD_REFRESH_TOKEN_REMEMBER_TTL", errors.New("must not be shorter than EKOKOD_REFRESH_TOKEN_TTL"))
 	}
 	if c.Security.BcryptCost < 12 {
 		l.fail("EKOKOD_BCRYPT_COST", errors.New("must be at least 12"))
 	}
 
-	// EKOKOD_JOB_MAX_RETRIES and EKOKOD_READING_RETENTION are the two
-	// remaining unbounded knobs, left that way on purpose: nothing consumes
-	// either yet, and what a non-positive retry count or a negative retention
-	// window should mean is the consuming phase's decision, not this one's.
-	// Both need the same treatment as the fields around them when they are
-	// wired up.
+	// EKOKOD_READING_RETENTION is the one remaining unbounded knob, left
+	// that way on purpose: nothing consumes it yet, and what a negative
+	// retention window should mean is the consuming phase's decision, not
+	// this one's. EKOKOD_JOB_MAX_RETRIES got that same treatment in F1;
+	// F2 is the consuming phase (internal/ingest, internal/worker), so it
+	// now uses nonNegativeInt — asynq's MaxRetry is a count, and a negative
+	// one is not "unlimited" or "unset", it is a config mistake (see
+	// nonNegativeInt's own doc for the parallel EKOKOD_REDIS_*_DB rationale;
+	// zero stays legal, it is job.TaskOptions' own documented "no retries").
 	c.Worker = Worker{
 		Concurrency: l.positiveInt("EKOKOD_WORKER_CONCURRENCY", 10),
-		MaxRetries:  l.intVal("EKOKOD_JOB_MAX_RETRIES", 5),
+		MaxRetries:  l.nonNegativeInt("EKOKOD_JOB_MAX_RETRIES", 5),
 		Timeout:     l.positiveDuration("EKOKOD_JOB_TIMEOUT", 30*time.Minute),
 	}
 	c.Scheduler = Scheduler{Enabled: l.boolVal("EKOKOD_SCHEDULER_ENABLED", true)}
@@ -405,25 +462,22 @@ func Load(lookup func(string) (string, bool)) (*Config, error) {
 		Carbon:         l.cronExpr("EKOKOD_SCHEDULE_CARBON", "30 4 * * *"),
 		ReportsMonthly: l.cronExpr("EKOKOD_SCHEDULE_REPORTS_MONTHLY", "0 6 2 * *"),
 		ReportsYearly:  l.cronExpr("EKOKOD_SCHEDULE_REPORTS_YEARLY", "0 7 3 1 *"),
+		Demo:           l.cronExpr("EKOKOD_SCHEDULE_DEMO", "15 * * * *"),
+		ISolarSync:     l.cronExpr("EKOKOD_SCHEDULE_ISOLAR_SYNC", "*/15 * * * *"),
+		ISolarAlarms:   l.cronExpr("EKOKOD_SCHEDULE_ISOLAR_ALARMS", "10 * * * *"),
 	}
 
 	c.Storage = Storage{
-		Root:      l.required("EKOKOD_STORAGE_ROOT"),
-		UploadMax: l.positiveInt64("EKOKOD_UPLOAD_MAX_BYTES", 31457280),
-		AllowedTypes: l.csv("EKOKOD_UPLOAD_ALLOWED_TYPES", []string{
-			"application/pdf",
-			"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-			"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-			"application/vnd.ms-excel",
-			"text/csv",
-			"image/png",
-			"image/jpeg",
-		}),
+		Root:         l.required("EKOKOD_STORAGE_ROOT"),
+		UploadMax:    l.positiveInt64("EKOKOD_UPLOAD_MAX_BYTES", 31457280),
+		AllowedTypes: l.csv("EKOKOD_UPLOAD_ALLOWED_TYPES", DefaultUploadTypes()),
 	}
 
 	c.External = External{
 		EPIASUsername:   l.required("EKOKOD_EPIAS_USERNAME"),
 		EPIASPassword:   string(l.secret("EKOKOD_EPIAS_PASSWORD", 1)),
+		EPIASCASURL:     l.httpsURL("EKOKOD_EPIAS_CAS_URL", "https://giris.epias.com.tr/cas/v1/tickets"),
+		EPIASBaseURL:    l.httpsURL("EKOKOD_EPIAS_BASE_URL", "https://seffaflik.epias.com.tr/electricity-service"),
 		MLURL:           l.str("EKOKOD_ML_URL", "http://ml:8000"),
 		MLAPIKey:        string(l.secret("EKOKOD_ML_API_KEY", 1)),
 		MLTimeout:       l.positiveDuration("EKOKOD_ML_TIMEOUT", 60*time.Second),
@@ -431,7 +485,15 @@ func Load(lookup func(string) (string, bool)) (*Config, error) {
 		MapTileURL:      l.str("EKOKOD_MAP_TILE_URL", ""),
 		ISolarRedirect:  l.str("EKOKOD_ISOLAR_REDIRECT_URL", ""),
 	}
-	if c.External.WeatherProvider != "" {
+	// R291: Open-Meteo is the one provider and needs no key; the key stays
+	// readable (masked) for a future keyed provider.
+	switch c.External.WeatherProvider {
+	case "", "open-meteo":
+	default:
+		l.fail("EKOKOD_WEATHER_PROVIDER", errors.New(`must be empty or "open-meteo"`))
+	}
+	c.External.WeatherBaseURL = l.httpsURL("EKOKOD_WEATHER_BASE_URL", "https://api.open-meteo.com")
+	if raw, ok := l.raw("EKOKOD_WEATHER_API_KEY"); ok && raw != "" {
 		c.External.WeatherAPIKey = string(l.secret("EKOKOD_WEATHER_API_KEY", 1))
 	} else {
 		l.record("EKOKOD_WEATHER_API_KEY", maskSecret(""), true, false)
@@ -447,6 +509,17 @@ func Load(lookup func(string) (string, bool)) (*Config, error) {
 		l.record("EKOKOD_PINNED_CERTS", "(none)", false, false)
 	}
 
+	c.PublicForms = PublicForms{
+		CompanyID: l.str("EKOKOD_PUBLIC_FORMS_COMPANY_ID", ""),
+		To:        l.str("EKOKOD_PUBLIC_FORMS_TO", ""),
+	}
+	if _, err := uuid.Parse(c.PublicForms.CompanyID); c.PublicForms.CompanyID != "" && err != nil {
+		l.fail("EKOKOD_PUBLIC_FORMS_COMPANY_ID", errors.New("must be a company uuid"))
+	}
+	if (c.PublicForms.CompanyID == "") != (c.PublicForms.To == "") {
+		l.fail("EKOKOD_PUBLIC_FORMS_TO", errors.New("set EKOKOD_PUBLIC_FORMS_COMPANY_ID and EKOKOD_PUBLIC_FORMS_TO together"))
+	}
+
 	c.Features = Features{
 		SelfRegistration: l.boolVal("EKOKOD_FEATURE_SELF_REGISTRATION", false),
 		PricingPage:      l.boolVal("EKOKOD_FEATURE_PRICING_PAGE", false),
@@ -455,9 +528,37 @@ func Load(lookup func(string) (string, bool)) (*Config, error) {
 		Tracing:          l.boolVal("EKOKOD_FEATURE_TRACING", false),
 	}
 
+	c.Ingest = Ingest{
+		SanityMultiple:  l.decimalVal("EKOKOD_INGEST_SANITY_MULTIPLE", decimal.NewFromInt(10)),
+		FutureTolerance: l.positiveDuration("EKOKOD_INGEST_FUTURE_TOLERANCE", 15*time.Minute),
+		InitialLookback: l.positiveDuration("EKOKOD_INGEST_INITIAL_LOOKBACK", 720*time.Hour),
+	}
+	if c.Ingest.SanityMultiple.LessThanOrEqual(decimal.NewFromInt(1)) {
+		l.fail("EKOKOD_INGEST_SANITY_MULTIPLE", errors.New("must be greater than 1"))
+	}
+
+	// R73: the ingest enqueue gate and consumption.Refresher's
+	// single global lock TTL (wired into RefreshDeps.LockTTL by
+	// worker/wiring.go). R100(5): 30m default.
+	c.ConsumptionRefreshEnabled = l.boolVal("EKOKOD_CONSUMPTION_REFRESH_ENABLED", true)
+	c.ConsumptionRefreshLockTTL = l.positiveDuration("EKOKOD_CONSUMPTION_REFRESH_LOCK_TTL", 30*time.Minute)
+
 	c.resolved = l.resolved
 	if len(l.errs) > 0 {
 		return nil, fmt.Errorf("invalid configuration:\n  %w", errors.Join(l.errs...))
 	}
 	return c, nil
+}
+
+// DefaultUploadTypes is the upload allow-list when EKOKOD_UPLOAD_ALLOWED_TYPES is unset.
+func DefaultUploadTypes() []string {
+	return []string{
+		"application/pdf",
+		"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+		"application/vnd.ms-excel",
+		"text/csv",
+		"image/png",
+		"image/jpeg",
+	}
 }

@@ -1,0 +1,91 @@
+{
+  "title": "ISO 50001 Energy Management System",
+  "subtitle": "A guided compliance workspace for TS EN ISO 50001:2018.",
+  "noAccess": "You have no access to this module",
+  "noAccessHint": "The ISO 50001 workspace is shown to authorised users.",
+  "chooseBuilding": "Select a building first",
+  "chooseBuildingHint": "An ISO 50001 project runs per building.",
+  "tabs": {
+    "summary": "Project home",
+    "checklist": "File upload page"
+  },
+  "footer": {
+    "standard": "All clauses are based on TS EN ISO 50001:2018.",
+    "guidance": "This tool is for guidance only."
+  },
+  "progress": {
+    "title": "Project progress",
+    "value": "Completed: {done} / {total} sub-clauses"
+  },
+  "gantt": {
+    "title": "Project timeline",
+    "noData": "There is not enough date data for the Gantt chart.",
+    "start": "Project start",
+    "end": "Project end",
+    "today": "Today",
+    "range": "{start} – {end}",
+    "label": "Clause timeline",
+    "status": {
+      "notStarted": "Not started",
+      "inProgress": "In progress",
+      "completed": "Completed",
+      "expired": "Expired"
+    }
+  },
+  "summary": {
+    "title": "Project progress summary",
+    "notes": "{count, plural, one {# note} other {# notes}}",
+    "files": "{count, plural, one {# file} other {# files}}",
+    "noNotes": "No notes added.",
+    "noFiles": "No files uploaded.",
+    "download": "Download ISO 50001 folder",
+    "downloading": "Downloading…",
+    "downloadError": "The folder could not be created.",
+    "updateCalendar": "Update calendar",
+    "setDates": "Set dates"
+  },
+  "calendar": {
+    "title": "Set project dates",
+    "subtitle": "Choose the start and end dates of each main clause.",
+    "save": "Save dates",
+    "saved": "Dates saved",
+    "errorAll": "Please choose start and end dates for every clause.",
+    "errorStart": "A start date cannot be after the end date."
+  },
+  "checklist": {
+    "subheadings": "Sub-clauses",
+    "template": "Sample template & document",
+    "downloadTemplate": "Download {name}"
+  },
+  "notes": {
+    "title": "Notes",
+    "noteTitle": "Title",
+    "body": "Note",
+    "add": "Add note to the list",
+    "existing": "Added notes",
+    "none": "No notes added yet.",
+    "edit": "Edit",
+    "update": "Update",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "deleteTitle": "Delete the note?",
+    "deleteConfirm": "The note “{title}” will be deleted. This cannot be undone.",
+    "untitled": "Untitled note",
+    "saved": "Note saved",
+    "deleted": "Note deleted",
+    "readOnly": "Authorised users can add notes."
+  },
+  "files": {
+    "title": "Evidence files",
+    "upload": "Upload required files",
+    "hint": "PDF, Excel, Word, CSV, PNG or JPEG; at most 30 MB.",
+    "none": "No files added yet.",
+    "download": "Download {name}",
+    "delete": "Delete {name}",
+    "deleteTitle": "Delete the file?",
+    "deleteConfirm": "Are you sure you want to delete “{name}”?",
+    "uploaded": "File uploaded",
+    "deleted": "File deleted",
+    "label": "Uploaded files"
+  }
+}

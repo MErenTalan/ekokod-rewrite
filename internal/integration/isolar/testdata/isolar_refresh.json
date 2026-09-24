@@ -1,0 +1,8 @@
+{
+  "result_code": "1",
+  "result_msg": "success",
+  "result_data": {
+    "access_token": "FIXTURE-ACCESS-b204",
+    "refresh_token": "FIXTURE-REFRESH-e615"
+  }
+}

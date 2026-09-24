@@ -1,0 +1,1 @@
+This message was sent to verify your ekokod SMTP settings. If you received it, your settings work.

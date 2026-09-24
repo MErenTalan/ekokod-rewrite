@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 // Environment is the deployment environment.
@@ -52,6 +54,25 @@ type Config struct {
 	Storage   Storage
 	External  External
 	Features  Features
+	// PublicForms routes the public site's forms to the operator (F12a Q-H6).
+	PublicForms PublicForms
+	Ingest      Ingest
+	// Metrics are each process's internal /metrics listener (F15b R460, Q-M3).
+	Metrics Metrics
+
+	// ConsumptionRefreshEnabled gates internal/ingest's consumption.refresh
+	// enqueue call site (R73).
+	// EKOKOD_CONSUMPTION_REFRESH_ENABLED, default true.
+	ConsumptionRefreshEnabled bool
+	// ConsumptionRefreshLockTTL is wired into
+	// internal/service/consumption.RefreshDeps.LockTTL by worker/wiring.go
+	// (R100(5)): how long the SINGLE global
+	// "consumption.refresh" lock consumption.Refresher holds is allowed to
+	// run before another worker could, in principle, acquire the same key
+	// (there is no lease renewal — see RefreshDeps' doc). 30 minutes
+	// comfortably covers a platform-wide yearly recompute.
+	// EKOKOD_CONSUMPTION_REFRESH_LOCK_TTL, default 30m, must be > 0.
+	ConsumptionRefreshLockTTL time.Duration
 
 	resolved []Resolved
 }
@@ -93,6 +114,9 @@ type Security struct {
 	DeviceFingerprintSecret []byte
 	AccessTokenTTL          time.Duration
 	RefreshTokenTTL         time.Duration
+	// RefreshTokenRememberTTL is the "remember this device" and mobile
+	// session lifetime (R141); never shorter than RefreshTokenTTL.
+	RefreshTokenRememberTTL time.Duration
 	BcryptCost              int
 	PasswordHistorySize     int
 	LegacyEncryptionKey     []byte // migration only; may be empty
@@ -120,6 +144,11 @@ type Schedule struct {
 	Carbon         string
 	ReportsMonthly string
 	ReportsYearly  string
+	// Demo extends the synthetic demo company's readings (R186).
+	Demo string
+	// ISolarSync and ISolarAlarms are the iSolar ticks (R288).
+	ISolarSync   string
+	ISolarAlarms string
 }
 
 // Storage configures where and how uploaded files are stored.
@@ -131,16 +160,46 @@ type Storage struct {
 
 // External configures the third-party integrations the platform calls out to.
 type External struct {
-	EPIASUsername   string
-	EPIASPassword   string
-	MLURL           string
-	MLAPIKey        string
-	MLTimeout       time.Duration
+	EPIASUsername string
+	EPIASPassword string
+	// EPIASCASURL and EPIASBaseURL are the EPİAŞ CAS
+	// ticket endpoint and electricity-service base URL internal/worker
+	// passes to epias.New. Both default to the real production URLs
+	// (epias.New's own defaultCASURL/defaultBaseURL) and must be https —
+	// this is the only seam through which a test can point a REAL
+	// worker.Build-constructed EPİAŞ client at a fake.NewTLSServer instead
+	// of substituting Handlers.Prices at the test layer.
+	EPIASCASURL  string
+	EPIASBaseURL string
+	MLURL        string
+	MLAPIKey     string
+	MLTimeout    time.Duration
+	// WeatherProvider is "" (air-gapped, weather unavailable) or "open-meteo" (R291).
 	WeatherProvider string
 	WeatherAPIKey   string
+	WeatherBaseURL  string
 	MapTileURL      string
 	ISolarRedirect  string
 	PinnedCerts     map[string]string // host -> base64(DER)
+}
+
+// Ingest configures F2's ingestion pipeline (internal/ingest.Options).
+type Ingest struct {
+	// SanityMultiple is R13's configurable sanity multiple: a register jump
+	// beyond this many times a point's typical interval consumption is
+	// rejected. EKOKOD_INGEST_SANITY_MULTIPLE, default "10", must be > 1 —
+	// a multiple at or below 1 would reject every reading whose value is
+	// merely equal to (or moderately above) the typical one, which is
+	// ordinary data, not a sanity violation.
+	SanityMultiple decimal.Decimal
+	// FutureTolerance bounds how far into the future a reading's timestamp
+	// may sit before it is rejected. EKOKOD_INGEST_FUTURE_TOLERANCE,
+	// default 15m, must be > 0.
+	FutureTolerance time.Duration
+	// InitialLookback is how far back a first-ever fetch (no stored
+	// cursor) starts, for an analyzer and kind. EKOKOD_INGEST_INITIAL_LOOKBACK,
+	// default 720h (30 days), must be > 0.
+	InitialLookback time.Duration
 }
 
 // Features toggles optional platform functionality.
@@ -163,4 +222,17 @@ func (c *Config) String() string {
 		fmt.Fprintf(&b, "%s=%s (%s)\n", r.Name, r.Value, r.Source)
 	}
 	return b.String()
+}
+
+// PublicForms names the operator company whose SMTP settings deliver the
+// public contact and demo forms, and the mailbox they go to. Both empty
+// means the forms answer "not configured" (on-premise installs).
+type PublicForms struct {
+	CompanyID string
+	To        string
+}
+
+// Metrics addresses: one internal listener per process; empty disables it.
+type Metrics struct {
+	APIAddr, WorkerAddr, SchedulerAddr string
 }

@@ -1,0 +1,474 @@
+{
+  "brand": "EkoKod",
+  "nav": {
+    "label": "Site menüsü",
+    "home": "Ana Sayfa",
+    "about": "Kurumsal",
+    "references": "Referanslar",
+    "documents": "Dokümanlar",
+    "toolkit": "Yazılım Çözümleri",
+    "pricing": "Fiyatlandırma",
+    "blog": "Blog",
+    "contact": "İletişim",
+    "calculator": "Fatura Hesaplama",
+    "requestDemo": "Demo Talep Et",
+    "login": "Giriş Yap",
+    "platform": "Platforma Git",
+    "openMenu": "Menüyü aç",
+    "menu": "Menü"
+  },
+  "announcement": {
+    "text": "Yeni: elektrik faturanızı güç bedeli dahil ücretsiz hesaplayın.",
+    "link": "Fatura hesaplayıcıyı dene"
+  },
+  "footer": {
+    "label": "Site alt bilgisi",
+    "tagline": "Binalarda enerji, su ve yakıt tüketimini yönetmek için geliştirilmiş kaynak ve karbon yönetim yazılımları.",
+    "company": "Kurumsal",
+    "product": "Ürün",
+    "resources": "Kaynaklar",
+    "contactTitle": "İletişim",
+    "copyright": "© {year} EkoKod. Tüm hakları saklıdır."
+  },
+  "contactInfo": {
+    "address": "Adres",
+    "addressValue": "Konya Teknokent, Akademi Mah. Gürbulut Sk. No: 67, Selçuklu / Konya",
+    "phone": "Telefon",
+    "phoneValue": "+90 506 315 41 98",
+    "email": "E-posta",
+    "emailValue": "info@ekokod.com",
+    "hours": "Çalışma saatleri",
+    "hoursValue": "Pazartesi – Cuma, 09:00 – 18:00",
+    "map": "Haritada aç",
+    "mapHint": "OpenStreetMap'te yeni sekmede açılır"
+  },
+  "meta": {
+    "siteName": "EkoKod",
+    "home": {
+      "title": "EkoKod — Bina kaynak ve karbon yönetimi",
+      "description": "EKO-RM ile enerji, su ve yakıt tüketiminizi izleyin, faturalarınızı doğrulayın, karbon ayak izinizi hesaplayın."
+    },
+    "about": {
+      "title": "Kurumsal",
+      "description": "EkoKod'un misyonu, vizyonu, iş ortakları ve sürdürülebilirlik yolculuğu."
+    },
+    "references": {
+      "title": "Referanslar",
+      "description": "EkoKod'un kamu, akademi ve enerji sektöründeki çalışmaları."
+    },
+    "documents": {
+      "title": "Dokümanlar",
+      "description": "EkoKod kullanım kılavuzu, teknik dokümanlar ve eğitim materyalleri."
+    },
+    "toolkit": {
+      "title": "Yazılım Çözümleri",
+      "description": "EKO-RM kaynak yönetimi ve EKO-CM karbon yönetimi yazılımlarının özellikleri."
+    },
+    "pricing": {
+      "title": "Fiyatlandırma",
+      "description": "EkoKod paketleri ve özellik karşılaştırması."
+    },
+    "requestDemo": {
+      "title": "Demo Talebi",
+      "description": "EkoKod'u kendi binalarınızla denemek için demo talep edin."
+    },
+    "contact": {
+      "title": "İletişim",
+      "description": "EkoKod ile iletişime geçin: adres, telefon, e-posta ve iletişim formu."
+    },
+    "blog": {
+      "title": "Blog",
+      "description": "Elektrik faturaları, enerji verimliliği ve karbon yönetimi üzerine yazılar."
+    },
+    "calculator": {
+      "title": "Elektrik Fatura Hesaplama",
+      "description": "Ulusal tarife tablosuyla enerji, dağıtım, güç, aşım bedeli ve KDV dahil fatura tahmini."
+    }
+  },
+  "home": {
+    "hero": {
+      "title": "Enerji, su ve yakıt tüketiminizi tek yerden yönetin",
+      "intro": "EKO-RM sürdürülebilirlik hedefleriniz için yol haritanızı hazırlar. EKO-RM ile:",
+      "points": {
+        "bills": "Faturanızı hesaplatarak hatalı faturaları tespit edebilirsiniz.",
+        "consumption": "Tüketiminizi izleyebilir, gelecekteki tüketiminizi yapay zekâ desteğiyle öngörebilirsiniz.",
+        "carbon": "Karbon ayak izinizi hesaplayabilirsiniz.",
+        "alarms": "Alarmlarla anormal tüketimlerden anında haberdar olabilirsiniz.",
+        "loadProfile": "Yük profilinizi çıkararak sorunları tespit edip tasarruf sağlayabilirsiniz."
+      },
+      "primary": "Demo talep et",
+      "secondary": "Faturanı hesapla"
+    },
+    "banner": {
+      "title": "Bina kaynak yönetiminde yeni bir dönem",
+      "description": "Binalar küresel karbon emisyonlarının ve enerji tüketiminin yaklaşık %40'ını oluşturuyor. EkoKod bu tüketimi ölçülebilir ve yönetilebilir kılar."
+    },
+    "strip": {
+      "text": "Bina kaynak yönetimi konusunda uzman çözümler için bizimle iletişime geçin.",
+      "action": "Şimdi iletişime geçin"
+    },
+    "features": {
+      "title": "EKO-RM ile neler yapabilirsiniz?",
+      "description": "EKO-RM, en küçük tesisten en karmaşığına kadar elektrik, su ve doğalgaz tüketen binalarda kaynakların verimli kullanılmasına yardımcı olur; enerji yöneticilerine, fabrika ve satın alma müdürlerine karar almaları için nesnel veri sağlar."
+    },
+    "carbon": {
+      "title": "EKO-CM ile neler yapabilirsiniz?",
+      "description": "EKO-CM, işletmelerin karbon emisyonlarını izlemesine, analiz etmesine ve sürdürülebilirlik hedeflerine ulaşmasına yardımcı olan bütünleşik bir karbon yönetim platformudur."
+    },
+    "references": {
+      "title": "Referanslarımız",
+      "all": "Tüm referanslar"
+    },
+    "documents": {
+      "title": "Dokümanlar",
+      "all": "Tüm dokümanlar"
+    },
+    "news": {
+      "title": "Haberler",
+      "watch": "Sunum videosunu izle",
+      "opensNew": "(yeni sekmede açılır)",
+      "items": {
+        "forum": {
+          "title": "Genel Müdürümüz Doç. Dr. Gül Nihal Güğül, 11. Enerji Verimliliği Forum ve Fuarı'nın start-up oturumunda konuşmacı olarak yer aldı.",
+          "body": "Sunumda bina kaynak yönetimi ve enerji verimliliği çalışmalarımızı paylaştık."
+        },
+        "stand": {
+          "title": "11. Enerji Verimliliği Forum ve Fuarı'ndaki standımıza ilgi büyüktü.",
+          "body": "Kamu ve özel sektör katılımcılarıyla ISO 50001, tüketim ve anomali tespiti, karbon ayak izi ve GES üretim analizi modüllerimizi konuştuk."
+        },
+        "mayors": {
+          "title": "Belediye başkanlarımızı ve ekiplerini standımızda ağırlamaktan onur duyduk.",
+          "body": "Belediyelerin enerji verimliliği hedeflerine nasıl katkı sağlayabileceğimizi değerlendirdik."
+        }
+      },
+      "photo": "{title} — fotoğraf {n}",
+      "date": "Ekim 2025"
+    },
+    "toolkit": {
+      "title": "Yazılım çözümlerimiz",
+      "action": "Özellikleri incele"
+    },
+    "leadership": {
+      "title": "Yönetim",
+      "name": "Doç. Dr. Gül Nihal Güğül",
+      "role": "Genel Müdür"
+    },
+    "faq": {
+      "title": "Sık sorulan sorular",
+      "items": {
+        "data": {
+          "q": "Tüketim verisi nereden geliyor?",
+          "a": "Sayaç verileri dağıtım şirketlerinin otomatik sayaç okuma sistemleri (OSOS) ve desteklenen entegrasyonlar üzerinden her gün otomatik olarak çekilir."
+        },
+        "bills": {
+          "q": "Fatura doğrulama nasıl çalışır?",
+          "a": "Tarifeniz ve ölçülen tüketiminizle faturanın her kalemi yeniden hesaplanır; enerji, dağıtım, güç, aşım ve reaktif bedelleri gerçek faturanızla karşılaştırabilirsiniz."
+        },
+        "carbon": {
+          "q": "Karbon hesabı hangi standartlara uyar?",
+          "a": "Hesaplamalar ISO 14064 kategorileri ve GHG Protocol kapsamlarıyla (Scope 1, 2, 3) raporlanır."
+        },
+        "install": {
+          "q": "Kendi sunucularımıza kurabilir miyiz?",
+          "a": "Evet. EkoKod bulutta veya kurum içi sunucularınızda çalışabilir."
+        }
+      }
+    },
+    "pricing": {
+      "title": "Size uygun paketi seçin",
+      "description": "Tek binadan çoklu tesislere kadar ihtiyacınıza göre paketler.",
+      "action": "Paketleri karşılaştır"
+    },
+    "demo": {
+      "title": "EkoKod'u kendi binanızla görün",
+      "description": "Kısa bir form doldurun, temsilcilerimiz sizinle iletişime geçsin.",
+      "action": "Demo talep et"
+    },
+    "contact": {
+      "title": "Bizimle iletişime geçmekten çekinmeyin",
+      "action": "İletişim sayfasına git"
+    }
+  },
+  "features": {
+    "realTime": "Gerçek zamanlı enerji, su ve yakıt tüketimi izleme",
+    "carbon": "Karbon ayak izi değerlendirme",
+    "anomalies": "Anormallik tespiti ve sorun giderme",
+    "predict": "Yapay zekâ ile gelecekteki tüketim eğilimlerini tahmin etme",
+    "penalty": "Reaktif güç cezasını önlemek için uyarı",
+    "bills": "Hata kontrolü için fatura hesaplama",
+    "profiles": "Saatlik, günlük ve mevsimsel yük profilleri"
+  },
+  "carbonFeatures": {
+    "scope": "Scope 1, 2 ve 3 sera gazı emisyonlarının hesaplanması",
+    "iso": "ISO 14064 Kategori 1–6 kapsamında emisyon hesaplamaları",
+    "isoghg": "ISO 14064 ve GHG Protocol standartlarına uygun raporlama",
+    "emissionFactor": "Güncel emisyon faktörlerinin yönetimi",
+    "corporate": "Kurumsal karbon ayak izi raporları",
+    "compare": "Dönemsel emisyon analizleri ve geçmişle karşılaştırma"
+  },
+  "references": {
+    "title": "Referanslarımız",
+    "description": "Kamu, akademi ve enerji sektöründen kurumlarla yürüttüğümüz çalışmalar.",
+    "logoAlt": "{name} logosu",
+    "items": {
+      "ministry": {
+        "name": "Enerji ve Tabii Kaynaklar Bakanlığı",
+        "story": "Bakanlık binalarında EkoKod ile enerji tüketimi analizi çalışmaları devam ediyor."
+      },
+      "hacettepe": {
+        "name": "Hacettepe Üniversitesi",
+        "story": "Kampüs genelinde kaynak tüketimlerinin tespiti için ön çalışmalar yapılıyor; kurulum 2026'da planlanıyor."
+      },
+      "arti": {
+        "name": "Artı Enerji",
+        "story": "Merkez ofiste elektrik üretim ve tüketim verileri OSOS üzerinden izleniyor, reaktif güç kontrolü yapılıyor."
+      },
+      "yalovares": {
+        "name": "Yalovares",
+        "story": "Karacabey Hibrit GES-RES santralinin üretim performansını optimize etmek için EkoKod ile Ar-Ge çalışmaları sürüyor."
+      }
+    }
+  },
+  "documents": {
+    "title": "Dokümanlar",
+    "description": "EkoKod yazılımı hakkında kullanım kılavuzları, teknik dokümanlar ve eğitim materyalleri.",
+    "request": "İletişime geçerek isteyin",
+    "requestSubject": "Doküman talebi: {title}",
+    "groups": {
+      "general": "Genel",
+      "technical": "Teknik dokümanlar",
+      "training": "Eğitim materyalleri"
+    },
+    "items": {
+      "userGuide": {
+        "title": "EkoKod Kullanıcı Kılavuzu",
+        "description": "Platformun tüm ekranlarını adım adım anlatan kılavuz."
+      },
+      "articles": {
+        "title": "Makaleler",
+        "description": "Enerji verimliliği ve fatura kalemleri üzerine yazılarımız.",
+        "action": "Blogu aç"
+      },
+      "needsForm": {
+        "title": "İhtiyaç Belirleme Formu",
+        "description": "Tesisinize uygun paketi belirlememiz için doldurmanız gereken form."
+      },
+      "specification": {
+        "title": "Teknik Şartname",
+        "description": "Yazılımın teknik özellikleri ve sistem gereksinimleri."
+      },
+      "api": {
+        "title": "API Dokümantasyonu",
+        "description": "EkoKod API'siyle kendi uygulamalarınızı geliştirmek için başvuru belgesi."
+      },
+      "videos": {
+        "title": "Eğitim Videoları",
+        "description": "Yazılımın kullanımını adım adım anlatan videolar."
+      },
+      "quickStart": {
+        "title": "Hızlı Başlangıç Kılavuzu",
+        "description": "EkoKod'u hızla kullanmaya başlamak için temel bilgiler."
+      }
+    }
+  },
+  "toolkit": {
+    "title": "Yazılım Çözümleri",
+    "description": "Sürdürülebilirlik hedeflerine kaynakların kontrolü ve yönetimiyle ulaşılır.",
+    "rm": {
+      "title": "Kaynak Yönetim Yazılımı (EKO-RM)",
+      "description": "Enerji ve su tüketimi sayaçlardan otomatik okunur, anormallikler tespit edilir ve reaktif güç kontrol altında tutulur."
+    },
+    "cm": {
+      "title": "Karbon Yönetim Yazılımı (EKO-CM)",
+      "description": "Karbon emisyonlarının doğru hesaplanması ve yönetimi sürdürülebilir bir geleceğin temelidir."
+    }
+  },
+  "about": {
+    "title": "EkoKod Hakkında",
+    "intro": "Binalarda enerji, su ve yakıt tüketimini yönetmek için geliştirilen EKO-RM, sürdürülebilirlik hedeflerine ulaşmada yol haritası sağlar.",
+    "mission": {
+      "title": "Misyonumuz",
+      "text": "Binalar küresel karbon emisyonlarının ve enerji tüketiminin yaklaşık %40'ını oluşturuyor. Kaynak tüketimini azaltmak ve sürdürülebilirliği teşvik etmek için bina kaynak yönetimi bizim misyonumuz."
+    },
+    "product": {
+      "title": "EKO-RM yazılımı",
+      "text": "Yapay zekâ tahmin modellerinden binaya entegre yenilenebilir enerji sistemlerine kadar bina kaynak yönetiminde uzmanlaşmış Ar-Ge ekibimiz tarafından geliştirildi."
+    },
+    "partners": {
+      "title": "İş ortaklarımız",
+      "text": "Sürdürülebilir şehirler için enerji, su ve yakıt tasarrufu stratejileri geliştirmek üzere kamu, ticari ve akademik kurumlarla iş birliği yapıyoruz:",
+      "list": {
+        "energy": "T.C. Enerji ve Tabii Kaynaklar Bakanlığı, Ankara",
+        "environment": "T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",
+        "selcuk": "Selçuk Üniversitesi, Konya",
+        "arti": "Artı Enerji, Ankara"
+      }
+    },
+    "vision": {
+      "title": "Vizyonumuz",
+      "text": "Bina kaynak yönetiminin etkili uygulanmasıyla konfor seviyesini korurken enerji, su ve yakıt tüketimini en aza indirmek."
+    },
+    "process": {
+      "title": "Sürdürülebilirlik yolculuğumuz",
+      "steps": {
+        "measure": {
+          "title": "Ölç",
+          "text": "Sayaç verileri her gün otomatik olarak toplanır."
+        },
+        "analyse": {
+          "title": "Analiz et",
+          "text": "Tüketim, yük profili ve faturalar kalem kalem incelenir."
+        },
+        "act": {
+          "title": "Harekete geç",
+          "text": "Alarmlar ve raporlarla tasarruf fırsatları hayata geçirilir."
+        },
+        "report": {
+          "title": "Raporla",
+          "text": "Karbon ayak izi ve ISO 50001 ilerlemesi belgelenir."
+        }
+      }
+    },
+    "metrics": {
+      "title": "Rakamlarla EkoKod",
+      "founded": "Kuruluş yılı",
+      "references": "Referans kurum",
+      "products": "Ürün: EKO-RM ve EKO-CM"
+    }
+  },
+  "pricing": {
+    "title": "Fiyatlandırma",
+    "description": "Tüm paketler için fiyat teklifi ihtiyaçlarınıza göre hazırlanır.",
+    "price": "Teklif alın",
+    "popular": "En çok tercih edilen",
+    "includes": "Pakete dahil olanlar",
+    "action": "İletişime geçin",
+    "packages": {
+      "standard": {
+        "title": "Standart",
+        "description": "Küçük ve orta ölçekli binalar için."
+      },
+      "premium": {
+        "title": "Premium",
+        "description": "Birden fazla binayı yönetmek için."
+      },
+      "enterprise": {
+        "title": "Kurumsal",
+        "description": "Büyük ölçekli projeler için özelleştirilmiş çözüm.",
+        "custom": "Kuruluşunuza özel fiyat ve özelleştirmeler için bizimle iletişime geçin."
+      }
+    },
+    "extras": {
+      "customReports": "Özelleştirilmiş raporlama",
+      "multiBuilding": "Çoklu tesis yönetimi",
+      "analytics": "Gelişmiş analitik araçlar",
+      "api": "API entegrasyonu"
+    }
+  },
+  "forms": {
+    "name": "Ad soyad",
+    "email": "E-posta",
+    "phone": "Telefon",
+    "subject": "Konu",
+    "message": "Mesajınız",
+    "company": "Şirket",
+    "role": "Göreviniz",
+    "send": "Gönder",
+    "sending": "Gönderiliyor…",
+    "sent": "Mesajınız iletildi. En kısa sürede sizinle iletişime geçeceğiz.",
+    "sendAnother": "Yeni mesaj gönder",
+    "failed": "Mesajınız iletilemedi. Lütfen daha sonra tekrar deneyin ya da bize {email} adresinden yazın.",
+    "notConfigured": "İletişim formu şu anda kullanılamıyor. Lütfen bize {email} adresinden yazın.",
+    "tooMany": "Çok fazla deneme yaptınız. Lütfen biraz sonra tekrar deneyin.",
+    "contactTitle": "Bize yazın",
+    "demoTitle": "Demo talep formu",
+    "messageShort": "En az 10 karakter yazın.",
+    "errorSummary": "Formu göndermeden önce şunları düzeltin"
+  },
+  "demo": {
+    "title": "Demo talebi",
+    "description": "EkoKod, sürdürülebilir ve uygun maliyetli binalar için enerji, su ve yakıt tüketimini azaltmaya ve karbon ayak izini değerlendirmeye yönelik çözümler sunar. Binanıza özgü tasarruf stratejilerinizi birlikte geliştirelim."
+  },
+  "contact": {
+    "title": "İletişim",
+    "description": "Sorularınız, iş birliği önerileriniz ve teklif talepleriniz için bize ulaşın."
+  },
+  "blog": {
+    "title": "Blog",
+    "description": "En son yazılarımız",
+    "filter": "Kategori",
+    "categories": {
+      "all": "Tümü",
+      "electricity": "Elektrik",
+      "naturalGas": "Doğal Gaz"
+    },
+    "empty": "Bu kategoride henüz yazı yok.",
+    "read": "Yazıyı oku",
+    "by": "Yazar: {author}",
+    "back": "Tüm yazılar",
+    "turkishOnly": "Bu yazı yalnızca Türkçe olarak yayımlanmıştır.",
+    "contents": "İçindekiler",
+    "published": "{date} tarihinde yayımlandı"
+  },
+  "calculator": {
+    "title": "Elektrik fatura hesaplama",
+    "description": "Ulusal tarife tablosundaki fiyatlarla faturanızın enerji, dağıtım, güç ve aşım bedellerini ve KDV'yi tahmin edin.",
+    "group": "Abone grubu",
+    "groups": {
+      "residential": "Mesken",
+      "commercial": "Ticarethane (kamu, özel sektör ve diğer)",
+      "industrial": "Sanayi",
+      "agricultural": "Tarımsal sulama",
+      "lighting": "Aydınlatma"
+    },
+    "voltage": "Abonelik tanımı",
+    "voltages": {
+      "lv": "Alçak gerilim (AG)",
+      "mv": "Orta gerilim (OG)"
+    },
+    "term": "Terim",
+    "terms": {
+      "monomial": "Tek terimli",
+      "binomial": "Çift terimli"
+    },
+    "binomialHint": "Çift terim yalnızca orta gerilimde vardır.",
+    "tariff": "Tarife",
+    "tariffs": {
+      "single": "Tek zamanlı",
+      "multi": "Çok zamanlı (T1/T2/T3)"
+    },
+    "start": "Başlangıç tarihi",
+    "end": "Bitiş tarihi",
+    "total": "Toplam tüketim (kWh)",
+    "t1": "T1 gündüz (kWh)",
+    "t2": "T2 puant (kWh)",
+    "t3": "T3 gece (kWh)",
+    "demand": "Ölçülen güç / demand (kW)",
+    "contract": "Sözleşme gücü (kW)",
+    "calculate": "Hesapla",
+    "result": "Fatura detayı",
+    "resultEmpty": "Bilgileri girip Hesapla'ya basın.",
+    "lines": {
+      "energy": "Enerji bedeli",
+      "distribution": "Dağıtım bedeli",
+      "power": "Güç bedeli",
+      "overuse": "Güç aşım bedeli",
+      "vatBase": "KDV matrahı",
+      "vat": "KDV (%{rate})",
+      "total": "Toplam fatura"
+    },
+    "days": "{days} günlük dönem",
+    "tariffUsed": "Kullanılan tarife: {effective} tarihli, {group}",
+    "plusGroup": "Günlük tüketim eşiği aşıldığı için yüksek tüketim fiyatı uygulandı.",
+    "rulesTitle": "Hesaplama kuralları",
+    "rules": {
+      "bands": "Çok zamanlı tarifede T1, T2 ve T3 birlikte girilmelidir; toplam da girilirse üçünün toplamına eşit olmalıdır. Tek zamanlı tarifede toplam kullanılır, yalnızca T değerleri girilirse toplamları alınır.",
+      "power": "Güç bedeli aylık fiyat × sözleşme gücü × gün sayısı / 30 olarak hesaplanır. Ölçülen güç sözleşme gücünü aşarsa aşan kısım aşım fiyatıyla eklenir.",
+      "vat": "KDV enerji, dağıtım, güç ve aşım bedellerinin toplamı üzerinden hesaplanır. Belediye tüketim vergisi gibi diğer kalemler dahil değildir; sonuç bir tahmindir."
+    },
+    "basis": {
+      "total": "Enerji toplam tüketim üzerinden fiyatlandırıldı.",
+      "bands": "Enerji T1, T2 ve T3 kendi fiyatlarıyla fiyatlandırıldı."
+    }
+  }
+}

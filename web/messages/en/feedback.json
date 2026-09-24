@@ -1,0 +1,23 @@
+{
+  "breadcrumb": "Breadcrumb",
+  "close": "Close",
+  "pageOf": "Page {page} of {count}",
+  "previousPage": "Previous page",
+  "nextPage": "Next page",
+  "rowsPerPage": "Rows per page",
+  "totalItems": "{count} records",
+  "loading": "Loading...",
+  "dismiss": "Dismiss",
+  "stepOf": "Step {current} of {total}",
+  "stepCompleted": "Completed",
+  "stepCurrent": "Current step",
+  "notifications": "Notifications ({hotkey})",
+  "progressIndeterminate": "In progress",
+  "threshold": "Threshold",
+  "notification": "Notification",
+  "saved": "Saved",
+  "loadFailed": "Could not load the data",
+  "saveFailed": "Could not be saved",
+  "deleted": "Deleted",
+  "created": "Created"
+}

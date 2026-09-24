@@ -5,6 +5,7 @@ package api
 import (
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/api/middleware"
 	"github.com/MErenTalan/ekokod-rewrite/internal/buildinfo"
@@ -19,12 +20,15 @@ type Deps struct {
 	Log         *slog.Logger
 	Build       buildinfo.Info
 	ReadyChecks []health.Check
+	// V1 is the /api/v1 surface (internal/api/v1), built by internal/apiwire.
+	V1 http.Handler
 }
 
 // NewRouter builds the HTTP handler.
 func NewRouter(d Deps) http.Handler {
 	r := chi.NewRouter()
 
+	r.Use(middleware.SecurityHeaders(strings.HasPrefix(d.Cfg.HTTP.PublicURL, "https://")))
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recoverer(d.Log))
 	r.Use(middleware.Logger(d.Log))
@@ -35,7 +39,9 @@ func NewRouter(d Deps) http.Handler {
 	r.Get("/health/live", liveHandler())
 	r.Get("/health/ready", readyHandler(d.ReadyChecks))
 	r.Get("/version", versionHandler(d.Build))
-	r.Handle("/metrics", middleware.MetricsHandler())
+	if d.V1 != nil {
+		r.Mount("/api/v1", d.V1)
+	}
 
 	return r
 }

@@ -1,0 +1,10 @@
+{
+  "columns": "Columns",
+  "actions": "Actions",
+  "rowActions": "Actions: {label}",
+  "sortAscending": "Sort ascending",
+  "sortDescending": "Sort descending",
+  "noResults": "No results found",
+  "export": "Export",
+  "scrollRegion": "{caption} table"
+}

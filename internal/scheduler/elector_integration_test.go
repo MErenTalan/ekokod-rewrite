@@ -4,57 +4,33 @@ package scheduler_test
 
 import (
 	"context"
-	"io"
-	"log/slog"
+	"errors"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/scheduler"
-	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
 	"github.com/stretchr/testify/require"
-	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 )
 
-func startPostgres(t *testing.T) string {
-	t.Helper()
-	ctx := context.Background()
-	container, err := tcpostgres.Run(ctx, "timescale/timescaledb:2.30.0-pg16",
-		tcpostgres.WithDatabase("ekokod"),
-		tcpostgres.WithUsername("ekokod"),
-		tcpostgres.WithPassword("ekokod"),
-		tcpostgres.BasicWaitStrategies(),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = container.Terminate(context.Background()) })
-
-	dsn, err := container.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-	return dsn
-}
-
-func newPool(t *testing.T, dsn string) *pgxpool.Pool {
-	t.Helper()
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	pool, err := postgres.NewPool(context.Background(), config.DB{
-		URL: dsn, MaxConns: 4, MinConns: 1,
-		MaxConnLifetime: time.Hour, StatementTimeout: 10 * time.Second,
-	}, log)
-	require.NoError(t, err)
-	t.Cleanup(pool.Close)
-	return pool
-}
+// These tests share one Postgres advisory-lock key namespace
+// (scheduler.LockKeyScheduler) and, where several run leader-election
+// loops, contend for real wall-clock leadership transitions — running them
+// in parallel with t.Parallel() would make one test's lock acquisition or
+// backend-termination race another's, so every test in this file stays
+// serial (the existing tests above already do; new ones below follow the
+// same rule).
 
 // TestLeaderElection is named in the F0 acceptance criteria: exactly one of two
 // simultaneously started instances leads, and killing it transfers leadership.
 func TestLeaderElection(t *testing.T) {
-	dsn := startPostgres(t)
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	dsn := testfixtures.StartPostgresUnmigrated(t)
+	log := testfixtures.DiscardLogger()
 	const retry = 200 * time.Millisecond
 
-	first := scheduler.NewElector(newPool(t, dsn), scheduler.LockKeyScheduler, retry, log)
-	second := scheduler.NewElector(newPool(t, dsn), scheduler.LockKeyScheduler, retry, log)
+	first := scheduler.NewElector(testfixtures.NewPool(t, dsn), scheduler.LockKeyScheduler, retry, log)
+	second := scheduler.NewElector(testfixtures.NewPool(t, dsn), scheduler.LockKeyScheduler, retry, log)
 
 	firstCtx, stopFirst := context.WithCancel(context.Background())
 	secondCtx, stopSecond := context.WithCancel(context.Background())
@@ -84,10 +60,10 @@ func TestLeaderElection(t *testing.T) {
 }
 
 func TestLeadContextIsCancelledWhenTheProcessStops(t *testing.T) {
-	dsn := startPostgres(t)
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	dsn := testfixtures.StartPostgresUnmigrated(t)
+	log := testfixtures.DiscardLogger()
 
-	elector := scheduler.NewElector(newPool(t, dsn), scheduler.LockKeyScheduler, 100*time.Millisecond, log)
+	elector := scheduler.NewElector(testfixtures.NewPool(t, dsn), scheduler.LockKeyScheduler, 100*time.Millisecond, log)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	cancelled := make(chan struct{})
@@ -121,10 +97,10 @@ func TestLeadContextIsCancelledWhenTheProcessStops(t *testing.T) {
 // it, so this instance's lead context must be cancelled promptly or two
 // replicas could fire the same cron entries simultaneously.
 func TestLeadContextIsCancelledWhenTheConnectionDies(t *testing.T) {
-	dsn := startPostgres(t)
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	dsn := testfixtures.StartPostgresUnmigrated(t)
+	log := testfixtures.DiscardLogger()
 
-	elector := scheduler.NewElector(newPool(t, dsn), scheduler.LockKeyScheduler, 100*time.Millisecond, log)
+	elector := scheduler.NewElector(testfixtures.NewPool(t, dsn), scheduler.LockKeyScheduler, 100*time.Millisecond, log)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
@@ -142,7 +118,7 @@ func TestLeadContextIsCancelledWhenTheConnectionDies(t *testing.T) {
 	// Find and kill the backend holding the advisory lock from a completely
 	// separate connection, simulating a dropped connection or a database
 	// session that was killed out from under the elector.
-	admin := newPool(t, dsn)
+	admin := testfixtures.NewPool(t, dsn)
 	var pid int32
 	require.NoError(t, admin.QueryRow(context.Background(),
 		`select pid from pg_locks where locktype = 'advisory' limit 1`).Scan(&pid))
@@ -163,10 +139,10 @@ func TestLeadContextIsCancelledWhenTheConnectionDies(t *testing.T) {
 // value. A zero here must degrade to a sane interval, not take the process
 // down.
 func TestNonPositiveRetryDoesNotPanic(t *testing.T) {
-	dsn := startPostgres(t)
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	dsn := testfixtures.StartPostgresUnmigrated(t)
+	log := testfixtures.DiscardLogger()
 
-	elector := scheduler.NewElector(newPool(t, dsn), scheduler.LockKeyScheduler, 0, log)
+	elector := scheduler.NewElector(testfixtures.NewPool(t, dsn), scheduler.LockKeyScheduler, 0, log)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
@@ -184,4 +160,46 @@ func TestNonPositiveRetryDoesNotPanic(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("Run did not return after its context was cancelled")
 	}
+}
+
+// TestElectorBacksOffOnRepeatedLeadFailure pins Carried-forward defect 2
+// (F1 plan): consecutive lead panics/errors back off exponentially (10s
+// doubling to 5m), rather than retrying at the fixed campaign cadence. A
+// fake scheduler.WithWait records every wait duration Run asks for and
+// never actually sleeps, so the test runs instantly despite exercising
+// several "seconds"-scale backoff steps. lead deliberately returns an
+// error every single term (never merely "did not win"), which — through
+// real Postgres advisory-lock acquisition — is exactly the
+// panic-or-error path Carried-forward defect 2 targets, distinct from the
+// ordinary not-currently-leading retry cadence the other tests in this
+// file exercise.
+func TestElectorBacksOffOnRepeatedLeadFailure(t *testing.T) {
+	dsn := testfixtures.StartPostgresUnmigrated(t)
+	log := testfixtures.DiscardLogger()
+
+	var mu sync.Mutex
+	var waits []time.Duration
+	stop := errors.New("enough samples")
+	fakeWait := func(_ context.Context, d time.Duration) error {
+		mu.Lock()
+		defer mu.Unlock()
+		waits = append(waits, d)
+		if len(waits) >= 4 {
+			return stop
+		}
+		return nil
+	}
+
+	elector := scheduler.NewElector(testfixtures.NewPool(t, dsn), scheduler.LockKeyScheduler,
+		10*time.Second, log, scheduler.WithWait(fakeWait))
+
+	leadErr := errors.New("boom")
+	_ = elector.Run(context.Background(), func(context.Context) error { return leadErr })
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.GreaterOrEqual(t, len(waits), 3, "expected at least 3 recorded backoff waits")
+	require.Less(t, waits[0], waits[1], "backoff must increase after a second consecutive failure")
+	require.Less(t, waits[1], waits[2], "backoff must increase after a third consecutive failure")
+	require.Equal(t, 10*time.Second, waits[0], "the first failure must back off at the 10s base")
 }

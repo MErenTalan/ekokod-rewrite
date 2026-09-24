@@ -6,6 +6,9 @@
 /web/coverage/
 /web/next-env.d.ts
 /web/tsconfig.tsbuildinfo
+/web/storybook-static/
+/web/playwright-report/
+/web/test-results/
 .env
 .env.local
 .env.docker
@@ -18,3 +21,13 @@
 *.tar
 *.tar.gz
 coverage.out
+
+# ML service (F13)
+ml/.venv/
+__pycache__/
+.pytest_cache/
+
+# F14c: rehearsal output (scripts/migration-rehearsal.sh)
+/reports/
+/rehearsal/
+/backups/

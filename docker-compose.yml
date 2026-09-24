@@ -31,7 +31,10 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ekokod -d ekokod"]
+      # Over TCP: the image's first-boot init server listens on the socket
+      # only, so a socket check reports healthy before the real server is up
+      # and migrate hits "connection refused" (found by F15c's install test).
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ekokod -d ekokod"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -76,7 +79,12 @@ services:
     image: ekokod:${VERSION:-dev}
     <<: *ekokod-env
     command: ["api"]
-    ports: ["8080:8080"]
+    # F15c R478: host ports are overridable so a second install (or the
+    # offline-install test) can sit beside the first.
+    ports: ["${EKOKOD_API_PORT:-8080}:8080"]
+    environment:
+      # F15b: metrics listen inside the compose network only; nothing publishes them.
+      EKOKOD_API_METRICS_ADDR: 0.0.0.0:9464
     volumes:
       - artifacts:/var/lib/ekokod
     depends_on:
@@ -104,6 +112,8 @@ services:
     image: ekokod:${VERSION:-dev}
     <<: *ekokod-env
     command: ["worker"]
+    environment:
+      EKOKOD_WORKER_METRICS_ADDR: 0.0.0.0:9465
     volumes:
       - artifacts:/var/lib/ekokod
     depends_on:
@@ -131,6 +141,8 @@ services:
     image: ekokod:${VERSION:-dev}
     <<: *ekokod-env
     command: ["scheduler"]
+    environment:
+      EKOKOD_SCHEDULER_METRICS_ADDR: 0.0.0.0:9466
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -147,7 +159,23 @@ services:
       resources:
         limits: { cpus: "1", memory: 512m }
 
+  # ML service (F13, 03 §6): forecasting and anomaly detection. Reads EKOKOD_ML_API_KEY from the
+  # same env file as the Go services; it has no database credentials and no database driver.
+  ml:
+    # R478: a named tag, so the offline bundle's docker save and the target's up agree.
+    image: ekokod-ml:${VERSION:-dev}
+    build:
+      context: ml
+    <<: *ekokod-env
+    volumes:
+      - ml-models:/var/lib/ekokod-ml
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { cpus: "2", memory: 2g }
+
   web:
+    image: ekokod-web:${VERSION:-dev}
     build:
       context: .
       dockerfile: web/Dockerfile
@@ -155,7 +183,12 @@ services:
       NEXT_PUBLIC_API_URL: http://localhost:8080
       EKOKOD_INTERNAL_API_URL: http://api:8080
       TZ: Europe/Istanbul
-    ports: ["3000:3000"]
+      # F12b: the public site reads these flags itself.
+      EKOKOD_FEATURE_PRICING_PAGE: ${EKOKOD_FEATURE_PRICING_PAGE:-false}
+      EKOKOD_FEATURE_ANALYTICS: ${EKOKOD_FEATURE_ANALYTICS:-false}
+      EKOKOD_ANALYTICS_SRC: ${EKOKOD_ANALYTICS_SRC:-}
+      EKOKOD_ANALYTICS_SITE: ${EKOKOD_ANALYTICS_SITE:-}
+    ports: ["${EKOKOD_WEB_PORT:-3000}:3000"]
     depends_on:
       api: { condition: service_healthy }
     # See the worker service for why unless-stopped.
@@ -176,3 +209,4 @@ volumes:
   postgres-data:
   redis-data:
   artifacts:
+  ml-models:

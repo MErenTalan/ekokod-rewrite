@@ -1,0 +1,50 @@
+{
+  "items": [
+    {
+      "meterDate": "2026-01-05T08:00:00+03:00",
+      "activeImport_kWh": 1523.750,
+      "inductive_kvarh": 88.400,
+      "capacitive_kvarh": 12.100,
+      "dmdKwPeak_kW": 45.200,
+      "currentGeneration": 3.600,
+      "deviceId": "FIXTURE-DEVICE-01",
+      "deviceIp": "127.0.0.1"
+    },
+    {
+      "meterDate": "not-a-real-date",
+      "activeImport_kWh": 1524.900,
+      "inductive_kvarh": 88.600,
+      "capacitive_kvarh": 12.150,
+      "dmdKwPeak_kW": 46.000,
+      "currentGeneration": 4.000,
+      "deviceId": "FIXTURE-DEVICE-01",
+      "deviceIp": "127.0.0.1"
+    },
+    {
+      "meterDate": "2026-01-05T09:00:00+03:00",
+      "activeImport_kWh": "N/A",
+      "inductive_kvarh": null,
+      "capacitive_kvarh": null,
+      "dmdKwPeak_kW": null,
+      "currentGeneration": null,
+      "deviceId": "FIXTURE-DEVICE-01",
+      "deviceIp": "127.0.0.1"
+    },
+    {
+      "meterDate": "2026-01-05T09:15:00+03:00",
+      "activeImport_kWh": 1526.100,
+      "inductive_kvarh": 88.900,
+      "capacitive_kvarh": 12.200,
+      "dmdKwPeak_kW": 44.800,
+      "currentGeneration": 3.200,
+      "deviceId": "FIXTURE-DEVICE-01",
+      "deviceIp": "127.0.0.1"
+    }
+  ],
+  "limit": 500,
+  "cursorNext": null,
+  "hasMore": false,
+  "total": 4,
+  "sort": "asc",
+  "filters": {}
+}
