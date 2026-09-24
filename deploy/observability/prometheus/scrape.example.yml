@@ -1,0 +1,11 @@
+# F15b R460: each process serves /metrics on its own internal address
+# (EKOKOD_API_METRICS_ADDR, EKOKOD_WORKER_METRICS_ADDR, EKOKOD_SCHEDULER_METRICS_ADDR).
+# The job names below are what alerts.yml expects.
+scrape_configs:
+  - job_name: ekokod-api
+    static_configs: [{ targets: ["127.0.0.1:9464"] }]
+  - job_name: ekokod-worker
+    static_configs: [{ targets: ["127.0.0.1:9465"] }]
+  - job_name: ekokod-scheduler
+    static_configs: [{ targets: ["127.0.0.1:9466"] }]
+rule_files: [alerts.yml]
