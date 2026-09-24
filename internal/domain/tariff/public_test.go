@@ -138,3 +138,20 @@ func TestPublicRefusals(t *testing.T) {
 		_ = name
 	}
 }
+
+func TestSchedulePickerTakesTheRowInForce(t *testing.T) {
+	d := func(y int, m time.Month, day int) time.Time { return time.Date(y, m, day, 0, 0, 0, 0, time.UTC) }
+	rows := []model.NationalTariffScheduleEntry{
+		{EffectiveFrom: d(2025, 1, 1), UserGroup: "commercial", VoltageLevel: "lv", Term: "monomial", EnergyPrice: *pd("1")},
+		{EffectiveFrom: d(2026, 4, 1), UserGroup: "commercial", VoltageLevel: "lv", Term: "monomial", EnergyPrice: *pd("2")},
+		{EffectiveFrom: d(2026, 4, 1), UserGroup: "industrial", VoltageLevel: "lv", Term: "monomial", EnergyPrice: *pd("9")},
+	}
+	row, ok := tariff.SchedulePicker(rows, d(2026, 3, 31))("commercial", "lv", "monomial")
+	require.True(t, ok)
+	require.Equal(t, "1", row.EnergyPrice.String())
+	row, ok = tariff.SchedulePicker(rows, d(2026, 4, 1))("commercial", "lv", "monomial")
+	require.True(t, ok)
+	require.Equal(t, "2", row.EnergyPrice.String())
+	_, ok = tariff.SchedulePicker(rows, d(2026, 3, 1))("industrial", "lv", "monomial")
+	require.False(t, ok, "nothing in force yet")
+}

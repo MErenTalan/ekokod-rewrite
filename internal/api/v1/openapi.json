@@ -6524,6 +6524,145 @@
         },
         "type": "object"
       },
+      "PublicBill": {
+        "properties": {
+          "basis": {
+            "enum": [
+              "total",
+              "bands"
+            ],
+            "type": "string"
+          },
+          "days": {
+            "type": "integer"
+          },
+          "distribution": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "energy": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "overuse": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "power": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "tariff": {
+            "$ref": "#/components/schemas/PublicBillTariff"
+          },
+          "total": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "vat": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "vat_base": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "vat_rate": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "required": [
+          "energy",
+          "distribution",
+          "power",
+          "overuse",
+          "vat_base",
+          "vat",
+          "total",
+          "vat_rate",
+          "days",
+          "basis",
+          "tariff"
+        ],
+        "type": "object"
+      },
+      "PublicBillRequest": {
+        "properties": {
+          "contract_power": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "demand": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "end": {
+            "$ref": "#/components/schemas/Date"
+          },
+          "multi_time": {
+            "type": "boolean"
+          },
+          "start": {
+            "$ref": "#/components/schemas/Date"
+          },
+          "t1": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "t2": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "t3": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "term": {
+            "enum": [
+              "monomial",
+              "binomial"
+            ],
+            "type": "string"
+          },
+          "total_consumption": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "user_group": {
+            "enum": [
+              "residential",
+              "commercial",
+              "industrial",
+              "agricultural",
+              "lighting"
+            ],
+            "type": "string"
+          },
+          "voltage_level": {
+            "enum": [
+              "lv",
+              "mv"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_group",
+          "voltage_level",
+          "term",
+          "start",
+          "end"
+        ],
+        "type": "object"
+      },
+      "PublicBillTariff": {
+        "properties": {
+          "effective_from": {
+            "$ref": "#/components/schemas/Date"
+          },
+          "group_used": {
+            "type": "string"
+          },
+          "source": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "effective_from",
+          "group_used"
+        ],
+        "type": "object"
+      },
       "ReactiveAnalyzer": {
         "properties": {
           "analyzer_id": {
@@ -25799,6 +25938,76 @@
         "summary": "Update the current user's name, e-mail, phone, locale and UI preferences.",
         "tags": [
           "profile"
+        ]
+      }
+    },
+    "/api/v1/public/bill-calculator": {
+      "post": {
+        "operationId": "public.bill_calculator",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicBillRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicBill"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Estimate a bill from the national tariff schedule, power charge included.",
+        "tags": [
+          "public"
         ]
       }
     },

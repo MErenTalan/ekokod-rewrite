@@ -1854,6 +1854,23 @@ export interface paths {
         patch: operations["profile.update"];
         trace?: never;
     };
+    "/api/v1/public/bill-calculator": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Estimate a bill from the national tariff schedule, power charge included. */
+        post: operations["public.bill_calculator"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/renewable/analytics": {
         parameters: {
             query?: never;
@@ -3943,6 +3960,42 @@ export interface components {
             name?: null | string;
             phone?: null | string;
             ui_preferences?: null | string;
+        };
+        PublicBill: {
+            /** @enum {string} */
+            basis: "total" | "bands";
+            days: number;
+            distribution: components["schemas"]["Decimal"];
+            energy: components["schemas"]["Decimal"];
+            overuse: components["schemas"]["Decimal"];
+            power: components["schemas"]["Decimal"];
+            tariff: components["schemas"]["PublicBillTariff"];
+            total: components["schemas"]["Decimal"];
+            vat: components["schemas"]["Decimal"];
+            vat_base: components["schemas"]["Decimal"];
+            vat_rate: components["schemas"]["Decimal"];
+        };
+        PublicBillRequest: {
+            contract_power?: components["schemas"]["Decimal"];
+            demand?: components["schemas"]["Decimal"];
+            end: components["schemas"]["Date"];
+            multi_time?: boolean;
+            start: components["schemas"]["Date"];
+            t1?: components["schemas"]["Decimal"];
+            t2?: components["schemas"]["Decimal"];
+            t3?: components["schemas"]["Decimal"];
+            /** @enum {string} */
+            term: "monomial" | "binomial";
+            total_consumption?: components["schemas"]["Decimal"];
+            /** @enum {string} */
+            user_group: "residential" | "commercial" | "industrial" | "agricultural" | "lighting";
+            /** @enum {string} */
+            voltage_level: "lv" | "mv";
+        };
+        PublicBillTariff: {
+            effective_from: components["schemas"]["Date"];
+            group_used: string;
+            source?: null | string;
         };
         ReactiveAnalyzer: {
             analyzer_id: components["schemas"]["UuidUUID"];
@@ -16364,6 +16417,66 @@ export interface operations {
             };
             /** @description Too Many Requests */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "public.bill_calculator": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PublicBillRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicBill"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -152,3 +152,25 @@ func consumption(in PublicInput) (decimal.Decimal, string, error) {
 	}
 	return sum, "total", nil
 }
+
+// SchedulePicker picks, per (group, voltage, term), the row with the latest
+// effective_from not after on (civil dates).
+func SchedulePicker(rows []model.NationalTariffScheduleEntry, on time.Time) Picker {
+	day := civilDay(on)
+	return func(g model.DistributionUserGroup, l model.VoltageLevel, t model.TariffTerm) (model.NationalTariffScheduleEntry, bool) {
+		var best *model.NationalTariffScheduleEntry
+		for i := range rows {
+			r := &rows[i]
+			if r.UserGroup != g || r.VoltageLevel != l || r.Term != t || civilDay(r.EffectiveFrom).After(day) {
+				continue
+			}
+			if best == nil || r.EffectiveFrom.After(best.EffectiveFrom) {
+				best = r
+			}
+		}
+		if best == nil {
+			return model.NationalTariffScheduleEntry{}, false
+		}
+		return *best, true
+	}
+}
