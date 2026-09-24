@@ -498,3 +498,44 @@ func analyticsDecPtr(s string) *decimal.Decimal {
 	d := decimal.RequireFromString(s)
 	return &d
 }
+
+// TestAnalyticsHourlyMeterIsNotZero is F3 Q6 (F15q R471): a meter that reports
+// once an hour has one reading per hourly bucket, so last−first inside it is
+// zero; the repository differences consecutive bucket boundaries instead.
+func TestAnalyticsHourlyMeterIsNotZero(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
+	readingRepo := postgres.NewReadingRepository(pool)
+	analyticsRepo := postgres.NewAnalyticsRepository(pool)
+	id := tenant.Analyzers[0].ID
+
+	// Istanbul midnight on 2 Jan 2026, hourly for 26 hours: 1000 + 10·h.
+	start := analyticsEpoch.Add(21 * time.Hour)
+	var rows []model.MeterReading
+	for h := 0; h <= 26; h++ {
+		rows = append(rows, model.MeterReading{AnalyzerID: id, Ts: start.Add(time.Duration(h) * time.Hour),
+			Kind: model.ReadingKindLoadProfile, ActiveImport: analyticsDecPtr(decimal.NewFromInt(int64(1000 + 10*h)).String()),
+			MultiplierApplied: decimal.RequireFromString("1"), SourceProvider: model.IntegrationProviderOSOS, IngestedAt: time.Now().UTC()})
+	}
+	_, _, err := readingRepo.BulkInsert(ctx, tenant.Scope, rows)
+	require.NoError(t, err)
+	for _, v := range []string{"consumption_hourly", "consumption_daily", "consumption_monthly", "consumption_yearly"} {
+		analyticsRefresh(t, ctx, pool, v)
+	}
+
+	hourly, err := analyticsRepo.ConsumptionHourly(ctx, tenant.Scope, []uuid.UUID{id},
+		store.TimeRange{From: start, To: start.Add(24 * time.Hour)})
+	require.NoError(t, err)
+	require.Len(t, hourly, 24)
+	for _, b := range hourly {
+		require.Equal(t, "10", b.ActiveConsumption.String(), b.Bucket)
+	}
+
+	daily, err := analyticsRepo.ConsumptionDaily(ctx, tenant.Scope, []uuid.UUID{id},
+		store.TimeRange{From: start, To: start.Add(24 * time.Hour)})
+	require.NoError(t, err)
+	require.Len(t, daily, 1)
+	require.Equal(t, "240", daily[0].ActiveConsumption.String(), "the whole day, 00:00 to 24:00")
+}

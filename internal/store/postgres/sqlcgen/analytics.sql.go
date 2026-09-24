@@ -13,7 +13,7 @@ import (
 )
 
 const analyticsConsumptionDaily = `-- name: AnalyticsConsumptionDaily :many
-select c.analyzer_id, c.bucket, c.active_import_start, c.active_import_end, c.active_consumption, c.inductive_consumption, c.capacitive_consumption, c.t1_consumption, c.t2_consumption, c.t3_consumption, c.active_generation, c.inductive_generation, c.capacitive_generation, c.t1_generation, c.t2_generation, c.t3_generation, c.max_demand_kw, c.active_index, c.inductive_index, c.capacitive_index, c.t1_index, c.t2_index, c.t3_index, c.active_generation_index, c.reading_count from consumption_daily c
+select c.analyzer_id, c.bucket, c.active_import_start, c.active_import_end, c.active_consumption, c.inductive_consumption, c.capacitive_consumption, c.t1_consumption, c.t2_consumption, c.t3_consumption, c.active_generation, c.inductive_generation, c.capacitive_generation, c.t1_generation, c.t2_generation, c.t3_generation, c.max_demand_kw, c.active_index, c.inductive_index, c.capacitive_index, c.t1_index, c.t2_index, c.t3_index, c.active_generation_index, c.reading_count, c.first_ts, c.inductive_consumption_start, c.capacitive_consumption_start, c.t1_consumption_start, c.t2_consumption_start, c.t3_consumption_start, c.active_generation_start, c.inductive_generation_start, c.capacitive_generation_start, c.t1_generation_start, c.t2_generation_start, c.t3_generation_start, c.inductive_generation_index, c.capacitive_generation_index, c.t1_generation_index, c.t2_generation_index, c.t3_generation_index from consumption_daily c
 join analyzers a on a.id = c.analyzer_id
 where a.company_id = $1
   and ($2::boolean or a.building_id = any($3::uuid[]))
@@ -79,6 +79,23 @@ func (q *Queries) AnalyticsConsumptionDaily(ctx context.Context, arg AnalyticsCo
 			&i.T3Index,
 			&i.ActiveGenerationIndex,
 			&i.ReadingCount,
+			&i.FirstTs,
+			&i.InductiveConsumptionStart,
+			&i.CapacitiveConsumptionStart,
+			&i.T1ConsumptionStart,
+			&i.T2ConsumptionStart,
+			&i.T3ConsumptionStart,
+			&i.ActiveGenerationStart,
+			&i.InductiveGenerationStart,
+			&i.CapacitiveGenerationStart,
+			&i.T1GenerationStart,
+			&i.T2GenerationStart,
+			&i.T3GenerationStart,
+			&i.InductiveGenerationIndex,
+			&i.CapacitiveGenerationIndex,
+			&i.T1GenerationIndex,
+			&i.T2GenerationIndex,
+			&i.T3GenerationIndex,
 		); err != nil {
 			return nil, err
 		}
@@ -92,7 +109,7 @@ func (q *Queries) AnalyticsConsumptionDaily(ctx context.Context, arg AnalyticsCo
 
 const analyticsConsumptionHourly = `-- name: AnalyticsConsumptionHourly :many
 
-select c.analyzer_id, c.bucket, c.active_import_start, c.active_import_end, c.active_consumption, c.inductive_consumption, c.capacitive_consumption, c.t1_consumption, c.t2_consumption, c.t3_consumption, c.active_generation, c.inductive_generation, c.capacitive_generation, c.t1_generation, c.t2_generation, c.t3_generation, c.max_demand_kw, c.active_index, c.inductive_index, c.capacitive_index, c.t1_index, c.t2_index, c.t3_index, c.active_generation_index, c.reading_count from consumption_hourly c
+select c.analyzer_id, c.bucket, c.active_import_start, c.active_import_end, c.active_consumption, c.inductive_consumption, c.capacitive_consumption, c.t1_consumption, c.t2_consumption, c.t3_consumption, c.active_generation, c.inductive_generation, c.capacitive_generation, c.t1_generation, c.t2_generation, c.t3_generation, c.max_demand_kw, c.active_index, c.inductive_index, c.capacitive_index, c.t1_index, c.t2_index, c.t3_index, c.active_generation_index, c.reading_count, c.first_ts, c.inductive_consumption_start, c.capacitive_consumption_start, c.t1_consumption_start, c.t2_consumption_start, c.t3_consumption_start, c.active_generation_start, c.inductive_generation_start, c.capacitive_generation_start, c.t1_generation_start, c.t2_generation_start, c.t3_generation_start, c.inductive_generation_index, c.capacitive_generation_index, c.t1_generation_index, c.t2_generation_index, c.t3_generation_index from consumption_hourly c
 join analyzers a on a.id = c.analyzer_id
 where a.company_id = $1
   and ($2::boolean or a.building_id = any($3::uuid[]))
@@ -168,6 +185,23 @@ func (q *Queries) AnalyticsConsumptionHourly(ctx context.Context, arg AnalyticsC
 			&i.T3Index,
 			&i.ActiveGenerationIndex,
 			&i.ReadingCount,
+			&i.FirstTs,
+			&i.InductiveConsumptionStart,
+			&i.CapacitiveConsumptionStart,
+			&i.T1ConsumptionStart,
+			&i.T2ConsumptionStart,
+			&i.T3ConsumptionStart,
+			&i.ActiveGenerationStart,
+			&i.InductiveGenerationStart,
+			&i.CapacitiveGenerationStart,
+			&i.T1GenerationStart,
+			&i.T2GenerationStart,
+			&i.T3GenerationStart,
+			&i.InductiveGenerationIndex,
+			&i.CapacitiveGenerationIndex,
+			&i.T1GenerationIndex,
+			&i.T2GenerationIndex,
+			&i.T3GenerationIndex,
 		); err != nil {
 			return nil, err
 		}
@@ -180,7 +214,7 @@ func (q *Queries) AnalyticsConsumptionHourly(ctx context.Context, arg AnalyticsC
 }
 
 const analyticsConsumptionMonthly = `-- name: AnalyticsConsumptionMonthly :many
-select c.analyzer_id, c.bucket, c.active_import_start, c.active_import_end, c.active_consumption, c.inductive_consumption, c.capacitive_consumption, c.t1_consumption, c.t2_consumption, c.t3_consumption, c.active_generation, c.inductive_generation, c.capacitive_generation, c.t1_generation, c.t2_generation, c.t3_generation, c.max_demand_kw, c.active_index, c.inductive_index, c.capacitive_index, c.t1_index, c.t2_index, c.t3_index, c.active_generation_index, c.reading_count from consumption_monthly c
+select c.analyzer_id, c.bucket, c.active_import_start, c.active_import_end, c.active_consumption, c.inductive_consumption, c.capacitive_consumption, c.t1_consumption, c.t2_consumption, c.t3_consumption, c.active_generation, c.inductive_generation, c.capacitive_generation, c.t1_generation, c.t2_generation, c.t3_generation, c.max_demand_kw, c.active_index, c.inductive_index, c.capacitive_index, c.t1_index, c.t2_index, c.t3_index, c.active_generation_index, c.reading_count, c.first_ts, c.inductive_consumption_start, c.capacitive_consumption_start, c.t1_consumption_start, c.t2_consumption_start, c.t3_consumption_start, c.active_generation_start, c.inductive_generation_start, c.capacitive_generation_start, c.t1_generation_start, c.t2_generation_start, c.t3_generation_start, c.inductive_generation_index, c.capacitive_generation_index, c.t1_generation_index, c.t2_generation_index, c.t3_generation_index from consumption_monthly c
 join analyzers a on a.id = c.analyzer_id
 where a.company_id = $1
   and ($2::boolean or a.building_id = any($3::uuid[]))
@@ -248,6 +282,23 @@ func (q *Queries) AnalyticsConsumptionMonthly(ctx context.Context, arg Analytics
 			&i.T3Index,
 			&i.ActiveGenerationIndex,
 			&i.ReadingCount,
+			&i.FirstTs,
+			&i.InductiveConsumptionStart,
+			&i.CapacitiveConsumptionStart,
+			&i.T1ConsumptionStart,
+			&i.T2ConsumptionStart,
+			&i.T3ConsumptionStart,
+			&i.ActiveGenerationStart,
+			&i.InductiveGenerationStart,
+			&i.CapacitiveGenerationStart,
+			&i.T1GenerationStart,
+			&i.T2GenerationStart,
+			&i.T3GenerationStart,
+			&i.InductiveGenerationIndex,
+			&i.CapacitiveGenerationIndex,
+			&i.T1GenerationIndex,
+			&i.T2GenerationIndex,
+			&i.T3GenerationIndex,
 		); err != nil {
 			return nil, err
 		}
@@ -260,7 +311,7 @@ func (q *Queries) AnalyticsConsumptionMonthly(ctx context.Context, arg Analytics
 }
 
 const analyticsConsumptionYearly = `-- name: AnalyticsConsumptionYearly :many
-select c.analyzer_id, c.bucket, c.active_import_start, c.active_import_end, c.active_consumption, c.inductive_consumption, c.capacitive_consumption, c.t1_consumption, c.t2_consumption, c.t3_consumption, c.active_generation, c.inductive_generation, c.capacitive_generation, c.t1_generation, c.t2_generation, c.t3_generation, c.max_demand_kw, c.active_index, c.inductive_index, c.capacitive_index, c.t1_index, c.t2_index, c.t3_index, c.active_generation_index, c.reading_count from consumption_yearly c
+select c.analyzer_id, c.bucket, c.active_import_start, c.active_import_end, c.active_consumption, c.inductive_consumption, c.capacitive_consumption, c.t1_consumption, c.t2_consumption, c.t3_consumption, c.active_generation, c.inductive_generation, c.capacitive_generation, c.t1_generation, c.t2_generation, c.t3_generation, c.max_demand_kw, c.active_index, c.inductive_index, c.capacitive_index, c.t1_index, c.t2_index, c.t3_index, c.active_generation_index, c.reading_count, c.first_ts, c.inductive_consumption_start, c.capacitive_consumption_start, c.t1_consumption_start, c.t2_consumption_start, c.t3_consumption_start, c.active_generation_start, c.inductive_generation_start, c.capacitive_generation_start, c.t1_generation_start, c.t2_generation_start, c.t3_generation_start, c.inductive_generation_index, c.capacitive_generation_index, c.t1_generation_index, c.t2_generation_index, c.t3_generation_index from consumption_yearly c
 join analyzers a on a.id = c.analyzer_id
 where a.company_id = $1
   and ($2::boolean or a.building_id = any($3::uuid[]))
@@ -325,6 +376,23 @@ func (q *Queries) AnalyticsConsumptionYearly(ctx context.Context, arg AnalyticsC
 			&i.T3Index,
 			&i.ActiveGenerationIndex,
 			&i.ReadingCount,
+			&i.FirstTs,
+			&i.InductiveConsumptionStart,
+			&i.CapacitiveConsumptionStart,
+			&i.T1ConsumptionStart,
+			&i.T2ConsumptionStart,
+			&i.T3ConsumptionStart,
+			&i.ActiveGenerationStart,
+			&i.InductiveGenerationStart,
+			&i.CapacitiveGenerationStart,
+			&i.T1GenerationStart,
+			&i.T2GenerationStart,
+			&i.T3GenerationStart,
+			&i.InductiveGenerationIndex,
+			&i.CapacitiveGenerationIndex,
+			&i.T1GenerationIndex,
+			&i.T2GenerationIndex,
+			&i.T3GenerationIndex,
 		); err != nil {
 			return nil, err
 		}

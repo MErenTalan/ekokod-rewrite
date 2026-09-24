@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shopspring/decimal"
 
+	"github.com/MErenTalan/ekokod-rewrite/internal/domain/energy"
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/internal/pgerr"
@@ -59,35 +60,12 @@ func NewAnalyticsRepository(pool *pgxpool.Pool) *AnalyticsRepository {
 var _ store.AnalyticsRepository = (*AnalyticsRepository)(nil)
 
 // ConsumptionHourly implements store.AnalyticsRepository.ConsumptionHourly.
+// Every delta is boundary-differenced (F15q R471), see consumption.
 func (r *AnalyticsRepository) ConsumptionHourly(ctx context.Context, s store.Scope, analyzerIDs []uuid.UUID, tr store.TimeRange) ([]model.ConsumptionBucket, error) {
-	if !s.Valid() {
-		return nil, store.ErrInvalidScope
-	}
-	if !tr.Valid() {
-		return nil, store.ErrInvalidRange
-	}
-	buildingIDs, allBuildings := s.BuildingFilter()
-
-	rows, err := r.q.AnalyticsConsumptionHourly(ctx, sqlcgen.AnalyticsConsumptionHourlyParams{
-		CompanyID:    s.CompanyID,
-		AllBuildings: allBuildings,
-		BuildingIds:  buildingIDs,
-		AnalyzerIds:  analyzerIDs,
-		FromTs:       timeseriesToTimestamptz(tr.From),
-		ToTs:         timeseriesToTimestamptz(tr.To),
-	})
-	if err != nil {
-		return nil, pgerr.Translate(r.pool, "analytics consumption hourly", err)
-	}
-	out := make([]model.ConsumptionBucket, len(rows))
-	for i, row := range rows {
-		b, err := consumptionBucketFromHourly(row)
-		if err != nil {
-			return nil, pgerr.Translate(r.pool, "analytics consumption hourly", err)
-		}
-		out[i] = b
-	}
-	return out, nil
+	return r.consumption(ctx, energy.Hourly, "analytics consumption hourly", s, analyzerIDs, tr,
+		func(p sqlcgen.AnalyticsConsumptionHourlyParams) ([]sqlcgen.ConsumptionHourly, error) {
+			return r.q.AnalyticsConsumptionHourly(ctx, p)
+		})
 }
 
 // ConsumptionDaily implements store.AnalyticsRepository.ConsumptionDaily.
@@ -99,74 +77,53 @@ func (r *AnalyticsRepository) ConsumptionHourly(ctx context.Context, s store.Sco
 // mid-bucket rather than aligned to it — see
 // TestAnalyticsConsumptionDailyBucketsInIstanbulNotUTC.
 func (r *AnalyticsRepository) ConsumptionDaily(ctx context.Context, s store.Scope, analyzerIDs []uuid.UUID, tr store.TimeRange) ([]model.ConsumptionBucket, error) {
-	if !s.Valid() {
-		return nil, store.ErrInvalidScope
-	}
-	if !tr.Valid() {
-		return nil, store.ErrInvalidRange
-	}
-	buildingIDs, allBuildings := s.BuildingFilter()
-
-	rows, err := r.q.AnalyticsConsumptionDaily(ctx, sqlcgen.AnalyticsConsumptionDailyParams{
-		CompanyID:    s.CompanyID,
-		AllBuildings: allBuildings,
-		BuildingIds:  buildingIDs,
-		AnalyzerIds:  analyzerIDs,
-		FromTs:       timeseriesToTimestamptz(tr.From),
-		ToTs:         timeseriesToTimestamptz(tr.To),
-	})
-	if err != nil {
-		return nil, pgerr.Translate(r.pool, "analytics consumption daily", err)
-	}
-	out := make([]model.ConsumptionBucket, len(rows))
-	for i, row := range rows {
-		b, err := consumptionBucketFromDaily(row)
-		if err != nil {
-			return nil, pgerr.Translate(r.pool, "analytics consumption daily", err)
-		}
-		out[i] = b
-	}
-	return out, nil
+	return r.consumption(ctx, energy.Daily, "analytics consumption daily", s, analyzerIDs, tr,
+		func(p sqlcgen.AnalyticsConsumptionHourlyParams) ([]sqlcgen.ConsumptionHourly, error) {
+			rows, err := r.q.AnalyticsConsumptionDaily(ctx, sqlcgen.AnalyticsConsumptionDailyParams(p))
+			out := make([]sqlcgen.ConsumptionHourly, len(rows))
+			for i, row := range rows {
+				out[i] = sqlcgen.ConsumptionHourly(row)
+			}
+			return out, err
+		})
 }
 
 // ConsumptionMonthly implements store.AnalyticsRepository.ConsumptionMonthly.
 // The open month is ABSENT from consumption_monthly (materialized_only =
 // true): see this file's header.
 func (r *AnalyticsRepository) ConsumptionMonthly(ctx context.Context, s store.Scope, analyzerIDs []uuid.UUID, tr store.TimeRange) ([]model.ConsumptionBucket, error) {
-	if !s.Valid() {
-		return nil, store.ErrInvalidScope
-	}
-	if !tr.Valid() {
-		return nil, store.ErrInvalidRange
-	}
-	buildingIDs, allBuildings := s.BuildingFilter()
-
-	rows, err := r.q.AnalyticsConsumptionMonthly(ctx, sqlcgen.AnalyticsConsumptionMonthlyParams{
-		CompanyID:    s.CompanyID,
-		AllBuildings: allBuildings,
-		BuildingIds:  buildingIDs,
-		AnalyzerIds:  analyzerIDs,
-		FromTs:       timeseriesToTimestamptz(tr.From),
-		ToTs:         timeseriesToTimestamptz(tr.To),
-	})
-	if err != nil {
-		return nil, pgerr.Translate(r.pool, "analytics consumption monthly", err)
-	}
-	out := make([]model.ConsumptionBucket, len(rows))
-	for i, row := range rows {
-		b, err := consumptionBucketFromMonthly(row)
-		if err != nil {
-			return nil, pgerr.Translate(r.pool, "analytics consumption monthly", err)
-		}
-		out[i] = b
-	}
-	return out, nil
+	return r.consumption(ctx, energy.Monthly, "analytics consumption monthly", s, analyzerIDs, tr,
+		func(p sqlcgen.AnalyticsConsumptionHourlyParams) ([]sqlcgen.ConsumptionHourly, error) {
+			rows, err := r.q.AnalyticsConsumptionMonthly(ctx, sqlcgen.AnalyticsConsumptionMonthlyParams(p))
+			out := make([]sqlcgen.ConsumptionHourly, len(rows))
+			for i, row := range rows {
+				out[i] = sqlcgen.ConsumptionHourly(row)
+			}
+			return out, err
+		})
 }
 
 // ConsumptionYearly implements store.AnalyticsRepository.ConsumptionYearly.
 // The open year is ABSENT from consumption_yearly (materialized_only =
 // true): see this file's header.
 func (r *AnalyticsRepository) ConsumptionYearly(ctx context.Context, s store.Scope, analyzerIDs []uuid.UUID, tr store.TimeRange) ([]model.ConsumptionBucket, error) {
+	return r.consumption(ctx, energy.Yearly, "analytics consumption yearly", s, analyzerIDs, tr,
+		func(p sqlcgen.AnalyticsConsumptionHourlyParams) ([]sqlcgen.ConsumptionHourly, error) {
+			rows, err := r.q.AnalyticsConsumptionYearly(ctx, sqlcgen.AnalyticsConsumptionYearlyParams(p))
+			out := make([]sqlcgen.ConsumptionHourly, len(rows))
+			for i, row := range rows {
+				out[i] = sqlcgen.ConsumptionHourly(row)
+			}
+			return out, err
+		})
+}
+
+// consumption reads tr widened by one bucket each side and boundary-
+// differences it (F15q R471): the neighbours supply each edge's reading.
+func (r *AnalyticsRepository) consumption(
+	ctx context.Context, level energy.Level, op string, s store.Scope, analyzerIDs []uuid.UUID, tr store.TimeRange,
+	fetch func(sqlcgen.AnalyticsConsumptionHourlyParams) ([]sqlcgen.ConsumptionHourly, error),
+) ([]model.ConsumptionBucket, error) {
 	if !s.Valid() {
 		return nil, store.ErrInvalidScope
 	}
@@ -174,25 +131,28 @@ func (r *AnalyticsRepository) ConsumptionYearly(ctx context.Context, s store.Sco
 		return nil, store.ErrInvalidRange
 	}
 	buildingIDs, allBuildings := s.BuildingFilter()
-
-	rows, err := r.q.AnalyticsConsumptionYearly(ctx, sqlcgen.AnalyticsConsumptionYearlyParams{
+	wide := widenForBoundaries(level, tr)
+	rows, err := fetch(sqlcgen.AnalyticsConsumptionHourlyParams{
 		CompanyID:    s.CompanyID,
 		AllBuildings: allBuildings,
 		BuildingIds:  buildingIDs,
 		AnalyzerIds:  analyzerIDs,
-		FromTs:       timeseriesToTimestamptz(tr.From),
-		ToTs:         timeseriesToTimestamptz(tr.To),
+		FromTs:       timeseriesToTimestamptz(wide.From),
+		ToTs:         timeseriesToTimestamptz(wide.To),
 	})
 	if err != nil {
-		return nil, pgerr.Translate(r.pool, "analytics consumption yearly", err)
+		return nil, pgerr.Translate(r.pool, op, err)
 	}
-	out := make([]model.ConsumptionBucket, len(rows))
+	buckets := make([]boundaryBucket, len(rows))
 	for i, row := range rows {
-		b, err := consumptionBucketFromYearly(row)
-		if err != nil {
-			return nil, pgerr.Translate(r.pool, "analytics consumption yearly", err)
+		if buckets[i], err = boundaryBucketFrom(row); err != nil {
+			return nil, pgerr.Translate(r.pool, op, err)
 		}
-		out[i] = b
+	}
+	kept := boundaryDifference(level, buckets, tr)
+	out := make([]model.ConsumptionBucket, len(kept))
+	for i := range kept {
+		out[i] = kept[i].b
 	}
 	return out, nil
 }
@@ -264,42 +224,6 @@ func (r *AnalyticsRepository) ProductionMonthly(ctx context.Context, s store.Sco
 // Four short, identical-shaped functions are the honest cost of that.
 
 func consumptionBucketFromHourly(row sqlcgen.ConsumptionHourly) (model.ConsumptionBucket, error) {
-	return newConsumptionBucket(
-		row.AnalyzerID, row.Bucket, row.ActiveImportStart, row.ActiveImportEnd,
-		row.ActiveConsumption, row.InductiveConsumption, row.CapacitiveConsumption,
-		row.T1Consumption, row.T2Consumption, row.T3Consumption,
-		row.ActiveGeneration, row.InductiveGeneration, row.CapacitiveGeneration,
-		row.T1Generation, row.T2Generation, row.T3Generation,
-		row.MaxDemandKw, row.ActiveIndex, row.InductiveIndex, row.CapacitiveIndex,
-		row.T1Index, row.T2Index, row.T3Index, row.ActiveGenerationIndex, row.ReadingCount,
-	)
-}
-
-func consumptionBucketFromDaily(row sqlcgen.ConsumptionDaily) (model.ConsumptionBucket, error) {
-	return newConsumptionBucket(
-		row.AnalyzerID, row.Bucket, row.ActiveImportStart, row.ActiveImportEnd,
-		row.ActiveConsumption, row.InductiveConsumption, row.CapacitiveConsumption,
-		row.T1Consumption, row.T2Consumption, row.T3Consumption,
-		row.ActiveGeneration, row.InductiveGeneration, row.CapacitiveGeneration,
-		row.T1Generation, row.T2Generation, row.T3Generation,
-		row.MaxDemandKw, row.ActiveIndex, row.InductiveIndex, row.CapacitiveIndex,
-		row.T1Index, row.T2Index, row.T3Index, row.ActiveGenerationIndex, row.ReadingCount,
-	)
-}
-
-func consumptionBucketFromMonthly(row sqlcgen.ConsumptionMonthly) (model.ConsumptionBucket, error) {
-	return newConsumptionBucket(
-		row.AnalyzerID, row.Bucket, row.ActiveImportStart, row.ActiveImportEnd,
-		row.ActiveConsumption, row.InductiveConsumption, row.CapacitiveConsumption,
-		row.T1Consumption, row.T2Consumption, row.T3Consumption,
-		row.ActiveGeneration, row.InductiveGeneration, row.CapacitiveGeneration,
-		row.T1Generation, row.T2Generation, row.T3Generation,
-		row.MaxDemandKw, row.ActiveIndex, row.InductiveIndex, row.CapacitiveIndex,
-		row.T1Index, row.T2Index, row.T3Index, row.ActiveGenerationIndex, row.ReadingCount,
-	)
-}
-
-func consumptionBucketFromYearly(row sqlcgen.ConsumptionYearly) (model.ConsumptionBucket, error) {
 	return newConsumptionBucket(
 		row.AnalyzerID, row.Bucket, row.ActiveImportStart, row.ActiveImportEnd,
 		row.ActiveConsumption, row.InductiveConsumption, row.CapacitiveConsumption,
