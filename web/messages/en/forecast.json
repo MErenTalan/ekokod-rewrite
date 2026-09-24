@@ -1,0 +1,91 @@
+{
+  "predict": {
+    "title": "Consumption Forecast",
+    "subtitle": "Past consumption and the model's hourly forecast with a 10–90% band.",
+    "history": "History period",
+    "horizon": "Horizon",
+    "horizons": {
+      "h24": "24 hours",
+      "h48": "48 hours",
+      "h168": "7 days",
+      "h336": "14 days",
+      "h744": "31 days"
+    },
+    "run": "Forecast",
+    "noAnalyzer": "Choose an analyzer to forecast.",
+    "chartTitle": "Actual and forecast",
+    "chartDescription": "Actual hourly consumption, the forecast median (dashed) and the 10–90% band.",
+    "actual": "Actual",
+    "median": "Forecast (median)",
+    "band": "10–90% range",
+    "readOnly": "You cannot run new forecasts; the latest stored forecast is shown.",
+    "ran": "Forecast created."
+  },
+  "status": {
+    "ok": "Forecast ready.",
+    "empty": "The model returned no values; there is no forecast for this period.",
+    "none": "No stored forecast for this period. Press Forecast to create one.",
+    "insufficientData": "Not enough history: a reliable forecast needs at least two weeks of hourly data.",
+    "noData": "This analyzer has no consumption history.",
+    "modelError": "The model could not produce a forecast. Try again later.",
+    "unavailable": "The forecasting service is unavailable right now. Other screens are not affected; stored forecasts can still be viewed."
+  },
+  "model": {
+    "line": "Model: {model} {version} · {generated}",
+    "fallback": "{model} was unavailable; the statistical baseline was used.",
+    "covariates": "Covariates used: {list}",
+    "none": "none",
+    "names": {
+      "dayType": "day type",
+      "vacation": "vacation",
+      "weather": "weather"
+    }
+  },
+  "gaps": {
+    "title": "Gaps in the data",
+    "warning": "The history has {count, plural, one {# gap} other {# gaps}} ({hours} hours). Gaps lower forecast quality.",
+    "start": "Start",
+    "end": "End",
+    "hours": "Missing hours"
+  },
+  "ai": {
+    "title": "AI Analysis",
+    "subtitle": "Daily, weekly and monthly forecasts, and an anomaly check for one value.",
+    "tabs": {
+      "daily": "Daily forecast",
+      "weekly": "Weekly forecast",
+      "monthly": "Monthly forecast",
+      "anomaly": "Anomaly check"
+    },
+    "targetDate": "Target date",
+    "weekStart": "Week start (Monday)",
+    "month": "Month",
+    "run": "Forecast",
+    "dayTotal": "Total forecast for {weekday}",
+    "approxBand": "Approximate range (sum of hourly bands): {low} – {high}",
+    "notStored": "This forecast is not stored.",
+    "hour": "Hour",
+    "day": "Day",
+    "total": "Total"
+  },
+  "anomaly": {
+    "ts": "Date",
+    "hour": "Hour",
+    "actual": "Actual value (kWh)",
+    "actualHint": "Leave empty to use the stored consumption.",
+    "check": "Check",
+    "anomalous": "Anomaly",
+    "normal": "Normal",
+    "insufficient": "Not enough history to compare",
+    "score": "Deviation score",
+    "expected": "Expected",
+    "band": "Expected range",
+    "method": "Method",
+    "actualUsed": "Value checked",
+    "chartTitle": "Actual and expected",
+    "methods": {
+      "robustZscoreSameHourOfWeek": "Robust z-score against the same hour of the week",
+      "insufficientHistory": "Insufficient history"
+    }
+  }
+}

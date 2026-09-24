@@ -1,0 +1,91 @@
+{
+  "predict": {
+    "title": "Tüketim Tahmini",
+    "subtitle": "Geçmiş tüketim ile modelin saatlik tahmini, %10–%90 güven bandıyla.",
+    "history": "Geçmiş dönem",
+    "horizon": "Tahmin ufku",
+    "horizons": {
+      "h24": "24 saat",
+      "h48": "48 saat",
+      "h168": "7 gün",
+      "h336": "14 gün",
+      "h744": "31 gün"
+    },
+    "run": "Tahmin et",
+    "noAnalyzer": "Tahmin için bir analizör seçin.",
+    "chartTitle": "Gerçekleşen ve tahmin",
+    "chartDescription": "Gerçekleşen saatlik tüketim, tahmin medyanı (kesikli) ve %10–%90 bandı.",
+    "actual": "Gerçekleşen",
+    "median": "Tahmin (medyan)",
+    "band": "%10–%90 aralığı",
+    "readOnly": "Yeni tahmin çalıştırma yetkiniz yok; kayıtlı son tahmin gösteriliyor.",
+    "ran": "Tahmin oluşturuldu."
+  },
+  "status": {
+    "ok": "Tahmin hazır.",
+    "empty": "Model sonuç döndürmedi; bu dönem için tahmin yok.",
+    "none": "Bu dönem için kayıtlı tahmin yok. Oluşturmak için Tahmin et'e basın.",
+    "insufficientData": "Geçmiş veri yetersiz: güvenilir bir tahmin için en az iki haftalık saatlik veri gerekir.",
+    "noData": "Bu analizör için geçmiş tüketim verisi yok.",
+    "modelError": "Model tahmini üretemedi. Daha sonra tekrar deneyin.",
+    "unavailable": "Tahmin servisi şu anda kullanılamıyor. Diğer ekranlar etkilenmez; kayıtlı tahminler görüntülenebilir."
+  },
+  "model": {
+    "line": "Model: {model} {version} · {generated}",
+    "fallback": "{model} kullanılamadı; temel istatistiksel model kullanıldı.",
+    "covariates": "Kullanılan değişkenler: {list}",
+    "none": "yok",
+    "names": {
+      "dayType": "gün tipi",
+      "vacation": "tatil",
+      "weather": "hava durumu"
+    }
+  },
+  "gaps": {
+    "title": "Verideki boşluklar",
+    "warning": "Geçmiş veride {count, plural, one {# boşluk} other {# boşluk}} var ({hours} saat). Boşluklar tahmin kalitesini düşürür.",
+    "start": "Başlangıç",
+    "end": "Bitiş",
+    "hours": "Eksik saat"
+  },
+  "ai": {
+    "title": "Yapay Zekâ Analizi",
+    "subtitle": "Günlük, haftalık ve aylık tahminler ile tek bir değerin anomali kontrolü.",
+    "tabs": {
+      "daily": "Günlük tahmin",
+      "weekly": "Haftalık tahmin",
+      "monthly": "Aylık tahmin",
+      "anomaly": "Anomali kontrolü"
+    },
+    "targetDate": "Hedef tarih",
+    "weekStart": "Hafta başlangıcı (Pazartesi)",
+    "month": "Ay",
+    "run": "Tahmin et",
+    "dayTotal": "{weekday} için toplam tahmin",
+    "approxBand": "Yaklaşık aralık (saatlik bantların toplamı): {low} – {high}",
+    "notStored": "Bu tahmin kaydedilmez.",
+    "hour": "Saat",
+    "day": "Gün",
+    "total": "Toplam"
+  },
+  "anomaly": {
+    "ts": "Tarih",
+    "hour": "Saat",
+    "actual": "Gerçekleşen değer (kWh)",
+    "actualHint": "Boş bırakılırsa kayıtlı tüketim kullanılır.",
+    "check": "Kontrol et",
+    "anomalous": "Anomali",
+    "normal": "Normal",
+    "insufficient": "Karşılaştırma için yeterli geçmiş yok",
+    "score": "Sapma skoru",
+    "expected": "Beklenen",
+    "band": "Beklenen aralık",
+    "method": "Yöntem",
+    "actualUsed": "Kontrol edilen değer",
+    "chartTitle": "Gerçekleşen ve beklenen",
+    "methods": {
+      "robustZscoreSameHourOfWeek": "Aynı haftanın aynı saatine göre sağlam z-skoru",
+      "insufficientHistory": "Yetersiz geçmiş"
+    }
+  }
+}
