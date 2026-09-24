@@ -59,6 +59,10 @@ const CODE_KEYS: Record<string, string> = {
   incomplete: 'incomplete',
   too_long: 'tooLong',
   unknown: 'invalid',
+  // F12 public bill calculator refusals.
+  mismatch: 'mismatch',
+  no_tariff: 'noTariff',
+  not_available: 'notAvailable',
 };
 
 /**

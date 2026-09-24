@@ -373,7 +373,6 @@
     "message": "Mesajınız",
     "company": "Şirket",
     "role": "Göreviniz",
-    "website": "Bu alanı boş bırakın",
     "send": "Gönder",
     "sending": "Gönderiliyor…",
     "sent": "Mesajınız iletildi. En kısa sürede sizinle iletişime geçeceğiz.",
@@ -382,7 +381,9 @@
     "notConfigured": "İletişim formu şu anda kullanılamıyor. Lütfen bize {email} adresinden yazın.",
     "tooMany": "Çok fazla deneme yaptınız. Lütfen biraz sonra tekrar deneyin.",
     "contactTitle": "Bize yazın",
-    "demoTitle": "Demo talep formu"
+    "demoTitle": "Demo talep formu",
+    "messageShort": "En az 10 karakter yazın.",
+    "errorSummary": "Formu göndermeden önce şunları düzeltin"
   },
   "demo": {
     "title": "Demo talebi",

@@ -373,7 +373,6 @@
     "message": "Your message",
     "company": "Company",
     "role": "Your role",
-    "website": "Leave this field empty",
     "send": "Send",
     "sending": "Sending…",
     "sent": "Your message has been sent. We will get back to you shortly.",
@@ -382,7 +381,9 @@
     "notConfigured": "The contact form is not available right now. Please write to us at {email}.",
     "tooMany": "Too many attempts. Please try again in a little while.",
     "contactTitle": "Write to us",
-    "demoTitle": "Demo request form"
+    "demoTitle": "Demo request form",
+    "messageShort": "Write at least 10 characters.",
+    "errorSummary": "Fix the following before sending"
   },
   "demo": {
     "title": "Request a demo",

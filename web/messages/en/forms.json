@@ -58,6 +58,9 @@
     "rangeTooLong": "The period can be at most 366 days.",
     "invalidRange": "A start date cannot be after the end date.",
     "incomplete": "Please choose start and end dates for every clause.",
-    "tooLong": "The text is too long."
+    "tooLong": "The text is too long.",
+    "mismatch": "The total must equal the sum of T1, T2 and T3.",
+    "noTariff": "No published tariff covers this date.",
+    "notAvailable": "This option is not available for this subscriber group."
   }
 }

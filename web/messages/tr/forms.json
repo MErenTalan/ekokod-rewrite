@@ -58,6 +58,9 @@
     "rangeTooLong": "Dönem en fazla 366 gün olabilir.",
     "invalidRange": "Başlangıç tarihi bitiş tarihinden sonra olamaz.",
     "incomplete": "Lütfen her başlık için başlangıç ve bitiş tarihlerini seçin.",
-    "tooLong": "Metin çok uzun."
+    "tooLong": "Metin çok uzun.",
+    "mismatch": "Toplam tüketim T1, T2 ve T3'ün toplamına eşit olmalı.",
+    "noTariff": "Bu tarih için yayımlanmış bir tarife yok.",
+    "notAvailable": "Bu abone grubu için bu seçenek yok."
   }
 }
