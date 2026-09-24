@@ -28,7 +28,7 @@ def request(values, horizon=48, **kw):
 
 
 def settings(**kw):
-    return Settings(api_key="x" * 16, **kw)
+    return Settings(**{"api_key": "x" * 16, **kw})
 
 
 def test_baseline_repeats_a_clean_weekly_pattern_and_continues_the_timeline():
