@@ -67,5 +67,12 @@ healthy
 want="$(sed -n 's/^VERSION=//p' "$dir/.env.bundle")"
 (cd "$dir" && docker compose ps --format '{{.Image}}' api) | grep -q ":${want}$" || { echo "FAIL: api not on ${want}" >&2; exit 1; }
 ls "$dir"/backups/*/db.dump >/dev/null 2>&1 || { echo "FAIL: no pre-upgrade backup" >&2; exit 1; }
+echo "==> Restore the pre-upgrade backup into the running install"
+psql_install "delete from offline_install_marker" >/dev/null
+backups=("$dir"/backups/*/)
+backup="${backups[0]}"
+(cd "$dir" && ./scripts/restore.sh --yes "$backup" >"$dir/restore.log" 2>&1) || { tail -20 "$dir/restore.log" >&2; echo "FAIL: restore.sh" >&2; exit 1; }
+healthy
+[ "$(psql_install "select v from offline_install_marker")" = "before-upgrade" ] || { echo "FAIL: restore did not bring the marker back" >&2; exit 1; }
 (cd "$dir" && docker compose ps --format '{{.Service}} {{.State}} {{.Health}}')
-echo "PASS: offline install, upgrade without data loss, pre-upgrade backup (networking-off host PENDING)"
+echo "PASS: offline install, upgrade without data loss, pre-upgrade backup restored (networking-off host PENDING)"

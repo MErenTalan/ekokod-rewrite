@@ -62,6 +62,6 @@ fi
 
 if [ "$COMPOSE_SERVICES" != "none" ]; then
   echo "==> Starting services"
-  docker compose up -d --no-build
+  docker compose up -d --no-build --pull never
 fi
 echo "==> Restored ${dir}"
