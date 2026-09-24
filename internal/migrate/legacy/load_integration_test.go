@@ -60,6 +60,8 @@ func TestLoadIsIdempotent(t *testing.T) {
 	cipher, err := crypto.NewCipher(make([]byte, 32))
 	require.NoError(t, err)
 	dir := transformedDir(t, cipher)
+	_, err = legacy.Artifacts(dir, []string{legacyTree(t)}, t.TempDir())
+	require.NoError(t, err)
 	db := admin.NewLegacyLoader(pool)
 
 	first, err := legacy.Load(ctx, db, dir)
@@ -88,7 +90,7 @@ func TestLoadIsIdempotent(t *testing.T) {
 		"market_prices_hourly": 2, "yekdem_monthly": 1, "legacy_bills": 2, "legacy_reports": 1, "operational_messages": 2,
 		"power_plants": 2, "power_plant_devices": 1, "solar_tariffs": 2, "plant_production_totals": 2, "alarms": 1, "alarm_channels": 2, "alarm_events": 1,
 		"carbon_activities": 1, "carbon_selected_activities": 1, "emission_factors": 1, "emission_factor_conversions": 1, "carbon_reports": 1,
-		"iso50001_projects": 1, "iso50001_clause_dates": 1, "iso50001_notes": 1} {
+		"iso50001_projects": 1, "iso50001_clause_dates": 1, "iso50001_notes": 1, "stored_files": 3} {
 		require.Equal(t, want, first.Tables[table].Loaded, table)
 	}
 	smtp := postgres.NewSMTPRepository(pool, cipher)

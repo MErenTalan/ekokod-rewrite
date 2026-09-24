@@ -21,8 +21,8 @@ import (
 
 // newMigrateLegacyCmd is 08 §11's legacy toolkit (F14a Q-J1): inventory, extract, transform.
 func newMigrateLegacyCmd() *cobra.Command {
-	cmd := &cobra.Command{Use: "legacy", Short: "Move the legacy system's data in: inventory, extract, transform, load (08-migration.md)"}
-	cmd.AddCommand(newLegacyInventoryCmd(), newLegacyExtractCmd(), newLegacyTransformCmd(), newLegacyLoadCmd())
+	cmd := &cobra.Command{Use: "legacy", Short: "Move the legacy system's data in: inventory, extract, transform, artifacts, load (08-migration.md)"}
+	cmd.AddCommand(newLegacyInventoryCmd(), newLegacyExtractCmd(), newLegacyTransformCmd(), newLegacyArtifactsCmd(), newLegacyLoadCmd())
 	return cmd
 }
 
@@ -174,6 +174,36 @@ func newLegacyTransformCmd() *cobra.Command {
 	cmd.Flags().StringVar(&now, "now", "", "RFC 3339 instant bounding plausible readings; fix it to make reruns identical")
 	cmd.Flags().StringVar(&answers, "answers", "", "answers.csv (kind,legacy_id,answer) for the manual_<kind>.csv questions")
 	cmd.Flags().IntVar(&logsDays, "logs-days", 180, "legacy logs older than this many days before --now are not migrated (Q-J10)")
+	return cmd
+}
+
+func newLegacyArtifactsCmd() *cobra.Command {
+	var dir, sources, dest string
+	cmd := &cobra.Command{
+		Use:   "artifacts",
+		Short: "Copy referenced legacy files into the storage layout, register them, report orphans both ways (08 §6)",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if dir == "" || sources == "" {
+				return errors.New("--dir and --source are required")
+			}
+			if dest == "" {
+				dest = os.Getenv("EKOKOD_STORAGE_ROOT")
+			}
+			if dest == "" {
+				return errors.New("--dest (or EKOKOD_STORAGE_ROOT) is required")
+			}
+			rep, err := legacy.Artifacts(dir, strings.Split(sources, ","), dest)
+			if err != nil {
+				return err
+			}
+			enc := json.NewEncoder(cmd.OutOrStdout())
+			enc.SetIndent("", "  ")
+			return enc.Encode(rep)
+		},
+	}
+	cmd.Flags().StringVar(&dir, "dir", "", "the transform output directory (reads artifact_refs.ndjson, writes stored_files.ndjson)")
+	cmd.Flags().StringVar(&sources, "source", "", "comma-separated legacy roots, e.g. /opt/bills,/opt/reports,/opt/documents,/opt/bcem (for /uploads)")
+	cmd.Flags().StringVar(&dest, "dest", "", "the new storage root (default $EKOKOD_STORAGE_ROOT)")
 	return cmd
 }
 
