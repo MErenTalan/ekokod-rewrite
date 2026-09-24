@@ -87,7 +87,8 @@
 |---|---|---|
 | `phase/f9-solar` (`/home/personal/ekokod-f9-phase`) | `fa70092` | F9 code + self-review done; Docker-bound gates PENDING (see "F9 remaining") |
 | `phase/f10-carbon` (`/home/personal/ekokod-f10-phase`) | `f95a67d` | F10 done (carbon backend + screens); Docker-bound gates PENDING |
-| **`phase/f11-iso50001`** (`/home/personal/ekokod-f11-phase`) | this commit | **F11 done (ISO 50001 backend + screens)**; Docker-bound gates PENDING |
+| `phase/f11-iso50001` (`/home/personal/ekokod-f11-phase`) | `32f7427` | F11 done (ISO 50001 backend + screens); Docker-bound gates PENDING |
+| **`phase/f12-site`** (`/home/personal/ekokod-f12-phase`) | this commit | **F12a done** (tariff schedule seed, public calculator, forms); F12b (site pages) next |
 
 - Plans and ledgers:
   - F10a `docs/superpowers/plans/2026-09-24-f10a-carbon-backend.md` (R300–R319);
@@ -101,7 +102,7 @@
   3. F11a integration (`TestFileAuthorization`, `TestISOProjectFlow`, sweep iso50001, seed counts).
   4. e2e: `carbon.spec.ts`, `iso50001.spec.ts`, `responsive.spec.ts`, then the full suite with the worker.
 - F11 also maps the F10 carbon validation codes to specific form messages (`web/src/lib/api/problem.ts`).
-- F12 (public marketing site) is next, from `phase/f11-iso50001`.
+- F12a plan `docs/superpowers/plans/2026-09-24-f12a-public-backend.md` (R350–R356, Q-H1…Q-H6). F12b (the public pages, blog, calculator page, SEO) is next on `phase/f12-site`.
 
 ## Docker hang (read before any integration/e2e)
 - **What happened (at ~00:25):**
