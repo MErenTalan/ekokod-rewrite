@@ -59,7 +59,7 @@ export const navigation: NavEntry[] = [
   { id: 'calendar', labelKey: 'calendar', href: '/ekorm/calendar', icon: CalendarDays },
   { id: 'settings', labelKey: 'settings', href: '/ekorm/settings', icon: Settings },
   { id: 'carbon', labelKey: 'carbonFootprint', href: '/ekorm/carbon-footprint', icon: Factory, permission: 'carbon.read' },
-  { id: 'iso50001', labelKey: 'iso50001', href: '/ekorm/iso-50001', icon: BadgeCheck },
+  { id: 'iso50001', labelKey: 'iso50001', href: '/ekorm/iso-50001', icon: BadgeCheck, permission: 'iso50001.read' },
   { id: 'savingActions', labelKey: 'savingActions', href: '/ekorm/saving-actions', icon: PiggyBank, disabled: true },
   { id: 'contact', labelKey: 'contact', href: '/ekorm/contact', icon: Mail },
 ];

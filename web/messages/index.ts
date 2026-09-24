@@ -26,6 +26,7 @@ import trWeather from './tr/weather.json';
 import trRenewable from './tr/renewable.json';
 import trFinancial from './tr/financial.json';
 import trCarbon from './tr/carbon.json';
+import trIso from './tr/iso.json';
 import enApp from './en/app.json';
 import enHealth from './en/health.json';
 import enUnits from './en/units.json';
@@ -53,6 +54,7 @@ import enWeather from './en/weather.json';
 import enRenewable from './en/renewable.json';
 import enFinancial from './en/financial.json';
 import enCarbon from './en/carbon.json';
+import enIso from './en/iso.json';
 
 const tr = {
   app: trApp,
@@ -82,6 +84,7 @@ const tr = {
   renewable: trRenewable,
   financial: trFinancial,
   carbon: trCarbon,
+  iso: trIso,
 };
 const en = {
   app: enApp,
@@ -111,6 +114,7 @@ const en = {
   renewable: enRenewable,
   financial: enFinancial,
   carbon: enCarbon,
+  iso: enIso,
 };
 
 export type Messages = typeof tr;

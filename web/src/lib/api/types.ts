@@ -158,3 +158,12 @@ export type CarbonCatalogueMain = S['CarbonCatalogueMain'];
 export type CarbonReportSummary = S['CarbonReportSummary'];
 export type EmissionFactorView = S['EmissionFactorView'];
 export type EmissionFactorConversion = S['EmissionFactorConversion'];
+
+// F11 ISO 50001 (05 §13).
+export type ISOClauses = S['ISOClauses'];
+export type ISOClause = S['ISOClause'];
+export type ISOSubClause = S['ISOSubClause'];
+export type ISOProject = S['ISOProject'];
+export type ISONote = S['ISONote'];
+export type ISOFile = S['ISOFile'];
+export type ISOTemplate = S['ISOTemplate'];
