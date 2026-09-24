@@ -25,6 +25,29 @@ type State struct {
 	ProjectStart, ProjectEnd *time.Time
 }
 
+// projectContent adds the project's dates and note counts.
+func (s *Service) projectContent(ctx context.Context, sc store.Scope, projectID uuid.UUID, st *State) error {
+	dates, err := s.d.ISO.ClauseDates(ctx, sc, projectID)
+	if err != nil {
+		return err
+	}
+	for _, d := range dates {
+		if d.StartDate != nil && d.EndDate != nil {
+			st.Dates[d.ClauseID] = domain.DateRange{Start: *d.StartDate, End: *d.EndDate}
+		}
+	}
+	notes, err := s.d.ISO.Notes(ctx, sc, projectID, nil)
+	if err != nil {
+		return err
+	}
+	for _, n := range notes {
+		c := st.Counts[n.ClauseID]
+		c.Notes++
+		st.Counts[n.ClauseID] = c
+	}
+	return nil
+}
+
 // Project is the building's state; a building without a project reads empty (R331).
 func (s *Service) Project(ctx context.Context, sc store.Scope, building uuid.UUID) (State, error) {
 	if _, err := s.d.Buildings.Get(ctx, sc, building); err != nil {
@@ -34,30 +57,16 @@ func (s *Service) Project(ctx context.Context, sc store.Scope, building uuid.UUI
 	for _, id := range domain.SubIDs() {
 		st.Counts[id] = Counts{}
 	}
+	// Files hang off the building, so they count even before any project exists.
 	p, err := s.d.ISO.Project(ctx, sc, building)
 	switch {
 	case errors.Is(err, store.ErrNotFound):
-		return s.finish(st), nil
 	case err != nil:
 		return State{}, err
-	}
-	dates, err := s.d.ISO.ClauseDates(ctx, sc, p.ID)
-	if err != nil {
-		return State{}, err
-	}
-	for _, d := range dates {
-		if d.StartDate != nil && d.EndDate != nil {
-			st.Dates[d.ClauseID] = domain.DateRange{Start: *d.StartDate, End: *d.EndDate}
+	default:
+		if err := s.projectContent(ctx, sc, p.ID, &st); err != nil {
+			return State{}, err
 		}
-	}
-	notes, err := s.d.ISO.Notes(ctx, sc, p.ID, nil)
-	if err != nil {
-		return State{}, err
-	}
-	for _, n := range notes {
-		c := st.Counts[n.ClauseID]
-		c.Notes++
-		st.Counts[n.ClauseID] = c
 	}
 	files, err := s.buildingFiles(ctx, sc, building, nil)
 	if err != nil {
