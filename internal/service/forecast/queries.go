@@ -140,5 +140,6 @@ func (s *Service) Anomaly(ctx context.Context, sc store.Scope, analyzerID uuid.U
 	if err != nil {
 		return AnomalyResult{}, unavailable(err)
 	}
-	return AnomalyResult{AnomalyResponse: out, Actual: *actual}, nil
+	return AnomalyResult{IsAnomaly: out.IsAnomaly, Score: decOrNil(out.Score), Expected: decOrNil(out.Expected), Lower: decOrNil(out.Lower),
+		Upper: decOrNil(out.Upper), Method: out.Method, ModelID: out.ModelID, Version: out.ModelVersion, Actual: *actual}, nil
 }

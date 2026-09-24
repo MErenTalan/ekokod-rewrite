@@ -90,10 +90,22 @@ type Result struct {
 	FallbackFrom   *string
 }
 
-// AnomalyResult is the ML verdict plus the actual value that was checked.
+// AnomalyResult is the ML verdict plus the actual value that was checked; the
+// ML service's floats are decimals from here on (no floats past the adapter).
 type AnomalyResult struct {
-	ml.AnomalyResponse
-	Actual decimal.Decimal
+	IsAnomaly                bool
+	Score                    *decimal.Decimal
+	Expected, Lower, Upper   *decimal.Decimal
+	Method, ModelID, Version string
+	Actual                   decimal.Decimal
+}
+
+func decOrNil(f *float64) *decimal.Decimal {
+	if f == nil {
+		return nil
+	}
+	d := dec(*f)
+	return &d
 }
 
 func validation(field, code string) error {

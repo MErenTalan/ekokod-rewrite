@@ -97,13 +97,11 @@ func (h *Handlers) anomalyCheck(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return nil, err
 		}
-		out := dto.AnomalyCheck{Available: true, IsAnomaly: &res.IsAnomaly, Score: res.Score, Actual: decPtr(&res.Actual),
-			Method: res.Method, ModelID: res.ModelID, ModelVersion: res.ModelVersion}
-		for dst, src := range map[**dto.Decimal]*float64{&out.Expected: res.Expected, &out.Lower: res.Lower, &out.Upper: res.Upper} {
-			if src != nil {
-				v := dto.D(decimal.NewFromFloat(*src).Round(4))
-				*dst = &v
-			}
+		out := dto.AnomalyCheck{Available: true, IsAnomaly: &res.IsAnomaly, Actual: decPtr(&res.Actual), Expected: decPtr(res.Expected),
+			Lower: decPtr(res.Lower), Upper: decPtr(res.Upper), Method: res.Method, ModelID: res.ModelID, ModelVersion: res.Version}
+		if res.Score != nil {
+			score := res.Score.InexactFloat64() // a dimensionless statistic: the wire keeps it a number
+			out.Score = &score
 		}
 		return out, nil
 	})
