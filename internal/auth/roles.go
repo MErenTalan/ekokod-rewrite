@@ -124,6 +124,10 @@ var permissionTable = map[string]RoleSet{
 	// F10a R314: carbon reads follow 05 §12's scope marker; writes are A CA.
 	"carbon.read": AllRoles,
 	"carbon.edit": Roles(roleA, roleCA),
+
+	// F11a R341: ISO 50001 reads are scope; writes are A CA BA (05 §13).
+	"iso50001.read": AllRoles,
+	"iso50001.edit": Roles(roleA, roleCA, roleBA),
 }
 
 // PermissionsFor returns the sorted permissions of a role, nil for an unknown role.

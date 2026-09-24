@@ -21,6 +21,7 @@ import (
 	carbonsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/carbon"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/financial"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/integrations"
+	isosvc "github.com/MErenTalan/ekokod-rewrite/internal/service/iso50001"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/jobs"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/ops"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/renewable"
@@ -57,15 +58,18 @@ type Handlers struct {
 	Renewable    *renewable.Service
 	Financial    *financial.Service
 	Carbon       *carbonsvc.Service
-	Calendar     *calendar.Service
-	Jobs         *jobs.Service
-	Alarms       *alarms.Service
-	Ops          *ops.Service
-	Definitions  integrations.Definitions
-	Credentials  *credentials.Service
-	Clock        clock.Clock
-	Log          *slog.Logger
-	ClientIP     func(*http.Request) string
+	ISO          *isosvc.Service
+	// UploadMax is the configured evidence file cap, named in a 413.
+	UploadMax   int64
+	Calendar    *calendar.Service
+	Jobs        *jobs.Service
+	Alarms      *alarms.Service
+	Ops         *ops.Service
+	Definitions integrations.Definitions
+	Credentials *credentials.Service
+	Clock       clock.Clock
+	Log         *slog.Logger
+	ClientIP    func(*http.Request) string
 }
 
 // Middleware is the per-route middleware the router composes; tests swap it.

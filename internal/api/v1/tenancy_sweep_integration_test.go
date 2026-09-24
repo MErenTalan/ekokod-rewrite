@@ -87,6 +87,9 @@ func (h *harness) foreign(t *testing.T) foreignIDs {
 		"carbon": {h.carbonActivityFor(h.fx.CompanyA, h.fx.BuildingA2), h.carbonActivityFor(h.fx.CompanyB, h.fx.BuildingB1),
 			h.carbonReportFor(h.fx.CompanyA, h.fx.BuildingA2), h.carbonReportFor(h.fx.CompanyB, h.fx.BuildingB1),
 			h.carbonFactorFor(h.fx.CompanyB)},
+		// F11a: a note and a file of A2 and of company B; templates/{id} answers an unknown id alike.
+		"iso50001": {h.isoNoteFor(h.fx.CompanyA, h.fx.BuildingA2), h.isoNoteFor(h.fx.CompanyB, h.fx.BuildingB1),
+			h.isoFileFor(h.fx.CompanyA, h.fx.BuildingA2), h.isoFileFor(h.fx.CompanyB, h.fx.BuildingB1)},
 	}
 }
 

@@ -44,6 +44,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/consumption"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/financial"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/integrations"
+	isosvc "github.com/MErenTalan/ekokod-rewrite/internal/service/iso50001"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/jobs"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/loadprofile"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/ops"
@@ -53,6 +54,7 @@ import (
 	tariffsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/tariff"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/tenancy"
 	weathersvc "github.com/MErenTalan/ekokod-rewrite/internal/service/weather"
+	"github.com/MErenTalan/ekokod-rewrite/internal/storage"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/admin"
 	platformredis "github.com/MErenTalan/ekokod-rewrite/internal/store/redis"
@@ -328,6 +330,10 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		Calendar: calendarService, Credentials: credentialService, Jobs: jobService, Alarms: alarmService, Ops: opsService,
 		Definitions: integrations.Definitions{Integrations: postgres.NewIntegrationRepository(pool, cipher), Catalogue: admin.NewCatalogueRepository(pool)}, Auth: authService, Tenancy: tenancyService, Assets: assetService, Analysis: analysisService,
 		Tariffs: tariffService, Billing: billingService, BillRequests: billRequests, Reports: reportRequests, Solar: solarService, Weather: weatherService, Renewable: renewableService, Financial: financialService,
+		ISO: isosvc.New(isosvc.Deps{ISO: postgres.NewISO50001Repository(pool), Files: postgres.NewFileRepository(pool),
+			Buildings: postgres.NewBuildingRepository(pool), Clock: opts.Clock,
+			Store: storage.Store{Root: cfg.Storage.Root, Max: cfg.Storage.UploadMax, Allowed: cfg.Storage.AllowedTypes}}),
+		UploadMax: cfg.Storage.UploadMax,
 		Carbon: carbonsvc.New(carbonsvc.Deps{Carbon: postgres.NewCarbonRepository(pool), Buildings: postgres.NewBuildingRepository(pool),
 			Companies: postgres.NewCompanyRepository(pool), Clock: opts.Clock}),
 		Clock: opts.Clock, Log: log, ClientIP: clientIP}
