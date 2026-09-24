@@ -36,6 +36,7 @@
   --color-revenue: light-dark(#15803D, #4ADE80);
   --color-forecast: light-dark(#64748B, #94A3B8);
   --color-overlay: light-dark(rgb(11 42 34 / 0.45), rgb(0 0 0 / 0.6));
+  --color-logo-plate: light-dark(#FFFFFF, #E8F2EE); /* partner logos are drawn for a light background */
   --color-card-edge: light-dark(transparent, #354E44); /* shadow-mode card edge; shadows vanish in dark */
   --radius-sm: calc(4px * var(--radius-scale)); --radius-md: calc(8px * var(--radius-scale));
   --radius-lg: calc(12px * var(--radius-scale)); --radius-full: 9999px;

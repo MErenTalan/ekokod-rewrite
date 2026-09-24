@@ -23,4 +23,5 @@ export const exempt: Record<string, string> = {
   'border-strong': 'decorative divider; controls use border-control',
   overlay: 'translucent scrim; content above it is on surface tokens',
   'card-edge': 'decorative card edge in shadow mode (transparent in light)',
+  'logo-plate': 'backdrop behind partner logo images; carries no text (logos have their own alt)',
 };
