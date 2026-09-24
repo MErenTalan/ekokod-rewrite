@@ -2,6 +2,7 @@ package iso50001
 
 // catalogue is legacy isoModule.accordionItem.accordion, verbatim in both
 // locales (R330). Generated once from src/app/i18n/locales/{tr,en}.json.
+//
 //nolint:misspell // Turkish clause text ("performans", "Adres"…), not English typos
 var catalogue = []Main{
 	{ID: "5", Title: map[string]string{"tr": "5. Liderlik", "en": "5. Leadership"}, Subs: []Sub{
