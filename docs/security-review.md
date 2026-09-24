@@ -82,8 +82,8 @@ Every mutating route writes an audit entry: `TestEveryMutationAudited` (runs ove
 
 ## 8. Supported browsers
 
-The last two versions of Chrome, Edge, Firefox and Safari, and iOS Safari 16 or later
-(`web/package.json` `browserslist`). Older browsers are not tested.
+Chrome and Edge 123+, Firefox 120+, Safari and iOS Safari 17.5+ — the floor F5 set for the design
+system (F5 handoff, M-18), recorded in `web/package.json` `browserslist`. Older browsers are not tested.
 
 ## Residual risks (accepted)
 

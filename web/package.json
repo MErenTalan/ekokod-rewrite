@@ -71,10 +71,10 @@
   },
   "packageManager": "pnpm@12.3.4",
   "browserslist": [
-    "last 2 Chrome versions",
-    "last 2 Edge versions",
-    "last 2 Firefox versions",
-    "last 2 Safari versions",
-    "iOS >= 16"
+    "chrome >= 123",
+    "edge >= 123",
+    "firefox >= 120",
+    "safari >= 17.5",
+    "ios_saf >= 17.5"
   ]
 }

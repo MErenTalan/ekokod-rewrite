@@ -23,7 +23,7 @@ backup/restore, the offline bundle and the handover documents.
 |---|---|---|---|
 | Q-L1 | GO-2026-6452 has no fixed excelize version. | Contain it at the untrusted boundary: every workbook read from an upload runs under a recover that turns a panic into a 422 `unreadable_workbook`; recorded in the security review until a fix ships | One malformed upload is refused instead of parsed |
 | Q-L2 | CSP strictness. | `script-src 'self' 'nonce-…' 'strict-dynamic'` (no `unsafe-inline`/`unsafe-eval` in production), `style-src 'self' 'unsafe-inline'` (Next/React inline style attributes and chart styles), `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, `frame-ancestors 'none'`, `img-src 'self' data: blob:` + the map tile origin, `connect-src 'self'` + the map tile origin, `worker-src 'self' blob:` (MapLibre), `font-src 'self' data:`; the analytics script origin is added only when that flag is on. Development adds `'unsafe-eval'` (React refresh) | A third-party embed the PO wants later needs an allow-list entry |
-| Q-L3 | Browser floor. | The last two versions of Chrome, Edge, Firefox and Safari, and iOS Safari ≥ 16 (`browserslist` in `web/package.json`), stated in the security review and the admin guide | Older browsers are not tested |
+| Q-L3 | Browser floor. | **F5's floor (M-18): Chrome/Edge ≥ 123, Firefox ≥ 120, Safari/iOS Safari ≥ 17.5** (`browserslist` in `web/package.json`), stated in the security review. (A first draft used "last two versions"; corrected in F15b after finding F5's recorded floor.) | Older browsers are not tested |
 | Q-L4 | HSTS. | Sent by the web and the API only when `EKOKOD_PUBLIC_URL` is `https://…` (`max-age=31536000; includeSubDomains`); the reverse proxy may also set it | — |
 
 ## Rulings (R450–R456)
