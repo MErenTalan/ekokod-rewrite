@@ -1,15 +1,10 @@
 # Handoff — ekokod rewrite: F1–F13 COMPLETE, F14a (legacy pipeline core) done, F14b next (Docker-bound gates of F9–F14 pending)
 
-> **STATUS (2026-09-24, ~00:50 Istanbul):** F9 (solar plants, renewable energy, financial analysis)
-> is on `phase/f9-solar` in `/home/personal/ekokod-f9-phase`, branched from `phase/f8b-reports`.
-> 23 commits after the plan `de5d2d1`. Tasks 1–15 are **complete** and ledgered. **Task 16** (seed, e2e,
-> a11y) is **half done**. Its first e2e run found three real defects; they are fixed and committed
-> (`9c746ca`). Then **the Docker daemon stopped answering** and every `refresh_continuous_aggregate`
-> in the test Postgres hung, so nothing after those fixes has been re-verified. **Task 17** (the
-> whole-phase self-review) has **not started**.
-> **Next session:** a long unattended run (5–6 h, the user is away). It should finish F9, then do **as many
-> of F10–F15 as fit**, one phase after another, **never stopping to ask**.
-> **Nothing is pushed and `main` is untouched. Pushing and merging are the user's call.**
+> **STATUS (2026-09-24, ~12:30 Istanbul):** Docker came back. **Every Docker-bound gate of F9–F14a is green**
+> (integration -race package by package, full e2e with the worker 112/112, ML image + nodb) after fixing the
+> defects those first runs found (commits `8202435`, `3a5aea2`, `be0a05e`). **F14b is done** (load, comparison
+> tables, the remaining collections, artifacts). **F14c is next** (recompute, reconcile, runbook, rehearsal target).
+> Branch `phase/f14-migration` in `/home/personal/ekokod-f14-phase`. Nothing is pushed; `main` is untouched.
 
 ---
 
@@ -89,7 +84,7 @@
 | `phase/f11-iso50001` (`/home/personal/ekokod-f11-phase`) | `32f7427` | F11 done (ISO 50001 backend + screens); Docker-bound gates PENDING |
 | `phase/f12-site` (`/home/personal/ekokod-f12-phase`) | `9c61937` | **F12 done** (F12a backend + F12b public site); API-backed public e2e PENDING (Docker) |
 | `phase/f13-ml` (`/home/personal/ekokod-f13-phase`) | `5efd328` | **F13 done** (ML service, Go forecasting, Predict + AI screens); Docker-bound gates PENDING |
-| **`phase/f14-migration`** (`/home/personal/ekokod-f14-phase`) | this commit | **F14a done** (legacy inventory/extract/transform); **F14b next** (load, comparison tables, remaining collections, artifacts) |
+| **`phase/f14-migration`** (`/home/personal/ekokod-f14-phase`) | this commit | **F14a + F14b done**; all F9–F14 Docker gates green; **F14c next** (plan: write it — `ekokod recompute …`, `migrate legacy reconcile`, `docs/runbook-migration.md`, `make migration-rehearsal`) |
 
 - Plans and ledgers:
   - F10a `docs/superpowers/plans/2026-09-24-f10a-carbon-backend.md` (R300–R319);
