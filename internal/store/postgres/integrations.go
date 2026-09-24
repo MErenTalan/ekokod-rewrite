@@ -50,6 +50,12 @@ func integrationCredentialAAD(companyID, definitionID uuid.UUID) []byte {
 	return []byte(companyID.String() + ":" + definitionID.String())
 }
 
+// IntegrationCredentialAAD is the same binding, for the legacy migration, which
+// re-seals credentials before they reach this repository (F14a Q-J3).
+func IntegrationCredentialAAD(companyID, definitionID uuid.UUID) []byte {
+	return integrationCredentialAAD(companyID, definitionID)
+}
+
 func integrationDefinitionFromRow(row sqlcgen.IntegrationDefinition) model.IntegrationDefinition {
 	return model.IntegrationDefinition{
 		ID: row.ID, Provider: model.IntegrationProvider(row.Provider), Subtype: row.Subtype,
