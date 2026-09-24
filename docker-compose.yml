@@ -147,6 +147,19 @@ services:
       resources:
         limits: { cpus: "1", memory: 512m }
 
+  # ML service (F13, 03 §6): forecasting and anomaly detection. Reads EKOKOD_ML_API_KEY from the
+  # same env file as the Go services; it has no database credentials and no database driver.
+  ml:
+    build:
+      context: ml
+    <<: *ekokod-env
+    volumes:
+      - ml-models:/var/lib/ekokod-ml
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { cpus: "2", memory: 2g }
+
   web:
     build:
       context: .
@@ -155,6 +168,11 @@ services:
       NEXT_PUBLIC_API_URL: http://localhost:8080
       EKOKOD_INTERNAL_API_URL: http://api:8080
       TZ: Europe/Istanbul
+      # F12b: the public site reads these flags itself.
+      EKOKOD_FEATURE_PRICING_PAGE: ${EKOKOD_FEATURE_PRICING_PAGE:-false}
+      EKOKOD_FEATURE_ANALYTICS: ${EKOKOD_FEATURE_ANALYTICS:-false}
+      EKOKOD_ANALYTICS_SRC: ${EKOKOD_ANALYTICS_SRC:-}
+      EKOKOD_ANALYTICS_SITE: ${EKOKOD_ANALYTICS_SITE:-}
     ports: ["3000:3000"]
     depends_on:
       api: { condition: service_healthy }
@@ -176,3 +194,4 @@ volumes:
   postgres-data:
   redis-data:
   artifacts:
+  ml-models:
