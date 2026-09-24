@@ -91,5 +91,8 @@ system (F5 handoff, M-18), recorded in `web/package.json` `browserslist`. Older 
 |---|---|---|
 | GO-2026-6452 in excelize | no fixed release; the only reachable path is contained and tested | excelize ships a fix |
 | `style-src 'unsafe-inline'` | React style attributes and chart styles need it; script execution stays nonce-only | a style-nonce strategy is worth its cost |
-| `/metrics` is served by the API router | the reverse proxy must route only `/api/`, `/health/` and the web app; F15b restricts the endpoint | F15b (observability) |
+| Backups (`backups/<stamp>/db.dump`) are not encrypted at rest | integration secrets inside are already encrypted with `EKOKOD_ENCRYPTION_KEY`; the rest is the customer's own energy data (F15c) | the customer asks for encrypted backups (pipe through `age`/`gpg` in `backup.sh`) |
 | ML Python dependencies unaudited here | no offline auditor | before release, on a connected machine |
+
+Resolved since F15a: `/metrics` left the public API router in F15b. Each process serves metrics on its own
+address (`EKOKOD_*_METRICS_ADDR`), and compose publishes none of them (F15c R478).

@@ -118,7 +118,8 @@ per building and per year; carbon ±1 % per building-year; artifact count and by
 - [ ] Reports render to PDF and Excel and send; historical (legacy) invoice and report PDFs download.
 - [ ] Carbon totals match the reconciliation; ISO 50001 notes and files are present; the export builds.
 - [ ] Scheduled jobs run under the leader lock and write `job_runs`.
-- [ ] Backup **and restore** tested end to end on a scratch host.
+- [ ] Backup **and restore** tested end to end on a scratch host (`make test-restore` proves the
+      procedure against a clean container; the operator runbook §4 has the commands).
 
 ## 7. Cutover (08 §10)
 
