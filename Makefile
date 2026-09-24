@@ -194,7 +194,10 @@ check-generate: ## Fail if the committed sqlcgen output is not what sqlc produce
 offline-bundle: ## Build the air-gapped install bundle
 	./scripts/offline-bundle.sh
 
-.PHONY: backup restore test-restore
+test-offline-install: ## Install dist/'s newest bundle into a scratch project, upgrade it, check no data loss (F15c R480)
+	./scripts/test-offline-install.sh $(BUNDLE) $(UPGRADE)
+
+.PHONY: backup restore test-restore test-offline-install
 .PHONY: web-install web-lint web-test web-build web-audit web-a11y web-e2e
 
 ml-test: ## Run the ML service tests (uv)

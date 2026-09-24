@@ -30,35 +30,45 @@ docker save $(docker compose config --images) -o "$STAGE/images/ekokod-images.ta
 echo "==> Staging deployment files"
 cp docker-compose.yml "$STAGE/"
 cp .env.example "$STAGE/env.template"
-mkdir -p "$STAGE/scripts"
-cp scripts/gen-env-docker.sh "$STAGE/scripts/"
-chmod +x "$STAGE/scripts/gen-env-docker.sh"
-# VERSION (not a secret) travels with the bundle so the target machine's
-# `docker compose` resolves the same image tag that was just saved above.
-# gen-env-docker.sh preserves this line and adds a freshly generated
-# POSTGRES_PASSWORD to the same file at install time.
-echo "VERSION=$VERSION" > "$STAGE/.env"
+mkdir -p "$STAGE/scripts" "$STAGE/docs"
+cp scripts/gen-env-docker.sh scripts/backup.sh scripts/restore.sh "$STAGE/scripts/"
+chmod +x "$STAGE"/scripts/*.sh
+cp docs/runbook-operator.md docs/admin-guide.md "$STAGE/docs/" 2>/dev/null || true
+# VERSION (not a secret) travels as .env.bundle, never .env: extracting an
+# upgrade over an install must not overwrite .env's POSTGRES_PASSWORD.
+# install.sh merges it into .env so compose resolves the saved image tag.
+echo "VERSION=$VERSION" > "$STAGE/.env.bundle"
 cat > "$STAGE/install.sh" <<'INSTALL'
 #!/usr/bin/env bash
-# Offline installer. Idempotent: safe to re-run for upgrades.
+# Offline installer (F15c R479). A fresh directory installs; a directory that
+# already holds an install (.env.docker present) upgrades it: backup first,
+# then the new images, migrations and an idempotent seed. Never pulls or builds.
 set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")"
 command -v docker >/dev/null || { echo "docker is required"; exit 1; }
 [ -f images/ekokod-images.tar ] || {
   echo "images/ekokod-images.tar not found — run this script from the directory the bundle tarball was extracted into" >&2
   exit 1
 }
+bundle_version="$(sed -n 's/^VERSION=//p' .env.bundle)"
+
+if [ -f .env.docker ] && docker compose ps --status running --quiet postgres 2>/dev/null | grep -q .; then
+  echo "==> Existing install found: backing up before the upgrade"
+  ./scripts/backup.sh
+fi
+
 docker load -i images/ekokod-images.tar
-# Generates .env.docker (app secrets) and adds a fresh POSTGRES_PASSWORD to
-# this directory's .env, alongside the VERSION already staged in it by
-# offline-bundle.sh. No manual edit required — refuses to touch either
-# file if .env.docker already exists (e.g. an upgrade re-run).
+# The bundle's version replaces the one in .env; POSTGRES_PASSWORD is kept.
+touch .env
+grep -v '^VERSION=' .env > .env.tmp || true
+echo "VERSION=${bundle_version}" >> .env.tmp
+mv .env.tmp .env
+# Generates .env.docker and POSTGRES_PASSWORD on a fresh install; leaves an
+# existing install's secrets untouched.
 ./scripts/gen-env-docker.sh
-# `docker compose up -d` already runs the migrate service to completion
-# (api/worker/scheduler all depend on migrate's service_completed_successfully)
-# before starting the other services, so migrations do not need a second,
-# separate run here.
-docker compose up -d
-docker compose run --rm api seed
+# migrate runs to completion before api/worker/scheduler start (depends_on).
+docker compose up -d --pull never --no-build --remove-orphans
+docker compose run --rm --no-deps api seed
 docker compose ps
 INSTALL
 chmod +x "$STAGE/install.sh"
