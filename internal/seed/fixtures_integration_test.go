@@ -70,6 +70,10 @@ func TestE2EFixturesHaveReadingsAndBill(t *testing.T) {
 	require.NoError(t, pool.QueryRow(ctx, `select count(*) from carbon_selected_activities where building_id = $1`, fx.BuildingA1).Scan(&selected))
 	require.NoError(t, pool.QueryRow(ctx, `select count(*) from carbon_activities where building_id = $1 and not is_automated`, fx.BuildingA1).Scan(&manual))
 	require.Equal(t, []int{len(seed.E2ECarbonSelection), 4}, []int{selected, manual})
+	var isoNotes, isoDates int
+	require.NoError(t, pool.QueryRow(ctx, `select count(*) from iso50001_notes n join iso50001_projects p on p.id = n.project_id where p.building_id = $1`, fx.BuildingA1).Scan(&isoNotes))
+	require.NoError(t, pool.QueryRow(ctx, `select count(*) from iso50001_clause_dates d join iso50001_projects p on p.id = d.project_id where p.building_id = $1`, fx.BuildingA1).Scan(&isoDates))
+	require.Equal(t, []int{3, 5}, []int{isoNotes, isoDates}, "F11a: one project, five dated clauses, three notes, once")
 
 	for _, id := range []uuid.UUID{fx.AnalyzerA1, fx.AnalyzerA2, fx.AnalyzerB1} {
 		var readings int
