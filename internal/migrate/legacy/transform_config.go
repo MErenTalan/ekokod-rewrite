@@ -172,6 +172,9 @@ func (t *transformer) credential(companyHex string, i int, in bson.M) error {
 		}
 		row["extra_enc"] = token
 	}
+	if strings.EqualFold(str(in, "type"), "ISOLAR") {
+		t.isolarCredential[companyHex] = row["id"].(string) // R424: a linked plant points at it
+	}
 	t.rj.Accept("integration_credentials")
 	return t.w.row("integration_credentials", row)
 }

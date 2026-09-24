@@ -79,8 +79,8 @@ func TestBillHistoryReportsAndLogs(t *testing.T) {
 // TestEveryStepIsIdempotent is R412 over every F14b step: byte-identical output,
 // except the two files whose secrets are sealed with random nonces.
 func TestEveryStepIsIdempotent(t *testing.T) {
-	a, _, _ := transformWith(t, historySource(t), nil)
-	b, _, _ := transformWith(t, historySource(t), nil)
+	a, _, _ := transformWith(t, fullSource(t), nil)
+	b, _, _ := transformWith(t, fullSource(t), nil)
 	entries, err := os.ReadDir(a)
 	require.NoError(t, err)
 	for _, e := range entries {

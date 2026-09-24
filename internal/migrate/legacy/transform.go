@@ -200,8 +200,10 @@ type transformer struct {
 	users            map[string]bool
 	buildingCompany  map[string]string
 	analyzerBuilding map[string]string
+	isolarCredential map[string]string // company hex → its ISOLAR credential id
 	companySubtypes  map[string]map[string]string
-	solarTariffDocs  []bson.M // standalone solar tariffs, written with the plants (R424)
+	solarTariffDocs  []bson.M        // standalone solar tariffs, written with the plants (R424)
+	solarDates       map[string]bool // plant hex:date with a plant-owned solar tariff
 }
 
 func (t *transformer) count(collection string) { t.read[collection]++ }
@@ -210,9 +212,9 @@ func (t *transformer) run() error {
 	t.read = map[string]int{}
 	t.definitions, t.companies, t.users = map[string]uuid.UUID{}, map[string]bool{}, map[string]bool{}
 	t.buildingCompany, t.companySubtypes = map[string]string{}, map[string]map[string]string{}
-	t.analyzerBuilding = map[string]string{}
+	t.analyzerBuilding, t.isolarCredential = map[string]string{}, map[string]string{}
 	for _, step := range []func() error{t.integrations, t.companiesStep, t.usersStep, t.buildingsStep, t.analyzersStep,
-		t.tariffsStep, t.templatesStep, t.smtpStep, t.epiasStep, t.solarTariffsPending,
+		t.tariffsStep, t.templatesStep, t.smtpStep, t.epiasStep, t.plantsStep, t.alarmsStep,
 		t.billHistoryStep, t.reportsStep, t.logsStep} {
 		if err := step(); err != nil {
 			return err
@@ -237,12 +239,4 @@ func (t *transformer) writeManual(path string) error {
 		return err
 	}
 	return f.Close()
-}
-
-// solarTariffsPending accounts standalone solar tariffs until plants are migrated.
-func (t *transformer) solarTariffsPending() error {
-	for _, d := range t.solarTariffDocs {
-		t.rj.Reject("tariffs", hexID(d["_id"]), "energy_source", "solar_tariff", nil)
-	}
-	return nil
 }
