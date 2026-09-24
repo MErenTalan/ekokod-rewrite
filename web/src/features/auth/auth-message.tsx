@@ -1,7 +1,7 @@
 import Link from 'next/link';
 
 import { Alert, type AlertTone } from '@/components/ui/alert';
-import { buttonVariants } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button-variants';
 
 /** A full auth page that is only a message and one way forward (auth error, maintenance). */
 export function AuthMessage({ title, description, tone, action }: {

@@ -42,6 +42,13 @@ afterEach(() => {
 const render = () => renderWithProviders(<SessionProvider me={me}><AiPage /></SessionProvider>);
 
 describe('AiPage', () => {
+  it('a user who cannot run forecasts still gets the page heading (F15c a11y sweep)', async () => {
+    api = mockApi(SCOPE);
+    const readonly = { ...me, role: 'building_readonly', permissions: fixture.building_readonly_admin as MeResponse['permissions'] } as MeResponse;
+    const view = renderWithProviders(<SessionProvider me={readonly}><AiPage /></SessionProvider>);
+    expect(await view.findByRole('heading', { level: 1 })).toBeInTheDocument();
+  });
+
   it('daily: runs to the end of tomorrow and totals that day with its weekday (Q-I17)', async () => {
     // The run starts at the current hour, so it also covers the rest of today: those hours are not tomorrow's.
     const today = { ts: '2026-09-23T20:00:00Z', median: '999', p10: '999', p90: '999' };

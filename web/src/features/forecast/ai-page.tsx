@@ -89,7 +89,14 @@ export function AiPage() {
   const dayRows = (points: ForecastPoint[]): PredictionRow[] => points.map((p) => ({ label: HOUR_LABEL.format(new Date(p.ts)), median: p.median, p10: p.p10, p90: p.p90 }));
   const dateRows = (points: ForecastPoint[]): PredictionRow[] => dailyTotals(points).map((d) => ({ label: formatDate(d.date, locale), median: d.median, p10: d.p10, p90: d.p90 }));
 
-  if (!can('forecast.run')) return <Alert tone="info" title={t('predict.readOnly')} />;
+  if (!can('forecast.run')) {
+    return (
+      <div className="flex flex-col gap-6">
+        <PageHeader title={t('ai.title')} description={t('ai.subtitle')} />
+        <Alert tone="info" title={t('predict.readOnly')} />
+      </div>
+    );
+  }
 
   const body = { analyzer_id: analyzerId ?? '' };
   const disabled = !analyzerId;
