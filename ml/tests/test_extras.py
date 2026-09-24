@@ -91,4 +91,5 @@ def test_a_pooled_forest_only_serves_its_own_covariate_set(tmp_path):
     days = sorted({(T0 + i * H).date() for i in range(4 * 168)})
     cov = {"day_type": [{"date": d.isoformat(), "type": "weekend" if d.weekday() >= 5 else "workday"} for d in days]}
     res = reg.forecast(request(weekly(3), model="random_forest", covariates=cov))
-    assert res.status == "ok" and res.model_version == "1.0.0"  # fitted on the request, not the pooled artifact
+    # Fitted on the request, not the pooled artifact (which would fail and fall back to the baseline).
+    assert res.status == "ok" and res.model_id == "random_forest" and res.fallback_from is None and res.model_version == "1.0.0"
