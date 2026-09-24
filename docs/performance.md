@@ -65,6 +65,17 @@ time predicate non-sargable made it scan all eleven, so the test guards the prop
   affected — it reads boundary readings (F3 R61). **This needs the product owner's attention before
   cutover:** legacy OSOS load profiles are hourly.
 
+  **Design notes for the fix (not started in F15b):** 02 §3.1's boundary differencing is
+  `consumption[b0, b1) = boundary(b1) − boundary(b0)`, with `boundary(t)` = the last reading with
+  `ts ≤ t`. Per bucket that is the next bucket's first reading when it sits exactly on the edge, else this
+  bucket's last. The aggregates keep a first value only for `active_import` (`active_import_start`); every
+  other register has only `last()` (`*_index`). So a correct fix for all twelve registers needs a
+  migration that adds `first()` per register to the four consumption aggregates (a rebuild: cheap before
+  cutover), then the analytics service differences consecutive buckets with a one-bucket look-ahead, as
+  R87 does for the load profile. A look-behind over `last()` alone would shift an hourly meter's
+  consumption by one hour. Tests to update: F3's "analytics and billing differ by exactly the missing
+  step" acceptance test encodes the current behaviour and must be re-ruled.
+
 ## PENDING
 
 - **24-hour soak** (`make soak-test`, `DURATION=24h`): no memory-growth or backlog proof until it runs on a
