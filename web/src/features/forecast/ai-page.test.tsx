@@ -44,7 +44,7 @@ const render = () => renderWithProviders(<SessionProvider me={me}><AiPage /></Se
 describe('AiPage', () => {
   it('a user who cannot run forecasts still gets the page heading (F15c a11y sweep)', async () => {
     api = mockApi(SCOPE);
-    const readonly = { ...me, role: 'building_readonly', permissions: fixture.building_readonly_admin as MeResponse['permissions'] } as MeResponse;
+    const readonly: MeResponse = { ...me, role: 'building_readonly_admin', permissions: fixture.building_readonly_admin as MeResponse['permissions'] };
     const view = renderWithProviders(<SessionProvider me={readonly}><AiPage /></SessionProvider>);
     expect(await view.findByRole('heading', { level: 1 })).toBeInTheDocument();
   });
