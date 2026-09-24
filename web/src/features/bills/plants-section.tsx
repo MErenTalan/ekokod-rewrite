@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Table, TableBody, TableCell, TableContainer, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCaption, TableCell, TableContainer, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatNumber } from '@/lib/format';
 import type { BillDashboard } from '@/lib/api/types';
 
@@ -37,6 +37,7 @@ export function PlantsSectionView({ plants, onDownloadPdf }: PlantsSectionViewPr
       ) : (
         <TableContainer label={t('plants.title')}>
           <Table>
+            <TableCaption>{t('plants.title')}</TableCaption>
             <TableHeader>
               <TableRow>
                 <TableHead>{t('plants.columns.plant')}</TableHead>

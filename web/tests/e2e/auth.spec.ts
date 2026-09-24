@@ -28,12 +28,14 @@ const CORE = [
   'İletişim',
 ];
 const WITHOUT_RESTRICTED = CORE.filter((label) => label !== 'GES Santralleri' && label !== 'Finansal Analiz');
+// F13 Q-I16: AI Analysis is gated on forecast.run (A CA BA).
+const withAI = (nav: readonly string[]) => nav.flatMap((label) => (label === 'Tüketim Tahmini' ? [label, 'Yapay Zekâ Analizi'] : [label]));
 
 const ROLES = [
-  { role: 'admin', user: USERS.admin, nav: CORE, switcher: true },
-  { role: 'company_admin', user: USERS.companyAdmin, nav: CORE, switcher: false },
+  { role: 'admin', user: USERS.admin, nav: withAI(CORE), switcher: true },
+  { role: 'company_admin', user: USERS.companyAdmin, nav: withAI(CORE), switcher: false },
   { role: 'company_readonly_admin', user: USERS.companyReadonly, nav: CORE, switcher: false },
-  { role: 'building_admin', user: USERS.buildingAdmin, nav: WITHOUT_RESTRICTED, switcher: false },
+  { role: 'building_admin', user: USERS.buildingAdmin, nav: withAI(WITHOUT_RESTRICTED), switcher: false },
   { role: 'building_readonly_admin', user: USERS.buildingReadonly, nav: WITHOUT_RESTRICTED, switcher: false },
   { role: 'demo', user: USERS.demo, nav: WITHOUT_RESTRICTED, switcher: false },
 ] as const;

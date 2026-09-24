@@ -50,7 +50,9 @@ test('lists each plant with its production and, when set, the netting analyzer (
   const plants = page.getByRole('table', { name: 'GES santralleri' });
   const linked = plants.getByRole('row', { name: /E2E Arazi GES/ });
   await expect(linked).toContainText('E2E-A1');
-  await expect(linked).toContainText('₺'); // production × the feed-in tariff
+  // production × the feed-in tariff, with the currency in its own column
+  await expect(linked.getByRole('cell').filter({ hasText: /^\d{1,3}(\.\d{3})*,\d{2}$/ })).not.toHaveCount(0);
+  await expect(linked).toContainText('TRY');
   await expect(plants.getByRole('row', { name: /E2E Çatı GES/ })).toBeVisible();
 });
 

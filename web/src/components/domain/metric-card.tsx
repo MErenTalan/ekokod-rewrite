@@ -49,6 +49,8 @@ export function MetricCard({ label, value, unit, delta, sparkline, quality, maxF
           <div className="flex items-end justify-between gap-3">
             <p className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 text-foreground">
               <span className="type-metric [overflow-wrap:anywhere]">{shown}</span>
+              {/* A real space: the gap alone left "7.030,75kWh" as the text a screen reader reads. */}
+              {unit !== 'TRY' && value !== null ? ' ' : null}
               {unit !== 'TRY' && value !== null ? <span className="text-foreground-muted type-small">{unitSymbol(unit)}</span> : null}
             </p>
             {sparkline}

@@ -21,7 +21,7 @@ test('a pending record is approved on the status tab (R325)', async ({ page }) =
   const row = page.getByRole('row', { name: /İş Seyahati/ }).first();
   await expect(row).toBeVisible({ timeout: 30_000 });
   await row.getByRole('button', { name: 'Onayla' }).click();
-  await expect(page.getByText('Kayıt onaylandı')).toBeVisible();
+  await expect(page.getByText('Kayıt onaylandı', { exact: true })).toBeVisible();
   await expect(page.getByRole('row', { name: /İş Seyahati/ }).first()).toContainText('Onaylandı');
 });
 
@@ -29,7 +29,7 @@ test('a GHG report is generated and its PDF downloads (R312, R326)', async ({ pa
   await login(page, USERS.companyAdmin.email);
   await page.goto('/ekorm/carbon-footprint?tab=reporting');
   await page.getByRole('button', { name: 'Raporu oluştur' }).click({ timeout: 30_000 });
-  await expect(page.getByText('Rapor oluşturuldu')).toBeVisible();
+  await expect(page.getByText('Rapor oluşturuldu', { exact: true })).toBeVisible();
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: /PDF indir$/ }).first().click();
   expect((await download).suggestedFilename()).toMatch(/^carbon-ghg-.*\.pdf$/);

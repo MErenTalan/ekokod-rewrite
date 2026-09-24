@@ -20,7 +20,8 @@ test.describe('forecasting', () => {
   });
 
   test('the old /ekorm/predict path lands on the screen', async ({ page }) => {
-    await login(page, USERS.companyAdmin.email, { next: '/ekorm/predict' });
+    await login(page, USERS.companyAdmin.email);
+    await page.goto('/ekorm/predict');
     await expect(page).toHaveURL(/\/ekorm\/forecast$/);
   });
 

@@ -46,7 +46,7 @@ test.describe('settings', () => {
     await expect(page.getByRole('menuitem', { name: 'Binaya ata' })).toHaveCount(0);
     await page.getByRole('menuitem', { name: 'Saatlik değerleri yenile' }).click();
     // No integration is configured for the fixtures, and the API says so plainly.
-    await expect(page.getByText(/entegrasyon/i)).toBeVisible();
+    await expect(page.getByText('Bu analizör için entegrasyon tanımlanmamış.', { exact: true })).toBeVisible();
   });
 
   test('a forbidden tab in the URL falls back to the account tab', async ({ page }) => {

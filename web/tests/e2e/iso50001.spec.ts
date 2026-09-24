@@ -44,6 +44,10 @@ test('a building-readonly user reads without write controls (R341)', async ({ pa
   await login(page, USERS.buildingReadonly.email);
   await page.goto('/ekorm/iso-50001?tab=checklist');
   await page.getByRole('button', { name: '5. Liderlik' }).click({ timeout: 30_000 });
-  await expect(page.getByText('Genel müdür EnYS taahhüt yazısını imzaladı.')).toBeVisible();
+  // Their only building is A2 (the seeded notes are A1's): the clause reads, nothing writes.
+  await expect(page.getByRole('combobox', { name: 'Bina' })).toContainText('A2 Depo');
+  await expect(page.getByRole('heading', { name: '5.1 Liderlik ve Taahhüt' })).toBeVisible();
+  await expect(page.getByText('Henüz not eklenmedi.').first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Notu Listeye Ekle' })).toHaveCount(0);
+  await expect(page.getByLabel(/Gerekli Dosyaları Yükle/)).toHaveCount(0);
 });

@@ -41,7 +41,7 @@ export default defineConfig({
           {
             command: `pnpm exec next start -p ${webPort} -H localhost`,
             url: `${webURL}/auth/login`,
-            env: { EKOKOD_INTERNAL_API_URL: `http://127.0.0.1:${apiPort}` },
+            env: { EKOKOD_INTERNAL_API_URL: `http://127.0.0.1:${apiPort}`, EKOKOD_PUBLIC_URL: webURL },
             timeout: 120_000,
             reuseExistingServer: false,
           },

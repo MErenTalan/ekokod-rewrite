@@ -65,7 +65,8 @@ test('the archive lists the seeded report as available', async ({ page }) => {
   await page.getByRole('tab', { name: 'Rapor arşivi' }).click();
   await expect(page.getByText(/Toplam rapor: \d+/)).toBeVisible({ timeout: 30_000 });
   const seeded = page.getByRole('listitem', { name: new RegExp(lastMonthLabel(), 'i') }).first();
-  await expect(seeded).toContainText('Mevcut');
+  // A parallel test may be regenerating this very report: the worker finishes it.
+  await expect(seeded).toContainText('Mevcut', { timeout: 60_000 });
   await expect(seeded.getByRole('button', { name: /PDF/ })).toBeVisible();
 });
 
