@@ -254,8 +254,8 @@ grep -rn "InsecureSkipVerify" internal/ && exit 1 || echo "no TLS bypass"
       operational message — asserted, not assumed.
 - [ ] Hourly, daily, monthly and yearly figures each derive from their own boundaries; summing
       the level below is asserted **not** to be how they are produced.
-- [ ] `billing.Consumption` and `analytics.Consumption` are shown to differ at a bucket boundary
-      by the expected step, documenting the trade-off in a test.
+- [ ] `billing.Consumption` and `analytics.Consumption` agree for readings on the bucket
+      boundaries (re-ruled by F15q R472: originally "differ by the expected step").
 - [ ] Monthly consumption prefers `billing`-kind readings when present.
 - [ ] Load profile statistics match hand-computed values for a fixture with known weekday/weekend
       and seasonal distribution.

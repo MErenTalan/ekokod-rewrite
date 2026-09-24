@@ -378,8 +378,11 @@ hierarchically rolled up from the level below where TimescaleDB permits it, or d
 the hypertable where boundary semantics require it.
 
 **Boundary semantics.** A continuous aggregate buckets by wall time and computes
-`last − first` *within* the bucket, which slightly understates a period because it misses the step
-between the last reading of one bucket and the first of the next. Where exactness matters — billing
+`last − first` *within* the bucket, which misses the step between the last reading of one bucket
+and the first of the next (for a meter that reports hourly, the whole hourly figure). The aggregates
+therefore also keep each register's first value and the first reading's instant, and the analytics
+repository differences consecutive bucket boundaries with a one-bucket look-ahead (F15q R470–R471):
+with readings on the bucket edges it agrees with billing. Where exactness matters — billing
 above all — consumption is computed by the **domain function** using the readings at the true period
 boundaries (§3.1 of `02-domain-rules.md`), reading directly from `meter_readings`. The continuous
 aggregates serve charts, tables and analytics, where the difference is immaterial and the speed is

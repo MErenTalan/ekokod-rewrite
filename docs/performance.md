@@ -57,24 +57,12 @@ time predicate non-sargable made it scan all eleven, so the test guards the prop
 ## Findings
 
 - **Fixed:** `recompute bills` did not parallelise within a company (above).
-- **Open — F3 Q6, confirmed at scale:** the consumption API's *hourly* series is `last − first` inside each
-  hour bucket, so it is **zero for a meter that reports once an hour** and about 25 % low for a 15-minute
-  meter; daily and monthly figures lose one reading interval at each bucket end (about 4 % of a day for
-  an hourly meter). F3's R87 already computes the load profile from consecutive bucket boundaries; the
-  analytics series needs the same boundary differencing (see the design notes below). Billing is not
-  affected — it reads boundary readings (F3 R61). **This needs the product owner's attention before
-  cutover:** legacy OSOS load profiles are hourly.
-
-  **Design notes for the fix (not started in F15b):** 02 §3.1's boundary differencing is
-  `consumption[b0, b1) = boundary(b1) − boundary(b0)`, with `boundary(t)` = the last reading with
-  `ts ≤ t`. Per bucket that is the next bucket's first reading when it sits exactly on the edge, else this
-  bucket's last. The aggregates keep a first value only for `active_import` (`active_import_start`); every
-  other register has only `last()` (`*_index`). So a correct fix for all twelve registers needs a
-  migration that adds `first()` per register to the four consumption aggregates (a rebuild: cheap before
-  cutover), then the analytics service differences consecutive buckets with a one-bucket look-ahead, as
-  R87 does for the load profile. A look-behind over `last()` alone would shift an hourly meter's
-  consumption by one hour. Tests to update: F3's "analytics and billing differ by exactly the missing
-  step" acceptance test encodes the current behaviour and must be re-ruled.
+- **Fixed in F15q — F3 Q6:** the consumption API's hourly series was `last − first` inside each hour
+  bucket, so it was zero for a meter that reports once an hour, and daily/monthly figures lost one
+  interval per bucket. Migration 00021 adds a `first()` per register and `first_ts` to the four
+  consumption aggregates. The analytics repository now reads one bucket on each side and computes
+  `boundary(b1) − boundary(b0)` (02 §3.1) (plan `docs/superpowers/plans/2026-09-24-f15q-boundary-differencing.md`,
+  R470–R474). Billing is unchanged.
 
 ## PENDING
 
