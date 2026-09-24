@@ -41,9 +41,12 @@
 >    bundle'da mı; docker-compose'da `EKOKOD_*_METRICS_ADDR=0.0.0.0:946x` — F15b notu), tam a11y denetimi
 >    (07 §9; Storybook a11y + sayfa bazında axe), dokümantasyon (operatör runbook, yönetici kılavuzu,
 >    OpenAPI'den statik API referansı, ADR'ler; `docs/` altındaki her belge güncel olmalı).
->    **Ayrıca:** F3 Q6 (saatlik tüketim serisi saatlik sayaçlarda sıfır) bir ürün kararı bekliyor —
->    önerilen düzeltme `docs/performance.md` "Findings"te; kararı bekletmeden önerilen düzeltmeyi ayrı
->    bir task olarak uygula (Ruling olarak yaz), çünkü legacy OSOS yük profilleri saatlik.
+>    **ÖNCE (F15c'den önce, kendi planıyla — "F15q"):** F3 Q6 düzeltmesi. Saatlik tüketim serisi
+>    saatlik sayaçlarda sıfır, günlük/aylıkta her kovada bir aralık kayıp (legacy OSOS yük profilleri
+>    saatlik). Tasarım notları `docs/performance.md` "Findings"te: dört consumption aggregate'ine her
+>    register için `first()` ekleyen bir migration + analytics'te bir kova ileriye bakan sınır farkı
+>    (R87 gibi); F3'ün "analytics ile billing tam bir adım farklı" kabul testi yeniden kararlanmalı.
+>    Önerilen düzeltmeyi uygula, Ruling olarak yaz; faturalama etkilenmiyor.
 > 3. Süre ya da bağlam biterken yarım task bırakma; son temiz task sınırında dur: ledger + bu dosya
 >    ("START HERE", yarım iş, sıradaki adım) + Türkçe yapıştırma promptu güncel, commit et, dur.
 >
