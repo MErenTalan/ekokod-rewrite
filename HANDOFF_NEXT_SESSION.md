@@ -1,12 +1,14 @@
-# Handoff — ekokod rewrite: F0–F14 COMPLETE, F15 (hardening, packaging, handover) next
+# Handoff — ekokod rewrite: F0–F14 COMPLETE, F15a (security) done, F15b next
 
 > **STATUS (2026-09-24, ~11:40 Istanbul):** every phase F0–F14 is built. Docker came back this
 > session and **every Docker-bound gate of F9–F14 is green** (integration `-race` package by package,
 > the full e2e suite with the worker 112/112, the ML image + in-image nodb). F14 is done in three
 > parts: F14a (inventory/extract/transform), F14b (load, comparison tables, remaining collections,
 > artifacts), F14c (recompute, reconcile, runbook, rehearsal target).
-> **Next: F15** on branch `phase/f15-hardening` (`/home/personal/ekokod-f15-phase`, created from the
-> F14 tip, `web/` installed). Its plan is not written yet.
+> **F15a (security hardening) is done** on `phase/f15-hardening` (`/home/personal/ekokod-f15-phase`):
+> excelize GO-2026-6452 contained, API + web security headers, nonce CSP (e2e 114/114), browser floor,
+> `docs/security-review.md`. **Next: F15b** (performance + observability), then **F15c** (backup/restore,
+> offline bundle, a11y audit, handover docs) — plans not written yet.
 > **Nothing is pushed and `main` is untouched. Pushing and merging are the user's call.**
 
 ---
@@ -22,8 +24,8 @@
 > Geri alınamaz ya da dışa dönük bir işlem gerekirse YAPMA; kaydet ve etrafından dolaş: push, merge,
 > `main`'e dokunmak, başka projenin container/port/süreçlerine dokunmak, Docker'ı yeniden başlatmak.
 >
-> **Durum:** F0–F14 tamam; F9–F14'ün Docker kapıları yeşil. Son dal `phase/f15-hardening`
-> (`/home/personal/ekokod-f15-phase`). Hiçbir şey push edilmedi.
+> **Durum:** F0–F14 tamam; F9–F14'ün Docker kapıları yeşil; **F15a (güvenlik) tamam**. Son dal
+> `phase/f15-hardening` (`/home/personal/ekokod-f15-phase`). Hiçbir şey push edilmedi.
 >
 > **Çalışma düzeni (kesin):** paralel agent YOK, subagent YOK, Workflow YOK. Fazı bu oturumda kendin
 > yürüt (`superpowers:executing-plans` + TDD). Her task sonunda diff'i oku ve guard'ın kırmızıya
@@ -32,13 +34,16 @@
 >
 > **Sıra:**
 > 1. `/home/personal/ekokod-f15-phase/HANDOFF_NEXT_SESSION.md`'i baştan sona oku.
-> 2. **F15'i planla ve uygula** (`docs/rewrite/09-implementation-plan.md` §F15): performans (2× yük
->    testi, hypertable planlarında chunk exclusion), güvenlik incelemesi (bağımlılık denetimi, sır
->    yönetimi, yetki matrisi, upload, path traversal, rate limit, audit log), tam erişilebilirlik
->    denetimi (07 §9), gözlemlenebilirlik (dashboard + alarm eşikleri), yedekleme ve **geri yükleme**,
->    offline bundle (`make offline-bundle`, `install.sh`, upgrade), dokümantasyon (operatör runbook,
->    yönetici kılavuzu, OpenAPI'den API referansı, ADR'ler). F15 ayrıca CSP nonce'ları, tarayıcı
->    tabanı, `EKOKOD_TRUSTED_PROXIES` ve rate limit'lerin sahibi. Büyükse F14 gibi F15a/b/c'ye böl.
+> 2. **F15b'yi planla ve uygula** (09 §F15): performans (API ve job hattında 2× yük testi —
+>    `make load-test`/`make soak-test`, hypertable sorgu planlarında chunk exclusion kanıtı, en büyük
+>    darboğazları düzelt) ve gözlemlenebilirlik (HTTP gecikme/hata, job başarı/süre, kuyruk derinliği,
+>    entegrasyon sağlığı için dashboard'lar + alarm eşikleri; `/metrics` public router'dan çekilmeli —
+>    `docs/security-review.md` residual risk). Sonra **F15c**: yedekleme ve **geri yükleme**
+>    (`make backup`, `scripts/test-restore.sh`), offline bundle (`make offline-bundle`, `install.sh`
+>    upgrade yolu, `scripts/test-offline-install.sh`; ML imajı bundle'da mı kontrol et), tam a11y
+>    denetimi (07 §9), dokümantasyon (operatör runbook, yönetici kılavuzu, OpenAPI'den API referansı,
+>    ADR'ler). Bu makinede yapılamayanlar (gerçek scratch host, 24 saatlik soak, network kapalı host)
+>    PENDING yazılır, sahte yapılmaz.
 > 3. Süre ya da bağlam biterken yarım task bırakma; son temiz task sınırında dur: ledger + bu dosya
 >    ("START HERE", yarım iş, sıradaki adım) + Türkçe yapıştırma promptu güncel, commit et, dur.
 >
@@ -63,7 +68,7 @@
 |---|---|---|
 | `phase/f9-solar` … `phase/f13-ml` (`/home/personal/ekokod-f9-phase` … `-f13-phase`) | unchanged | code done; their Docker gates were run **on the F14 tip** this session (the tip carries them) and fixed there |
 | `phase/f14-migration` (`/home/personal/ekokod-f14-phase`) | `d07b99d` + handoff | **F14 done** (a + b + c) |
-| **`phase/f15-hardening`** (`/home/personal/ekokod-f15-phase`) | this commit | **F15 next** — no plan yet; `web/` installed |
+| **`phase/f15-hardening`** (`/home/personal/ekokod-f15-phase`) | this commit | **F15a done** (plan `docs/superpowers/plans/2026-09-24-f15a-security-hardening.md`, R450–R456, Q-L1…Q-L4; ledger `.superpowers/sdd/2026-09-24-f15a-security-hardening/progress.md`); **F15b next** |
 
 ### What this session did
 1. **Gates (Docker back):** the F9–F14a integration suite ran with `-race` package by package; e2e
@@ -107,7 +112,7 @@
 F1 1–14, F2 R1–R53, F3 R54–R104, F4 R105–R135, F5 D1–D26, F6a R136–R189, F6b R190–R210,
 F7 R211–R232, F8a R233–R253, F8b R254–R275 + E-1…E-3, F9 R276–R299 + F-1…F-3, F10 R300–R327,
 F11 R330–R346, F12 R350–R356, F13 R360–R385, F14a R400–R412, **F14b R413–R429, F14c R430–R444**, plus
-each phase's ledgered rulings. **F15 continues from R450.**
+each phase's ledgered rulings, **F15a R450–R456**. **F15b continues from R460.**
 
 ## F15 (09-implementation-plan.md §F15) — what to plan
 Performance (2× load on API + jobs, chunk exclusion in hypertable plans), security review (dependency
