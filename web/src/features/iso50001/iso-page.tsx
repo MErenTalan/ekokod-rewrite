@@ -12,6 +12,8 @@ import { ScopePicker } from '@/features/scope/scope-picker';
 import { useSelection } from '@/lib/selection/selection-store';
 import { useSession } from '@/lib/session/session-provider';
 
+import { SummaryPanel } from './summary-panel';
+
 const TABS = ['summary', 'checklist'] as const;
 export type IsoTab = (typeof TABS)[number];
 
@@ -20,7 +22,9 @@ const resolve = (v: string | null): IsoTab => ((TABS as readonly string[]).inclu
 /** What a view receives: the selected building and tab navigation. */
 export type IsoContext = { buildingId: string; go: (tab: IsoTab) => void };
 
-const VIEWS: Partial<Record<IsoTab, (ctx: IsoContext) => ReactNode>> = {};
+const VIEWS: Partial<Record<IsoTab, (ctx: IsoContext) => ReactNode>> = {
+  summary: ({ buildingId }) => <SummaryPanel buildingId={buildingId} />,
+};
 
 /** 01 §7.17: the ISO 50001 workbench for the selected building (Q-G6). */
 export function IsoPage() {
