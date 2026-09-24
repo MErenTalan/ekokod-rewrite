@@ -12,6 +12,7 @@ import { ScopePicker } from '@/features/scope/scope-picker';
 import { useSelection } from '@/lib/selection/selection-store';
 import { useSession } from '@/lib/session/session-provider';
 
+import { ChecklistPanel } from './checklist-panel';
 import { SummaryPanel } from './summary-panel';
 
 const TABS = ['summary', 'checklist'] as const;
@@ -24,6 +25,7 @@ export type IsoContext = { buildingId: string; go: (tab: IsoTab) => void };
 
 const VIEWS: Partial<Record<IsoTab, (ctx: IsoContext) => ReactNode>> = {
   summary: ({ buildingId }) => <SummaryPanel buildingId={buildingId} />,
+  checklist: ({ buildingId }) => <ChecklistPanel buildingId={buildingId} />,
 };
 
 /** 01 §7.17: the ISO 50001 workbench for the selected building (Q-G6). */

@@ -46,6 +46,19 @@ const CODE_KEYS: Record<string, string> = {
   too_many_analyzers: 'tooManyAnalyzers',
   range_too_wide: 'rangeTooWide',
   exactly_one_of_analyzer_id_building_id: 'subjectExclusive',
+  // F10 carbon and F11 ISO 50001 refusals.
+  type_not_allowed: 'typeNotAllowed',
+  not_selected: 'notSelected',
+  not_applicable: 'notApplicable',
+  not_supported: 'notSupported',
+  archived: 'archived',
+  future: 'future',
+  range_too_long: 'rangeTooLong',
+  invalid_range: 'invalidRange',
+  start_after_end: 'invalidRange',
+  incomplete: 'incomplete',
+  too_long: 'tooLong',
+  unknown: 'invalid',
 };
 
 /**

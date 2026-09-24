@@ -48,6 +48,16 @@
     "mustBeEmpty": "Must be empty on this tariff",
     "mustBeTry": "PTF + YEKDEM is TRY only",
     "outOfRange": "Out of range",
-    "duplicate": "This row already exists"
+    "duplicate": "This row already exists",
+    "typeNotAllowed": "This file type is not allowed: upload PDF, Excel, Word, CSV, PNG or JPEG.",
+    "notSelected": "This activity is not selected for the building; add it on Activity Selection first.",
+    "notApplicable": "This emission source does not belong to the chosen activity.",
+    "notSupported": "This unit is not supported for the chosen source.",
+    "archived": "This emission factor is no longer in use.",
+    "future": "The date cannot be after today.",
+    "rangeTooLong": "The period can be at most 366 days.",
+    "invalidRange": "A start date cannot be after the end date.",
+    "incomplete": "Please choose start and end dates for every clause.",
+    "tooLong": "The text is too long."
   }
 }

@@ -48,6 +48,16 @@
     "mustBeEmpty": "Bu tarifede boş bırakılmalı",
     "mustBeTry": "PTF + YEKDEM yalnızca TL ile",
     "outOfRange": "Aralık dışında",
-    "duplicate": "Bu satır zaten var"
+    "duplicate": "Bu satır zaten var",
+    "typeNotAllowed": "Bu dosya türüne izin verilmiyor: PDF, Excel, Word, CSV, PNG veya JPEG yükleyin.",
+    "notSelected": "Bu faaliyet bina için seçilmemiş; önce Faaliyet Seçimi'nden ekleyin.",
+    "notApplicable": "Bu emisyon kaynağı seçilen faaliyete ait değil.",
+    "notSupported": "Bu birim seçilen kaynak için desteklenmiyor.",
+    "archived": "Bu emisyon faktörü artık kullanılmıyor.",
+    "future": "Tarih bugünden sonra olamaz.",
+    "rangeTooLong": "Dönem en fazla 366 gün olabilir.",
+    "invalidRange": "Başlangıç tarihi bitiş tarihinden sonra olamaz.",
+    "incomplete": "Lütfen her başlık için başlangıç ve bitiş tarihlerini seçin.",
+    "tooLong": "Metin çok uzun."
   }
 }
