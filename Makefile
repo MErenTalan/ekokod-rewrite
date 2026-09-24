@@ -12,7 +12,7 @@ GOLANGCI_VERSION := v2.13.2
 GOVULNCHECK_VERSION := v1.8.0
 SQLC_VERSION := v1.30.0
 
-.PHONY: build test test-integration test-perf lint fmt tidy tools vuln ci check-script-modes test-db-up test-db-down test-redis-up test-redis-down openapi migration-rehearsal
+.PHONY: build test test-integration test-perf lint fmt tidy tools vuln ci check-script-modes test-db-up test-db-down test-redis-up test-redis-down openapi migration-rehearsal load-test soak-test
 
 # TEST_DB_* back test-db-up/test-db-down (F4 Task 0): one long-lived
 # TimescaleDB container integration tests can opt into sharing, instead of
@@ -222,3 +222,9 @@ web-audit: ## Fail on high-severity frontend dependency vulnerabilities
 
 migration-rehearsal: ## One timed rehearsal of the legacy migration into a scratch DB (F14c R444; docs/runbook-migration.md)
 	bash scripts/migration-rehearsal.sh
+
+load-test: ## 2× load against $(LOADTEST_BASE) for $(DURATION) (F15b R468; seed first: ekokod tool seed-scale)
+	go run ./cmd/ekokod tool loadtest --base $${LOADTEST_BASE:-http://127.0.0.1:8080} --duration $${DURATION:-2m} --users $${USERS:-10} --report $${REPORT:-loadtest.json}
+
+soak-test: ## 24 h soak: the load test for $(DURATION), default 24h (F15b Q-M4)
+	DURATION=$${DURATION:-24h} USERS=$${USERS:-10} $(MAKE) load-test

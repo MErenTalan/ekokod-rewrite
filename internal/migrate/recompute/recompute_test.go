@@ -137,7 +137,7 @@ func TestBillsParallelIsBounded(t *testing.T) {
 	g := &generator{}
 	_, err := recompute.Bills(context.Background(), bs, analyzers{}, g, recompute.BillsOptions{From: "2026-01", To: "2026-03", Parallel: 2}, &bytes.Buffer{})
 	require.NoError(t, err)
-	require.Equal(t, int32(2), g.peak.Load(), "two companies at a time, never more")
+	require.Equal(t, int32(2), g.peak.Load(), "never more than --parallel bills at once")
 }
 
 type refresher struct{ calls []string }
@@ -184,4 +184,23 @@ func TestBillsPageThroughEveryAnalyzer(t *testing.T) {
 		}
 	}
 	require.Equal(t, 2501, n, "no analyzer is dropped by a page limit")
+}
+
+// F15b: a single large company is the common case (the scale run was one company,
+// 0.5 s per bill sequentially): its buildings run in parallel too, bounded.
+func TestBillsParallelisesBuildingsWithinACompany(t *testing.T) {
+	company := uuid.New()
+	var bs billable
+	for range 6 {
+		bs = append(bs, store.BillableBuilding{CompanyID: company, BuildingID: uuid.New(), CutoffDay: 1})
+	}
+	g := &generator{}
+	sum, err := recompute.Bills(context.Background(), bs, analyzers{}, g, recompute.BillsOptions{From: "2026-01", To: "2026-02", Parallel: 3}, &bytes.Buffer{})
+	require.NoError(t, err)
+	require.Equal(t, 6*2+2, sum.Processed, "six buildings × two months, then the company's two")
+	require.Equal(t, int32(3), g.peak.Load())
+	last := g.calls[len(g.calls)-2:]
+	for _, c := range last {
+		require.Equal(t, model.BillScopeCompany, c.Scope, "the company bill waits for every building")
+	}
 }

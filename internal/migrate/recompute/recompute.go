@@ -200,23 +200,23 @@ func Bills(ctx context.Context, b Billable, a Analyzers, g BillingGenerator, o B
 		byCompany[bb.CompanyID] = append(byCompany[bb.CompanyID], bb)
 	}
 	t := &tally{out: out}
-	parallel := max(o.Parallel, 1)
-	sem := make(chan struct{}, parallel)
+	// One bound across every building of every company: a single large company
+	// is the common case, so buildings, not companies, are the unit of work.
+	sem := make(chan struct{}, max(o.Parallel, 1))
 	var wg sync.WaitGroup
 	for _, company := range companies {
 		wg.Add(1)
-		sem <- struct{}{}
 		go func() {
 			defer wg.Done()
-			defer func() { <-sem }()
-			billCompany(ctx, a, g, o, company, byCompany[company], t)
+			billCompany(ctx, a, g, o, company, byCompany[company], t, sem)
 		}()
 	}
 	wg.Wait()
 	return t.result(), nil
 }
 
-func billCompany(ctx context.Context, a Analyzers, g BillingGenerator, o BillsOptions, company uuid.UUID, buildings []store.BillableBuilding, t *tally) {
+func billCompany(ctx context.Context, a Analyzers, g BillingGenerator, o BillsOptions, company uuid.UUID, buildings []store.BillableBuilding, t *tally, sem chan struct{}) {
+	var mu sync.Mutex
 	companyKeys := map[string]bool{}
 	gen := func(scope model.BillScope, subject uuid.UUID, key string) {
 		p := job.BillingGeneratePayload{CompanyID: company, Scope: scope, SubjectID: subject, PeriodKey: key, Force: o.Force}
@@ -226,36 +226,48 @@ func billCompany(ctx context.Context, a Analyzers, g BillingGenerator, o BillsOp
 		}
 		t.ok()
 	}
+	var wg sync.WaitGroup
 	for _, bb := range buildings {
-		to := o.To
-		if to == "" {
-			to = domain.LatestClosedPeriodKey(bb.CutoffDay, o.Now, consumption.SettleDelayMonthly, istanbul)
-		}
-		keys, err := PeriodKeys(o.From, to)
-		if err != nil {
-			t.fail(Failure{Company: company.String(), Subject: bb.BuildingID.String(), Error: err.Error()})
-			continue
-		}
-		bid := bb.BuildingID
-		analyzers, err := allAnalyzers(ctx, a, company, bid)
-		if err != nil {
-			t.fail(Failure{Company: company.String(), Subject: bid.String(), Error: err.Error()})
-			continue
-		}
-		for _, key := range keys {
-			gen(model.BillScopeBuilding, bid, key)
-			for _, an := range analyzers {
-				gen(model.BillScopeAnalyzer, an.ID, key)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			to := o.To
+			if to == "" {
+				to = domain.LatestClosedPeriodKey(bb.CutoffDay, o.Now, consumption.SettleDelayMonthly, istanbul)
 			}
-			companyKeys[key] = true
-		}
-		t.progress("bills %s building %s: %d periods", company, bid, len(keys))
+			keys, err := PeriodKeys(o.From, to)
+			if err != nil {
+				t.fail(Failure{Company: company.String(), Subject: bb.BuildingID.String(), Error: err.Error()})
+				return
+			}
+			bid := bb.BuildingID
+			analyzers, err := allAnalyzers(ctx, a, company, bid)
+			if err != nil {
+				t.fail(Failure{Company: company.String(), Subject: bid.String(), Error: err.Error()})
+				return
+			}
+			for _, key := range keys {
+				gen(model.BillScopeBuilding, bid, key)
+				for _, an := range analyzers {
+					gen(model.BillScopeAnalyzer, an.ID, key)
+				}
+				mu.Lock()
+				companyKeys[key] = true
+				mu.Unlock()
+			}
+			t.progress("bills %s building %s: %d periods", company, bid, len(keys))
+		}()
 	}
+	wg.Wait()
 	keys := make([]string, 0, len(companyKeys))
 	for k := range companyKeys {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
+	sem <- struct{}{}
+	defer func() { <-sem }()
 	for _, key := range keys {
 		gen(model.BillScopeCompany, company, key)
 	}
