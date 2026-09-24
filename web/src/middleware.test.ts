@@ -73,6 +73,9 @@ describe('middleware', () => {
     ['/site/request-demo', '/request-demo'],
     ['/site/blog/detail/elektrik-faturam-neden-yuksek-2', '/blog/elektrik-faturam-neden-yuksek-2'],
     ['/site/unknown', '/'],
+    // Review: crafted legacy URLs never leave the site.
+    ['/site//evil.com', '/'],
+    ['/site/blog/detail/%2F%2Fevil.com', '/blog/%2F%2Fevil.com'],
   ])('moves the legacy URL %s to %s permanently', async (from, to) => {
     const res = await middleware(request(from));
     expect(res.status).toBe(308);
