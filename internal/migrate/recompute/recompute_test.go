@@ -24,8 +24,12 @@ func (b billable) BillableBuildings(context.Context) ([]store.BillableBuilding, 
 
 type analyzers map[uuid.UUID][]model.Analyzer
 
+// List pages like the repository does.
 func (a analyzers) List(_ context.Context, _ store.Scope, f store.AnalyzerFilter) ([]model.Analyzer, error) {
-	return a[*f.BuildingID], nil
+	all := a[*f.BuildingID]
+	from := min(int(f.Page.Offset), len(all))
+	to := min(from+int(f.Page.Limit), len(all))
+	return all[from:to], nil
 }
 
 type generator struct {
@@ -161,4 +165,23 @@ func TestConsumptionWindowsFitTheirBuckets(t *testing.T) {
 		"consumption_monthly 2024-12-01→2026-02-01", "consumption_monthly 2025-12-01→2027-02-01",
 		"consumption_yearly 2024-01-01→2028-01-01",
 	}, r.calls)
+}
+
+func TestBillsPageThroughEveryAnalyzer(t *testing.T) {
+	b := uuid.New()
+	many := make([]model.Analyzer, 2501)
+	for i := range many {
+		many[i] = model.Analyzer{ID: uuid.New()}
+	}
+	g := &generator{}
+	_, err := recompute.Bills(context.Background(), billable{{CompanyID: uuid.New(), BuildingID: b, CutoffDay: 1}}, analyzers{b: many}, g,
+		recompute.BillsOptions{From: "2026-07", To: "2026-07"}, &bytes.Buffer{})
+	require.NoError(t, err)
+	n := 0
+	for _, c := range g.calls {
+		if c.Scope == model.BillScopeAnalyzer {
+			n++
+		}
+	}
+	require.Equal(t, 2501, n, "no analyzer is dropped by a page limit")
 }

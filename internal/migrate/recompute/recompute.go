@@ -237,7 +237,7 @@ func billCompany(ctx context.Context, a Analyzers, g BillingGenerator, o BillsOp
 			continue
 		}
 		bid := bb.BuildingID
-		analyzers, err := a.List(ctx, store.SystemScope(company), store.AnalyzerFilter{BuildingID: &bid, Page: store.Page{Limit: 1000}})
+		analyzers, err := allAnalyzers(ctx, a, company, bid)
 		if err != nil {
 			t.fail(Failure{Company: company.String(), Subject: bid.String(), Error: err.Error()})
 			continue
@@ -258,6 +258,22 @@ func billCompany(ctx context.Context, a Analyzers, g BillingGenerator, o BillsOp
 	sort.Strings(keys)
 	for _, key := range keys {
 		gen(model.BillScopeCompany, company, key)
+	}
+}
+
+const analyzerPage = 1000
+
+func allAnalyzers(ctx context.Context, a Analyzers, company, building uuid.UUID) ([]model.Analyzer, error) {
+	var out []model.Analyzer
+	for offset := int32(0); ; offset += analyzerPage {
+		page, err := a.List(ctx, store.SystemScope(company), store.AnalyzerFilter{BuildingID: &building, Page: store.Page{Limit: analyzerPage, Offset: offset}})
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, page...)
+		if len(page) < analyzerPage {
+			return out, nil
+		}
 	}
 }
 
