@@ -28,17 +28,9 @@ func ReadSheet(fileName string, content []byte) (icmal.Table, error) {
 			return icmal.Table{}, fmt.Errorf("%w: csv: %w", ErrInvalidRequest, err)
 		}
 	case ".xlsx":
-		f, err := excelize.OpenReader(bytes.NewReader(content))
-		if err != nil {
-			return icmal.Table{}, fmt.Errorf("%w: xlsx: %w", ErrInvalidRequest, err)
-		}
-		defer func() { _ = f.Close() }()
-		sheets := f.GetSheetList()
-		if len(sheets) == 0 {
-			return icmal.Table{}, fmt.Errorf("%w: xlsx has no sheet", ErrInvalidRequest)
-		}
-		if rows, err = f.GetRows(sheets[0]); err != nil {
-			return icmal.Table{}, fmt.Errorf("%w: xlsx: %w", ErrInvalidRequest, err)
+		var err error
+		if rows, err = xlsxRows(content); err != nil {
+			return icmal.Table{}, err
 		}
 	default:
 		return icmal.Table{}, fmt.Errorf("%w: unsupported file type %q", ErrInvalidRequest, fileName)
@@ -49,6 +41,30 @@ func ReadSheet(fileName string, content []byte) (icmal.Table, error) {
 		}
 	}
 	return icmal.Table{}, fmt.Errorf("%w: no header row with known icmal columns", ErrInvalidRequest)
+}
+
+// xlsxRows reads the first sheet of an uploaded workbook. excelize can panic on
+// a crafted file (GO-2026-6452, no fixed release): the panic is contained here,
+// at the untrusted boundary, and refused like any unreadable file (F15a R450).
+func xlsxRows(content []byte) (rows [][]string, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			rows, err = nil, fmt.Errorf("%w: xlsx: unreadable_workbook", ErrInvalidRequest)
+		}
+	}()
+	f, err := excelize.OpenReader(bytes.NewReader(content))
+	if err != nil {
+		return nil, fmt.Errorf("%w: xlsx: %w", ErrInvalidRequest, err)
+	}
+	defer func() { _ = f.Close() }()
+	sheets := f.GetSheetList()
+	if len(sheets) == 0 {
+		return nil, fmt.Errorf("%w: xlsx has no sheet", ErrInvalidRequest)
+	}
+	if rows, err = f.GetRows(sheets[0]); err != nil {
+		return nil, fmt.Errorf("%w: xlsx: %w", ErrInvalidRequest, err)
+	}
+	return rows, nil
 }
 
 // delimiter picks ',' or ';' by which appears more in the first line outside quotes.
