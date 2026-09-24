@@ -1,4 +1,4 @@
-# Handoff — ekokod rewrite: F1–F12 code COMPLETE (Docker-bound gates of F9–F12 pending), F13 next
+# Handoff — ekokod rewrite: F1–F13 code COMPLETE (Docker-bound gates of F9–F13 pending), F14 next
 
 > **STATUS (2026-09-24, ~00:50 Istanbul):** F9 (solar plants, renewable energy, financial analysis)
 > is on `phase/f9-solar` in `/home/personal/ekokod-f9-phase`, branched from `phase/f8b-reports`.
@@ -88,7 +88,8 @@
 | `phase/f9-solar` (`/home/personal/ekokod-f9-phase`) | `fa70092` | F9 code + self-review done; Docker-bound gates PENDING (see "F9 remaining") |
 | `phase/f10-carbon` (`/home/personal/ekokod-f10-phase`) | `f95a67d` | F10 done (carbon backend + screens); Docker-bound gates PENDING |
 | `phase/f11-iso50001` (`/home/personal/ekokod-f11-phase`) | `32f7427` | F11 done (ISO 50001 backend + screens); Docker-bound gates PENDING |
-| `phase/f12-site` (`/home/personal/ekokod-f12-phase`) | `ddb6d4b`+handoff | **F12 done** (F12a backend + F12b public site); API-backed public e2e PENDING (Docker) |
+| `phase/f12-site` (`/home/personal/ekokod-f12-phase`) | `9c61937` | **F12 done** (F12a backend + F12b public site); API-backed public e2e PENDING (Docker) |
+| **`phase/f13-ml`** (`/home/personal/ekokod-f13-phase`) | this commit | **F13 done** (ML service, Go forecasting, Predict + AI screens); Docker-bound gates PENDING |
 
 - Plans and ledgers:
   - F10a `docs/superpowers/plans/2026-09-24-f10a-carbon-backend.md` (R300–R319);
@@ -111,7 +112,14 @@
   - SEO: title template, OG, canonical, JSON-LD, sitemap, robots; analytics = self-hosted script via env (off).
   - Verified: web unit 1118/1118, site a11y sweep 186/186, smoke of API-free public e2e 18/18 (next start, API absent), Lighthouse mobile perf 96–98 / a11y 100 / BP 100 / SEO 100, LCP 2.5–2.8 s simulated (measured ~100 ms), CLS 0.
   - PENDING (Docker): `PW_PROJECT=e2e pnpm exec playwright test tests/e2e/public/` (signed-in header, calculator vs seeded schedule, contact 503, honeypot 202, Q-H4); F12a integration tests.
-- **F13 (ML service) is next** — branch `phase/f13-ml` from `phase/f12-site`.
+- F13 plans: `…-f13a-ml-service.md` (R360–R369, Q-I1…Q-I7), `…-f13b-forecast-backend.md` (R370–R379, Q-I8…Q-I14), `…-f13c-forecast-screens.md` (R380–R385, Q-I15…Q-I18); ledgers under `.superpowers/sdd/`.
+  - `ml/`: FastAPI service, uv project (**uv lives at `/home/personal/.local/uv/uv`**, installed from its PyPI wheel; system python has no pip). `cd ml && /home/personal/.local/uv/uv run pytest -q` → 39 passed, 1 skipped (LSTM needs the optional `lstm` extra; verified once with ephemeral CPU torch).
+  - Models: seasonal-naive baseline (always), random forest, LSTM (extra), Chronos (sidecar URL). No DB client: `python -m ekokod_ml.nodb`, CI job `ml`.
+  - Go: `internal/ml` client (TestGracefulDegradation), `internal/service/forecast` (run/read/weekly/monthly/anomaly, job `forecast.run` at `Schedule.Forecast`), routes `GET /forecast`, `POST /forecast/{run,weekly,monthly}`, `/anomaly/check` now real (still `available:false` when ML is down).
+  - Web: `/ekorm/forecast` (Predict), `/ekorm/ai` (AI Analysis, `forecast.run` only), `/ekorm/predict` redirects.
+  - PENDING (Docker): `docker build ml` + in-image nodb; `go test -tags=integration ./internal/api/v1 -run 'Forecast|AnomalyCheck'`; `./internal/worker -run ForecastRun`; e2e `tests/e2e/predict.spec.ts`.
+  - Known pre-existing minor: the Messages page trigger list shows 4 of 10 triggerable jobs.
+- **F14 (migration/cutover tooling) is next** — branch `phase/f14-migration` from `phase/f13-ml`.
 
 ## Docker hang (read before any integration/e2e)
 - **What happened (at ~00:25):**
