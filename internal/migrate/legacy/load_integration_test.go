@@ -29,8 +29,12 @@ func fingerprint(t *testing.T, pool *pgxpool.Pool, tables []string) map[string]s
 		var n int64
 		var sum string
 		id := pgx.Identifier{table}.Sanitize()
+		row := "t::text"
+		if table == "operational_messages" {
+			row = "(to_jsonb(t) - 'id')::text" // Q-J15: a bigserial, renumbered by each replace
+		}
 		require.NoError(t, pool.QueryRow(context.Background(),
-			fmt.Sprintf(`select count(*), md5(coalesce(string_agg(t::text, '|' order by t::text), '')) from %s t`, id)).Scan(&n, &sum), table)
+			fmt.Sprintf(`select count(*), md5(coalesce(string_agg(%s, '|' order by %s), '')) from %s t`, row, row, id)).Scan(&n, &sum), table)
 		out[table] = fmt.Sprintf("%d:%s", n, sum)
 	}
 	return out
@@ -39,7 +43,7 @@ func fingerprint(t *testing.T, pool *pgxpool.Pool, tables []string) map[string]s
 func transformedDir(t *testing.T, cipher *crypto.Cipher) string {
 	t.Helper()
 	extract := t.TempDir()
-	_, err := legacy.Extract(context.Background(), tariffSource(t), extract)
+	_, err := legacy.Extract(context.Background(), historySource(t), extract)
 	require.NoError(t, err)
 	out := t.TempDir()
 	_, err = legacy.Transform(extract, out, legacy.TransformOptions{Keys: legacy.Keys{Primary: "legacy-secret-key"}, Cipher: cipher, Now: now,
@@ -81,7 +85,7 @@ func TestLoadIsIdempotent(t *testing.T) {
 	_, err = os.Stat(filepath.Join(dir, "load_report.json"))
 	require.NoError(t, err)
 	for table, want := range map[string]int{"tariffs": 3, "tariff_taxes": 2, "tariff_manual_yekdem": 1, "tariff_templates": 1, "smtp_settings": 1,
-		"market_prices_hourly": 2, "yekdem_monthly": 1} {
+		"market_prices_hourly": 2, "yekdem_monthly": 1, "legacy_bills": 2, "legacy_reports": 1, "operational_messages": 2} {
 		require.Equal(t, want, first.Tables[table].Loaded, table)
 	}
 	smtp := postgres.NewSMTPRepository(pool, cipher)

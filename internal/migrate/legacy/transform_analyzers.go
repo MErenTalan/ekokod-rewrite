@@ -42,6 +42,7 @@ func (t *transformer) analyzersStep() error {
 		lon, _ := num(a["koordinatY"])
 		defType, _ := num(a["definitionType"])
 		active, _ := a["isActive"].(bool)
+		t.analyzerBuilding[hex] = building
 		t.rj.Accept("analyzers")
 		if err := t.w.row("analyzers", map[string]any{"id": id.String(), "company_id": ID("companies", company).String(), "building_id": ID("buildings", building).String(),
 			"provider": provider, "provider_subtype": str(a, "subIntegration"), "installation_number": str(a, "installationNumber"),

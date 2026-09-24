@@ -35,21 +35,7 @@ func embedded(from, priceType string, p bson.D, extra ...bson.E) bson.D {
 // tariffSource extends the transform fixture with R417–R420's collections.
 func tariffSource(t *testing.T) *legacy.MemSource {
 	src := transformSource(t)
-	kbk := bson.D{{Key: "energyKbk", Value: 1.1}, {Key: "t1Kbk", Value: 1.0}, {Key: "t2Kbk", Value: 1.2}, {Key: "t3Kbk", Value: 0.8},
-		{Key: "reactivePowerKbk", Value: 1.0}, {Key: "distributionCostTlPerKwh", Value: 0.9}, {Key: "useManualYekdem", Value: true},
-		{Key: "manualYekdem", Value: bson.A{bson.D{{Key: "year", Value: int32(2026)}, {Key: "month", Value: int32(3)}, {Key: "value", Value: 1500.0}}}}}
-	src.Replace("buildings",
-		bson.D{{Key: "_id", Value: oid(buildingHex)}, {Key: "company_id", Value: oid(companyHex)}, {Key: "name", Value: "Merkez"},
-			{Key: "tariffs", Value: bson.A{
-				embedded("01-01-2025", "single_time", price("power_price", 2.5, "vat_rate", 20.0, "other_taxes_rate", 3.35, "contracted_power", 100.0, "power_unit_price", 10.0)),
-				embedded("2025-07-01", "single_time", price("single_time_price", 2.6)),
-				embedded("2026-01-01", "single_time", price("single_time_price", 2.7, "vat_rate", 20.0), bson.E{Key: "usePtfYekdem", Value: true}),
-				embedded("01-03-2026", "multi_time", price("vat_rate", 20.0, "allTaxes", bson.A{bson.D{{Key: "name", Value: "BTV"}, {Key: "rate", Value: 1.0}}}),
-					bson.E{Key: "usePtfYekdem", Value: true}, bson.E{Key: "kbk", Value: kbk}),
-			}}},
-		bson.D{{Key: "_id", Value: oid(building2Hex)}, {Key: "company_id", Value: oid(companyHex)}, {Key: "name", Value: "Depo"},
-			{Key: "tariffs", Value: bson.A{embedded("2026-01-01", "single_time", price("single_time_price", 3.0, "vat_rate", 20.0, "contracted_power", 50.0, "power_unit_price", 12.0))}}},
-	)
+	src.Replace("buildings", tariffBuildings(nil)...)
 	src.Add("tariffs",
 		bson.D{{Key: "_id", Value: oid("64f000000000000000001a01")}, {Key: "building", Value: oid(buildingHex)}, {Key: "effectiveFrom", Value: "01-01-2025"},
 			{Key: "currency", Value: "tl"}, {Key: "energy_type", Value: "grid_energy"}, {Key: "distribution_type", Value: "ag"},
@@ -186,4 +172,24 @@ func TestTemplatesSMTPAndMarketPrices(t *testing.T) {
 	require.Equal(t, []map[string]any{{"year": float64(2026), "month": float64(8), "value": "310"}}, rows(t, out, "yekdem_monthly"), "the latest date's YEKDEM")
 	require.Equal(t, 1, res.Notes["yekdem_conflicts"])
 	require.Equal(t, legacy.Tally{Accepted: 3}, res.Summary["epiashistories"])
+}
+
+// tariffBuildings are the two buildings with R417's tariff history (and, for
+// the history tests, a bill history on the first).
+func tariffBuildings(bills bson.D) []bson.D {
+	kbk := bson.D{{Key: "energyKbk", Value: 1.1}, {Key: "t1Kbk", Value: 1.0}, {Key: "t2Kbk", Value: 1.2}, {Key: "t3Kbk", Value: 0.8},
+		{Key: "reactivePowerKbk", Value: 1.0}, {Key: "distributionCostTlPerKwh", Value: 0.9}, {Key: "useManualYekdem", Value: true},
+		{Key: "manualYekdem", Value: bson.A{bson.D{{Key: "year", Value: int32(2026)}, {Key: "month", Value: int32(3)}, {Key: "value", Value: 1500.0}}}}}
+	return []bson.D{
+		bson.D{{Key: "_id", Value: oid(buildingHex)}, {Key: "company_id", Value: oid(companyHex)}, {Key: "name", Value: "Merkez"}, {Key: "billHistory", Value: bills},
+			{Key: "tariffs", Value: bson.A{
+				embedded("01-01-2025", "single_time", price("power_price", 2.5, "vat_rate", 20.0, "other_taxes_rate", 3.35, "contracted_power", 100.0, "power_unit_price", 10.0)),
+				embedded("2025-07-01", "single_time", price("single_time_price", 2.6)),
+				embedded("2026-01-01", "single_time", price("single_time_price", 2.7, "vat_rate", 20.0), bson.E{Key: "usePtfYekdem", Value: true}),
+				embedded("01-03-2026", "multi_time", price("vat_rate", 20.0, "allTaxes", bson.A{bson.D{{Key: "name", Value: "BTV"}, {Key: "rate", Value: 1.0}}}),
+					bson.E{Key: "usePtfYekdem", Value: true}, bson.E{Key: "kbk", Value: kbk}),
+			}}},
+		bson.D{{Key: "_id", Value: oid(building2Hex)}, {Key: "company_id", Value: oid(companyHex)}, {Key: "name", Value: "Depo"},
+			{Key: "tariffs", Value: bson.A{embedded("2026-01-01", "single_time", price("single_time_price", 3.0, "vat_rate", 20.0, "contracted_power", 50.0, "power_unit_price", 12.0))}}},
+	}
 }

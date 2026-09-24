@@ -195,12 +195,13 @@ type transformer struct {
 	notes    map[string]int
 	notesOut *bufio.Writer
 
-	definitions     map[string]uuid.UUID // "OSOS:Baskent" → definition id
-	companies       map[string]bool
-	users           map[string]bool
-	buildingCompany map[string]string
-	companySubtypes map[string]map[string]string
-	solarTariffDocs []bson.M // standalone solar tariffs, written with the plants (R424)
+	definitions      map[string]uuid.UUID // "OSOS:Baskent" → definition id
+	companies        map[string]bool
+	users            map[string]bool
+	buildingCompany  map[string]string
+	analyzerBuilding map[string]string
+	companySubtypes  map[string]map[string]string
+	solarTariffDocs  []bson.M // standalone solar tariffs, written with the plants (R424)
 }
 
 func (t *transformer) count(collection string) { t.read[collection]++ }
@@ -209,8 +210,10 @@ func (t *transformer) run() error {
 	t.read = map[string]int{}
 	t.definitions, t.companies, t.users = map[string]uuid.UUID{}, map[string]bool{}, map[string]bool{}
 	t.buildingCompany, t.companySubtypes = map[string]string{}, map[string]map[string]string{}
+	t.analyzerBuilding = map[string]string{}
 	for _, step := range []func() error{t.integrations, t.companiesStep, t.usersStep, t.buildingsStep, t.analyzersStep,
-		t.tariffsStep, t.templatesStep, t.smtpStep, t.epiasStep, t.solarTariffsPending} {
+		t.tariffsStep, t.templatesStep, t.smtpStep, t.epiasStep, t.solarTariffsPending,
+		t.billHistoryStep, t.reportsStep, t.logsStep} {
 		if err := step(); err != nil {
 			return err
 		}

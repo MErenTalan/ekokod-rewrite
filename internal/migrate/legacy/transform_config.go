@@ -44,13 +44,13 @@ func (t *transformer) integrations() error {
 			return nil
 		}
 		id := ID("integrations", hex)
-		endpoints, err := bson.MarshalExtJSON(asDoc(d["endpoints"]), false, false)
-		if err != nil || asDoc(d["endpoints"]) == nil {
-			endpoints = []byte("{}")
+		endpoints, err := canonical(d["endpoints"])
+		if err != nil {
+			endpoints = json.RawMessage("{}")
 		}
 		t.definitions[strings.ToUpper(str(d, "type"))+":"+str(d, "subType")] = id
 		t.rj.Accept("integrations")
-		if err := t.w.row("integration_definitions", map[string]any{"id": id.String(), "provider": provider, "subtype": str(d, "subType"), "endpoints": json.RawMessage(endpoints)}); err != nil {
+		if err := t.w.row("integration_definitions", map[string]any{"id": id.String(), "provider": provider, "subtype": str(d, "subType"), "endpoints": endpoints}); err != nil {
 			return err
 		}
 		return t.w.legacyID("integrations", hex, "integration_definitions", id)
