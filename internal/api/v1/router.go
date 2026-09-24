@@ -20,6 +20,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/calendar"
 	carbonsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/carbon"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/financial"
+	forecastsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/forecast"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/integrations"
 	isosvc "github.com/MErenTalan/ekokod-rewrite/internal/service/iso50001"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/jobs"
@@ -59,6 +60,7 @@ type Handlers struct {
 	Renewable    *renewable.Service
 	Financial    *financial.Service
 	Carbon       *carbonsvc.Service
+	Forecast     *forecastsvc.Service
 	ISO          *isosvc.Service
 	PublicForms  *publicforms.Service
 	// UploadMax is the configured evidence file cap, named in a 413.

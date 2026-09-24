@@ -103,6 +103,11 @@ var expectedAccess = map[string]string{
 	"GET /generation":                          "A CA CR BA BR D",
 	"GET /energy-balance":                      "A CA CR BA BR D",
 	"POST /anomaly/check":                      "A CA BA",
+	// F13b: forecasting (05 §16).
+	"GET /forecast":          "A CA CR BA BR D",
+	"POST /forecast/run":     "A CA BA",
+	"POST /forecast/weekly":  "A CA BA",
+	"POST /forecast/monthly": "A CA BA",
 	// 05 §6 (F6a subset, R178)
 	"GET /tariffs":            "A CA CR BA BR D",
 	"POST /tariffs":           "A CA",

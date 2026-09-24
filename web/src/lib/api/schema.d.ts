@@ -136,7 +136,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Check one value against the model (unavailable until the ML service, R165). */
+        /** Check one hour's consumption against the model; available=false when the ML service is down. */
         post: operations["anomaly.check"];
         delete?: never;
         options?: never;
@@ -1001,6 +1001,74 @@ export interface paths {
         get: operations["financial.summary"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/forecast": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The latest stored forecast covering the window, with its gaps; never calls the ML service. */
+        get: operations["forecast.read"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/forecast/monthly": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** A daily forecast for one month (not stored). */
+        post: operations["forecast.monthly"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/forecast/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Forecast an analyzer now and store the run. */
+        post: operations["forecast.run"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/forecast/weekly": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** An hourly forecast for one week (not stored). */
+        post: operations["forecast.weekly"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2563,11 +2631,20 @@ export interface components {
             resolved_by?: components["schemas"]["UuidUUID"];
         };
         AnomalyCheck: {
+            actual?: components["schemas"]["Decimal"];
             available: boolean;
+            expected?: components["schemas"]["Decimal"];
+            is_anomaly?: null | boolean;
+            lower?: components["schemas"]["Decimal"];
+            method?: string;
+            model_id?: string;
+            model_version?: string;
             reason?: string;
+            score?: null | number;
+            upper?: components["schemas"]["Decimal"];
         };
         AnomalyCheckRequest: {
-            actual: components["schemas"]["Decimal"];
+            actual?: components["schemas"]["Decimal"];
             analyzer_id: components["schemas"]["UuidUUID"];
             /** Format: date-time */
             ts: string;
@@ -3280,6 +3357,44 @@ export interface components {
             sale: components["schemas"]["FinancialPlantFeedIn"][];
             sale_missing: boolean;
         };
+        Forecast: {
+            fallback_from?: null | string;
+            gaps: components["schemas"]["ForecastGap"][];
+            /** Format: date-time */
+            generated_at?: null | string;
+            model_id?: null | string;
+            model_version?: null | string;
+            points: components["schemas"]["ForecastPoint"][];
+            /** @enum {string} */
+            status: "ok" | "insufficient_data" | "no_data" | "model_error" | "none";
+            used_covariates: string[];
+        };
+        ForecastGap: {
+            /** Format: date-time */
+            end: string;
+            missing_hours: number;
+            /** Format: date-time */
+            start: string;
+        };
+        ForecastMonthlyRequest: {
+            analyzer_id: components["schemas"]["UuidUUID"];
+            month: string;
+        };
+        ForecastPoint: {
+            median: components["schemas"]["Decimal"];
+            p10?: components["schemas"]["Decimal"];
+            p90?: components["schemas"]["Decimal"];
+            /** Format: date-time */
+            ts: string;
+        };
+        ForecastRunRequest: {
+            analyzer_id: components["schemas"]["UuidUUID"];
+            horizon_hours: number;
+        };
+        ForecastWeeklyRequest: {
+            analyzer_id: components["schemas"]["UuidUUID"];
+            week_start: components["schemas"]["Date"];
+        };
         ForgotPasswordRequest: {
             /** Format: email */
             email: string;
@@ -3773,7 +3888,7 @@ export interface components {
             period_start: string;
         };
         /** @enum {string} */
-        Permission: "admin.companies" | "alarms.edit" | "alarms.evaluate" | "alarms.read" | "analyzers.refresh" | "anomaly.check" | "bills.compute" | "bills.read" | "calendar.edit" | "carbon.edit" | "carbon.read" | "financial.read" | "integrations.credentials" | "iso50001.edit" | "iso50001.read" | "jobs.runs.read" | "jobs.trigger" | "messages.read" | "nav.core" | "nav.financial" | "nav.solar_plants" | "plants.manage" | "plants.read" | "renewable.read" | "reports.email" | "reports.generate" | "reports.read" | "settings.analyzers" | "settings.analyzers.edit" | "settings.buildings" | "settings.company" | "settings.company.edit" | "settings.integrations" | "settings.plants" | "settings.smtp" | "settings.users" | "solar_tariffs.read" | "tariffs.bulk.read" | "tariffs.defaults" | "tariffs.edit" | "tariffs.icmal" | "tariffs.read" | "tariffs.templates.read" | "write";
+        Permission: "admin.companies" | "alarms.edit" | "alarms.evaluate" | "alarms.read" | "analyzers.refresh" | "anomaly.check" | "bills.compute" | "bills.read" | "calendar.edit" | "carbon.edit" | "carbon.read" | "financial.read" | "forecast.read" | "forecast.run" | "integrations.credentials" | "iso50001.edit" | "iso50001.read" | "jobs.runs.read" | "jobs.trigger" | "messages.read" | "nav.core" | "nav.financial" | "nav.solar_plants" | "plants.manage" | "plants.read" | "renewable.read" | "reports.email" | "reports.generate" | "reports.read" | "settings.analyzers" | "settings.analyzers.edit" | "settings.buildings" | "settings.company" | "settings.company.edit" | "settings.integrations" | "settings.plants" | "settings.smtp" | "settings.users" | "solar_tariffs.read" | "tariffs.bulk.read" | "tariffs.defaults" | "tariffs.edit" | "tariffs.icmal" | "tariffs.read" | "tariffs.templates.read" | "write";
         Plant: {
             address?: null | string;
             /** Format: date-time */
@@ -11186,6 +11301,379 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "forecast.read": {
+        parameters: {
+            query: {
+                analyzer_id: components["schemas"]["UuidUUID"];
+                from: null | string;
+                to: null | string;
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Forecast"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "forecast.monthly": {
+        parameters: {
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ForecastMonthlyRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Forecast"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "forecast.run": {
+        parameters: {
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ForecastRunRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Forecast"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "forecast.weekly": {
+        parameters: {
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ForecastWeeklyRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Forecast"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

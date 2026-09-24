@@ -31,6 +31,7 @@ import (
 	isweather "github.com/MErenTalan/ekokod-rewrite/internal/integration/weather"
 	"github.com/MErenTalan/ekokod-rewrite/internal/job"
 	"github.com/MErenTalan/ekokod-rewrite/internal/mail"
+	"github.com/MErenTalan/ekokod-rewrite/internal/ml"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/crypto"
@@ -44,6 +45,7 @@ import (
 	carbonsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/carbon"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/consumption"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/financial"
+	forecastsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/forecast"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/integrations"
 	isosvc "github.com/MErenTalan/ekokod-rewrite/internal/service/iso50001"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/jobs"
@@ -80,6 +82,8 @@ type Options struct {
 	Solar solar.Adapter
 	// Weather replaces the weather provider (R291).
 	Weather weathersvc.Provider
+	// ML replaces the ML service client (F13b).
+	ML forecastsvc.Predictor
 }
 
 // Enqueuer is the job client the services enqueue through.
@@ -329,6 +333,10 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		return Built{}, err
 	}
 
+	var mlClient forecastsvc.Predictor = ml.New(cfg.External.MLURL, cfg.External.MLAPIKey, cfg.External.MLTimeout)
+	if opts.ML != nil {
+		mlClient = opts.ML
+	}
 	clientIP := middleware.ClientIP(cfg.HTTP.TrustedProxies)
 	handlers := &v1.Handlers{
 		Calendar: calendarService, Credentials: credentialService, Jobs: jobService, Alarms: alarmService, Ops: opsService,
@@ -342,6 +350,8 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 			CompanyID: formsCompany, To: cfg.PublicForms.To}),
 		Carbon: carbonsvc.New(carbonsvc.Deps{Carbon: postgres.NewCarbonRepository(pool), Buildings: postgres.NewBuildingRepository(pool),
 			Companies: postgres.NewCompanyRepository(pool), Clock: opts.Clock}),
+		Forecast: forecastsvc.New(forecastsvc.Deps{Analyzers: postgres.NewAnalyzerRepository(pool), Analytics: postgres.NewAnalyticsRepository(pool),
+			Calendar: postgres.NewCalendarRepository(pool), Forecasts: postgres.NewForecastRepository(pool), ML: mlClient, Clock: opts.Clock}),
 		Clock: opts.Clock, Log: log, ClientIP: clientIP}
 	router := v1.NewRouter(handlers, middlewareFor(cfg, redisClient, authService, auditRepo, admin.NewAuditRepository(pool), clientIP, opts.RedisPrefix, log), log)
 	var once sync.Once

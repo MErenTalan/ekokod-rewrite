@@ -33,6 +33,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/isolar"
 	"github.com/MErenTalan/ekokod-rewrite/internal/mail"
+	"github.com/MErenTalan/ekokod-rewrite/internal/ml"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/seed"
@@ -126,6 +127,7 @@ type harness struct {
 	srv       *httptest.Server
 	clock     *clock.Fake
 	mail      *capturedMail
+	ml        *fakeMLService
 	fx        seed.Fixtures
 	pool      *pgxpool.Pool
 	cfg       *config.Config
@@ -156,14 +158,14 @@ func newHarness(t *testing.T, tune ...func(*config.Config)) *harness {
 	for _, f := range tune {
 		f(cfg)
 	}
-	h := &harness{providers: &fakeProviders{}, enq: &recordingEnqueuer{seen: map[string]bool{}}, t: t, clock: clock.NewFake(time.Date(2026, 9, 17, 10, 0, 0, 0, time.UTC)), mail: &capturedMail{}, pool: pool, cfg: cfg,
+	h := &harness{ml: &fakeMLService{err: ml.ErrUnavailable}, providers: &fakeProviders{}, enq: &recordingEnqueuer{seen: map[string]bool{}}, t: t, clock: clock.NewFake(time.Date(2026, 9, 17, 10, 0, 0, 0, time.UTC)), mail: &capturedMail{}, pool: pool, cfg: cfg,
 		hasher: auth.Hasher{Pepper: cfg.Security.PasswordPepper, Cost: cfg.Security.BcryptCost}}
 	fx, err := seed.E2EFixtures(ctx, pool, h.hasher, testPassword, h.clock.Now())
 	require.NoError(t, err)
 	h.fx = fx
 	built, err := apiwire.Build(ctx, cfg, pool, testfixtures.DiscardLogger(), apiwire.Options{
 		Clock: h.clock, Mail: h.mail, RedisPrefix: "test:" + uuid.NewString() + ":", Async: func(f func()) { f() }, Enqueuer: h.enq,
-		Verifiers: h.providers, ISolar: h.providers, Solar: fakeSolar{},
+		Verifiers: h.providers, ISolar: h.providers, Solar: fakeSolar{}, ML: h.ml,
 	})
 	require.NoError(t, err)
 	t.Cleanup(built.Close)

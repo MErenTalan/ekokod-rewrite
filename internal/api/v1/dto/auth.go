@@ -22,7 +22,7 @@ type Permission string
 func (Permission) Enum() []any {
 	return []any{
 		"admin.companies", "alarms.edit", "alarms.evaluate", "alarms.read", "analyzers.refresh",
-		"anomaly.check", "bills.compute", "bills.read", "calendar.edit", "carbon.edit", "carbon.read", "financial.read", "integrations.credentials", "iso50001.edit", "iso50001.read",
+		"anomaly.check", "bills.compute", "bills.read", "calendar.edit", "carbon.edit", "carbon.read", "financial.read", "forecast.read", "forecast.run", "integrations.credentials", "iso50001.edit", "iso50001.read",
 		"jobs.runs.read", "jobs.trigger", "messages.read", "nav.core", "nav.financial", "nav.solar_plants",
 		"plants.manage", "plants.read", "renewable.read", "reports.email", "reports.generate", "reports.read", "settings.analyzers", "settings.analyzers.edit", "settings.buildings", "settings.company",
 		"settings.company.edit", "settings.integrations", "settings.plants", "settings.smtp",

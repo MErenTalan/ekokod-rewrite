@@ -128,6 +128,9 @@ var permissionTable = map[string]RoleSet{
 	// F11a R341: ISO 50001 reads are scope; writes are A CA BA (05 §13).
 	"iso50001.read": AllRoles,
 	"iso50001.edit": Roles(roleA, roleCA, roleBA),
+	// F13b: forecasts are read by every scope; running one is a writer's act.
+	"forecast.read": AllRoles,
+	"forecast.run":  Roles(roleA, roleCA, roleBA),
 }
 
 // PermissionsFor returns the sorted permissions of a role, nil for an unknown role.

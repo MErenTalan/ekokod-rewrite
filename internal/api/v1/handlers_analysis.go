@@ -63,10 +63,6 @@ func analysisRoutes() []Route {
 		{Method: http.MethodGet, Pattern: "/energy-balance", OperationID: "energy_balance", Tag: "consumption", Access: RoleGated, Roles: all,
 			Summary: "Consumption, generation, grid import and export.", Request: dto.ConsumptionQuery{}, Response: dto.EnergyBalance{},
 			Status: http.StatusOK, Handler: (*Handlers).energyBalance},
-		{Method: http.MethodPost, Pattern: "/anomaly/check", OperationID: "anomaly.check", Tag: "forecast", Access: RoleGated,
-			Roles: auth.Roles(roleA, roleCA, roleBA), Entity: "analyzer", NoIdempotency: true,
-			Summary: "Check one value against the model (unavailable until the ML service, R165).", Request: dto.AnomalyCheckRequest{},
-			Response: dto.AnomalyCheck{}, Status: http.StatusOK, Handler: (*Handlers).anomalyCheck},
 	}
 }
 
@@ -400,15 +396,6 @@ func (h *Handlers) loadProfileExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeFile(w, xlsxType, fmt.Sprintf("yuk-profili-%s-%s.xlsx", q.From.Format("20060102"), q.To.Format("20060102")), body)
-}
-
-func (h *Handlers) anomalyCheck(w http.ResponseWriter, r *http.Request) {
-	serve(w, r, http.StatusOK, func(q dto.AnomalyCheckRequest) (any, error) {
-		if _, err := h.Analysis.Analyzer(r.Context(), mw.ScopeFrom(r), q.AnalyzerID); err != nil {
-			return nil, err
-		}
-		return dto.AnomalyCheck{Available: false, Reason: "ml_service_unavailable"}, nil
-	})
 }
 
 func (h *Handlers) energyBalance(w http.ResponseWriter, r *http.Request) {

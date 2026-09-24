@@ -216,13 +216,24 @@ type LoadProfileStatistics struct {
 type AnomalyCheckRequest struct {
 	AnalyzerID uuid.UUID `json:"analyzer_id" validate:"required" required:"true"`
 	Ts         time.Time `json:"ts" validate:"required" required:"true"`
-	Actual     *Decimal  `json:"actual" validate:"required" required:"true"`
+	// Actual is optional (Q-I13): the stored hourly consumption at ts is used when it is absent.
+	Actual *Decimal `json:"actual,omitempty"`
 }
 
-// AnomalyCheck is the verdict, or availability=false before F13 (R165).
+// AnomalyCheck is the ML verdict (F13b R375), or available=false with a
+// reason when the ML service cannot be reached (R165, R371): the screen degrades.
 type AnomalyCheck struct {
-	Available bool   `json:"available" required:"true"`
-	Reason    string `json:"reason,omitempty"`
+	Available    bool     `json:"available" required:"true"`
+	Reason       string   `json:"reason,omitempty"`
+	IsAnomaly    *bool    `json:"is_anomaly,omitempty"`
+	Score        *float64 `json:"score,omitempty"`
+	Actual       *Decimal `json:"actual,omitempty"`
+	Expected     *Decimal `json:"expected,omitempty"`
+	Lower        *Decimal `json:"lower,omitempty"`
+	Upper        *Decimal `json:"upper,omitempty"`
+	Method       string   `json:"method,omitempty"`
+	ModelID      string   `json:"model_id,omitempty"`
+	ModelVersion string   `json:"model_version,omitempty"`
 }
 
 // ConsumptionGroupedQuery is R193: the "detailed graphs" query.

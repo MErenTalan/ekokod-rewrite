@@ -73,7 +73,7 @@ func (rt Route) Mutating() bool {
 // Table is every /api/v1 route.
 func Table() []Route {
 	return slices.Concat(systemRoutes(), authRoutes(), tenancyRoutes(), assetRoutes(), analysisRoutes(), billingRoutes(),
-		tariffRoutes(), icmalRoutes(), solarRoutes(), calendarRoutes(), jobRoutes(), alarmRoutes(), opsRoutes(), reportRoutes(), plantRoutes(), renewableRoutes(), panelRoutes(), carbonRoutes(), iso50001Routes(), publicRoutes())
+		tariffRoutes(), icmalRoutes(), solarRoutes(), calendarRoutes(), jobRoutes(), alarmRoutes(), opsRoutes(), reportRoutes(), plantRoutes(), renewableRoutes(), panelRoutes(), carbonRoutes(), iso50001Routes(), publicRoutes(), forecastRoutes())
 }
 
 func systemRoutes() []Route {

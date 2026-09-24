@@ -700,11 +700,44 @@
       },
       "AnomalyCheck": {
         "properties": {
+          "actual": {
+            "$ref": "#/components/schemas/Decimal"
+          },
           "available": {
             "type": "boolean"
           },
+          "expected": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "is_anomaly": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "lower": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "method": {
+            "type": "string"
+          },
+          "model_id": {
+            "type": "string"
+          },
+          "model_version": {
+            "type": "string"
+          },
           "reason": {
             "type": "string"
+          },
+          "score": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "upper": {
+            "$ref": "#/components/schemas/Decimal"
           }
         },
         "required": [
@@ -727,8 +760,7 @@
         },
         "required": [
           "analyzer_id",
-          "ts",
-          "actual"
+          "ts"
         ],
         "type": "object"
       },
@@ -3530,6 +3562,161 @@
         ],
         "type": "object"
       },
+      "Forecast": {
+        "properties": {
+          "fallback_from": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "gaps": {
+            "items": {
+              "$ref": "#/components/schemas/ForecastGap"
+            },
+            "type": "array"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "model_id": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "model_version": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/ForecastPoint"
+            },
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "insufficient_data",
+              "no_data",
+              "model_error",
+              "none"
+            ],
+            "type": "string"
+          },
+          "used_covariates": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "status",
+          "used_covariates",
+          "points",
+          "gaps"
+        ],
+        "type": "object"
+      },
+      "ForecastGap": {
+        "properties": {
+          "end": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "missing_hours": {
+            "type": "integer"
+          },
+          "start": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "missing_hours"
+        ],
+        "type": "object"
+      },
+      "ForecastMonthlyRequest": {
+        "properties": {
+          "analyzer_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "month": {
+            "pattern": "^[0-9]{4}-[0-9]{2}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "analyzer_id",
+          "month"
+        ],
+        "type": "object"
+      },
+      "ForecastPoint": {
+        "properties": {
+          "median": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "p10": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "p90": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "ts": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ts",
+          "median"
+        ],
+        "type": "object"
+      },
+      "ForecastRunRequest": {
+        "properties": {
+          "analyzer_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "horizon_hours": {
+            "maximum": 744,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "analyzer_id",
+          "horizon_hours"
+        ],
+        "type": "object"
+      },
+      "ForecastWeeklyRequest": {
+        "properties": {
+          "analyzer_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
+          "week_start": {
+            "$ref": "#/components/schemas/Date"
+          }
+        },
+        "required": [
+          "analyzer_id",
+          "week_start"
+        ],
+        "type": "object"
+      },
       "ForgotPasswordRequest": {
         "properties": {
           "email": {
@@ -5561,6 +5748,8 @@
           "carbon.edit",
           "carbon.read",
           "financial.read",
+          "forecast.read",
+          "forecast.run",
           "integrations.credentials",
           "iso50001.edit",
           "iso50001.read",
@@ -11208,7 +11397,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "Check one value against the model (unavailable until the ML service, R165).",
+        "summary": "Check one hour's consumption against the model; available=false when the ML service is down.",
         "tags": [
           "forecast"
         ]
@@ -18725,6 +18914,517 @@
         "summary": "Company-wide consumption, cost, production, revenue and net for a year or month, with the tariffs in force.",
         "tags": [
           "financial"
+        ]
+      }
+    },
+    "/api/v1/forecast": {
+      "get": {
+        "operationId": "forecast.read",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "analyzer_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Forecast"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "The latest stored forecast covering the window, with its gaps; never calls the ML service.",
+        "tags": [
+          "forecast"
+        ]
+      }
+    },
+    "/api/v1/forecast/monthly": {
+      "post": {
+        "operationId": "forecast.monthly",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForecastMonthlyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Forecast"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "A daily forecast for one month (not stored).",
+        "tags": [
+          "forecast"
+        ]
+      }
+    },
+    "/api/v1/forecast/run": {
+      "post": {
+        "operationId": "forecast.run",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForecastRunRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Forecast"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Forecast an analyzer now and store the run.",
+        "tags": [
+          "forecast"
+        ]
+      }
+    },
+    "/api/v1/forecast/weekly": {
+      "post": {
+        "operationId": "forecast.weekly",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForecastWeeklyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Forecast"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "An hourly forecast for one week (not stored).",
+        "tags": [
+          "forecast"
         ]
       }
     },
