@@ -61,7 +61,7 @@ time predicate non-sargable made it scan all eleven, so the test guards the prop
   hour bucket, so it is **zero for a meter that reports once an hour** and about 25 % low for a 15-minute
   meter; daily and monthly figures lose one reading interval at each bucket end (about 4 % of a day for
   an hourly meter). F3's R87 already computes the load profile from consecutive bucket boundaries; the
-  analytics series needs the same (`index(h) − index(h−1)` across consecutive buckets). Billing is not
+  analytics series needs the same boundary differencing (see the design notes below). Billing is not
   affected — it reads boundary readings (F3 R61). **This needs the product owner's attention before
   cutover:** legacy OSOS load profiles are hourly.
 
