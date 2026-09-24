@@ -41,8 +41,21 @@ func (s *Service) AccrueTask(ctx context.Context, day string) error {
 // for the day, converging on re-runs. One company's failure never stops another's.
 func (s *Service) Accrue(ctx context.Context, day time.Time) (AccrualResult, error) {
 	day = civil(day)
-	today := s.today()
-	if !day.Before(today) || day.Before(today.AddDate(0, 0, -maxAccrualDaysBack)) {
+	if day.Before(s.today().AddDate(0, 0, -maxAccrualDaysBack)) {
+		return AccrualResult{}, validation("day", "range")
+	}
+	return s.accrue(ctx, day)
+}
+
+// Recompute is `ekokod recompute carbon` (F14c Q-K3): Accrue without the job
+// API's lookback bound, so a migration can rebuild legacy history. Operator only.
+func (s *Service) Recompute(ctx context.Context, day time.Time) error {
+	_, err := s.accrue(ctx, civil(day))
+	return err
+}
+
+func (s *Service) accrue(ctx context.Context, day time.Time) (AccrualResult, error) {
+	if !day.Before(s.today()) {
 		return AccrualResult{}, validation("day", "range")
 	}
 	res := AccrualResult{Skipped: map[string]int{}}

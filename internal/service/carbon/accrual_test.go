@@ -142,6 +142,15 @@ func TestAccrualDayBounds(t *testing.T) {
 	require.NoError(t, err, "400 days back is allowed")
 }
 
+// F14c Q-K3: the migration's recompute reaches legacy history; today is still refused.
+func TestRecomputeHasNoLookbackBound(t *testing.T) {
+	w := newAccrualWorld()
+	w.bucket(w.a1, istDay(2023, 1, 15), ptr(d("5")), nil)
+	require.NoError(t, w.accrual().Recompute(context.Background(), date(2023, 1, 15)))
+	require.Len(t, w.automated(t), 1)
+	requireValidation(t, w.accrual().Recompute(context.Background(), date(2026, 9, 10)), "day", "range")
+}
+
 func TestAccrueTaskDefaultsToYesterday(t *testing.T) {
 	w := newAccrualWorld()
 	w.bucket(w.a1, istDay(2026, 9, 9), ptr(d("1")), nil)

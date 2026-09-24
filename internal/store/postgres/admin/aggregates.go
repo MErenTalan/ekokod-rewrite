@@ -70,3 +70,20 @@ func (r *AggregateRepository) Refresh(ctx context.Context, view store.AggregateV
 	}
 	return nil
 }
+
+// plantViews are migration 00018's plant aggregates, finest first.
+var plantViews = []string{"plant_production_daily", "plant_production_monthly"}
+
+// RefreshPlantProduction refreshes the plant aggregates over rng (F14c R430);
+// the view names are this closed list, never caller input.
+func (r *AggregateRepository) RefreshPlantProduction(ctx context.Context, rng store.TimeRange) error {
+	if !rng.Valid() {
+		return store.ErrInvalidRange
+	}
+	for _, v := range plantViews {
+		if _, err := r.pool.Exec(ctx, aggregateRefreshSQL, v, rng.From, rng.To); err != nil {
+			return pgerr.Translate(r.pool, "refresh continuous aggregate "+v, err)
+		}
+	}
+	return nil
+}
