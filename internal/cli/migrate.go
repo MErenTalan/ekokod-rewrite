@@ -64,5 +64,6 @@ func newMigrateCmd() *cobra.Command {
 	}
 
 	cmd.AddCommand(up, down, status)
+	cmd.AddCommand(newMigrateLegacyCmd())
 	return cmd
 }

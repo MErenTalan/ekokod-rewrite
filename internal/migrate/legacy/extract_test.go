@@ -28,7 +28,7 @@ func oid(hex string) bson.ObjectID {
 func memSource() *legacy.MemSource {
 	src := legacy.NewMemSource()
 	src.Add("companies",
-		bson.D{{Key: "_id", Value: oid("64f000000000000000000002")}, {Key: "name", Value: "B Şirketi"}},
+		bson.D{{Key: "_id", Value: oid("64f000000000000000000002")}, {Key: "name", Value: "B Şirketi"}, {Key: "zeta", Value: 1}, {Key: "address", Value: "Konya"}, {Key: "yota", Value: 2}, {Key: "beta", Value: 3}, {Key: "xi", Value: 4}, {Key: "chi", Value: 5}, {Key: "psi", Value: 6}}, // many keys out of order: a map would reorder them
 		bson.D{{Key: "_id", Value: oid("64f000000000000000000001")}, {Key: "name", Value: "A Şirketi"}, {Key: "vacations", Value: bson.D{{Key: "weekend", Value: bson.A{int32(0), int32(6)}}}}},
 	)
 	src.Add("users", bson.D{{Key: "_id", Value: oid("64f000000000000000000010")}, {Key: "email", Value: "a@x.test"}})
@@ -112,4 +112,21 @@ func TestTheMongoGuardRefusesEveryWrite(t *testing.T) {
 	require.NoError(t, g.Err())
 	g.Observe("insert")
 	require.ErrorContains(t, g.Err(), "insert")
+}
+
+func TestAnExtractIsASourceToo(t *testing.T) {
+	dir := t.TempDir()
+	_, err := legacy.Extract(context.Background(), memSource(), dir)
+	require.NoError(t, err)
+	src, err := legacy.OpenExtract(dir)
+	require.NoError(t, err)
+	names, err := src.Collections(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, []string{"companies", "users"}, names)
+	again := t.TempDir()
+	_, err = legacy.Extract(context.Background(), src, again)
+	require.NoError(t, err)
+	x, _ := os.ReadFile(filepath.Join(dir, "companies.ndjson.gz"))
+	y, _ := os.ReadFile(filepath.Join(again, "companies.ndjson.gz"))
+	require.Equal(t, x, y, "re-extracting an extract changes nothing")
 }

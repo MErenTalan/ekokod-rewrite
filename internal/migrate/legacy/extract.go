@@ -164,3 +164,61 @@ func ReadExtract(dir, collection string, fn func(bson.M) error) error {
 	}
 	return sc.Err()
 }
+
+// ExtractSource reads a verified extract as a Source, so inventory and the
+// rehearsal can run offline from the checksummed files (08 §4).
+type ExtractSource struct {
+	dir   string
+	names []string
+}
+
+// OpenExtract verifies the manifest and opens the directory as a Source.
+func OpenExtract(dir string) (*ExtractSource, error) {
+	if err := VerifyManifest(dir); err != nil {
+		return nil, err
+	}
+	m, err := ReadManifest(dir)
+	if err != nil {
+		return nil, err
+	}
+	s := &ExtractSource{dir: dir}
+	for _, e := range m.Collections {
+		s.names = append(s.names, e.Collection)
+	}
+	return s, nil
+}
+
+// Collections lists the extracted collections in manifest order.
+func (s *ExtractSource) Collections(context.Context) ([]string, error) { return s.names, nil }
+
+// Iterate replays a collection in its extracted (_id) order with field order intact.
+func (s *ExtractSource) Iterate(_ context.Context, collection string, fn func(bson.Raw) error) error {
+	f, err := os.Open(filepath.Join(s.dir, collection+".ndjson.gz")) //nolint:gosec // staging directory
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		return err
+	}
+	sc := bufio.NewScanner(gz)
+	sc.Buffer(make([]byte, 1<<20), 1<<30)
+	for sc.Scan() {
+		var doc bson.D
+		if err := bson.UnmarshalExtJSON(sc.Bytes(), true, &doc); err != nil {
+			return fmt.Errorf("%s: %w", collection, err)
+		}
+		raw, err := bson.Marshal(doc)
+		if err != nil {
+			return err
+		}
+		if err := fn(raw); err != nil {
+			return err
+		}
+	}
+	return sc.Err()
+}
