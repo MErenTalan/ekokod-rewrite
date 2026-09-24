@@ -12,7 +12,7 @@ GOLANGCI_VERSION := v2.13.2
 GOVULNCHECK_VERSION := v1.8.0
 SQLC_VERSION := v1.30.0
 
-.PHONY: build test test-integration test-perf lint fmt tidy tools vuln ci check-script-modes test-db-up test-db-down test-redis-up test-redis-down openapi
+.PHONY: build test test-integration test-perf lint fmt tidy tools vuln ci check-script-modes test-db-up test-db-down test-redis-up test-redis-down openapi migration-rehearsal
 
 # TEST_DB_* back test-db-up/test-db-down (F4 Task 0): one long-lived
 # TimescaleDB container integration tests can opt into sharing, instead of
@@ -219,3 +219,6 @@ web-e2e: ## Playwright e2e against the real API (needs test-db-up and test-redis
 
 web-audit: ## Fail on high-severity frontend dependency vulnerabilities
 	cd web && pnpm audit --audit-level=high
+
+migration-rehearsal: ## One timed rehearsal of the legacy migration into a scratch DB (F14c R444; docs/runbook-migration.md)
+	bash scripts/migration-rehearsal.sh

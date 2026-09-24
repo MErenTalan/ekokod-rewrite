@@ -26,3 +26,7 @@ coverage.out
 ml/.venv/
 __pycache__/
 .pytest_cache/
+
+# F14c: rehearsal output (scripts/migration-rehearsal.sh)
+/reports/
+/rehearsal/
