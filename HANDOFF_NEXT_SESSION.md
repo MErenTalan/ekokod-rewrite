@@ -1,4 +1,4 @@
-# Handoff — ekokod rewrite: F1–F8 COMPLETE, F9 tasks 1–15 done, Task 16 half-run, Task 17 not started
+# Handoff — ekokod rewrite: F1–F12 code COMPLETE (Docker-bound gates of F9–F12 pending), F13 next
 
 > **STATUS (2026-09-24, ~00:50 Istanbul):** F9 (solar plants, renewable energy, financial analysis)
 > is on `phase/f9-solar` in `/home/personal/ekokod-f9-phase`, branched from `phase/f8b-reports`.
@@ -88,7 +88,7 @@
 | `phase/f9-solar` (`/home/personal/ekokod-f9-phase`) | `fa70092` | F9 code + self-review done; Docker-bound gates PENDING (see "F9 remaining") |
 | `phase/f10-carbon` (`/home/personal/ekokod-f10-phase`) | `f95a67d` | F10 done (carbon backend + screens); Docker-bound gates PENDING |
 | `phase/f11-iso50001` (`/home/personal/ekokod-f11-phase`) | `32f7427` | F11 done (ISO 50001 backend + screens); Docker-bound gates PENDING |
-| **`phase/f12-site`** (`/home/personal/ekokod-f12-phase`) | this commit | **F12a done** (tariff schedule seed, public calculator, forms); F12b (site pages) next |
+| `phase/f12-site` (`/home/personal/ekokod-f12-phase`) | `ddb6d4b`+handoff | **F12 done** (F12a backend + F12b public site); API-backed public e2e PENDING (Docker) |
 
 - Plans and ledgers:
   - F10a `docs/superpowers/plans/2026-09-24-f10a-carbon-backend.md` (R300–R319);
@@ -102,7 +102,16 @@
   3. F11a integration (`TestFileAuthorization`, `TestISOProjectFlow`, sweep iso50001, seed counts).
   4. e2e: `carbon.spec.ts`, `iso50001.spec.ts`, `responsive.spec.ts`, then the full suite with the worker.
 - F11 also maps the F10 carbon validation codes to specific form messages (`web/src/lib/api/problem.ts`).
-- F12a plan `docs/superpowers/plans/2026-09-24-f12a-public-backend.md` (R350–R356, Q-H1…Q-H6). F12b (the public pages, blog, calculator page, SEO) is next on `phase/f12-site`.
+- F12a plan `docs/superpowers/plans/2026-09-24-f12a-public-backend.md` (R350–R356, Q-H1…Q-H6).
+- F12b plan `docs/superpowers/plans/2026-09-24-f12b-public-site.md` (Q-H7…Q-H11); ledger lists every ruling. Done:
+  - `(site)` route group at the root (`/`, `/about`, `/references`, `/documents`, `/toolkit`, `/pricing` behind its flag, `/request-demo`, `/contact`, `/blog`, `/blog/[slug]`, `/bill-calculator`); legacy `/site/*` → 308;
+  - only genuine legacy content (template testimonials, placeholder leaders and unverifiable metrics dropped);
+  - blog: `marked` 18, articles in `web/content/blog/`, images WebP in `web/public/site/`;
+  - forms validate R353 client-side; calculator shows every line + Q-H3/Q-H4 rules;
+  - SEO: title template, OG, canonical, JSON-LD, sitemap, robots; analytics = self-hosted script via env (off).
+  - Verified: web unit 1118/1118, site a11y sweep 186/186, smoke of API-free public e2e 18/18 (next start, API absent), Lighthouse mobile perf 96–98 / a11y 100 / BP 100 / SEO 100, LCP 2.5–2.8 s simulated (measured ~100 ms), CLS 0.
+  - PENDING (Docker): `PW_PROJECT=e2e pnpm exec playwright test tests/e2e/public/` (signed-in header, calculator vs seeded schedule, contact 503, honeypot 202, Q-H4); F12a integration tests.
+- **F13 (ML service) is next** — branch `phase/f13-ml` from `phase/f12-site`.
 
 ## Docker hang (read before any integration/e2e)
 - **What happened (at ~00:25):**
