@@ -53,10 +53,9 @@ type analyticsBucketKey struct {
 	bucket   int64
 }
 
-// Consumption serves charts and tables from the continuous aggregates. It
-// is fast and slightly understates a period: a bucket misses the step
-// between the last reading of one bucket and the first of the next (04
-// §4.3). At Monthly/Yearly, EVERY requested bucket absent from the
+// Consumption serves charts and tables from the continuous aggregates. The
+// repository boundary-differences each bucket (F15q R471), so a bucket with
+// readings on its edges matches Billing. At Monthly/Yearly, EVERY requested bucket absent from the
 // materialised view — whether it is the still-open trailing period or an
 // earlier closed month/year the refresh policy has not reached yet (R94,
 // amending R88) — is composed from consumption_daily closing indexes,

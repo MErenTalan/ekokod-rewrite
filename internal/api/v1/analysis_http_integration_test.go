@@ -76,7 +76,7 @@ func TestConsumptionColumnSet(t *testing.T) {
 	require.Equal(t, want, keys)
 	var series dto.ConsumptionSeries
 	res.json(t, &series)
-	require.Equal(t, "230", series.Items[0].ActiveImport.String(), "daily aggregates hold the 23 in-day steps; the midnight step is not in a bucket (04 §4.3)")
+	require.Equal(t, "240", series.Items[0].ActiveImport.String(), "all 24 steps: the midnight step is the next bucket's first reading (F15q R471)")
 	require.True(t, strings.HasSuffix(series.Items[0].PeriodStart.Format(time.RFC3339), "+03:00"))
 }
 
@@ -105,7 +105,7 @@ func TestConsumptionSubjectsAndScope(t *testing.T) {
 	var summary dto.ConsumptionSummary
 	ca.do(http.MethodGet, "/consumption/summary?building_id="+h.fx.BuildingA1.String()+"&granularity=daily&from=2026-08-01&to=2026-08-31", nil).json(t, &summary)
 	require.Equal(t, 31, summary.Rows)
-	require.Equal(t, "920", summary.Averages.ActiveImport.String(), "(10 + 30) × 23 in-day steps")
+	require.Equal(t, "960", summary.Averages.ActiveImport.String(), "(10 + 30) × 24 steps (F15q R471)")
 
 	ba := h.as(seed.E2EBuildingAdminEmail)
 	require.Equal(t, http.StatusOK, ba.do(http.MethodGet, "/consumption?analyzer_id="+h.fx.AnalyzerA1.String()+q, nil).status)

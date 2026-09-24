@@ -37,10 +37,9 @@ var DefaultWeekendDays = map[time.Weekday]bool{time.Saturday: true, time.Sunday:
 
 // HourlySource is the narrow interface over store.AnalyticsRepository this
 // package needs (R87): raw consumption_hourly buckets, so this package can
-// read each bucket's OWN ActiveImportStart rather than internal/service/
-// consumption's Row.Values, which holds the bucket's active_consumption
-// (last-first inside the bucket) — structurally ZERO for a meter that
-// reports once per hour and the wrong figure even for a 15-minute meter.
+// read each bucket's OWN ActiveImportStart. Since F15q (R471) the bucket's
+// active_consumption is boundary-differenced too; R87's own differencing
+// stays because it is what the load-profile tests pin.
 type HourlySource interface {
 	ConsumptionHourly(ctx context.Context, sc store.Scope, analyzerIDs []uuid.UUID, r store.TimeRange) ([]model.ConsumptionBucket, error)
 }

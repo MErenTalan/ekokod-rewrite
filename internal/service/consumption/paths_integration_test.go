@@ -30,19 +30,11 @@ func sub(a, b consumption.Row, reg energy.Register) decimal.Decimal {
 	return a.Values[reg].Sub(*b.Values[reg])
 }
 
-// TestBillingAndAnalyticsDifferByTheBucketBoundaryStep is 09 §F3's headline
-// acceptance criterion, proven against REAL repositories (not fakes): the
-// analytics path reads consumption_hourly (built by migration 00005 as
-// last(active_import) - first(active_import) inside the bucket) and the
-// billing path reads meter_readings at the bucket's true [09:00, 10:00)
-// boundaries.
-//
-// Hand arithmetic. Readings at 09:00=1000, 09:45=1030, 10:00=1040:
-//
-//	analytics (last-first INSIDE the 09:00 bucket) = 1030 - 1000 = 30
-//	billing   (true boundary 09:00 -> true boundary 10:00) = 1040 - 1000 = 40
-//	difference = 40 - 30 = 10, exactly the 09:45->10:00 step the aggregate misses.
-func TestBillingAndAnalyticsDifferByTheBucketBoundaryStep(t *testing.T) {
+// TestBillingAndAnalyticsAgreeOnBoundaryAlignedReadings was 09 §F3's "differ by the boundary step" criterion,
+// re-ruled by F15q R472: the analytics repository differences consecutive
+// bucket boundaries (02 §3.1), so with readings 09:00=1000, 09:45=1030 and
+// 10:00=1040 both paths give 1040 − 1000 = 40 for [09:00, 10:00).
+func TestBillingAndAnalyticsAgreeOnBoundaryAlignedReadings(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
@@ -80,7 +72,7 @@ func TestBillingAndAnalyticsDifferByTheBucketBoundaryStep(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, analyticsRows, 1)
 	require.NotNil(t, analyticsRows[0].Values[energy.ActiveImport])
-	require.Equal(t, "30", analyticsRows[0].Values[energy.ActiveImport].String())
+	require.Equal(t, "40", analyticsRows[0].Values[energy.ActiveImport].String())
 
 	billingRows, err := billing.Consumption(ctx, tenant.Scope, req)
 	require.NoError(t, err)
@@ -89,7 +81,7 @@ func TestBillingAndAnalyticsDifferByTheBucketBoundaryStep(t *testing.T) {
 	require.Equal(t, "40", billingRows[0].Values[energy.ActiveImport].String())
 
 	diff := sub(billingRows[0], analyticsRows[0], energy.ActiveImport)
-	require.Equal(t, "10", diff.String(), "exactly the step the aggregate misses")
+	require.True(t, diff.IsZero(), "the 09:45->10:00 step is no longer lost")
 }
 
 // TestBillingIsolatesTenants (F1 ruling 4): the cross-tenant assertion uses

@@ -270,19 +270,11 @@ func TestF3LevelsDeriveFromTheirOwnBoundaries(t *testing.T) {
 	require.NotEqual(t, "1200", monthlySumOfYear.String(), "summing the monthly rows is not how the yearly figure is produced")
 }
 
-// TestF3BillingAndAnalyticsDifferByTheBoundaryStep is 09 §F3's criterion:
-// "billing.Consumption and analytics.Consumption are shown to differ at a
-// bucket boundary by the expected step, documenting the trade-off in a
-// test."
-//
-// Hand arithmetic. Readings at 09:00=1000, 09:45=1030, 10:00=1040:
-//
-//	analytics (consumption_hourly's last(active_import)-first(active_import)
-//	           INSIDE the [09:00,10:00) bucket) = 1030 - 1000 = 30
-//	billing   (true boundary 09:00 -> true boundary 10:00) = 1040 - 1000 = 40
-//	difference = 40 - 30 = 10, exactly the 09:45->10:00 step the aggregate
-//	misses (04 §4.3).
-func TestF3BillingAndAnalyticsDifferByTheBoundaryStep(t *testing.T) {
+// TestF3BillingAndAnalyticsAgreeOnBoundaryAlignedReadings was 09 §F3's "differ by the boundary step" criterion,
+// re-ruled by F15q R472: the analytics repository differences consecutive
+// bucket boundaries (02 §3.1), so with readings 09:00=1000, 09:45=1030 and
+// 10:00=1040 both paths give 1040 − 1000 = 40 for [09:00, 10:00).
+func TestF3BillingAndAnalyticsAgreeOnBoundaryAlignedReadings(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
@@ -314,7 +306,7 @@ func TestF3BillingAndAnalyticsDifferByTheBoundaryStep(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, analyticsRows, 1)
 	require.NotNil(t, analyticsRows[0].Values[energy.ActiveImport])
-	require.Equal(t, "30", analyticsRows[0].Values[energy.ActiveImport].String())
+	require.Equal(t, "40", analyticsRows[0].Values[energy.ActiveImport].String())
 
 	billingRows, err := billing.Consumption(ctx, tenant.Scope, req)
 	require.NoError(t, err)
@@ -323,7 +315,7 @@ func TestF3BillingAndAnalyticsDifferByTheBoundaryStep(t *testing.T) {
 	require.Equal(t, "40", billingRows[0].Values[energy.ActiveImport].String())
 
 	diff := billingRows[0].Values[energy.ActiveImport].Sub(*analyticsRows[0].Values[energy.ActiveImport])
-	require.Equal(t, "10", diff.String(), "exactly the 09:45->10:00 step the aggregate misses")
+	require.True(t, diff.IsZero(), "the 09:45->10:00 step is no longer lost")
 }
 
 // TestF3MonthlyPrefersBillingReadings is 09 §F3's criterion: "Monthly
