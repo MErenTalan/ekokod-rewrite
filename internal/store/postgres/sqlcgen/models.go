@@ -1823,6 +1823,54 @@ type JobRun struct {
 	TaskID     *string
 }
 
+type LegacyBill struct {
+	ID                     uuid.UUID
+	CompanyID              uuid.UUID
+	BuildingID             uuid.UUID
+	AnalyzerID             *uuid.UUID
+	Scope                  string
+	Period                 string
+	StartDate              pgtype.Date
+	EndDate                pgtype.Date
+	TotalActiveKwh         pgtype.Numeric
+	T1Kwh                  pgtype.Numeric
+	T2Kwh                  pgtype.Numeric
+	T3Kwh                  pgtype.Numeric
+	InductiveKvarh         pgtype.Numeric
+	CapacitiveKvarh        pgtype.Numeric
+	EnergyCost             pgtype.Numeric
+	DistributionCost       pgtype.Numeric
+	CapacityCost           pgtype.Numeric
+	PowerCost              pgtype.Numeric
+	GreenEnergyCost        pgtype.Numeric
+	ReactivePenalty        pgtype.Numeric
+	ReactivePenaltyApplied *bool
+	VatCost                pgtype.Numeric
+	OtherTaxesCost         pgtype.Numeric
+	TotalCost              pgtype.Numeric
+	PdfPath                *string
+	Payload                []byte
+}
+
+type LegacyID struct {
+	Collection string
+	LegacyID   string
+	TableName  string
+	NewID      uuid.UUID
+}
+
+type LegacyReport struct {
+	ID         uuid.UUID
+	CompanyID  uuid.UUID
+	BuildingID *uuid.UUID
+	ReportType string
+	Period     string
+	Payload    []byte
+	PdfPath    *string
+	ExcelPath  *string
+	CreatedAt  pgtype.Timestamptz
+}
+
 type MarketPricesHourly struct {
 	Ts        pgtype.Timestamptz
 	Ptf       pgtype.Numeric

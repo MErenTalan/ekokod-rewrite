@@ -44,7 +44,7 @@ func fixtureSource(t *testing.T, artifacts string) *legacy.MemSource {
 	lp := bson.A{ososRow("22/09/2026 10:00:00", "100"), ososRow("23/09/2026 12:00:00", "90")} // a 26 h gap and a drop
 	src.Add("analyzers",
 		bson.D{{Key: "_id", Value: oid("64f0000000000000000000a1")}, {Key: "building", Value: oid(buildingHex)}, {Key: "subIntegration", Value: "Baskent"},
-			{Key: "meterMultiplier", Value: "40"}, {Key: "energyValues", Value: bson.D{{Key: "loadProfile", Value: lp}}},
+			{Key: "meterMultiplier", Value: "40"}, {Key: "muhatapNo", Value: "M-1"}, {Key: "energyValues", Value: bson.D{{Key: "loadProfile", Value: lp}}},
 			{Key: "billHistory", Value: bson.D{{Key: "2026-08", Value: bson.D{{Key: "totalCost", Value: 250.25}}}}}},
 		bson.D{{Key: "_id", Value: oid("64f0000000000000000000a2")}, {Key: "building", Value: oid(buildingHex)}, {Key: "subIntegration", Value: "Aril"},
 			{Key: "meterMultiplier", Value: ""}, {Key: "energyValues", Value: bson.D{{Key: "daily", Value: bson.A{ososRow("24/09/2026 00:00:00", "5")}}}}},

@@ -49,7 +49,7 @@ func (t *transformer) analyzersStep() error {
 			"district": strOrNil(str(a, "ilce")), "neighbourhood": strOrNil(str(a, "koyMahallesi")), "street": strOrNil(str(a, "caddesiSokagi")),
 			"tariff_type": strOrNil(str(a, "tarifeTipi")), "tariff_kind": strOrNil(str(a, "tarifeTuru")), "installation_kind": strOrNil(str(a, "tesisatTurTanim")),
 			"installed_power_kw": dec2(power), "meter_number": strOrNil(str(a, "meterNumber")), "meter_model": strOrNil(str(a, "meterModel")),
-			"meter_multiplier": meterMultiplier, "multiplier_confirmed": dec.Determined, // a load hint, not a column (F14b) "counterparty_no": strOrNil(str(a, "muhatapNo")),
+			"meter_multiplier": meterMultiplier, "counterparty_no": strOrNil(str(a, "muhatapNo")),
 			"metering_point_name": strOrNil(str(a, "sayimNokTanim")), "latitude": dec2(lat), "longitude": dec2(lon), "etso_code": strOrNil(str(a, "etso")),
 			"definition_type": dec2(defType), "last_reading_at": ts(bdate(a["lastDataDate"])), "is_active": active}); err != nil {
 			return err

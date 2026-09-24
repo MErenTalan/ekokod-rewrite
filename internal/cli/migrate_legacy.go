@@ -15,12 +15,14 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/migrate/legacy"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/crypto"
+	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
+	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/admin"
 )
 
 // newMigrateLegacyCmd is 08 §11's legacy toolkit (F14a Q-J1): inventory, extract, transform.
 func newMigrateLegacyCmd() *cobra.Command {
-	cmd := &cobra.Command{Use: "legacy", Short: "Move the legacy system's data in: inventory, extract, transform (08-migration.md)"}
-	cmd.AddCommand(newLegacyInventoryCmd(), newLegacyExtractCmd(), newLegacyTransformCmd())
+	cmd := &cobra.Command{Use: "legacy", Short: "Move the legacy system's data in: inventory, extract, transform, load (08-migration.md)"}
+	cmd.AddCommand(newLegacyInventoryCmd(), newLegacyExtractCmd(), newLegacyTransformCmd(), newLegacyLoadCmd())
 	return cmd
 }
 
@@ -163,6 +165,48 @@ func newLegacyTransformCmd() *cobra.Command {
 	cmd.Flags().StringVar(&out, "out", "", "staging directory for the transformed files")
 	cmd.Flags().StringVar(&confirmations, "confirmations", "", "manual_multipliers.csv with the answer column filled (raw|multiplied)")
 	cmd.Flags().StringVar(&now, "now", "", "RFC 3339 instant bounding plausible readings; fix it to make reruns identical")
+	return cmd
+}
+
+func newLegacyLoadCmd() *cobra.Command {
+	var dir string
+	cmd := &cobra.Command{
+		Use:   "load",
+		Short: "Write a transform directory into Postgres: ordered, per-stage transactional, re-runnable (08 §6)",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if dir == "" {
+				return errors.New("--dir is required")
+			}
+			cfg, err := config.FromEnv()
+			if err != nil {
+				return err
+			}
+			ctx := cmd.Context()
+			pool, err := postgres.NewPool(ctx, cfg.DB, newCommandLogger(cfg, os.Stderr))
+			if err != nil {
+				return err
+			}
+			defer pool.Close()
+			if pending, err := postgres.PendingMigrations(ctx, cfg.DB.URL); err != nil {
+				return err
+			} else if pending > 0 {
+				return fmt.Errorf("the schema has %d pending migrations: run `ekokod migrate up` first", pending)
+			}
+			rep, err := legacy.Load(ctx, admin.NewLegacyLoader(pool), dir)
+			if err != nil {
+				return err
+			}
+			for _, w := range rep.Warnings {
+				if _, err := fmt.Fprintln(cmd.ErrOrStderr(), "warning:", w); err != nil {
+					return err
+				}
+			}
+			enc := json.NewEncoder(cmd.OutOrStdout())
+			enc.SetIndent("", "  ")
+			return enc.Encode(rep)
+		},
+	}
+	cmd.Flags().StringVar(&dir, "dir", "", "a transform output directory")
 	return cmd
 }
 
