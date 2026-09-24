@@ -138,7 +138,7 @@ check-script-modes: ## Fail if a committed scripts/*.sh file lacks the executabl
 		exit 1; \
 	fi
 
-ci: lint check-generate check-script-modes test build web-lint web-test web-build web-audit ml-test ## Everything CI runs, except integration tests, govulncheck and shellcheck
+ci: lint check-generate check-api-docs check-script-modes test build web-lint web-test web-build web-audit ml-test ## Everything CI runs, except integration tests, govulncheck and shellcheck
 
 .PHONY: up down dev logs ps migrate seed generate check-generate offline-bundle env-docker ml-test
 
@@ -182,6 +182,15 @@ generate: ## Regenerate sqlc types from the migrations and internal/store/postgr
 # also produces an empty string, so without it this guard PASSES precisely when
 # it cannot run. The `git diff --exit-code` it replaced failed loudly in that
 # case, and losing that would have been a straight regression.
+api-docs: ## Regenerate docs/api/openapi.json and docs/api/reference.md from the route table (F15c R482)
+	mkdir -p docs/api
+	go run ./cmd/ekokod tool openapi > docs/api/openapi.json
+	go run ./cmd/ekokod tool openapi --format markdown > docs/api/reference.md
+
+check-api-docs: api-docs ## Fail if the committed API reference is not what the route table produces
+	@changed="$$(git status --porcelain -- docs/api)" || exit 1; \
+	if [ -n "$$changed" ]; then echo "docs/api is not current — run 'make api-docs' and commit:"; echo "$$changed"; exit 1; fi
+
 check-generate: ## Fail if the committed sqlcgen output is not what sqlc produces
 	sqlc generate
 	@changed="$$(git status --porcelain --untracked-files=all -- internal/store/postgres/sqlcgen)" || exit 1; \
@@ -197,6 +206,7 @@ offline-bundle: ## Build the air-gapped install bundle
 test-offline-install: ## Install dist/'s newest bundle into a scratch project, upgrade it, check no data loss (F15c R480)
 	./scripts/test-offline-install.sh $(BUNDLE) $(UPGRADE)
 
+.PHONY: api-docs check-api-docs
 .PHONY: backup restore test-restore test-offline-install
 .PHONY: web-install web-lint web-test web-build web-audit web-a11y web-e2e
 
