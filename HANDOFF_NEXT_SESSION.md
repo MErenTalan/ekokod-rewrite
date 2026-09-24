@@ -81,20 +81,27 @@
 
 ---
 
-## START HERE — exact state (2026-09-24 ~03:00)
+## START HERE — exact state (2026-09-24 ~03:45)
 
 | Branch / worktree | Head | State |
 |---|---|---|
 | `phase/f9-solar` (`/home/personal/ekokod-f9-phase`) | `fa70092` | F9 code + self-review done; Docker-bound gates PENDING (see "F9 remaining") |
-| **`phase/f10-carbon`** (`/home/personal/ekokod-f10-phase`) | this commit | **F10 done (F10a backend + F10b screens)**; Docker-bound gates PENDING |
+| `phase/f10-carbon` (`/home/personal/ekokod-f10-phase`) | `f95a67d` | F10 done (carbon backend + screens); Docker-bound gates PENDING |
+| **`phase/f11-iso50001`** (`/home/personal/ekokod-f11-phase`) | this commit | **F11 done (ISO 50001 backend + screens)**; Docker-bound gates PENDING |
 
-- F10a plan `docs/superpowers/plans/2026-09-24-f10a-carbon-backend.md` (R300–R319, Q-F1…Q-F7); ledger `.superpowers/sdd/2026-09-24-f10a-carbon-backend/progress.md`.
-- F10b plan `docs/superpowers/plans/2026-09-24-f10b-carbon-screens.md` (R320–R327, Q-F8…Q-F12); ledger `.superpowers/sdd/2026-09-24-f10b-carbon-screens/progress.md`.
-- **Docker is still hung** (since 00:25). PENDING, in this order once it is back:
-  1. F9's list ("F9 remaining" below).
-  2. F10a integration: `internal/store/postgres` (carbon + scope isolation), `internal/api/v1` (carbon HTTP + tenancy sweep), `internal/cli`, `internal/seed`, `internal/worker`, `internal/scheduler`.
-  3. e2e: `carbon.spec.ts`, `responsive.spec.ts`, then the full suite with the worker.
-- F11 (ISO 50001) is next, from `phase/f10-carbon`.
+- Plans and ledgers:
+  - F10a `docs/superpowers/plans/2026-09-24-f10a-carbon-backend.md` (R300–R319);
+  - F10b `…-f10b-carbon-screens.md` (R320–R327);
+  - F11a `…-f11a-iso50001-backend.md` (R330–R341);
+  - F11b `…-f11b-iso50001-screens.md` (R342–R346);
+  - each with `.superpowers/sdd/<plan>/progress.md` (rulings, mutations, PENDING lists).
+- **Docker is still hung** (since 00:25). When it is back, run in this order:
+  1. F9 "remaining".
+  2. F10a integration (store carbon, api carbon + sweep, cli verify, seed, worker, scheduler).
+  3. F11a integration (`TestFileAuthorization`, `TestISOProjectFlow`, sweep iso50001, seed counts).
+  4. e2e: `carbon.spec.ts`, `iso50001.spec.ts`, `responsive.spec.ts`, then the full suite with the worker.
+- F11 also maps the F10 carbon validation codes to specific form messages (`web/src/lib/api/problem.ts`).
+- F12 (public marketing site) is next, from `phase/f11-iso50001`.
 
 ## Docker hang (read before any integration/e2e)
 - **What happened (at ~00:25):**
