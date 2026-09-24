@@ -166,3 +166,29 @@ describe('middleware', () => {
     );
   });
 });
+
+describe('security headers on every response (F15a R452)', () => {
+  const nonceOf = (csp: string | null) => /'nonce-([^']+)'/.exec(csp ?? '')?.[1];
+
+  it('a public page gets the CSP, and its render gets the same nonce', async () => {
+    const res = await middleware(request('/about'));
+    const csp = res.headers.get('content-security-policy');
+    expect(nonceOf(csp)).toBeTruthy();
+    expect(res.headers.get('x-middleware-request-x-nonce')).toBe(nonceOf(csp));
+    expect(res.headers.get('x-frame-options')).toBe('DENY');
+  });
+
+  it('a signed-in page keeps its guarded path and gets a nonce too', async () => {
+    const res = await middleware(request('/ekorm/consumption', 'ekokod_at=AT'));
+    expect(res.headers.get('x-middleware-request-x-ekokod-path')).toBe('/ekorm/consumption');
+    expect(res.headers.get('x-middleware-request-x-nonce')).toBe(nonceOf(res.headers.get('content-security-policy')));
+  });
+
+  it('a redirect carries the headers as well, and every request draws a new nonce', async () => {
+    const a = await middleware(request('/ekorm/consumption'));
+    expect(a.status).toBe(307);
+    const b = await middleware(request('/auth/login'));
+    expect(nonceOf(a.headers.get('content-security-policy'))).toBeTruthy();
+    expect(nonceOf(a.headers.get('content-security-policy'))).not.toBe(nonceOf(b.headers.get('content-security-policy')));
+  });
+});

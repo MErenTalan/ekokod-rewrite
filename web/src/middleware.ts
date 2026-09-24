@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
 import { authRedirectFor, errorCode } from '@/lib/api/errors';
+import { contentSecurityPolicy, newNonce, securityHeaders } from '@/lib/security/csp';
 import { isPublicPath, legacyRedirect } from '@/lib/site/paths';
 
 export const ACCESS_COOKIE = 'ekokod_at';
@@ -40,24 +41,39 @@ function withCookies(header: string, setCookies: string[]): string {
 /** PATH_HEADER carries the guarded path to the server layout (R208). */
 export const PATH_HEADER = 'x-ekokod-path';
 
-function withPath(request: NextRequest, path: string): Headers {
-  const headers = new Headers(request.headers);
+/** NONCE_HEADER hands the request's CSP nonce to the render (Next reads it for its own scripts). */
+export const NONCE_HEADER = 'x-nonce';
+
+function withPath(base: Headers, path: string): Headers {
+  const headers = new Headers(base);
   headers.set(PATH_HEADER, path);
   return headers;
 }
 
-/** Guards every page: a missing access cookie is refreshed server-side before the render (R168). */
+/** Every response gets the security headers; every render gets this request's nonce (F15a R452). */
 export async function middleware(request: NextRequest): Promise<NextResponse> {
+  const nonce = newNonce();
+  const csp = contentSecurityPolicy(nonce);
+  const forwarded = new Headers(request.headers);
+  forwarded.set(NONCE_HEADER, nonce);
+  forwarded.set('content-security-policy', csp);
+  const res = await guard(request, forwarded);
+  for (const [name, value] of Object.entries(securityHeaders(csp))) res.headers.set(name, value);
+  return res;
+}
+
+/** Guards every page: a missing access cookie is refreshed server-side before the render (R168). */
+async function guard(request: NextRequest, base: Headers): Promise<NextResponse> {
   const { pathname, search } = request.nextUrl;
   const moved = legacyRedirect(pathname);
   if (moved) return NextResponse.redirect(new URL(moved, request.url), 308);
   // F12b: the marketing site needs no session; `/` is its homepage now (R167 retired).
-  if (isPublicPath(pathname)) return NextResponse.next();
-  if (pathname.startsWith('/auth/') || pathname === '/auth') return NextResponse.next();
+  if (isPublicPath(pathname)) return NextResponse.next({ request: { headers: base } });
+  if (pathname.startsWith('/auth/') || pathname === '/auth') return NextResponse.next({ request: { headers: base } });
   const next = pathname + search;
   // R208: a server component cannot read its own URL, so the guarded path travels
   // as a header and the layout's redirect can carry `next` like this one does.
-  if (request.cookies.get(ACCESS_COOKIE)?.value) return NextResponse.next({ request: { headers: withPath(request, next) } });
+  if (request.cookies.get(ACCESS_COOKIE)?.value) return NextResponse.next({ request: { headers: withPath(base, next) } });
 
   const login = authRedirectFor('session_revoked', next)!;
   if (!request.cookies.get(REFRESH_COOKIE)?.value) return redirectTo(request, login);
@@ -81,7 +97,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   }
   const setCookies = response.headers.getSetCookie();
   if (response.ok) {
-    const forwarded = withPath(request, next);
+    const forwarded = withPath(base, next);
     forwarded.set('cookie', withCookies(request.headers.get('cookie') ?? '', setCookies));
     const res = NextResponse.next({ request: { headers: forwarded } });
     for (const c of setCookies) res.headers.append('set-cookie', c);

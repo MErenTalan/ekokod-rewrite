@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { getTranslations } from 'next-intl/server';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import Script from 'next/script';
 
 import { AnnouncementBar } from '@/features/site/announcement-bar';
@@ -16,6 +16,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
   const [jar, t] = await Promise.all([cookies(), getTranslations('shell')]);
   const { pricing } = siteFeatures();
   const analytics = analyticsScript();
+  const nonce = (await headers()).get('x-nonce') ?? undefined; // F15a R452
   // Q-H11: a cookie only picks the header's button; the platform's own guard still decides.
   const signedIn = Boolean(jar.get(ACCESS_COOKIE)?.value || jar.get(REFRESH_COOKIE)?.value);
   const year = Number(new Intl.DateTimeFormat('en', { year: 'numeric', timeZone: 'Europe/Istanbul' }).format(new Date()));
@@ -34,7 +35,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         {children}
       </main>
       <SiteFooter year={year} pricing={pricing} />
-      {analytics ? <Script defer data-domain={analytics.site} src={analytics.src} strategy="afterInteractive" /> : null}
+      {analytics ? <Script defer nonce={nonce} data-domain={analytics.site} src={analytics.src} strategy="afterInteractive" /> : null}
     </div>
   );
 }
