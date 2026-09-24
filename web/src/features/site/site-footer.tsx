@@ -21,7 +21,7 @@ export function SiteFooter({ year, pricing }: SiteFooterProps) {
       <ul className="flex flex-col gap-1">
         {items.map((l) => (
           <li key={l.key}>
-            <Link href={l.href} className="inline-flex min-h-8 items-center text-foreground-muted hover:text-foreground hover:underline pointer-coarse:min-h-11">
+            <Link href={l.href} className="inline-flex min-h-8 items-center text-foreground-muted hover:text-foreground hover:underline pointer-coarse:min-h-11 pointer-coarse:min-w-11">
               {t(`nav.${l.key}`)}
             </Link>
           </li>

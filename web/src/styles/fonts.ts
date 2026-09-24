@@ -17,6 +17,8 @@ const jetbrainsMono = localFont({
   src: './fonts/jetbrains-mono.woff2',
   variable: '--font-jetbrains-mono',
   display: 'swap',
+  // Figures only: not preloaded, so it never competes with the text fonts for first paint (F12b LCP).
+  preload: false,
   weight: '100 800',
 });
 

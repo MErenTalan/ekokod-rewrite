@@ -31,6 +31,10 @@
   .site-prose hr { border-color: var(--color-border); margin-block: 2.5rem; }
   .site-prose .footnotes { color: var(--color-foreground-muted); @apply type-small; }
   .site-prose sup a { text-decoration: none; }
+  /* Footnote links are tiny inline targets; on touch screens they grow to 44×44 (07 §9). */
+  @media (pointer: coarse) {
+    .site-prose sup a, .site-prose .footnotes a { display: inline-flex; min-width: 44px; min-height: 44px; align-items: center; justify-content: center; }
+  }
 
   /* Card-grid stagger (07 §8, plan D26): each card enters --duration-stagger-step after the one before it. */
   @media (prefers-reduced-motion: no-preference) {

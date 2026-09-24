@@ -196,6 +196,8 @@ export function NewsList() {
   );
 }
 
+const TAP = 'inline-flex min-h-8 items-center hover:underline pointer-coarse:min-h-11';
+
 export const MAP_URL = 'https://www.openstreetmap.org/search?query=Konya%20Teknokent%20Sel%C3%A7uklu';
 
 /** Address, phone, e-mail, hours and a map link (Q-H8: no third-party iframe). */
@@ -224,8 +226,8 @@ export function ContactDetails() {
           </a>
         </>
       ))}
-      {row(Phone, t('phone'), <a href={`tel:${phone.replace(/\s/g, '')}`} className="hover:underline">{phone}</a>)}
-      {row(Mail, t('email'), <a href={`mailto:${email}`} className="hover:underline">{email}</a>)}
+      {row(Phone, t('phone'), <a href={`tel:${phone.replace(/\s/g, '')}`} className={TAP}>{phone}</a>)}
+      {row(Mail, t('email'), <a href={`mailto:${email}`} className={TAP}>{email}</a>)}
       {row(Clock, t('hours'), t('hoursValue'))}
     </dl>
   );

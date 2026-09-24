@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { getTranslations } from 'next-intl/server';
 import { cookies } from 'next/headers';
 import Script from 'next/script';
@@ -7,6 +8,8 @@ import { SiteFooter } from '@/features/site/site-footer';
 import { SiteHeader } from '@/features/site/site-header';
 import { ACCESS_COOKIE, REFRESH_COOKIE } from '@/middleware';
 import { analyticsScript, siteFeatures } from '@/lib/site/features';
+
+export const metadata: Metadata = { title: { template: '%s | EkoKod', default: 'EkoKod' } };
 
 /** The public site's frame (01 §7.19): announcement, header with drawer, footer. No session needed. */
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
