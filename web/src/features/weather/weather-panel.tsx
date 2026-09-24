@@ -42,7 +42,7 @@ export function WeatherPanelView({ weather, loading = false }: { weather?: Weath
   const num = (v?: string | null, unit = '') => (v ? `${formatNumber(v, { maxFractionDigits: 2 })}${unit}` : t('noData'));
 
   return (
-    <Card className="flex flex-col gap-4">
+    <Card className="p-4 flex flex-col gap-4">
       <div>
         <h3 className="type-h3">{t('title')}</h3>
         <p className="text-foreground-muted type-caption">{t('description')}</p>

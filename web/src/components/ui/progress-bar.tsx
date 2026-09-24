@@ -11,12 +11,14 @@ export type ProgressBarProps = {
   thresholds?: { value: number; label: string }[];
   valueText?: string;
   tone?: 'primary' | 'success' | 'warning' | 'danger';
+  /** What `value: null` means: still running (pulsing fill) or nothing measured (empty track). */
+  missing?: 'pending' | 'empty';
 };
 
 const fills = { primary: 'bg-primary', success: 'bg-success', warning: 'bg-warning', danger: 'bg-danger' } as const;
 
 /** `value: null` is indeterminate: no aria-valuenow, never a fake zero. Thresholds are ticks with text labels. */
-export function ProgressBar({ label, value, max = 100, thresholds = [], valueText, tone = 'primary' }: ProgressBarProps) {
+export function ProgressBar({ label, value, max = 100, thresholds = [], valueText, tone = 'primary', missing = 'pending' }: ProgressBarProps) {
   const labelId = useId();
   const pct = (v: number) => `${Math.min(100, Math.max(0, (v / max) * 100))}%`;
   return (
@@ -25,7 +27,10 @@ export function ProgressBar({ label, value, max = 100, thresholds = [], valueTex
         <span id={labelId} className="text-foreground type-small font-semibold">
           {label}
         </span>
-        {valueText ? <span className="text-foreground type-data">{valueText}</span> : null}
+        {valueText ? (
+          // Without a value the text is a sentence ("Veri yok"), not a figure: no mono digits.
+          <span className={value === null ? 'text-foreground-muted type-small' : 'text-foreground type-data'}>{valueText}</span>
+        ) : null}
       </div>
       <div
         role="progressbar"
@@ -37,7 +42,7 @@ export function ProgressBar({ label, value, max = 100, thresholds = [], valueTex
         className="relative h-2 rounded-full bg-surface-sunken"
       >
         {value === null ? (
-          <div className="absolute inset-y-0 start-0 w-1/3 animate-pulse rounded-full bg-foreground-subtle" />
+          missing === 'empty' ? null : <div className="absolute inset-y-0 start-0 w-1/3 animate-pulse rounded-full bg-foreground-subtle motion-reduce:animate-none" />
         ) : (
           <div className={cn('absolute inset-y-0 start-0 rounded-full', fills[tone])} style={{ width: pct(value) }} />
         )}

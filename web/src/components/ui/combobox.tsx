@@ -14,6 +14,8 @@ export type ComboboxProps = FieldProps & {
   value: string | null;
   onValueChange: (value: string | null) => void;
   searchPlaceholder: string;
+  /** Trigger text while nothing is chosen; defaults to `searchPlaceholder`. */
+  placeholder?: string;
   emptyText: string;
   labelVisibility?: 'visible' | 'hidden';
 };
@@ -35,7 +37,7 @@ export const itemClasses =
 export const searchClasses =
   'h-9 w-full border-b border-border bg-transparent px-3 text-foreground type-body placeholder:text-foreground-subtle pointer-coarse:min-h-11';
 
-export function Combobox({ label, description, error, required, id, disabled, options, value, onValueChange, searchPlaceholder, emptyText, labelVisibility }: ComboboxProps) {
+export function Combobox({ label, description, error, required, id, disabled, options, value, onValueChange, searchPlaceholder, placeholder, emptyText, labelVisibility }: ComboboxProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const listId = useId();
@@ -66,7 +68,7 @@ export function Combobox({ label, description, error, required, id, disabled, op
               className={cn(controlClasses, 'flex items-center justify-between gap-2 text-start')}
             >
               <span className={cn('truncate', !selected && 'text-foreground-subtle')}>
-                {selected?.label ?? searchPlaceholder}
+                {selected?.label ?? placeholder ?? searchPlaceholder}
               </span>
               <ChevronsUpDown aria-hidden className="size-4 shrink-0 text-foreground-muted" />
             </button>

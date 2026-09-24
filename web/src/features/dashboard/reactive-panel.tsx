@@ -11,7 +11,6 @@ import { DataTable } from '@/components/ui/data-table';
 import { Dialog } from '@/components/ui/dialog';
 import { MonthPicker } from '@/components/ui/month-picker';
 import { Select } from '@/components/ui/select';
-import { Skeleton } from '@/components/ui/skeleton';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { $api } from '@/lib/api/query';
 import { istanbulToday, monthOf } from '@/lib/dates';
@@ -110,26 +109,22 @@ export function ReactivePanelView({
   );
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="w-40">
-          <MonthPicker label={t('month')} value={month} onValueChange={(v) => onMonthChange(v ?? month)} max={maxMonth} />
-        </div>
-        <div className="w-48">
-          <Select label={t('scope')} options={scopeOptions} value={scope} onValueChange={onScopeChange} />
-        </div>
-      </div>
-      {loading ? (
-        <Skeleton className="h-64 w-full" />
-      ) : (
-        <>
-          <ReactiveStatusCard
-            period={month}
-            inductive={{ ratio: highestInductive?.inductive_ratio ?? null, limit: highestInductive?.inductive_limit ?? '0.20' }}
-            capacitive={{ ratio: highestCapacitive?.capacitive_ratio ?? null, limit: highestCapacitive?.capacitive_limit ?? '0.15' }}
-            penaltyApplied={rows.length === 0 ? null : penalty}
-            advisory={rows.length === 0 ? t('noData') : penalty ? t('advisoryFix') : t('advisoryOk')}
-          />
+    <>
+      <ReactiveStatusCard
+        period={month}
+        loading={loading}
+        toolbar={
+          <div className="grid grid-cols-2 gap-3">
+            <MonthPicker label={t('month')} value={month} onValueChange={(v) => onMonthChange(v ?? month)} max={maxMonth} />
+            <Select label={t('scope')} options={scopeOptions} value={scope} onValueChange={onScopeChange} />
+          </div>
+        }
+        inductive={{ ratio: highestInductive?.inductive_ratio ?? null, limit: highestInductive?.inductive_limit ?? '0.20' }}
+        capacitive={{ ratio: highestCapacitive?.capacitive_ratio ?? null, limit: highestCapacitive?.capacitive_limit ?? '0.15' }}
+        penaltyApplied={rows.length === 0 ? null : penalty}
+        advisory={rows.length === 0 ? t('noData') : penalty ? t('advisoryFix') : t('advisoryOk')}
+      >
+        {highestInductive || highestCapacitive ? (
           <div className="flex flex-col gap-1 text-foreground-muted type-small">
             {highestInductive ? (
               <p>{t('highestInductive', { analyzer: highestInductive.analyzerLabel, building: highestInductive.buildingName })}</p>
@@ -138,22 +133,24 @@ export function ReactivePanelView({
               <p>{t('highestCapacitive', { analyzer: highestCapacitive.analyzerLabel, building: highestCapacitive.buildingName })}</p>
             ) : null}
           </div>
-          <Button variant="secondary" size="sm" className="self-start" onClick={() => setOpen(true)} disabled={rows.length === 0}>
+        ) : null}
+        {rows.length > 0 ? (
+          <Button variant="secondary" size="sm" className="self-start" onClick={() => setOpen(true)}>
             {t('openDialog')}
           </Button>
-          <Dialog open={open} onOpenChange={setOpen} title={t('dialogTitle')} size="lg">
-            <DataTable
-              columns={columns}
-              data={rows}
-              caption={t('dialogTitle')}
-              getRowId={(row) => row.analyzer_id}
-              initialSorting={[{ id: 'inductive', desc: true }]}
-              empty={{ title: t('noData'), description: t('noData') }}
-            />
-          </Dialog>
-        </>
-      )}
-    </div>
+        ) : null}
+      </ReactiveStatusCard>
+      <Dialog open={open} onOpenChange={setOpen} title={t('dialogTitle')} size="lg">
+        <DataTable
+          columns={columns}
+          data={rows}
+          caption={t('dialogTitle')}
+          getRowId={(row) => row.analyzer_id}
+          initialSorting={[{ id: 'inductive', desc: true }]}
+          empty={{ title: t('noData'), description: t('noData') }}
+        />
+      </Dialog>
+    </>
   );
 }
 

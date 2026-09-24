@@ -47,7 +47,7 @@ export function OverviewTabView({ realtime, revenue, monthDaily, history, loadin
       <RevenueCards revenue={revenue} />
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <Card>
+        <Card className="p-4">
           <BarChart
             title={t('charts.monthDaily')}
             description={t('charts.monthDailyDescription')}
@@ -58,7 +58,7 @@ export function OverviewTabView({ realtime, revenue, monthDaily, history, loadin
             empty={{ title: t('charts.empty'), description: t('charts.emptyDescription') }}
           />
         </Card>
-        <Card>
+        <Card className="p-4">
           <BarChart
             title={t('charts.history')}
             description={t('charts.historyDescription')}
@@ -80,7 +80,7 @@ function RevenueCards({ revenue }: { revenue?: PlantRevenue }) {
   if (!revenue) return null;
   if (!revenue.available) {
     return (
-      <Card>
+      <Card className="p-4">
         <EmptyState title={t('revenue.unavailable')} description={t('revenue.unavailableDescription')} />
       </Card>
     );

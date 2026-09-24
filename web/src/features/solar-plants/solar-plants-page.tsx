@@ -122,7 +122,7 @@ export function SolarPlantsPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title={t('title')} description={t('subtitle')} />
-      <Card className="flex flex-wrap items-end justify-between gap-4">
+      <Card className="p-4 flex flex-wrap items-end justify-between gap-4">
         <div className="w-full max-w-xs">
           <Select label={t('plant')} value={id} onValueChange={setPlantId}
             options={linked.map((p) => ({ value: p.id, label: p.name }))} />

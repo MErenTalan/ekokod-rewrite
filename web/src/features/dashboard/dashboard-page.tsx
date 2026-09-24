@@ -6,7 +6,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { RefreshActions } from '@/features/jobs/refresh-actions';
 import { analyzerLabel, useAssets } from '@/features/scope/use-assets';
 import { PageHeader } from '@/components/shell/page-header';
-import { StaggerGrid } from '@/components/ui/stagger-grid';
 import type { Granularity } from '@/components/domain/period-filter-bar';
 import type { DateRange } from '@/components/ui/date-range-picker';
 import { errorCodeOf } from '@/lib/api/problem';
@@ -100,14 +99,15 @@ export function DashboardPage() {
     'get',
     '/api/v1/buildings/{id}/comparison',
     { params: { path: { id: buildingId ?? '' }, query: scope } },
-    { enabled, retry: false },
+    { enabled, retry: false, meta: { quietErrors: ['building_sector_missing'] } },
   );
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title={t('title')} description={t('subtitle')} />
-      <StaggerGrid className="lg:grid-cols-12">
-        <div className="lg:col-span-6">
+      {/* Spans sit on the grid's own children: StaggerGrid wraps each child and would swallow them. */}
+      <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-12">
+        <div className="stagger-item min-w-0 lg:col-span-2 2xl:col-span-6" style={{ ['--i' as string]: 0 }}>
           <MapPanelView
             loading={loading}
             buildings={buildings
@@ -128,7 +128,7 @@ export function DashboardPage() {
             }}
           />
         </div>
-        <div className="lg:col-span-3">
+        <div className="stagger-item min-w-0 2xl:col-span-3" style={{ ['--i' as string]: 1 }}>
           <BuildingListView
             loading={loading}
             buildings={buildings.map((b) => ({
@@ -148,14 +148,14 @@ export function DashboardPage() {
             onFocus={setFocusId}
           />
         </div>
-        <div className="flex flex-col gap-4 lg:col-span-3">
+        <div className="stagger-item flex min-w-0 flex-col gap-4 2xl:col-span-3" style={{ ['--i' as string]: 2 }}>
           <LatestBillCard buildingName={selectedBuilding?.name} />
           <ReactivePanel
             buildings={buildings.map((b) => ({ id: b.id, name: b.name }))}
             analyzerNames={analyzerNames}
           />
         </div>
-      </StaggerGrid>
+      </div>
       <ConsumptionPanelView
         rows={seriesQuery.data?.items ?? []}
         previousYear={yoyEnabled ? (previousYear.data?.items ?? []) : null}

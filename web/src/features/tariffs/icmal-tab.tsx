@@ -80,7 +80,7 @@ export function IcmalTabView({
       {result ? (
         <>
           {result.unmatched.length > 0 ? (
-            <Card className="flex flex-col gap-2">
+            <Card className="p-4 flex flex-col gap-2">
               <h4 className="type-h3">{t('icmal.unmatched')}</h4>
               <p className="text-foreground-muted type-caption">{t('icmal.unmatchedDescription')}</p>
               <div className="flex flex-wrap gap-2">
@@ -107,7 +107,7 @@ export function IcmalTabView({
             ))}
           </div>
 
-          <Card className="flex flex-col gap-4">
+          <Card className="p-4 flex flex-col gap-4">
             <p className="text-foreground type-body">{t('icmal.confirmDescription')}</p>
             <Input
               label={t('icmal.effectiveFrom')}
@@ -146,7 +146,7 @@ function AnalysisCard({
   ];
 
   return (
-    <Card className="flex flex-col gap-3">
+    <Card className="p-4 flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Checkbox
           label={`${analysis.etso_code} — ${buildingName}`}

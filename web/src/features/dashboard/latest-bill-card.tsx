@@ -93,7 +93,7 @@ export function LatestBillCard({ buildingName }: { buildingName?: string }) {
     'get',
     '/api/v1/bills/latest',
     { params: { query: { ...scope, scope: buildingId ? 'building' : 'company', subject_id: subject ?? '' } } },
-    { enabled: Boolean(subject), retry: false },
+    { enabled: Boolean(subject), retry: false, meta: { quietErrors: ['not_found'] } },
   );
 
   return (

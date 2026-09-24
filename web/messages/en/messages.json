@@ -56,7 +56,33 @@
       "partial": "Partial",
       "failed": "Failed"
     },
-    "emptyDescription": "No job has run yet."
+    "emptyDescription": "No job has run yet.",
+    "types": {
+      "alarmEvaluate": "Alarm evaluation",
+      "alarmDispatch": "Alarm dispatch",
+      "alarmNotify": "Alarm notification",
+      "billingDispatch": "Bulk bill calculation",
+      "billingGenerate": "Bill calculation",
+      "billingRenderPdf": "Bill PDF rendering",
+      "carbonDailyAccrual": "Daily carbon accrual",
+      "consumptionRefresh": "Consumption refresh",
+      "demoExtend": "Demo data extension",
+      "epiasSyncPrices": "EPİAŞ price sync",
+      "forecastRun": "Forecast run",
+      "integrationBackfill": "Historical data backfill",
+      "integrationFetchReadings": "Meter reading fetch",
+      "integrationRefreshAnalyzer": "Analyzer refresh",
+      "integrationSyncAnalyzers": "Analyzer sync",
+      "integrationSyncDispatch": "Integration sync",
+      "isolarDispatchSync": "iSolarCloud sync",
+      "isolarFetchAlarms": "iSolarCloud alarms",
+      "isolarSyncPlant": "Plant sync",
+      "reportDeliver": "Report delivery",
+      "reportDispatchMonthly": "Monthly report dispatch",
+      "reportDispatchYearly": "Yearly report dispatch",
+      "reportGenerate": "Report generation",
+      "systemNoop": "System check"
+    }
   },
   "emptyDescription": "Automated jobs and alarms appear here.",
   "emptyFilteredDescription": "Try a different filter."

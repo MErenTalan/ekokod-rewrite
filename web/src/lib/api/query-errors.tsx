@@ -36,6 +36,9 @@ export function QueryErrorToaster() {
       // so the code is what tells a refusal from a failure.
       const code = errorCodeOf(error);
       if (code === 'unauthorized' || code === 'forbidden') return;
+      // A screen that shows "nothing yet" for these codes lists them in the query's meta.
+      const quiet = (query.meta as { quietErrors?: string[] } | undefined)?.quietErrors;
+      if (code && quiet?.includes(code)) return;
       spoken.add(query.queryHash);
       toast.toast({ tone: 'danger', title: errorMessage(error, feedback('loadFailed')) });
     });

@@ -45,7 +45,7 @@ export function ReportSelectionView({ kind, buildings, plants, value, onChange, 
   const visiblePlants = (plants ?? []).filter((p) => value.plantSelection === 'all' || p.kind === value.plantSelection);
 
   return (
-    <Card className="flex flex-col gap-4">
+    <Card className="p-4 flex flex-col gap-4">
       <h2 className="type-h3">{t('title')}</h2>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <div className="flex flex-col gap-2">

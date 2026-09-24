@@ -91,7 +91,7 @@ export function MonthlyReportView({ payload: m }: { payload: ReportMonthly }) {
           delta={metricDelta(deltaIn(m.reactive_penalty_delta, currency), false, comparison)} />
       </StaggerGrid>
 
-      <Card className="flex flex-col gap-3">
+      <Card className="p-4 flex flex-col gap-3">
         <h2 className="type-h3">{t('monthly.infoTitle')}</h2>
         <TableContainer label={t('monthly.infoTitle')}>
           <Table aria-label={t('monthly.infoTitle')}>

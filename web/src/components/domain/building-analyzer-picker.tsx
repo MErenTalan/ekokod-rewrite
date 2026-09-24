@@ -45,11 +45,14 @@ export function BuildingAnalyzerPicker({ buildings, analyzers, value, onValueCha
           searchPlaceholder={t('searchAnalyzer')}
           emptyText={t('noAnalyzers')}
           disabled={value.buildingId === null}
-          description={value.buildingId === null ? t('chooseBuildingFirst') : undefined}
+          // A placeholder, not a description: a line under one field misaligns every filter row (items-end).
+          placeholder={value.buildingId === null ? t('chooseBuildingFirst') : undefined}
           onValueChange={(analyzerId) => onValueChange({ ...value, analyzerId })}
         />
       </div>
-      <Checkbox label={t('activeOnly')} checked={activeOnly} onCheckedChange={onActiveOnlyChange} />
+      <div className="flex h-9 items-center pointer-coarse:min-h-11">
+        <Checkbox label={t('activeOnly')} checked={activeOnly} onCheckedChange={onActiveOnlyChange} />
+      </div>
     </div>
   );
 }

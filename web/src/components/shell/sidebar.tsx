@@ -34,6 +34,9 @@ function Leaf({ leaf, collapsed, onNavigate }: { leaf: NavLeaf; collapsed: boole
       <Tooltip content={collapsed ? `${label}: ${t('notYetAvailable')}` : t('notYetAvailable')} side="right">
         <span role="link" aria-disabled="true" tabIndex={0} className={cn(row, 'cursor-not-allowed text-foreground-subtle', collapsed && 'justify-center px-0')}>
           {content}
+          {collapsed ? null : (
+            <span aria-hidden className="shrink-0 rounded-full border border-border px-1.5 text-foreground-subtle type-caption">{t('soon')}</span>
+          )}
         </span>
       </Tooltip>
     );

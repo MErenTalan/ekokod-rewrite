@@ -21,7 +21,7 @@ export function NettingSummaryView({ netting }: NettingSummaryViewProps) {
   return (
     <div className="flex flex-col gap-4">
       {netting.map((n) => (
-        <Card key={n.currency} className="flex flex-col gap-4">
+        <Card key={n.currency} className="p-4 flex flex-col gap-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className="type-h3">{t('netting.title')}</h3>
             <div className="flex items-center gap-2">

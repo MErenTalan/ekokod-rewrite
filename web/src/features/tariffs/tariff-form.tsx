@@ -84,7 +84,7 @@ export function TariffFormView({
   const ptf = draft.usePtfYekdem;
 
   return (
-    <Card className="flex flex-col gap-6">
+    <Card className="p-4 flex flex-col gap-6">
       <section className="flex flex-col gap-4">
         <h3 className="type-h3">{t('sections.identity')}</h3>
         <div className="grid gap-4 sm:grid-cols-2">

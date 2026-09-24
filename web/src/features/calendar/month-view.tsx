@@ -3,10 +3,15 @@
 import { useLocale, useTranslations } from 'next-intl';
 import { useMemo, useState } from 'react';
 
+import { Plus } from 'lucide-react';
+
 import { Button } from '@/components/ui/button';
+import { IconButton } from '@/components/ui/icon-button';
 import { Popover } from '@/components/ui/popover';
 import type { CalendarEvent, VacationPeriod } from '@/lib/api/types';
 import type { Locale } from '@/i18n/locale';
+import { cn } from '@/lib/cn';
+import { istanbulToday } from '@/lib/dates';
 
 import { eventDays, nonWorkingDay } from './event-draft';
 import { visibleDays } from './range';
@@ -57,6 +62,7 @@ export function MonthView({ anchor, events, weekendDays, periods, canEdit, onSel
 
   const dayNumber = new Intl.DateTimeFormat(locale === 'tr' ? 'tr-TR' : 'en-US', { day: 'numeric', timeZone: 'Europe/Istanbul' });
   const month = anchor.slice(0, 7);
+  const today = istanbulToday();
 
   return (
     // Seven day columns need more width than a phone has, so the grid scrolls
@@ -79,17 +85,36 @@ export function MonthView({ anchor, events, weekendDays, periods, canEdit, onSel
               key={day}
               data-day={day}
               data-non-working={status.weekend || status.vacation ? 'true' : undefined}
-              className="flex min-h-24 flex-col gap-1 rounded-md border border-border p-1 data-[non-working=true]:bg-surface-sunken"
+              className="group flex min-h-28 flex-col gap-1 rounded-md border border-border bg-surface-raised p-1.5 data-[non-working=true]:bg-surface-sunken"
             >
-              <div className="flex items-baseline justify-between gap-1">
-                <span className={day.slice(0, 7) === month ? 'text-foreground type-caption' : 'text-foreground-subtle type-caption'}>
+              <div className="flex items-center justify-between gap-1">
+                <span
+                  aria-current={day === today ? 'date' : undefined}
+                  className={cn(
+                    'inline-flex size-6 items-center justify-center rounded-full type-small',
+                    day.slice(0, 7) === month ? 'text-foreground' : 'text-foreground-subtle',
+                    day === today && 'bg-primary font-semibold text-on-primary',
+                  )}
+                >
                   {dayNumber.format(new Date(`${day}T12:00:00Z`))}
                 </span>
-                {status.vacation ? (
-                  <span className="text-foreground-muted type-caption">{status.vacation.description || t('vacation')}</span>
-                ) : status.weekend ? (
-                  <span className="text-foreground-muted type-caption">{t('weekend')}</span>
-                ) : null}
+                <span className="flex min-w-0 items-center gap-1">
+                  {status.vacation ? (
+                    <span className="truncate text-foreground-muted type-caption">{status.vacation.description || t('vacation')}</span>
+                  ) : status.weekend ? (
+                    <span className="truncate text-foreground-muted type-caption">{t('weekend')}</span>
+                  ) : null}
+                  {canEdit ? (
+                    // One quiet "+" per day, shown on hover/focus: 42 "Etkinlik ekle" labels drowned the events.
+                    <IconButton
+                      label={t('addEvent')}
+                      icon={Plus}
+                      size="sm"
+                      className="size-6 shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
+                      onClick={() => onSelectDate(day)}
+                    />
+                  ) : null}
+                </span>
               </div>
               {dayEvents.slice(0, CHIPS_PER_DAY).map((event) => (
                 <EventChip key={event.id} event={event} onSelect={() => onSelectEvent(event)} />
@@ -110,11 +135,6 @@ export function MonthView({ anchor, events, weekendDays, periods, canEdit, onSel
                     ))}
                   </div>
                 </Popover>
-              ) : null}
-              {canEdit ? (
-                <Button size="sm" variant="ghost" className="mt-auto self-start" onClick={() => onSelectDate(day)}>
-                  {t('addEvent')}
-                </Button>
               ) : null}
             </div>
           );

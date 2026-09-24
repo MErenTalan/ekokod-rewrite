@@ -74,7 +74,7 @@ export function SettingsPage({ slots }: { slots?: Partial<Record<SettingsTabId, 
   // Signing out everywhere ends this session too, so it finishes like a logout.
   const logoutAll = useApiMutation('post', '/api/v1/auth/logout-all', { onSuccess: () => void logout() });
 
-  const smtp = $api.useQuery('get', '/api/v1/smtp-settings', { params: { query: scope } }, { enabled: can('settings.smtp'), retry: false });
+  const smtp = $api.useQuery('get', '/api/v1/smtp-settings', { params: { query: scope } }, { enabled: can('settings.smtp'), retry: false, meta: { quietErrors: ['not_found'] } });
   const saveSmtp = useApiMutation('put', '/api/v1/smtp-settings', { success: smtpText('saved'), invalidate: ['/api/v1/smtp-settings'] });
   const testSmtp = useApiMutation('post', '/api/v1/smtp-settings/test', { success: smtpText('testSent') });
 

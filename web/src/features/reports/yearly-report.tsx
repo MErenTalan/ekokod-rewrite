@@ -55,7 +55,7 @@ export function YearlyReportView({ payload: y }: { payload: ReportYearly }) {
     <div className="flex flex-col gap-6">
       {y.partial ? <Alert tone="info" title={t('partial')} /> : null}
 
-      <Card className="flex flex-col gap-3">
+      <Card className="p-4 flex flex-col gap-3">
         <h2 className="type-h3">{t('yearly.consumptionTable')}</h2>
         <TableContainer label={t('yearly.consumptionTable')}>
           <Table aria-label={t('yearly.consumptionTable')}>
@@ -104,7 +104,7 @@ export function YearlyReportView({ payload: y }: { payload: ReportYearly }) {
         </TableContainer>
       </Card>
 
-      <Card className="flex flex-col gap-3">
+      <Card className="p-4 flex flex-col gap-3">
         <h2 className="type-h3">{t('yearly.solarTitle')}</h2>
         <Rows
           title={t('yearly.solarTitle')}
@@ -164,7 +164,7 @@ export function YearlyReportView({ payload: y }: { payload: ReportYearly }) {
         empty={{ title: t('monthly.chartEmpty'), description: t('monthly.chartEmptyDescription') }}
       />
 
-      <Card className="flex flex-col gap-3">
+      <Card className="p-4 flex flex-col gap-3">
         <h2 className="type-h3">{t('yearly.comparisonTitle')}</h2>
         <p className="text-foreground-muted type-small">{t('yearly.comparisonDescription')}</p>
         <Rows
@@ -178,7 +178,7 @@ export function YearlyReportView({ payload: y }: { payload: ReportYearly }) {
         />
       </Card>
 
-      <Card className="flex flex-col gap-3">
+      <Card className="p-4 flex flex-col gap-3">
         <h2 className="type-h3">{t('yearly.carbonTitle')}</h2>
         {y.carbon ? (
           <>

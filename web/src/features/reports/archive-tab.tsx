@@ -79,7 +79,7 @@ export function ArchiveTabView({ items, total, loading, filters, buildings, onFi
 
   return (
     <div className="flex flex-col gap-6 pt-4">
-      <Card className="grid gap-4 md:grid-cols-3 md:items-end">
+      <Card className="p-4 grid gap-4 md:grid-cols-3 md:items-end">
         <Select
           label={t('filterType')}
           options={[
@@ -105,7 +105,7 @@ export function ArchiveTabView({ items, total, loading, filters, buildings, onFi
         <EmptyState title={t('empty')} description={t('emptyDescription')} />
       ) : (
         groupArchive(items).map((g) => (
-          <Card key={g.year} className="flex flex-col gap-4">
+          <Card key={g.year} className="p-4 flex flex-col gap-4">
             <h2 className="type-h3">{t('yearTitle', { year: g.year })}</h2>
             <section className="flex flex-col gap-1">
               <h3 className="type-small font-semibold text-foreground-muted">{t('yearlyReport')}</h3>

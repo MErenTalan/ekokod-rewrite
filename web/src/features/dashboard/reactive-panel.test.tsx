@@ -80,7 +80,8 @@ describe('ReactivePanelView', () => {
   it('says there is nothing to show for an empty month', () => {
     const r = renderWithProviders(view({ rows: [], highestInductive: undefined, highestCapacitive: undefined }));
     expect(r.getByText('Seçilen ay için reaktif verisi yok')).toBeInTheDocument();
-    expect(r.getByRole('button', { name: 'Tüm binalar' })).toBeDisabled();
+    // Nothing to list: the all-analyzers dialog button is left out rather than shown disabled.
+    expect(r.queryByRole('button', { name: 'Tüm binalar' })).toBeNull();
   });
 
   it('has no axe violations', async () => {

@@ -54,7 +54,7 @@ export function AccountTabView({
         <CardContent className="flex flex-col gap-4">
           {readOnly ? <Alert tone="info" title={t('demoReadOnly')} /> : null}
           <form
-            className="flex flex-col gap-4"
+            className="flex max-w-xl flex-col gap-4"
             onSubmit={(event) => {
               event.preventDefault();
               onSaveProfile({ name: values.name, email: values.email, phone: values.phone || null });
@@ -79,7 +79,7 @@ export function AccountTabView({
           </CardHeader>
           <CardContent>
             <form
-              className="flex flex-col gap-4"
+              className="flex max-w-xl flex-col gap-4"
               onSubmit={(event) => {
                 event.preventDefault();
                 onChangePassword({ current_password: password.current, new_password: password.next });

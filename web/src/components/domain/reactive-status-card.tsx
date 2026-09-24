@@ -1,12 +1,14 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import type { ReactNode } from 'react';
 
 import { compareDecimal, fractionToPercent } from '@/lib/decimal';
 import { formatQuantity } from '@/lib/format';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { ProgressBar } from '../ui/progress-bar';
+import { Skeleton } from '../ui/skeleton';
 import { StatusBadge } from '../ui/status-badge';
 
 type Ratio = { ratio: string | null; limit: string };
@@ -17,6 +19,11 @@ export type ReactiveStatusCardProps = {
   penaltyApplied: boolean | null;
   advisory?: string;
   period: string;
+  /** Controls drawn inside the card above the ratios (the dashboard's month and scope pickers). */
+  toolbar?: ReactNode;
+  /** Extra lines under the advisory, still inside the card. */
+  children?: ReactNode;
+  loading?: boolean;
 };
 
 function RatioRow({ label, ratio, limit }: Ratio & { label: string }) {
@@ -32,24 +39,22 @@ function RatioRow({ label, ratio, limit }: Ratio & { label: string }) {
         value={ratio === null ? null : Number(fractionToPercent(ratio))}
         max={max}
         valueText={shown ?? t('noData')}
+        missing="empty"
         tone={over ? 'danger' : 'success'}
         thresholds={[{ value: Number(limitPct), label: t('limit', { value: formatQuantity(limitPct, 'percent') }) }]}
       />
-      <div>
-        {ratio === null ? (
-          <StatusBadge status="neutral" label={t('noData')} />
-        ) : over ? (
-          <StatusBadge status="danger" label={t('overLimit')} />
-        ) : (
-          <StatusBadge status="success" label={t('withinLimit')} />
-        )}
-      </div>
+      {/* No ratio: the bar's own text already says "Veri yok"; a second badge only repeated it. */}
+      {ratio === null ? null : (
+        <div>
+          <StatusBadge status={over ? 'danger' : 'success'} label={over ? t('overLimit') : t('withinLimit')} />
+        </div>
+      )}
     </div>
   );
 }
 
 /** Inductive and capacitive ratios against their limits, and whether the penalty applied (07 §6). */
-export function ReactiveStatusCard({ inductive, capacitive, penaltyApplied, advisory, period }: ReactiveStatusCardProps) {
+export function ReactiveStatusCard({ inductive, capacitive, penaltyApplied, advisory, period, toolbar, children, loading = false }: ReactiveStatusCardProps) {
   const t = useTranslations('domain.reactive');
   return (
     <Card>
@@ -58,14 +63,22 @@ export function ReactiveStatusCard({ inductive, capacitive, penaltyApplied, advi
         <CardDescription>{period}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
-        <RatioRow label={t('inductive')} {...inductive} />
-        <RatioRow label={t('capacitive')} {...capacitive} />
-        {penaltyApplied !== null ? (
-          <div>
-            <StatusBadge status={penaltyApplied ? 'danger' : 'success'} label={penaltyApplied ? t('penaltyApplied') : t('penaltyNotApplied')} />
-          </div>
-        ) : null}
-        {advisory ? <p className="text-foreground-muted type-small">{advisory}</p> : null}
+        {toolbar}
+        {loading ? (
+          <Skeleton className="h-40 w-full" />
+        ) : (
+          <>
+            <RatioRow label={t('inductive')} {...inductive} />
+            <RatioRow label={t('capacitive')} {...capacitive} />
+            {penaltyApplied !== null ? (
+              <div>
+                <StatusBadge status={penaltyApplied ? 'danger' : 'success'} label={penaltyApplied ? t('penaltyApplied') : t('penaltyNotApplied')} />
+              </div>
+            ) : null}
+            {advisory ? <p className="text-foreground-muted type-small">{advisory}</p> : null}
+            {children}
+          </>
+        )}
       </CardContent>
     </Card>
   );

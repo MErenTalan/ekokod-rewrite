@@ -104,7 +104,9 @@ export function BillsPage() {
     <div className="flex flex-col gap-6">
       <PageHeader title={t('title')} description={t('subtitle')} />
 
-      <MonthPicker label={t('monthSelection')} value={month} onValueChange={setMonth} />
+      <div className="w-full max-w-xs">
+        <MonthPicker label={t('monthSelection')} value={month} onValueChange={setMonth} />
+      </div>
 
       {month === null ? (
         <EmptyState title={t('noMonth')} description={t('noMonthDescription')} />

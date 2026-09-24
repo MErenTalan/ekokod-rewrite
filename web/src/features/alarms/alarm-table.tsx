@@ -51,6 +51,7 @@ export function AlarmTableView({
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <RadioGroup
+          orientation="horizontal"
           label={t('state')}
           value={state}
           onValueChange={(value) => onStateChange(value as AlarmStateFilter)}

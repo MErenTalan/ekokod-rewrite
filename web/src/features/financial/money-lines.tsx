@@ -39,9 +39,9 @@ export function coverageSuffix(n: number): string {
 }
 
 /** One line per currency (R253); an empty list is "veri yok", never 0. */
-export function MoneyLines({ list }: { list: MoneyAmount[] }) {
+export function MoneyLines({ list, emptyClassName = 'type-small' }: { list: MoneyAmount[]; emptyClassName?: string }) {
   const t = useTranslations('financial');
-  if (list.length === 0) return <span className="text-foreground-muted">{t('noData')}</span>;
+  if (list.length === 0) return <span className={`text-foreground-muted ${emptyClassName}`}>{t('noData')}</span>;
   return (
     <span className="flex flex-col">
       {list.map((m) => (

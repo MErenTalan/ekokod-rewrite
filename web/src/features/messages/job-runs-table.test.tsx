@@ -36,7 +36,7 @@ describe('JobRunsTableView', () => {
   it('offers one button per allow-listed job to an admin (R220)', async () => {
     const onTrigger = vi.fn();
     const r = renderWithProviders(view({ onTrigger }));
-    await r.user.click(r.getByRole('button', { name: /alarm\.evaluate/ }));
+    await r.user.click(r.getByRole('button', { name: /Alarm değerlendirme/ }));
     expect(onTrigger).toHaveBeenCalledWith('alarm.evaluate');
     expect(r.getAllByRole('button', { name: /Şimdi çalıştır/ })).toHaveLength(TRIGGERABLE.length);
   });

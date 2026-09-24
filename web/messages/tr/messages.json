@@ -56,7 +56,33 @@
       "partial": "Kısmi",
       "failed": "Hatalı"
     },
-    "emptyDescription": "Henüz hiçbir iş çalışmadı."
+    "emptyDescription": "Henüz hiçbir iş çalışmadı.",
+    "types": {
+      "alarmEvaluate": "Alarm değerlendirme",
+      "alarmDispatch": "Alarm dağıtımı",
+      "alarmNotify": "Alarm bildirimi",
+      "billingDispatch": "Toplu fatura hesaplama",
+      "billingGenerate": "Fatura hesaplama",
+      "billingRenderPdf": "Fatura PDF oluşturma",
+      "carbonDailyAccrual": "Günlük karbon tahakkuku",
+      "consumptionRefresh": "Tüketim yenileme",
+      "demoExtend": "Demo verisini uzatma",
+      "epiasSyncPrices": "EPİAŞ fiyat senkronu",
+      "forecastRun": "Tahmin çalıştırma",
+      "integrationBackfill": "Geçmiş veri aktarımı",
+      "integrationFetchReadings": "Sayaç okumalarını çekme",
+      "integrationRefreshAnalyzer": "Analizör yenileme",
+      "integrationSyncAnalyzers": "Analizör senkronu",
+      "integrationSyncDispatch": "Entegrasyon senkronu",
+      "isolarDispatchSync": "iSolarCloud senkronu",
+      "isolarFetchAlarms": "iSolarCloud alarmları",
+      "isolarSyncPlant": "Santral senkronu",
+      "reportDeliver": "Rapor gönderimi",
+      "reportDispatchMonthly": "Aylık rapor dağıtımı",
+      "reportDispatchYearly": "Yıllık rapor dağıtımı",
+      "reportGenerate": "Rapor oluşturma",
+      "systemNoop": "Sistem kontrolü"
+    }
   },
   "emptyDescription": "Otomatik işlemler ve alarmlar burada görünür.",
   "emptyFilteredDescription": "Farklı bir filtre deneyin."

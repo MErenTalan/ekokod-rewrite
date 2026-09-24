@@ -54,7 +54,7 @@ export function GenerateCardView({
   const shown = problem ?? failure ?? null;
 
   return (
-    <Card className="flex flex-col gap-4">
+    <Card className="p-4 flex flex-col gap-4">
       <div>
         <h3 className="type-h3">{t('generate.title')}</h3>
         <p className="text-foreground-muted type-caption">{t('generate.description')}</p>

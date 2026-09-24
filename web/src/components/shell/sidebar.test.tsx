@@ -7,8 +7,13 @@ import { renderWithProviders } from '@/test/render';
 
 import { Sidebar } from './sidebar';
 
-const topLevel = (nav: HTMLElement) =>
-  [...nav.querySelectorAll(':scope > ul > li > :is(a, button, [role="link"])')].map((el) => el.textContent?.trim());
+// Accessible names only: the aria-hidden "Yakında" badge is decoration.
+const spoken = (el: Element) => {
+  const copy = el.cloneNode(true) as Element;
+  copy.querySelectorAll('[aria-hidden]').forEach((n) => n.remove());
+  return copy.textContent?.trim();
+};
+const topLevel = (nav: HTMLElement) => [...nav.querySelectorAll(':scope > ul > li > :is(a, button, [role="link"])')].map(spoken);
 
 describe('Sidebar', () => {
   afterEach(() => setMockPathname('/'));

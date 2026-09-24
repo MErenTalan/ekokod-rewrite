@@ -93,7 +93,7 @@ describe('MessagesPage', () => {
     render('admin');
     await userEvent.click(await screen.findByRole('tab', { name: 'İş Geçmişi' }));
 
-    await userEvent.click(await screen.findByRole('button', { name: /alarm\.evaluate — Şimdi çalıştır/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /Alarm değerlendirme — Şimdi çalıştır/ }));
     await waitFor(() =>
       expect(api.calls.some((c) =>
         c.method === 'POST' && new URL(c.url).pathname === '/api/v1/job-runs/alarm.evaluate/trigger')).toBe(true));

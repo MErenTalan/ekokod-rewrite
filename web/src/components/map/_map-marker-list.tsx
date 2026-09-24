@@ -24,6 +24,8 @@ export function MapMarkerList({
   onMarkerSelect?: (id: string) => void;
 }) {
   const t = useTranslations('map');
+  // Headers over no rows read as a broken table; the page's own empty state speaks instead.
+  if (markers.length === 0) return null;
   return (
     <TableContainer label={label} className="max-h-96">
       <Table>

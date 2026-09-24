@@ -39,6 +39,11 @@ export function JobRunsTableView({
 }: JobRunsTableViewProps) {
   const t = useTranslations('messages');
   const locale = useLocale() as Locale;
+  // Job types are dotted codes (alarm.evaluate); unknown ones fall back to the code itself.
+  const jobLabel = (type: string) => {
+    const key = `jobs.types.${type.replace(/[._](\w)/g, (_, c: string) => c.toUpperCase())}` as Parameters<typeof t>[0];
+    return t.has(key) ? t(key) : type;
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -46,7 +51,7 @@ export function JobRunsTableView({
         <div className="flex flex-wrap gap-2">
           {triggerable.map((jobType) => (
             <Button key={jobType} variant="secondary" size="sm" onClick={() => onTrigger(jobType)}>
-              {t('jobs.triggerLabel', { job: jobType })}
+              {t('jobs.triggerLabel', { job: jobLabel(jobType) })}
             </Button>
           ))}
         </div>
@@ -75,7 +80,10 @@ export function JobRunsTableView({
             <TableBody>
               {runs.map((run) => (
                 <TableRow key={run.id}>
-                  <TableCell className="font-medium">{run.job_type}</TableCell>
+                  <TableCell>
+                    <p className="font-medium">{jobLabel(run.job_type)}</p>
+                    <p className="text-foreground-muted type-caption">{run.job_type}</p>
+                  </TableCell>
                   <TableCell>{formatDateTime(run.started_at, locale)}</TableCell>
                   <TableCell>{run.finished_at ? formatDateTime(run.finished_at, locale) : '—'}</TableCell>
                   <TableCell>

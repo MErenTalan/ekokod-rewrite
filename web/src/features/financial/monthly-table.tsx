@@ -25,7 +25,7 @@ export function MonthlyTable({ monthly }: { monthly: FinancialMonthly }) {
     v ? (
       formatNumber(v, { maxFractionDigits: 2 })
     ) : (
-      <span className="text-foreground-muted">{t('noData')}</span>
+      <span className="text-foreground-muted type-small">{t('noData')}</span>
     );
   const cells = (m: FinancialMonth) => (
     <>

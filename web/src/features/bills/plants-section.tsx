@@ -27,7 +27,7 @@ export function PlantsSectionView({ plants, onDownloadPdf }: PlantsSectionViewPr
   const money = (v: string) => formatNumber(v, { minFractionDigits: 2, maxFractionDigits: 2 });
 
   return (
-    <Card className="flex flex-col gap-4">
+    <Card className="p-4 flex flex-col gap-4">
       <div>
         <h3 className="type-h3">{t('plants.title')}</h3>
         <p className="text-foreground-muted type-caption">{t('plants.description')}</p>

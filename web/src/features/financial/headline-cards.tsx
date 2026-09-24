@@ -32,13 +32,13 @@ export function HeadlineCards({ summary }: { summary: FinancialSummary }) {
         <Tile label={`${t('headline.consumption')} (kWh)`}>{orNone(kwh(f.consumption_kwh))}</Tile>
         <Tile label={`${t('headline.production')} (kWh)`}>{orNone(kwh(f.production_kwh))}</Tile>
         <Tile label={t('headline.cost')}>
-          <MoneyLines list={f.cost} />
+          <MoneyLines list={f.cost} emptyClassName="type-body-lg" />
         </Tile>
         <Tile label={t('headline.revenue')}>
-          <MoneyLines list={f.revenue} />
+          <MoneyLines list={f.revenue} emptyClassName="type-body-lg" />
         </Tile>
         <Tile label={t('headline.net')}>
-          <MoneyLines list={f.net} />
+          <MoneyLines list={f.net} emptyClassName="type-body-lg" />
         </Tile>
       </div>
       <p className="text-foreground-muted type-small">

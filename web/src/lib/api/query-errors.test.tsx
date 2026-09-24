@@ -6,8 +6,8 @@ import { renderWithProviders } from '@/test/render';
 
 import { $api } from './query';
 
-function Screen() {
-  const q = $api.useQuery('get', '/api/v1/buildings', { params: { query: {} } });
+function Screen({ quietErrors }: { quietErrors?: string[] }) {
+  const q = $api.useQuery('get', '/api/v1/buildings', { params: { query: {} } }, quietErrors ? { retry: false, meta: { quietErrors } } : {});
   return <p>{q.isError ? 'hata' : q.data ? 'yüklendi' : 'boş'}</p>;
 }
 
@@ -40,6 +40,19 @@ describe('QueryErrorToaster', () => {
     await waitFor(() => expect(r.getByText('hata')).toBeInTheDocument());
     expect(r.queryByText('Yetkiniz yok')).toBeNull();
     expect(r.queryByText('Veriler yüklenemedi')).toBeNull();
+  });
+
+  it('stays quiet about a code the screen shows as "nothing yet" (meta.quietErrors), and only that code', async () => {
+    api = mockApi({
+      'GET /api/v1/buildings': Response.json({ error: { code: 'not_found', message: 'Kayıt bulunamadı.' } }, { status: 404 }),
+    });
+    const quiet = renderWithProviders(<Screen quietErrors={['not_found']} />);
+    await waitFor(() => expect(quiet.getByText('hata')).toBeInTheDocument());
+    expect(quiet.queryByText('Kayıt bulunamadı.')).toBeNull();
+    quiet.unmount();
+
+    const loud = renderWithProviders(<Screen quietErrors={['building_sector_missing']} />);
+    await waitFor(() => expect(loud.getByText('Kayıt bulunamadı.')).toBeInTheDocument());
   });
 
   it('stays quiet when the read succeeds', async () => {

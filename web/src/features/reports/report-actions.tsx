@@ -38,7 +38,7 @@ const LABEL = { queued: 'queued', running: 'running', succeeded: 'ready', failed
 export function ReportActionsView({ canGenerate, canEmail, rows, generating, onGenerate, onDownload, onEmail }: ReportActionsViewProps) {
   const t = useTranslations('reports.actions');
   return (
-    <Card className="flex flex-col gap-4">
+    <Card className="p-4 flex flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="type-h3">{t('title')}</h2>
