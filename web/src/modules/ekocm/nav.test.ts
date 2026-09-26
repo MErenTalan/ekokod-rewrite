@@ -4,7 +4,8 @@ import { leavesOf, navFor } from '@/components/shell/nav';
 import { TABS } from '@/features/carbon/labels';
 import fixture from '@/lib/session/permissions.fixture.json';
 
-import { ekocmNav, SECTION_HREF } from './nav';
+import { ekocmNav } from './nav';
+import { SECTION_HREF } from './sections';
 
 describe('EKOCM nav (R488)', () => {
   it('gives every former tab exactly one page under /ekocm', () => {

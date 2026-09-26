@@ -69,13 +69,10 @@ describe('navFor', () => {
     expect(leafIds(navFor(['nav.core']))).not.toContain('messages');
   });
 
-  // R320: the carbon module lives at /ekorm/carbon-footprint behind carbon.read.
-  it('points the carbon leaf at the module and gates it (R320)', () => {
+  // F17: carbon is its own module (EKOCM); EKORM's nav no longer lists it (overrides R320).
+  it('has no carbon leaf', () => {
     const leaves = navigation.flatMap((e) => (isGroup(e) ? e.children : [e]));
-    const carbon = leaves.find((l) => l.id === 'carbon');
-    expect(carbon?.href).toBe('/ekorm/carbon-footprint');
-    expect(carbon?.permission).toBe('carbon.read');
-    expect(leafIds(navFor(['nav.core']))).not.toContain('carbon');
+    expect(leaves.some((l) => l.permission === 'carbon.read' || l.href.includes('carbon'))).toBe(false);
   });
 
   // R246: all six roles hold both permissions today, so navFor's output is
