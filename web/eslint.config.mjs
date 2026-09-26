@@ -1,5 +1,7 @@
 import { FlatCompat } from '@eslint/eslintrc';
 
+import owners from './src/modules/feature-owners.json' with { type: 'json' };
+
 const compat = new FlatCompat({ baseDirectory: import.meta.dirname });
 
 const config = [
@@ -16,6 +18,13 @@ const ban = (re, message) => [
   { selector: `Literal[value=/${re}/]`, message },
   { selector: `TemplateElement[value.raw=/${re}/]`, message },
 ];
+const LIBRARY_PATHS = [
+  { name: 'recharts', message: 'Use src/components/charts (07 §5, plan D10).' },
+  { name: 'maplibre-gl', message: 'Use src/components/map (plan D23).' }];
+// F17 R490: a module never imports another module's features; shared code imports neither.
+const featureDirs = (ids) => ids.flatMap((f) => [`src/features/${f}/**`]);
+const noFeatures = (ids, message) => ['error', { paths: LIBRARY_PATHS, patterns: [
+  { group: ids.flatMap((f) => [`@/features/${f}`, `@/features/${f}/**`]), message }] }];
 config.push(
   { files: ['src/**/*.{ts,tsx}'], ignores: ['src/styles/**'], rules: {
     'no-restricted-syntax': ['error',
@@ -23,10 +32,15 @@ config.push(
       ...ban(PALETTE, 'Tailwind default palette: use a token utility (plan D5).'),
       ...ban(ENERGY_TEXT, 'Energy colours are graphics only, never text colour (plan D3, M-1).'),
       ...ban(FORBIDDEN, 'outline-none / dark: are forbidden: focus rings are global, dark mode is token-driven (plan D4).')],
-    'no-restricted-imports': ['error', { paths: [
-      { name: 'recharts', message: 'Use src/components/charts (07 §5, plan D10).' },
-      { name: 'maplibre-gl', message: 'Use src/components/map (plan D23).' }] }],
+    'no-restricted-imports': ['error', { paths: LIBRARY_PATHS }],
   } },
+  { files: ['src/app/ekocm/**', 'src/modules/ekocm/**', ...featureDirs(owners.ekocm)],
+    rules: { 'no-restricted-imports': noFeatures(owners.ekorm, 'EKOCM code must not import EKORM features (F17 R490).') } },
+  { files: ['src/app/ekorm/**', 'src/modules/ekorm/**', ...featureDirs(owners.ekorm)],
+    rules: { 'no-restricted-imports': noFeatures(owners.ekocm, 'EKORM code must not import EKOCM features (F17 R490).') } },
+  { files: ['src/components/**', 'src/lib/**', 'src/modules/*.{ts,tsx}', ...featureDirs(owners.shared)],
+    ignores: ['**/*.stories.tsx', '**/*.test.{ts,tsx}'],
+    rules: { 'no-restricted-imports': noFeatures([...owners.ekorm, ...owners.ekocm], 'Shared code must not import a module’s features (F17 R490).') } },
   { files: ['src/components/charts/**'], rules: { 'no-restricted-imports': 'off' } },
   { files: ['src/components/map/**'], rules: { 'no-restricted-imports': 'off' } },
 );
