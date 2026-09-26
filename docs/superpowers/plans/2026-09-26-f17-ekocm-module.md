@@ -40,7 +40,7 @@ when messages/tokens change). `next build` with `NODE_OPTIONS=--max-old-space-si
 
 1. **Nav/registry refactor (no behaviour change)** — R485–R487 for EKORM only; tests: existing nav-config/sidebar/page-header/top-nav tests pass against moved modules; `findTrail`/`navFor` take entries.
 2. **EKOCM skeleton** — `ekocm.json` (tr/en), `modules/ekocm/nav.ts`, `app/ekocm/layout.tsx`, brand token + contrast pair, `AppShell module` prop, `data-module`. Tests: EKOCM layout renders EKOCM nav only (no `Tüketim`), brand label; layout redirects without session; nav permission filter.
-3. **Pages split** — `features/carbon/carbon-section.tsx` (replaces `carbon-page.tsx`): permission gate, building requirement, scope picker, `go(tab)` → `router.push(href)`; one `page.tsx` per route; remove `/ekorm/carbon-footprint` page and the EKORM `carbon` leaf. Tests: section map, go() targets, no-access state.
+3. **Pages split** — `features/carbon/section-page.tsx` (replaces `carbon-page.tsx`): permission gate, building requirement, scope picker, `go(tab)` → `router.push(href)`; one `page.tsx` per route; remove `/ekorm/carbon-footprint` page and the EKORM `carbon` leaf. Tests: section map, go() targets, no-access state.
 4. **Import boundary** — ESLint overrides (R490) + a vitest that walks `app/ekocm` and `features/carbon` imports (mutation-proved).
 5. **Middleware + safeNext** — R492–R494 with `middleware.test.ts` cases (each redirect, query kept, unknown tab, `/contact` untouched, unauth `/ekocm` → login with next, `safeNext` open-redirect cases).
 6. **Chooser, switcher, login target** — R491, R495, R496; `modules/access.ts` `modulesFor(me)`; tests for chooser (two cards / single-module redirect), switcher link, login default.
@@ -52,3 +52,12 @@ when messages/tokens change). `next build` with `NODE_OPTIONS=--max-old-space-si
 - One login → `/modules` → EKORM → switcher → EKOCM with no second login (e2e).
 - EKOCM pages load no EKORM feature code (lint rule + import-walk test + build manifest check that `/ekocm` chunks hold no `features/consumption|bills|alarms…`).
 - `/api/v1/carbon/*` role checks: existing Go handler tests (`carbon.read` all roles, `carbon.edit` A/CA) run and pass unchanged.
+
+## Outcome (2026-09-26)
+
+All eight tasks are done on `phase/f17-ekocm-module`. Gates:
+- web: typecheck, lint, vitest 1218+, i18n parity, contrast, `next build`, `check:module-chunks`;
+- Go: the touched service packages, unit + integration, lint 0;
+- e2e: all 182 tests, in four foreground chunks.
+
+Two e2e drifts from `c836484` (F16 UI polish) were fixed along the way: the "Yakında" badge in the sidebar labels, and the readable job name on the trigger button.
