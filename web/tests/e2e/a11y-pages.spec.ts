@@ -17,7 +17,6 @@ const APP = [
   '/ekorm/messages',
   '/ekorm/reports',
   '/ekorm/calendar',
-  '/ekorm/carbon-footprint',
   '/ekorm/iso-50001',
   '/ekorm/financial-analysis',
   '/ekorm/renewable-energy',
@@ -26,6 +25,17 @@ const APP = [
   '/ekorm/predict',
   '/ekorm/ai',
   '/ekorm/settings',
+  // F17: the chooser and every EKOCM page.
+  '/modules',
+  '/ekocm',
+  '/ekocm/activity-selection',
+  '/ekocm/data-entry',
+  '/ekocm/activity-status',
+  '/ekocm/reports',
+  '/ekocm/emission-factors',
+  '/ekocm/company',
+  '/ekocm/ghg-protocol',
+  '/ekocm/documents',
 ];
 const AUTH = ['/auth/login', '/auth/forgot-password', '/auth/register', '/auth/reset-password?token=x', '/auth/error', '/auth/maintenance'];
 

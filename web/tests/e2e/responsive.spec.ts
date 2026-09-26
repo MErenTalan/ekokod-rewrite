@@ -20,7 +20,9 @@ const SCREENS = [
   ['solar-plants', '/ekorm/solar-plants'],
   ['renewable-energy', '/ekorm/renewable-energy'],
   ['financial-analysis', '/ekorm/financial-analysis'],
-  ['carbon-footprint', '/ekorm/carbon-footprint'],
+  ['ekocm-overview', '/ekocm'],
+  ['ekocm-status', '/ekocm/activity-status'],
+  ['modules', '/modules'],
   ['iso-50001', '/ekorm/iso-50001'],
 ] as const;
 
