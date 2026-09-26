@@ -15,3 +15,8 @@ export const SECTION_HREF: Record<CarbonTab, string> = {
   standards: '/ekocm/standards',
   documents: '/ekocm/documents',
 };
+
+/** The page for a legacy `?tab=` value; anything unknown is the overview (R320, R493). */
+export function sectionHref(tab: string | null): string {
+  return tab && Object.hasOwn(SECTION_HREF, tab) ? SECTION_HREF[tab as CarbonTab] : SECTION_HREF.overview;
+}

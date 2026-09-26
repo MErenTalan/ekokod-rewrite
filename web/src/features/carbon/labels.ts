@@ -20,11 +20,6 @@ export type CarbonTab = (typeof TABS)[number];
 /** R321: these sections act on one building. */
 export const NEEDS_BUILDING: ReadonlySet<CarbonTab> = new Set(['overview', 'selection', 'entry', 'status', 'reporting']);
 
-/** A legacy `?tab=` value, or the overview for anything else (R320, R493). */
-export function resolveTab(value: string | null): CarbonTab {
-  return (TABS as readonly string[]).includes(value ?? '') ? (value as CarbonTab) : 'overview';
-}
-
 /** Activity status as colour + icon + text (07 §2.4). */
 export const STATUS_TONE = { pending: 'neutral', approved: 'success', rejected: 'danger' } as const;
 
