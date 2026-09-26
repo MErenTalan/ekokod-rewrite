@@ -8,12 +8,13 @@ import { MODULE_IDS, type ModuleId } from './ids';
 
 export { MODULE_IDS, type ModuleId };
 
-export type ModuleDef = { id: ModuleId; prefix: `/${ModuleId}`; home: string; nav: NavEntry[]; icon: LucideIcon };
+/** `iconClass` colours the module's mark outside its own shell (the chooser), where `stroke-brand` is not rebound. */
+export type ModuleDef = { id: ModuleId; prefix: `/${ModuleId}`; home: string; nav: NavEntry[]; icon: LucideIcon; iconClass: string };
 
 /** R485: the frontend modules; backend, auth and session are shared by all of them. */
 export const MODULES: Record<ModuleId, ModuleDef> = {
-  ekorm: { id: 'ekorm', prefix: '/ekorm', home: '/ekorm', nav: ekormNav, icon: Leaf },
-  ekocm: { id: 'ekocm', prefix: '/ekocm', home: '/ekocm', nav: ekocmNav, icon: Factory },
+  ekorm: { id: 'ekorm', prefix: '/ekorm', home: '/ekorm', nav: ekormNav, icon: Leaf, iconClass: 'stroke-brand' },
+  ekocm: { id: 'ekocm', prefix: '/ekocm', home: '/ekocm', nav: ekocmNav, icon: Factory, iconClass: 'stroke-module-ekocm' },
 };
 
 /** The module a path belongs to, or null outside every module. */

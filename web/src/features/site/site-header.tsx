@@ -11,6 +11,7 @@ import { ThemeToggle } from '@/components/shell/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { Drawer } from '@/components/ui/drawer';
 import { IconButton } from '@/components/ui/icon-button';
+import { CHOOSER_PATH } from '@/lib/api/errors';
 import { cn } from '@/lib/cn';
 
 import { isCurrent, siteNav } from './site-nav';
@@ -23,7 +24,7 @@ export function SiteHeader({ pricing, signedIn }: SiteHeaderProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const links = siteNav(pricing);
-  const account = signedIn ? { href: '/ekorm', label: t('nav.platform') } : { href: '/auth/login', label: t('nav.login') };
+  const account = signedIn ? { href: CHOOSER_PATH, label: t('nav.platform') } : { href: '/auth/login', label: t('nav.login') };
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/80">

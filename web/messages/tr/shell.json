@@ -102,6 +102,12 @@
       "name": "EKO-CM",
       "title": "Karbon Yönetimi",
       "description": "GHG Protokolü ve ISO 14064 kapsamında kurumsal karbon ayak izinizi hesaplayın ve raporlayın."
+    },
+    "all": "Tüm modüller",
+    "chooser": {
+      "title": "Modül seçin",
+      "description": "Hoş geldiniz, {name}. Çalışmak istediğiniz modülü seçin; aynı oturumla modüller arasında istediğiniz zaman geçebilirsiniz.",
+      "open": "{name} modülünü aç"
     }
   }
 }

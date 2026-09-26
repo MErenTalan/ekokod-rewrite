@@ -9,7 +9,7 @@ import { renderWithProviders } from '@/test/render';
 
 import type { CarbonTab } from './labels';
 
-const { CarbonSection } = await import('./carbon-section');
+const { CarbonSection } = await import('./section-page');
 
 const me = (role: keyof typeof fixture): MeResponse => ({
   id: `u-${role}`,

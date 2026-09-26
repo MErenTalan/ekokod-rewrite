@@ -23,11 +23,13 @@ export type TopBarProps = {
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
   onOpenCustomizer: () => void;
+  /** R496: the module switcher, when the user has more than one module. */
+  moduleSwitcher?: ReactNode;
   /** The admin's company scope control, only for `admin.companies`. */
   companySwitcher?: ReactNode;
 };
 
-export function TopBar({ module = 'ekorm', user, notificationCount, sidebarOpen, onToggleSidebar, onOpenCustomizer, companySwitcher }: TopBarProps) {
+export function TopBar({ module = 'ekorm', moduleSwitcher, user, notificationCount, sidebarOpen, onToggleSidebar, onOpenCustomizer, companySwitcher }: TopBarProps) {
   const t = useTranslations('shell');
   const common = useTranslations('common');
   const app = useTranslations('app');
@@ -53,6 +55,7 @@ export function TopBar({ module = 'ekorm', user, notificationCount, sidebarOpen,
         <span className="hidden font-heading text-lg font-semibold text-foreground sm:inline">{app('name')}</span>
         <span className="hidden rounded-sm border border-brand px-1.5 font-heading text-foreground type-caption sm:inline">{moduleName}</span>
       </Link>
+      {moduleSwitcher}
       {companySwitcher ? <div className="ms-2 hidden sm:block">{companySwitcher}</div> : null}
       <div className="ms-auto hidden w-72 md:block">
         <SearchInput label={t('search')} labelVisibility="hidden" placeholder={t('searchPlaceholder')} value={query} onValueChange={setQuery} />

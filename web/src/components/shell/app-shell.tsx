@@ -7,10 +7,12 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 import { useOptionalSession } from '@/lib/session/session-provider';
 import { useUiPreferences } from '@/lib/ui-preferences-provider';
-import { MODULES, shellModule, type ModuleId } from '@/modules/registry';
+import { modulesFor } from '@/modules/access';
+import { MODULE_IDS, MODULES, shellModule, type ModuleId } from '@/modules/registry';
 
 import { Drawer } from '../ui/drawer';
 import { CompanySwitcher } from './company-switcher';
+import { ModuleSwitcher } from './module-switcher';
 import { navFor } from './nav';
 import { Sidebar } from './sidebar';
 import { ThemeCustomizer } from './theme-customizer';
@@ -33,6 +35,7 @@ export function AppShell({ children, module, user, notificationCount }: AppShell
   // R489: the layout names its module; stories fall back to the path.
   const current = module ? MODULES[module] : shellModule(pathname);
   const entries = useMemo(() => (session ? navFor(current.nav, session.me.permissions) : current.nav), [session, current]);
+  const modules = session ? modulesFor(session.me) : [...MODULE_IDS];
   const shellUser: ShellUser = session
     ? { name: session.me.name, email: session.me.email, roleLabel: t(`roles.${roleKey(session.me.role)}`) }
     : (user ?? { name: '', email: '', roleLabel: '' });
@@ -60,6 +63,7 @@ export function AppShell({ children, module, user, notificationCount }: AppShell
       </a>
       <TopBar
         module={current.id}
+        moduleSwitcher={modules.length > 1 ? <ModuleSwitcher current={current.id} modules={modules} /> : null}
         user={shellUser}
         companySwitcher={session?.can('admin.companies') ? <CompanySwitcher /> : null}
         notificationCount={notificationCount}

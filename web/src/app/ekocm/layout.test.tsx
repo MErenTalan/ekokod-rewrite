@@ -58,6 +58,7 @@ describe('/ekocm layout', () => {
     expect(r.queryByRole('link', { name: 'Yönetim Arayüzü' })).toBeNull();
     expect(r.queryByRole('button', { name: 'Veri Analizi' })).toBeNull();
     expect(r.getByText('İçerik')).toBeInTheDocument();
+    expect(r.getByRole('button', { name: 'Modül değiştir' })).toBeInTheDocument();
   });
 
   it('shows no carbon navigation to a principal without carbon.read', async () => {

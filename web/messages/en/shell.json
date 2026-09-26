@@ -102,6 +102,12 @@
       "name": "EKO-CM",
       "title": "Carbon Management",
       "description": "Calculate and report your corporate carbon footprint under the GHG Protocol and ISO 14064."
+    },
+    "all": "All modules",
+    "chooser": {
+      "title": "Choose a module",
+      "description": "Welcome, {name}. Pick the module you want to work in; you can switch between modules at any time without signing in again.",
+      "open": "Open {name}"
     }
   }
 }

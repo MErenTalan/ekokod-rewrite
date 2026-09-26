@@ -33,7 +33,7 @@ describe('SiteHeader', () => {
     expect(getByRole('link', { name: 'Giriş Yap' })).toHaveAttribute('href', '/auth/login');
     unmount();
     renderWithProviders(<SiteHeader pricing={false} signedIn />);
-    expect(getByRole('link', { name: 'Platforma Git' })).toHaveAttribute('href', '/ekorm');
+    expect(getByRole('link', { name: 'Platforma Git' })).toHaveAttribute('href', '/modules');
     expect(queryByRole('link', { name: 'Giriş Yap' })).toBeNull();
   });
 

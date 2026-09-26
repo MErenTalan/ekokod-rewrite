@@ -5,7 +5,7 @@ import { AuthMessage } from '@/features/auth/auth-message';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations('auth.error');
-  return { title: `${t('title')} · EKORM` };
+  return { title: `${t('title')} · ekokod` };
 }
 
 export default async function AuthErrorPage() {

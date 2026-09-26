@@ -1,4 +1,4 @@
-import { CarbonSection } from '@/features/carbon/carbon-section';
+import { CarbonSection } from '@/features/carbon/section-page';
 import { sectionMetadata } from '@/modules/ekocm/metadata';
 
 export const generateMetadata = () => sectionMetadata('entry');
