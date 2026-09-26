@@ -30,7 +30,7 @@
   },
   "notYetAvailable": "This section is not available yet",
   "skipToContent": "Skip to content",
-  "home": "ekokod home",
+  "home": "{module} home",
   "search": "Search",
   "searchPlaceholder": "Search buildings, analyzers or reports",
   "notificationsCount": "Notifications ({count} new)",
@@ -89,5 +89,20 @@
     "search": "Search companies",
     "empty": "No company found"
   },
-  "soon": "Soon"
+  "soon": "Soon",
+  "modules": {
+    "label": "Modules",
+    "switcher": "Switch module",
+    "current": "Current module",
+    "ekorm": {
+      "name": "EKO-RM",
+      "title": "Resource Management",
+      "description": "Monitor and analyse energy and resource use; manage bills, alarms and reports."
+    },
+    "ekocm": {
+      "name": "EKO-CM",
+      "title": "Carbon Management",
+      "description": "Calculate and report your corporate carbon footprint under the GHG Protocol and ISO 14064."
+    }
+  }
 }

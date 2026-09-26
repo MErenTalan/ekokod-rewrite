@@ -6,22 +6,25 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 
 import { cn } from '@/lib/cn';
+import { shellModule, trailFor } from '@/modules/registry';
 
 import { Button } from '../ui/button';
 import { DropdownMenu } from '../ui/dropdown-menu';
 import { Tooltip } from '../ui/tooltip';
-import { findTrail, isGroup, navigation, type NavEntry } from './nav-config';
+import { isGroup, type NavEntry } from './nav';
 
 /** Horizontal layout at ≥lg: groups become menus; below lg the shell uses the same drawer as vertical (plan D24). */
-export function TopNav({ entries = navigation }: { entries?: NavEntry[] }) {
+export function TopNav({ entries: given }: { entries?: NavEntry[] }) {
   const t = useTranslations('shell');
+  const tr = useTranslations();
   const pathname = usePathname();
   const router = useRouter();
-  const trail = findTrail(pathname);
+  const trail = trailFor(pathname);
+  const entries = given ?? shellModule(pathname).nav;
   return (
     <nav aria-label={t('nav.label')} data-top-nav className="flex flex-wrap items-center gap-1 px-4 py-1">
       {entries.map((entry) => {
-        const label = t(`nav.${entry.labelKey}`);
+        const label = tr(entry.label);
         if (isGroup(entry)) {
           const active = trail?.group?.id === entry.id;
           return (
@@ -35,7 +38,7 @@ export function TopNav({ entries = navigation }: { entries?: NavEntry[] }) {
               }
               items={entry.children.map((c) => ({
                 type: 'item' as const,
-                label: t(`nav.${c.labelKey}`),
+                label: tr(c.label),
                 icon: c.icon,
                 disabled: c.disabled,
                 description: c.disabled ? t('notYetAvailable') : undefined,

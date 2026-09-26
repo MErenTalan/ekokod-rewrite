@@ -4,18 +4,19 @@ import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { ReactNode } from 'react';
 
+import { trailFor } from '@/modules/registry';
+
 import { Breadcrumb, type BreadcrumbItem } from '../ui/breadcrumb';
-import { findTrail } from './nav-config';
 
 export type PageHeaderProps = { title: string; description?: string; actions?: ReactNode; breadcrumb?: BreadcrumbItem[] };
 
 /** Page h1 with the breadcrumb derived from the route, overridable per page (plan I-15). */
 export function PageHeader({ title, description, actions, breadcrumb }: PageHeaderProps) {
-  const t = useTranslations('shell');
+  const t = useTranslations();
   const pathname = usePathname();
-  const trail = findTrail(pathname);
+  const trail = trailFor(pathname);
   const items: BreadcrumbItem[] =
-    breadcrumb ?? (trail ? [...(trail.group ? [{ label: t(`nav.${trail.group.labelKey}`) }] : []), { label: t(`nav.${trail.leaf.labelKey}`) }] : []);
+    breadcrumb ?? (trail ? [...(trail.group ? [{ label: t(trail.group.label) }] : []), { label: t(trail.leaf.label) }] : []);
   return (
     <header className="flex flex-col gap-2">
       {items.length > 0 ? <Breadcrumb items={items} /> : null}

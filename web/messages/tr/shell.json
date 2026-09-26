@@ -30,7 +30,7 @@
   },
   "notYetAvailable": "Bu bölüm henüz kullanıma açılmadı",
   "skipToContent": "İçeriğe geç",
-  "home": "ekokod ana sayfa",
+  "home": "{module} ana sayfası",
   "search": "Ara",
   "searchPlaceholder": "Bina, analizör veya rapor ara",
   "notificationsCount": "Bildirimler ({count} yeni)",
@@ -89,5 +89,20 @@
     "search": "Şirket ara",
     "empty": "Şirket bulunamadı"
   },
-  "soon": "Yakında"
+  "soon": "Yakında",
+  "modules": {
+    "label": "Modüller",
+    "switcher": "Modül değiştir",
+    "current": "Şu anki modül",
+    "ekorm": {
+      "name": "EKO-RM",
+      "title": "Kaynak Yönetimi",
+      "description": "Enerji ve kaynak tüketimini izleyin, analiz edin; faturaları, alarmları ve raporları yönetin."
+    },
+    "ekocm": {
+      "name": "EKO-CM",
+      "title": "Karbon Yönetimi",
+      "description": "GHG Protokolü ve ISO 14064 kapsamında kurumsal karbon ayak izinizi hesaplayın ve raporlayın."
+    }
+  }
 }

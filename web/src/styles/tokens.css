@@ -12,6 +12,7 @@
   --color-primary-subtle: light-dark(#D1FAE5, #053F30); /* dark darkened: muted text on a selected row needed 4.5:1 */
   --color-on-primary: light-dark(#FFFFFF, #04211A);
   --color-brand: light-dark(#059669, #34D399);
+  --color-module-ekocm: light-dark(#0284C7, #38BDF8); /* R489: EKOCM's brand accent */
   --color-background: light-dark(#F6FAF8, #0B1512);
   --color-surface: light-dark(#FFFFFF, #12201C);
   --color-surface-raised: light-dark(#FFFFFF, #172823);

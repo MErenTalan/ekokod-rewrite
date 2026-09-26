@@ -55,11 +55,12 @@ describe('LoginForm', () => {
     expect(adopt).toHaveBeenCalledWith(expect.objectContaining({ ui_preferences: me.ui_preferences, locale: 'en' }));
   });
 
+  // U3: without a valid next the sign-in lands on the module chooser.
   it.each(['//evil.com', 'https://evil.com/ekorm', '/auth/login', undefined])('ignores an unsafe next (%s)', async (next) => {
     fetchMock.mockResolvedValue(reply(200, me));
     const ui = renderWithProviders(<LoginForm next={next} />);
     await fill(ui, false);
-    await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/ekorm'));
+    await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/modules'));
   });
 
   it('announces wrong credentials and moves focus to the message', async () => {

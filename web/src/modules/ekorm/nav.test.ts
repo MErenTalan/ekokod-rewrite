@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import fixture from '@/lib/session/permissions.fixture.json';
 
-import { findTrail, isActive, isGroup, navFor, navigation, type NavEntry } from './nav-config';
+import { findTrail as findIn, isActive, isGroup, navFor as navForIn, type NavEntry } from '@/components/shell/nav';
+
+import { ekormNav as navigation } from './nav';
+
+const findTrail = (path: string) => findIn(navigation, path);
+const navFor = (permissions: readonly string[]) => navForIn(navigation, permissions);
 
 const leafIds = (entries: NavEntry[]) => entries.flatMap((e) => (isGroup(e) ? e.children : [e])).map((l) => l.id);
 const ALL = leafIds(navigation);

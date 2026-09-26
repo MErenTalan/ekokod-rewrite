@@ -26,6 +26,7 @@ import trWeather from './tr/weather.json';
 import trRenewable from './tr/renewable.json';
 import trFinancial from './tr/financial.json';
 import trCarbon from './tr/carbon.json';
+import trEkocm from './tr/ekocm.json';
 import trIso from './tr/iso.json';
 import trSite from './tr/site.json';
 import trForecast from './tr/forecast.json';
@@ -56,6 +57,7 @@ import enWeather from './en/weather.json';
 import enRenewable from './en/renewable.json';
 import enFinancial from './en/financial.json';
 import enCarbon from './en/carbon.json';
+import enEkocm from './en/ekocm.json';
 import enIso from './en/iso.json';
 import enSite from './en/site.json';
 import enForecast from './en/forecast.json';
@@ -88,6 +90,7 @@ const tr = {
   renewable: trRenewable,
   financial: trFinancial,
   carbon: trCarbon,
+  ekocm: trEkocm,
   iso: trIso,
   site: trSite,
   forecast: trForecast,
@@ -120,6 +123,7 @@ const en = {
   renewable: enRenewable,
   financial: enFinancial,
   carbon: enCarbon,
+  ekocm: enEkocm,
   iso: enIso,
   site: enSite,
   forecast: enForecast,
