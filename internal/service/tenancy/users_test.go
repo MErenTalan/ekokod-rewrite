@@ -136,7 +136,9 @@ func (f *fakeUsers) List(_ context.Context, _ store.Scope, filter store.UserFilt
 // scope must see only itself and the users of its own buildings.
 func TestListUsersHidesAdminsAndUnrelatedUsers(t *testing.T) {
 	company := uuid.New()
-	mk := func(role model.UserRole) model.User { return model.User{ID: uuid.New(), CompanyID: company, Role: role} }
+	mk := func(role model.UserRole) model.User {
+		return model.User{ID: uuid.New(), CompanyID: company, Role: role}
+	}
 	admin, ca, ba1, ba2 := mk(model.UserRoleAdmin), mk(model.UserRoleCompanyAdmin), mk(model.UserRoleBuildingAdmin), mk(model.UserRoleBuildingAdmin)
 	b1, b2 := uuid.New(), uuid.New()
 	u := &fakeUsers{rows: map[uuid.UUID]model.User{admin.ID: admin, ca.ID: ca, ba1.ID: ba1, ba2.ID: ba2}}
