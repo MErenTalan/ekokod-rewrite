@@ -21,6 +21,13 @@ import { CredentialFormView, emptyDraft, type CredentialDraft } from './credenti
 
 export type BackfillRange = { from: string; to: string };
 
+/** `day` (YYYY-MM-DD) moved by `days`, calendar-wise. */
+export function shiftDay(day: string, days: number): string {
+  const d = new Date(`${day}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 export type CredentialsSectionViewProps = {
   credentials: IntegrationCredential[];
   definitions: IntegrationDefinition[];
@@ -66,7 +73,10 @@ export function CredentialsSectionView({
   const locale = useLocale() as Locale;
   const [draft, setDraft] = useState<CredentialDraft | null>(null);
   const [pendingDelete, setPendingDelete] = useState<IntegrationCredential | null>(null);
-  const [backfill, setBackfill] = useState<{ credential: IntegrationCredential; range: BackfillRange } | null>(null);
+  const [backfill, setBackfill] = useState<{
+    credential: IntegrationCredential;
+    range: BackfillRange;
+  } | null>(null);
 
   const columns = useMemo<ColumnDef<IntegrationCredential, unknown>[]>(
     () => [
@@ -82,14 +92,20 @@ export function CredentialsSectionView({
         header: t('status'),
         accessorFn: (row) => (row.has_secret ? 1 : 0),
         cell: ({ row }) =>
-          row.original.has_secret ? <StatusBadge status="success" label={t('secretStored')} /> : <StatusBadge status="neutral" label="—" />,
+          row.original.has_secret ? (
+            <StatusBadge status="success" label={t('secretStored')} />
+          ) : (
+            <StatusBadge status="neutral" label="—" />
+          ),
       },
       {
         id: 'verified',
         header: t('lastVerified'),
         accessorFn: (row) => row.last_verified_at ?? '',
         cell: ({ row }) =>
-          row.original.last_verified_at ? formatDate(row.original.last_verified_at.slice(0, 10), locale) : t('never'),
+          row.original.last_verified_at
+            ? formatDate(row.original.last_verified_at.slice(0, 10), locale)
+            : t('never'),
       },
     ],
     [t, locale],
@@ -111,10 +127,17 @@ export function CredentialsSectionView({
           {
             type: 'item' as const,
             label: t('backfill'),
-            onSelect: () => setBackfill({ credential: row, range: { from: today, to: today } }),
+            onSelect: () =>
+              setBackfill({ credential: row, range: { from: shiftDay(today, -30), to: today } }),
           },
           ...(row.provider === 'isolar'
-            ? [{ type: 'item' as const, label: t('connectIsolar'), onSelect: () => onConnectIsolar(row) }]
+            ? [
+                {
+                  type: 'item' as const,
+                  label: t('connectIsolar'),
+                  onSelect: () => onConnectIsolar(row),
+                },
+              ]
             : []),
           { type: 'item' as const, label: t('delete'), onSelect: () => setPendingDelete(row) },
         ]}
@@ -176,13 +199,17 @@ export function CredentialsSectionView({
               label={t('backfillFrom')}
               value={backfill.range.from}
               max={today}
-              onValueChange={(from) => setBackfill({ ...backfill, range: { ...backfill.range, from: from ?? today } })}
+              onValueChange={(from) =>
+                setBackfill({ ...backfill, range: { ...backfill.range, from: from ?? today } })
+              }
             />
             <DatePicker
               label={t('backfillTo')}
               value={backfill.range.to}
               max={today}
-              onValueChange={(to) => setBackfill({ ...backfill, range: { ...backfill.range, to: to ?? today } })}
+              onValueChange={(to) =>
+                setBackfill({ ...backfill, range: { ...backfill.range, to: to ?? today } })
+              }
             />
           </div>
         ) : null}
@@ -204,7 +231,14 @@ export function CredentialsSectionView({
           </Button>
         }
       >
-        {pendingDelete ? <p>{t('deleteConfirm', { provider: pendingDelete.provider, subtype: pendingDelete.subtype })}</p> : null}
+        {pendingDelete ? (
+          <p>
+            {t('deleteConfirm', {
+              provider: pendingDelete.provider,
+              subtype: pendingDelete.subtype,
+            })}
+          </p>
+        ) : null}
       </Dialog>
     </div>
   );

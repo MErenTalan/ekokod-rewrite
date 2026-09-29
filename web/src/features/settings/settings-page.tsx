@@ -121,6 +121,7 @@ export function SettingsPage({ slots }: { slots?: Partial<Record<SettingsTabId, 
     integrations: (
       <IntegrationsTabView
         definitions={definitions.data?.items ?? []}
+        endpointKeys={definitions.data?.endpoint_keys ?? []}
         loading={definitions.isLoading}
         saving={createDefinition.isPending || updateDefinition.isPending}
         fieldErrors={{ ...createDefinition.fieldErrors, ...updateDefinition.fieldErrors }}

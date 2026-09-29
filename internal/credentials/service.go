@@ -59,6 +59,12 @@ var ErrInvalidExtraKey = errors.New("credentials: invalid extra key")
 // provider that has no manual metering points supplies any (R210).
 var ErrInvalidWiringNumber = errors.New("credentials: invalid wiring number")
 
+// ErrInvalidBackfillRange is an empty or over-long backfill range.
+var ErrInvalidBackfillRange = errors.New("credentials: invalid backfill range")
+
+// maxBackfillSpan matches internal/ingest/backfill's own bound.
+const maxBackfillSpan = 5 * 365 * 24 * time.Hour
+
 // ErrInvalidBuilding is returned when Input.BuildingID names a building the
 // scope cannot see, or a provider whose analyzers are not created here (R210).
 var ErrInvalidBuilding = errors.New("credentials: invalid building")
@@ -915,6 +921,13 @@ func (s *Service) Discover(ctx context.Context, sc store.Scope, id uuid.UUID) (s
 func (s *Service) Backfill(ctx context.Context, sc store.Scope, id uuid.UUID, in BackfillInput) (string, error) {
 	if !sc.Valid() {
 		return "", store.ErrInvalidScope
+	}
+	// "Until today" reaches past now; the worker refuses that, so clamp here.
+	if now := s.deps.Clock.Now(); in.To.After(now) {
+		in.To = now
+	}
+	if !in.From.Before(in.To) || in.To.Sub(in.From) > maxBackfillSpan {
+		return "", ErrInvalidBackfillRange
 	}
 	if _, _, err := s.getCredential(ctx, sc, id); err != nil {
 		return "", err

@@ -5128,6 +5128,12 @@
       },
       "IntegrationDefinitions": {
         "properties": {
+          "endpoint_keys": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderEndpointKeys"
+            },
+            "type": "array"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/IntegrationDefinition"
@@ -5136,7 +5142,8 @@
           }
         },
         "required": [
-          "items"
+          "items",
+          "endpoint_keys"
         ],
         "type": "object"
       },
@@ -6711,6 +6718,38 @@
             ]
           }
         },
+        "type": "object"
+      },
+      "ProviderEndpointKeys": {
+        "properties": {
+          "optional": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "provider": {
+            "enum": [
+              "osos",
+              "gridbox",
+              "aril",
+              "pm5340",
+              "isolar"
+            ],
+            "type": "string"
+          },
+          "required": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "provider",
+          "required",
+          "optional"
+        ],
         "type": "object"
       },
       "PublicBill": {

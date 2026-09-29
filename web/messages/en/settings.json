@@ -68,7 +68,11 @@
     "empty": "No definition yet",
     "emptyHint": "Define each provider and subtype with its endpoint templates here.",
     "saved": "The definition was saved",
-    "deleted": "The definition was deleted"
+    "deleted": "The definition was deleted",
+    "health": "Status",
+    "complete": "Complete",
+    "missingKeys": "Missing required endpoints: {keys}",
+    "unknownKey": "This provider does not read this key"
   },
   "confirmDelete": "Confirm deletion",
   "deleteAction": "Delete",

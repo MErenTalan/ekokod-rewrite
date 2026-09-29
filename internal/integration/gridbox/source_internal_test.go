@@ -48,3 +48,9 @@ func TestGridBoxDataClientSerializeKey(t *testing.T) {
 	require.Equal(t, "gridbox:"+companyID.String(), cfg.SerializeKey)
 	require.NotEqual(t, "gridbox:token:"+companyID.String(), cfg.SerializeKey, "data and token serialise keys must stay distinct")
 }
+
+func TestGridBoxCatalogMatchesAdapter(t *testing.T) {
+	cat := integration.EndpointCatalog[integration.ProviderGridBox]
+	require.Equal(t, RequiredEndpointKeys, cat.Required)
+	require.Equal(t, OptionalEndpointKeys, cat.Optional)
+}

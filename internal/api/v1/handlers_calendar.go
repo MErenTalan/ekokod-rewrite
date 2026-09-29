@@ -161,13 +161,25 @@ func definitionDTO(d model.IntegrationDefinition) dto.IntegrationDefinition {
 	return dto.IntegrationDefinition{ID: d.ID, Provider: string(d.Provider), Subtype: d.Subtype, Endpoints: d.Endpoints, UpdatedAt: dto.T(d.UpdatedAt)}
 }
 
+func endpointKeysDTO() []dto.ProviderEndpointKeys {
+	providers := []integration.Provider{integration.ProviderOSOS, integration.ProviderGridBox, integration.ProviderARIL,
+		integration.ProviderPM5340, integration.ProviderISolar}
+	out := make([]dto.ProviderEndpointKeys, 0, len(providers))
+	for _, p := range providers {
+		k := integration.EndpointCatalog[p]
+		out = append(out, dto.ProviderEndpointKeys{Provider: string(p),
+			Required: append([]string{}, k.Required...), Optional: append([]string{}, k.Optional...)})
+	}
+	return out
+}
+
 func (h *Handlers) listDefinitions(w http.ResponseWriter, r *http.Request) {
 	serve(w, r, http.StatusOK, func(struct{}) (any, error) {
 		list, err := h.Definitions.List(r.Context(), mw.ScopeFrom(r))
 		if err != nil {
 			return nil, err
 		}
-		out := dto.IntegrationDefinitions{Items: make([]dto.IntegrationDefinition, len(list))}
+		out := dto.IntegrationDefinitions{Items: make([]dto.IntegrationDefinition, len(list)), EndpointKeys: endpointKeysDTO()}
 		for i, d := range list {
 			out.Items[i] = definitionDTO(d)
 		}
@@ -186,7 +198,7 @@ func (h *Handlers) createDefinition(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) updateDefinition(w http.ResponseWriter, r *http.Request) {
 	serve(w, r, http.StatusOK, func(req dto.IntegrationDefinitionUpdateRequest) (any, error) {
-		d, err := h.Definitions.Update(r.Context(), model.IntegrationDefinition{ID: req.ID, Subtype: req.Subtype, Endpoints: req.Endpoints})
+		d, err := h.Definitions.Update(r.Context(), mw.ScopeFrom(r), model.IntegrationDefinition{ID: req.ID, Subtype: req.Subtype, Endpoints: req.Endpoints})
 		return definitionDTO(d), err
 	})
 }
@@ -211,6 +223,8 @@ func credErr(err error) error {
 		return perr.New("integration_unavailable", 503, "errors.integrations.unavailable")
 	case errors.Is(err, credentials.ErrInvalidSettings), errors.Is(err, credentials.ErrInvalidExtraKey):
 		return perr.Validation.WithParams(map[string]any{"settings": []string{"invalid"}})
+	case errors.Is(err, credentials.ErrInvalidBackfillRange):
+		return perr.Validation.WithParams(map[string]any{"from": []string{"invalid_range"}})
 	case errors.Is(err, credentials.ErrInvalidWiringNumber):
 		return perr.Validation.WithParams(map[string]any{"wiring_numbers": []string{"invalid"}})
 	case errors.Is(err, credentials.ErrInvalidBuilding):

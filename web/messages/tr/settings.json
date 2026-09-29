@@ -68,7 +68,11 @@
     "empty": "Henüz tanım yok",
     "emptyHint": "Her sağlayıcı ve alt tür için uç nokta şablonlarını buradan tanımlayın.",
     "saved": "Tanım kaydedildi",
-    "deleted": "Tanım silindi"
+    "deleted": "Tanım silindi",
+    "health": "Durum",
+    "complete": "Tam",
+    "missingKeys": "Eksik zorunlu uç nokta: {keys}",
+    "unknownKey": "Bu sağlayıcı bu anahtarı kullanmıyor"
   },
   "confirmDelete": "Silme onayı",
   "deleteAction": "Sil",

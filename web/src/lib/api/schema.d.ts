@@ -3730,6 +3730,7 @@ export interface components {
             subtype: string;
         };
         IntegrationDefinitions: {
+            endpoint_keys: components["schemas"]["ProviderEndpointKeys"][];
             items: components["schemas"]["IntegrationDefinition"][];
         };
         Job: {
@@ -4109,6 +4110,12 @@ export interface components {
             name?: null | string;
             phone?: null | string;
             ui_preferences?: null | string;
+        };
+        ProviderEndpointKeys: {
+            optional: string[];
+            /** @enum {string} */
+            provider: "osos" | "gridbox" | "aril" | "pm5340" | "isolar";
+            required: string[];
         };
         PublicBill: {
             /** @enum {string} */

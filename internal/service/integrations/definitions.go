@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
+	"github.com/MErenTalan/ekokod-rewrite/internal/integration"
 	perr "github.com/MErenTalan/ekokod-rewrite/internal/platform/errors"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
 )
@@ -30,8 +31,9 @@ type Definitions struct {
 var endpointKey = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 
 // validEndpoints checks R176 (as amended): a flat object of snake_case keys to
-// non-empty strings; any absolute URL must be https.
-func validEndpoints(raw json.RawMessage) error {
+// non-empty strings; any absolute URL must be https; and every key the
+// provider's adapter requires is present (integration.EndpointCatalog).
+func validEndpoints(provider model.IntegrationProvider, raw json.RawMessage) error {
 	var m map[string]string
 	if err := json.Unmarshal(raw, &m); err != nil || m == nil {
 		return perr.Validation.WithParams(map[string]any{"endpoints": []string{"object_of_strings"}})
@@ -49,6 +51,13 @@ func validEndpoints(raw json.RawMessage) error {
 			return perr.Validation.WithParams(map[string]any{"endpoints." + k: []string{"https_required"}})
 		}
 	}
+	if missing := integration.MissingEndpointKeys(integration.Provider(provider), m); len(missing) > 0 {
+		params := make(map[string]any, len(missing))
+		for _, k := range missing {
+			params["endpoints."+k] = []string{"required"}
+		}
+		return perr.Validation.WithParams(params)
+	}
 	return nil
 }
 
@@ -59,7 +68,7 @@ func (d Definitions) List(ctx context.Context, sc store.Scope) ([]model.Integrat
 
 // Create adds a provider/subtype.
 func (d Definitions) Create(ctx context.Context, def model.IntegrationDefinition) (model.IntegrationDefinition, error) {
-	if err := validEndpoints(def.Endpoints); err != nil {
+	if err := validEndpoints(def.Provider, def.Endpoints); err != nil {
 		return model.IntegrationDefinition{}, err
 	}
 	created, err := d.Catalogue.CreateIntegrationDefinition(ctx, def)
@@ -70,8 +79,21 @@ func (d Definitions) Create(ctx context.Context, def model.IntegrationDefinition
 }
 
 // Update replaces a definition's subtype and endpoints.
-func (d Definitions) Update(ctx context.Context, def model.IntegrationDefinition) (model.IntegrationDefinition, error) {
-	if err := validEndpoints(def.Endpoints); err != nil {
+func (d Definitions) Update(ctx context.Context, sc store.Scope, def model.IntegrationDefinition) (model.IntegrationDefinition, error) {
+	existing, err := d.Integrations.Definitions(ctx, sc)
+	if err != nil {
+		return model.IntegrationDefinition{}, err
+	}
+	provider, found := model.IntegrationProvider(""), false
+	for _, e := range existing {
+		if e.ID == def.ID {
+			provider, found = e.Provider, true
+		}
+	}
+	if !found {
+		return model.IntegrationDefinition{}, store.ErrNotFound
+	}
+	if err := validEndpoints(provider, def.Endpoints); err != nil {
 		return model.IntegrationDefinition{}, err
 	}
 	updated, err := d.Catalogue.UpdateIntegrationDefinition(ctx, def)

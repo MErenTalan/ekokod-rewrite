@@ -73,9 +73,18 @@ type IntegrationDefinition struct {
 	UpdatedAt time.Time       `json:"updated_at" required:"true"`
 }
 
-// IntegrationDefinitions is the catalogue list.
+// IntegrationDefinitions is the catalogue list, with the endpoint keys each
+// provider's adapter reads so the form offers exactly those.
 type IntegrationDefinitions struct {
-	Items []IntegrationDefinition `json:"items" required:"true"`
+	Items        []IntegrationDefinition `json:"items" required:"true"`
+	EndpointKeys []ProviderEndpointKeys  `json:"endpoint_keys" required:"true"`
+}
+
+// ProviderEndpointKeys is one provider's integration.EndpointCatalog entry.
+type ProviderEndpointKeys struct {
+	Provider string   `json:"provider" required:"true" enum:"osos,gridbox,aril,pm5340,isolar"`
+	Required []string `json:"required" required:"true"`
+	Optional []string `json:"optional" required:"true"`
 }
 
 // IntegrationDefinitionCreateRequest is POST /integration-definitions.

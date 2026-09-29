@@ -1083,3 +1083,29 @@ func TestGridBoxTokenExchangeNeverRetries(t *testing.T) {
 	defer mu.Unlock()
 	require.Equal(t, 1, calls, "R32: a non-idempotent token exchange POST must never be retried in-client")
 }
+
+// energy_values is optional, like legacy (gridbox/refresh/route.ts "Optional
+// energyvalues"): without it reset is simply not offered, and every other kind
+// still fetches instead of failing on config:energy_values.
+func TestGridBoxEnergyValuesIsOptional(t *testing.T) {
+	from, to := istanbulDay(2026, 9, 1)
+	srv := fake.NewTLSServer(t, append(gridboxBaseRoutes(t),
+		fake.Route{Method: http.MethodGet, Path: "/gridbox/last-endex", Respond: fake.JSON(200, fake.Fixture(t, "gridbox", "gridbox_last_endex.json"))},
+		fake.Route{Method: http.MethodGet, Path: "/gridbox/load-profiles", Respond: fake.JSON(200, fake.Fixture(t, "gridbox", "gridbox_success.json"))},
+	)...)
+	pool, _ := gridboxTestPool(t, srv)
+	src := gridboxNewSource(pool, 0)
+	creds := gridboxTestCreds(srv, false)
+	delete(creds.Endpoints, "energy_values")
+
+	require.NotContains(t, src.Kinds(creds), model.ReadingKindReset)
+	require.Contains(t, src.Kinds(creds), model.ReadingKindLoadProfile)
+
+	_, err := src.FetchReadings(context.Background(), creds, gridboxTestRequest(model.ReadingKindLoadProfile, from, to))
+	require.NoError(t, err)
+
+	_, err = src.FetchReadings(context.Background(), creds, gridboxTestRequest(model.ReadingKindReset, from, to))
+	var ierr *integration.Error
+	require.ErrorAs(t, err, &ierr)
+	require.Equal(t, "config:energy_values", ierr.Op)
+}

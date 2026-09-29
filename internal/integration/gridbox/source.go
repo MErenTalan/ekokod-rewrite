@@ -97,15 +97,17 @@ var _ integration.Adapter = (*Source)(nil)
 // Provider reports integration.ProviderGridBox.
 func (s *Source) Provider() integration.Provider { return integration.ProviderGridBox }
 
-// Kinds is 06 §3's Flow step 2, minus billing when the company has not
-// enabled it: load_profile, daily, reset and current_index always; billing
-// iff creds.Settings.UseBillingIndexes.
+// Kinds is 06 §3's Flow step 2: load_profile, daily and current_index
+// always; reset iff the optional energy_values endpoint is configured (legacy
+// treats it as optional); billing iff creds.Settings.UseBillingIndexes.
 func (s *Source) Kinds(creds integration.Credentials) []model.ReadingKind {
 	kinds := []model.ReadingKind{
 		model.ReadingKindLoadProfile,
 		model.ReadingKindDaily,
-		model.ReadingKindReset,
 		model.ReadingKindCurrentIndex,
+	}
+	if strings.TrimSpace(creds.Endpoints[optionalEndpointKey]) != "" {
+		kinds = append(kinds, model.ReadingKindReset)
 	}
 	if creds.Settings.UseBillingIndexes {
 		kinds = append(kinds, model.ReadingKindBilling)
@@ -116,8 +118,14 @@ func (s *Source) Kinds(creds integration.Credentials) []model.ReadingKind {
 // MaxWindow is 30 days for every kind (Task 7 brief).
 func (s *Source) MaxWindow(model.ReadingKind) time.Duration { return maxWindow }
 
-// gridboxEndpointKeys is every endpoint key 06 §3 assigns GridBox.
-var gridboxEndpointKeys = []string{"token", "last_success_date", "last_endex", "load_profiles", "endexes", "energy_values"}
+// RequiredEndpointKeys are the endpoints every GridBox definition needs;
+// energy_values (reset events) is optional, as in legacy.
+var RequiredEndpointKeys = []string{"token", "last_success_date", "last_endex", "load_profiles", "endexes"}
+
+const optionalEndpointKey = "energy_values"
+
+// OptionalEndpointKeys are the endpoints a definition may add.
+var OptionalEndpointKeys = []string{optionalEndpointKey}
 
 // configError reports a deliberately-classified configuration problem: a
 // missing/blank endpoint template, or (fetchConfigError) a blank wiring
@@ -141,11 +149,15 @@ func tokenConfigError(creds integration.Credentials) error {
 	return nil
 }
 
-// fetchConfigError validates every endpoint FetchReadings needs plus the
+// fetchConfigError validates the endpoints a fetch of kind needs plus the
 // wiring number, before any HTTP call is attempted (adapter review pattern
 // 12: "empty installation/device id → error before any call").
-func fetchConfigError(creds integration.Credentials, wiringNo string) error {
-	for _, key := range gridboxEndpointKeys {
+func fetchConfigError(creds integration.Credentials, kind model.ReadingKind, wiringNo string) error {
+	keys := []string{"token", "last_success_date", "last_endex"}
+	if op, _ := kindEndpoint(kind); op != "" {
+		keys = append(keys, op)
+	}
+	for _, key := range keys {
 		if strings.TrimSpace(creds.Endpoints[key]) == "" {
 			return configError("config:" + key)
 		}
@@ -318,7 +330,7 @@ func (s *Source) DiscoverMeteringPoints(ctx context.Context, creds integration.C
 // behaviour being replicated.
 func (s *Source) FetchReadings(ctx context.Context, creds integration.Credentials, req integration.FetchRequest) (integration.FetchResult, error) {
 	wiringNo := req.Point.InstallationNumber
-	if err := fetchConfigError(creds, wiringNo); err != nil {
+	if err := fetchConfigError(creds, req.Kind, wiringNo); err != nil {
 		return integration.FetchResult{}, err
 	}
 
