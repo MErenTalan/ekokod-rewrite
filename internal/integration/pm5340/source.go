@@ -10,6 +10,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/httpx"
+	"github.com/MErenTalan/ekokod-rewrite/internal/integration/normalize"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
 )
 
@@ -150,8 +151,8 @@ func (s *Source) FetchReadings(ctx context.Context, creds integration.Credential
 	}
 
 	client := s.client(creds)
-	start := req.From.UTC().Format(time.RFC3339)
-	end := req.To.UTC().Format(time.RFC3339)
+	start := deviceWallClock(req.From)
+	end := deviceWallClock(req.To)
 
 	var (
 		readings []model.MeterReading
@@ -220,6 +221,13 @@ func (s *Source) FetchReadings(ctx context.Context, creds integration.Credential
 		}
 		cursor = *next
 	}
+}
+
+// deviceWallClock formats t as the gateway compares it: meterDate is Istanbul
+// wall-clock and the device filters start/end against it as if it were UTC,
+// so a true-UTC bound shifted every window by 3h and lost its edges.
+func deviceWallClock(t time.Time) string {
+	return t.In(normalize.Istanbul).Format("2006-01-02T15:04:05") + "Z"
 }
 
 func lastCoveredTs(readings []model.MeterReading) *time.Time {
