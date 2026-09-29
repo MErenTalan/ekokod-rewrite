@@ -966,8 +966,9 @@ func seedScopeIsoFixtures(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	// task id is identical for two companies billing the same period, so
 	// RunByTaskID must answer from the caller's company and no other (R237).
 	scopeIsoTaskID := "billing.generate:company:scope-iso:2026-08"
+	scopeIsoParentID := "integration.backfill:scope-iso"
 	run, err := opsRepo.StartRun(ctx, adminScope, model.JobRun{CompanyID: &companyID, JobType: "scope-iso-job",
-		TaskID: &scopeIsoTaskID})
+		TaskID: &scopeIsoTaskID, ParentTaskID: &scopeIsoParentID})
 	require.NoError(t, err)
 	f.jobRunID = run.ID
 	msg, err := opsRepo.AppendMessage(ctx, adminScope, model.OperationalMessage{
@@ -2219,6 +2220,20 @@ func TestScopeIsolation(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, bf.jobRunID, other.ID, "each tenant sees only its own run for the shared task id")
 		_, err = repo.RunByTaskID(ctx, invalidScope, sharedTaskID)
+		require.ErrorIs(t, err, store.ErrInvalidScope)
+
+		// Both tenants' runs share one parent task id; each summary counts only its own child.
+		const sharedParentID = "integration.backfill:scope-iso"
+		for _, sc := range []store.Scope{tenantA.AdminScope, tenantB.AdminScope} {
+			groups, err := repo.ChildRunSummary(ctx, sc, sharedParentID)
+			require.NoError(t, err)
+			total := int32(0)
+			for _, g := range groups {
+				total += g.Count
+			}
+			require.Equal(t, int32(1), total, "OpsRepository.ChildRunSummary counts only the scope's own children")
+		}
+		_, err = repo.ChildRunSummary(ctx, invalidScope, sharedParentID)
 		require.ErrorIs(t, err, store.ErrInvalidScope)
 	})
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/api/v1/dto"
+	"github.com/MErenTalan/ekokod-rewrite/internal/integration"
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/seed"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/admin"
@@ -113,7 +114,14 @@ func TestWeekendAndVacationChangeLoadProfileHTTP(t *testing.T) {
 	require.Equal(t, "4", we)
 }
 
+// definition fills the provider's required endpoint keys the caller left out,
+// so each test states only the keys it is about.
 func definition(provider, subtype string, endpoints map[string]string) map[string]any {
+	for _, k := range integration.EndpointCatalog[integration.Provider(provider)].Required {
+		if _, ok := endpoints[k]; !ok {
+			endpoints[k] = "/" + k
+		}
+	}
 	return map[string]any{"provider": provider, "subtype": subtype, "endpoints": endpoints}
 }
 
