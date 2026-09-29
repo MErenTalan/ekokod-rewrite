@@ -3,6 +3,7 @@ package tenancy
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -124,9 +125,46 @@ func (s *Service) ResponsibleBuildings(ctx context.Context, sc store.Scope) (map
 	return out, nil
 }
 
-// ListUsers lists the scope company's users.
-func (s *Service) ListUsers(ctx context.Context, sc store.Scope, f store.UserFilter) ([]model.User, error) {
-	return s.d.Users.List(ctx, sc, f)
+// ListUsers lists the scope company's users the actor may see: platform
+// admins only to an admin, and to a building-scoped caller only itself and
+// the users responsible for one of its buildings.
+func (s *Service) ListUsers(ctx context.Context, actor Actor, sc store.Scope, f store.UserFilter) ([]model.User, error) {
+	if actor.Role != model.UserRoleAdmin {
+		f.Roles = withoutAdmin(f.Roles)
+		if len(f.Roles) == 0 {
+			return nil, nil
+		}
+	}
+	list, err := s.d.Users.List(ctx, sc, f)
+	if err != nil || sc.AllBuildings {
+		return list, err
+	}
+	assigned, err := s.ResponsibleBuildings(ctx, sc)
+	if err != nil {
+		return nil, err
+	}
+	out := list[:0]
+	for _, u := range list {
+		if u.ID == actor.UserID || slices.ContainsFunc(assigned[u.ID], sc.AllowsBuilding) {
+			out = append(out, u)
+		}
+	}
+	return out, nil
+}
+
+// withoutAdmin narrows a role filter (empty = every role) to non-admin roles.
+func withoutAdmin(roles []model.UserRole) []model.UserRole {
+	if len(roles) == 0 {
+		return []model.UserRole{model.UserRoleCompanyAdmin, model.UserRoleCompanyReadonlyAdmin,
+			model.UserRoleBuildingAdmin, model.UserRoleBuildingReadonlyAdmin, model.UserRoleDemo}
+	}
+	var out []model.UserRole
+	for _, r := range roles {
+		if r != model.UserRoleAdmin {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 // CreateUser creates a user with an assignable role and a policy-valid password.

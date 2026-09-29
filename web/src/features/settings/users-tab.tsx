@@ -25,6 +25,8 @@ export type UsersTabViewProps = {
   onEdit: (user: User) => void;
   onDelete: (user: User) => void;
   loading?: boolean;
+  /** Company names by id; given to an admin, whose users span companies. */
+  companyNames?: Record<string, string>;
 };
 
 /** The user list of 01 §7.15. */
@@ -36,6 +38,7 @@ export function UsersTabView({
   onEdit,
   onDelete,
   loading = false,
+  companyNames,
 }: UsersTabViewProps) {
   const t = useTranslations('settings.users');
   const roles = useTranslations('shell.roles');
@@ -53,6 +56,13 @@ export function UsersTabView({
         accessorFn: (row) => row.role,
         cell: ({ row }) => roles(ROLE_LABEL_KEY[row.original.role]),
       },
+      ...(companyNames
+        ? [{
+            id: 'company',
+            header: t('company'),
+            accessorFn: (row: User) => companyNames[row.company_id] ?? '—',
+          } satisfies ColumnDef<User, unknown>]
+        : []),
       {
         id: 'buildings',
         header: t('buildings'),
@@ -109,7 +119,7 @@ export function UsersTabView({
         ),
       },
     ];
-  }, [t, roles, common, locale, canEdit, onEdit, onDelete, selfId]);
+  }, [t, roles, common, locale, canEdit, onEdit, onDelete, selfId, companyNames]);
 
   return (
     <DataTable

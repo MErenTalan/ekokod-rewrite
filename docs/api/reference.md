@@ -5172,6 +5172,7 @@ object
 | field | type | required |
 |---|---|---|
 | `building_ids` | `UuidUUID`[] |  |
+| `company_id` | `UuidUUID` | yes |
 | `created_at` | string (date-time) | yes |
 | `email` | string | yes |
 | `id` | `UuidUUID` | yes |

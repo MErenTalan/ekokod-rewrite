@@ -139,11 +139,12 @@ export function UserFormView({
         description={isSelf ? t('cannotModifySelf') : undefined}
         onValueChange={(role) => set({ role: role as Role })}
       />
-      {companies && !value.id ? (
+      {companies ? (
         <Select
           label={t('company')}
           options={companies.map((c) => ({ value: c.id, label: c.name }))}
           value={value.companyId ?? ''}
+          disabled={Boolean(value.id)}
           description={t('companyHint')}
           onValueChange={(companyId) => set({ companyId, buildingIds: [] })}
         />

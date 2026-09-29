@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
@@ -40,6 +40,10 @@ export function UsersPanel() {
     '/api/v1/companies',
     { params: { query: { limit: 500 } } },
     { enabled: isAdmin },
+  );
+  const companyNames = useMemo(
+    () => Object.fromEntries((companies.data?.items ?? []).map((c) => [c.id, c.name])),
+    [companies.data],
   );
   // A new user's buildings come from the company chosen in the form, not the header's.
   const formCompany =
@@ -82,10 +86,12 @@ export function UsersPanel() {
             role: user.role,
             password: '',
             isActive: user.is_active,
+            companyId: user.company_id,
             buildingIds: user.building_ids ?? [],
           })
         }
         onDelete={setPendingDelete}
+        companyNames={isAdmin ? companyNames : undefined}
       />
 
       <Dialog

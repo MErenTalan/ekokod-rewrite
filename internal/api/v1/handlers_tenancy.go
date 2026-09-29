@@ -132,7 +132,7 @@ func (h *Handlers) deleteCompany(w http.ResponseWriter, r *http.Request) {
 
 func userDTO(u model.User) dto.User {
 	return dto.User{
-		ID: u.ID, Name: u.Name, Email: u.Email, Phone: u.Phone, Role: dto.Role(u.Role), IsActive: u.IsActive,
+		ID: u.ID, CompanyID: u.CompanyID, Name: u.Name, Email: u.Email, Phone: u.Phone, Role: dto.Role(u.Role), IsActive: u.IsActive,
 		Locale: dto.Locale(u.Locale), LastLoginAt: dto.TP(u.LastLoginAt), CreatedAt: dto.T(u.CreatedAt),
 	}
 }
@@ -155,7 +155,7 @@ func (h *Handlers) listUsers(w http.ResponseWriter, r *http.Request) {
 				return nil, kit.ErrInvalidParameters.WithParams(map[string]any{"role": []string{"invalid"}})
 			}
 		}
-		list, err := h.Tenancy.ListUsers(r.Context(), mw.ScopeFrom(r), store.UserFilter{Roles: roles, IsActive: req.IsActive, EmailContains: req.Q, Page: page})
+		list, err := h.Tenancy.ListUsers(r.Context(), actor(r), mw.ScopeFrom(r), store.UserFilter{Roles: roles, IsActive: req.IsActive, EmailContains: req.Q, Page: page})
 		if err != nil {
 			return nil, err
 		}

@@ -4896,6 +4896,7 @@ export interface components {
         };
         User: {
             building_ids?: components["schemas"]["UuidUUID"][];
+            company_id: components["schemas"]["UuidUUID"];
             /** Format: date-time */
             created_at: string;
             email: string;

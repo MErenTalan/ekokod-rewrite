@@ -2,6 +2,8 @@ package tenancy
 
 import (
 	"context"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -118,4 +120,60 @@ func TestBuildingAdminAssignment(t *testing.T) {
 	_, err = svc.UpdateUser(t.Context(), admin, sc, u.ID, UserInput{Role: &ca, BuildingIDs: &ids})
 	require.ErrorAs(t, err, &pe)
 	require.Equal(t, []string{"role_not_building_scoped"}, pe.Params["building_ids"])
+}
+
+func (f *fakeUsers) List(_ context.Context, _ store.Scope, filter store.UserFilter) ([]model.User, error) {
+	var out []model.User
+	for _, u := range f.rows {
+		if len(filter.Roles) == 0 || slices.Contains(filter.Roles, u.Role) {
+			out = append(out, u)
+		}
+	}
+	return out, nil
+}
+
+// A company admin saw the platform admin in its user list, and a building
+// scope must see only itself and the users of its own buildings.
+func TestListUsersHidesAdminsAndUnrelatedUsers(t *testing.T) {
+	company := uuid.New()
+	mk := func(role model.UserRole) model.User { return model.User{ID: uuid.New(), CompanyID: company, Role: role} }
+	admin, ca, ba1, ba2 := mk(model.UserRoleAdmin), mk(model.UserRoleCompanyAdmin), mk(model.UserRoleBuildingAdmin), mk(model.UserRoleBuildingAdmin)
+	b1, b2 := uuid.New(), uuid.New()
+	u := &fakeUsers{rows: map[uuid.UUID]model.User{admin.ID: admin, ca.ID: ca, ba1.ID: ba1, ba2.ID: ba2}}
+	b := &fakeBuildings{rows: map[uuid.UUID]model.Building{
+		b1: {ID: b1, CompanyID: company, ResponsibleUserID: &ba1.ID},
+		b2: {ID: b2, CompanyID: company, ResponsibleUserID: &ba2.ID},
+	}}
+	svc := usersService(b, u)
+	ids := func(list []model.User) []uuid.UUID {
+		out := make([]uuid.UUID, 0, len(list))
+		for _, x := range list {
+			out = append(out, x.ID)
+		}
+		slices.SortFunc(out, func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) })
+		return out
+	}
+	sorted := func(v ...uuid.UUID) []uuid.UUID {
+		slices.SortFunc(v, func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) })
+		return v
+	}
+	all := store.Scope{CompanyID: company, AllBuildings: true}
+	ctx := context.Background()
+
+	got, err := svc.ListUsers(ctx, Actor{UserID: admin.ID, Role: model.UserRoleAdmin}, all, store.UserFilter{})
+	require.NoError(t, err)
+	require.Equal(t, sorted(admin.ID, ca.ID, ba1.ID, ba2.ID), ids(got))
+
+	got, err = svc.ListUsers(ctx, Actor{UserID: ca.ID, Role: model.UserRoleCompanyAdmin}, all, store.UserFilter{})
+	require.NoError(t, err)
+	require.Equal(t, sorted(ca.ID, ba1.ID, ba2.ID), ids(got), "no platform admin")
+
+	got, err = svc.ListUsers(ctx, Actor{UserID: ca.ID, Role: model.UserRoleCompanyAdmin}, all, store.UserFilter{Roles: []model.UserRole{model.UserRoleAdmin}})
+	require.NoError(t, err)
+	require.Empty(t, got, "asking for admins by role yields nothing")
+
+	got, err = svc.ListUsers(ctx, Actor{UserID: ba1.ID, Role: model.UserRoleBuildingAdmin},
+		store.Scope{CompanyID: company, BuildingIDs: []uuid.UUID{b1}}, store.UserFilter{})
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{ba1.ID}, ids(got), "only itself and users of its buildings")
 }

@@ -66,6 +66,7 @@ type CompanyUpdateRequest struct {
 // User is a user as managers see them.
 type User struct {
 	ID          uuid.UUID  `json:"id" required:"true"`
+	CompanyID   uuid.UUID  `json:"company_id" required:"true"`
 	Name        string     `json:"name" required:"true"`
 	Email       string     `json:"email" required:"true"`
 	Phone       *string    `json:"phone"`
