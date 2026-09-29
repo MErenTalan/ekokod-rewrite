@@ -25,7 +25,10 @@ const me = (role: keyof typeof fixture): MeResponse => ({
 const ROUTES = {
   'GET /api/v1/messages': { items: demoMessages, next_cursor: null },
   'GET /api/v1/job-runs': { items: demoRuns, next_cursor: null },
-  'POST /api/v1/job-runs/alarm.evaluate/trigger': Response.json({ job_id: 'task-1' }, { status: 202 }),
+  'POST /api/v1/job-runs/alarm.evaluate/trigger': Response.json(
+    { job_id: 'task-1' },
+    { status: 202 },
+  ),
   'GET /api/v1/jobs/task-1': { id: 'task-1', type: 'alarm.evaluate', status: 'succeeded' },
 };
 
@@ -60,13 +63,16 @@ describe('MessagesPage', () => {
     await userEvent.click(screen.getByRole('combobox', { name: /Durum/ }));
     await userEvent.click(await screen.findByRole('option', { name: 'Uyarı' }));
 
-    await waitFor(() => {
-      const calls = api.calls.filter((c) => new URL(c.url).pathname === '/api/v1/messages');
-      const q = queryOf(api.calls, 'GET', '/api/v1/messages', calls.length - 1);
-      expect(q.get('q')).toBe('tetiklendi');
-      expect(q.get('kind')).toBe('alarm');
-      expect(q.get('status')).toBe('warning');
-    }, { timeout: 5000 });
+    await waitFor(
+      () => {
+        const calls = api.calls.filter((c) => new URL(c.url).pathname === '/api/v1/messages');
+        const q = queryOf(api.calls, 'GET', '/api/v1/messages', calls.length - 1);
+        expect(q.get('q')).toBe('tetiklendi');
+        expect(q.get('kind')).toBe('alarm');
+        expect(q.get('status')).toBe('warning');
+      },
+      { timeout: 5000 },
+    );
   });
 
   it('hides the job-history tab from a role without jobs.runs.read, and never asks for it', async () => {
@@ -93,13 +99,22 @@ describe('MessagesPage', () => {
     render('admin');
     await userEvent.click(await screen.findByRole('tab', { name: 'İş Geçmişi' }));
 
-    await userEvent.click(await screen.findByRole('button', { name: /Alarm değerlendirme — Şimdi çalıştır/ }));
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Alarm değerlendirme — Şimdi çalıştır/ }),
+    );
     await waitFor(() =>
-      expect(api.calls.some((c) =>
-        c.method === 'POST' && new URL(c.url).pathname === '/api/v1/job-runs/alarm.evaluate/trigger')).toBe(true));
+      expect(
+        api.calls.some(
+          (c) =>
+            c.method === 'POST' &&
+            new URL(c.url).pathname === '/api/v1/job-runs/alarm.evaluate/trigger',
+        ),
+      ).toBe(true),
+    );
     // The job is then watched through GET /jobs/{id}, the F6b convention.
     await waitFor(() =>
-      expect(api.calls.some((c) => new URL(c.url).pathname === '/api/v1/jobs/task-1')).toBe(true));
+      expect(api.calls.some((c) => new URL(c.url).pathname === '/api/v1/jobs/task-1')).toBe(true),
+    );
   });
 
   it('offers only the allow-listed jobs', async () => {

@@ -40,9 +40,13 @@ func (s *Service) RefreshAnalyzer(ctx context.Context, p job.RefreshAnalyzerPayl
 		if hourly != (p.Mode == job.RefreshModeHourly) {
 			continue
 		}
-		task, err := job.NewFetchReadingsTask(job.FetchReadingsPayload{
+		payload := job.FetchReadingsPayload{
 			CompanyID: p.CompanyID, CredentialID: p.CredentialID, AnalyzerID: p.AnalyzerID, Kind: kind,
-		}, job.TaskOptions{MaxRetry: s.opts.MaxRetry})
+		}
+		if parent := ownTaskID(ctx); parent != nil {
+			payload.ParentTaskID = *parent
+		}
+		task, err := job.NewFetchReadingsTask(payload, job.TaskOptions{MaxRetry: s.opts.MaxRetry})
 		if err != nil {
 			return err
 		}

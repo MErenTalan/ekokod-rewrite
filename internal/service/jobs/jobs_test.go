@@ -196,8 +196,13 @@ func (f fakeBuildings) Get(_ context.Context, _ store.Scope, id uuid.UUID) (mode
 // billing generator writes.
 type fakeOps struct {
 	store.OpsRepository
-	runs map[string]model.JobRun
-	asks []string
+	runs     map[string]model.JobRun
+	asks     []string
+	children map[string][]model.ChildRunGroup
+}
+
+func (f *fakeOps) ChildRunSummary(_ context.Context, _ store.Scope, parent string) ([]model.ChildRunGroup, error) {
+	return f.children[parent], nil
 }
 
 // RunByTaskID is company-scoped like the real query: a run whose CompanyID is
@@ -521,4 +526,29 @@ func TestGetGoneSolarSyncFromRunWithClosedCode(t *testing.T) {
 	ops.runs[hidden] = model.JobRun{CompanyID: &companyA, Status: "success"}
 	_, err = solarService(t, emptyInspector(), ops).Get(t.Context(), scopeA(), hidden)
 	require.ErrorIs(t, err, store.ErrNotFound)
+}
+
+// A backfill "succeeds" as soon as it has queued its windows; the screen must
+// see what its fetch_readings children did, grouped by error.
+func TestBackfillReportsItsChildren(t *testing.T) {
+	t.Parallel()
+	insp := &fakeInspector{tasks: map[string]map[string]*asynq.TaskInfo{job.QueueLow: {"b1": taskInfo(
+		"b1", job.QueueLow, job.TypeIntegrationBackfill, asynq.TaskStateCompleted,
+		job.BackfillPayload{CompanyID: companyA, CredentialID: uuid.New()})}}}
+	cfg := "gridbox config:last_endex: integration: configuration incomplete or invalid (HTTP 0)"
+	ops := &fakeOps{
+		runs: map[string]model.JobRun{"b1": {CompanyID: &companyA, Processed: 10, Detail: []byte(`{"already_enqueued":2}`)}},
+		children: map[string][]model.ChildRunGroup{"b1": {
+			{Status: "failed", Error: cfg, Count: 6}, {Status: "success", Count: 3}, {Status: "running", Count: 1},
+		}},
+	}
+	s, err := jobs.New(jobs.Deps{Inspector: insp, Analyzers: fakeAnalyzers{}, Ops: ops})
+	require.NoError(t, err)
+	v, err := s.Get(t.Context(), scopeA(), "b1")
+	require.NoError(t, err)
+	require.NotNil(t, v.Children)
+	require.Equal(t, int32(10), *v.Children.Enqueued)
+	require.Equal(t, int32(2), v.Children.AlreadyQueued)
+	require.Equal(t, [4]int32{1, 3, 0, 6}, [4]int32{v.Children.Running, v.Children.Succeeded, v.Children.Partial, v.Children.Failed})
+	require.Equal(t, []jobs.ChildError{{Message: cfg, Count: 6}}, v.Children.Errors)
 }

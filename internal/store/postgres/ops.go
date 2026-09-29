@@ -63,7 +63,7 @@ func opsJobRunFromRow(row sqlcgen.JobRun) model.JobRun {
 		ID: row.ID, CompanyID: row.CompanyID, JobType: row.JobType, Scope: row.Scope,
 		StartedAt: row.StartedAt.Time, FinishedAt: finishedAt, Status: row.Status,
 		Processed: row.Processed, Skipped: row.Skipped, Failed: row.Failed,
-		Error: row.Error, Detail: row.Detail, TaskID: row.TaskID,
+		Error: row.Error, Detail: row.Detail, TaskID: row.TaskID, ParentTaskID: row.ParentTaskID,
 	}
 }
 
@@ -93,6 +93,7 @@ func (r *OpsRepository) StartRun(ctx context.Context, s store.Scope, run model.J
 	}
 	row, err := r.q.OpsStartRun(ctx, sqlcgen.OpsStartRunParams{
 		ID: run.ID, CompanyID: s.CompanyID, JobType: run.JobType, Scope: scope, Status: "running", TaskID: run.TaskID,
+		ParentTaskID: run.ParentTaskID,
 	})
 	if err != nil {
 		return model.JobRun{}, pgerr.Translate(r.pool, "start job run", err)
@@ -112,6 +113,23 @@ func (r *OpsRepository) RunByTaskID(ctx context.Context, s store.Scope, taskID s
 		return model.JobRun{}, pgerr.Translate(r.pool, "job run by task id", err)
 	}
 	return opsJobRunFromRow(row), nil
+}
+
+// ChildRunSummary groups the newest run of every task parentTaskID enqueued
+// by status and error text.
+func (r *OpsRepository) ChildRunSummary(ctx context.Context, s store.Scope, parentTaskID string) ([]model.ChildRunGroup, error) {
+	if !s.Valid() {
+		return nil, store.ErrInvalidScope
+	}
+	rows, err := r.q.OpsChildRunSummary(ctx, sqlcgen.OpsChildRunSummaryParams{CompanyID: s.CompanyID, ParentTaskID: parentTaskID})
+	if err != nil {
+		return nil, pgerr.Translate(r.pool, "child run summary", err)
+	}
+	out := make([]model.ChildRunGroup, len(rows))
+	for i, row := range rows {
+		out[i] = model.ChildRunGroup{Status: row.Status, Error: row.Error, Count: row.N}
+	}
+	return out, nil
 }
 
 // FinishRun stamps finished_at, the final status and the three counts. Only a

@@ -82,7 +82,21 @@
       "reportDispatchYearly": "Yearly report dispatch",
       "reportGenerate": "Report generation",
       "systemNoop": "System check"
-    }
+    },
+    "queues": {
+      "title": "Queues",
+      "queue": "Queue",
+      "pending": "Pending",
+      "active": "Active",
+      "retry": "To retry",
+      "archived": "Archived (failed)",
+      "processedToday": "Processed today",
+      "failedToday": "Failed today",
+      "paused": "Paused"
+    },
+    "allTypes": "All jobs",
+    "allStatuses": "All statuses",
+    "autoRefresh": "The list refreshes every 10 seconds."
   },
   "emptyDescription": "Automated jobs and alarms appear here.",
   "emptyFilteredDescription": "Try a different filter."

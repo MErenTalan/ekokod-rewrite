@@ -1876,19 +1876,20 @@ type IsolarForwardedAlarm struct {
 }
 
 type JobRun struct {
-	ID         uuid.UUID
-	CompanyID  *uuid.UUID
-	JobType    string
-	Scope      []byte
-	StartedAt  pgtype.Timestamptz
-	FinishedAt pgtype.Timestamptz
-	Status     string
-	Processed  int32
-	Skipped    int32
-	Failed     int32
-	Error      *string
-	Detail     []byte
-	TaskID     *string
+	ID           uuid.UUID
+	CompanyID    *uuid.UUID
+	JobType      string
+	Scope        []byte
+	StartedAt    pgtype.Timestamptz
+	FinishedAt   pgtype.Timestamptz
+	Status       string
+	Processed    int32
+	Skipped      int32
+	Failed       int32
+	Error        *string
+	Detail       []byte
+	TaskID       *string
+	ParentTaskID *string
 }
 
 type LegacyBill struct {

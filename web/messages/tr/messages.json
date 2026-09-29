@@ -82,7 +82,21 @@
       "reportDispatchYearly": "Yıllık rapor dağıtımı",
       "reportGenerate": "Rapor oluşturma",
       "systemNoop": "Sistem kontrolü"
-    }
+    },
+    "queues": {
+      "title": "Kuyruklar",
+      "queue": "Kuyruk",
+      "pending": "Bekleyen",
+      "active": "Çalışan",
+      "retry": "Yeniden denenecek",
+      "archived": "Arşivde (başarısız)",
+      "processedToday": "Bugün işlenen",
+      "failedToday": "Bugün hatalı",
+      "paused": "Durduruldu"
+    },
+    "allTypes": "Tüm işler",
+    "allStatuses": "Tüm durumlar",
+    "autoRefresh": "Liste 10 saniyede bir yenilenir."
   },
   "emptyDescription": "Otomatik işlemler ve alarmlar burada görünür.",
   "emptyFilteredDescription": "Farklı bir filtre deneyin."

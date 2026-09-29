@@ -339,6 +339,9 @@ func (noOps) FinishRun(context.Context, store.Scope, uuid.UUID, string, int32, i
 func (noOps) RunByTaskID(context.Context, store.Scope, string) (model.JobRun, error) {
 	return model.JobRun{}, store.ErrNotFound
 }
+func (noOps) ChildRunSummary(context.Context, store.Scope, string) ([]model.ChildRunGroup, error) {
+	panic("noOps: ChildRunSummary")
+}
 
 func (noOps) GetRun(context.Context, store.Scope, uuid.UUID) (model.JobRun, error) {
 	panic("consumption: Task 7's Billing.Consumption must never call OpsRepository.GetRun")
@@ -643,6 +646,9 @@ func (f *fakeOps) FinishRun(context.Context, store.Scope, uuid.UUID, string, int
 }
 func (f *fakeOps) RunByTaskID(context.Context, store.Scope, string) (model.JobRun, error) {
 	return model.JobRun{}, store.ErrNotFound
+}
+func (f *fakeOps) ChildRunSummary(context.Context, store.Scope, string) ([]model.ChildRunGroup, error) {
+	return nil, nil
 }
 
 func (f *fakeOps) GetRun(context.Context, store.Scope, uuid.UUID) (model.JobRun, error) {

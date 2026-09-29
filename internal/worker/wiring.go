@@ -421,6 +421,7 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		Credentials: credService,
 		Sources:     registry,
 		Enqueuer:    jobClient,
+		Inspector:   inspector,
 		Clock:       clock.System(),
 		MaxRetry:    cfg.Worker.MaxRetries,
 	})

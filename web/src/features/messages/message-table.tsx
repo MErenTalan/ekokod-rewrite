@@ -6,7 +6,15 @@ import { useLocale, useTranslations } from 'next-intl';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableContainer, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import type { OperationalMessage } from '@/lib/api/types';
 import { formatDateTime } from '@/lib/format';
 import type { Locale } from '@/i18n/locale';
@@ -21,10 +29,16 @@ export type MessageTableViewProps = {
 const KIND_ICON = { alarm: AlertTriangle, job: Clock, system: Server } as const;
 const KIND_LABEL = { alarm: 'types.alarm', job: 'types.job', system: 'types.system' } as const;
 const STATUS_TONE = {
-  success: 'success', error: 'danger', warning: 'warning', info: 'neutral',
+  success: 'success',
+  error: 'danger',
+  warning: 'warning',
+  info: 'neutral',
 } as const;
 const STATUS_LABEL = {
-  success: 'statuses.success', error: 'statuses.error', warning: 'statuses.warning', info: 'statuses.info',
+  success: 'statuses.success',
+  error: 'statuses.error',
+  warning: 'statuses.warning',
+  info: 'statuses.info',
 } as const;
 
 /** The §7.13 table: type badge, status badge, message, detail, related entity
@@ -86,8 +100,12 @@ export function MessageTableView({ messages, filtered, loading = false }: Messag
                   )}
                 </TableCell>
                 <TableCell>
-                  <Badge tone={STATUS_TONE[message.status as keyof typeof STATUS_TONE] ?? 'neutral'}>
-                    {t(STATUS_LABEL[message.status as keyof typeof STATUS_LABEL] ?? 'statuses.info')}
+                  <Badge
+                    tone={STATUS_TONE[message.status as keyof typeof STATUS_TONE] ?? 'neutral'}
+                  >
+                    {t(
+                      STATUS_LABEL[message.status as keyof typeof STATUS_LABEL] ?? 'statuses.info',
+                    )}
                   </Badge>
                 </TableCell>
                 <TableCell>{formatDateTime(message.created_at, locale)}</TableCell>

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hibiken/asynq"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration"
@@ -126,6 +127,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 	run, err := s.deps.Ops.StartRun(ctx, sc, model.JobRun{
 		ID: uuid.New(), CompanyID: &companyID, JobType: job.TypeIntegrationFetchReadings,
 		Scope: newFetchRunScope(p.AnalyzerID, p.Kind, p.Window), StartedAt: now,
+		TaskID: ownTaskID(ctx), ParentTaskID: optString(p.ParentTaskID),
 	})
 	if err != nil {
 		return err
@@ -740,4 +742,19 @@ func convertHourlyValues(analyzerID uuid.UUID, provider model.IntegrationProvide
 		out = append(out, row)
 	}
 	return out
+}
+
+// ownTaskID is the queue id of the task being run, when ctx comes from one.
+func ownTaskID(ctx context.Context) *string {
+	if id, ok := asynq.GetTaskID(ctx); ok {
+		return &id
+	}
+	return nil
+}
+
+func optString(v string) *string {
+	if v == "" {
+		return nil
+	}
+	return &v
 }
