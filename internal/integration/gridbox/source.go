@@ -363,6 +363,16 @@ func (s *Source) FetchReadings(ctx context.Context, creds integration.Credential
 		}
 	}
 
+	// End-of-day indexes exist only for finished days: GridBox answers endexes
+	// for today with ResultStatus != 1, so daily/billing stop at today's start
+	// (today's reading is current_index's job).
+	if req.Kind == model.ReadingKindDaily || req.Kind == model.ReadingKindBilling {
+		now := s.clock.Now().In(normalize.Istanbul)
+		if today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, normalize.Istanbul); today.Before(to) {
+			to = today
+		}
+	}
+
 	lastEndexBody, err := s.call(ctx, client, token, "last_endex", creds.Endpoints["last_endex"],
 		map[string]httpx.Param{"wiringNo": {Value: wiringNo}})
 	if err != nil {
