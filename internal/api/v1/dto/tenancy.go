@@ -74,6 +74,8 @@ type User struct {
 	Locale      Locale     `json:"locale" required:"true"`
 	LastLoginAt *time.Time `json:"last_login_at"`
 	CreatedAt   time.Time  `json:"created_at" required:"true"`
+	// BuildingIDs are the buildings this user is responsible for (users API only).
+	BuildingIDs []uuid.UUID `json:"building_ids,omitempty"`
 }
 
 // UserListRequest is GET /users.
@@ -92,6 +94,8 @@ type UserCreateRequest struct {
 	Role     Role    `json:"role" validate:"required,oneof=admin company_admin company_readonly_admin building_admin building_readonly_admin demo" required:"true"`
 	Password string  `json:"password" validate:"required,max=256" required:"true"`
 	IsActive *bool   `json:"is_active,omitempty"`
+	// BuildingIDs are a building admin's buildings (their responsible user).
+	BuildingIDs []uuid.UUID `json:"building_ids,omitempty" validate:"max=500"`
 }
 
 // UserUpdateRequest is PATCH /users/{id}.
@@ -102,6 +106,8 @@ type UserUpdateRequest struct {
 	Phone    *string   `json:"phone,omitempty" validate:"omitempty,max=40"`
 	Role     *Role     `json:"role,omitempty" validate:"omitempty,oneof=admin company_admin company_readonly_admin building_admin building_readonly_admin demo"`
 	IsActive *bool     `json:"is_active,omitempty"`
+	// BuildingIDs, when present, replaces the building admin's buildings.
+	BuildingIDs *[]uuid.UUID `json:"building_ids,omitempty" validate:"omitempty,max=500"`
 }
 
 // SMTPSettings is GET/PUT /smtp-settings; the password is never returned.

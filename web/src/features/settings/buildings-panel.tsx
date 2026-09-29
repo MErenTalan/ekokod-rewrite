@@ -11,7 +11,13 @@ import type { Building } from '@/lib/api/types';
 import { useScopeParams } from '@/lib/selection/selection-store';
 import { useSession } from '@/lib/session/session-provider';
 
-import { BuildingFormView, buildingDraft, emptyBuilding, toBuildingRequest, type BuildingDraft } from './building-form';
+import {
+  BuildingFormView,
+  buildingDraft,
+  emptyBuilding,
+  toBuildingRequest,
+  type BuildingDraft,
+} from './building-form';
 import { BuildingsTabView } from './buildings-tab';
 
 /** The Buildings tab's data (01 §7.15); the tariff editor itself is F8's. */
@@ -19,7 +25,7 @@ export function BuildingsPanel() {
   const t = useTranslations('settings.buildings');
   const settings = useTranslations('settings');
   const common = useTranslations('common');
-  const { can } = useSession();
+  const { can, me } = useSession();
   const scope = useScopeParams();
   const [draft, setDraft] = useState<BuildingDraft | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Building | null>(null);
@@ -28,7 +34,21 @@ export function BuildingsPanel() {
   const buildings = $api.useQuery('get', '/api/v1/buildings', {
     params: { query: { ...scope, include: ['analyzer_count', 'active_status'], limit: 500 } },
   });
-  const users = $api.useQuery('get', '/api/v1/users', { params: { query: { ...scope, limit: 500, is_active: true } } }, { enabled: canEdit });
+  const isAdmin = me.role === 'admin';
+  const companies = $api.useQuery(
+    'get',
+    '/api/v1/companies',
+    { params: { query: { limit: 500 } } },
+    { enabled: isAdmin && canEdit },
+  );
+  // An admin may create the building in another company than the header's.
+  const formScope = draft && !draft.id && draft.companyId ? { company_id: draft.companyId } : scope;
+  const users = $api.useQuery(
+    'get',
+    '/api/v1/users',
+    { params: { query: { ...formScope, limit: 500, is_active: true } } },
+    { enabled: canEdit },
+  );
   const detail = $api.useQuery(
     'get',
     '/api/v1/buildings/{id}',
@@ -36,9 +56,18 @@ export function BuildingsPanel() {
     { enabled: Boolean(draft?.id) },
   );
 
-  const create = useApiMutation('post', '/api/v1/buildings', { success: t('saved'), invalidate: ['/api/v1/buildings'] });
-  const update = useApiMutation('patch', '/api/v1/buildings/{id}', { success: t('saved'), invalidate: ['/api/v1/buildings'] });
-  const remove = useApiMutation('delete', '/api/v1/buildings/{id}', { success: t('deleted'), invalidate: ['/api/v1/buildings'] });
+  const create = useApiMutation('post', '/api/v1/buildings', {
+    success: t('saved'),
+    invalidate: ['/api/v1/buildings'],
+  });
+  const update = useApiMutation('patch', '/api/v1/buildings/{id}', {
+    success: t('saved'),
+    invalidate: ['/api/v1/buildings'],
+  });
+  const remove = useApiMutation('delete', '/api/v1/buildings/{id}', {
+    success: t('deleted'),
+    invalidate: ['/api/v1/buildings'],
+  });
 
   return (
     <>
@@ -46,8 +75,10 @@ export function BuildingsPanel() {
         buildings={buildings.data?.items ?? []}
         canEdit={canEdit}
         loading={buildings.isLoading}
-        onAdd={() => setDraft(emptyBuilding())}
-        onEdit={(building) => setDraft({ ...emptyBuilding(), id: building.id, name: building.name })}
+        onAdd={() => setDraft({ ...emptyBuilding(), companyId: scope.company_id ?? me.company.id })}
+        onEdit={(building) =>
+          setDraft({ ...emptyBuilding(), id: building.id, name: building.name })
+        }
         onDelete={setPendingDelete}
       />
 
@@ -62,8 +93,9 @@ export function BuildingsPanel() {
             onClick={() => {
               if (!draft) return;
               const body = toBuildingRequest(draft);
-              if (draft.id) update.mutate({ params: { path: { id: draft.id }, query: scope }, body });
-              else create.mutate({ params: { query: scope }, body });
+              if (draft.id)
+                update.mutate({ params: { path: { id: draft.id }, query: scope }, body });
+              else create.mutate({ params: { query: formScope }, body });
               setDraft(null);
             }}
           >
@@ -78,6 +110,11 @@ export function BuildingsPanel() {
             value={detail.data && detail.data.id === draft.id ? buildingDraft(detail.data) : draft}
             onChange={setDraft}
             users={users.data?.items ?? []}
+            companies={
+              isAdmin
+                ? (companies.data?.items ?? []).map((c) => ({ id: c.id, name: c.name }))
+                : undefined
+            }
             tariffHistory={detail.data?.tariff_history ?? []}
             fieldErrors={{ ...create.fieldErrors, ...update.fieldErrors }}
           />
@@ -92,7 +129,8 @@ export function BuildingsPanel() {
           <Button
             variant="danger"
             onClick={() => {
-              if (pendingDelete) remove.mutate({ params: { path: { id: pendingDelete.id }, query: scope } });
+              if (pendingDelete)
+                remove.mutate({ params: { path: { id: pendingDelete.id }, query: scope } });
               setPendingDelete(null);
             }}
           >

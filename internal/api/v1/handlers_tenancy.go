@@ -3,6 +3,8 @@ package v1
 import (
 	"net/http"
 
+	"github.com/google/uuid"
+
 	"github.com/MErenTalan/ekokod-rewrite/internal/api/v1/dto"
 	"github.com/MErenTalan/ekokod-rewrite/internal/api/v1/kit"
 	"github.com/MErenTalan/ekokod-rewrite/internal/api/v1/mw"
@@ -157,9 +159,14 @@ func (h *Handlers) listUsers(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return nil, err
 		}
+		assigned, err := h.Tenancy.ResponsibleBuildings(r.Context(), mw.ScopeFrom(r))
+		if err != nil {
+			return nil, err
+		}
 		items := make([]dto.User, len(list))
 		for i, u := range list {
 			items[i] = userDTO(u)
+			items[i].BuildingIDs = assigned[u.ID]
 		}
 		return kit.PageOf(items, page, limit), nil
 	})
@@ -170,21 +177,36 @@ func (h *Handlers) createUser(w http.ResponseWriter, r *http.Request) {
 		role := model.UserRole(req.Role)
 		u, err := h.Tenancy.CreateUser(r.Context(), actor(r), mw.ScopeFrom(r), tenancy.UserInput{
 			Name: &req.Name, Email: &req.Email, Phone: req.Phone, Role: &role, IsActive: req.IsActive, Password: &req.Password,
+			BuildingIDs: optIDs(req.BuildingIDs),
 		})
-		return userDTO(u), err
+		out := userDTO(u)
+		out.BuildingIDs = req.BuildingIDs
+		return out, err
 	})
 }
 
 func (h *Handlers) updateUser(w http.ResponseWriter, r *http.Request) {
 	serve(w, r, http.StatusOK, func(req dto.UserUpdateRequest) (any, error) {
-		in := tenancy.UserInput{Name: req.Name, Email: req.Email, Phone: req.Phone, IsActive: req.IsActive}
+		in := tenancy.UserInput{Name: req.Name, Email: req.Email, Phone: req.Phone, IsActive: req.IsActive, BuildingIDs: req.BuildingIDs}
 		if req.Role != nil {
 			role := model.UserRole(*req.Role)
 			in.Role = &role
 		}
 		u, err := h.Tenancy.UpdateUser(r.Context(), actor(r), mw.ScopeFrom(r), req.ID, in)
-		return userDTO(u), err
+		out := userDTO(u)
+		if req.BuildingIDs != nil {
+			out.BuildingIDs = *req.BuildingIDs
+		}
+		return out, err
 	})
+}
+
+// optIDs treats an absent list on create as "assign nothing".
+func optIDs(ids []uuid.UUID) *[]uuid.UUID {
+	if ids == nil {
+		return nil
+	}
+	return &ids
 }
 
 func (h *Handlers) deleteUser(w http.ResponseWriter, r *http.Request) {

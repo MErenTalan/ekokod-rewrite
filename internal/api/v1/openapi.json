@@ -9680,6 +9680,12 @@
       },
       "User": {
         "properties": {
+          "building_ids": {
+            "items": {
+              "$ref": "#/components/schemas/UuidUUID"
+            },
+            "type": "array"
+          },
           "created_at": {
             "format": "date-time",
             "type": "string"
@@ -9729,6 +9735,12 @@
       },
       "UserCreateRequest": {
         "properties": {
+          "building_ids": {
+            "items": {
+              "$ref": "#/components/schemas/UuidUUID"
+            },
+            "type": "array"
+          },
           "email": {
             "format": "email",
             "type": "string"
@@ -9765,6 +9777,12 @@
       },
       "UserUpdateRequest": {
         "properties": {
+          "building_ids": {
+            "items": {
+              "$ref": "#/components/schemas/UuidUUID"
+            },
+            "type": "array"
+          },
           "email": {
             "format": "email",
             "type": [

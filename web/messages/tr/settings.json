@@ -184,7 +184,8 @@
     "empty": "Henüz bina yok",
     "emptyHint": "Ölçüm yapılacak her tesis için bir bina tanımlayın.",
     "saved": "Bina kaydedildi",
-    "deleted": "Bina silindi"
+    "deleted": "Bina silindi",
+    "company": "Şirket"
   },
   "plants": {
     "title": "Güneş santralleri",
@@ -321,6 +322,13 @@
     "saved": "Kullanıcı kaydedildi",
     "deleted": "Kullanıcı silindi",
     "empty": "Kullanıcı yok",
-    "emptyHint": "Şirketinize erişecek kullanıcıları buradan tanımlayın."
+    "emptyHint": "Şirketinize erişecek kullanıcıları buradan tanımlayın.",
+    "company": "Şirket",
+    "companyHint": "Kullanıcı bu şirkete bağlanır; sonradan değiştirilemez.",
+    "buildings": "Sorumlu olduğu binalar",
+    "buildingsHint": "Bina yöneticisi yalnızca seçilen binaları görür. Başka bir kullanıcıya atanmış bina bu kullanıcıya geçer.",
+    "buildingsSearch": "Bina ara",
+    "noBuildings": "Bu şirkette bina yok",
+    "buildingCount": "{count, plural, =0 {Bina atanmadı} one {# bina} other {# bina}}"
   }
 }

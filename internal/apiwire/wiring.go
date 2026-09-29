@@ -139,7 +139,7 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 	tenancyService, err := tenancy.New(tenancy.Deps{
 		Companies: postgres.NewCompanyRepository(pool), AdminTenant: admin.NewTenantRepository(pool),
 		Users: postgres.NewUserRepository(pool), Sessions: postgres.NewSessionRepository(pool),
-		Analyzers: postgres.NewAnalyzerRepository(pool), SMTP: postgres.NewSMTPRepository(pool, cipher),
+		Analyzers: postgres.NewAnalyzerRepository(pool), Buildings: postgres.NewBuildingRepository(pool), SMTP: postgres.NewSMTPRepository(pool, cipher),
 		Mail: opts.Mail, Hasher: auth.Hasher{Pepper: cfg.Security.PasswordPepper, Cost: cfg.Security.BcryptCost}, Clock: opts.Clock,
 	})
 	if err != nil {

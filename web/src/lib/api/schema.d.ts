@@ -4892,6 +4892,7 @@ export interface components {
             [key: string]: string;
         };
         User: {
+            building_ids?: components["schemas"]["UuidUUID"][];
             /** Format: date-time */
             created_at: string;
             email: string;
@@ -4905,6 +4906,7 @@ export interface components {
             role: components["schemas"]["Role"];
         };
         UserCreateRequest: {
+            building_ids?: components["schemas"]["UuidUUID"][];
             /** Format: email */
             email: string;
             is_active?: null | boolean;
@@ -4914,6 +4916,7 @@ export interface components {
             role: components["schemas"]["Role"];
         };
         UserUpdateRequest: {
+            building_ids?: components["schemas"]["UuidUUID"][];
             /** Format: email */
             email?: null | string;
             is_active?: null | boolean;
