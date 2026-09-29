@@ -2719,6 +2719,7 @@ export interface components {
             inductive_kvarh: components["schemas"]["Decimal"];
             inductive_ratio?: components["schemas"]["Decimal"];
             max_demand_kw?: components["schemas"]["Decimal"];
+            missing_days: string[];
             net_consumption: components["schemas"]["Decimal"];
             /** Format: date-time */
             period_end: string;
@@ -2813,6 +2814,7 @@ export interface components {
             etso_code: string;
             installation_number: string;
             invoice: components["schemas"]["Decimal"];
+            missing_days: string[];
             period_key: string;
             production: components["schemas"]["Decimal"];
             production_price?: components["schemas"]["Decimal"];
@@ -2838,6 +2840,7 @@ export interface components {
             lines: components["schemas"]["BillLine"][];
             max_demand_kw?: components["schemas"]["Decimal"];
             member_analyzer_ids: components["schemas"]["UuidUUID"][];
+            missing_days: string[];
             net_consumption: components["schemas"]["Decimal"];
             /** Format: date-time */
             period_end: string;

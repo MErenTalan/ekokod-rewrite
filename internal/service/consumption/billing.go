@@ -130,6 +130,7 @@ func (b *Billing) consumptionWithGaps(ctx context.Context, sc store.Scope, req S
 type windowMode struct {
 	level    energy.Level
 	explicit bool
+	open     bool // PeriodRequest.Open: skip the settle check
 }
 
 // consumptionOverWindows is the shared body of Consumption and
@@ -211,7 +212,7 @@ func (b *Billing) consumptionForAnalyzer(ctx context.Context, sc store.Scope, an
 		// period, or one still inside its own ingestion-lag window, would
 		// write one). closedBucket is the ONE shared predicate both
 		// rulings now use, so they can never drift apart again.
-		if !closedBucket(w, now, level) {
+		if !mode.open && !closedBucket(w, now, level) {
 			continue
 		}
 		row, ok := deriveRow(analyzerID, w, data, nil, level)

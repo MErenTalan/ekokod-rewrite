@@ -75,7 +75,9 @@
     "companyBill": "Şirket faturası",
     "running": "Hesaplanıyor",
     "ready": "Fatura hazır",
-    "downloadReady": "Faturayı indir"
+    "downloadReady": "Faturayı indir",
+    "partialTitle": "Fatura eksik veriyle oluşturuldu",
+    "partialDays": "Verisi olmayan günler faturaya dahil edilmedi: {days}"
   },
   "errors": {
     "noAnalyzerSelected": "En az bir sayaç seçin",
@@ -85,8 +87,9 @@
     "noTariffForBuilding": "Bina için tarife bulunamadı",
     "noConsumptionData": "Seçilen dönemde tüketim verisi yok",
     "unresolvedAnomaly": "Çözülmemiş tüketim anomalisi var",
-    "periodNotClosed": "Dönem henüz kapanmadı",
+    "periodNotClosed": "Dönem henüz başlamadı",
     "ptfDataMissing": "Döneme ait PTF verisi eksik",
     "generationFailed": "Fatura oluşturulamadı"
-  }
+  },
+  "missingDays": "{count} gün veri eksik"
 }

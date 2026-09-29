@@ -38,9 +38,11 @@ type DashboardRow struct {
 	ConsumptionPrice *decimal.Decimal
 	ProductionPrice  *decimal.Decimal
 
-	Invoice    decimal.Decimal
-	Currency   model.CurrencyCode
-	Superseded bool
+	Invoice  decimal.Decimal
+	Currency model.CurrencyCode
+	// MissingDays are the bill's uncovered days (a partial bill).
+	MissingDays []string
+	Superseded  bool
 }
 
 // DashboardBuilding is one building's section: its analyzer rows and their

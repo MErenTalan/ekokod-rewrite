@@ -115,6 +115,10 @@ type Bill struct {
 	PtfAverage              *decimal.Decimal
 	YekdemUsed              *decimal.Decimal
 
+	// MissingDays are the Istanbul days (YYYY-MM-DD) the bill's consumption
+	// could not cover: it was generated before the period had full data.
+	MissingDays []string
+
 	Status BillStatus
 	// FlagReason is set when Status is BillStatusFlagged.
 	FlagReason *string

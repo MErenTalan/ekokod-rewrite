@@ -54,7 +54,7 @@ var messages = map[string][2]string{ // code → {tr, en}
 	"tariff_not_found":               {"Seçilen dönem için geçerli bir tarife bulunamadı.", "No tariff is in force for the selected period."},
 	"no_consumption_data":            {"Dönem için tüketim verisi yok.", "There is no consumption data for the period."},
 	"unresolved_anomaly":             {"Dönemde çözülmemiş bir tüketim anomalisi var.", "The period has an unresolved consumption anomaly."},
-	"period_not_closed":              {"Fatura dönemi henüz kapanmadı.", "The billing period has not closed yet."},
+	"period_not_closed":              {"Fatura dönemi henüz başlamadı.", "The billing period has not started yet."},
 	"ptf_data_missing":               {"Dönem için PTF verisi eksik.", "PTF prices are missing for the period."},
 	"billing_parameters_invalid":     {"Fatura parametreleri geçersiz; operatöre başvurun.", "Billing parameters are invalid; contact the operator."},
 	"definition_in_use":              {"Bu tanımı kullanan entegrasyonlar var.", "Integrations still use this definition."},

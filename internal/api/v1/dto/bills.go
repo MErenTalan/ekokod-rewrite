@@ -35,6 +35,7 @@ type Bill struct {
 	PtfYekdemUsed          bool       `json:"ptf_yekdem_used" required:"true"`
 	Status                 string     `json:"status" required:"true" enum:"draft,issued,flagged,superseded"`
 	FlagReason             *string    `json:"flag_reason"`
+	MissingDays            []string   `json:"missing_days" required:"true"` // Istanbul YYYY-MM-DD days not covered (partial bill)
 	HasPDF                 bool       `json:"has_pdf" required:"true"`
 	ComputedAt             time.Time  `json:"computed_at" required:"true"`
 }
@@ -138,6 +139,7 @@ type BillDashboardRow struct {
 	ProductionPrice    *Decimal   `json:"production_price"`
 	Invoice            Decimal    `json:"invoice" required:"true"`
 	Currency           string     `json:"currency" required:"true" enum:"TRY,USD,EUR"`
+	MissingDays        []string   `json:"missing_days" required:"true"`
 }
 
 // BillDashboardBuilding is one building's section. BuildingBill is the

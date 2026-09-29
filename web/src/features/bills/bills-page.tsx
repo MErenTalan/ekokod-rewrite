@@ -124,6 +124,9 @@ export function BillsPage() {
               running={compute.isPending || job?.status === 'queued' || job?.status === 'running'}
               failure={job?.status === 'failed' ? messageKeyForErrorCode(errorCode) : undefined}
               readyBillIds={job?.status === 'succeeded' ? (generated.data?.items ?? []).map((b) => b.id) : []}
+              missingDays={job?.status === 'succeeded'
+                ? [...new Set((generated.data?.items ?? []).flatMap((b) => b.missing_days ?? []))].sort()
+                : []}
               onDownload={(id) => download(`/api/v1/bills/${id}/pdf`, {}, `fatura-${id}.pdf`)}
             />
           ) : null}

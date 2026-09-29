@@ -926,6 +926,12 @@
           "max_demand_kw": {
             "$ref": "#/components/schemas/Decimal"
           },
+          "missing_days": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "net_consumption": {
             "$ref": "#/components/schemas/Decimal"
           },
@@ -1000,6 +1006,7 @@
           "reactive_penalty_applied",
           "ptf_yekdem_used",
           "status",
+          "missing_days",
           "has_pdf",
           "computed_at"
         ],
@@ -1311,6 +1318,12 @@
           "invoice": {
             "$ref": "#/components/schemas/Decimal"
           },
+          "missing_days": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "period_key": {
             "type": "string"
           },
@@ -1331,7 +1344,8 @@
           "consumption",
           "production",
           "invoice",
-          "currency"
+          "currency",
+          "missing_days"
         ],
         "type": "object"
       },
@@ -1399,6 +1413,12 @@
           "member_analyzer_ids": {
             "items": {
               "$ref": "#/components/schemas/UuidUUID"
+            },
+            "type": "array"
+          },
+          "missing_days": {
+            "items": {
+              "type": "string"
             },
             "type": "array"
           },
@@ -1476,6 +1496,7 @@
           "reactive_penalty_applied",
           "ptf_yekdem_used",
           "status",
+          "missing_days",
           "has_pdf",
           "computed_at",
           "lines",

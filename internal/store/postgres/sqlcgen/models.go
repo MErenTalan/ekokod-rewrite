@@ -1352,6 +1352,7 @@ type Bill struct {
 	DemandDataAvailable     bool
 	PtfHoursExpected        *int32
 	ConsumptionHoursMissing *int32
+	MissingDays             []string
 }
 
 type BillHourlyDetail struct {

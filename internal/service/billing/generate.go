@@ -38,10 +38,11 @@ const anomalyLookback = 367 * 24 * time.Hour // I-5: widest anomaly period start
 
 // subject is one computed invoice subject plus what persistence needs.
 type subject struct {
-	invoice  domain.Invoice
-	members  []uuid.UUID
-	building *model.Building
-	analyzer *model.Analyzer
+	invoice     domain.Invoice
+	members     []uuid.UUID
+	building    *model.Building
+	analyzer    *model.Analyzer
+	missingDays []string // days the consumption could not cover (partial bill)
 }
 
 // Generate computes and persists a bill (R113, R114, R115).
@@ -125,6 +126,7 @@ func (s *Service) persist(ctx context.Context, sc store.Scope, req GenerateReque
 		bill.AnalyzerID = &subj.analyzer.ID
 	}
 	bill.ComputedAt, bill.CreatedAt, bill.UpdatedAt = now, now, now
+	bill.MissingDays = subj.missingDays
 
 	var saved model.Bill
 	var err error
@@ -217,6 +219,7 @@ func (s *Service) computeCompany(ctx context.Context, sc store.Scope, key string
 	}
 	var invoices []domain.Invoice
 	var members []uuid.UUID
+	missing := map[string]bool{}
 	for _, b := range buildings {
 		analyzers, err := s.buildingAnalyzers(ctx, sc, b.ID)
 		if err != nil {
@@ -235,6 +238,9 @@ func (s *Service) computeCompany(ctx context.Context, sc store.Scope, key string
 		}
 		invoices = append(invoices, subj.invoice)
 		members = append(members, subj.members...)
+		for _, d := range subj.missingDays {
+			missing[d] = true
+		}
 	}
 	if len(invoices) == 0 {
 		return subject{}, computeErr(CodeNoConsumptionData, "company_id", sc.CompanyID.String())
@@ -243,7 +249,7 @@ func (s *Service) computeCompany(ctx context.Context, sc store.Scope, key string
 	if err != nil {
 		return subject{}, computeErr(CodeNoConsumptionData, "reason", err.Error())
 	}
-	return subject{invoice: combined, members: members}, nil
+	return subject{invoice: combined, members: members, missingDays: sortedKeys(missing)}, nil
 }
 
 // computeSubject prices one analyzer or building for key (steps 2–8).
@@ -252,7 +258,8 @@ func (s *Service) computeSubject(ctx context.Context, sc store.Scope, building m
 	if err != nil {
 		return subject{}, fmt.Errorf("%w: %w", ErrInvalidRequest, err)
 	}
-	if s.deps.Clock.Now().Before(window.To.Add(consumption.SettleDelayMonthly)) {
+	now := s.deps.Clock.Now()
+	if !now.After(window.From) {
 		return subject{}, computeErr(CodePeriodNotClosed, "period_end", window.To.UTC().Format(time.RFC3339))
 	}
 	ids := make([]uuid.UUID, len(analyzers))
@@ -279,13 +286,24 @@ func (s *Service) computeSubject(ctx context.Context, sc store.Scope, building m
 	}
 
 	rows := map[uuid.UUID]consumption.Row{}
-	for _, chunk := range chunks(ids, maxChunk) {
-		got, err := s.deps.Consumption.PeriodConsumptionAndRecord(ctx, sc, consumption.PeriodRequest{AnalyzerIDs: chunk, Windows: []energy.Window{window}})
-		if err != nil {
-			return subject{}, err
+	if !now.Before(window.To.Add(consumption.SettleDelayMonthly)) {
+		for _, chunk := range chunks(ids, maxChunk) {
+			got, err := s.deps.Consumption.PeriodConsumptionAndRecord(ctx, sc, consumption.PeriodRequest{AnalyzerIDs: chunk, Windows: []energy.Window{window}})
+			if err != nil {
+				return subject{}, err
+			}
+			for _, r := range got {
+				rows[r.AnalyzerID] = r
+			}
 		}
-		for _, r := range got {
-			rows[r.AnalyzerID] = r
+	}
+	// An open period or a missing boundary no longer blocks the bill: it
+	// covers the days that have data and lists the rest.
+	billed, partial := window, len(rows) < len(ids)
+	var missingDays []string
+	if partial {
+		if billed, missingDays, rows, err = s.partialRows(ctx, sc, ids, window, now); err != nil {
+			return subject{}, err
 		}
 	}
 	var quantities []domain.Quantities
@@ -303,7 +321,7 @@ func (s *Service) computeSubject(ctx context.Context, sc store.Scope, building m
 	if len(suspect) > 0 {
 		return subject{}, computeErr(CodeUnresolvedAnomaly, "analyzer_ids", strings.Join(suspect, ","))
 	}
-	if blocking, err := s.blockingAnomalies(ctx, sc, ids, window); err != nil {
+	if blocking, err := s.blockingAnomalies(ctx, sc, ids, billed, partial); err != nil {
 		return subject{}, err
 	} else if len(blocking) > 0 {
 		return subject{}, computeErr(CodeUnresolvedAnomaly, "anomaly_ids", strings.Join(blocking, ","))
@@ -327,7 +345,7 @@ func (s *Service) computeSubject(ctx context.Context, sc store.Scope, building m
 		Quantities: domain.AggregateQuantities(quantities), InstalledPowerKw: domain.SumInstalledPower(installed),
 	}
 	if t.UsePtfYekdem {
-		pricing, err := s.price(ctx, sc, t, ids, window, params)
+		pricing, err := s.price(ctx, sc, t, ids, billed, params)
 		if err != nil {
 			return subject{}, err
 		}
@@ -340,11 +358,73 @@ func (s *Service) computeSubject(ctx context.Context, sc store.Scope, building m
 	if err != nil {
 		return subject{}, err
 	}
-	return subject{invoice: inv, members: ids, building: &building}, nil
+	return subject{invoice: inv, members: ids, building: &building, missingDays: missingDays}, nil
+}
+
+// partialRows bills the span from the first to the last day every analyzer
+// can difference; days not covered (future ones included) are returned as
+// missing, in order.
+func (s *Service) partialRows(ctx context.Context, sc store.Scope, ids []uuid.UUID, window energy.Window, now time.Time) (energy.Window, []string, map[uuid.UUID]consumption.Row, error) {
+	var days []energy.Window
+	for d := window.From.In(s.loc); d.Before(window.To); d = d.AddDate(0, 0, 1) {
+		days = append(days, energy.Window{From: d, To: d.AddDate(0, 0, 1)})
+	}
+	index := make(map[int64]int, len(days))
+	var probe []energy.Window
+	for i, d := range days {
+		index[d.From.UnixNano()] = i
+		if !d.To.After(now) { // a day still running is never "covered"
+			probe = append(probe, d)
+		}
+	}
+	covered := make([]int, len(days))
+	perChunk := max(1, min(maxChunk, consumption.MaxCells/consumption.MaxPeriodWindows))
+	for i := 0; i < len(probe); i += consumption.MaxPeriodWindows {
+		batch := probe[i:min(len(probe), i+consumption.MaxPeriodWindows)]
+		for _, chunk := range chunks(ids, perChunk) {
+			got, err := s.deps.Consumption.PeriodConsumption(ctx, sc, consumption.PeriodRequest{AnalyzerIDs: chunk, Windows: batch, Open: true})
+			if err != nil {
+				return energy.Window{}, nil, nil, err
+			}
+			for _, r := range got {
+				if j, ok := index[r.Window.From.UnixNano()]; ok {
+					covered[j]++
+				}
+			}
+		}
+	}
+	first, last := -1, -1
+	var missing []string
+	for i, d := range days {
+		if covered[i] == len(ids) {
+			if first < 0 {
+				first = i
+			}
+			last = i
+			continue
+		}
+		missing = append(missing, d.From.Format(time.DateOnly))
+	}
+	if first < 0 {
+		return energy.Window{}, nil, nil, computeErr(CodeNoConsumptionData, "reason", "no day of the period has readings")
+	}
+	billed := energy.Window{From: days[first].From, To: days[last].To}
+	rows := map[uuid.UUID]consumption.Row{}
+	for _, chunk := range chunks(ids, maxChunk) {
+		got, err := s.deps.Consumption.PeriodConsumption(ctx, sc, consumption.PeriodRequest{AnalyzerIDs: chunk, Windows: []energy.Window{billed}, Open: true})
+		if err != nil {
+			return energy.Window{}, nil, nil, err
+		}
+		for _, r := range got {
+			rows[r.AnalyzerID] = r
+		}
+	}
+	return billed, missing, rows, nil
 }
 
 // blockingAnomalies pages every unresolved anomaly that overlaps window (I-5).
-func (s *Service) blockingAnomalies(ctx context.Context, sc store.Scope, ids []uuid.UUID, window energy.Window) ([]string, error) {
+// A partial bill already lists its missing days, so missing_readings does not block it.
+func (s *Service) blockingAnomalies(ctx context.Context, sc store.Scope, ids []uuid.UUID, window energy.Window, partial bool) ([]string, error) {
 	var out []string
 	for _, chunk := range chunks(ids, maxChunk) {
 		anomalies, err := listAll(func(p store.Page) ([]model.ConsumptionAnomaly, error) {
@@ -357,6 +437,9 @@ func (s *Service) blockingAnomalies(ctx context.Context, sc store.Scope, ids []u
 			return nil, err
 		}
 		for _, a := range anomalies {
+			if partial && a.Reason == string(energy.ReasonMissingReadings) {
+				continue
+			}
 			if overlaps(a, window) {
 				out = append(out, a.ID.String())
 			}

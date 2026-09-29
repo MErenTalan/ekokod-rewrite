@@ -112,7 +112,7 @@ func (l dashboardLabels) row(b model.Bill) domain.DashboardRow {
 		BillID: b.ID, BuildingID: b.BuildingID, AnalyzerID: b.AnalyzerID, PeriodKey: b.PeriodKey,
 		Consumption: b.ActiveImport, Production: b.ActiveExport, ConsumptionPrice: b.EffectiveEnergyPrice,
 		ProductionPrice: b.GenerationPricePerKwh, Invoice: b.TotalCost, Currency: b.Currency,
-		Superseded: b.Status == model.BillStatusSuperseded,
+		Superseded: b.Status == model.BillStatusSuperseded, MissingDays: b.MissingDays,
 	}
 	if b.BuildingID != nil {
 		row.BuildingName = l.buildings[*b.BuildingID]

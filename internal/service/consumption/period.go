@@ -20,6 +20,9 @@ type PeriodRequest struct {
 	// Windows are sorted and contiguous (Windows[i].To == Windows[i+1].From),
 	// 1..MaxPeriodWindows of them, every bound an Istanbul midnight.
 	Windows []energy.Window
+	// Open also derives windows that have not settled yet (partial bills);
+	// PeriodConsumptionAndRecord refuses it so no gap is ever recorded for one.
+	Open bool
 }
 
 // PeriodConsumption is Consumption at Monthly semantics over req.Windows
@@ -34,6 +37,9 @@ func (b *Billing) PeriodConsumption(ctx context.Context, sc store.Scope, req Per
 // missing_readings anomalies for req.Windows, exactly as ConsumptionAndRecord
 // does for Monthly buckets.
 func (b *Billing) PeriodConsumptionAndRecord(ctx context.Context, sc store.Scope, req PeriodRequest) ([]Row, error) {
+	if req.Open {
+		return nil, ErrInvalidRequest
+	}
 	if b.deps.Locker == nil {
 		return nil, errRequired("BillingDeps.Locker")
 	}
@@ -56,7 +62,7 @@ func (b *Billing) periodConsumptionWithGaps(ctx context.Context, sc store.Scope,
 	for i, w := range req.Windows {
 		windows[i] = energy.Window{From: w.From.In(istanbul), To: w.To.In(istanbul)}
 	}
-	return b.consumptionOverWindows(ctx, sc, req.AnalyzerIDs, windowMode{level: energy.Monthly, explicit: true}, windows)
+	return b.consumptionOverWindows(ctx, sc, req.AnalyzerIDs, windowMode{level: energy.Monthly, explicit: true, open: req.Open}, windows)
 }
 
 // validatePeriodRequest runs every PeriodRequest check before any I/O.

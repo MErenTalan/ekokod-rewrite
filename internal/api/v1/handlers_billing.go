@@ -253,6 +253,7 @@ func billDTO(b model.Bill) dto.Bill {
 		VatCost: dto.D(b.VatCost), TotalCost: dto.D(b.TotalCost), Currency: string(b.Currency), InductiveRatio: dto.DP(b.InductiveRatio),
 		CapacitiveRatio: dto.DP(b.CapacitiveRatio), ReactivePenaltyApplied: b.ReactivePenaltyApplied, PtfYekdemUsed: b.PtfYekdemUsed,
 		Status: string(b.Status), FlagReason: b.FlagReason, HasPDF: b.PdfPath != nil, ComputedAt: dto.T(b.ComputedAt),
+		MissingDays: nonNilDays(b.MissingDays),
 	}
 }
 
@@ -418,7 +419,7 @@ func dashboardRowDTO(row domainbilling.DashboardRow) dto.BillDashboardRow {
 		AnalyzerName: row.AnalyzerName, InstallationNumber: row.InstallationNumber, EtsoCode: row.EtsoCode,
 		PeriodKey: row.PeriodKey, Consumption: dto.D(row.Consumption), Production: dto.D(row.Production),
 		ConsumptionPrice: dto.DP(row.ConsumptionPrice), ProductionPrice: dto.DP(row.ProductionPrice),
-		Invoice: dto.D(row.Invoice), Currency: string(row.Currency),
+		Invoice: dto.D(row.Invoice), Currency: string(row.Currency), MissingDays: nonNilDays(row.MissingDays),
 	}
 }
 
@@ -467,4 +468,11 @@ func dashboardPlantsDTO(p domainbilling.DashboardPlants) dto.BillDashboardPlants
 		out.TotalInvoice[i] = dto.MoneyAmount{Currency: string(m.Currency), Amount: dto.D(m.Amount)}
 	}
 	return out
+}
+
+func nonNilDays(v []string) []string {
+	if v == nil {
+		return []string{}
+	}
+	return v
 }

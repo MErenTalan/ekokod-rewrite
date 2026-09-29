@@ -10,6 +10,7 @@ import { MultiSelect } from '@/components/ui/multi-select';
 import type { Analyzer } from '@/lib/api/types';
 
 import { validateSelection, type BillsMessageKey, type GenerationScope } from './generation-status';
+import { dayRanges } from './missing-days';
 
 export type GenerateRequest = {
   scope: GenerationScope;
@@ -25,6 +26,8 @@ export type GenerateCardViewProps = {
   onGenerate: (request: GenerateRequest) => void;
   /** Bill ids the finished job produced, ready to download. */
   readyBillIds?: string[];
+  /** Days the ready bills could not cover: they were generated with missing data. */
+  missingDays?: string[];
   onDownload?: (billID: string) => void;
   /** The API's own failure, mapped to a §7.10 sentence (R238). */
   failure?: BillsMessageKey;
@@ -37,7 +40,7 @@ export type GenerateCardViewProps = {
  * enqueued, so every §7.10 validation message is reachable.
  */
 export function GenerateCardView({
-  analyzers, period, buildingId, onGenerate, readyBillIds = [], onDownload, failure, running = false,
+  analyzers, period, buildingId, onGenerate, readyBillIds = [], missingDays = [], onDownload, failure, running = false,
 }: GenerateCardViewProps) {
   const t = useTranslations('bills');
   const common = useTranslations('common');
@@ -81,6 +84,12 @@ export function GenerateCardView({
         <Button variant="secondary" loading={running} onClick={() => start('building')}>{t('generate.buildingBill')}</Button>
         <Button variant="secondary" loading={running} onClick={() => start('company')}>{t('generate.companyBill')}</Button>
       </div>
+
+      {readyBillIds.length > 0 && missingDays.length > 0 ? (
+        <Alert tone="warning" title={t('generate.partialTitle')}>
+          {t('generate.partialDays', { days: dayRanges(missingDays).join(', ') })}
+        </Alert>
+      ) : null}
 
       {readyBillIds.length > 0 && onDownload ? (
         <div className="flex flex-wrap items-center gap-3">

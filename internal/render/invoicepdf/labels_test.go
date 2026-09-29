@@ -22,3 +22,9 @@ func TestLabelsCoverEveryLineCode(t *testing.T) {
 	}
 	require.Equal(t, "Vergi/fon: BTV", lineLabel("tr", "tax:BTV"))
 }
+
+func TestDayRangesCollapsesRuns(t *testing.T) {
+	got := DayRanges([]string{"2026-09-01", "2026-09-02", "2026-09-03", "2026-09-05", "2026-09-30", "2026-10-01"})
+	require.Equal(t, []string{"01.09.2026 – 03.09.2026", "05.09.2026", "30.09.2026 – 01.10.2026"}, got)
+	require.Empty(t, DayRanges(nil))
+}
