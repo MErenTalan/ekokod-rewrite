@@ -506,6 +506,7 @@ type QueueStats struct {
 }
 
 type queueInspector interface {
+	Queues() ([]string, error)
 	GetQueueInfo(queue string) (*asynq.QueueInfo, error)
 }
 
@@ -516,8 +517,22 @@ func (s *Service) Queues() ([]QueueStats, error) {
 	if !ok {
 		return nil, errors.New("jobs: inspector cannot report queues")
 	}
+	// A queue no task has used yet does not exist in Redis, and GetQueueInfo
+	// reports that as an internal NOT_FOUND, not asynq.ErrQueueNotFound.
+	names, err := qi.Queues()
+	if err != nil {
+		return nil, fmt.Errorf("jobs: list queues: %w", err)
+	}
+	exists := make(map[string]bool, len(names))
+	for _, n := range names {
+		exists[n] = true
+	}
 	out := make([]QueueStats, 0, len(s.d.Queues))
 	for _, q := range s.d.Queues {
+		if !exists[q] {
+			out = append(out, QueueStats{Queue: q})
+			continue
+		}
 		info, err := qi.GetQueueInfo(q)
 		if errors.Is(err, asynq.ErrQueueNotFound) {
 			out = append(out, QueueStats{Queue: q})

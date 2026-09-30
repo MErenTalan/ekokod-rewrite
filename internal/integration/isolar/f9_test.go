@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MErenTalan/ekokod-rewrite/internal/integration"
+
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
@@ -36,7 +38,7 @@ func TestDeviceMinuteSeriesReturnsCumulativeYieldInKwh(t *testing.T) {
 	require.Len(t, samples, 1)
 	require.True(t, decimal.RequireFromString("12.5").Equal(*samples[0].YieldTodayKwh))
 	require.True(t, decimal.RequireFromString("3.2").Equal(*samples[0].ActivePowerKw))
-	require.Equal(t, "1,24", requestBody(t, srv, 0)["points"])
+	require.Equal(t, "p1,p24", requestBody(t, srv, 0)["points"])
 }
 
 // F2 defect 2: a plant has its own points, 83022 (daily yield) and 83025 (active power).
@@ -49,7 +51,7 @@ func TestPlantMinuteSeriesAsksForPlantPoints(t *testing.T) {
 	require.Len(t, samples, 1)
 	require.True(t, decimal.RequireFromString("5").Equal(*samples[0].YieldTodayKwh))
 	require.True(t, decimal.RequireFromString("8").Equal(*samples[0].ActivePowerKw))
-	require.Equal(t, "83022,83025", requestBody(t, srv, 0)["points"])
+	require.Equal(t, "p83022,p83025", requestBody(t, srv, 0)["points"])
 }
 
 func TestPlantDailySeriesOneRowPerDay(t *testing.T) {
@@ -70,7 +72,7 @@ func TestPlantDailySeriesOneRowPerDay(t *testing.T) {
 	require.True(t, days[2].Day.Equal(from.AddDate(0, 0, 2)))
 
 	req := requestBody(t, srv, 0)
-	require.Equal(t, "1", req["query_type"])
+	require.Equal(t, "day", req["query_type"])
 	require.Equal(t, "2", req["data_type"])
 	require.Equal(t, "p83022", req["data_point"])
 	require.Equal(t, "20260101", req["start_time"])
@@ -149,4 +151,17 @@ func TestNoWattsCrossTheAdapter(t *testing.T) {
 			}
 		}
 	}
+}
+
+// A parameter error is our own request's fault: never retried (live: 010).
+func TestParameterErrorIsNotRetryable(t *testing.T) {
+	body := []byte(`{"result_code":"010","result_msg":"Parameter:query_type must be in daymonthyear","result_data":null}`)
+	srv := fake.NewTLSServer(t, fake.Route{Method: http.MethodPost, Path: "/openapi/platform/getPowerStationPointDayMonthYearDataList",
+		Respond: fake.JSON(http.StatusOK, body)})
+	c := isolar.New(isolarTestPool(t, srv), isolar.Options{Clock: clock.NewFake(fixtureFrom)})
+
+	_, err := c.PlantDailySeries(context.Background(), isolarTestCreds(srv), "FX3001", fixtureFrom, fixtureFrom.AddDate(0, 0, 1))
+	require.ErrorIs(t, err, integration.ErrConfig)
+	require.False(t, integration.Retryable(err))
+	require.Contains(t, err.Error(), "[010 Parameter:query_type must be in daymonthyear]")
 }

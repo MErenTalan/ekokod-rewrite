@@ -14,9 +14,10 @@ import (
 
 const (
 	opGetPowerStationPointDayMonthYearDataList = "get_power_station_point_day_month_year_data_list"
-	// Legacy's historical route: query_type "1" = day, data_type "2", point
-	// p83022 (daily yield, Wh). Unverified against a live account (Q-F3).
-	dailyQueryType = "1"
+	// Legacy's historical route: query_type "day", data_type "2" (peak), point
+	// p83022 (daily yield, Wh). The live API refuses "1" (010 query_type must
+	// be in daymonthyear).
+	dailyQueryType = "day"
 	dailyDataType  = "2"
 	dailyPoint     = "p83022"
 	dayLayout      = "20060102"
