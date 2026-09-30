@@ -29,13 +29,10 @@ const (
 // package no longer reads creds.Region at all). app_id comes from
 // creds.Extra["app_id"].
 //
-// redirectURI is taken EXACTLY as given and query-escaped once. R22's
-// HMAC-signed state ("redirectUrl=<callback>?state=<signed>") is produced
-// and verified by Task 14's credential service, not by this package: this
-// Client has no access to EKOKOD_JWT_SIGNING_KEY (it would break 06 §1 rule
-// 2's purity — no config/store dependency), so the caller is expected to
-// hand redirectURI already carrying its own "?state=..." query when one is
-// wanted. This function's only job is the R22 string format.
+// redirectURI is taken EXACTLY as given and query-escaped once. It must be
+// the application's registered URL verbatim: iSolarCloud rejects any
+// extra query ("invalid redirect uri"), so the caller keeps its state
+// elsewhere. This function's only job is the R22 string format.
 func (c *Client) AuthorizeURL(creds integration.Credentials, redirectURI string) (string, error) {
 	origin, ok := creds.Endpoints[endpointAuthorizeOrigin]
 	if !ok || origin == "" {

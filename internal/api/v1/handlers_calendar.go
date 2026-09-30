@@ -1,9 +1,6 @@
 package v1
 
 import (
-	"crypto/sha256"
-	"crypto/subtle"
-	"encoding/hex"
 	"errors"
 	"net/http"
 	"time"
@@ -341,15 +338,12 @@ func (h *Handlers) backfillCredential(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// OAuthCookie binds an iSolar authorisation to the browser that started it (R187).
+// OAuthCookie carries the signed iSolar state and binds the authorisation to
+// the browser that started it (R187). iSolarCloud rejects a redirect URL that
+// differs from the registered one, so the state cannot ride in its query.
 const OAuthCookie = "ekokod_oauth"
 
 const callbackPath = "/api/v1/integrations/isolar/callback"
-
-func stateHash(state string) string {
-	sum := sha256.Sum256([]byte(state))
-	return hex.EncodeToString(sum[:])
-}
 
 func (h *Handlers) isolarAuthorizeURL(w http.ResponseWriter, r *http.Request) {
 	var q dto.AuthorizeURLRequest
@@ -362,17 +356,16 @@ func (h *Handlers) isolarAuthorizeURL(w http.ResponseWriter, r *http.Request) {
 		kit.WriteError(w, r, credErr(err))
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: OAuthCookie, Value: stateHash(state), Path: callbackPath, HttpOnly: true, Secure: true,
+	http.SetCookie(w, &http.Cookie{Name: OAuthCookie, Value: state, Path: callbackPath, HttpOnly: true, Secure: true,
 		SameSite: http.SameSiteLaxMode, MaxAge: int((10 * time.Minute).Seconds())})
 	kit.WriteJSON(w, http.StatusOK, dto.AuthorizeURL{URL: u})
 }
 
 func (h *Handlers) isolarCallback(w http.ResponseWriter, r *http.Request) {
-	state, code := r.URL.Query().Get("state"), r.URL.Query().Get("code")
+	code := r.URL.Query().Get("code")
 	outcome := "error"
-	if c, err := r.Cookie(OAuthCookie); err == nil && state != "" && code != "" &&
-		subtle.ConstantTimeCompare([]byte(c.Value), []byte(stateHash(state))) == 1 {
-		if err := h.Credentials.ISolarCallback(r.Context(), code, state); err == nil {
+	if c, err := r.Cookie(OAuthCookie); err == nil && c.Value != "" && code != "" {
+		if err := h.Credentials.ISolarCallback(r.Context(), code, c.Value); err == nil {
 			outcome = "ok"
 		} else {
 			h.Log.WarnContext(r.Context(), "api: isolar callback failed", "error", err.Error())

@@ -3,7 +3,6 @@
 package v1_test
 
 import (
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -272,18 +271,16 @@ func TestIsolarCallbackRequiresBrowserBinding(t *testing.T) {
 	parsed, err := url.Parse(redirect)
 	require.NoError(t, err)
 	require.Equal(t, "/api/v1/integrations/isolar/callback", parsed.Path)
-	state := parsed.Query().Get("state")
-	sum := sha256.Sum256([]byte(state))
-	require.Contains(t, cookie, "ekokod_oauth="+hex.EncodeToString(sum[:]))
+	require.Empty(t, parsed.RawQuery, "iSolarCloud refuses a redirect that differs from the registered URL")
 
 	stranger := h.client(uaChrome)
-	res = stranger.do(http.MethodGet, "/integrations/isolar/callback?code=c1&state="+url.QueryEscape(state), nil)
+	res = stranger.do(http.MethodGet, "/integrations/isolar/callback?code=c1", nil)
 	require.Equal(t, http.StatusFound, res.status)
 	require.Equal(t, "/ekorm/settings?tab=company&isolar=error", res.header.Get("Location"), "no cookie: refused")
 	_, used := h.providers.exchanged.Load("c1")
 	require.False(t, used, "the nonce is not consumed and no code is exchanged")
 
-	res = ca.do(http.MethodGet, "/integrations/isolar/callback?code=c2&state="+url.QueryEscape(state)+"&lang=tr", nil)
+	res = ca.do(http.MethodGet, "/integrations/isolar/callback?code=c2&lang=tr", nil)
 	require.Equal(t, http.StatusFound, res.status)
 	require.Equal(t, "/ekorm/settings?tab=company&isolar=ok", res.header.Get("Location"))
 	require.Contains(t, setCookie(t, res, "ekokod_oauth"), "Max-Age=0")
