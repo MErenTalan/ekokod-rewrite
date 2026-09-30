@@ -168,6 +168,7 @@ jobs:
       - run: pnpm check:contrast
       - run: pnpm test
       - run: pnpm build
+      - run: pnpm check:module-chunks
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm storybook:build
         env:

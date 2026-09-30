@@ -14,14 +14,20 @@ describe('safeNext', () => {
   it.each([
     ['/ekorm/consumption?x=1', '/ekorm/consumption?x=1'],
     ['/ekorm', '/ekorm'],
-    [undefined, '/ekorm'],
-    ['//evil.com', '/ekorm'],
-    ['https://evil.com/ekorm', '/ekorm'],
-    ['/auth/login', '/ekorm'],
-    ['/ekormevil', '/ekorm'],
-    ['/ekorm/\\evil.com', '/ekorm'],
-    ['/ekorm/../auth/login', '/ekorm'],
-    ['/ekorm/./x', '/ekorm'],
+    // R492: every module and the chooser are valid targets; anything else lands on the chooser (U3).
+    ['/ekocm/data-entry', '/ekocm/data-entry'],
+    ['/ekocm?x=1', '/ekocm?x=1'],
+    ['/modules', '/modules'],
+    [undefined, '/modules'],
+    ['//evil.com', '/modules'],
+    ['https://evil.com/ekorm', '/modules'],
+    ['/auth/login', '/modules'],
+    ['/ekormevil', '/modules'],
+    ['/ekocmevil', '/modules'],
+    ['/modulesx', '/modules'],
+    ['/ekorm/\\evil.com', '/modules'],
+    ['/ekocm/../auth/login', '/modules'],
+    ['/ekorm/./x', '/modules'],
     ['/ekorm/a..b', '/ekorm/a..b'],
   ])('%s → %s', (input, want) => {
     expect(safeNext(input)).toBe(want);

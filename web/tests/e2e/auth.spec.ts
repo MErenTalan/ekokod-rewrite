@@ -22,7 +22,6 @@ const CORE = [
   'Raporlar',
   'Takvim',
   'Ayarlar',
-  'Karbon Ayak İzi',
   'ISO 50001 Modülü',
   'Tasarruf Önerileri',
   'İletişim',

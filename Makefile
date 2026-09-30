@@ -222,7 +222,7 @@ web-test:
 	cd web && pnpm test
 
 web-build:
-	cd web && pnpm build
+	cd web && pnpm build && pnpm check:module-chunks
 
 web-a11y: ## Storybook build + Playwright a11y sweep (slow, memory-heavy; not part of `ci`)
 	cd web && pnpm storybook:build && pnpm test:a11y

@@ -6,8 +6,8 @@ import { renderWithProviders } from '@/test/render';
 import { UsersTabView } from './users-tab';
 
 const users = [
-  { id: 'u-1', name: 'Ayşe Kaya', email: 'ayse@ornek.com.tr', role: 'company_admin', is_active: true, locale: 'tr', created_at: '', last_login_at: '2026-09-17T08:00:00+03:00' },
-  { id: 'u-2', name: 'Can Demir', email: 'can@ornek.com.tr', role: 'company_readonly_admin', is_active: false, locale: 'tr', created_at: '', last_login_at: null },
+  { id: 'u-1', company_id: 'c-1', name: 'Ayşe Kaya', email: 'ayse@ornek.com.tr', role: 'company_admin', is_active: true, locale: 'tr', created_at: '', last_login_at: '2026-09-17T08:00:00+03:00' },
+  { id: 'u-2', company_id: 'c-2', name: 'Can Demir', email: 'can@ornek.com.tr', role: 'company_readonly_admin', is_active: false, locale: 'tr', created_at: '', last_login_at: null },
 ] as User[];
 
 describe('UsersTabView', () => {
@@ -17,6 +17,15 @@ describe('UsersTabView', () => {
     );
     expect(r.getByRole('row', { name: /Ayşe Kaya/ })).toHaveTextContent('Şirket Yöneticisi');
     expect(r.getByRole('row', { name: /Can Demir/ })).toHaveTextContent('Hiç');
+  });
+
+  it('shows each user company to an admin', () => {
+    const r = renderWithProviders(
+      <UsersTabView users={users} selfId="u-1" canEdit onAdd={() => {}} onEdit={() => {}} onDelete={() => {}}
+        companyNames={{ 'c-1': 'Artı Enerji', 'c-2': 'Ekokod' }} />,
+    );
+    expect(r.getByRole('row', { name: /Ayşe Kaya/ })).toHaveTextContent('Artı Enerji');
+    expect(r.getByRole('row', { name: /Can Demir/ })).toHaveTextContent('Ekokod');
   });
 
   it('cannot delete the caller own row (R174)', () => {

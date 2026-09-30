@@ -25,15 +25,22 @@ type TaskInspector interface {
 // re-run, so it is deleted and the task enqueued again. insp nil keeps the
 // plain dedupe.
 func EnqueueReplacingFinished(ctx context.Context, e Enqueuer, insp TaskInspector, task *asynq.Task, id string) error {
+	_, err := EnqueueOrReplace(ctx, e, insp, task, id)
+	return err
+}
+
+// EnqueueOrReplace is EnqueueReplacingFinished that also reports whether
+// the task was (re-)enqueued: false means a live task already holds id.
+func EnqueueOrReplace(ctx context.Context, e Enqueuer, insp TaskInspector, task *asynq.Task, id string) (bool, error) {
 	_, err := e.Enqueue(ctx, task)
 	if err == nil {
-		return nil
+		return true, nil
 	}
 	if !errors.Is(err, asynq.ErrTaskIDConflict) && !errors.Is(err, asynq.ErrDuplicateTask) {
-		return err
+		return false, err
 	}
 	if insp == nil {
-		return nil
+		return false, nil
 	}
 	for _, queue := range []string{QueueCritical, QueueDefault, QueueLow} {
 		info, ierr := insp.GetTaskInfo(queue, id)
@@ -41,16 +48,16 @@ func EnqueueReplacingFinished(ctx context.Context, e Enqueuer, insp TaskInspecto
 			continue
 		}
 		if info.State != asynq.TaskStateArchived && info.State != asynq.TaskStateCompleted {
-			return nil
+			return false, nil
 		}
 		if err := insp.DeleteTask(queue, id); err != nil && !errors.Is(err, asynq.ErrTaskNotFound) {
-			return err
+			return false, err
 		}
 		_, err := e.Enqueue(ctx, task)
 		if errors.Is(err, asynq.ErrTaskIDConflict) {
-			return nil // a concurrent request re-enqueued it first
+			return false, nil // a concurrent request re-enqueued it first
 		}
-		return err
+		return err == nil, err
 	}
-	return nil
+	return false, nil
 }

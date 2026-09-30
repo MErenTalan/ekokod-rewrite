@@ -64,6 +64,52 @@ func (q *Queries) OpsAppendMessage(ctx context.Context, arg OpsAppendMessagePara
 	return i, err
 }
 
+const opsChildRunSummary = `-- name: OpsChildRunSummary :many
+select latest.status::text as status, coalesce(latest.error, '')::text as error, count(*)::int as n
+from (
+    select distinct on (task_id) status, error
+    from job_runs
+    where company_id = $1::uuid and parent_task_id = $2::text
+    order by task_id, started_at desc, id
+) latest
+group by 1, 2
+order by 3 desc, 1, 2
+limit 50
+`
+
+type OpsChildRunSummaryParams struct {
+	CompanyID    uuid.UUID
+	ParentTaskID string
+}
+
+type OpsChildRunSummaryRow struct {
+	Status string
+	Error  string
+	N      int32
+}
+
+// The outcome of every task a parent job enqueued: each child's newest run
+// (a retried task writes one run per attempt), grouped by status and error.
+func (q *Queries) OpsChildRunSummary(ctx context.Context, arg OpsChildRunSummaryParams) ([]OpsChildRunSummaryRow, error) {
+	rows, err := q.db.Query(ctx, opsChildRunSummary, arg.CompanyID, arg.ParentTaskID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OpsChildRunSummaryRow
+	for rows.Next() {
+		var i OpsChildRunSummaryRow
+		if err := rows.Scan(&i.Status, &i.Error, &i.N); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const opsFinishRun = `-- name: OpsFinishRun :one
 update job_runs set
     finished_at = $1::timestamptz,
@@ -74,7 +120,7 @@ update job_runs set
     error = $6::text,
     detail = $7::jsonb
 where id = $8::uuid and company_id = $9::uuid
-returning id, company_id, job_type, scope, started_at, finished_at, status, processed, skipped, failed, error, detail, task_id
+returning id, company_id, job_type, scope, started_at, finished_at, status, processed, skipped, failed, error, detail, task_id, parent_task_id
 `
 
 type OpsFinishRunParams struct {
@@ -116,12 +162,13 @@ func (q *Queries) OpsFinishRun(ctx context.Context, arg OpsFinishRunParams) (Job
 		&i.Error,
 		&i.Detail,
 		&i.TaskID,
+		&i.ParentTaskID,
 	)
 	return i, err
 }
 
 const opsGetRun = `-- name: OpsGetRun :one
-select id, company_id, job_type, scope, started_at, finished_at, status, processed, skipped, failed, error, detail, task_id from job_runs where id = $1 and company_id = $2::uuid
+select id, company_id, job_type, scope, started_at, finished_at, status, processed, skipped, failed, error, detail, task_id, parent_task_id from job_runs where id = $1 and company_id = $2::uuid
 `
 
 type OpsGetRunParams struct {
@@ -146,6 +193,7 @@ func (q *Queries) OpsGetRun(ctx context.Context, arg OpsGetRunParams) (JobRun, e
 		&i.Error,
 		&i.Detail,
 		&i.TaskID,
+		&i.ParentTaskID,
 	)
 	return i, err
 }
@@ -233,7 +281,7 @@ func (q *Queries) OpsListMessages(ctx context.Context, arg OpsListMessagesParams
 }
 
 const opsListRuns = `-- name: OpsListRuns :many
-select id, company_id, job_type, scope, started_at, finished_at, status, processed, skipped, failed, error, detail, task_id from job_runs
+select id, company_id, job_type, scope, started_at, finished_at, status, processed, skipped, failed, error, detail, task_id, parent_task_id from job_runs
 where company_id = $1::uuid
   and ($2::text is null or job_type = $2::text)
   and ($3::text[] is null or cardinality($3::text[]) = 0
@@ -288,6 +336,7 @@ func (q *Queries) OpsListRuns(ctx context.Context, arg OpsListRunsParams) ([]Job
 			&i.Error,
 			&i.Detail,
 			&i.TaskID,
+			&i.ParentTaskID,
 		); err != nil {
 			return nil, err
 		}
@@ -300,7 +349,7 @@ func (q *Queries) OpsListRuns(ctx context.Context, arg OpsListRunsParams) ([]Job
 }
 
 const opsRunByTaskID = `-- name: OpsRunByTaskID :one
-select id, company_id, job_type, scope, started_at, finished_at, status, processed, skipped, failed, error, detail, task_id from job_runs
+select id, company_id, job_type, scope, started_at, finished_at, status, processed, skipped, failed, error, detail, task_id, parent_task_id from job_runs
 where company_id = $1::uuid and task_id = $2::text
 order by started_at desc, id
 limit 1
@@ -330,29 +379,31 @@ func (q *Queries) OpsRunByTaskID(ctx context.Context, arg OpsRunByTaskIDParams) 
 		&i.Error,
 		&i.Detail,
 		&i.TaskID,
+		&i.ParentTaskID,
 	)
 	return i, err
 }
 
 const opsStartRun = `-- name: OpsStartRun :one
 
-insert into job_runs (id, company_id, job_type, scope, status, task_id)
+insert into job_runs (id, company_id, job_type, scope, status, task_id, parent_task_id)
 values (
     coalesce(nullif($1::uuid, '00000000-0000-0000-0000-000000000000'::uuid),
              gen_random_uuid()),
     $2::uuid, $3, $4::jsonb, $5,
-    $6::text
+    $6::text, $7::text
 )
-returning id, company_id, job_type, scope, started_at, finished_at, status, processed, skipped, failed, error, detail, task_id
+returning id, company_id, job_type, scope, started_at, finished_at, status, processed, skipped, failed, error, detail, task_id, parent_task_id
 `
 
 type OpsStartRunParams struct {
-	ID        uuid.UUID
-	CompanyID uuid.UUID
-	JobType   string
-	Scope     []byte
-	Status    string
-	TaskID    *string
+	ID           uuid.UUID
+	CompanyID    uuid.UUID
+	JobType      string
+	Scope        []byte
+	Status       string
+	TaskID       *string
+	ParentTaskID *string
 }
 
 // Tenant job-run and operational-message repository queries (migration
@@ -371,6 +422,7 @@ func (q *Queries) OpsStartRun(ctx context.Context, arg OpsStartRunParams) (JobRu
 		arg.Scope,
 		arg.Status,
 		arg.TaskID,
+		arg.ParentTaskID,
 	)
 	var i JobRun
 	err := row.Scan(
@@ -387,6 +439,7 @@ func (q *Queries) OpsStartRun(ctx context.Context, arg OpsStartRunParams) (JobRu
 		&i.Error,
 		&i.Detail,
 		&i.TaskID,
+		&i.ParentTaskID,
 	)
 	return i, err
 }

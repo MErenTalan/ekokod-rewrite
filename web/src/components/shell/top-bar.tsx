@@ -1,11 +1,12 @@
 'use client';
 
-import { Bell, Leaf, PanelLeft, PanelLeftClose, Search, Settings2 } from 'lucide-react';
+import { Bell, PanelLeft, PanelLeftClose, Search, Settings2 } from 'lucide-react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useState, type ReactNode } from 'react';
 
 import { useUiPreferences } from '@/lib/ui-preferences-provider';
+import { MODULES, type ModuleId } from '@/modules/registry';
 
 import { IconButton } from '../ui/icon-button';
 import { Popover } from '../ui/popover';
@@ -15,22 +16,28 @@ import { ThemeToggle } from './theme-toggle';
 import { UserMenu, type ShellUser } from './user-menu';
 
 export type TopBarProps = {
+  /** The module whose brand and home the bar shows (R489); EKORM when omitted. */
+  module?: ModuleId;
   user: ShellUser;
   notificationCount?: number;
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
   onOpenCustomizer: () => void;
+  /** R496: the module switcher, when the user has more than one module. */
+  moduleSwitcher?: ReactNode;
   /** The admin's company scope control, only for `admin.companies`. */
   companySwitcher?: ReactNode;
 };
 
-export function TopBar({ user, notificationCount, sidebarOpen, onToggleSidebar, onOpenCustomizer, companySwitcher }: TopBarProps) {
+export function TopBar({ module = 'ekorm', moduleSwitcher, user, notificationCount, sidebarOpen, onToggleSidebar, onOpenCustomizer, companySwitcher }: TopBarProps) {
   const t = useTranslations('shell');
   const common = useTranslations('common');
   const app = useTranslations('app');
   const { prefs, update } = useUiPreferences();
   const [query, setQuery] = useState('');
   const collapsed = prefs.sidebar === 'collapsed';
+  const { home, icon: Brand } = MODULES[module];
+  const moduleName = t(`modules.${module}.name`);
   return (
     <header className="sticky top-0 z-20 flex h-14 items-center gap-1 border-b border-border bg-surface px-2 sm:gap-2 sm:px-3">
       <IconButton className="lg:hidden" label={t('toggleSidebar')} icon={PanelLeft} aria-expanded={sidebarOpen} onClick={onToggleSidebar} />
@@ -43,10 +50,12 @@ export function TopBar({ user, notificationCount, sidebarOpen, onToggleSidebar, 
           onClick={() => update({ sidebar: collapsed ? 'expanded' : 'collapsed' })}
         />
       ) : null}
-      <Link href="/ekorm" aria-label={t('home')} className="flex items-center gap-1.5 rounded-md px-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11">
-        <Leaf aria-hidden className="size-6 stroke-brand" />
+      <Link href={home} aria-label={t('home', { module: moduleName })} className="flex items-center gap-1.5 rounded-md px-1 pointer-coarse:min-h-11 pointer-coarse:min-w-11">
+        <Brand aria-hidden className="size-6 stroke-brand" />
         <span className="hidden font-heading text-lg font-semibold text-foreground sm:inline">{app('name')}</span>
+        <span className="hidden rounded-sm border border-brand px-1.5 font-heading text-foreground type-caption sm:inline">{moduleName}</span>
       </Link>
+      {moduleSwitcher}
       {companySwitcher ? <div className="ms-2 hidden sm:block">{companySwitcher}</div> : null}
       <div className="ms-auto hidden w-72 md:block">
         <SearchInput label={t('search')} labelVisibility="hidden" placeholder={t('searchPlaceholder')} value={query} onValueChange={setQuery} />

@@ -11,6 +11,7 @@ import (
 
 	"github.com/shopspring/decimal"
 
+	carbondomain "github.com/MErenTalan/ekokod-rewrite/internal/domain/carbon"
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 )
 
@@ -24,7 +25,7 @@ var istanbul = func() *time.Location {
 
 // Equivalence factor keys, seeded as platform emission_factors rows (R293).
 const (
-	GridFactorKey = "grid_electricity_tr_2022"
+	GridFactorKey = carbondomain.GridFactorKey // F17 R497: one key platform-wide
 	EquivTree     = "equiv_tree_co2_kg_per_year"
 	EquivCoal     = "equiv_coal_kg_per_kwh"
 	EquivCar      = "equiv_car_co2_kg_per_km"

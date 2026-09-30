@@ -16,14 +16,14 @@ import (
 )
 
 // TestISolarAuthorizeURLFormat: exact string for region EU with a fixture
-// app id and a redirect carrying "?state=" — the redirect is query-escaped
-// once (R22's legacy format, isolarClient.ts:676-684).
+// app id — the redirect is query-escaped exactly once (R22's legacy format,
+// isolarClient.ts:676-684).
 func TestISolarAuthorizeURLFormat(t *testing.T) {
 	srv := fake.NewTLSServer(t)
 	c := isolar.New(isolarTestPool(t, srv), isolar.Options{Clock: clock.NewFake(fixtureFrom)})
 	creds := isolarTestCreds(srv)
 
-	redirect := "https://app.example.invalid/integrations/isolar/callback?state=FIXTURE-STATE-abc123"
+	redirect := "https://app.example.invalid/api/v1/integrations/isolar/callback?lang=tr"
 	got, err := c.AuthorizeURL(creds, redirect)
 	require.NoError(t, err)
 

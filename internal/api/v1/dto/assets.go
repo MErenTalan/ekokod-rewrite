@@ -57,8 +57,8 @@ type BuildingListRequest struct {
 // BuildingFields are the writable building fields.
 type BuildingFields struct {
 	Address           *string    `json:"address,omitempty" validate:"omitempty,max=500"`
-	Latitude          *Decimal   `json:"latitude,omitempty"`
-	Longitude         *Decimal   `json:"longitude,omitempty"`
+	Latitude          *Decimal   `json:"latitude,omitempty" validate:"omitempty,latitude"`
+	Longitude         *Decimal   `json:"longitude,omitempty" validate:"omitempty,longitude"`
 	Floors            *int32     `json:"floors,omitempty" validate:"omitempty,min=0,max=300"`
 	PersonnelCount    *int32     `json:"personnel_count,omitempty" validate:"omitempty,min=0"`
 	TotalAreaM2       *Decimal   `json:"total_area_m2,omitempty"`
@@ -122,8 +122,8 @@ type AnalyzerUpdateRequest struct {
 	UnassignBuilding bool       `json:"unassign_building,omitempty"`
 	MeterMultiplier  *Decimal   `json:"meter_multiplier,omitempty"`
 	InstalledPowerKw *Decimal   `json:"installed_power_kw,omitempty"`
-	Latitude         *Decimal   `json:"latitude,omitempty"`
-	Longitude        *Decimal   `json:"longitude,omitempty"`
+	Latitude         *Decimal   `json:"latitude,omitempty" validate:"omitempty,latitude"`
+	Longitude        *Decimal   `json:"longitude,omitempty" validate:"omitempty,longitude"`
 }
 
 // AnalyzerRefreshRequest is POST /analyzers/{id}/refresh.
@@ -199,8 +199,8 @@ type PlantFields struct {
 	YearlyTargetKwh    *Decimal   `json:"yearly_target_kwh,omitempty"`
 	InstallationDate   *Date      `json:"installation_date,omitempty"`
 	Address            *string    `json:"address,omitempty" validate:"omitempty,max=500"`
-	Latitude           *Decimal   `json:"latitude,omitempty"`
-	Longitude          *Decimal   `json:"longitude,omitempty"`
+	Latitude           *Decimal   `json:"latitude,omitempty" validate:"omitempty,latitude"`
+	Longitude          *Decimal   `json:"longitude,omitempty" validate:"omitempty,longitude"`
 	MonthlyTargets     *[]Decimal `json:"monthly_targets,omitempty" validate:"omitempty,len=12"`
 	AlarmRecipients    *[]string  `json:"alarm_recipients,omitempty" validate:"omitempty,max=50,dive,email"`
 	// NettingAnalyzerID sets the optional netting meter; ClearNettingAnalyzer removes it (R289).

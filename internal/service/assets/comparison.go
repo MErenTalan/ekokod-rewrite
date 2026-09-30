@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 
+	carbondomain "github.com/MErenTalan/ekokod-rewrite/internal/domain/carbon"
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/comparison"
 	perr "github.com/MErenTalan/ekokod-rewrite/internal/platform/errors"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
@@ -16,8 +17,8 @@ import (
 // ErrBuildingSectorMissing is returned when a building has no sector to compare within.
 var ErrBuildingSectorMissing = perr.New("building_sector_missing", 409, "errors.buildings.sectorMissing")
 
-// GridFactorKey is the emission factor the CO2 figure uses (R162).
-const GridFactorKey = "grid_electricity_tr_2022"
+// GridFactorKey is the emission factor the CO2 figure uses (R162); one key platform-wide (F17 R497).
+const GridFactorKey = carbondomain.GridFactorKey
 
 var istanbul = func() *time.Location {
 	loc, err := time.LoadLocation("Europe/Istanbul")

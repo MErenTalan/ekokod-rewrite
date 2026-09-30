@@ -177,6 +177,9 @@ type JobRun struct {
 	// run came from one (migration 00016). It is how a screen watching a job
 	// finds the run that explains it.
 	TaskID *string
+	// ParentTaskID is the task id of the job that enqueued this run's task
+	// (a backfill or analyzer refresh), so that job's screen can follow it.
+	ParentTaskID *string
 	// Scope describes what the run covered, as jsonb. It is NOT
 	// store.Scope — internal/domain imports nothing from the project, and
 	// the two are different things: this is a record of what a job did, not
@@ -222,4 +225,11 @@ type OperationalMessage struct {
 	Metadata    json.RawMessage
 
 	CreatedAt time.Time
+}
+
+// ChildRunGroup counts a parent job's child tasks sharing a status and error.
+type ChildRunGroup struct {
+	Status string
+	Error  string
+	Count  int32
 }

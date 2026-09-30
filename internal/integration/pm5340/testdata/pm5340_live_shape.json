@@ -1,0 +1,35 @@
+{
+  "items": [
+    {
+      "id": "69a89d6302faea14aae06707",
+      "deviceId": 56529,
+      "deviceIp": "192.168.1.188",
+      "meterDate": "05/01/2026 08:00",
+      "activeImport_kWh": 26152.314000000002,
+      "inductive_kvarh": 116.05,
+      "capacitive_kvarh": 9819.475,
+      "dmdKwPeak_kW": 200.93040466308594,
+      "currentGeneration": null,
+      "serverTsUtc": "2026-01-05T05:00:01.484Z",
+      "source": "modbus+fronius"
+    },
+    {
+      "id": "69a8a0e202faea14aae06708",
+      "deviceId": 56529,
+      "deviceIp": "192.168.1.188",
+      "meterDate": "05/01/2026 08:15",
+      "activeImport_kWh": null,
+      "inductive_kvarh": null,
+      "capacitive_kvarh": null,
+      "dmdKwPeak_kW": null,
+      "currentGeneration": 0,
+      "serverTsUtc": "2026-01-05T05:15:14.592Z",
+      "source": "bacnet+fronius"
+    }
+  ],
+  "limit": 500,
+  "cursorNext": "69a8a0e202faea14aae06708",
+  "hasMore": false,
+  "sort": "asc",
+  "filters": {"start": "2026-01-05T00:00:00Z", "end": "2026-01-06T00:00:00Z"}
+}

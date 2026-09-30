@@ -37,7 +37,9 @@ remain supported.
 - The carbon footprint module is branded **Eko-CM**. In the legacy deployment it ran as a
   *separate application* mounted at `/ekocm`, sharing the same database and session secret.
   **In the rewrite it is a first-class module of the single application** — same codebase, same
-  API, same auth, no second deployment.
+  API, same auth, no second deployment. Since F17 it is a sibling frontend module at `/ekocm`
+  with its own layout, sidebar and brand accent; one login leads to the `/modules` chooser, and
+  a header switcher moves between EKORM and Eko-CM on the same session.
 - The public marketing site lives under `/site`.
 
 ---
@@ -172,9 +174,13 @@ Key relationships and rules:
 /ekorm/messages            → System / alarm / job message log
 /ekorm/reports             → Monthly, yearly and archived reports
 /ekorm/settings/account    → Settings (tabbed)
-/ekorm/carbon-footprint    → Carbon footprint module (Eko-CM)
 /ekorm/iso-50001           → ISO 50001 compliance workbench
 /ekorm/calendar            → Company calendar, events and vacation configuration
+
+/modules                   → Module chooser after login (EKORM / Eko-CM)
+/ekocm                     → Eko-CM overview; sections at /ekocm/activity-selection, /data-entry,
+                             /activity-status, /reports, /emission-factors, /company,
+                             /ghg-protocol, /iso-14064, /standards, /documents (F17)
 
 /auth/login                → Login
 /auth/forgot-password      → Password reset request
@@ -717,10 +723,12 @@ flag, username, password, from-address; with a test-send action.
 
 ---
 
-### 7.16 Carbon Footprint — Eko-CM (`/ekorm/carbon-footprint`)
+### 7.16 Carbon Footprint — Eko-CM (`/ekocm`)
 
 A corporate carbon accounting module implementing **GHG Protocol** scopes and **ISO 14064**
 categories. It has its own left sidebar and requires a building to be selected before any action.
+F17: each section below is its own page under `/ekocm`; `/ekorm/carbon-footprint?tab=…` links
+redirect permanently to them.
 
 **Overview**
 - Cards: total carbon footprint, total activity count, registered activities, highest emission source.

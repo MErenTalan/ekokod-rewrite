@@ -30,10 +30,13 @@ type Deps struct {
 	Users       store.UserRepository
 	Sessions    store.SessionRepository
 	Analyzers   store.AnalyzerRepository
-	SMTP        store.SMTPRepository
-	Mail        mail.Sender
-	Hasher      auth.Hasher
-	Clock       clock.Clock
+	// Buildings carries a building-scoped user's assignment
+	// (buildings.responsible_user_id, 01 §3).
+	Buildings store.BuildingRepository
+	SMTP      store.SMTPRepository
+	Mail      mail.Sender
+	Hasher    auth.Hasher
+	Clock     clock.Clock
 }
 
 // Service implements tenancy management.
@@ -41,7 +44,7 @@ type Service struct{ d Deps }
 
 // New validates deps.
 func New(d Deps) (*Service, error) {
-	if d.Companies == nil || d.AdminTenant == nil || d.Users == nil || d.Sessions == nil || d.Analyzers == nil ||
+	if d.Companies == nil || d.AdminTenant == nil || d.Users == nil || d.Sessions == nil || d.Analyzers == nil || d.Buildings == nil ||
 		d.SMTP == nil || d.Mail == nil || d.Clock == nil || len(d.Hasher.Pepper) == 0 {
 		return nil, errors.New("tenancy: missing dependency")
 	}

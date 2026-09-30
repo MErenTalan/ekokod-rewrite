@@ -9,7 +9,16 @@ import { IconButton } from '@/components/ui/icon-button';
 import { Input } from '@/components/ui/input';
 import { NumberInput } from '@/components/ui/number-input';
 import { Select } from '@/components/ui/select';
-import { Table, TableBody, TableCaption, TableCell, TableContainer, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import type { BuildingCreateRequest, BuildingDetail, TariffSummary, User } from '@/lib/api/types';
 import { formatDate } from '@/lib/format';
@@ -29,6 +38,8 @@ export type BuildingDraft = {
   sector: string;
   billCutoffDay: string;
   contacts: { name: string; phone: string }[];
+  /** The company a new building belongs to; an admin picks it. */
+  companyId?: string;
 };
 
 export const MAX_CONTACTS = 10;
@@ -63,7 +74,9 @@ export const buildingDraft = (building: BuildingDetail): BuildingDraft => ({
 });
 
 /** The request for a building (R175): a cleared responsible user says so explicitly. */
-export function toBuildingRequest(draft: BuildingDraft): BuildingCreateRequest & { clear_responsible_user?: boolean } {
+export function toBuildingRequest(
+  draft: BuildingDraft,
+): BuildingCreateRequest & { clear_responsible_user?: boolean } {
   return {
     name: draft.name,
     address: draft.address || null,
@@ -76,7 +89,9 @@ export function toBuildingRequest(draft: BuildingDraft): BuildingCreateRequest &
     personnel_count: draft.personnelCount === '' ? null : Number(draft.personnelCount),
     bill_cutoff_day: Number(draft.billCutoffDay),
     contacts: draft.contacts.filter((c) => c.name || c.phone),
-    ...(draft.responsibleUserId ? { responsible_user_id: draft.responsibleUserId } : { clear_responsible_user: true }),
+    ...(draft.responsibleUserId
+      ? { responsible_user_id: draft.responsibleUserId }
+      : { clear_responsible_user: true }),
   };
 }
 
@@ -86,30 +101,104 @@ export type BuildingFormViewProps = {
   users: User[];
   tariffHistory: TariffSummary[];
   fieldErrors?: Record<string, string>;
+  /** Companies an admin may create the building in. */
+  companies?: { id: string; name: string }[];
 };
 
 /** Building fields of 01 §7.15; the tariff history is read-only here (F8 edits it). */
-export function BuildingFormView({ value, onChange, users, tariffHistory, fieldErrors = {} }: BuildingFormViewProps) {
+export function BuildingFormView({
+  value,
+  onChange,
+  users,
+  tariffHistory,
+  fieldErrors = {},
+  companies,
+}: BuildingFormViewProps) {
   const t = useTranslations('settings.buildings');
   const locale = useLocale() as Locale;
   const set = (patch: Partial<BuildingDraft>) => onChange({ ...value, ...patch });
   const cutoff = Number(value.billCutoffDay);
-  const cutoffError = value.billCutoffDay !== '' && (!Number.isInteger(cutoff) || cutoff < 1 || cutoff > 31) ? t('cutoffRange') : undefined;
+  const cutoffError =
+    value.billCutoffDay !== '' && (!Number.isInteger(cutoff) || cutoff < 1 || cutoff > 31)
+      ? t('cutoffRange')
+      : undefined;
 
   return (
     <div className="flex flex-col gap-4">
-      <Input label={t('name')} value={value.name} error={fieldErrors.name} onChange={(e) => set({ name: e.target.value })} required />
-      <Textarea label={t('address')} value={value.address} rows={2} onChange={(e) => set({ address: e.target.value })} />
+      {companies && !value.id ? (
+        <Select
+          label={t('company')}
+          required
+          options={companies.map((c) => ({ value: c.id, label: c.name }))}
+          value={value.companyId ?? ''}
+          onValueChange={(companyId) => set({ companyId, responsibleUserId: null })}
+        />
+      ) : null}
+      <Input
+        label={t('name')}
+        value={value.name}
+        error={fieldErrors.name}
+        onChange={(e) => set({ name: e.target.value })}
+        required
+      />
+      <Textarea
+        label={t('address')}
+        value={value.address}
+        rows={2}
+        onChange={(e) => set({ address: e.target.value })}
+      />
       <div className="flex flex-wrap gap-4">
-        <NumberInput label={t('latitude')} value={value.latitude} onValueChange={(v) => set({ latitude: v ?? '' })} fractionDigits={6} />
-        <NumberInput label={t('longitude')} value={value.longitude} onValueChange={(v) => set({ longitude: v ?? '' })} fractionDigits={6} />
+        <NumberInput
+          label={t('latitude')}
+          value={value.latitude}
+          error={fieldErrors.latitude}
+          onValueChange={(v) => set({ latitude: v ?? '' })}
+          min="-90"
+          max="90"
+          fractionDigits={6}
+        />
+        <NumberInput
+          label={t('longitude')}
+          value={value.longitude}
+          error={fieldErrors.longitude}
+          onValueChange={(v) => set({ longitude: v ?? '' })}
+          min="-180"
+          max="180"
+          fractionDigits={6}
+        />
       </div>
       <div className="flex flex-wrap gap-4">
-        <NumberInput label={t('floors')} value={value.floors} onValueChange={(v) => set({ floors: v ?? '' })} fractionDigits={0} />
-        <NumberInput label={t('personnel')} value={value.personnelCount} onValueChange={(v) => set({ personnelCount: v ?? '' })} fractionDigits={0} />
-        <NumberInput label={t('area')} value={value.totalAreaM2} onValueChange={(v) => set({ totalAreaM2: v ?? '' })} fractionDigits={2} />
+        <NumberInput
+          label={t('floors')}
+          value={value.floors}
+          error={fieldErrors.floors}
+          min="0"
+          onValueChange={(v) => set({ floors: v ?? '' })}
+          fractionDigits={0}
+        />
+        <NumberInput
+          label={t('personnel')}
+          value={value.personnelCount}
+          error={fieldErrors.personnel_count}
+          min="0"
+          onValueChange={(v) => set({ personnelCount: v ?? '' })}
+          fractionDigits={0}
+        />
+        <NumberInput
+          label={t('area')}
+          value={value.totalAreaM2}
+          error={fieldErrors.total_area_m2}
+          min="0"
+          onValueChange={(v) => set({ totalAreaM2: v ?? '' })}
+          fractionDigits={2}
+        />
       </div>
-      <Input label={t('sector')} value={value.sector} error={fieldErrors.sector} onChange={(e) => set({ sector: e.target.value })} />
+      <Input
+        label={t('sector')}
+        value={value.sector}
+        error={fieldErrors.sector}
+        onChange={(e) => set({ sector: e.target.value })}
+      />
       <NumberInput
         label={t('cutoffDay')}
         value={value.billCutoffDay}
@@ -135,12 +224,24 @@ export function BuildingFormView({ value, onChange, users, tariffHistory, fieldE
             <Input
               label={t('contactName')}
               value={contact.name}
-              onChange={(e) => set({ contacts: value.contacts.map((c, i) => (i === index ? { ...c, name: e.target.value } : c)) })}
+              onChange={(e) =>
+                set({
+                  contacts: value.contacts.map((c, i) =>
+                    i === index ? { ...c, name: e.target.value } : c,
+                  ),
+                })
+              }
             />
             <Input
               label={t('contactPhone')}
               value={contact.phone}
-              onChange={(e) => set({ contacts: value.contacts.map((c, i) => (i === index ? { ...c, phone: e.target.value } : c)) })}
+              onChange={(e) =>
+                set({
+                  contacts: value.contacts.map((c, i) =>
+                    i === index ? { ...c, phone: e.target.value } : c,
+                  ),
+                })
+              }
             />
             <IconButton
               label={t('removeContact', { index: index + 1 })}

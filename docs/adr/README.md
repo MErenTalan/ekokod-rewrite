@@ -10,3 +10,4 @@ Short records of the decisions a maintainer needs to know about. Each one gives 
 - [0006 — Next.js web app with an API client generated from OpenAPI](0006-nextjs-web-generated-client.md)
 - [0007 — Forecasting in a Python sidecar with no database access](0007-ml-sidecar-without-db.md)
 - [0008 — Delivery as an offline bundle for on-premises installs](0008-offline-bundle-delivery.md)
+- [0009 — EKORM and EKOCM as sibling frontend modules of one app](0009-frontend-modules.md)

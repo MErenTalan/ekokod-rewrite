@@ -73,8 +73,10 @@ raporu istediğiniz zaman elle de üretebilirsiniz; iş bittiğinde indirme bağ
 
 - **Yük Profili:** hafta içi/hafta sonu ve tatil günlerine göre saatlik profil. Tatiller
   **Takvim**'den yönetilir.
-- **Karbon Ayak İzi** ve **ISO 50001 Modülü:** emisyon kayıtları ve enerji yönetim sistemi
-  dokümanları.
+- **ISO 50001 Modülü:** enerji yönetim sistemi dokümanları.
+- **EKO-CM (Karbon Yönetimi):** ayrı bir modüldür (`/ekocm`). Girişten sonra açılan modül
+  seçim ekranından ya da üst çubuktaki modül değiştiriciden, yeniden giriş yapmadan geçilir.
+  Faaliyet seçimi, veri girişi, onay, emisyon faktörleri ve GHG/ISO 14064 raporları buradadır.
 - **Finansal Analiz**, **Yenilenebilir Enerji**, **GES Santralleri:** üretim, mahsuplaşma ve
   yatırım göstergeleri.
 - **Tüketim Tahmini** ve **Yapay Zekâ Analizi:** saatlik tahmin ve anomali kontrolü. Salt okunur

@@ -12,20 +12,28 @@ export const USERS = {
   demo: { email: 'demo@ekokod.com.tr' },
 } as const;
 
-export async function login(page: Page, email: string, o: { remember?: boolean; next?: string } = {}) {
-  await page.goto(o.next ? `/auth/login?next=${encodeURIComponent(o.next)}` : '/auth/login');
+/** Signs in and lands on `next` (EKORM's dashboard by default); `next: null` takes the plain login to the chooser (F17 U3). */
+export async function login(page: Page, email: string, o: { remember?: boolean; next?: string | null } = {}) {
+  const next = o.next === undefined ? '/ekorm' : o.next;
+  await page.goto(next ? `/auth/login?next=${encodeURIComponent(next)}` : '/auth/login');
   await page.getByLabel('E-posta').fill(email);
   await page.getByLabel('Şifre', { exact: true }).fill(PASSWORD);
   if (o.remember) await page.getByRole('checkbox', { name: 'Bu Cihazı Hatırla' }).click();
   await page.getByRole('button', { name: 'Giriş Yap' }).click();
-  await expect(page).toHaveURL(new RegExp(`${(o.next ?? '/ekorm').replace(/[/?]/g, '\\$&')}$`));
+  await expect(page).toHaveURL(new RegExp(`${(next ?? '/modules').replace(/[/?]/g, '\\$&')}$`));
 }
 
-/** Every docked-sidebar entry label with groups expanded, in order. */
+/** Every docked-sidebar entry's accessible label with groups expanded, in order (aria-hidden badges like "Yakında" excluded). */
 export async function sidebarLabels(page: Page): Promise<string[]> {
   const nav = page.getByRole('navigation', { name: 'Ana menü' }).first();
   await expect(nav).toBeVisible();
   const collapsed = nav.locator('button[aria-expanded="false"]');
   while ((await collapsed.count()) > 0) await collapsed.first().click();
-  return (await nav.locator('a, [role="link"]').allTextContents()).map((t) => t.trim());
+  return nav.locator('a, [role="link"]').evaluateAll((els) =>
+    els.map((el) => {
+      const copy = el.cloneNode(true) as Element;
+      copy.querySelectorAll('[aria-hidden="true"]').forEach((n) => n.remove());
+      return copy.textContent?.trim() ?? '';
+    }),
+  );
 }

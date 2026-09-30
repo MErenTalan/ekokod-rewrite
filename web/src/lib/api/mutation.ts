@@ -60,5 +60,7 @@ export function useApiMutation<M extends Method, P extends PathsWithMethod<paths
     onError,
   });
 
-  return useMemo(() => ({ ...mutation, fieldErrors: errors }), [mutation, errors]);
+  // A dialog closed after a failure opens clean next time.
+  const clearFieldErrors = useCallback(() => setErrors({}), []);
+  return useMemo(() => ({ ...mutation, fieldErrors: errors, clearFieldErrors }), [mutation, errors, clearFieldErrors]);
 }

@@ -32,7 +32,7 @@ test('an admin can trigger a job (R220)', async ({ page }) => {
   // what this test is about.
   await expect(page.getByText('Henüz iş kaydı yok.')).toBeVisible();
 
-  await page.getByRole('button', { name: /alarm\.evaluate — Şimdi çalıştır/ }).click();
+  await page.getByRole('button', { name: 'Alarm değerlendirme — Şimdi çalıştır' }).click();
   // Either outcome is honest: the job is queued, or R225 reports that the same
   // hour's run is already queued — Redis outlives the e2e database, so a second
   // run inside the same hour legitimately hits the de-duplication. What must

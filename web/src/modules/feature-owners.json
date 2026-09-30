@@ -1,0 +1,5 @@
+{
+  "ekorm": ["alarms", "bills", "calendar", "consumption", "dashboard", "financial", "forecast", "iso50001", "jobs", "load-profile", "messages", "renewable", "reports", "settings", "solar-plants", "tariffs", "weather"],
+  "ekocm": ["carbon"],
+  "shared": ["auth", "preferences", "scope", "site"]
+}

@@ -17,6 +17,7 @@ import (
 // *consumption.Billing satisfies it (R61: never analytics).
 type ConsumptionReader interface {
 	PeriodConsumptionAndRecord(ctx context.Context, sc store.Scope, req consumption.PeriodRequest) ([]consumption.Row, error)
+	PeriodConsumption(ctx context.Context, sc store.Scope, req consumption.PeriodRequest) ([]consumption.Row, error)
 	Consumption(ctx context.Context, sc store.Scope, req consumption.SeriesRequest) ([]consumption.Row, error)
 }
 

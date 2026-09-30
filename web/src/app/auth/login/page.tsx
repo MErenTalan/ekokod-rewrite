@@ -7,7 +7,7 @@ import { firstParam, type SearchParams } from '../search-params';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations('auth.login');
-  return { title: `${t('title')} · EKORM` };
+  return { title: `${t('title')} · ekokod` };
 }
 
 export default async function LoginPage({ searchParams }: { searchParams: SearchParams }) {

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '@/test/render';
 
 import { demoRuns } from './_fixture';
-import { JobRunsTableView, type JobRunsTableViewProps } from './job-runs-table';
+import { describeScope, JobRunsTableView, type JobRunsTableViewProps } from './job-runs-table';
 
 const TRIGGERABLE = ['alarm.evaluate', 'billing.dispatch'] as const;
 
@@ -30,7 +30,16 @@ describe('JobRunsTableView', () => {
   it('shows a still-running job without a finish time', () => {
     const r = renderWithProviders(view());
     expect(r.getByText('Çalışıyor')).toBeVisible();
-    expect(r.getByText('—')).toBeVisible();
+    expect(r.getAllByText('—').length).toBeGreaterThan(0);
+  });
+
+  it('names what a fetch run covered', () => {
+    expect(
+      describeScope(
+        { analyzer_id: 'a-1', kind: 'load_profile', window: { from: '2026-09-01T00:00:00+03:00', to: '2026-09-30T00:00:00+03:00' } },
+        { 'a-1': '4001 · Fabrika' },
+      ),
+    ).toBe('4001 · Fabrika · load_profile · 2026-09-01 → 2026-09-30');
   });
 
   it('offers one button per allow-listed job to an admin (R220)', async () => {

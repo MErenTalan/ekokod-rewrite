@@ -19,12 +19,20 @@ export type JobView = {
   progress?: number | null;
   message?: string;
   resultAction?: { label: string; onClick: () => void };
+  /** Distinct failures of the job's sub-tasks, largest first. */
+  errors?: { message: string; count: number }[];
 };
 
 const tones = { queued: 'info', running: 'info', succeeded: 'success', failed: 'danger' } as const;
 
 /** A background job and its result (07 §6); status changes are announced, failures assertively (07 §9). */
-export function JobStatusBanner({ job, onDismiss }: { job: JobView | null; onDismiss?: () => void }) {
+export function JobStatusBanner({
+  job,
+  onDismiss,
+}: {
+  job: JobView | null;
+  onDismiss?: () => void;
+}) {
   const t = useTranslations('domain.job');
   const common = useTranslations('common');
   const announce = useAnnounce();
@@ -32,7 +40,8 @@ export function JobStatusBanner({ job, onDismiss }: { job: JobView | null; onDis
   const status = job?.status ?? null;
   const line = job ? t('statusLine', { label: job.label, status: t(job.status) }) : '';
   useEffect(() => {
-    if (status && previous.current && previous.current !== status) announce(line, status === 'failed' ? 'assertive' : 'polite');
+    if (status && previous.current && previous.current !== status)
+      announce(line, status === 'failed' ? 'assertive' : 'polite');
     previous.current = status;
   }, [status, line, announce]);
   if (!job) return null;
@@ -48,21 +57,40 @@ export function JobStatusBanner({ job, onDismiss }: { job: JobView | null; onDis
                 {job.resultAction.label}
               </Button>
             ) : null}
-            {onDismiss ? <IconButton label={common('close')} icon={X} size="sm" tooltip={false} onClick={onDismiss} /> : null}
+            {onDismiss ? (
+              <IconButton
+                label={common('close')}
+                icon={X}
+                size="sm"
+                tooltip={false}
+                onClick={onDismiss}
+              />
+            ) : null}
           </>
         ) : undefined
       }
     >
-      {job.status === 'running' || job.message ? (
+      {job.status === 'running' || job.message || job.errors?.length ? (
         <div className="flex flex-col gap-2">
           {job.status === 'running' ? (
             <ProgressBar
               label={t('progress', { label: job.label })}
               value={job.progress ?? null}
-              valueText={job.progress == null ? undefined : formatQuantity(String(job.progress), 'percent')}
+              valueText={
+                job.progress == null ? undefined : formatQuantity(String(job.progress), 'percent')
+              }
             />
           ) : null}
           {job.message ? <p>{job.message}</p> : null}
+          {job.errors?.length ? (
+            <ul className="flex list-disc flex-col gap-1 pl-5 text-sm">
+              {job.errors.map((e) => (
+                <li key={e.message} className="break-words">
+                  <span className="font-mono">{e.message}</span> ×{e.count}
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       ) : null}
     </Alert>

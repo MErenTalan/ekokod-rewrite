@@ -1,7 +1,7 @@
 # ekokod API reference
 
 Generated from the OpenAPI document (`ekokod tool openapi`) by `make api-docs`; do not edit.
-Version 1 · 182 operations · 263 schemas. Authentication: a session cookie (`ekokod_at`) or a mobile bearer token; operations marked *public* need neither.
+Version 1 · 183 operations · 268 schemas. Authentication: a session cookie (`ekokod_at`) or a mobile bearer token; operations marked *public* need neither.
 Errors 400, 401, 403, 429 and 500 apply to every operation and use the `Error` schema.
 
 ## alarms
@@ -1291,6 +1291,16 @@ Responses: 200, 404
 
 ## jobs
 
+### `GET /api/v1/job-queues`
+
+Current load of every background queue (platform-wide). `jobs.queues`
+
+| parameter | in | required | type |
+|---|---|---|---|
+| `company_id` | query |  | `UuidUUID` |
+
+Responses: 200 [`JobQueues`](#schema-jobqueues), 404
+
 ### `GET /api/v1/jobs/{id}`
 
 The state of a background job this user started (R192). `jobs.get`
@@ -2549,6 +2559,7 @@ Responses: 204, 404, 409, 422
 | `inductive_kvarh` | [`Decimal`](#schema-decimal) | yes |
 | `inductive_ratio` | [`Decimal`](#schema-decimal) |  |
 | `max_demand_kw` | [`Decimal`](#schema-decimal) |  |
+| `missing_days` | string[] | yes |
 | `net_consumption` | [`Decimal`](#schema-decimal) | yes |
 | `period_end` | string (date-time) | yes |
 | `period_key` | string | yes |
@@ -2656,6 +2667,7 @@ Responses: 204, 404, 409, 422
 | `etso_code` | string | yes |
 | `installation_number` | string | yes |
 | `invoice` | [`Decimal`](#schema-decimal) | yes |
+| `missing_days` | string[] | yes |
 | `period_key` | string | yes |
 | `production` | [`Decimal`](#schema-decimal) | yes |
 | `production_price` | [`Decimal`](#schema-decimal) |  |
@@ -2682,6 +2694,7 @@ Responses: 204, 404, 409, 422
 | `lines` | [`BillLine`](#schema-billline)[] | yes |
 | `max_demand_kw` | [`Decimal`](#schema-decimal) |  |
 | `member_analyzer_ids` | `UuidUUID`[] | yes |
+| `missing_days` | string[] | yes |
 | `net_consumption` | [`Decimal`](#schema-decimal) | yes |
 | `period_end` | string (date-time) | yes |
 | `period_key` | string | yes |
@@ -3803,12 +3816,14 @@ string
 
 | field | type | required |
 |---|---|---|
+| `endpoint_keys` | [`ProviderEndpointKeys`](#schema-providerendpointkeys)[] | yes |
 | `items` | [`IntegrationDefinition`](#schema-integrationdefinition)[] | yes |
 
 ### <a id="schema-job"></a>`Job`
 
 | field | type | required |
 |---|---|---|
+| `children` | [`JobChildren`](#schema-jobchildren) |  |
 | `completed_at` | string (date-time)? |  |
 | `error_code` | string: tariff_not_found \| no_consumption_data \| unresolved_anomaly \| period_not_closed \| ptf_data_missing \| billing_parameters_missing \| billing_parameters_invalid \| report_building_not_found \| report_not_ready \| smtp_not_configured \| delivery_failed \| isolar_auth \| isolar_unavailable \| isolar_not_linked \| credential_missing \| credential_inactive |  |
 | `id` | string | yes |
@@ -3820,6 +3835,47 @@ string
 | field | type | required |
 |---|---|---|
 | `job_id` | string | yes |
+
+### <a id="schema-jobchilderror"></a>`JobChildError`
+
+| field | type | required |
+|---|---|---|
+| `count` | integer (int32) | yes |
+| `message` | string | yes |
+
+### <a id="schema-jobchildren"></a>`JobChildren`
+
+| field | type | required |
+|---|---|---|
+| `already_queued` | integer (int32) | yes |
+| `enqueued` | integer? |  |
+| `errors` | [`JobChildError`](#schema-jobchilderror)[] | yes |
+| `failed` | integer (int32) | yes |
+| `partial` | integer (int32) | yes |
+| `running` | integer (int32) | yes |
+| `succeeded` | integer (int32) | yes |
+
+### <a id="schema-jobqueue"></a>`JobQueue`
+
+| field | type | required |
+|---|---|---|
+| `active` | integer | yes |
+| `archived` | integer | yes |
+| `completed` | integer | yes |
+| `failed_today` | integer | yes |
+| `latency_seconds` | integer (int64) | yes |
+| `paused` | boolean | yes |
+| `pending` | integer | yes |
+| `processed_today` | integer | yes |
+| `queue` | string | yes |
+| `retry` | integer | yes |
+| `scheduled` | integer | yes |
+
+### <a id="schema-jobqueues"></a>`JobQueues`
+
+| field | type | required |
+|---|---|---|
+| `items` | [`JobQueue`](#schema-jobqueue)[] | yes |
 
 ### <a id="schema-jobrun"></a>`JobRun`
 
@@ -4247,6 +4303,14 @@ string: admin.companies \| alarms.edit \| alarms.evaluate \| alarms.read \| anal
 | `name` | string? |  |
 | `phone` | string? |  |
 | `ui_preferences` | string? |  |
+
+### <a id="schema-providerendpointkeys"></a>`ProviderEndpointKeys`
+
+| field | type | required |
+|---|---|---|
+| `optional` | string[] | yes |
+| `provider` | string: osos \| gridbox \| aril \| pm5340 \| isolar | yes |
+| `required` | string[] | yes |
 
 ### <a id="schema-publicbill"></a>`PublicBill`
 
@@ -5107,6 +5171,8 @@ object
 
 | field | type | required |
 |---|---|---|
+| `building_ids` | `UuidUUID`[] |  |
+| `company_id` | `UuidUUID` | yes |
 | `created_at` | string (date-time) | yes |
 | `email` | string | yes |
 | `id` | `UuidUUID` | yes |
@@ -5121,6 +5187,7 @@ object
 
 | field | type | required |
 |---|---|---|
+| `building_ids` | `UuidUUID`[] |  |
 | `email` | string (email) | yes |
 | `is_active` | boolean? |  |
 | `name` | string | yes |
@@ -5139,6 +5206,7 @@ object
 
 | field | type | required |
 |---|---|---|
+| `building_ids` | `UuidUUID`[] |  |
 | `email` | string (email)? |  |
 | `is_active` | boolean? |  |
 | `name` | string? |  |

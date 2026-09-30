@@ -66,4 +66,9 @@ describe('GenerateCardView', () => {
     await user.click(r.getByRole('button', { name: /Faturayı indir/ }));
     expect(onDownload).toHaveBeenCalledWith('bill-9');
   });
+  it('says which days a partial bill left out', () => {
+    const r = view({ readyBillIds: ['bill-1'], onDownload: vi.fn(), missingDays: ['2026-08-30', '2026-08-31'] });
+    expect(r.getByRole('alert')).toHaveTextContent('Fatura eksik veriyle oluşturuldu');
+    expect(r.getByRole('alert')).toHaveTextContent('30.08.2026 – 31.08.2026');
+  });
 });

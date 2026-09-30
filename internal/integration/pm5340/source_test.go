@@ -659,3 +659,47 @@ func TestPM5340RefusesZeroMultiplier(t *testing.T) {
 	require.NotErrorIs(t, err, integration.ErrAuth)
 	require.Empty(t, srv.Requests())
 }
+
+// TestPM5340AcceptsLiveDeviceShape: the real gateway (Artı Enerji) sends a
+// numeric deviceId plus id/serverTsUtc/source; a string-typed deviceId
+// failed every row as unparseable_row, so backfills stored nothing.
+func TestPM5340AcceptsLiveDeviceShape(t *testing.T) {
+	srv := fake.NewTLSServer(t, fake.Route{
+		Method:  http.MethodGet,
+		Path:    "/api/v1/readings",
+		Respond: fake.JSON(http.StatusOK, fake.Fixture(t, "pm5340", "pm5340_live_shape.json")),
+	})
+	pool, _ := pm5340TestPool(t, srv)
+	src := pm5340.New(pool, pm5340.Options{Clock: clock.NewFake(fixtureNow)})
+
+	res, err := src.FetchReadings(context.Background(), pm5340TestCreds(srv), pm5340TestRequest())
+	require.NoError(t, err)
+	require.Len(t, res.Readings, 2)
+	for _, w := range res.Warnings {
+		require.NotEqual(t, integration.WarnUnparseableRow, w.Code, w.Detail)
+	}
+	require.True(t, res.Readings[0].ActiveImport.Equal(decimal.RequireFromString("26152.314000000002")))
+	require.Nil(t, res.Readings[1].ActiveImport)
+}
+
+// TestPM5340SendsWindowAsDeviceWallClock: the gateway filters on Istanbul
+// wall-clock meterDate, so UTC 21:00 must go out as 00:00 of the next day.
+func TestPM5340SendsWindowAsDeviceWallClock(t *testing.T) {
+	srv := fake.NewTLSServer(t, fake.Route{
+		Method:  http.MethodGet,
+		Path:    "/api/v1/readings",
+		Respond: fake.JSON(http.StatusOK, fake.Fixture(t, "pm5340", "pm5340_empty.json")),
+	})
+	pool, _ := pm5340TestPool(t, srv)
+	src := pm5340.New(pool, pm5340.Options{Clock: clock.NewFake(fixtureNow)})
+	req := pm5340TestRequest()
+	req.From = time.Date(2026, 6, 1, 21, 0, 0, 0, time.UTC)
+	req.To = time.Date(2026, 6, 2, 21, 0, 0, 0, time.UTC)
+
+	_, err := src.FetchReadings(context.Background(), pm5340TestCreds(srv), req)
+	require.NoError(t, err)
+	reqs := srv.Requests()
+	require.Len(t, reqs, 1)
+	require.Contains(t, reqs[0].RawQuery, "start=2026-06-02T00%3A00%3A00Z")
+	require.Contains(t, reqs[0].RawQuery, "end=2026-06-03T00%3A00%3A00Z")
+}

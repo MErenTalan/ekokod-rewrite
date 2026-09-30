@@ -98,6 +98,26 @@ describe('middleware', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  // F17 R494: both modules and the chooser are guarded the same way.
+  it.each(['/ekocm', '/ekocm/data-entry?x=1', '/modules'])('sends a visitor without cookies from %s to login with next', async (path) => {
+    const res = await middleware(request(path));
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toBe(`https://app.test/auth/login?next=${encodeURIComponent(path)}`);
+  });
+
+  // F17 R493: moved module URLs redirect permanently, before any session check.
+  it.each([
+    ['/ekorm/carbon-footprint?tab=status', 'https://app.test/ekocm/activity-status'],
+    ['/carbon-footprint', 'https://app.test/ekocm'],
+    ['/consumption?x=1', 'https://app.test/ekorm/consumption?x=1'],
+    ['/ekocm/auth/login', 'https://app.test/auth/login?next=%2Fekocm'],
+  ])('moves %s to %s', async (path, want) => {
+    const res = await middleware(request(path));
+    expect(res.status).toBe(308);
+    expect(res.headers.get('location')).toBe(want);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('passes a request with an access cookie straight through', async () => {
     const res = await middleware(request('/ekorm', 'ekokod_at=AT; ekokod_rt=RT'));
     expect(res.headers.get('x-middleware-next')).toBe('1');

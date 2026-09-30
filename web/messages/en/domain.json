@@ -55,7 +55,8 @@
     "statusLine": "{label}: {status}",
     "progress": "{label} progress",
     "stillRunning": "The job is still running; you can leave this screen.",
-    "refreshQueued": "The pull has started; the values appear within a few minutes."
+    "refreshQueued": "The pull has started; the values appear within a few minutes.",
+    "children": "{done}/{total} sub-tasks finished · {succeeded} succeeded · {failed} failed{already, plural, =0 {} other { · # windows already queued}}"
   },
   "quality": {
     "estimated": "Estimated",

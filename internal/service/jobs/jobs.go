@@ -41,7 +41,31 @@ type View struct {
 	// failed, and "" otherwise. It is a closed set, so it can be shown to an
 	// operator; the worker's own error text still never leaves (R237).
 	ErrorCode string
+	// Children is the outcome of the fetch tasks a backfill or analyzer
+	// refresh enqueued; nil for every other job.
+	Children *Children
 }
+
+// Children summarises a parent job's fetch tasks.
+type Children struct {
+	// Enqueued is how many tasks the parent queued, when it recorded that.
+	Enqueued *int32
+	// AlreadyQueued counts windows a live task already held.
+	AlreadyQueued                       int32
+	Running, Succeeded, Partial, Failed int32
+	Errors                              []ChildError
+}
+
+// ChildError is one distinct failure text and how many children hit it.
+// Integration errors are built from our own op names and are redacted of
+// credentials before they are written (secret.Redact), never a provider body.
+type ChildError struct {
+	Message string
+	Count   int32
+}
+
+// parentTypes enqueue fetch_readings children that record ParentTaskID.
+var parentTypes = map[string]bool{job.TypeIntegrationBackfill: true, job.TypeIntegrationRefreshAnalyzer: true}
 
 // Inspector is the slice of asynq.Inspector this service uses.
 type Inspector interface {
@@ -159,7 +183,60 @@ func (s *Service) Get(ctx context.Context, sc store.Scope, id string) (View, err
 			v.ErrorCode = s.failureCode(ctx, sc, id)
 		}
 	}
+	if parentTypes[info.Type] && s.d.Ops != nil {
+		children, err := s.children(ctx, sc, info.ID)
+		if err != nil {
+			return View{}, err
+		}
+		v.Children = children
+	}
 	return v, nil
+}
+
+func (s *Service) children(ctx context.Context, sc store.Scope, taskID string) (*Children, error) {
+	groups, err := s.d.Ops.ChildRunSummary(ctx, sc, taskID)
+	if err != nil {
+		return nil, err
+	}
+	c := &Children{}
+	byMessage := map[string]int{}
+	for _, g := range groups {
+		switch g.Status {
+		case "running":
+			c.Running += g.Count
+		case "success":
+			c.Succeeded += g.Count
+		case "partial":
+			c.Partial += g.Count
+		default:
+			c.Failed += g.Count
+		}
+		if g.Error == "" {
+			continue
+		}
+		if i, ok := byMessage[g.Error]; ok {
+			c.Errors[i].Count += g.Count
+			continue
+		}
+		byMessage[g.Error] = len(c.Errors)
+		c.Errors = append(c.Errors, ChildError{Message: g.Error, Count: g.Count})
+	}
+	if run, err := s.d.Ops.RunByTaskID(ctx, sc, taskID); err == nil {
+		enqueued := run.Processed
+		c.Enqueued = &enqueued
+		var detail struct {
+			AlreadyEnqueued int32 `json:"already_enqueued"`
+		}
+		if json.Unmarshal(run.Detail, &detail) == nil {
+			c.AlreadyQueued = detail.AlreadyEnqueued
+		}
+		if run.Error != nil {
+			c.Errors = append([]ChildError{{Message: *run.Error, Count: 1}}, c.Errors...)
+		}
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return nil, err
+	}
+	return c, nil
 }
 
 // runTaskID is the task id the worker wrote on its job_runs row, derived
@@ -417,4 +494,43 @@ func statusOf(state asynq.TaskState) Status {
 	default: // pending, scheduled, aggregating
 		return Queued
 	}
+}
+
+// QueueStats is one asynq queue's current load, for the operator view.
+type QueueStats struct {
+	Queue                                                  string
+	Pending, Active, Scheduled, Retry, Archived, Completed int
+	ProcessedToday, FailedToday                            int
+	Paused                                                 bool
+	Latency                                                time.Duration
+}
+
+type queueInspector interface {
+	GetQueueInfo(queue string) (*asynq.QueueInfo, error)
+}
+
+// Queues reports every queue's load. It is platform-wide, so the route is
+// admin-only.
+func (s *Service) Queues() ([]QueueStats, error) {
+	qi, ok := s.d.Inspector.(queueInspector)
+	if !ok {
+		return nil, errors.New("jobs: inspector cannot report queues")
+	}
+	out := make([]QueueStats, 0, len(s.d.Queues))
+	for _, q := range s.d.Queues {
+		info, err := qi.GetQueueInfo(q)
+		if errors.Is(err, asynq.ErrQueueNotFound) {
+			out = append(out, QueueStats{Queue: q})
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("jobs: queue %s: %w", q, err)
+		}
+		out = append(out, QueueStats{
+			Queue: q, Pending: info.Pending, Active: info.Active, Scheduled: info.Scheduled, Retry: info.Retry,
+			Archived: info.Archived, Completed: info.Completed, ProcessedToday: info.Processed, FailedToday: info.Failed,
+			Paused: info.Paused, Latency: info.Latency,
+		})
+	}
+	return out, nil
 }

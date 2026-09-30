@@ -325,8 +325,10 @@ with an expiry. All encrypted at rest.
 ### Authorisation flow
 
 1. Build the authorisation URL from the region's authorisation origin, the `app_id` and the
-   redirect URI.
-2. The user authorises in iSolarCloud and is returned to `/integrations/isolar/callback` with a code.
+   redirect URI. The redirect URI must be the application's registered URL verbatim
+   (`<EKOKOD_PUBLIC_URL>/api/v1/integrations/isolar/callback`); iSolarCloud rejects any extra
+   query, so the signed state travels in an HttpOnly cookie scoped to the callback path.
+2. The user authorises in iSolarCloud and is returned to `/api/v1/integrations/isolar/callback` with a code.
 3. Exchange the code at `/openapi/apiManage/token` for tokens.
 4. Refresh at `/openapi/apiManage/refreshToken` **before** expiry. Token refresh is serialised per
    company with a lock so concurrent jobs cannot both refresh and invalidate each other's token.

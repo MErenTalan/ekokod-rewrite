@@ -68,7 +68,11 @@
     "empty": "No definition yet",
     "emptyHint": "Define each provider and subtype with its endpoint templates here.",
     "saved": "The definition was saved",
-    "deleted": "The definition was deleted"
+    "deleted": "The definition was deleted",
+    "health": "Status",
+    "complete": "Complete",
+    "missingKeys": "Missing required endpoints: {keys}",
+    "unknownKey": "This provider does not read this key"
   },
   "confirmDelete": "Confirm deletion",
   "deleteAction": "Delete",
@@ -180,7 +184,8 @@
     "empty": "No building yet",
     "emptyHint": "Define a building for every metered site.",
     "saved": "The building was saved",
-    "deleted": "The building was deleted"
+    "deleted": "The building was deleted",
+    "company": "Company"
   },
   "plants": {
     "title": "Solar plants",
@@ -269,6 +274,17 @@
       "empty": "No plants on this account",
       "emptyDescription": "The iSolarCloud account shows no plants.",
       "job": "iSolar history"
+    },
+    "finance": {
+      "title": "Financial settings",
+      "hint": "The sale price prices the plant's revenue and the revenue and net figures of the Financial analysis page. It is stored under Tariffs › Solar tariffs.",
+      "price": "Unit price (currency/MWh)",
+      "currency": "Currency",
+      "from": "Price effective from",
+      "fromHintNew": "Empty: the installation date, or today without one",
+      "fromHintChange": "Empty: today; a price with the same date is corrected",
+      "current": "Current price: {price} {currency}/MWh (since {date})",
+      "saved": "Plant price saved"
     }
   },
   "analyzers": {
@@ -317,6 +333,13 @@
     "saved": "The user was saved",
     "deleted": "The user was deleted",
     "empty": "No user",
-    "emptyHint": "Define the people who may reach your company here."
+    "emptyHint": "Define the people who may reach your company here.",
+    "company": "Company",
+    "companyHint": "The user joins this company; it cannot be changed later.",
+    "buildings": "Buildings they manage",
+    "buildingsHint": "A building admin sees only the selected buildings. A building assigned to another user moves to this one.",
+    "buildingsSearch": "Search buildings",
+    "noBuildings": "This company has no buildings",
+    "buildingCount": "{count, plural, =0 {No building assigned} one {# building} other {# buildings}}"
   }
 }

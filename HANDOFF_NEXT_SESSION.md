@@ -1,22 +1,21 @@
-# Handoff — ekokod rewrite: F0–F15 COMPLETE (coding done); waiting on the product owner
+# Handoff — ekokod rewrite: F0–F17 COMPLETE; waiting on the product owner
 
-> **STATUS (2026-09-24, ~18:00 Istanbul):** every phase F0–F15 is built and gated. This session did
-> **F15q** (the F3 Q6 fix: analytics by boundary differencing) and **F15c** (backup/restore, offline
-> bundle + upgrade path, a11y audit, API reference, operator runbook, Turkish admin guide, ADRs).
-> What remains needs the product owner or hardware this machine lacks: **`SENDEN-GEREKENLER.md`**
-> (Turkish, simple list). **Nothing is pushed and `main` is untouched. Pushing and merging are the user's call.**
+> **STATUS (2026-09-26):** F17 split the carbon module (EKOCM) out of EKORM into its own frontend
+> module at `/ekocm`, on branch **`phase/f17-ekocm-module`** (`/home/personal/ekokod-f17-ekocm`, cut from
+> `main` b3dbddb). What still needs the product owner is unchanged: **`SENDEN-GEREKENLER.md`**.
+> **Nothing is pushed; `main` is untouched. Pushing and merging are the user's call.**
 
 ---
 
 ## Paste this as the first message of the next session (only when there is new input)
 
 > Bu, bcem-energy'nin (yeni adıyla ekokod) Go ile yeniden yazım projesi. Spesifikasyon `docs/rewrite/`
-> içinde. **F0–F15'in hepsi bitti**; son dal `phase/f15-hardening` (`/home/personal/ekokod-f15-phase`).
-> Hiçbir şey push edilmedi.
+> içinde. **F0–F17'nin hepsi bitti.** Son dal `phase/f17-ekocm-module` (`/home/personal/ekokod-f17-ekocm`),
+> `main`'den açıldı. EKOCM artık `/ekocm` altında ayrı bir frontend modülü. Hiçbir şey push edilmedi.
 >
-> Önce `/home/personal/ekokod-f15-phase/HANDOFF_NEXT_SESSION.md` ve `SENDEN-GEREKENLER.md`'yi oku.
-> Sonra şu yeni girdiyle çalış: **<buraya ne getirdiğini yaz: örn. anonim üretim dökümü yolu / gerçek
-> fatura PDF'leri / karar cevapları>**.
+> Önce `/home/personal/ekokod-f17-ekocm/HANDOFF_NEXT_SESSION.md`, `SENDEN-GEREKENLER.md` ve
+> `docs/superpowers/plans/2026-09-26-f17-ekocm-module.md`'yi oku. Sonra şu yeni girdiyle çalış:
+> **<buraya ne getirdiğini yaz>**.
 >
 > **Çalışma düzeni (kesin):** paralel agent YOK, subagent YOK, Workflow YOK. İşi bu oturumda kendin
 > yürüt (`superpowers:executing-plans` + TDD). Her task sonunda diff'i oku, guard'ı kendi mutasyonunla
@@ -24,14 +23,31 @@
 >
 > **Ortam:** her komutun başına `export PATH="/home/personal/.local/go/bin:/home/personal/.local/node/bin:/home/personal/go/bin:$PATH" GOFLAGS=-p=2 GOMEMLIMIT=2GiB`.
 > Docker: `sg docker -c /yol/betik.sh` (betik dosyası yaz). **Asla `make test` / `go test ./...`.**
-> Integration: `sg docker -c "docker ps -a"`; Exited ise `docker start ekokod-test-pg ekokod-test-redis`;
-> `EKOKOD_TEST_PG_DSN='postgres://ekokod:ekokod@localhost:55432/postgres?sslmode=disable' EKOKOD_TEST_REDIS_URL=redis://localhost:56379/0 TESTCONTAINERS_HOST_OVERRIDE=127.0.0.1 go test <paket> -tags=integration -count=1 -parallel 4`.
-> Web: `pnpm test --maxWorkers=2`; `next build` için `NODE_OPTIONS=--max-old-space-size=4096`;
-> Playwright ön planda, parçalar halinde (araç zaman aşımı 10 dk), `PLAYWRIGHT_BROWSERS_PATH=/home/personal/.cache/ms-playwright E2E_API_PORT=18082 PW_PROJECT=e2e`.
+> Integration: `EKOKOD_TEST_PG_DSN='postgres://ekokod:ekokod@localhost:55432/postgres?sslmode=disable' EKOKOD_TEST_REDIS_URL=redis://localhost:56379/0 TESTCONTAINERS_HOST_OVERRIDE=127.0.0.1 go test <paket> -tags=integration -count=1 -parallel 4`.
+> Web: `pnpm test --maxWorkers=2`; `next build` için `NODE_OPTIONS=--max-old-space-size=4096`, ardından `pnpm check:module-chunks`;
+> Playwright ön planda, parçalar halinde (araç zaman aşımı 10 dk), `sg docker` içinde
+> `PLAYWRIGHT_BROWSERS_PATH=/home/personal/.cache/ms-playwright E2E_API_PORT=18082 PW_PROJECT=e2e pnpm exec playwright test --project=e2e --workers=1 <dosyalar>`.
 
 ---
 
-## START HERE — exact state (2026-09-24 ~18:00)
+## F17 — what changed (2026-09-26)
+
+User decisions U1–U4, rulings R485–R497: `docs/superpowers/plans/2026-09-26-f17-ekocm-module.md`. ADR 0009.
+- `web/src/modules/`: `registry.ts` (MODULES), `ids.ts`, `ekorm/nav.ts`, `ekocm/{nav,sections,metadata}.ts`,
+  `access.ts` (`modulesFor(me)` — frontend-only hook, everyone gets both, U2), `module-layout.tsx`, `module-chooser.tsx`,
+  `redirects.ts`, `feature-owners.json`, `boundary.test.ts`.
+- `/ekocm` + 10 section pages (`features/carbon/section-page.tsx`); `/modules` chooser is the default post-login
+  target (U3); `ModuleSwitcher` in both top bars; `safeNext` accepts `/modules`, `/ekorm`, `/ekocm`.
+- Middleware 308s: `/ekorm/carbon-footprint?tab=x` → its `/ekocm` page, legacy root paths → `/ekorm/…`,
+  `/carbon-footprint` → `/ekocm`, `/ekocm/auth/*` → `/auth/login?next=/ekocm`.
+- Boundary guards: ESLint patterns, import-walk vitest, `pnpm check:module-chunks` (CI + `make web-build`).
+- Backend: only `GridFactorKey` consolidated in `domain/carbon` (R497). The yearly report's carbon summary stays in EKORM (U1).
+- Gates: lint, typecheck, check:api, i18n, contrast, vitest 1218/1218, `next build`, module chunks, Go touched packages
+  (unit + integration) + golangci-lint 0, `internal/arch`, **e2e 182/182** in four foreground chunks.
+- Fixed two e2e drifts that had been in `main` since `c836484` (F16 UI polish): the sidebar labels now ignore the
+  aria-hidden "Yakında" badge, and the job-trigger button has its readable name.
+
+## Before F17 — START HERE — exact state (2026-09-24 ~18:00)
 
 | Branch / worktree | State |
 |---|---|

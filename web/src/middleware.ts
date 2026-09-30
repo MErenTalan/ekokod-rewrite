@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { authRedirectFor, errorCode } from '@/lib/api/errors';
 import { contentSecurityPolicy, newNonce, securityHeaders } from '@/lib/security/csp';
 import { isPublicPath, legacyRedirect } from '@/lib/site/paths';
+import { moduleRedirect } from '@/modules/redirects';
 
 export const ACCESS_COOKIE = 'ekokod_at';
 export const REFRESH_COOKIE = 'ekokod_rt';
@@ -65,7 +66,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
 /** Guards every page: a missing access cookie is refreshed server-side before the render (R168). */
 async function guard(request: NextRequest, base: Headers): Promise<NextResponse> {
   const { pathname, search } = request.nextUrl;
-  const moved = legacyRedirect(pathname);
+  const moved = legacyRedirect(pathname) ?? moduleRedirect(pathname, search);
   if (moved) return NextResponse.redirect(new URL(moved, request.url), 308);
   // F12b: the marketing site needs no session; `/` is its homepage now (R167 retired).
   if (isPublicPath(pathname)) return NextResponse.next({ request: { headers: base } });

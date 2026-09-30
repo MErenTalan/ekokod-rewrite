@@ -7,7 +7,6 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -124,26 +123,27 @@ func (r *credFakeVerifierResolver) forProvider(p integration.Provider) *credFake
 }
 
 // credFakeISolar is credentials.ISolarTokens. AuthorizeURL returns
-// redirectURI UNCHANGED, so a test can recover the signed state straight
-// out of the URL credentials.Service.ISolarAuthorizeURL returns (it always
-// appends "?state=..." to Deps.RedirectURI before calling AuthorizeURL).
+// redirectURI UNCHANGED and ExchangeCode records its own, so a test can
+// assert both calls send the same bare registered URL.
 type credFakeISolar struct {
-	mu            sync.Mutex
-	exchangeToken isolar.Token
-	refreshToken  isolar.Token
-	refreshDelay  time.Duration
-	refreshCalls  int32
-	exchangeCalls int32
+	mu               sync.Mutex
+	exchangeRedirect string
+	exchangeToken    isolar.Token
+	refreshToken     isolar.Token
+	refreshDelay     time.Duration
+	refreshCalls     int32
+	exchangeCalls    int32
 }
 
 func (f *credFakeISolar) AuthorizeURL(_ integration.Credentials, redirectURI string) (string, error) {
 	return redirectURI, nil
 }
 
-func (f *credFakeISolar) ExchangeCode(context.Context, integration.Credentials, string, string) (isolar.Token, error) {
+func (f *credFakeISolar) ExchangeCode(_ context.Context, _ integration.Credentials, _, redirectURI string) (isolar.Token, error) {
 	atomic.AddInt32(&f.exchangeCalls, 1)
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.exchangeRedirect = redirectURI
 	return f.exchangeToken, nil
 }
 
@@ -275,15 +275,6 @@ func isolarExtraFixture(refreshToken, accessToken string) map[string]integration
 		m["access_token"] = integration.NewSecret([]byte(accessToken))
 	}
 	return m
-}
-
-func extractState(t *testing.T, authorizeURL string) string {
-	t.Helper()
-	u, err := url.Parse(authorizeURL)
-	require.NoError(t, err)
-	state := u.Query().Get("state")
-	require.NotEmpty(t, state)
-	return state
 }
 
 // --- tests -----------------------------------------------------------------
@@ -674,11 +665,15 @@ func TestISolarCallbackStoresTokensForTheStatesCompany(t *testing.T) {
 		ExpiresAt:    credNow.Add(2 * time.Hour),
 	})
 
-	authorizeURL, err := h.svc.ISolarAuthorizeURL(ctx, tenantA.AdminScope, view.ID)
+	authorizeURL, state, err := h.svc.ISolarAuthorize(ctx, tenantA.AdminScope, view.ID)
 	require.NoError(t, err)
-	state := extractState(t, authorizeURL)
+	require.NotEmpty(t, state)
+	// iSolarCloud matches the redirect byte-for-byte against the registered
+	// URL: no "?state=" in either call.
+	require.Equal(t, h.redirectURI, authorizeURL)
 
 	require.NoError(t, h.svc.ISolarCallback(ctx, "auth-code", state))
+	require.Equal(t, h.redirectURI, h.isolarFake.exchangeRedirect)
 
 	list, err := h.svc.List(ctx, tenantA.AdminScope)
 	require.NoError(t, err)
@@ -738,9 +733,8 @@ func TestISolarCallbackKeepsRefreshTokenWhenProviderOmitsANewOne(t *testing.T) {
 		ExpiresAt:    credNow.Add(2 * time.Hour),
 	})
 
-	authorizeURL, err := h.svc.ISolarAuthorizeURL(ctx, tenant.AdminScope, view.ID)
+	_, state, err := h.svc.ISolarAuthorize(ctx, tenant.AdminScope, view.ID)
 	require.NoError(t, err)
-	state := extractState(t, authorizeURL)
 	require.NoError(t, h.svc.ISolarCallback(ctx, "auth-code", state))
 
 	creds, err := h.svc.Open(ctx, tenant.AdminScope, view.ID)

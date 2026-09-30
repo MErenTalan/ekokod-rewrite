@@ -117,6 +117,19 @@ func cidToGIDMaps(t *testing.T, pdf []byte) [][]byte {
 	return out
 }
 
+func TestRenderListsMissingDays(t *testing.T) {
+	d := document(model.BillScopeAnalyzer)
+	d.Uncompressed = true
+	d.Bill.MissingDays = []string{"2026-01-20", "2026-01-21"}
+	out, err := invoicepdf.Render(d)
+	require.NoError(t, err)
+	base := document(model.BillScopeAnalyzer)
+	base.Uncompressed = true
+	plain, err := invoicepdf.Render(base)
+	require.NoError(t, err)
+	require.Greater(t, len(out), len(plain), "the missing-days note is drawn")
+}
+
 func TestRenderGoldenHash(t *testing.T) {
 	out, err := invoicepdf.Render(document(model.BillScopeAnalyzer))
 	require.NoError(t, err)

@@ -181,6 +181,10 @@ func (c *countingReader) PeriodConsumptionAndRecord(ctx context.Context, sc stor
 	return c.inner.PeriodConsumptionAndRecord(ctx, sc, req)
 }
 
+func (c *countingReader) PeriodConsumption(ctx context.Context, sc store.Scope, req consumption.PeriodRequest) ([]consumption.Row, error) {
+	return c.inner.PeriodConsumption(ctx, sc, req)
+}
+
 func (c *countingReader) Consumption(ctx context.Context, sc store.Scope, req consumption.SeriesRequest) ([]consumption.Row, error) {
 	c.mu.Lock()
 	c.hourly = append(c.hourly, len(req.AnalyzerIDs))
@@ -288,17 +292,70 @@ func TestGenerateNoTariffFails(t *testing.T) {
 	require.Equal(t, billingsvc.CodeTariffNotFound, h.computeCode(err))
 }
 
-func TestGeneratePeriodNotClosed(t *testing.T) {
+// seedDays writes one reading at each of the first n+1 window midnights, 10 kWh a day.
+func (h *harness) seedDays(analyzer uuid.UUID, n int) {
+	h.t.Helper()
+	for d := 0; d <= n; d++ {
+		h.seed(analyzer, h.window.From.AddDate(0, 0, d), decimal.NewFromInt(int64(1000+10*d)).String(), "0", "0")
+	}
+}
+
+func (h *harness) days(from, to int) []string {
+	var out []string
+	for d := from; d < to; d++ {
+		out = append(out, h.window.From.AddDate(0, 0, d).Format(time.DateOnly))
+	}
+	return out
+}
+
+func TestGenerateOpenPeriodBillsCoveredDaysAndListsMissing(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t, 7007)
 	a := h.tenant.Analyzers[0].ID
+	h.seedDays(a, 10)
+	h.clock.Set(h.window.From.AddDate(0, 0, 12).Add(time.Hour))
+
+	res, err := h.generate(h.tenant.Scope, model.BillScopeAnalyzer, a)
+	require.NoError(t, err)
+	require.Equal(t, "100", res.Bill.NetConsumption.String(), "10 covered days × 10 kWh")
+	require.Equal(t, h.days(10, 31), res.Bill.MissingDays)
+	require.True(t, res.Bill.PeriodStart.Equal(h.window.From), "the bill keeps its own period")
+
+	got, err := h.bills.Current(h.ctx, h.tenant.Scope, model.BillScopeAnalyzer, a, "2026-01")
+	require.NoError(t, err)
+	require.Equal(t, h.days(10, 31), got.MissingDays, "persisted")
+}
+
+func TestGenerateClosedPeriodWithMissingEndStillBills(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, 7090)
+	a := h.tenant.Analyzers[0].ID
+	h.seedDays(a, 20)
+	h.seed(a, h.window.From.AddDate(0, 0, 25), "1300", "0", "0") // an isolated reading covers no day
+
+	res, err := h.generate(h.tenant.Scope, model.BillScopeAnalyzer, a)
+	require.NoError(t, err, "the missing_readings anomaly just recorded does not block")
+	require.Equal(t, "200", res.Bill.NetConsumption.String())
+	require.Equal(t, h.days(20, 31), res.Bill.MissingDays)
+}
+
+func TestGenerateCompletePeriodHasNoMissingDays(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, 7091)
+	a := h.tenant.Analyzers[0].ID
 	h.seedPeriod(a, h.window, "500")
-	h.clock.Set(h.window.To.Add(consumption.SettleDelayMonthly - time.Minute))
+	res, err := h.generate(h.tenant.Scope, model.BillScopeAnalyzer, a)
+	require.NoError(t, err)
+	require.Empty(t, res.Bill.MissingDays)
+}
+
+func TestGenerateFuturePeriodNotStarted(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, 7092)
+	a := h.tenant.Analyzers[0].ID
+	h.clock.Set(h.window.From.Add(-time.Hour))
 	_, err := h.generate(h.tenant.Scope, model.BillScopeAnalyzer, a)
 	require.Equal(t, billingsvc.CodePeriodNotClosed, h.computeCode(err))
-	h.clock.Set(h.window.To.Add(consumption.SettleDelayMonthly))
-	_, err = h.generate(h.tenant.Scope, model.BillScopeAnalyzer, a)
-	require.NoError(t, err)
 }
 
 func TestGenerateMissingMemberRowFails(t *testing.T) {

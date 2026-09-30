@@ -490,7 +490,7 @@ func billInsert(ctx context.Context, q *sqlcgen.Queries, pool *pgxpool.Pool, s s
 		ComputedAt: tariffTimestamptz(b.ComputedAt), CreatedAt: tariffTimestamptz(b.CreatedAt),
 		Currency: billCurrency(b.Currency), ExtraChargesCost: decimalToNumeric(b.ExtraChargesCost),
 		DemandDataAvailable: b.DemandDataAvailable, PtfHoursExpected: b.PtfHoursExpected,
-		ConsumptionHoursMissing: b.ConsumptionHoursMissing,
+		ConsumptionHoursMissing: b.ConsumptionHoursMissing, MissingDays: nonNilStrings(b.MissingDays),
 	})
 	if err != nil {
 		return sqlcgen.Bill{}, pgerr.Translate(pool, "create bill", err)
@@ -642,7 +642,7 @@ func billFromRow(row sqlcgen.Bill) (model.Bill, error) {
 		OtherTaxesCost: otherTaxesCost, VatBase: vatBase, VatCost: vatCost, GenerationCredit: generationCredit,
 		TotalCost: totalCost, ExtraChargesCost: extraChargesCost, Currency: model.CurrencyCode(row.Currency),
 		DemandDataAvailable: row.DemandDataAvailable, PtfHoursExpected: row.PtfHoursExpected,
-		ConsumptionHoursMissing: row.ConsumptionHoursMissing,
+		ConsumptionHoursMissing: row.ConsumptionHoursMissing, MissingDays: row.MissingDays,
 
 		ReactivePenaltyApplied: row.ReactivePenaltyApplied,
 		GenerationUsage:        model.GenerationUsage(row.GenerationUsage),
@@ -728,4 +728,12 @@ func billHourlyDetailFromRow(row sqlcgen.BillHourlyDetail) (model.BillHourlyDeta
 		BillID: row.BillID, Ts: row.Ts.Time, Consumption: consumption, PTF: ptf, Yekdem: yekdem,
 		Kbk: kbk, UnitPrice: unitPrice, Cost: cost,
 	}, nil
+}
+
+// nonNilStrings keeps a nil slice from binding as SQL NULL on a NOT NULL array.
+func nonNilStrings(v []string) []string {
+	if v == nil {
+		return []string{}
+	}
+	return v
 }

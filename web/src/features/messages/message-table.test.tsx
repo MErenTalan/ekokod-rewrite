@@ -23,7 +23,9 @@ describe('MessageTableView', () => {
   });
 
   it('renders a message with no detail and no relation as an em dash', () => {
-    const r = renderWithProviders(<MessageTableView messages={[demoMessages[1]]} filtered={false} />);
+    const r = renderWithProviders(
+      <MessageTableView messages={[demoMessages[1]]} filtered={false} />,
+    );
     expect(r.getAllByText('—')).toHaveLength(2);
   });
 

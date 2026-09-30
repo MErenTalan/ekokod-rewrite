@@ -25,10 +25,21 @@ export type UsersTabViewProps = {
   onEdit: (user: User) => void;
   onDelete: (user: User) => void;
   loading?: boolean;
+  /** Company names by id; given to an admin, whose users span companies. */
+  companyNames?: Record<string, string>;
 };
 
 /** The user list of 01 §7.15. */
-export function UsersTabView({ users, selfId, canEdit, onAdd, onEdit, onDelete, loading = false }: UsersTabViewProps) {
+export function UsersTabView({
+  users,
+  selfId,
+  canEdit,
+  onAdd,
+  onEdit,
+  onDelete,
+  loading = false,
+  companyNames,
+}: UsersTabViewProps) {
   const t = useTranslations('settings.users');
   const roles = useTranslations('shell.roles');
   const common = useTranslations('common');
@@ -39,20 +50,47 @@ export function UsersTabView({ users, selfId, canEdit, onAdd, onEdit, onDelete, 
       { accessorKey: 'name', header: t('name'), enableHiding: false },
       { accessorKey: 'email', header: t('email') },
       { id: 'phone', header: t('phone'), accessorFn: (row) => row.phone ?? '—' },
-      { id: 'role', header: t('role'), accessorFn: (row) => row.role, cell: ({ row }) => roles(ROLE_LABEL_KEY[row.original.role]) },
+      {
+        id: 'role',
+        header: t('role'),
+        accessorFn: (row) => row.role,
+        cell: ({ row }) => roles(ROLE_LABEL_KEY[row.original.role]),
+      },
+      ...(companyNames
+        ? [{
+            id: 'company',
+            header: t('company'),
+            accessorFn: (row: User) => companyNames[row.company_id] ?? '—',
+          } satisfies ColumnDef<User, unknown>]
+        : []),
+      {
+        id: 'buildings',
+        header: t('buildings'),
+        accessorFn: (row) => row.building_ids?.length ?? 0,
+        cell: ({ row }) =>
+          row.original.role === 'building_admin' || row.original.role === 'building_readonly_admin'
+            ? t('buildingCount', { count: row.original.building_ids?.length ?? 0 })
+            : '—',
+      },
       {
         id: 'active',
         header: t('active'),
         accessorFn: (row) => (row.is_active ? 1 : 0),
         cell: ({ row }) => (
-          <StatusBadge status={row.original.is_active ? 'success' : 'neutral'} label={row.original.is_active ? t('active') : '—'} />
+          <StatusBadge
+            status={row.original.is_active ? 'success' : 'neutral'}
+            label={row.original.is_active ? t('active') : '—'}
+          />
         ),
       },
       {
         id: 'lastLogin',
         header: t('lastLogin'),
         accessorFn: (row) => row.last_login_at ?? '',
-        cell: ({ row }) => (row.original.last_login_at ? formatDate(row.original.last_login_at.slice(0, 10), locale) : t('never')),
+        cell: ({ row }) =>
+          row.original.last_login_at
+            ? formatDate(row.original.last_login_at.slice(0, 10), locale)
+            : t('never'),
       },
     ];
     if (!canEdit) return base;
@@ -63,7 +101,12 @@ export function UsersTabView({ users, selfId, canEdit, onAdd, onEdit, onDelete, 
         header: common('actions'),
         cell: ({ row }) => (
           <span className="flex gap-1">
-            <IconButton label={t('edit')} icon={Pencil} size="sm" onClick={() => onEdit(row.original)} />
+            <IconButton
+              label={t('edit')}
+              icon={Pencil}
+              size="sm"
+              onClick={() => onEdit(row.original)}
+            />
             {/* The caller's own row keeps its delete visible but disabled (R174). */}
             <IconButton
               label={t('delete')}
@@ -76,7 +119,7 @@ export function UsersTabView({ users, selfId, canEdit, onAdd, onEdit, onDelete, 
         ),
       },
     ];
-  }, [t, roles, common, locale, canEdit, onEdit, onDelete, selfId]);
+  }, [t, roles, common, locale, canEdit, onEdit, onDelete, selfId, companyNames]);
 
   return (
     <DataTable

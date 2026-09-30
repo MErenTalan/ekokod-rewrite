@@ -64,3 +64,12 @@ func TestEnqueueReplacingFinishedWithoutInspectorDedupes(t *testing.T) {
 	require.NoError(t, EnqueueReplacingFinished(context.Background(), e, nil, asynq.NewTask("t", nil), "id"))
 	require.Equal(t, 1, e.calls)
 }
+
+func TestEnqueueOrReplaceReportsWhetherItQueued(t *testing.T) {
+	queued, err := EnqueueOrReplace(context.Background(), &conflictOnce{conflicts: 1}, &heldBy{state: asynq.TaskStateArchived}, asynq.NewTask("t", nil), "id")
+	require.NoError(t, err)
+	require.True(t, queued, "an archived failure is replaced")
+	queued, err = EnqueueOrReplace(context.Background(), &conflictOnce{conflicts: 1}, &heldBy{state: asynq.TaskStatePending}, asynq.NewTask("t", nil), "id")
+	require.NoError(t, err)
+	require.False(t, queued, "a live task keeps the id")
+}

@@ -1491,6 +1491,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/job-queues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Current load of every background queue (platform-wide). */
+        get: operations["jobs.queues"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/job-runs": {
         parameters: {
             query?: never;
@@ -2702,6 +2719,7 @@ export interface components {
             inductive_kvarh: components["schemas"]["Decimal"];
             inductive_ratio?: components["schemas"]["Decimal"];
             max_demand_kw?: components["schemas"]["Decimal"];
+            missing_days: string[];
             net_consumption: components["schemas"]["Decimal"];
             /** Format: date-time */
             period_end: string;
@@ -2796,6 +2814,7 @@ export interface components {
             etso_code: string;
             installation_number: string;
             invoice: components["schemas"]["Decimal"];
+            missing_days: string[];
             period_key: string;
             production: components["schemas"]["Decimal"];
             production_price?: components["schemas"]["Decimal"];
@@ -2821,6 +2840,7 @@ export interface components {
             lines: components["schemas"]["BillLine"][];
             max_demand_kw?: components["schemas"]["Decimal"];
             member_analyzer_ids: components["schemas"]["UuidUUID"][];
+            missing_days: string[];
             net_consumption: components["schemas"]["Decimal"];
             /** Format: date-time */
             period_end: string;
@@ -3730,9 +3750,11 @@ export interface components {
             subtype: string;
         };
         IntegrationDefinitions: {
+            endpoint_keys: components["schemas"]["ProviderEndpointKeys"][];
             items: components["schemas"]["IntegrationDefinition"][];
         };
         Job: {
+            children?: components["schemas"]["JobChildren"];
             /** Format: date-time */
             completed_at?: null | string;
             /** @enum {string} */
@@ -3744,6 +3766,42 @@ export interface components {
         };
         JobAccepted: {
             job_id: string;
+        };
+        JobChildError: {
+            /** Format: int32 */
+            count: number;
+            message: string;
+        };
+        JobChildren: {
+            /** Format: int32 */
+            already_queued: number;
+            enqueued?: null | number;
+            errors: components["schemas"]["JobChildError"][];
+            /** Format: int32 */
+            failed: number;
+            /** Format: int32 */
+            partial: number;
+            /** Format: int32 */
+            running: number;
+            /** Format: int32 */
+            succeeded: number;
+        };
+        JobQueue: {
+            active: number;
+            archived: number;
+            completed: number;
+            failed_today: number;
+            /** Format: int64 */
+            latency_seconds: number;
+            paused: boolean;
+            pending: number;
+            processed_today: number;
+            queue: string;
+            retry: number;
+            scheduled: number;
+        };
+        JobQueues: {
+            items: components["schemas"]["JobQueue"][];
         };
         JobRun: {
             error?: null | string;
@@ -4109,6 +4167,12 @@ export interface components {
             name?: null | string;
             phone?: null | string;
             ui_preferences?: null | string;
+        };
+        ProviderEndpointKeys: {
+            optional: string[];
+            /** @enum {string} */
+            provider: "osos" | "gridbox" | "aril" | "pm5340" | "isolar";
+            required: string[];
         };
         PublicBill: {
             /** @enum {string} */
@@ -4831,6 +4895,8 @@ export interface components {
             [key: string]: string;
         };
         User: {
+            building_ids?: components["schemas"]["UuidUUID"][];
+            company_id: components["schemas"]["UuidUUID"];
             /** Format: date-time */
             created_at: string;
             email: string;
@@ -4844,6 +4910,7 @@ export interface components {
             role: components["schemas"]["Role"];
         };
         UserCreateRequest: {
+            building_ids?: components["schemas"]["UuidUUID"][];
             /** Format: email */
             email: string;
             is_active?: null | boolean;
@@ -4853,6 +4920,7 @@ export interface components {
             role: components["schemas"]["Role"];
         };
         UserUpdateRequest: {
+            building_ids?: components["schemas"]["UuidUUID"][];
             /** Format: email */
             email?: null | string;
             is_active?: null | boolean;
@@ -14395,6 +14463,82 @@ export interface operations {
                 };
                 content: {
                     "application/zip": string;
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "jobs.queues": {
+        parameters: {
+            query?: {
+                company_id?: components["schemas"]["UuidUUID"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobQueues"];
                 };
             };
             /** @description Bad Request */

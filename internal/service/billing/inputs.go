@@ -1,6 +1,7 @@
 package billing
 
 import (
+	"sort"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -80,5 +81,17 @@ func chunks[T any](items []T, size int) [][]T {
 		out = append(out, items[:n])
 		items = items[n:]
 	}
+	return out
+}
+
+func sortedKeys(m map[string]bool) []string {
+	if len(m) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
 	return out
 }

@@ -49,6 +49,43 @@ describe('NumberInput', () => {
     expect(input.value).toBe('100,01');
   });
 
+  it('reads a lone dot with other than three decimals as a decimal point', async () => {
+    const { input, user, onValueChange } = setup(null, { min: '-90', max: '90' });
+    await user.type(input, '41.0082');
+    await user.tab();
+    expect(onValueChange).toHaveBeenCalledWith('41.0082');
+  });
+
+  it('keeps 1.234 as Turkish thousands', async () => {
+    const { input, user, onValueChange } = setup();
+    await user.type(input, '1.234');
+    await user.tab();
+    expect(onValueChange).toHaveBeenCalledWith('1234');
+  });
+
+  it('shows an empty string value as empty, so it can be typed into', async () => {
+    const { input, user, onValueChange } = setup('');
+    expect(input.value).toBe('');
+    await user.type(input, '100');
+    await user.tab();
+    expect(onValueChange).toHaveBeenCalledWith('100');
+  });
+
+  it('names a fraction in a whole-number field instead of sending it', async () => {
+    const { input, user, onValueChange, getByText } = setup(null, { fractionDigits: 0 });
+    await user.type(input, '12,5');
+    await user.tab();
+    expect(onValueChange).not.toHaveBeenCalled();
+    expect(getByText('Tam sayı girin')).toBeVisible();
+  });
+
+  it('names an out-of-range value', async () => {
+    const { input, user, getByText } = setup(null, { min: '-90', max: '90' });
+    await user.type(input, '410082');
+    await user.tab();
+    expect(getByText('Aralık dışında')).toBeVisible();
+  });
+
   it('has no axe violations', async () => {
     const { container } = setup('1234.5', { unit: 'kWh' });
     await expectNoAxeViolations(container);

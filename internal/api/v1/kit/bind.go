@@ -16,7 +16,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 
+	"github.com/MErenTalan/ekokod-rewrite/internal/api/v1/dto"
 	perr "github.com/MErenTalan/ekokod-rewrite/internal/platform/errors"
 )
 
@@ -34,8 +36,32 @@ func validatorInstance() *validator.Validate {
 	validateOnce.Do(func() {
 		validate = validator.New(validator.WithRequiredStructEnabled())
 		validate.RegisterTagNameFunc(fieldName)
+		// Coordinates are numeric(9,6): out of range they failed the insert with a 500.
+		_ = validate.RegisterValidation("latitude", decimalWithin(90))
+		_ = validate.RegisterValidation("longitude", decimalWithin(180))
 	})
 	return validate
+}
+
+// wireName drops the root type and embedded struct names (capitalised Go
+// names) from a validator namespace, leaving the JSON path the client sent.
+func wireName(namespace string) string {
+	parts := strings.Split(namespace, ".")[1:]
+	out := parts[:0]
+	for _, p := range parts {
+		if p != "" && p[0] >= 'A' && p[0] <= 'Z' {
+			continue
+		}
+		out = append(out, p)
+	}
+	return strings.Join(out, ".")
+}
+
+func decimalWithin(limit int64) validator.Func {
+	return func(fl validator.FieldLevel) bool {
+		d, ok := fl.Field().Interface().(dto.Decimal)
+		return !ok || d.Abs().LessThanOrEqual(decimal.NewFromInt(limit))
+	}
 }
 
 // fieldName is the wire name of a field: json, then query, then path tag.
@@ -76,10 +102,7 @@ func Bind(r *http.Request, dst any) error {
 		}
 		details := map[string]any{}
 		for _, fe := range verrs {
-			name := fe.Namespace()
-			if _, rest, ok := strings.Cut(name, "."); ok {
-				name = rest
-			}
+			name := wireName(fe.Namespace())
 			codes, _ := details[name].([]string)
 			details[name] = append(codes, fe.Tag())
 		}
@@ -119,6 +142,11 @@ func decodeBody(r *http.Request, dst any) error {
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
+		// A wrong JSON type names its field, so the form can mark that field.
+		var typeErr *json.UnmarshalTypeError
+		if errors.As(err, &typeErr) && typeErr.Field != "" {
+			return perr.Validation.WithParams(map[string]any{typeErr.Field: []string{"invalid"}})
+		}
 		return ErrInvalidBody.WithParams(map[string]any{"reason": bodyReason(err)})
 	}
 	if dec.More() {

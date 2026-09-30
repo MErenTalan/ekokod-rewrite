@@ -32,9 +32,9 @@ type readingsEnvelope struct {
 // field in mapping.go's decodeOptionalNumber — accepting a bare JSON
 // number, a quoted numeric string (some device firmwares stringify
 // numbers) or JSON null uniformly, with no float64 anywhere in the path.
-// DeviceID/DeviceIP are diagnostic metadata only (06 §5): they never feed
-// a canonical register, they only ever reach Raw via the row's own
-// original bytes.
+// DeviceID/DeviceIP are diagnostic metadata only (06 §5) and never typed:
+// the live gateway sends deviceId as a number, and a typed mismatch failed
+// every row. They only ever reach Raw via the row's own original bytes.
 type pm5340Row struct {
 	MeterDate         *string         `json:"meterDate"`
 	ActiveImportKwh   json.RawMessage `json:"activeImport_kWh"`
@@ -42,6 +42,6 @@ type pm5340Row struct {
 	CapacitiveKvarh   json.RawMessage `json:"capacitive_kvarh"`
 	DmdKwPeakKw       json.RawMessage `json:"dmdKwPeak_kW"`
 	CurrentGeneration json.RawMessage `json:"currentGeneration"`
-	DeviceID          *string         `json:"deviceId"`
-	DeviceIP          *string         `json:"deviceIp"`
+	DeviceID          json.RawMessage `json:"deviceId"`
+	DeviceIP          json.RawMessage `json:"deviceIp"`
 }

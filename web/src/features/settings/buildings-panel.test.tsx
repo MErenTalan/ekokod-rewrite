@@ -90,4 +90,26 @@ describe('BuildingsPanel', () => {
     expect(r.queryByRole('button', { name: 'Bina ekle' })).toBeNull();
     expect(queryOf(api.calls, 'GET', '/api/v1/users').toString()).toBe('');
   });
+  it('keeps the dialog and the typed values when the API refuses the save', async () => {
+    api = mockApi({
+      ...ROUTES,
+      'POST /api/v1/buildings': Response.json(
+        { error: { code: 'validation_failed', message: 'Girilen bilgiler geçersiz.', details: { latitude: ['latitude'] } } },
+        { status: 422 },
+      ),
+    });
+    const r = renderWithProviders(
+      <SessionProvider me={me('company_admin')}>
+        <BuildingsPanel />
+      </SessionProvider>,
+    );
+    await waitFor(() => expect(r.getByRole('button', { name: 'Bina ekle' })).toBeInTheDocument());
+    await r.user.click(r.getByRole('button', { name: 'Bina ekle' }));
+    await r.user.type(r.getByRole('textbox', { name: /^Bina adı/ }), 'Depo');
+    await r.user.click(r.getByRole('button', { name: 'Kaydet' }));
+    await waitFor(() => expect(api.calls.some((c) => c.method === 'POST')).toBe(true));
+    const dialog = await r.findByRole('dialog');
+    expect(r.getByRole('textbox', { name: /^Bina adı/ })).toHaveValue('Depo');
+    await waitFor(() => expect(dialog).toHaveTextContent('Geçersiz değer'));
+  });
 });

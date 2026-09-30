@@ -68,7 +68,11 @@
     "empty": "Henüz tanım yok",
     "emptyHint": "Her sağlayıcı ve alt tür için uç nokta şablonlarını buradan tanımlayın.",
     "saved": "Tanım kaydedildi",
-    "deleted": "Tanım silindi"
+    "deleted": "Tanım silindi",
+    "health": "Durum",
+    "complete": "Tam",
+    "missingKeys": "Eksik zorunlu uç nokta: {keys}",
+    "unknownKey": "Bu sağlayıcı bu anahtarı kullanmıyor"
   },
   "confirmDelete": "Silme onayı",
   "deleteAction": "Sil",
@@ -180,7 +184,8 @@
     "empty": "Henüz bina yok",
     "emptyHint": "Ölçüm yapılacak her tesis için bir bina tanımlayın.",
     "saved": "Bina kaydedildi",
-    "deleted": "Bina silindi"
+    "deleted": "Bina silindi",
+    "company": "Şirket"
   },
   "plants": {
     "title": "Güneş santralleri",
@@ -269,6 +274,17 @@
       "empty": "Bu hesapta santral bulunamadı",
       "emptyDescription": "iSolarCloud hesabında görünen santral yok.",
       "job": "iSolar geçmiş verisi"
+    },
+    "finance": {
+      "title": "Finansal ayarlar",
+      "hint": "Satış fiyatı santralin gelirini ve Finansal analiz sayfasındaki gelir ile net tutarı hesaplar. Tarifeler › GES tarifeleri sekmesinde saklanır.",
+      "price": "Birim fiyat (para birimi/MWh)",
+      "currency": "Para birimi",
+      "from": "Fiyat geçerlilik başlangıcı",
+      "fromHintNew": "Boş bırakılırsa kurulum tarihi, o da yoksa bugün",
+      "fromHintChange": "Boş bırakılırsa bugün; aynı tarihli fiyat düzeltilir",
+      "current": "Geçerli fiyat: {price} {currency}/MWh ({date} tarihinden beri)",
+      "saved": "Santral fiyatı kaydedildi"
     }
   },
   "analyzers": {
@@ -317,6 +333,13 @@
     "saved": "Kullanıcı kaydedildi",
     "deleted": "Kullanıcı silindi",
     "empty": "Kullanıcı yok",
-    "emptyHint": "Şirketinize erişecek kullanıcıları buradan tanımlayın."
+    "emptyHint": "Şirketinize erişecek kullanıcıları buradan tanımlayın.",
+    "company": "Şirket",
+    "companyHint": "Kullanıcı bu şirkete bağlanır; sonradan değiştirilemez.",
+    "buildings": "Sorumlu olduğu binalar",
+    "buildingsHint": "Bina yöneticisi yalnızca seçilen binaları görür. Başka bir kullanıcıya atanmış bina bu kullanıcıya geçer.",
+    "buildingsSearch": "Bina ara",
+    "noBuildings": "Bu şirkette bina yok",
+    "buildingCount": "{count, plural, =0 {Bina atanmadı} one {# bina} other {# bina}}"
   }
 }

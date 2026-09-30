@@ -54,7 +54,8 @@ insert into bills (
   reactive_penalty_applied, reactive_power_price, generation_usage, generation_price_per_kwh,
   ptf_yekdem_used, ptf_hours_matched, ptf_hours_missing, ptf_average, yekdem_used, status,
   flag_reason, pdf_path, computed_at, created_at, updated_at,
-  currency, extra_charges_cost, demand_data_available, ptf_hours_expected, consumption_hours_missing
+  currency, extra_charges_cost, demand_data_available, ptf_hours_expected, consumption_hours_missing,
+  missing_days
 )
 select
   gen_random_uuid(), $1, $2, $3,
@@ -75,24 +76,25 @@ select
   $50, $51, $52, $53,
   $54, $55, $56, $56,
   $57, $58, $59,
-  $60, $61
+  $60, $61,
+  $62::text[]
 where
   ($2::uuid is null or exists (
     select 1 from buildings b
     where b.id = $2 and b.company_id = $1 and b.deleted_at is null
-      and ($62::boolean or b.id = any($63::uuid[]))
+      and ($63::boolean or b.id = any($64::uuid[]))
   ))
   and ($9::uuid is null or exists (
     select 1 from tariffs t
     where t.id = $9 and t.company_id = $1 and t.deleted_at is null
-      and ($62::boolean or t.building_id is null or t.building_id = any($63::uuid[]))
+      and ($63::boolean or t.building_id is null or t.building_id = any($64::uuid[]))
   ))
   and ($3::uuid is null or exists (
     select 1 from analyzers an
     where an.id = $3 and an.company_id = $1 and an.deleted_at is null
-      and ($62::boolean or an.building_id = any($63::uuid[]))
+      and ($63::boolean or an.building_id = any($64::uuid[]))
   ))
-returning id, company_id, building_id, analyzer_id, scope, period_key, period_start, period_end, days_in_period, tariff_id, tariff_effective_from, active_import, t1_kwh, t2_kwh, t3_kwh, inductive_kvarh, capacitive_kvarh, active_export, net_consumption, low_tier_kwh, high_tier_kwh, max_demand_kw, tiered_applied, index_start, index_end, effective_energy_price, low_tier_price, high_tier_price, energy_cost, distribution_cost, green_energy_cost, power_cost, demand_overrun_cost, reactive_penalty, other_taxes_cost, vat_base, vat_cost, generation_credit, total_cost, inductive_ratio, capacitive_ratio, inductive_threshold, capacitive_threshold, reactive_penalty_applied, reactive_power_price, generation_usage, generation_price_per_kwh, ptf_yekdem_used, ptf_hours_matched, ptf_hours_missing, ptf_average, yekdem_used, status, flag_reason, pdf_path, computed_at, created_at, updated_at, currency, extra_charges_cost, demand_data_available, ptf_hours_expected, consumption_hours_missing
+returning id, company_id, building_id, analyzer_id, scope, period_key, period_start, period_end, days_in_period, tariff_id, tariff_effective_from, active_import, t1_kwh, t2_kwh, t3_kwh, inductive_kvarh, capacitive_kvarh, active_export, net_consumption, low_tier_kwh, high_tier_kwh, max_demand_kw, tiered_applied, index_start, index_end, effective_energy_price, low_tier_price, high_tier_price, energy_cost, distribution_cost, green_energy_cost, power_cost, demand_overrun_cost, reactive_penalty, other_taxes_cost, vat_base, vat_cost, generation_credit, total_cost, inductive_ratio, capacitive_ratio, inductive_threshold, capacitive_threshold, reactive_penalty_applied, reactive_power_price, generation_usage, generation_price_per_kwh, ptf_yekdem_used, ptf_hours_matched, ptf_hours_missing, ptf_average, yekdem_used, status, flag_reason, pdf_path, computed_at, created_at, updated_at, currency, extra_charges_cost, demand_data_available, ptf_hours_expected, consumption_hours_missing, missing_days
 `
 
 type BillCreateParams struct {
@@ -157,6 +159,7 @@ type BillCreateParams struct {
 	DemandDataAvailable     bool
 	PtfHoursExpected        *int32
 	ConsumptionHoursMissing *int32
+	MissingDays             []string
 	AllBuildings            bool
 	BuildingIds             []uuid.UUID
 }
@@ -242,6 +245,7 @@ func (q *Queries) BillCreate(ctx context.Context, arg BillCreateParams) (Bill, e
 		arg.DemandDataAvailable,
 		arg.PtfHoursExpected,
 		arg.ConsumptionHoursMissing,
+		arg.MissingDays,
 		arg.AllBuildings,
 		arg.BuildingIds,
 	)
@@ -310,12 +314,13 @@ func (q *Queries) BillCreate(ctx context.Context, arg BillCreateParams) (Bill, e
 		&i.DemandDataAvailable,
 		&i.PtfHoursExpected,
 		&i.ConsumptionHoursMissing,
+		&i.MissingDays,
 	)
 	return i, err
 }
 
 const billCurrent = `-- name: BillCurrent :one
-select id, company_id, building_id, analyzer_id, scope, period_key, period_start, period_end, days_in_period, tariff_id, tariff_effective_from, active_import, t1_kwh, t2_kwh, t3_kwh, inductive_kvarh, capacitive_kvarh, active_export, net_consumption, low_tier_kwh, high_tier_kwh, max_demand_kw, tiered_applied, index_start, index_end, effective_energy_price, low_tier_price, high_tier_price, energy_cost, distribution_cost, green_energy_cost, power_cost, demand_overrun_cost, reactive_penalty, other_taxes_cost, vat_base, vat_cost, generation_credit, total_cost, inductive_ratio, capacitive_ratio, inductive_threshold, capacitive_threshold, reactive_penalty_applied, reactive_power_price, generation_usage, generation_price_per_kwh, ptf_yekdem_used, ptf_hours_matched, ptf_hours_missing, ptf_average, yekdem_used, status, flag_reason, pdf_path, computed_at, created_at, updated_at, currency, extra_charges_cost, demand_data_available, ptf_hours_expected, consumption_hours_missing from bills
+select id, company_id, building_id, analyzer_id, scope, period_key, period_start, period_end, days_in_period, tariff_id, tariff_effective_from, active_import, t1_kwh, t2_kwh, t3_kwh, inductive_kvarh, capacitive_kvarh, active_export, net_consumption, low_tier_kwh, high_tier_kwh, max_demand_kw, tiered_applied, index_start, index_end, effective_energy_price, low_tier_price, high_tier_price, energy_cost, distribution_cost, green_energy_cost, power_cost, demand_overrun_cost, reactive_penalty, other_taxes_cost, vat_base, vat_cost, generation_credit, total_cost, inductive_ratio, capacitive_ratio, inductive_threshold, capacitive_threshold, reactive_penalty_applied, reactive_power_price, generation_usage, generation_price_per_kwh, ptf_yekdem_used, ptf_hours_matched, ptf_hours_missing, ptf_average, yekdem_used, status, flag_reason, pdf_path, computed_at, created_at, updated_at, currency, extra_charges_cost, demand_data_available, ptf_hours_expected, consumption_hours_missing, missing_days from bills
 where bills.company_id = $1
   and ($2::boolean or bills.building_id = any($3::uuid[]))
   and bills.scope = $4
@@ -408,13 +413,14 @@ func (q *Queries) BillCurrent(ctx context.Context, arg BillCurrentParams) (Bill,
 		&i.DemandDataAvailable,
 		&i.PtfHoursExpected,
 		&i.ConsumptionHoursMissing,
+		&i.MissingDays,
 	)
 	return i, err
 }
 
 const billGet = `-- name: BillGet :one
 
-select id, company_id, building_id, analyzer_id, scope, period_key, period_start, period_end, days_in_period, tariff_id, tariff_effective_from, active_import, t1_kwh, t2_kwh, t3_kwh, inductive_kvarh, capacitive_kvarh, active_export, net_consumption, low_tier_kwh, high_tier_kwh, max_demand_kw, tiered_applied, index_start, index_end, effective_energy_price, low_tier_price, high_tier_price, energy_cost, distribution_cost, green_energy_cost, power_cost, demand_overrun_cost, reactive_penalty, other_taxes_cost, vat_base, vat_cost, generation_credit, total_cost, inductive_ratio, capacitive_ratio, inductive_threshold, capacitive_threshold, reactive_penalty_applied, reactive_power_price, generation_usage, generation_price_per_kwh, ptf_yekdem_used, ptf_hours_matched, ptf_hours_missing, ptf_average, yekdem_used, status, flag_reason, pdf_path, computed_at, created_at, updated_at, currency, extra_charges_cost, demand_data_available, ptf_hours_expected, consumption_hours_missing from bills
+select id, company_id, building_id, analyzer_id, scope, period_key, period_start, period_end, days_in_period, tariff_id, tariff_effective_from, active_import, t1_kwh, t2_kwh, t3_kwh, inductive_kvarh, capacitive_kvarh, active_export, net_consumption, low_tier_kwh, high_tier_kwh, max_demand_kw, tiered_applied, index_start, index_end, effective_energy_price, low_tier_price, high_tier_price, energy_cost, distribution_cost, green_energy_cost, power_cost, demand_overrun_cost, reactive_penalty, other_taxes_cost, vat_base, vat_cost, generation_credit, total_cost, inductive_ratio, capacitive_ratio, inductive_threshold, capacitive_threshold, reactive_penalty_applied, reactive_power_price, generation_usage, generation_price_per_kwh, ptf_yekdem_used, ptf_hours_matched, ptf_hours_missing, ptf_average, yekdem_used, status, flag_reason, pdf_path, computed_at, created_at, updated_at, currency, extra_charges_cost, demand_data_available, ptf_hours_expected, consumption_hours_missing, missing_days from bills
 where bills.id = $1 and bills.company_id = $2
   and ($3::boolean or bills.building_id = any($4::uuid[]))
   and (bills.building_id is null or exists (select 1 from buildings b where b.id = bills.building_id and b.deleted_at is null))
@@ -503,6 +509,7 @@ func (q *Queries) BillGet(ctx context.Context, arg BillGetParams) (Bill, error) 
 		&i.DemandDataAvailable,
 		&i.PtfHoursExpected,
 		&i.ConsumptionHoursMissing,
+		&i.MissingDays,
 	)
 	return i, err
 }
@@ -752,7 +759,7 @@ func (q *Queries) BillLineList(ctx context.Context, arg BillLineListParams) ([]B
 }
 
 const billList = `-- name: BillList :many
-select id, company_id, building_id, analyzer_id, scope, period_key, period_start, period_end, days_in_period, tariff_id, tariff_effective_from, active_import, t1_kwh, t2_kwh, t3_kwh, inductive_kvarh, capacitive_kvarh, active_export, net_consumption, low_tier_kwh, high_tier_kwh, max_demand_kw, tiered_applied, index_start, index_end, effective_energy_price, low_tier_price, high_tier_price, energy_cost, distribution_cost, green_energy_cost, power_cost, demand_overrun_cost, reactive_penalty, other_taxes_cost, vat_base, vat_cost, generation_credit, total_cost, inductive_ratio, capacitive_ratio, inductive_threshold, capacitive_threshold, reactive_penalty_applied, reactive_power_price, generation_usage, generation_price_per_kwh, ptf_yekdem_used, ptf_hours_matched, ptf_hours_missing, ptf_average, yekdem_used, status, flag_reason, pdf_path, computed_at, created_at, updated_at, currency, extra_charges_cost, demand_data_available, ptf_hours_expected, consumption_hours_missing from bills
+select id, company_id, building_id, analyzer_id, scope, period_key, period_start, period_end, days_in_period, tariff_id, tariff_effective_from, active_import, t1_kwh, t2_kwh, t3_kwh, inductive_kvarh, capacitive_kvarh, active_export, net_consumption, low_tier_kwh, high_tier_kwh, max_demand_kw, tiered_applied, index_start, index_end, effective_energy_price, low_tier_price, high_tier_price, energy_cost, distribution_cost, green_energy_cost, power_cost, demand_overrun_cost, reactive_penalty, other_taxes_cost, vat_base, vat_cost, generation_credit, total_cost, inductive_ratio, capacitive_ratio, inductive_threshold, capacitive_threshold, reactive_penalty_applied, reactive_power_price, generation_usage, generation_price_per_kwh, ptf_yekdem_used, ptf_hours_matched, ptf_hours_missing, ptf_average, yekdem_used, status, flag_reason, pdf_path, computed_at, created_at, updated_at, currency, extra_charges_cost, demand_data_available, ptf_hours_expected, consumption_hours_missing, missing_days from bills
 where bills.company_id = $1
   and ($2::boolean or bills.building_id = any($3::uuid[]))
   and (cardinality($4::uuid[]) = 0 or bills.id = any($4::uuid[]))
@@ -870,6 +877,7 @@ func (q *Queries) BillList(ctx context.Context, arg BillListParams) ([]Bill, err
 			&i.DemandDataAvailable,
 			&i.PtfHoursExpected,
 			&i.ConsumptionHoursMissing,
+			&i.MissingDays,
 		); err != nil {
 			return nil, err
 		}
@@ -1041,7 +1049,7 @@ update bills set status = $1, flag_reason = $2, updated_at = $3
 where id = $4 and company_id = $5
   and ($6::boolean or building_id = any($7::uuid[]))
   and status <> 'superseded'
-returning id, company_id, building_id, analyzer_id, scope, period_key, period_start, period_end, days_in_period, tariff_id, tariff_effective_from, active_import, t1_kwh, t2_kwh, t3_kwh, inductive_kvarh, capacitive_kvarh, active_export, net_consumption, low_tier_kwh, high_tier_kwh, max_demand_kw, tiered_applied, index_start, index_end, effective_energy_price, low_tier_price, high_tier_price, energy_cost, distribution_cost, green_energy_cost, power_cost, demand_overrun_cost, reactive_penalty, other_taxes_cost, vat_base, vat_cost, generation_credit, total_cost, inductive_ratio, capacitive_ratio, inductive_threshold, capacitive_threshold, reactive_penalty_applied, reactive_power_price, generation_usage, generation_price_per_kwh, ptf_yekdem_used, ptf_hours_matched, ptf_hours_missing, ptf_average, yekdem_used, status, flag_reason, pdf_path, computed_at, created_at, updated_at, currency, extra_charges_cost, demand_data_available, ptf_hours_expected, consumption_hours_missing
+returning id, company_id, building_id, analyzer_id, scope, period_key, period_start, period_end, days_in_period, tariff_id, tariff_effective_from, active_import, t1_kwh, t2_kwh, t3_kwh, inductive_kvarh, capacitive_kvarh, active_export, net_consumption, low_tier_kwh, high_tier_kwh, max_demand_kw, tiered_applied, index_start, index_end, effective_energy_price, low_tier_price, high_tier_price, energy_cost, distribution_cost, green_energy_cost, power_cost, demand_overrun_cost, reactive_penalty, other_taxes_cost, vat_base, vat_cost, generation_credit, total_cost, inductive_ratio, capacitive_ratio, inductive_threshold, capacitive_threshold, reactive_penalty_applied, reactive_power_price, generation_usage, generation_price_per_kwh, ptf_yekdem_used, ptf_hours_matched, ptf_hours_missing, ptf_average, yekdem_used, status, flag_reason, pdf_path, computed_at, created_at, updated_at, currency, extra_charges_cost, demand_data_available, ptf_hours_expected, consumption_hours_missing, missing_days
 `
 
 type BillUpdateStatusParams struct {
@@ -1132,6 +1140,7 @@ func (q *Queries) BillUpdateStatus(ctx context.Context, arg BillUpdateStatusPara
 		&i.DemandDataAvailable,
 		&i.PtfHoursExpected,
 		&i.ConsumptionHoursMissing,
+		&i.MissingDays,
 	)
 	return i, err
 }

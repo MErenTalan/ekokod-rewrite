@@ -7,10 +7,11 @@ import { useTranslations } from 'next-intl';
 import { useId, useState } from 'react';
 
 import { cn } from '@/lib/cn';
+import { shellModule, trailFor } from '@/modules/registry';
 
 import { DropdownMenu } from '../ui/dropdown-menu';
 import { Tooltip } from '../ui/tooltip';
-import { findTrail, isGroup, navigation, type NavEntry, type NavGroup, type NavLeaf } from './nav-config';
+import { isGroup, type NavEntry, type NavGroup, type NavLeaf } from './nav';
 
 export type SidebarProps = { collapsed: boolean; onNavigate?: () => void; entries?: NavEntry[] };
 
@@ -19,8 +20,9 @@ const row =
 
 function Leaf({ leaf, collapsed, onNavigate }: { leaf: NavLeaf; collapsed: boolean; onNavigate?: () => void }) {
   const t = useTranslations('shell');
+  const tr = useTranslations();
   const pathname = usePathname();
-  const label = t(`nav.${leaf.labelKey}`);
+  const label = tr(leaf.label);
   const Icon = leaf.icon;
   const content = (
     <>
@@ -41,7 +43,7 @@ function Leaf({ leaf, collapsed, onNavigate }: { leaf: NavLeaf; collapsed: boole
       </Tooltip>
     );
   }
-  const active = findTrail(pathname)?.leaf.id === leaf.id;
+  const active = trailFor(pathname)?.leaf.id === leaf.id;
   const link = (
     <Link
       href={leaf.href}
@@ -69,12 +71,13 @@ function Leaf({ leaf, collapsed, onNavigate }: { leaf: NavLeaf; collapsed: boole
 
 function Group({ group, collapsed, onNavigate }: { group: NavGroup; collapsed: boolean; onNavigate?: () => void }) {
   const t = useTranslations('shell');
+  const tr = useTranslations();
   const pathname = usePathname();
   const router = useRouter();
   const listId = useId();
-  const hasActive = findTrail(pathname)?.group?.id === group.id;
+  const hasActive = trailFor(pathname)?.group?.id === group.id;
   const [open, setOpen] = useState(hasActive);
-  const label = t(`nav.${group.labelKey}`);
+  const label = tr(group.label);
   const Icon = group.icon;
   if (collapsed) {
     return (
@@ -90,7 +93,7 @@ function Group({ group, collapsed, onNavigate }: { group: NavGroup; collapsed: b
           { type: 'label', label },
           ...group.children.map((c) => ({
             type: 'item' as const,
-            label: t(`nav.${c.labelKey}`),
+            label: tr(c.label),
             icon: c.icon,
             disabled: c.disabled,
             description: c.disabled ? t('notYetAvailable') : undefined,
@@ -127,8 +130,10 @@ function Group({ group, collapsed, onNavigate }: { group: NavGroup; collapsed: b
   );
 }
 
-export function Sidebar({ collapsed, onNavigate, entries = navigation }: SidebarProps) {
+export function Sidebar({ collapsed, onNavigate, entries: given }: SidebarProps) {
   const t = useTranslations('shell');
+  const pathname = usePathname();
+  const entries = given ?? shellModule(pathname).nav;
   return (
     <nav aria-label={t('nav.label')} className={cn('flex flex-col p-2', collapsed ? 'w-16' : 'w-64')}>
       <ul className="flex flex-col gap-0.5">

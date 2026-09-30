@@ -1083,3 +1083,54 @@ func TestGridBoxTokenExchangeNeverRetries(t *testing.T) {
 	defer mu.Unlock()
 	require.Equal(t, 1, calls, "R32: a non-idempotent token exchange POST must never be retried in-client")
 }
+
+// energy_values is optional, like legacy (gridbox/refresh/route.ts "Optional
+// energyvalues"): without it reset is simply not offered, and every other kind
+// still fetches instead of failing on config:energy_values.
+func TestGridBoxEnergyValuesIsOptional(t *testing.T) {
+	from, to := istanbulDay(2026, 9, 1)
+	srv := fake.NewTLSServer(t, append(gridboxBaseRoutes(t),
+		fake.Route{Method: http.MethodGet, Path: "/gridbox/last-endex", Respond: fake.JSON(200, fake.Fixture(t, "gridbox", "gridbox_last_endex.json"))},
+		fake.Route{Method: http.MethodGet, Path: "/gridbox/load-profiles", Respond: fake.JSON(200, fake.Fixture(t, "gridbox", "gridbox_success.json"))},
+	)...)
+	pool, _ := gridboxTestPool(t, srv)
+	src := gridboxNewSource(pool, 0)
+	creds := gridboxTestCreds(srv, false)
+	delete(creds.Endpoints, "energy_values")
+
+	require.NotContains(t, src.Kinds(creds), model.ReadingKindReset)
+	require.Contains(t, src.Kinds(creds), model.ReadingKindLoadProfile)
+
+	_, err := src.FetchReadings(context.Background(), creds, gridboxTestRequest(model.ReadingKindLoadProfile, from, to))
+	require.NoError(t, err)
+
+	_, err = src.FetchReadings(context.Background(), creds, gridboxTestRequest(model.ReadingKindReset, from, to))
+	var ierr *integration.Error
+	require.ErrorAs(t, err, &ierr)
+	require.Equal(t, "config:energy_values", ierr.Op)
+}
+
+// GridBox has no end-of-day index before the day ends and answers endexes for
+// today with ResultStatus != 1; that used to fail (and retry) every backfill's
+// last window and every nightly daily/billing fetch. Endexes stop at today.
+func TestGridBoxEndexesStopBeforeToday(t *testing.T) {
+	today := time.Date(2026, 9, 15, 0, 0, 0, 0, normalize.Istanbul) // fixtureNow's Istanbul day
+	srv := fake.NewTLSServer(t, append(gridboxBaseRoutes(t),
+		fake.Route{Method: http.MethodGet, Path: "/gridbox/last-endex", Respond: fake.JSON(200, fake.Fixture(t, "gridbox", "gridbox_last_endex.json"))},
+		fake.Route{Method: http.MethodGet, Path: "/gridbox/endexes", Respond: fake.JSON(200, fake.Fixture(t, "gridbox", "gridbox_success.json"))},
+	)...)
+	pool, _ := gridboxTestPool(t, srv)
+	src := gridboxNewSource(pool, 0)
+	creds := gridboxTestCreds(srv, true)
+
+	for _, kind := range []model.ReadingKind{model.ReadingKindDaily, model.ReadingKindBilling} {
+		_, err := src.FetchReadings(context.Background(), creds, gridboxTestRequest(kind, today, fixtureNow))
+		require.NoError(t, err, kind)
+	}
+	require.False(t, requestQueryContains(t, srv, "/gridbox/endexes", ""), "today alone asks endexes nothing")
+
+	_, err := src.FetchReadings(context.Background(), creds, gridboxTestRequest(model.ReadingKindDaily, today.AddDate(0, 0, -1), fixtureNow))
+	require.NoError(t, err)
+	require.True(t, requestQueryContains(t, srv, "/gridbox/endexes", "endDate=2026-09-14"))
+	require.False(t, requestQueryContains(t, srv, "/gridbox/endexes", "endDate=2026-09-15"))
+}

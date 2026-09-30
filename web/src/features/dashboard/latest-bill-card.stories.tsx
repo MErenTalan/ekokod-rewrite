@@ -28,6 +28,7 @@ const bill: Bill = {
   computed_at: '2026-09-01T03:00:00+03:00',
   has_pdf: true,
   ptf_yekdem_used: false,
+  missing_days: [],
 } as Bill;
 
 const meta = {

@@ -5,10 +5,27 @@ import { useEffect, useMemo, useState } from 'react';
 
 import type { JobView } from '@/components/domain/job-status-banner';
 import { $api } from '@/lib/api/query';
+import type { components } from '@/lib/api/schema';
 import { useScopeParams } from '@/lib/selection/selection-store';
 
 const POLL_MS = 2000;
-const GIVE_UP_MS = 5 * 60 * 1000;
+// A backfill's fetch tasks can run for many minutes after the backfill itself.
+const GIVE_UP_MS = 20 * 60 * 1000;
+
+type Children = NonNullable<components['schemas']['Job']['children']>;
+
+/** Progress of a parent job's fetch tasks: done of total, and the overall tone. */
+export function childProgress(c: Children): {
+  done: number;
+  total: number;
+  status: JobView['status'];
+} {
+  const done = c.succeeded + c.partial + c.failed;
+  const total = Math.max(c.enqueued ?? done + c.running, done + c.running);
+  if (done < total) return { done, total, status: 'running' };
+  if (c.failed > 0 && c.succeeded + c.partial === 0) return { done, total, status: 'failed' };
+  return { done, total, status: 'succeeded' };
+}
 
 const TONE: Record<string, JobView['status']> = {
   queued: 'queued',
@@ -23,7 +40,10 @@ const TONE: Record<string, JobView['status']> = {
  * ever. A 404 means the job is gone or was never ours: that is a failure to the
  * screen, never a retry loop.
  */
-export function useJob(jobId: string | null, label: string): { job: JobView | null; errorCode?: string } {
+export function useJob(
+  jobId: string | null,
+  label: string,
+): { job: JobView | null; errorCode?: string } {
   const t = useTranslations('domain.job');
   const scope = useScopeParams();
   const [startedAt, setStartedAt] = useState<number | null>(null);
@@ -41,29 +61,56 @@ export function useJob(jobId: string | null, label: string): { job: JobView | nu
     {
       enabled: Boolean(jobId) && !expired,
       refetchInterval: (q) => {
-        const status = (q.state.data as { status?: string } | undefined)?.status;
-        return status === 'succeeded' || status === 'failed' ? false : POLL_MS;
+        const data = q.state.data as { status?: string; children?: Children } | undefined;
+        if (data?.children && data.status === 'succeeded')
+          return childProgress(data.children).status === 'running' ? POLL_MS : false;
+        return data?.status === 'succeeded' || data?.status === 'failed' ? false : POLL_MS;
       },
     },
   );
 
   useEffect(() => {
     if (!startedAt || expired) return;
-    const timer = setTimeout(() => setExpired(true), Math.max(0, startedAt + GIVE_UP_MS - Date.now()));
+    const timer = setTimeout(
+      () => setExpired(true),
+      Math.max(0, startedAt + GIVE_UP_MS - Date.now()),
+    );
     return () => clearTimeout(timer);
   }, [startedAt, expired]);
 
   return useMemo(() => {
     if (!jobId) return { job: null };
-    if (expired) return { job: { id: jobId, label, status: 'running', message: t('stillRunning') } };
+    if (expired)
+      return { job: { id: jobId, label, status: 'running', message: t('stillRunning') } };
     if (query.error) return { job: { id: jobId, label, status: 'failed' } };
     const status = TONE[query.data?.status ?? 'queued'] ?? 'queued';
+    const children = query.data?.children;
+    if (children && status === 'succeeded') {
+      const p = childProgress(children);
+      return {
+        job: {
+          id: jobId,
+          label,
+          status: p.status,
+          progress: p.total ? Math.round((p.done / p.total) * 100) : null,
+          message: t('children', {
+            done: p.done,
+            total: p.total,
+            succeeded: children.succeeded + children.partial,
+            failed: children.failed,
+            already: children.already_queued,
+          }),
+          errors: children.errors.slice(0, 5),
+        },
+      };
+    }
     return {
       job: {
         id: jobId,
         label,
         status,
         message: status === 'succeeded' ? t('refreshQueued') : undefined,
+        errors: children?.errors.slice(0, 5),
       },
       // R237's closed code set, for a screen that must name the data
       // condition that stopped the job (§7.10's sentences).

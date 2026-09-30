@@ -96,6 +96,12 @@ func Render(d Document) ([]byte, error) {
 		pdf.CellFormat(0, 8, label(loc, "preview")+reason, "1", 1, "C", false, 0, "")
 		pdf.SetTextColor(0, 0, 0)
 	}
+	if len(b.MissingDays) > 0 {
+		pdf.SetFont("Go", "B", 9)
+		pdf.SetTextColor(160, 90, 0)
+		pdf.MultiCell(0, 5, label(loc, "missing_days")+strings.Join(DayRanges(b.MissingDays), ", "), "1", "L", false)
+		pdf.SetTextColor(0, 0, 0)
+	}
 	pdf.SetFont("Go", "", 9)
 	kv(label(loc, "company"), d.CompanyName)
 	if d.BuildingName != "" {
@@ -245,5 +251,36 @@ func indexes(raw json.RawMessage) map[string]*decimal.Decimal {
 		}
 		out[k] = &d
 	}
+	return out
+}
+
+// DayRanges collapses sorted YYYY-MM-DD days into "02.01.2006" or
+// "02.01.2006 – 05.01.2006" runs of consecutive days.
+func DayRanges(days []string) []string {
+	var out []string
+	var start, prev time.Time
+	flush := func() {
+		if start.IsZero() {
+			return
+		}
+		if start.Equal(prev) {
+			out = append(out, start.Format("02.01.2006"))
+		} else {
+			out = append(out, start.Format("02.01.2006")+" – "+prev.Format("02.01.2006"))
+		}
+	}
+	for _, s := range days {
+		d, err := time.Parse(time.DateOnly, s)
+		if err != nil {
+			continue
+		}
+		if !start.IsZero() && d.Equal(prev.AddDate(0, 0, 1)) {
+			prev = d
+			continue
+		}
+		flush()
+		start, prev = d, d
+	}
+	flush()
 	return out
 }

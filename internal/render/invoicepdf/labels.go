@@ -26,6 +26,7 @@ var labels = map[string]map[string]string{
 		"members": "Sayaçlar", "flags": "İşaretler", "net": "Net tüketim", "active_import": "Aktif çekiş", "active_export": "Aktif veriş",
 		"inductive": "Endüktif", "capacitive": "Kapasitif", "max_demand": "Maksimum demant", "footnote": "Tutarlar yuvarlanmamış miktar ve birim fiyattan hesaplanır; kayıtlı 4/6 haneli değerlerden yeniden hesaplamada kuruş farkı olabilir.",
 		"analyzer": "Sayaç", "company_scope": "Şirket", "building_scope": "Bina",
+		"missing_days": "Eksik veri — bu fatura dönemin tamamını kapsamıyor. Verisi olmayan günler: ",
 	},
 	"en": {
 		model.BillLineEnergy: "Energy", model.BillLineEnergyLowTier: "Energy (low tier)", model.BillLineEnergyHighTier: "Energy (high tier)",
@@ -44,6 +45,7 @@ var labels = map[string]map[string]string{
 		"members": "Meters", "flags": "Flags", "net": "Net consumption", "active_import": "Active import", "active_export": "Active export",
 		"inductive": "Inductive", "capacitive": "Capacitive", "max_demand": "Max demand", "footnote": "Amounts are computed from unrounded quantities and prices; re-deriving them from the stored 4/6-decimal values can differ by a kuruş.",
 		"analyzer": "Meter", "company_scope": "Company", "building_scope": "Building",
+		"missing_days": "Incomplete data — this bill does not cover the whole period. Days without data: ",
 	},
 }
 

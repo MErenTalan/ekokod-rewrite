@@ -1,15 +1,19 @@
 'use client';
 
+import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { cn } from '@/lib/cn';
 import { useOptionalSession } from '@/lib/session/session-provider';
 import { useUiPreferences } from '@/lib/ui-preferences-provider';
+import { modulesFor } from '@/modules/access';
+import { MODULE_IDS, MODULES, shellModule, type ModuleId } from '@/modules/registry';
 
 import { Drawer } from '../ui/drawer';
 import { CompanySwitcher } from './company-switcher';
-import { navFor, navigation } from './nav-config';
+import { ModuleSwitcher } from './module-switcher';
+import { navFor } from './nav';
 import { Sidebar } from './sidebar';
 import { ThemeCustomizer } from './theme-customizer';
 import { TopBar } from './top-bar';
@@ -17,17 +21,21 @@ import { TopNav } from './top-nav';
 import type { ShellUser } from './user-menu';
 import { useMediaQuery } from './use-media-query';
 
-export type AppShellProps = { children: ReactNode; user?: ShellUser; notificationCount?: number };
+export type AppShellProps = { children: ReactNode; module?: ModuleId; user?: ShellUser; notificationCount?: number };
 
 /**
  * Dashboard shell (07 §7). Docking is CSS-first so SSR and first paint match at every width (plan I-16);
  * preferences come from the cookie-backed provider, the breadcrumb from PageHeader. Inside a SessionProvider the
  * user, the role-filtered navigation and the admin company switcher come from the session (R159, R139).
  */
-export function AppShell({ children, user, notificationCount }: AppShellProps) {
+export function AppShell({ children, module, user, notificationCount }: AppShellProps) {
   const t = useTranslations('shell');
   const session = useOptionalSession();
-  const entries = useMemo(() => (session ? navFor(session.me.permissions) : navigation), [session]);
+  const pathname = usePathname();
+  // R489: the layout names its module; stories fall back to the path.
+  const current = module ? MODULES[module] : shellModule(pathname);
+  const entries = useMemo(() => (session ? navFor(current.nav, session.me.permissions) : current.nav), [session, current]);
+  const modules = session ? modulesFor(session.me) : [...MODULE_IDS];
   const shellUser: ShellUser = session
     ? { name: session.me.name, email: session.me.email, roleLabel: t(`roles.${roleKey(session.me.role)}`) }
     : (user ?? { name: '', email: '', roleLabel: '' });
@@ -40,7 +48,7 @@ export function AppShell({ children, user, notificationCount }: AppShellProps) {
   }, [desktop]);
 
   return (
-    <div className="min-h-dvh bg-background text-foreground">
+    <div data-module={current.id} className="min-h-dvh bg-background text-foreground">
       <a
         href="#main-content"
         data-skip-link
@@ -54,6 +62,8 @@ export function AppShell({ children, user, notificationCount }: AppShellProps) {
         {t('skipToContent')}
       </a>
       <TopBar
+        module={current.id}
+        moduleSwitcher={modules.length > 1 ? <ModuleSwitcher current={current.id} modules={modules} /> : null}
         user={shellUser}
         companySwitcher={session?.can('admin.companies') ? <CompanySwitcher /> : null}
         notificationCount={notificationCount}

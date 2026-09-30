@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { compareDecimal, fractionToPercent } from './decimal';
+import { compareDecimal, fractionToPercent, shiftDecimal } from './decimal';
 
 describe('decimal strings', () => {
   it('compares without floats', () => {
@@ -17,5 +17,16 @@ describe('decimal strings', () => {
     expect(fractionToPercent('1.5')).toBe('150');
     expect(fractionToPercent('-0.005')).toBe('-0.5');
     expect(fractionToPercent('3')).toBe('300');
+  });
+
+  it('shifts the decimal point both ways without floats', () => {
+    expect(shiftDecimal('70', -3)).toBe('0.07');
+    expect(shiftDecimal('70.5', -3)).toBe('0.0705');
+    expect(shiftDecimal('1234.56', -3)).toBe('1.23456');
+    expect(shiftDecimal('0.0705', 3)).toBe('70.5');
+    expect(shiftDecimal('0.070000', 3)).toBe('70');
+    expect(shiftDecimal('2', 3)).toBe('2000');
+    expect(shiftDecimal('-1.5', 3)).toBe('-1500');
+    expect(shiftDecimal('0', -3)).toBe('0');
   });
 });

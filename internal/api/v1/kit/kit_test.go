@@ -235,3 +235,26 @@ func TestBindDecodesAnEscapedPathValue(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "billing.generate:company:abc:2026-08", got.ID)
 }
+
+// A wrong JSON type used to be an opaque invalid_body; it now names the field.
+func TestBindTypeErrorNamesTheField(t *testing.T) {
+	var dst struct {
+		Count *int32 `json:"panel_count,omitempty"`
+	}
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/x", strings.NewReader(`{"panel_count":12.5}`))
+	req.Header.Set("Content-Type", "application/json")
+	e := requireCode(t, kit.Bind(req, &dst), "validation_failed")
+	require.Equal(t, map[string]any{"panel_count": []string{"invalid"}}, e.Params)
+}
+
+func TestBindCoordinatesInRange(t *testing.T) {
+	bindCoord := func(body string) error {
+		var dst dto.BuildingCreateRequest
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/x", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		return kit.Bind(req, &dst)
+	}
+	require.NoError(t, bindCoord(`{"name":"b","latitude":"41.0082","longitude":"-28.9784"}`))
+	e := requireCode(t, bindCoord(`{"name":"b","latitude":"410082","longitude":"289784"}`), "validation_failed")
+	require.Equal(t, map[string]any{"latitude": []string{"latitude"}, "longitude": []string{"longitude"}}, e.Params)
+}

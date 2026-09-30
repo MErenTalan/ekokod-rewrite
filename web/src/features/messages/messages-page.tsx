@@ -18,14 +18,32 @@ import { useSession } from '@/lib/session/session-provider';
 import { JobRunsTableView } from './job-runs-table';
 import { MessageTableView } from './message-table';
 
-type OperationalMessagesQuery = NonNullable<paths['/api/v1/messages']['get']['parameters']['query']>;
+type OperationalMessagesQuery = NonNullable<
+  paths['/api/v1/messages']['get']['parameters']['query']
+>;
 
 const ALL = 'all';
 
 /** The filter values the API declares, so a widget can never send a third. */
 type MessageKind = NonNullable<NonNullable<OperationalMessagesQuery['kind']>>;
 type MessageStatus = NonNullable<NonNullable<OperationalMessagesQuery['status']>>;
-type TriggerableJob = paths['/api/v1/job-runs/{type}/trigger']['post']['parameters']['path']['type'];
+type TriggerableJob =
+  paths['/api/v1/job-runs/{type}/trigger']['post']['parameters']['path']['type'];
+type RunStatus = NonNullable<
+  NonNullable<paths['/api/v1/job-runs']['get']['parameters']['query']>['status']
+>;
+const RUNS_POLL_MS = 10_000;
+/** The job types an operator filters by most; the rest stay under "all". */
+const RUN_TYPES = [
+  'integration.backfill',
+  'integration.fetch_readings',
+  'integration.refresh_analyzer',
+  'integration.sync_analyzers',
+  'integration.sync_dispatch',
+  'consumption.refresh',
+  'billing.generate',
+  'epias.sync_prices',
+] as const;
 const LIST_LIMIT = 200;
 const SEARCH_DEBOUNCE_MS = 300;
 
@@ -35,13 +53,16 @@ const SEARCH_DEBOUNCE_MS = 300;
  * and ops.Triggerable equal, and this list mirrors that enum.
  */
 const TRIGGERABLE: readonly TriggerableJob[] = [
-  'alarm.evaluate', 'billing.dispatch', 'integration.sync_dispatch', 'epias.sync_prices',
+  'alarm.evaluate',
+  'billing.dispatch',
+  'integration.sync_dispatch',
+  'epias.sync_prices',
 ];
 
 /** The unified operational log of 01 §7.13, with 09 §F7's job history beside it. */
 export function MessagesPage() {
   const t = useTranslations('messages');
-  const { can } = useSession();
+  const { can, me } = useSession();
   const scope = useScopeParams();
 
   const [tab, setTab] = useState('messages');
@@ -50,6 +71,8 @@ export function MessagesPage() {
   const [kind, setKind] = useState<MessageKind | typeof ALL>(ALL);
   const [status, setStatus] = useState<MessageStatus | typeof ALL>(ALL);
   const [startedJob, setStartedJob] = useState<{ id: string; label: string } | null>(null);
+  const [runType, setRunType] = useState<string>(ALL);
+  const [runStatus, setRunStatus] = useState<RunStatus | typeof ALL>(ALL);
 
   const canReadRuns = can('jobs.runs.read');
   const canTrigger = can('jobs.trigger');
@@ -74,11 +97,43 @@ export function MessagesPage() {
 
   // The job-runs query is only issued when the role may read it, so a building
   // admin never fires a request their token would refuse.
+  const onRuns = tab === 'jobRuns';
   const runs = $api.useQuery(
     'get',
     '/api/v1/job-runs',
-    { params: { query: { ...scope, limit: LIST_LIMIT } } },
-    { enabled: canReadRuns },
+    {
+      params: {
+        query: {
+          ...scope,
+          limit: LIST_LIMIT,
+          ...(runType === ALL ? {} : { job_type: runType }),
+          ...(runStatus === ALL ? {} : { status: runStatus }),
+        },
+      },
+    },
+    { enabled: canReadRuns, refetchInterval: onRuns ? RUNS_POLL_MS : false },
+  );
+  // Queue load is platform-wide, so only an admin asks for it.
+  const queues = $api.useQuery(
+    'get',
+    '/api/v1/job-queues',
+    {},
+    {
+      enabled: canReadRuns && onRuns && me.role === 'admin',
+      refetchInterval: onRuns ? RUNS_POLL_MS : false,
+    },
+  );
+  const analyzers = $api.useQuery(
+    'get',
+    '/api/v1/analyzers',
+    { params: { query: { ...scope, limit: 500 } } },
+    { enabled: canReadRuns && onRuns },
+  );
+  const analyzerNames = Object.fromEntries(
+    (analyzers.data?.items ?? []).map((a) => [
+      a.id,
+      a.customer_name ? `${a.installation_number} · ${a.customer_name}` : a.installation_number,
+    ]),
   );
 
   const trigger = useApiMutation('post', '/api/v1/job-runs/{type}/trigger', {
@@ -135,28 +190,58 @@ export function MessagesPage() {
       ),
     },
     ...(canReadRuns
-      ? [{
-          value: 'jobRuns',
-          label: t('tabs.jobRuns'),
-          content: (
-            <div className="pt-4">
-              <JobRunsTableView
-                runs={runs.data?.items ?? []}
-                triggerable={TRIGGERABLE}
-                canTrigger={canTrigger}
-                loading={runs.isPending}
-                job={job}
-                onDismissJob={() => setStartedJob(null)}
-                onTrigger={(jobType) => {
-                  trigger.mutate(
-                    { params: { path: { type: jobType as TriggerableJob }, query: scope } },
-                    { onSuccess: (data) => setStartedJob({ id: data.job_id, label: jobType }) },
-                  );
-                }}
-              />
-            </div>
-          ),
-        }]
+      ? [
+          {
+            value: 'jobRuns',
+            label: t('tabs.jobRuns'),
+            content: (
+              <div className="flex flex-col gap-4 pt-4">
+                <div className="grid gap-3 md:grid-cols-3">
+                  <Select
+                    label={t('jobs.type')}
+                    value={runType}
+                    onValueChange={setRunType}
+                    options={[
+                      { value: ALL, label: t('jobs.allTypes') },
+                      ...RUN_TYPES.map((type) => ({ value: type, label: type })),
+                    ]}
+                  />
+                  <Select
+                    label={t('jobs.status')}
+                    value={runStatus}
+                    onValueChange={(value) => setRunStatus(value as RunStatus | typeof ALL)}
+                    options={[
+                      { value: ALL, label: t('jobs.allStatuses') },
+                      { value: 'running', label: t('jobs.statuses.running') },
+                      { value: 'success', label: t('jobs.statuses.success') },
+                      { value: 'partial', label: t('jobs.statuses.partial') },
+                      { value: 'failed', label: t('jobs.statuses.failed') },
+                    ]}
+                  />
+                  <p className="self-end text-foreground-muted type-caption">
+                    {t('jobs.autoRefresh')}
+                  </p>
+                </div>
+                <JobRunsTableView
+                  analyzerNames={analyzerNames}
+                  queues={queues.data?.items}
+                  runs={runs.data?.items ?? []}
+                  triggerable={TRIGGERABLE}
+                  canTrigger={canTrigger}
+                  loading={runs.isPending}
+                  job={job}
+                  onDismissJob={() => setStartedJob(null)}
+                  onTrigger={(jobType) => {
+                    trigger.mutate(
+                      { params: { path: { type: jobType as TriggerableJob }, query: scope } },
+                      { onSuccess: (data) => setStartedJob({ id: data.job_id, label: jobType }) },
+                    );
+                  }}
+                />
+              </div>
+            ),
+          },
+        ]
       : []),
   ];
 

@@ -541,3 +541,34 @@ func TestPeriodConsumptionAppliesAGapOverrideOnlyForThatExactWindow(t *testing.T
 	require.NoError(t, err)
 	require.Empty(t, other)
 }
+
+// TestPeriodConsumptionOpenDerivesUnsettledWindow: a partial bill needs an
+// unsettled window; Open derives it, and the recording variant refuses Open.
+func TestPeriodConsumptionOpenDerivesUnsettledWindow(t *testing.T) {
+	loc := istanbulLoc(t)
+	d1 := time.Date(2026, 9, 1, 0, 0, 0, 0, loc)
+	d2 := time.Date(2026, 9, 2, 0, 0, 0, 0, loc)
+	id := uuid.New()
+	readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
+		model.ReadingKindLoadProfile: {
+			readingRow(id, d1, model.ReadingKindLoadProfile, map[string]string{"active_import": "100"}),
+			readingRow(id, d2, model.ReadingKindLoadProfile, map[string]string{"active_import": "140"}),
+		},
+	}}
+	b := newBillingAt(t, readings, d2.Add(time.Hour))
+	ctx := context.Background()
+	req := consumption.PeriodRequest{AnalyzerIDs: []uuid.UUID{id}, Windows: []energy.Window{win(d1, d2)}}
+
+	rows, err := b.PeriodConsumption(ctx, periodScope(), req)
+	require.NoError(t, err)
+	require.Empty(t, rows, "unsettled without Open")
+
+	req.Open = true
+	rows, err = b.PeriodConsumption(ctx, periodScope(), req)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "40", rows[0].Values[energy.ActiveImport].String())
+
+	_, err = b.PeriodConsumptionAndRecord(ctx, periodScope(), req)
+	require.ErrorIs(t, err, consumption.ErrInvalidRequest)
+}

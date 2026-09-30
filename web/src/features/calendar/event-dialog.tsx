@@ -74,13 +74,13 @@ export function EventDialogView({
           />
           <Switch label={t('allDay')} checked={value.allDay} disabled={readOnly} onCheckedChange={(allDay) => set({ allDay })} />
           <div className="flex flex-wrap gap-4">
-            <DatePicker label={t('start')} value={value.startDate} disabled={readOnly} onValueChange={(date) => set({ startDate: date ?? value.startDate })} />
+            <DatePicker label={t('start')} required value={value.startDate} disabled={readOnly} onValueChange={(date) => set({ startDate: date ?? value.startDate })} />
             {!value.allDay ? (
               <Input label={t('startTime')} type="time" value={value.startTime} disabled={readOnly} onChange={(e) => set({ startTime: e.target.value })} />
             ) : null}
           </div>
           <div className="flex flex-wrap gap-4">
-            <DatePicker label={t('end')} value={value.endDate} disabled={readOnly} onValueChange={(date) => set({ endDate: date ?? value.endDate })} />
+            <DatePicker label={t('end')} required value={value.endDate} disabled={readOnly} onValueChange={(date) => set({ endDate: date ?? value.endDate })} />
             {!value.allDay ? (
               <Input label={t('endTime')} type="time" value={value.endTime} disabled={readOnly} onChange={(e) => set({ endTime: e.target.value })} />
             ) : null}

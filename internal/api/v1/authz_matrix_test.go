@@ -158,6 +158,7 @@ var expectedAccess = map[string]string{
 	"GET /calendar/vacations":      "A CA CR BA BR D",
 	"GET /consumption/grouped":     "A CA CR BA BR D",
 	"GET /jobs/{id}":               "A CA BA",
+	"GET /job-queues":              "A",
 
 	// 05 §10 alarms and messages.
 	"GET /alarms":                "A CA CR BA BR D",

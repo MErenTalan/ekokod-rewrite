@@ -24,7 +24,11 @@ describe('assignableRoles', () => {
 describe('UserFormView', () => {
   it('asks for a password only when creating', () => {
     const creating = renderWithProviders(
-      <UserFormView value={emptyUser('company_admin')} onChange={() => {}} actorRole="company_admin" />,
+      <UserFormView
+        value={emptyUser('company_admin')}
+        onChange={() => {}}
+        actorRole="company_admin"
+      />,
     );
     expect(creating.getByLabelText(/Şifre/)).toBeInTheDocument();
     expect(creating.getByText(/En az 10 karakter/)).toBeInTheDocument();
@@ -56,7 +60,12 @@ describe('UserFormView', () => {
 
   it('builds the create request', () => {
     expect(
-      toUserRequest({ ...emptyUser('company_admin'), name: 'Yeni', email: 'yeni@ornek.com.tr', password: 'Guvenli!Sifre-42' }),
+      toUserRequest({
+        ...emptyUser('company_admin'),
+        name: 'Yeni',
+        email: 'yeni@ornek.com.tr',
+        password: 'Guvenli!Sifre-42',
+      }),
     ).toEqual({
       name: 'Yeni',
       email: 'yeni@ornek.com.tr',
@@ -64,6 +73,44 @@ describe('UserFormView', () => {
       role: 'building_readonly_admin',
       is_active: true,
       password: 'Guvenli!Sifre-42',
+      building_ids: [],
     });
+  });
+
+  it('lets an admin pick the company and a building admin its buildings', async () => {
+    let draft = emptyUser('admin', 'c-1');
+    draft = { ...draft, role: 'building_admin' };
+    const r = renderWithProviders(
+      <UserFormView
+        value={draft}
+        onChange={(next) => (draft = next)}
+        actorRole="admin"
+        companies={[
+          { id: 'c-1', name: 'Acme' },
+          { id: 'c-2', name: 'Beta' },
+        ]}
+        buildings={[{ id: 'b-1', name: 'Merkez' }]}
+      />,
+    );
+    expect(r.getByRole('combobox', { name: /Şirket/ })).toHaveTextContent('Acme');
+    await r.user.click(r.getByRole('combobox', { name: /Sorumlu olduğu binalar/ }));
+    await r.user.click(await r.findByRole('option', { name: 'Merkez' }));
+    expect(draft.buildingIds).toEqual(['b-1']);
+    expect(toUserRequest(draft).building_ids).toEqual(['b-1']);
+  });
+
+  it('asks for buildings only for building roles', () => {
+    const r = renderWithProviders(
+      <UserFormView
+        value={{ ...emptyUser('admin'), role: 'company_admin' }}
+        onChange={() => {}}
+        actorRole="admin"
+        buildings={[]}
+      />,
+    );
+    expect(r.queryByText('Sorumlu olduğu binalar')).toBeNull();
+    expect(toUserRequest({ ...emptyUser('admin'), role: 'company_admin' })).not.toHaveProperty(
+      'building_ids',
+    );
   });
 });

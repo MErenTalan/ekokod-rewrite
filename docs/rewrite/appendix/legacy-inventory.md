@@ -27,7 +27,7 @@ accounted for.
 | `/messages` | `/ekorm/messages` | F7 |
 | `/reports` | `/ekorm/reports` | F8 |
 | `/settings/account` | `/ekorm/settings` | F6 |
-| `/carbon-footprint` | `/ekorm/carbon-footprint` | F10 |
+| `/carbon-footprint` | `/ekocm` (308) | F10, F17 |
 | `/iso-50001` | `/ekorm/iso-50001` | F11 |
 | `/calendar` | `/ekorm/calendar` | F6 |
 | `/auth/login` | `/auth/login` | F6 |
@@ -47,7 +47,7 @@ accounted for.
 | `/site/blog` | `/blog` | F12 |
 | `/site/blog/detail/[slug]` | `/blog/[slug]` | F12 |
 | `/site/billCalculate` | `/bill-calculator` | F12 |
-| `/ekocm/*` (separate application) | `/ekorm/carbon-footprint` | F10 |
+| `/ekocm/*` (separate application) | `/ekocm/*`, a module of the same application; `/ekocm/auth/login` → `/auth/login` | F10, F17 |
 
 ### Template demo routes — deliberately dropped
 

@@ -9,6 +9,8 @@ import { Table, TableBody, TableCell, TableContainer, TableHead, TableHeader, Ta
 import { formatNumber } from '@/lib/format';
 import type { BillDashboardBuilding, BillDashboardRow } from '@/lib/api/types';
 
+import { dayRanges } from './missing-days';
+
 export type DashboardTableViewProps = {
   buildings: BillDashboardBuilding[];
   onDownloadPdf?: (billID: string) => void;
@@ -109,7 +111,7 @@ function BuildingSection({
       <TableCell>{r.analyzer_name}</TableCell>
       <TableCell>{r.installation_number}</TableCell>
       <TableCell>{r.etso_code}</TableCell>
-      <TableCell className="type-data">{num(r.consumption)}</TableCell>
+      <TableCell className="type-data">{num(r.consumption)}<MissingDaysNote days={r.missing_days} /></TableCell>
       <TableCell className="type-data">{r.consumption_price ? num(r.consumption_price) : '—'}</TableCell>
       <TableCell className="type-data">{money(r.invoice)}</TableCell>
       <TableCell>
@@ -146,7 +148,9 @@ function BuildingSection({
           <TableCell />
           <TableCell />
           <TableCell />
-          <TableCell className="type-data">{num(building.building_bill.consumption)}</TableCell>
+          <TableCell className="type-data">
+            {num(building.building_bill.consumption)}<MissingDaysNote days={building.building_bill.missing_days} />
+          </TableCell>
           <TableCell />
           <TableCell className="type-data">{money(building.building_bill.invoice)}</TableCell>
           <TableCell>
@@ -159,5 +163,16 @@ function BuildingSection({
         </TableRow>
       ) : null}
     </>
+  );
+}
+
+/** A partial bill (generated before the period had full data) says so next to its consumption. */
+function MissingDaysNote({ days }: { days?: string[] }) {
+  const t = useTranslations('bills');
+  if (!days || days.length === 0) return null;
+  return (
+    <span className="block text-warning type-caption" title={dayRanges(days).join(', ')}>
+      {t('missingDays', { count: days.length })}
+    </span>
   );
 }

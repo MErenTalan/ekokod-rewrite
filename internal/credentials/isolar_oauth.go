@@ -3,7 +3,6 @@ package credentials
 import (
 	"context"
 	"encoding/json"
-	"net/url"
 
 	"github.com/google/uuid"
 
@@ -14,8 +13,9 @@ import (
 )
 
 // ISolarAuthorizeURL builds the iSolarCloud authorisation-request URL (06
-// §6 step 1), with an R22 HMAC-signed state naming (sc.CompanyID, id,
-// expiry, a fresh nonce) appended to the redirect URI as ?state=....
+// §6 step 1). The redirect URI goes out bare: iSolarCloud matches it
+// byte-for-byte against the application's registered URL, so the signed
+// state travels in a cookie instead (see ISolarAuthorize).
 func (s *Service) ISolarAuthorizeURL(ctx context.Context, sc store.Scope, id uuid.UUID) (string, error) {
 	u, _, err := s.ISolarAuthorize(ctx, sc, id)
 	return u, err
@@ -44,9 +44,7 @@ func (s *Service) ISolarAuthorize(ctx context.Context, sc store.Scope, id uuid.U
 	if err != nil {
 		return "", "", err
 	}
-	redirect := s.deps.RedirectURI + "?state=" + url.QueryEscape(state)
-
-	authURL, err = s.deps.ISolar.AuthorizeURL(creds, redirect)
+	authURL, err = s.deps.ISolar.AuthorizeURL(creds, s.deps.RedirectURI)
 	return authURL, state, err
 }
 
@@ -96,27 +94,9 @@ func (s *Service) ISolarCallback(ctx context.Context, code, state string) error 
 		return err
 	}
 
-	// R46: the redirect_uri sent to the token exchange must be
-	// byte-identical to the one sent in the authorize request
-	// (ISolarAuthorizeURL builds exactly this same
-	// RedirectURI+"?state="+url.QueryEscape(state) and hands it to
-	// AuthorizeURL as redirectURI). isolar.Client's own AuthorizeURL doc
-	// comment (internal/integration/isolar/auth.go) says as much: "the
-	// caller is expected to hand redirectURI already carrying its own
-	// '?state=...' query when one is wanted" — that applies equally to
-	// ExchangeCode's redirectURI, since iSolarCloud's OAuth protocol takes
-	// one redirect_uri string with no separate state parameter (confirmed
-	// against the legacy client, bcem-energy's isolarClient.ts:
-	// buildAuthorizeUrl(appId, region, redirectUri) and
-	// exchangeAuthCode(code, companyId, redirectUri) both take a single
-	// redirectUri the caller must pass identically to both). The original
-	// draft sent the BARE s.deps.RedirectURI here — no "?state=..." — which
-	// does not match what AuthorizeURL sent and would be rejected by any
-	// provider that validates redirect_uri against the authorize request
-	// (fix round 1, folded minor).
-	redirectURI := s.deps.RedirectURI + "?state=" + url.QueryEscape(state)
-
-	tok, err := s.deps.ISolar.ExchangeCode(ctx, creds, code, redirectURI)
+	// R46: the token exchange sends the same bare redirect_uri the
+	// authorize request did.
+	tok, err := s.deps.ISolar.ExchangeCode(ctx, creds, code, s.deps.RedirectURI)
 	if err != nil {
 		return err
 	}

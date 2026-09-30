@@ -13,7 +13,7 @@ import { useJob } from '@/features/jobs/use-job';
 
 import { CompanyListView } from './company-list';
 import { CompanyTabView } from './company-tab';
-import { CredentialsSectionView } from './credentials-section';
+import { CredentialsSectionView, shiftDay } from './credentials-section';
 import type { CredentialDraft } from './credential-form';
 import { toCredentialRequest } from './credential-form';
 
@@ -43,11 +43,24 @@ export function CompanyPanel() {
     { params: { query: { limit: 50, ...(cursor ? { cursor } : {}) } } },
     { enabled: can('admin.companies') },
   );
-  const createCompany = useApiMutation('post', '/api/v1/companies', { success: t('created'), invalidate: ['/api/v1/companies'] });
-  const deleteCompany = useApiMutation('delete', '/api/v1/companies/{id}', { success: t('deleted'), invalidate: ['/api/v1/companies'] });
+  const createCompany = useApiMutation('post', '/api/v1/companies', {
+    success: t('created'),
+    invalidate: ['/api/v1/companies'],
+  });
+  const deleteCompany = useApiMutation('delete', '/api/v1/companies/{id}', {
+    success: t('deleted'),
+    invalidate: ['/api/v1/companies'],
+  });
 
-  const definitions = $api.useQuery('get', '/api/v1/integration-definitions', {}, { enabled: can('settings.integrations') });
-  const buildings = $api.useQuery('get', '/api/v1/buildings', { params: { query: { ...scope, limit: 500 } } });
+  const definitions = $api.useQuery(
+    'get',
+    '/api/v1/integration-definitions',
+    {},
+    { enabled: can('settings.integrations') },
+  );
+  const buildings = $api.useQuery('get', '/api/v1/buildings', {
+    params: { query: { ...scope, limit: 500 } },
+  });
   const credentialList = $api.useQuery(
     'get',
     '/api/v1/integration-credentials',
@@ -58,7 +71,9 @@ export function CompanyPanel() {
     success: credentials('saved'),
     invalidate: ['/api/v1/integration-credentials'],
   });
-  const verify = useApiMutation('post', '/api/v1/integration-credentials/{id}/verify', { success: credentials('verified') });
+  const verify = useApiMutation('post', '/api/v1/integration-credentials/{id}/verify', {
+    success: credentials('verified'),
+  });
   const discover = useApiMutation('post', '/api/v1/integration-credentials/{id}/discover', {
     success: credentials('discoverStarted'),
   });
@@ -83,21 +98,45 @@ export function CompanyPanel() {
       today={today}
       job={job}
       onDismissJob={() => setStartedJob(null)}
-      onSave={(draft: CredentialDraft) => saveCredential.mutate({ params: { query: scope }, body: toCredentialRequest(draft) })}
-      onVerify={(credential) => verify.mutate({ params: { path: { id: credential.id }, query: scope } })}
+      onSave={(draft: CredentialDraft) =>
+        saveCredential.mutate({ params: { query: scope }, body: toCredentialRequest(draft) })
+      }
+      onVerify={(credential) =>
+        verify.mutate({ params: { path: { id: credential.id }, query: scope } })
+      }
       onDiscover={(credential) =>
         discover.mutate(
           { params: { path: { id: credential.id }, query: scope } },
-          { onSuccess: (data) => setStartedJob({ id: (data as { job_id: string }).job_id, label: credentials('discover') }) },
+          {
+            onSuccess: (data) =>
+              setStartedJob({
+                id: (data as { job_id: string }).job_id,
+                label: credentials('discover'),
+              }),
+          },
         )
       }
       onBackfill={(credential, range) =>
         backfill.mutate(
-          { params: { path: { id: credential.id }, query: scope }, body: { from: `${range.from}T00:00:00+03:00`, to: `${range.to}T00:00:00+03:00` } },
-          { onSuccess: (data) => setStartedJob({ id: (data as { job_id: string }).job_id, label: credentials('backfill') }) },
+          {
+            params: { path: { id: credential.id }, query: scope }, // The end day is inclusive; the server clamps a `to` past now.
+            body: {
+              from: `${range.from}T00:00:00+03:00`,
+              to: `${shiftDay(range.to, 1)}T00:00:00+03:00`,
+            },
+          },
+          {
+            onSuccess: (data) =>
+              setStartedJob({
+                id: (data as { job_id: string }).job_id,
+                label: credentials('backfill'),
+              }),
+          },
         )
       }
-      onDelete={(credential) => removeCredential.mutate({ params: { path: { id: credential.id }, query: scope } })}
+      onDelete={(credential) =>
+        removeCredential.mutate({ params: { path: { id: credential.id }, query: scope } })
+      }
       onConnectIsolar={async (credential) => {
         const { data } = await api.GET('/api/v1/integrations/isolar/authorize-url', {
           params: { query: { ...scope, credential_id: credential.id } },
@@ -115,7 +154,12 @@ export function CompanyPanel() {
       canEdit={can('settings.company.edit')}
       saving={saveCompany.isPending}
       fieldErrors={saveCompany.fieldErrors}
-      onSave={(values) => saveCompany.mutate({ params: { path: { id: companyIdInScope }, query: scope }, body: values })}
+      onSave={(values) =>
+        saveCompany.mutate({
+          params: { path: { id: companyIdInScope }, query: scope },
+          body: values,
+        })
+      }
     >
       {can('admin.companies') ? (
         <CompanyListView

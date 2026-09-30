@@ -50,6 +50,11 @@ type FetchReadingsPayload struct {
 	// silently skipped as already_enqueued. The zero value (nil) is the
 	// default, resumable id shape every non-Force caller keeps using.
 	ForceRunID *uuid.UUID
+
+	// ParentTaskID is the task id of the backfill or refresh that enqueued
+	// this fetch; the fetch's job_runs row records it so /jobs/{parent}
+	// can report the children's outcome. Not part of the task id.
+	ParentTaskID string `json:",omitempty"`
 }
 
 // BackfillPayload asks the ingestion job to backfill a range for a
@@ -193,6 +198,11 @@ func DecodeSyncAnalyzers(t *asynq.Task) (SyncAnalyzersPayload, error) {
 // not a brand new operator request) still collide with each other, only a
 // NEW run (a new ForceRunID) mints fresh ids.
 func integFetchReadingsTaskID(p FetchReadingsPayload) string {
+	return FetchReadingsTaskID(p)
+}
+
+// FetchReadingsTaskID is the deterministic id of a windowed fetch task.
+func FetchReadingsTaskID(p FetchReadingsPayload) string {
 	base := fmt.Sprintf("backfill:%s:%s:%d:%d", p.AnalyzerID, p.Kind, p.Window.From.Unix(), p.Window.To.Unix())
 	if p.ForceRunID != nil {
 		return base + ":force:" + p.ForceRunID.String()
@@ -244,7 +254,8 @@ func NewBackfillTask(p BackfillPayload, o TaskOptions) (*asynq.Task, error) {
 	opts := append([]asynq.Option{
 		asynq.Timeout(30 * time.Minute),
 		asynq.Queue(QueueLow),
-		asynq.Retention(time.Hour), // R192
+		// R192: watchable after it finishes; its children can take hours.
+		asynq.Retention(24 * time.Hour),
 	}, integMaxRetryOptions(o)...)
 	return asynq.NewTask(TypeIntegrationBackfill, payload, opts...), nil
 }

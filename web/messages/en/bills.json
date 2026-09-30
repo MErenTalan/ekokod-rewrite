@@ -75,7 +75,9 @@
     "companyBill": "Company invoice",
     "running": "Computing",
     "ready": "Invoice ready",
-    "downloadReady": "Download the invoice"
+    "downloadReady": "Download the invoice",
+    "partialTitle": "The bill was generated with missing data",
+    "partialDays": "Days without data are not included: {days}"
   },
   "errors": {
     "noAnalyzerSelected": "Select at least one meter",
@@ -85,8 +87,9 @@
     "noTariffForBuilding": "No tariff found for the building",
     "noConsumptionData": "No consumption data for the selected period",
     "unresolvedAnomaly": "There is an unresolved consumption anomaly",
-    "periodNotClosed": "The period is not closed yet",
+    "periodNotClosed": "The period has not started yet",
     "ptfDataMissing": "PTF data is missing for the period",
     "generationFailed": "The invoice could not be generated"
-  }
+  },
+  "missingDays": "{count, plural, one {# day} other {# days}} missing"
 }

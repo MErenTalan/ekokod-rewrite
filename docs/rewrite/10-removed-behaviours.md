@@ -429,7 +429,9 @@ being wired up. See `01-project-context.md` §9.
 sharing the production database, the session secret and the encryption key, with its own copy of
 overlapping code.
 
-**Now:** one application, one deployment, one codebase. See `01-project-context.md` §1.
+**Now:** one application, one deployment, one codebase. See `01-project-context.md` §1. Since
+F17 the carbon module is back at `/ekocm` as a sibling frontend module of that one application
+(own layout and sidebar, shared login, session, API and database).
 
 ---
 

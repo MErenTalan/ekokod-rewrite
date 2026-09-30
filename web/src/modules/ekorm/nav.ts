@@ -1,0 +1,58 @@
+import {
+  Activity,
+  BadgeCheck,
+  Bell,
+  BellRing,
+  CalendarDays,
+  Droplets,
+  FileBarChart,
+  FileText,
+  Flame,
+  LayoutDashboard,
+  Leaf,
+  LineChart,
+  Mail,
+  MessageSquare,
+  PiggyBank,
+  PlugZap,
+  Receipt,
+  Settings,
+  Sparkles,
+  Sun,
+  Tags,
+  TrendingUp,
+  BrainCircuit,
+  Wallet,
+  Zap,
+} from 'lucide-react';
+
+import type { NavEntry } from '@/components/shell/nav';
+
+/** EKORM's sidebar information architecture (07 §7, plan D18, R167). */
+export const ekormNav: NavEntry[] = [
+  { id: 'dashboard', label: 'shell.nav.dashboard', href: '/ekorm', icon: LayoutDashboard, exact: true },
+  { id: 'dataAnalysis', label: 'shell.nav.dataAnalysis', icon: LineChart, children: [
+    { id: 'consumption', label: 'shell.nav.consumption', href: '/ekorm/consumption', icon: Zap },
+    { id: 'loadProfile', label: 'shell.nav.loadProfile', href: '/ekorm/load-profile', icon: Activity },
+    { id: 'forecast', label: 'shell.nav.forecast', href: '/ekorm/forecast', icon: TrendingUp, permission: 'forecast.read' },
+    { id: 'ai', label: 'shell.nav.aiAnalysis', href: '/ekorm/ai', icon: BrainCircuit, permission: 'forecast.run' },
+    { id: 'solarPlants', label: 'shell.nav.solarPlants', href: '/ekorm/solar-plants', icon: Sun, permission: 'nav.solar_plants' },
+    { id: 'financial', label: 'shell.nav.financialAnalysis', href: '/ekorm/financial-analysis', icon: Wallet, permission: 'nav.financial' },
+    { id: 'renewable', label: 'shell.nav.renewableEnergy', href: '/ekorm/renewable-energy', icon: Leaf, permission: 'renewable.read' },
+    { id: 'water', label: 'shell.nav.water', href: '/ekorm/water', icon: Droplets, disabled: true },
+    { id: 'gas', label: 'shell.nav.gas', href: '/ekorm/gas', icon: Flame, disabled: true },
+    { id: 'evDrivers', label: 'shell.nav.evDrivers', href: '/ekorm/ev-drivers', icon: PlugZap, disabled: true } ] },
+  { id: 'billsTariffs', label: 'shell.nav.billsAndTariffs', icon: Receipt, children: [
+    { id: 'bills', label: 'shell.nav.bills', href: '/ekorm/bills', icon: FileText, permission: 'bills.read' },
+    { id: 'tariffs', label: 'shell.nav.tariffs', href: '/ekorm/tariffs', icon: Tags, permission: 'tariffs.read' } ] },
+  { id: 'alarms', label: 'shell.nav.alarms', icon: Bell, children: [
+    { id: 'alarmsManual', label: 'shell.nav.manual', href: '/ekorm/alarms', icon: BellRing, permission: 'alarms.read' },
+    { id: 'messages', label: 'shell.nav.messages', href: '/ekorm/messages', icon: MessageSquare, permission: 'messages.read' },
+    { id: 'alarmsAi', label: 'shell.nav.ai', href: '/ekorm/alarms/ai', icon: Sparkles, disabled: true } ] },
+  { id: 'reports', label: 'shell.nav.reports', href: '/ekorm/reports', icon: FileBarChart, permission: 'reports.read' },
+  { id: 'calendar', label: 'shell.nav.calendar', href: '/ekorm/calendar', icon: CalendarDays },
+  { id: 'settings', label: 'shell.nav.settings', href: '/ekorm/settings', icon: Settings },
+  { id: 'iso50001', label: 'shell.nav.iso50001', href: '/ekorm/iso-50001', icon: BadgeCheck, permission: 'iso50001.read' },
+  { id: 'savingActions', label: 'shell.nav.savingActions', href: '/ekorm/saving-actions', icon: PiggyBank, disabled: true },
+  { id: 'contact', label: 'shell.nav.contact', href: '/ekorm/contact', icon: Mail },
+];

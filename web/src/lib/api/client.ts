@@ -2,7 +2,7 @@ import createClient, { type Client } from 'openapi-fetch';
 
 import { LOCALE_COOKIE } from '@/i18n/locale';
 
-import { authRedirectFor, errorCode, REFRESHABLE_CODES } from './errors';
+import { authRedirectFor, CHOOSER_PATH, errorCode, REFRESHABLE_CODES } from './errors';
 import type { paths } from './schema';
 
 export const REFRESH_PATH = '/api/v1/auth/refresh';
@@ -99,7 +99,7 @@ const instance = createApiClient({
   baseUrl: browser ? window.location.origin : 'http://localhost',
   fetch: (request) => globalThis.fetch(request),
   navigate: (href) => window.location.assign(href),
-  currentPath: () => (browser ? window.location.pathname + window.location.search : '/ekorm'),
+  currentPath: () => (browser ? window.location.pathname + window.location.search : CHOOSER_PATH),
   locale: () => cookieValue(LOCALE_COOKIE),
 });
 

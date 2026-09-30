@@ -1,0 +1,18 @@
+{
+  "nav": {
+    "overview": "Overview",
+    "data": "Data Management",
+    "selection": "Activity Selection",
+    "entry": "Data Entry",
+    "status": "Activity Status",
+    "reporting": "Reporting",
+    "library": "Library",
+    "emissionFactors": "Emission Factors",
+    "company": "Company Details",
+    "reference": "Reference",
+    "ghg": "GHG Protocol",
+    "iso": "ISO 14064",
+    "standards": "Reporting Standards",
+    "documents": "Documents"
+  }
+}

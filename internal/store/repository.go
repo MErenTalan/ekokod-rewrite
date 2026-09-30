@@ -1543,6 +1543,9 @@ type OpsRepository interface {
 	// recomputation reuses it and only the latest run explains the job the
 	// caller is watching (R237).
 	RunByTaskID(ctx context.Context, s Scope, taskID string) (model.JobRun, error)
+	// ChildRunSummary groups the newest run of every task parentTaskID
+	// enqueued by status and error, largest group first.
+	ChildRunSummary(ctx context.Context, s Scope, parentTaskID string) ([]model.ChildRunGroup, error)
 
 	// AppendMessage stores s.CompanyID as company_id; a message whose
 	// CompanyID is nil (a platform message) or names another company is

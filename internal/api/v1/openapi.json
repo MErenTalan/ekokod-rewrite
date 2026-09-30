@@ -926,6 +926,12 @@
           "max_demand_kw": {
             "$ref": "#/components/schemas/Decimal"
           },
+          "missing_days": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "net_consumption": {
             "$ref": "#/components/schemas/Decimal"
           },
@@ -1000,6 +1006,7 @@
           "reactive_penalty_applied",
           "ptf_yekdem_used",
           "status",
+          "missing_days",
           "has_pdf",
           "computed_at"
         ],
@@ -1311,6 +1318,12 @@
           "invoice": {
             "$ref": "#/components/schemas/Decimal"
           },
+          "missing_days": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "period_key": {
             "type": "string"
           },
@@ -1331,7 +1344,8 @@
           "consumption",
           "production",
           "invoice",
-          "currency"
+          "currency",
+          "missing_days"
         ],
         "type": "object"
       },
@@ -1399,6 +1413,12 @@
           "member_analyzer_ids": {
             "items": {
               "$ref": "#/components/schemas/UuidUUID"
+            },
+            "type": "array"
+          },
+          "missing_days": {
+            "items": {
+              "type": "string"
             },
             "type": "array"
           },
@@ -1476,6 +1496,7 @@
           "reactive_penalty_applied",
           "ptf_yekdem_used",
           "status",
+          "missing_days",
           "has_pdf",
           "computed_at",
           "lines",
@@ -5128,6 +5149,12 @@
       },
       "IntegrationDefinitions": {
         "properties": {
+          "endpoint_keys": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderEndpointKeys"
+            },
+            "type": "array"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/IntegrationDefinition"
@@ -5136,12 +5163,16 @@
           }
         },
         "required": [
-          "items"
+          "items",
+          "endpoint_keys"
         ],
         "type": "object"
       },
       "Job": {
         "properties": {
+          "children": {
+            "$ref": "#/components/schemas/JobChildren"
+          },
           "completed_at": {
             "format": "date-time",
             "type": [
@@ -5201,6 +5232,133 @@
         },
         "required": [
           "job_id"
+        ],
+        "type": "object"
+      },
+      "JobChildError": {
+        "properties": {
+          "count": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "count"
+        ],
+        "type": "object"
+      },
+      "JobChildren": {
+        "properties": {
+          "already_queued": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "enqueued": {
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/JobChildError"
+            },
+            "type": "array"
+          },
+          "failed": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "partial": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "running": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "succeeded": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "already_queued",
+          "running",
+          "succeeded",
+          "partial",
+          "failed",
+          "errors"
+        ],
+        "type": "object"
+      },
+      "JobQueue": {
+        "properties": {
+          "active": {
+            "type": "integer"
+          },
+          "archived": {
+            "type": "integer"
+          },
+          "completed": {
+            "type": "integer"
+          },
+          "failed_today": {
+            "type": "integer"
+          },
+          "latency_seconds": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "paused": {
+            "type": "boolean"
+          },
+          "pending": {
+            "type": "integer"
+          },
+          "processed_today": {
+            "type": "integer"
+          },
+          "queue": {
+            "type": "string"
+          },
+          "retry": {
+            "type": "integer"
+          },
+          "scheduled": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "queue",
+          "pending",
+          "active",
+          "scheduled",
+          "retry",
+          "archived",
+          "completed",
+          "processed_today",
+          "failed_today",
+          "paused",
+          "latency_seconds"
+        ],
+        "type": "object"
+      },
+      "JobQueues": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/JobQueue"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
         ],
         "type": "object"
       },
@@ -6711,6 +6869,38 @@
             ]
           }
         },
+        "type": "object"
+      },
+      "ProviderEndpointKeys": {
+        "properties": {
+          "optional": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "provider": {
+            "enum": [
+              "osos",
+              "gridbox",
+              "aril",
+              "pm5340",
+              "isolar"
+            ],
+            "type": "string"
+          },
+          "required": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "provider",
+          "required",
+          "optional"
+        ],
         "type": "object"
       },
       "PublicBill": {
@@ -9511,6 +9701,15 @@
       },
       "User": {
         "properties": {
+          "building_ids": {
+            "items": {
+              "$ref": "#/components/schemas/UuidUUID"
+            },
+            "type": "array"
+          },
+          "company_id": {
+            "$ref": "#/components/schemas/UuidUUID"
+          },
           "created_at": {
             "format": "date-time",
             "type": "string"
@@ -9549,6 +9748,7 @@
         },
         "required": [
           "id",
+          "company_id",
           "name",
           "email",
           "role",
@@ -9560,6 +9760,12 @@
       },
       "UserCreateRequest": {
         "properties": {
+          "building_ids": {
+            "items": {
+              "$ref": "#/components/schemas/UuidUUID"
+            },
+            "type": "array"
+          },
           "email": {
             "format": "email",
             "type": "string"
@@ -9596,6 +9802,12 @@
       },
       "UserUpdateRequest": {
         "properties": {
+          "building_ids": {
+            "items": {
+              "$ref": "#/components/schemas/UuidUUID"
+            },
+            "type": "array"
+          },
           "email": {
             "format": "email",
             "type": [
@@ -23104,6 +23316,104 @@
         "summary": "Every note and file as a zip, streamed.",
         "tags": [
           "iso50001"
+        ]
+      }
+    },
+    "/api/v1/job-queues": {
+      "get": {
+        "operationId": "jobs.queues",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "company_id",
+            "schema": {
+              "$ref": "#/components/schemas/UuidUUID"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobQueues"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Current load of every background queue (platform-wide).",
+        "tags": [
+          "jobs"
         ]
       }
     },

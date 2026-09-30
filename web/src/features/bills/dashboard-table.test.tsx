@@ -33,6 +33,16 @@ describe('DashboardTableView', () => {
     expect(r.getByRole('note')).toHaveTextContent(/bina tarifesi toplam tüketime bir kez uygulanır/i);
   });
 
+  it('marks a partial bill with its missing-day count', () => {
+    const r = view(demoDivergentDashboard);
+    const note = r.getByText('2 gün veri eksik');
+    expect(note).toHaveAttribute('title', '30.08.2026 – 31.08.2026');
+  });
+
+  it('marks nothing on a complete bill', () => {
+    expect(view().queryByText(/gün veri eksik/)).toBeNull();
+  });
+
   it('does not cry divergence when the invoice agrees with its rows', () => {
     expect(view().queryByRole('note')).toBeNull();
   });

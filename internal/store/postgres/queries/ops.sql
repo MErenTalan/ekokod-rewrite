@@ -8,14 +8,28 @@
 -- the tenant-scoped, surface.
 
 -- name: OpsStartRun :one
-insert into job_runs (id, company_id, job_type, scope, status, task_id)
+insert into job_runs (id, company_id, job_type, scope, status, task_id, parent_task_id)
 values (
     coalesce(nullif(sqlc.arg(id)::uuid, '00000000-0000-0000-0000-000000000000'::uuid),
              gen_random_uuid()),
     sqlc.arg(company_id)::uuid, sqlc.arg(job_type), sqlc.arg(scope)::jsonb, sqlc.arg(status),
-    sqlc.narg(task_id)::text
+    sqlc.narg(task_id)::text, sqlc.narg(parent_task_id)::text
 )
 returning *;
+
+-- name: OpsChildRunSummary :many
+-- The outcome of every task a parent job enqueued: each child's newest run
+-- (a retried task writes one run per attempt), grouped by status and error.
+select latest.status::text as status, coalesce(latest.error, '')::text as error, count(*)::int as n
+from (
+    select distinct on (task_id) status, error
+    from job_runs
+    where company_id = sqlc.arg(company_id)::uuid and parent_task_id = sqlc.arg(parent_task_id)::text
+    order by task_id, started_at desc, id
+) latest
+group by 1, 2
+order by 3 desc, 1, 2
+limit 50;
 
 -- name: OpsRunByTaskID :one
 -- The newest run for a task id: the id is deterministic per subject and

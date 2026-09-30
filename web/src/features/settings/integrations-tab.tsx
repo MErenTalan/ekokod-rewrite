@@ -13,21 +13,20 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import type { IntegrationDefinition, Provider } from '@/lib/api/types';
 
-/** The endpoint templates a provider may declare (R176). */
-export const ENDPOINT_KEYS = [
-  'authentication',
-  'analyzer_list',
-  'hourly_values',
-  'energy_values',
-  'token',
-  'last_index',
-  'indexes',
-  'last_success_date',
-  'load_profiles',
-  'owner_consumptions',
-  'current_indexes',
-  'end_of_month_indexes',
-] as const;
+/** The keys each provider's adapter reads; the server sends them with the list. */
+export type ProviderEndpointKeys = { provider: Provider; required: string[]; optional: string[] };
+
+const keysOf = (catalog: ProviderEndpointKeys[], provider: Provider) =>
+  catalog.find((k) => k.provider === provider) ?? { provider, required: [], optional: [] };
+
+/** Required keys the definition lacks, so a broken definition shows before a fetch fails on it. */
+export function missingKeys(
+  catalog: ProviderEndpointKeys[],
+  provider: Provider,
+  endpoints: Record<string, string>,
+): string[] {
+  return keysOf(catalog, provider).required.filter((k) => !endpoints[k]?.trim());
+}
 
 const PROVIDERS: Provider[] = ['osos', 'gridbox', 'aril', 'pm5340', 'isolar'];
 
@@ -40,6 +39,7 @@ export type DefinitionDraft = {
 
 export type IntegrationsTabViewProps = {
   definitions: IntegrationDefinition[];
+  endpointKeys?: ProviderEndpointKeys[];
   onSave: (draft: DefinitionDraft) => void;
   onDelete: (definition: IntegrationDefinition) => void;
   fieldErrors?: Record<string, string>;
@@ -47,16 +47,37 @@ export type IntegrationsTabViewProps = {
   loading?: boolean;
 };
 
-const draftOf = (definition?: IntegrationDefinition): DefinitionDraft => ({
-  id: definition?.id,
-  provider: definition?.provider ?? 'osos',
-  subtype: definition?.subtype ?? '',
-  endpoints: Object.entries((definition?.endpoints ?? {}) as Record<string, string>).map(([key, url]) => ({ key, url })),
-});
+const withRequired = (
+  catalog: ProviderEndpointKeys[],
+  provider: Provider,
+  endpoints: DefinitionDraft['endpoints'],
+) => [
+  ...endpoints,
+  ...keysOf(catalog, provider)
+    .required.filter((k) => !endpoints.some((e) => e.key === k))
+    .map((key) => ({ key, url: '' })),
+];
+
+const draftOf = (
+  catalog: ProviderEndpointKeys[],
+  definition?: IntegrationDefinition,
+): DefinitionDraft => {
+  const provider = definition?.provider ?? 'osos';
+  const endpoints = Object.entries((definition?.endpoints ?? {}) as Record<string, string>).map(
+    ([key, url]) => ({ key, url }),
+  );
+  return {
+    id: definition?.id,
+    provider,
+    subtype: definition?.subtype ?? '',
+    endpoints: withRequired(catalog, provider, endpoints),
+  };
+};
 
 /** The provider catalogue of 01 §7.15 — admin only, and every URL is https (R176). */
 export function IntegrationsTabView({
   definitions,
+  endpointKeys = [],
   onSave,
   onDelete,
   fieldErrors = {},
@@ -69,7 +90,17 @@ export function IntegrationsTabView({
   const [draft, setDraft] = useState<DefinitionDraft | null>(null);
   const [pendingDelete, setPendingDelete] = useState<IntegrationDefinition | null>(null);
 
-  const invalidUrl = draft?.endpoints.some((e) => e.url !== '' && !e.url.startsWith('https://')) ?? false;
+  const invalidUrl =
+    draft?.endpoints.some((e) => e.url !== '' && !e.url.startsWith('https://')) ?? false;
+  const draftKeys = draft ? keysOf(endpointKeys, draft.provider) : null;
+  const known = draftKeys ? [...draftKeys.required, ...draftKeys.optional] : [];
+  const draftMissing = draft
+    ? missingKeys(
+        endpointKeys,
+        draft.provider,
+        Object.fromEntries(draft.endpoints.map((e) => [e.key, e.url])),
+      )
+    : [];
 
   const columns = useMemo<ColumnDef<IntegrationDefinition, unknown>[]>(
     () => [
@@ -79,20 +110,49 @@ export function IntegrationsTabView({
         id: 'endpoints',
         header: t('endpoints'),
         accessorFn: (row) => Object.keys((row.endpoints ?? {}) as Record<string, string>).length,
-        cell: ({ row }) => t('endpointCount', { count: Object.keys((row.original.endpoints ?? {}) as Record<string, string>).length }),
+        cell: ({ row }) =>
+          t('endpointCount', {
+            count: Object.keys((row.original.endpoints ?? {}) as Record<string, string>).length,
+          }),
+      },
+      {
+        id: 'health',
+        header: t('health'),
+        cell: ({ row }) => {
+          const missing = missingKeys(
+            endpointKeys,
+            row.original.provider,
+            (row.original.endpoints ?? {}) as Record<string, string>,
+          );
+          return missing.length ? (
+            <span className="text-danger">{t('missingKeys', { keys: missing.join(', ') })}</span>
+          ) : (
+            <span className="text-success">{t('complete')}</span>
+          );
+        },
       },
       {
         id: 'actions',
         header: common('actions'),
         cell: ({ row }) => (
           <span className="flex gap-1">
-            <IconButton label={t('edit')} icon={Pencil} size="sm" onClick={() => setDraft(draftOf(row.original))} />
-            <IconButton label={t('delete')} icon={Trash2} size="sm" onClick={() => setPendingDelete(row.original)} />
+            <IconButton
+              label={t('edit')}
+              icon={Pencil}
+              size="sm"
+              onClick={() => setDraft(draftOf(endpointKeys, row.original))}
+            />
+            <IconButton
+              label={t('delete')}
+              icon={Trash2}
+              size="sm"
+              onClick={() => setPendingDelete(row.original)}
+            />
           </span>
         ),
       },
     ],
-    [t, common],
+    [t, common, endpointKeys],
   );
 
   return (
@@ -105,7 +165,7 @@ export function IntegrationsTabView({
         loading={loading}
         empty={{ title: t('empty'), description: t('emptyHint') }}
         toolbar={
-          <Button iconStart={Plus} onClick={() => setDraft(draftOf())}>
+          <Button iconStart={Plus} onClick={() => setDraft(draftOf(endpointKeys))}>
             {t('add')}
           </Button>
         }
@@ -119,7 +179,7 @@ export function IntegrationsTabView({
         footer={
           <Button
             loading={saving}
-            disabled={invalidUrl}
+            disabled={invalidUrl || draftMissing.length > 0}
             onClick={() => {
               if (draft) onSave(draft);
               setDraft(null);
@@ -135,19 +195,49 @@ export function IntegrationsTabView({
               label={t('provider')}
               options={PROVIDERS.map((value) => ({ value, label: value }))}
               value={draft.provider}
-              onValueChange={(provider) => setDraft({ ...draft, provider: provider as Provider })}
+              onValueChange={(provider) =>
+                setDraft({
+                  ...draft,
+                  provider: provider as Provider,
+                  endpoints: withRequired(
+                    endpointKeys,
+                    provider as Provider,
+                    draft.endpoints.filter((e) => e.url),
+                  ),
+                })
+              }
               disabled={Boolean(draft.id)}
             />
-            <Input label={t('subtype')} value={draft.subtype} error={fieldErrors.subtype} onChange={(e) => setDraft({ ...draft, subtype: e.target.value })} required />
+            <Input
+              label={t('subtype')}
+              value={draft.subtype}
+              error={fieldErrors.subtype}
+              onChange={(e) => setDraft({ ...draft, subtype: e.target.value })}
+              required
+            />
             {draft.endpoints.map((endpoint, index) => (
               <div key={index} className="flex flex-wrap items-end gap-2">
                 <div className="w-56">
                   <Select
                     label={t('endpointKey')}
-                    options={ENDPOINT_KEYS.map((value) => ({ value, label: value }))}
+                    options={[
+                      ...known,
+                      ...(known.includes(endpoint.key) ? [] : [endpoint.key]),
+                    ].map((value) => ({
+                      value,
+                      label: draftKeys?.required.includes(value) ? `${value} *` : value,
+                    }))}
                     value={endpoint.key}
+                    error={
+                      known.length && !known.includes(endpoint.key)
+                        ? t('unknownKey')
+                        : fieldErrors[`endpoints.${endpoint.key}`]
+                    }
                     onValueChange={(key) =>
-                      setDraft({ ...draft, endpoints: draft.endpoints.map((e, i) => (i === index ? { ...e, key } : e)) })
+                      setDraft({
+                        ...draft,
+                        endpoints: draft.endpoints.map((e, i) => (i === index ? { ...e, key } : e)),
+                      })
                     }
                   />
                 </div>
@@ -155,9 +245,18 @@ export function IntegrationsTabView({
                   <Input
                     label={t('endpointUrl')}
                     value={endpoint.url}
-                    error={endpoint.url !== '' && !endpoint.url.startsWith('https://') ? t('httpsOnly') : undefined}
+                    error={
+                      endpoint.url !== '' && !endpoint.url.startsWith('https://')
+                        ? t('httpsOnly')
+                        : undefined
+                    }
                     onChange={(e) =>
-                      setDraft({ ...draft, endpoints: draft.endpoints.map((x, i) => (i === index ? { ...x, url: e.target.value } : x)) })
+                      setDraft({
+                        ...draft,
+                        endpoints: draft.endpoints.map((x, i) =>
+                          i === index ? { ...x, url: e.target.value } : x,
+                        ),
+                      })
                     }
                   />
                 </div>
@@ -165,15 +264,26 @@ export function IntegrationsTabView({
                   label={t('removeEndpoint', { key: endpoint.key })}
                   icon={Trash2}
                   size="sm"
-                  onClick={() => setDraft({ ...draft, endpoints: draft.endpoints.filter((_, i) => i !== index) })}
+                  onClick={() =>
+                    setDraft({ ...draft, endpoints: draft.endpoints.filter((_, i) => i !== index) })
+                  }
                 />
               </div>
             ))}
+            {draftMissing.length ? (
+              <p role="alert" className="text-sm text-danger">
+                {t('missingKeys', { keys: draftMissing.join(', ') })}
+              </p>
+            ) : null}
             <Button
               variant="secondary"
               size="sm"
               className="self-start"
-              onClick={() => setDraft({ ...draft, endpoints: [...draft.endpoints, { key: ENDPOINT_KEYS[0], url: '' }] })}
+              disabled={known.every((k) => draft.endpoints.some((e) => e.key === k))}
+              onClick={() => {
+                const next = known.find((k) => !draft.endpoints.some((e) => e.key === k)) ?? '';
+                setDraft({ ...draft, endpoints: [...draft.endpoints, { key: next, url: '' }] });
+              }}
             >
               {t('addEndpoint')}
             </Button>
@@ -197,7 +307,14 @@ export function IntegrationsTabView({
           </Button>
         }
       >
-        {pendingDelete ? <p>{t('deleteConfirm', { provider: pendingDelete.provider, subtype: pendingDelete.subtype })}</p> : null}
+        {pendingDelete ? (
+          <p>
+            {t('deleteConfirm', {
+              provider: pendingDelete.provider,
+              subtype: pendingDelete.subtype,
+            })}
+          </p>
+        ) : null}
       </Dialog>
     </div>
   );

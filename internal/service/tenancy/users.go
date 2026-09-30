@@ -3,6 +3,7 @@ package tenancy
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -35,11 +36,135 @@ type UserInput struct {
 	Role               *model.UserRole
 	IsActive           *bool
 	Password           *string // create only
+	// BuildingIDs, when set, is the complete list of buildings a building
+	// admin is responsible for; buildings not in it stop pointing at them.
+	BuildingIDs *[]uuid.UUID
 }
 
-// ListUsers lists the scope company's users.
-func (s *Service) ListUsers(ctx context.Context, sc store.Scope, f store.UserFilter) ([]model.User, error) {
-	return s.d.Users.List(ctx, sc, f)
+// buildingRole is a role whose scope is its assigned buildings.
+func buildingRole(r model.UserRole) bool {
+	return r == model.UserRoleBuildingAdmin || r == model.UserRoleBuildingReadonlyAdmin
+}
+
+const buildingPage = 500
+
+// companyBuildings lists every building of the scope company.
+func (s *Service) companyBuildings(ctx context.Context, sc store.Scope) ([]model.Building, error) {
+	var all []model.Building
+	for offset := int32(0); ; offset += buildingPage {
+		page, err := s.d.Buildings.List(ctx, sc, store.BuildingFilter{Page: store.Page{Limit: buildingPage, Offset: offset}})
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, page...)
+		if len(page) < buildingPage {
+			return all, nil
+		}
+	}
+}
+
+// checkBuildings refuses ids that are not buildings of the scope company, or
+// any ids for a role that is not building-scoped.
+func (s *Service) checkBuildings(ctx context.Context, sc store.Scope, role model.UserRole, ids []uuid.UUID) ([]model.Building, error) {
+	if len(ids) > 0 && !buildingRole(role) {
+		return nil, validation("building_ids", "role_not_building_scoped")
+	}
+	all, err := s.companyBuildings(ctx, sc)
+	if err != nil {
+		return nil, err
+	}
+	known := make(map[uuid.UUID]bool, len(all))
+	for _, b := range all {
+		known[b.ID] = true
+	}
+	for _, id := range ids {
+		if !known[id] {
+			return nil, validation("building_ids", "invalid")
+		}
+	}
+	return all, nil
+}
+
+// assignBuildings makes userID responsible for exactly ids among all.
+func (s *Service) assignBuildings(ctx context.Context, sc store.Scope, userID uuid.UUID, all []model.Building, ids []uuid.UUID) error {
+	want := make(map[uuid.UUID]bool, len(ids))
+	for _, id := range ids {
+		want[id] = true
+	}
+	for _, b := range all {
+		mine := b.ResponsibleUserID != nil && *b.ResponsibleUserID == userID
+		switch {
+		case want[b.ID] && !mine:
+			uid := userID
+			b.ResponsibleUserID = &uid
+		case !want[b.ID] && mine:
+			b.ResponsibleUserID = nil
+		default:
+			continue
+		}
+		if _, err := s.d.Buildings.Update(ctx, sc, b); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ResponsibleBuildings maps each user of the scope company to the buildings
+// they are responsible for.
+func (s *Service) ResponsibleBuildings(ctx context.Context, sc store.Scope) (map[uuid.UUID][]uuid.UUID, error) {
+	all, err := s.companyBuildings(ctx, sc)
+	if err != nil {
+		return nil, err
+	}
+	out := map[uuid.UUID][]uuid.UUID{}
+	for _, b := range all {
+		if b.ResponsibleUserID != nil {
+			out[*b.ResponsibleUserID] = append(out[*b.ResponsibleUserID], b.ID)
+		}
+	}
+	return out, nil
+}
+
+// ListUsers lists the scope company's users the actor may see: platform
+// admins only to an admin, and to a building-scoped caller only itself and
+// the users responsible for one of its buildings.
+func (s *Service) ListUsers(ctx context.Context, actor Actor, sc store.Scope, f store.UserFilter) ([]model.User, error) {
+	if actor.Role != model.UserRoleAdmin {
+		f.Roles = withoutAdmin(f.Roles)
+		if len(f.Roles) == 0 {
+			return nil, nil
+		}
+	}
+	list, err := s.d.Users.List(ctx, sc, f)
+	if err != nil || sc.AllBuildings {
+		return list, err
+	}
+	assigned, err := s.ResponsibleBuildings(ctx, sc)
+	if err != nil {
+		return nil, err
+	}
+	out := list[:0]
+	for _, u := range list {
+		if u.ID == actor.UserID || slices.ContainsFunc(assigned[u.ID], sc.AllowsBuilding) {
+			out = append(out, u)
+		}
+	}
+	return out, nil
+}
+
+// withoutAdmin narrows a role filter (empty = every role) to non-admin roles.
+func withoutAdmin(roles []model.UserRole) []model.UserRole {
+	if len(roles) == 0 {
+		return []model.UserRole{model.UserRoleCompanyAdmin, model.UserRoleCompanyReadonlyAdmin,
+			model.UserRoleBuildingAdmin, model.UserRoleBuildingReadonlyAdmin, model.UserRoleDemo}
+	}
+	var out []model.UserRole
+	for _, r := range roles {
+		if r != model.UserRoleAdmin {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 // CreateUser creates a user with an assignable role and a policy-valid password.
@@ -53,6 +178,12 @@ func (s *Service) CreateUser(ctx context.Context, actor Actor, sc store.Scope, i
 	company, err := s.d.Companies.Get(ctx, sc, sc.CompanyID)
 	if err != nil {
 		return model.User{}, err
+	}
+	var buildings []model.Building
+	if in.BuildingIDs != nil {
+		if buildings, err = s.checkBuildings(ctx, sc, *in.Role, *in.BuildingIDs); err != nil {
+			return model.User{}, err
+		}
 	}
 	if codes := auth.CheckPolicy(s.d.Hasher, auth.PolicyInput{
 		Password: *in.Password, Name: *in.Name, Email: *in.Email, CompanyName: company.Name,
@@ -76,7 +207,15 @@ func (s *Service) CreateUser(ctx context.Context, actor Actor, sc store.Scope, i
 	if errors.Is(err, store.ErrConflict) {
 		return model.User{}, ErrEmailTaken
 	}
-	return created, err
+	if err != nil {
+		return model.User{}, err
+	}
+	if in.BuildingIDs != nil {
+		if err := s.assignBuildings(ctx, sc, created.ID, buildings, *in.BuildingIDs); err != nil {
+			return model.User{}, err
+		}
+	}
+	return created, nil
 }
 
 // target loads a user the actor may manage: a company admin never manages an admin.
@@ -107,6 +246,16 @@ func (s *Service) UpdateUser(ctx context.Context, actor Actor, sc store.Scope, i
 	if roleChanged && !assignable[actor.Role].Has(*in.Role) {
 		return model.User{}, validation("role", errRoleNotAssignable)
 	}
+	role := user.Role
+	if in.Role != nil {
+		role = *in.Role
+	}
+	var buildings []model.Building
+	if in.BuildingIDs != nil {
+		if buildings, err = s.checkBuildings(ctx, sc, role, *in.BuildingIDs); err != nil {
+			return model.User{}, err
+		}
+	}
 	if in.Name != nil {
 		if strings.TrimSpace(*in.Name) == "" {
 			return model.User{}, validation("name", "required")
@@ -131,6 +280,11 @@ func (s *Service) UpdateUser(ctx context.Context, actor Actor, sc store.Scope, i
 	}
 	if err != nil {
 		return model.User{}, err
+	}
+	if in.BuildingIDs != nil {
+		if err := s.assignBuildings(ctx, sc, user.ID, buildings, *in.BuildingIDs); err != nil {
+			return model.User{}, err
+		}
 	}
 	if roleChanged || activeChanged || emailChanged {
 		if _, err := s.d.Sessions.RevokeAllForUserWithReason(ctx, sc, user.ID, "admin_change", nil, now); err != nil {

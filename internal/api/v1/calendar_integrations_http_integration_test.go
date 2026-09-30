@@ -3,7 +3,6 @@
 package v1_test
 
 import (
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -18,6 +17,7 @@ import (
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/api/v1/dto"
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
+	"github.com/MErenTalan/ekokod-rewrite/internal/integration"
 	"github.com/MErenTalan/ekokod-rewrite/internal/seed"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/admin"
 	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
@@ -113,7 +113,14 @@ func TestWeekendAndVacationChangeLoadProfileHTTP(t *testing.T) {
 	require.Equal(t, "4", we)
 }
 
+// definition fills the provider's required endpoint keys the caller left out,
+// so each test states only the keys it is about.
 func definition(provider, subtype string, endpoints map[string]string) map[string]any {
+	for _, k := range integration.EndpointCatalog[integration.Provider(provider)].Required {
+		if _, ok := endpoints[k]; !ok {
+			endpoints[k] = "/" + k
+		}
+	}
 	return map[string]any{"provider": provider, "subtype": subtype, "endpoints": endpoints}
 }
 
@@ -264,18 +271,16 @@ func TestIsolarCallbackRequiresBrowserBinding(t *testing.T) {
 	parsed, err := url.Parse(redirect)
 	require.NoError(t, err)
 	require.Equal(t, "/api/v1/integrations/isolar/callback", parsed.Path)
-	state := parsed.Query().Get("state")
-	sum := sha256.Sum256([]byte(state))
-	require.Contains(t, cookie, "ekokod_oauth="+hex.EncodeToString(sum[:]))
+	require.Empty(t, parsed.RawQuery, "iSolarCloud refuses a redirect that differs from the registered URL")
 
 	stranger := h.client(uaChrome)
-	res = stranger.do(http.MethodGet, "/integrations/isolar/callback?code=c1&state="+url.QueryEscape(state), nil)
+	res = stranger.do(http.MethodGet, "/integrations/isolar/callback?code=c1", nil)
 	require.Equal(t, http.StatusFound, res.status)
 	require.Equal(t, "/ekorm/settings?tab=company&isolar=error", res.header.Get("Location"), "no cookie: refused")
 	_, used := h.providers.exchanged.Load("c1")
 	require.False(t, used, "the nonce is not consumed and no code is exchanged")
 
-	res = ca.do(http.MethodGet, "/integrations/isolar/callback?code=c2&state="+url.QueryEscape(state)+"&lang=tr", nil)
+	res = ca.do(http.MethodGet, "/integrations/isolar/callback?code=c2&lang=tr", nil)
 	require.Equal(t, http.StatusFound, res.status)
 	require.Equal(t, "/ekorm/settings?tab=company&isolar=ok", res.header.Get("Location"))
 	require.Contains(t, setCookie(t, res, "ekokod_oauth"), "Max-Age=0")

@@ -89,8 +89,7 @@ export function AnalyzersPanel() {
               update.mutate({
                 params: { path: { id: assigning.analyzer.id }, query: scope },
                 body: assigning.buildingId ? { building_id: assigning.buildingId } : { unassign_building: true },
-              });
-              setAssigning(null);
+              }, { onSuccess: () => setAssigning(null) });
             }}
           >
             {common('save')}

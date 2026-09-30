@@ -75,8 +75,11 @@ type Deps struct {
 	Credentials ingest.CredentialOpener
 	Sources     ingest.SourceResolver
 	Enqueuer    ingest.Enqueuer
-	Clock       clock.Clock
-	MaxRetry    int
+	// Inspector, when set, lets a re-run replace windows that already
+	// finished (failed and archived, or completed) instead of skipping them.
+	Inspector job.TaskInspector
+	Clock     clock.Clock
+	MaxRetry  int
 }
 
 // Backfiller implements job.Backfiller.
@@ -108,10 +111,15 @@ func (b *Backfiller) Backfill(ctx context.Context, p job.BackfillPayload) error 
 
 	sc := store.SystemScope(p.CompanyID)
 	companyID := p.CompanyID
+	// The children carry this task's id so /jobs/{id} can report their outcome.
+	var ownTaskID *string
+	if id, ok := asynq.GetTaskID(ctx); ok {
+		ownTaskID = &id
+	}
 
 	run, err := b.deps.Ops.StartRun(ctx, sc, model.JobRun{
 		ID: uuid.New(), CompanyID: &companyID, JobType: job.TypeIntegrationBackfill,
-		Scope: newBackfillRunScope(p), StartedAt: now,
+		Scope: newBackfillRunScope(p), StartedAt: now, TaskID: ownTaskID,
 	})
 	if err != nil {
 		return err
@@ -177,19 +185,24 @@ func (b *Backfiller) Backfill(ctx context.Context, p job.BackfillPayload) error 
 			for _, w := range Windows(p.From, p.To, src.MaxWindow(kind)) {
 				win := w
 				aid := a.ID
-				task, terr := job.NewFetchReadingsTask(
-					job.FetchReadingsPayload{
-						CompanyID: p.CompanyID, CredentialID: p.CredentialID,
-						AnalyzerID: aid, Kind: kind, Window: &win, ForceRunID: forceRunID,
-					},
-					job.TaskOptions{MaxRetry: b.deps.MaxRetry},
-				)
+				payload := job.FetchReadingsPayload{
+					CompanyID: p.CompanyID, CredentialID: p.CredentialID,
+					AnalyzerID: aid, Kind: kind, Window: &win, ForceRunID: forceRunID,
+				}
+				if ownTaskID != nil {
+					payload.ParentTaskID = *ownTaskID
+				}
+				task, terr := job.NewFetchReadingsTask(payload, job.TaskOptions{MaxRetry: b.deps.MaxRetry})
 				if terr != nil {
 					failed++
 					failures = append(failures, backfillFailure{AnalyzerID: &aid, Kind: kind, Reason: redacted(creds, terr)})
 					continue
 				}
-				if _, eerr := b.deps.Enqueuer.Enqueue(ctx, task); eerr != nil {
+				queued, eerr := job.EnqueueOrReplace(ctx, b.deps.Enqueuer, b.deps.Inspector, task, job.FetchReadingsTaskID(payload))
+				if eerr == nil && !queued {
+					eerr = asynq.ErrTaskIDConflict // a live task holds the window
+				}
+				if eerr != nil {
 					if errors.Is(eerr, asynq.ErrTaskIDConflict) {
 						// R53: without Force, a window already queued or
 						// still retained (job.NewFetchReadingsTask's 30-day

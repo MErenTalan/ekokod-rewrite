@@ -1,7 +1,7 @@
 'use client';
 
 import { Trash2 } from 'lucide-react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -12,7 +12,10 @@ import { NumberInput } from '@/components/ui/number-input';
 import { Select } from '@/components/ui/select';
 import { Table, TableBody, TableCaption, TableCell, TableContainer, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import type { PlantCreateRequest, PlantDetail, PlantDevice } from '@/lib/api/types';
+import type { Locale } from '@/i18n/locale';
+import type { PlantCreateRequest, PlantDetail, PlantDevice, SolarTariff, SolarTariffFields } from '@/lib/api/types';
+import { shiftDecimal } from '@/lib/decimal';
+import { formatDate } from '@/lib/format';
 
 export const MONTH_KEYS = [
   'january',
@@ -30,6 +33,8 @@ export const MONTH_KEYS = [
 ] as const;
 
 const ORIENTATIONS = ['n', 's', 'e', 'w', 'ne', 'se', 'nw', 'sw'] as const;
+export const CURRENCIES = ['USD', 'EUR', 'TRY'] as const;
+type Currency = (typeof CURRENCIES)[number];
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export type PlantDraft = {
@@ -56,6 +61,13 @@ export type PlantDraft = {
   nettingAnalyzerId: string;
   /** What the server holds, so an edit that removes it can say so. */
   savedNettingAnalyzerId?: string;
+  /** The sale price per MWh; saved as a solar tariff per kWh (legacy "Birim Fiyat"). */
+  priceMwh: string;
+  currency: Currency;
+  /** Empty: the installation date for a new plant, today for a price change. */
+  priceFrom: string | null;
+  /** The plant's current solar tariff, so an unchanged price is not re-saved. */
+  savedTariff?: SolarTariff;
 };
 
 export const emptyPlant = (): PlantDraft => ({
@@ -78,6 +90,9 @@ export const emptyPlant = (): PlantDraft => ({
   monthlyTargets: Array.from({ length: 12 }, () => ''),
   alarmRecipients: [],
   nettingAnalyzerId: '',
+  priceMwh: '',
+  currency: 'USD',
+  priceFrom: null,
 });
 
 export const plantDraft = (plant: PlantDetail): PlantDraft => ({
@@ -104,6 +119,22 @@ export const plantDraft = (plant: PlantDetail): PlantDraft => ({
   nettingAnalyzerId: plant.netting_analyzer_id ?? '',
   savedNettingAnalyzerId: plant.netting_analyzer_id ?? undefined,
 });
+
+/** Seeds the price fields from the plant's newest solar tariff. */
+export const withTariff = (draft: PlantDraft, tariff?: SolarTariff): PlantDraft =>
+  tariff
+    ? { ...draft, priceMwh: shiftDecimal(tariff.feed_in_tariff, 3), currency: (tariff.currency as Currency) || 'TRY', savedTariff: tariff }
+    : draft;
+
+/** The solar tariff to store after a save, or null when the price is empty or unchanged. */
+export function toTariffRequest(draft: PlantDraft, plantId: string, today: string): SolarTariffFields | null {
+  if (draft.priceMwh === '') return null;
+  const perKwh = shiftDecimal(draft.priceMwh, -3);
+  const saved = draft.savedTariff;
+  if (saved && !draft.priceFrom && shiftDecimal(saved.feed_in_tariff, 0) === perKwh && saved.currency === draft.currency) return null;
+  const from = draft.priceFrom ?? (saved ? today : (draft.installationDate ?? today));
+  return { plant_id: plantId, effective_from: from, feed_in_tariff: perKwh, currency: draft.currency };
+}
 
 /** Every month needs a target, so the request never carries a substituted zero. */
 export const monthlyTargetsComplete = (draft: PlantDraft) =>
@@ -148,6 +179,8 @@ export type PlantFormViewProps = {
 /** Plant fields of 01 §7.15; devices arrive with the iSolar link (F9). */
 export function PlantFormView({ value, onChange, devices, fieldErrors = {}, analyzers = [] }: PlantFormViewProps) {
   const t = useTranslations('settings.plants');
+  const forms = useTranslations('forms');
+  const locale = useLocale() as Locale;
   const [recipient, setRecipient] = useState('');
   const set = (patch: Partial<PlantDraft>) => onChange({ ...value, ...patch });
   const recipientInvalid = recipient !== '' && !EMAIL.test(recipient);
@@ -175,10 +208,10 @@ export function PlantFormView({ value, onChange, devices, fieldErrors = {}, anal
       />
       <Input label={t('pvBrandModel')} value={value.pvBrandModel} onChange={(e) => set({ pvBrandModel: e.target.value })} />
       <div className="flex flex-wrap gap-4">
-        <NumberInput label={t('panelPower')} value={value.panelPowerW} onValueChange={(v) => set({ panelPowerW: v ?? '' })} fractionDigits={2} />
-        <NumberInput label={t('panelEfficiency')} value={value.panelEfficiencyPct} onValueChange={(v) => set({ panelEfficiencyPct: v ?? '' })} fractionDigits={2} />
-        <NumberInput label={t('panelCount')} value={value.panelCount} onValueChange={(v) => set({ panelCount: v ?? '' })} fractionDigits={0} />
-        <NumberInput label={t('stringCount')} value={value.stringCount} onValueChange={(v) => set({ stringCount: v ?? '' })} fractionDigits={0} />
+        <NumberInput label={t('panelPower')} value={value.panelPowerW} error={fieldErrors.panel_power_w} onValueChange={(v) => set({ panelPowerW: v ?? '' })} fractionDigits={2} />
+        <NumberInput label={t('panelEfficiency')} value={value.panelEfficiencyPct} error={fieldErrors.panel_efficiency_pct} onValueChange={(v) => set({ panelEfficiencyPct: v ?? '' })} fractionDigits={2} />
+        <NumberInput label={t('panelCount')} value={value.panelCount} error={fieldErrors.panel_count} min="0" onValueChange={(v) => set({ panelCount: v ?? '' })} fractionDigits={0} />
+        <NumberInput label={t('stringCount')} value={value.stringCount} error={fieldErrors.string_count} min="0" onValueChange={(v) => set({ stringCount: v ?? '' })} fractionDigits={0} />
       </div>
       <div className="flex flex-wrap gap-4">
         <Select
@@ -187,24 +220,25 @@ export function PlantFormView({ value, onChange, devices, fieldErrors = {}, anal
           value={value.orientation || null}
           onValueChange={(orientation) => set({ orientation: orientation as PlantDraft['orientation'] })}
         />
-        <NumberInput label={t('tilt')} value={value.tiltAngleDeg} onValueChange={(v) => set({ tiltAngleDeg: v ?? '' })} fractionDigits={2} />
-        <NumberInput label={t('capacity')} value={value.totalCapacityKw} onValueChange={(v) => set({ totalCapacityKw: v ?? '' })} fractionDigits={2} />
+        <NumberInput label={t('tilt')} value={value.tiltAngleDeg} error={fieldErrors.tilt_angle_deg} onValueChange={(v) => set({ tiltAngleDeg: v ?? '' })} fractionDigits={2} />
+        <NumberInput label={t('capacity')} value={value.totalCapacityKw} error={fieldErrors.total_capacity_kw} onValueChange={(v) => set({ totalCapacityKw: v ?? '' })} fractionDigits={2} />
       </div>
       <DatePicker label={t('installationDate')} value={value.installationDate} onValueChange={(date) => set({ installationDate: date })} />
       <Textarea label={t('address')} value={value.address} rows={2} onChange={(e) => set({ address: e.target.value })} />
       <div className="flex flex-wrap gap-4">
-        <NumberInput label={t('latitude')} value={value.latitude} onValueChange={(v) => set({ latitude: v ?? '' })} fractionDigits={6} />
-        <NumberInput label={t('longitude')} value={value.longitude} onValueChange={(v) => set({ longitude: v ?? '' })} fractionDigits={6} />
+        <NumberInput label={t('latitude')} value={value.latitude} error={fieldErrors.latitude} onValueChange={(v) => set({ latitude: v ?? '' })} min="-90" max="90" fractionDigits={6} />
+        <NumberInput label={t('longitude')} value={value.longitude} error={fieldErrors.longitude} onValueChange={(v) => set({ longitude: v ?? '' })} min="-180" max="180" fractionDigits={6} />
       </div>
-      <NumberInput label={t('yearlyTarget')} value={value.yearlyTargetKwh} onValueChange={(v) => set({ yearlyTargetKwh: v ?? '' })} fractionDigits={2} />
+      <NumberInput label={t('yearlyTarget')} value={value.yearlyTargetKwh} error={fieldErrors.yearly_target_kwh} onValueChange={(v) => set({ yearlyTargetKwh: v ?? '' })} fractionDigits={2} />
 
       <fieldset className="flex flex-col gap-3">
-        <legend className="text-foreground type-small font-semibold">{t('monthlyTargets')}</legend>
+        <legend className="text-foreground type-small font-semibold">{t('monthlyTargets')} <span className="font-normal text-foreground-muted">({forms('required')})</span></legend>
         <div className="grid gap-3 sm:grid-cols-3">
           {MONTH_KEYS.map((month, index) => (
             <NumberInput
               key={month}
               label={t(`months.${month}`)}
+              required
               value={value.monthlyTargets[index] ?? ''}
               onValueChange={(v) => set({ monthlyTargets: value.monthlyTargets.map((target, i) => (i === index ? (v ?? '') : target)) })}
               fractionDigits={2}
@@ -212,6 +246,44 @@ export function PlantFormView({ value, onChange, devices, fieldErrors = {}, anal
           ))}
         </div>
         {!monthlyTargetsComplete(value) ? <p className="text-danger type-small">{t('monthlyTargetsRequired')}</p> : null}
+        {fieldErrors.monthly_targets ? <p className="text-danger type-small">{fieldErrors.monthly_targets}</p> : null}
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-3">
+        <legend className="text-foreground type-small font-semibold">{t('finance.title')}</legend>
+        <p className="text-foreground-muted type-small">{t('finance.hint')}</p>
+        <div className="flex flex-wrap gap-4">
+          <NumberInput
+            label={t('finance.price')}
+            value={value.priceMwh}
+            error={fieldErrors.feed_in_tariff}
+            min="0"
+            onValueChange={(v) => set({ priceMwh: v ?? '' })}
+            fractionDigits={2}
+          />
+          <Select
+            label={t('finance.currency')}
+            options={CURRENCIES.map((c) => ({ value: c, label: c }))}
+            value={value.currency}
+            onValueChange={(currency) => set({ currency: currency as Currency })}
+          />
+          <DatePicker
+            label={t('finance.from')}
+            description={value.savedTariff ? t('finance.fromHintChange') : t('finance.fromHintNew')}
+            value={value.priceFrom}
+            error={fieldErrors.effective_from}
+            onValueChange={(date) => set({ priceFrom: date })}
+          />
+        </div>
+        {value.savedTariff ? (
+          <p className="text-foreground-muted type-small">
+            {t('finance.current', {
+              price: shiftDecimal(value.savedTariff.feed_in_tariff, 3),
+              currency: value.savedTariff.currency ?? 'TRY',
+              date: formatDate(value.savedTariff.effective_from, locale),
+            })}
+          </p>
+        ) : null}
       </fieldset>
 
       <fieldset className="flex flex-col gap-3">
