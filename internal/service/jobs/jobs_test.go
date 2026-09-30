@@ -3,6 +3,7 @@ package jobs_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -551,4 +552,31 @@ func TestBackfillReportsItsChildren(t *testing.T) {
 	require.Equal(t, int32(2), v.Children.AlreadyQueued)
 	require.Equal(t, [4]int32{1, 3, 0, 6}, [4]int32{v.Children.Running, v.Children.Succeeded, v.Children.Partial, v.Children.Failed})
 	require.Equal(t, []jobs.ChildError{{Message: cfg, Count: 6}}, v.Children.Errors)
+}
+
+// queueFake reports only "default" as existing; asking for any other queue
+// fails the way asynq's real inspector does (an internal NOT_FOUND).
+type queueFake struct{ *fakeInspector }
+
+func (queueFake) Queues() ([]string, error) { return []string{job.QueueDefault}, nil }
+func (queueFake) GetQueueInfo(q string) (*asynq.QueueInfo, error) {
+	if q != job.QueueDefault {
+		return nil, errors.New(`NOT_FOUND: queue "` + q + `" does not exist`)
+	}
+	return &asynq.QueueInfo{Queue: q, Pending: 3}, nil
+}
+
+// A queue no task has used yet is reported empty, never a 500.
+func TestQueuesReportsUnusedQueuesAsEmpty(t *testing.T) {
+	s, err := jobs.New(jobs.Deps{Inspector: queueFake{&fakeInspector{}}, Analyzers: fakeAnalyzers{}})
+	require.NoError(t, err)
+	stats, err := s.Queues()
+	require.NoError(t, err)
+	require.Len(t, stats, 3)
+	byName := map[string]jobs.QueueStats{}
+	for _, st := range stats {
+		byName[st.Queue] = st
+	}
+	require.Equal(t, 3, byName[job.QueueDefault].Pending)
+	require.Equal(t, jobs.QueueStats{Queue: job.QueueCritical}, byName[job.QueueCritical])
 }

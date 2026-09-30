@@ -18,6 +18,7 @@ import (
 	"mime"
 	"net/http"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration"
@@ -71,8 +72,8 @@ const MaxWindowDay = 31 * 24 * time.Hour
 // 24 active power (W); a plant reports 83022 daily yield (Wh) and 83025
 // active power (W). F2 asked plants for the inverter points (F9 finding).
 const (
-	devicePoints = "1,24"
-	plantPoints  = "83022,83025"
+	devicePoints = "p1,p24" // minute endpoints take "p"-prefixed ids (legacy, arti-scada)
+	plantPoints  = "p83022,p83025"
 )
 
 // Endpoints keys this package never hard-codes a value for (R40): every
@@ -105,12 +106,20 @@ var authFailureMsgPattern = regexp.MustCompile(`(?i)token|auth|appkey|access`)
 // "a result_msg matching (?i)token|auth|appkey|access, is ErrAuth; anything
 // else is ErrUpstreamUnavailable." Correcting this mapping against real
 // iSolar codes in F14 touches only this function.
-func classifyResult(_ string, msg string) error {
-	if authFailureMsgPattern.MatchString(msg) {
+func classifyResult(code, msg string) error {
+	switch {
+	case isolarAuthCodes[code] || authFailureMsgPattern.MatchString(msg):
 		return integration.ErrAuth
+	case code == "010" || strings.HasPrefix(strings.ToLower(msg), "parameter"):
+		// A request we built wrong never succeeds on a retry (live: "010
+		// Parameter:query_type must be in daymonthyear").
+		return integration.ErrConfig
 	}
 	return integration.ErrUpstreamUnavailable
 }
+
+// isolarAuthCodes are the token/authorisation result codes arti-scada saw live.
+var isolarAuthCodes = map[string]bool{"E00003": true, "E911": true, "E912": true, "E913": true, "E916": true, "E401": true, "401": true}
 
 // Options configures a Client.
 type Options struct {
