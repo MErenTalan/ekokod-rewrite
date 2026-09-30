@@ -3,6 +3,7 @@ package integration
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -43,6 +44,23 @@ type Error struct {
 	Op         string // endpoint key, e.g. "load_profiles" — never a URL
 	HTTPStatus int
 	RetryAfter time.Duration
+	// Detail is the provider's own result code/message (e.g. iSolar's
+	// "E900 er_invalid_appkey"), kept for diagnosis. Error() renders it
+	// only through SafeDetail, so it can never echo arbitrary response text.
+	Detail string
+}
+
+// SafeDetail keeps only [A-Za-z0-9 _.:/-] of s, capped at 80 bytes: enough
+// for a provider error code and message key, too little to carry a body.
+func SafeDetail(s string) string {
+	out := make([]byte, 0, min(len(s), 80))
+	for i := 0; i < len(s) && len(out) < 80; i++ {
+		c := s[i]
+		if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.IndexByte(" _.:/-", c) >= 0 {
+			out = append(out, c)
+		}
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // kindText renders Kind as one of the six sentinels' own text — never
@@ -79,7 +97,11 @@ func kindText(kind error) string {
 // own text, which could otherwise carry request data into an operational
 // message.
 func (e *Error) Error() string {
-	return fmt.Sprintf("%s %s: %s (HTTP %d)", e.Provider, e.Op, kindText(e.Kind), e.HTTPStatus)
+	msg := fmt.Sprintf("%s %s: %s (HTTP %d)", e.Provider, e.Op, kindText(e.Kind), e.HTTPStatus)
+	if d := SafeDetail(e.Detail); d != "" {
+		msg += " [" + d + "]"
+	}
+	return msg
 }
 
 // Unwrap exposes Kind to errors.Is/errors.As, so callers match against the

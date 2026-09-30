@@ -284,6 +284,7 @@ func TestISolarFixtureMatrix(t *testing.T) {
 			case "auth_failure":
 				_, err := tc.call(t, c, creds)
 				require.ErrorIs(t, err, integration.ErrAuth)
+				require.Contains(t, err.Error(), "[E00003 er_token_login_invalid]", "the provider's own code is logged")
 			case "malformed":
 				_, err := tc.call(t, c, creds)
 				require.ErrorIs(t, err, integration.ErrMalformedPayload)

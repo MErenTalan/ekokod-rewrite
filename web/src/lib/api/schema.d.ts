@@ -1290,7 +1290,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** OAuth callback; redirects to Settings. */
+        /** OAuth callback; a page that continues to Settings. */
         get: operations["isolar.callback"];
         put?: never;
         post?: never;
@@ -13236,8 +13236,8 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Found */
-            302: {
+            /** @description OK */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

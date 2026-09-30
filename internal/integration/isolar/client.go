@@ -290,7 +290,8 @@ func (c *Client) decodeEnvelope(op string, resp httpx.Response) (json.RawMessage
 		return nil, &integration.Error{Kind: integration.ErrMalformedPayload, Provider: integration.ProviderISolar, Op: op, HTTPStatus: resp.Status}
 	}
 	if *env.ResultCode != resultSuccess {
-		return nil, &integration.Error{Kind: classifyResult(*env.ResultCode, env.ResultMsg), Provider: integration.ProviderISolar, Op: op, HTTPStatus: resp.Status}
+		return nil, &integration.Error{Kind: classifyResult(*env.ResultCode, env.ResultMsg), Provider: integration.ProviderISolar, Op: op, HTTPStatus: resp.Status,
+			Detail: *env.ResultCode + " " + env.ResultMsg}
 	}
 	if isNullOrEmpty(env.ResultData) {
 		return nil, &integration.Error{Kind: integration.ErrMalformedPayload, Provider: integration.ProviderISolar, Op: op, HTTPStatus: resp.Status}
