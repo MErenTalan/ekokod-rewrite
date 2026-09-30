@@ -96,7 +96,12 @@ export function UsersPanel() {
 
       <Dialog
         open={draft !== null}
-        onOpenChange={(open) => !open && setDraft(null)}
+        onOpenChange={(open) => {
+          if (open) return;
+          setDraft(null);
+          create.clearFieldErrors();
+          update.clearFieldErrors();
+        }}
         title={draft?.id ? t('edit') : t('add')}
         footer={
           <Button
@@ -104,6 +109,8 @@ export function UsersPanel() {
             onClick={() => {
               if (!draft) return;
               const body = toUserRequest(draft);
+              // The dialog closes only on success, so a refused save can be corrected.
+              const close = { onSuccess: () => setDraft(null) };
               if (draft.id) {
                 // A password is only ever set at creation; an update never carries one.
                 const patch = {
@@ -114,14 +121,13 @@ export function UsersPanel() {
                   is_active: body.is_active,
                   ...(isBuildingRole(draft.role) ? { building_ids: draft.buildingIds } : {}),
                 };
-                update.mutate({ params: { path: { id: draft.id }, query: scope }, body: patch });
+                update.mutate({ params: { path: { id: draft.id }, query: scope }, body: patch }, close);
               } else {
                 create.mutate({
                   params: { query: draft.companyId ? { company_id: draft.companyId } : scope },
                   body,
-                });
+                }, close);
               }
-              setDraft(null);
             }}
           >
             {common('save')}

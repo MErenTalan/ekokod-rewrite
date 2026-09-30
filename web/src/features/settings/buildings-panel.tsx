@@ -84,7 +84,12 @@ export function BuildingsPanel() {
 
       <Dialog
         open={draft !== null}
-        onOpenChange={(open) => !open && setDraft(null)}
+        onOpenChange={(open) => {
+          if (open) return;
+          setDraft(null);
+          create.clearFieldErrors();
+          update.clearFieldErrors();
+        }}
         title={draft?.id ? t('edit') : t('add')}
         size="lg"
         footer={
@@ -93,10 +98,11 @@ export function BuildingsPanel() {
             onClick={() => {
               if (!draft) return;
               const body = toBuildingRequest(draft);
+              // The dialog closes only on success, so a refused save can be corrected.
+              const close = { onSuccess: () => setDraft(null) };
               if (draft.id)
-                update.mutate({ params: { path: { id: draft.id }, query: scope }, body });
-              else create.mutate({ params: { query: formScope }, body });
-              setDraft(null);
+                update.mutate({ params: { path: { id: draft.id }, query: scope }, body }, close);
+              else create.mutate({ params: { query: formScope }, body }, close);
             }}
           >
             {common('save')}

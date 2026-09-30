@@ -97,4 +97,30 @@ describe('PlantsPanel iSolar link (R281)', () => {
     const accountCall = api.calls.find((c) => c.url.includes('/integrations/isolar/plants'));
     expect(new URL(accountCall!.url).searchParams.get('credential_id')).toBe('c-iso');
   });
+  it('keeps the dialog open when the API refuses the save', async () => {
+    api = mockApi({
+      ...ROUTES,
+      'GET /api/v1/analyzers': { items: [] },
+      'POST /api/v1/power-plants': Response.json(
+        { error: { code: 'validation_failed', message: 'Girilen bilgiler geçersiz.', details: { panel_count: ['invalid'] } } },
+        { status: 422 },
+      ),
+    });
+    const r = renderWithProviders(
+      <SessionProvider me={me('company_admin')}>
+        <PlantsPanel />
+      </SessionProvider>,
+    );
+    await waitFor(() => expect(r.getByRole('button', { name: 'Santral ekle' })).toBeInTheDocument());
+    await r.user.click(r.getByRole('button', { name: 'Santral ekle' }));
+    await r.user.type(r.getByRole('textbox', { name: /^Santral ismi/ }), 'GES');
+    for (const m of ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık']) {
+      await r.user.type(r.getByRole('textbox', { name: new RegExp(`^${m}`) }), '100');
+    }
+    await r.user.click(r.getByRole('textbox', { name: /^Santral ismi/ }));
+    await r.user.click(r.getByRole('button', { name: 'Kaydet' }));
+    await waitFor(() => expect(api.calls.some((c) => c.method === 'POST')).toBe(true));
+    expect(r.getByRole('textbox', { name: /^Santral ismi/ })).toHaveValue('GES');
+    await waitFor(() => expect(r.getByRole('dialog')).toHaveTextContent('Geçersiz değer'));
+  });
 });

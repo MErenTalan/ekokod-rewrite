@@ -148,6 +148,7 @@ export type PlantFormViewProps = {
 /** Plant fields of 01 §7.15; devices arrive with the iSolar link (F9). */
 export function PlantFormView({ value, onChange, devices, fieldErrors = {}, analyzers = [] }: PlantFormViewProps) {
   const t = useTranslations('settings.plants');
+  const forms = useTranslations('forms');
   const [recipient, setRecipient] = useState('');
   const set = (patch: Partial<PlantDraft>) => onChange({ ...value, ...patch });
   const recipientInvalid = recipient !== '' && !EMAIL.test(recipient);
@@ -175,10 +176,10 @@ export function PlantFormView({ value, onChange, devices, fieldErrors = {}, anal
       />
       <Input label={t('pvBrandModel')} value={value.pvBrandModel} onChange={(e) => set({ pvBrandModel: e.target.value })} />
       <div className="flex flex-wrap gap-4">
-        <NumberInput label={t('panelPower')} value={value.panelPowerW} onValueChange={(v) => set({ panelPowerW: v ?? '' })} fractionDigits={2} />
-        <NumberInput label={t('panelEfficiency')} value={value.panelEfficiencyPct} onValueChange={(v) => set({ panelEfficiencyPct: v ?? '' })} fractionDigits={2} />
-        <NumberInput label={t('panelCount')} value={value.panelCount} onValueChange={(v) => set({ panelCount: v ?? '' })} fractionDigits={0} />
-        <NumberInput label={t('stringCount')} value={value.stringCount} onValueChange={(v) => set({ stringCount: v ?? '' })} fractionDigits={0} />
+        <NumberInput label={t('panelPower')} value={value.panelPowerW} error={fieldErrors.panel_power_w} onValueChange={(v) => set({ panelPowerW: v ?? '' })} fractionDigits={2} />
+        <NumberInput label={t('panelEfficiency')} value={value.panelEfficiencyPct} error={fieldErrors.panel_efficiency_pct} onValueChange={(v) => set({ panelEfficiencyPct: v ?? '' })} fractionDigits={2} />
+        <NumberInput label={t('panelCount')} value={value.panelCount} error={fieldErrors.panel_count} min="0" onValueChange={(v) => set({ panelCount: v ?? '' })} fractionDigits={0} />
+        <NumberInput label={t('stringCount')} value={value.stringCount} error={fieldErrors.string_count} min="0" onValueChange={(v) => set({ stringCount: v ?? '' })} fractionDigits={0} />
       </div>
       <div className="flex flex-wrap gap-4">
         <Select
@@ -187,24 +188,25 @@ export function PlantFormView({ value, onChange, devices, fieldErrors = {}, anal
           value={value.orientation || null}
           onValueChange={(orientation) => set({ orientation: orientation as PlantDraft['orientation'] })}
         />
-        <NumberInput label={t('tilt')} value={value.tiltAngleDeg} onValueChange={(v) => set({ tiltAngleDeg: v ?? '' })} fractionDigits={2} />
-        <NumberInput label={t('capacity')} value={value.totalCapacityKw} onValueChange={(v) => set({ totalCapacityKw: v ?? '' })} fractionDigits={2} />
+        <NumberInput label={t('tilt')} value={value.tiltAngleDeg} error={fieldErrors.tilt_angle_deg} onValueChange={(v) => set({ tiltAngleDeg: v ?? '' })} fractionDigits={2} />
+        <NumberInput label={t('capacity')} value={value.totalCapacityKw} error={fieldErrors.total_capacity_kw} onValueChange={(v) => set({ totalCapacityKw: v ?? '' })} fractionDigits={2} />
       </div>
       <DatePicker label={t('installationDate')} value={value.installationDate} onValueChange={(date) => set({ installationDate: date })} />
       <Textarea label={t('address')} value={value.address} rows={2} onChange={(e) => set({ address: e.target.value })} />
       <div className="flex flex-wrap gap-4">
-        <NumberInput label={t('latitude')} value={value.latitude} onValueChange={(v) => set({ latitude: v ?? '' })} fractionDigits={6} />
-        <NumberInput label={t('longitude')} value={value.longitude} onValueChange={(v) => set({ longitude: v ?? '' })} fractionDigits={6} />
+        <NumberInput label={t('latitude')} value={value.latitude} error={fieldErrors.latitude} onValueChange={(v) => set({ latitude: v ?? '' })} min="-90" max="90" fractionDigits={6} />
+        <NumberInput label={t('longitude')} value={value.longitude} error={fieldErrors.longitude} onValueChange={(v) => set({ longitude: v ?? '' })} min="-180" max="180" fractionDigits={6} />
       </div>
-      <NumberInput label={t('yearlyTarget')} value={value.yearlyTargetKwh} onValueChange={(v) => set({ yearlyTargetKwh: v ?? '' })} fractionDigits={2} />
+      <NumberInput label={t('yearlyTarget')} value={value.yearlyTargetKwh} error={fieldErrors.yearly_target_kwh} onValueChange={(v) => set({ yearlyTargetKwh: v ?? '' })} fractionDigits={2} />
 
       <fieldset className="flex flex-col gap-3">
-        <legend className="text-foreground type-small font-semibold">{t('monthlyTargets')}</legend>
+        <legend className="text-foreground type-small font-semibold">{t('monthlyTargets')} <span className="font-normal text-foreground-muted">({forms('required')})</span></legend>
         <div className="grid gap-3 sm:grid-cols-3">
           {MONTH_KEYS.map((month, index) => (
             <NumberInput
               key={month}
               label={t(`months.${month}`)}
+              required
               value={value.monthlyTargets[index] ?? ''}
               onValueChange={(v) => set({ monthlyTargets: value.monthlyTargets.map((target, i) => (i === index ? (v ?? '') : target)) })}
               fractionDigits={2}
@@ -212,6 +214,7 @@ export function PlantFormView({ value, onChange, devices, fieldErrors = {}, anal
           ))}
         </div>
         {!monthlyTargetsComplete(value) ? <p className="text-danger type-small">{t('monthlyTargetsRequired')}</p> : null}
+        {fieldErrors.monthly_targets ? <p className="text-danger type-small">{fieldErrors.monthly_targets}</p> : null}
       </fieldset>
 
       <fieldset className="flex flex-col gap-3">

@@ -129,6 +129,7 @@ export function UserFormView({
       />
       <Select
         label={t('role')}
+        required
         options={assignableRoles(actorRole).map((role) => ({
           value: role,
           label: roles(ROLE_LABEL_KEY[role]),
@@ -142,6 +143,7 @@ export function UserFormView({
       {companies ? (
         <Select
           label={t('company')}
+          required
           options={companies.map((c) => ({ value: c.id, label: c.name }))}
           value={value.companyId ?? ''}
           disabled={Boolean(value.id)}

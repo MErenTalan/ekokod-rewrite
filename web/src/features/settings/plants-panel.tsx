@@ -78,7 +78,12 @@ export function PlantsPanel() {
 
       <Dialog
         open={draft !== null}
-        onOpenChange={(open) => !open && setDraft(null)}
+        onOpenChange={(open) => {
+          if (open) return;
+          setDraft(null);
+          create.clearFieldErrors();
+          update.clearFieldErrors();
+        }}
         title={draft?.id ? t('edit') : t('add')}
         size="lg"
         footer={
@@ -88,9 +93,10 @@ export function PlantsPanel() {
             onClick={() => {
               if (!value) return;
               const body = toPlantRequest(value);
-              if (value.id) update.mutate({ params: { path: { id: value.id }, query: scope }, body });
-              else create.mutate({ params: { query: scope }, body });
-              setDraft(null);
+              // The dialog closes only on success, so a refused save can be corrected.
+              const close = { onSuccess: () => setDraft(null) };
+              if (value.id) update.mutate({ params: { path: { id: value.id }, query: scope }, body }, close);
+              else create.mutate({ params: { query: scope }, body }, close);
             }}
           >
             {common('save')}

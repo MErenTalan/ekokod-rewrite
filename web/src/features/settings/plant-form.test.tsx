@@ -38,8 +38,8 @@ describe('plant form', () => {
   it('labels the twelve months and the eight orientations', () => {
     const r = renderWithProviders(<PlantFormView value={emptyPlant()} onChange={() => {}} devices={[]} />);
     expect(MONTH_KEYS).toHaveLength(12);
-    expect(r.getByLabelText('Ocak')).toBeInTheDocument();
-    expect(r.getByLabelText('Aralık')).toBeInTheDocument();
+    expect(r.getByRole('textbox', { name: /^Ocak/ })).toBeInTheDocument();
+    expect(r.getByRole('textbox', { name: /^Aralık/ })).toBeInTheDocument();
     expect(r.getByRole('combobox', { name: 'Panellerin yönü' })).toBeInTheDocument();
   });
 

@@ -128,6 +128,7 @@ export function BuildingFormView({
       {companies && !value.id ? (
         <Select
           label={t('company')}
+          required
           options={companies.map((c) => ({ value: c.id, label: c.name }))}
           value={value.companyId ?? ''}
           onValueChange={(companyId) => set({ companyId, responsibleUserId: null })}
@@ -150,13 +151,19 @@ export function BuildingFormView({
         <NumberInput
           label={t('latitude')}
           value={value.latitude}
+          error={fieldErrors.latitude}
           onValueChange={(v) => set({ latitude: v ?? '' })}
+          min="-90"
+          max="90"
           fractionDigits={6}
         />
         <NumberInput
           label={t('longitude')}
           value={value.longitude}
+          error={fieldErrors.longitude}
           onValueChange={(v) => set({ longitude: v ?? '' })}
+          min="-180"
+          max="180"
           fractionDigits={6}
         />
       </div>
@@ -164,18 +171,24 @@ export function BuildingFormView({
         <NumberInput
           label={t('floors')}
           value={value.floors}
+          error={fieldErrors.floors}
+          min="0"
           onValueChange={(v) => set({ floors: v ?? '' })}
           fractionDigits={0}
         />
         <NumberInput
           label={t('personnel')}
           value={value.personnelCount}
+          error={fieldErrors.personnel_count}
+          min="0"
           onValueChange={(v) => set({ personnelCount: v ?? '' })}
           fractionDigits={0}
         />
         <NumberInput
           label={t('area')}
           value={value.totalAreaM2}
+          error={fieldErrors.total_area_m2}
+          min="0"
           onValueChange={(v) => set({ totalAreaM2: v ?? '' })}
           fractionDigits={2}
         />

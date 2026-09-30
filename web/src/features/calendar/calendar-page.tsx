@@ -122,7 +122,12 @@ export function CalendarPage() {
 
       <EventDialogView
         open={draft !== null}
-        onOpenChange={(open) => !open && setDraft(null)}
+        onOpenChange={(open) => {
+          if (open) return;
+          setDraft(null);
+          create.clearFieldErrors();
+          update.clearFieldErrors();
+        }}
         value={draft}
         onChange={setDraft}
         readOnly={!canEdit}
@@ -135,9 +140,10 @@ export function CalendarPage() {
         onSubmit={() => {
           if (!draft) return;
           const body = toEventRequest(draft);
-          if (draft.id) update.mutate({ params: { path: { id: draft.id }, query: scope }, body });
-          else create.mutate({ params: { query: scope }, body });
-          setDraft(null);
+          // The dialog closes only on success, so a refused save can be corrected.
+          const close = { onSuccess: () => setDraft(null) };
+          if (draft.id) update.mutate({ params: { path: { id: draft.id }, query: scope }, body }, close);
+          else create.mutate({ params: { query: scope }, body }, close);
         }}
       />
 
@@ -151,8 +157,7 @@ export function CalendarPage() {
         readOnly={!canEdit}
         saving={saveVacations.isPending}
         onSave={(values) => {
-          saveVacations.mutate({ params: { query: scope }, body: values });
-          setVacationsOpen(false);
+          saveVacations.mutate({ params: { query: scope }, body: values }, { onSuccess: () => setVacationsOpen(false) });
         }}
       />
     </div>

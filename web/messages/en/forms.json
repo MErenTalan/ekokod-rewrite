@@ -61,6 +61,7 @@
     "tooLong": "The text is too long.",
     "mismatch": "The total must equal the sum of T1, T2 and T3.",
     "noTariff": "No published tariff covers this date.",
-    "notAvailable": "This option is not available for this subscriber group."
+    "notAvailable": "This option is not available for this subscriber group.",
+    "integer": "Enter a whole number"
   }
 }
