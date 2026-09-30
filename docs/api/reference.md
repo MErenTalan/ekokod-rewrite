@@ -1110,9 +1110,9 @@ Responses: 200 [`AuthorizeURL`](#schema-authorizeurl), 404
 
 ### `GET /api/v1/integrations/isolar/callback`
 
-OAuth callback; redirects to Settings. *public* · `isolar.callback`
+OAuth callback; a page that continues to Settings. *public* · `isolar.callback`
 
-Responses: 302
+Responses: 200
 
 ### `GET /api/v1/integrations/isolar/plants`
 

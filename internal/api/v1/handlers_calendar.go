@@ -2,6 +2,7 @@ package v1
 
 import (
 	"errors"
+	"io"
 	"net/http"
 	"time"
 
@@ -81,7 +82,7 @@ func calendarRoutes() []Route {
 			Access: RoleGated, Roles: aca, Summary: "The iSolarCloud authorisation URL; binds the flow to this browser (R187).",
 			Request: dto.AuthorizeURLRequest{}, Response: dto.AuthorizeURL{}, Status: http.StatusOK, Handler: (*Handlers).isolarAuthorizeURL},
 		{Method: http.MethodGet, Pattern: "/integrations/isolar/callback", OperationID: "isolar.callback", Tag: "integrations", Access: Public,
-			Summary: "OAuth callback; redirects to Settings.", Status: http.StatusFound, Handler: (*Handlers).isolarCallback},
+			Summary: "OAuth callback; a page that continues to Settings.", Status: http.StatusOK, Handler: (*Handlers).isolarCallback},
 	}
 }
 
@@ -373,5 +374,13 @@ func (h *Handlers) isolarCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, &http.Cookie{Name: OAuthCookie, Value: "", Path: callbackPath, HttpOnly: true, Secure: true,
 		SameSite: http.SameSiteLaxMode, MaxAge: -1})
-	http.Redirect(w, r, "/ekorm/settings?tab=company&isolar="+outcome, http.StatusFound)
+	// Not a 302: a redirect chain that began on iSolarCloud is cross-site, so the
+	// SameSite=Strict session cookies would be withheld and the user bounced to
+	// login. A same-origin meta refresh is a same-site navigation.
+	target := "/ekorm/settings?tab=company&amp;isolar=" + outcome
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.WriteString(w, `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=`+
+		target+`"><title>iSolarCloud</title></head><body><a href="`+target+`">Ayarlara dön</a></body></html>`)
 }

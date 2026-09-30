@@ -275,14 +275,16 @@ func TestIsolarCallbackRequiresBrowserBinding(t *testing.T) {
 
 	stranger := h.client(uaChrome)
 	res = stranger.do(http.MethodGet, "/integrations/isolar/callback?code=c1", nil)
-	require.Equal(t, http.StatusFound, res.status)
-	require.Equal(t, "/ekorm/settings?tab=company&isolar=error", res.header.Get("Location"), "no cookie: refused")
+	require.Equal(t, http.StatusOK, res.status)
+	require.Contains(t, string(res.body), `content="0;url=/ekorm/settings?tab=company&amp;isolar=error"`, "no cookie: refused")
 	_, used := h.providers.exchanged.Load("c1")
 	require.False(t, used, "the nonce is not consumed and no code is exchanged")
 
 	res = ca.do(http.MethodGet, "/integrations/isolar/callback?code=c2&lang=tr", nil)
-	require.Equal(t, http.StatusFound, res.status)
-	require.Equal(t, "/ekorm/settings?tab=company&isolar=ok", res.header.Get("Location"))
+	// A same-origin page, not a 302: the SameSite=Strict session must survive the return from iSolarCloud.
+	require.Equal(t, http.StatusOK, res.status)
+	require.True(t, strings.HasPrefix(res.header.Get("Content-Type"), "text/html"))
+	require.Contains(t, string(res.body), `content="0;url=/ekorm/settings?tab=company&amp;isolar=ok"`)
 	require.Contains(t, setCookie(t, res, "ekokod_oauth"), "Max-Age=0")
 	_, used = h.providers.exchanged.Load("c2")
 	require.True(t, used)

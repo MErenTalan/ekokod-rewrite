@@ -21588,8 +21588,8 @@
       "get": {
         "operationId": "isolar.callback",
         "responses": {
-          "302": {
-            "description": "Found"
+          "200": {
+            "description": "OK"
           },
           "400": {
             "content": {
@@ -21612,7 +21612,7 @@
             "description": "Internal Server Error"
           }
         },
-        "summary": "OAuth callback; redirects to Settings.",
+        "summary": "OAuth callback; a page that continues to Settings.",
         "tags": [
           "integrations"
         ]

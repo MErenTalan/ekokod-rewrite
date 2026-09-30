@@ -120,7 +120,9 @@
     "goToAnalyzers": "Go to the analyzers",
     "backfillFrom": "From",
     "backfillTo": "To",
-    "backfillTitle": "Backfill history"
+    "backfillTitle": "Backfill history",
+    "isolarConnected": "iSolarCloud connected",
+    "isolarFailed": "Could not connect iSolarCloud. Check the keys and the region, then try again."
   },
   "company": {
     "title": "Company details",

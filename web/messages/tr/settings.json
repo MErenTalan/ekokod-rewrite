@@ -120,7 +120,9 @@
     "goToAnalyzers": "Analizörlere git",
     "backfillFrom": "Başlangıç",
     "backfillTo": "Bitiş",
-    "backfillTitle": "Geçmiş veriyi çek"
+    "backfillTitle": "Geçmiş veriyi çek",
+    "isolarConnected": "iSolarCloud bağlandı",
+    "isolarFailed": "iSolarCloud bağlantısı kurulamadı. Anahtarları ve bölgeyi kontrol edip yeniden deneyin."
   },
   "company": {
     "title": "Şirket bilgileri",

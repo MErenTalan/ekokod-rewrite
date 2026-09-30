@@ -3,6 +3,7 @@ package integration_test
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -83,6 +84,19 @@ func TestErrorRendersOnlyKnownKindText(t *testing.T) {
 	// "unknown" and never as ErrAuth's "authentication failed".
 	config := &integration.Error{Kind: integration.ErrConfig, Provider: integration.ProviderGridBox, Op: "config:token"}
 	require.Equal(t, "gridbox config:token: integration: configuration incomplete or invalid (HTTP 0)", config.Error())
+}
+
+// TestErrorDetailIsSanitised: the provider's result code/message shows up for
+// diagnosis, but only through a narrow charset and length cap.
+func TestErrorDetailIsSanitised(t *testing.T) {
+	e := &integration.Error{Kind: integration.ErrAuth, Provider: integration.ProviderISolar, Op: "token", HTTPStatus: 200, Detail: "E900 er_invalid_appkey"}
+	require.Equal(t, "isolar token: integration: authentication failed (HTTP 200) [E900 er_invalid_appkey]", e.Error())
+
+	e.Detail = `E1 {"access_token":"x"}<script>` + strings.Repeat("a", 200)
+	got := e.Error()
+	require.NotContains(t, got, `"`)
+	require.NotContains(t, got, "<")
+	require.LessOrEqual(t, len(integration.SafeDetail(e.Detail)), 80)
 }
 
 // TestRetryAfterOnlyFromRateLimited proves RetryAfter reports ok=true only

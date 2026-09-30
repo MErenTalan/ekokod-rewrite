@@ -32,6 +32,7 @@ export function SettingsPage({ slots }: { slots?: Partial<Record<SettingsTabId, 
   const account = useTranslations('settings.account');
   const smtpText = useTranslations('settings.smtp');
   const integrationsText = useTranslations('settings.integrations');
+  const credentialsText = useTranslations('settings.credentials');
   const { me, can } = useSession();
   const scope = useScopeParams();
   const router = useRouter();
@@ -58,11 +59,11 @@ export function SettingsPage({ slots }: { slots?: Partial<Record<SettingsTabId, 
     // The iSolar OAuth callback comes back here (R187).
     const isolar = params.get('isolar');
     if (!isolar) return;
-    toast.toast({ tone: isolar === 'ok' ? 'success' : 'danger', title: integrationsText(isolar === 'ok' ? 'saved' : 'empty') });
+    toast.toast({ tone: isolar === 'ok' ? 'success' : 'danger', title: credentialsText(isolar === 'ok' ? 'isolarConnected' : 'isolarFailed') });
     const next = new URLSearchParams(params.toString());
     next.delete('isolar');
     router.replace(`${pathname}?${next.toString()}`);
-  }, [params, pathname, router, toast, integrationsText]);
+  }, [params, pathname, router, toast, credentialsText]);
 
   const sessions = $api.useQuery('get', '/api/v1/auth/sessions', {}, { enabled: !isDemo });
   const profile = useApiMutation('patch', '/api/v1/profile', { success: account('saved'), invalidate: ['/api/v1/auth/me'] });
