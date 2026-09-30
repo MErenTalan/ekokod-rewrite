@@ -55,6 +55,9 @@ describe('toCredentialRequest', () => {
     expect(
       toCredentialRequest(draft({ provider: 'isolar', subtype: 'eu', appKey: 'ak', secretKey: 'sk', appId: 'ai', isolarRegion: 'eu' })),
     ).toEqual({ provider: 'isolar', subtype: 'eu', extra: { app_key: 'ak', secret_key: 'sk', app_id: 'ai' }, isolar_region: 'eu' });
+    expect(
+      toCredentialRequest(draft({ provider: 'isolar', subtype: 'eu', appKey: ' ak\n', secretKey: 'sk ', appId: '\tai', isolarRegion: 'eu' })).extra,
+    ).toEqual({ app_key: 'ak', secret_key: 'sk', app_id: 'ai' });
   });
 
   it('leaves an empty secret out, so the stored one is kept', () => {

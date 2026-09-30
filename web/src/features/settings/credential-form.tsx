@@ -51,9 +51,11 @@ export function toCredentialRequest(draft: CredentialDraft): IntegrationCredenti
   const request: IntegrationCredentialCreateRequest = { provider: draft.provider, subtype: draft.subtype };
   if (draft.provider === 'isolar') {
     const extra: Record<string, string> = {};
-    if (draft.appKey) extra.app_key = draft.appKey;
-    if (draft.secretKey) extra.secret_key = draft.secretKey;
-    if (draft.appId) extra.app_id = draft.appId;
+    // Pasted keys often carry a stray space or newline; iSolarCloud then rejects them.
+    const appKey = draft.appKey.trim(), secretKey = draft.secretKey.trim(), appId = draft.appId.trim();
+    if (appKey) extra.app_key = appKey;
+    if (secretKey) extra.secret_key = secretKey;
+    if (appId) extra.app_id = appId;
     if (Object.keys(extra).length > 0) request.extra = extra;
     if (draft.isolarRegion) request.isolar_region = draft.isolarRegion;
     return request;
