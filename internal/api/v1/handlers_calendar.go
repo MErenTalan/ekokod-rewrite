@@ -219,6 +219,9 @@ func credErr(err error) error {
 		return perr.New("integration_auth_failed", 422, "errors.integrations.authFailed")
 	case errors.Is(err, integration.ErrRateLimited), errors.Is(err, integration.ErrUpstreamUnavailable):
 		return perr.New("integration_unavailable", 503, "errors.integrations.unavailable")
+	case errors.Is(err, integration.ErrMalformedPayload):
+		// WriteError logs the cause (5xx); the user sees a provider fault, not a bare 500.
+		return perr.Wrap(err, "integration_bad_response", 502, "errors.integrations.badResponse")
 	case errors.Is(err, credentials.ErrInvalidSettings), errors.Is(err, credentials.ErrInvalidExtraKey):
 		return perr.Validation.WithParams(map[string]any{"settings": []string{"invalid"}})
 	case errors.Is(err, credentials.ErrInvalidBackfillRange):

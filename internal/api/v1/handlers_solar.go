@@ -172,7 +172,7 @@ func (h *Handlers) isolarPlants(w http.ResponseWriter, r *http.Request) {
 	serve(w, r, http.StatusOK, func(req dto.ISolarPlantsRequest) (any, error) {
 		list, err := h.Solar.AccountPlants(r.Context(), mw.ScopeFrom(r), req.CredentialID)
 		if err != nil {
-			return nil, err
+			return nil, credErr(err)
 		}
 		out := dto.ISolarAccountPlants{Items: make([]dto.ISolarAccountPlant, len(list))}
 		for i, p := range list {

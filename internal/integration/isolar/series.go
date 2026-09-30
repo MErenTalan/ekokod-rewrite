@@ -83,7 +83,7 @@ func (c *Client) DeviceMinuteSeries(ctx context.Context, creds integration.Crede
 		for psKey, points := range byKey {
 			key := psKey
 			for _, wp := range points {
-				s, mapErr := mapPoint(wp.TimeStamp, wp.Point1, wp.Point24, w[0], w[1])
+				s, mapErr := mapPoint(string(wp.TimeStamp), wp.Point1.ptr(), wp.Point24.ptr(), w[0], w[1])
 				if mapErr != nil {
 					// adapter-patterns.md item 7: skip one bad row rather
 					// than failing the whole call. See plants.go's
@@ -141,7 +141,7 @@ func (c *Client) PlantMinuteSeries(ctx context.Context, creds integration.Creden
 
 		for _, points := range byKey {
 			for _, wp := range points {
-				s, mapErr := mapPoint(wp.TimeStamp, wp.Point83022, wp.Point83025, w[0], w[1])
+				s, mapErr := mapPoint(string(wp.TimeStamp), wp.Point83022.ptr(), wp.Point83025.ptr(), w[0], w[1])
 				if mapErr != nil {
 					continue
 				}

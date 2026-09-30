@@ -1,6 +1,62 @@
 package isolar
 
-import "encoding/json"
+import (
+	"bytes"
+	"encoding/json"
+	"strings"
+)
+
+// flexString decodes a JSON string or number: the live API sends ps_id,
+// fault_code and point values either way (arti-scada's fixtures: "ps_id":
+// 5001, "fault_code": 10). Objects, arrays and booleans decode to "".
+type flexString string
+
+func (f *flexString) UnmarshalJSON(b []byte) error {
+	*f = ""
+	b = bytes.TrimSpace(b)
+	if len(b) == 0 {
+		return nil
+	}
+	switch b[0] {
+	case '"':
+		var s string
+		if err := json.Unmarshal(b, &s); err != nil {
+			return err
+		}
+		*f = flexString(strings.TrimSpace(s))
+	case '-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
+		*f = flexString(b)
+	}
+	return nil
+}
+
+// ptr returns the value as a *string, nil for a nil receiver.
+func (f *flexString) ptr() *string {
+	if f == nil {
+		return nil
+	}
+	s := string(*f)
+	return &s
+}
+
+// flexNumber decodes a JSON number or numeric string; "", "--" and other
+// non-numbers leave it empty instead of failing the whole page.
+type flexNumber string
+
+func (f *flexNumber) UnmarshalJSON(b []byte) error {
+	var s flexString
+	if err := s.UnmarshalJSON(b); err != nil {
+		return err
+	}
+	var n json.Number
+	*f = ""
+	if s != "" && json.Unmarshal([]byte(s), &n) == nil {
+		*f = flexNumber(n)
+	}
+	return nil
+}
+
+func (f flexNumber) Int64() (int64, error) { return json.Number(f).Int64() }
 
 // This file holds ONLY provider-shaped structs (the adapter template's
 // rule): every field is a string, *string or json.Number so decoding never
@@ -64,7 +120,7 @@ type wireTokenData struct {
 // by bcem-energy's plants/route.ts:47,78, which reads `data.pageList` /
 // `data.rowCount` directly, no fallback).
 type wirePagedPlants struct {
-	RowCount json.Number `json:"rowCount"`
+	RowCount flexNumber  `json:"rowCount"`
 	PageList []wirePlant `json:"pageList"`
 }
 
@@ -74,9 +130,12 @@ type wirePagedPlants struct {
 // original round-1 field name "total_capacity" does not appear anywhere in
 // the legacy source and is corrected here.
 type wirePlant struct {
-	PsID           string  `json:"ps_id"`
-	PsName         string  `json:"ps_name"`
-	InstalledPower *string `json:"installed_power"` // kW, no unit conversion (06 §6)
+	PsID   flexString `json:"ps_id"`
+	PsName flexString `json:"ps_name"`
+	// A plain number in W, or {"value": "450", "unit": "kWp"} (arti-scada's
+	// live-API parser); some responses name it install_power.
+	InstalledPower json.RawMessage `json:"installed_power"`
+	InstallPower   json.RawMessage `json:"install_power"`
 }
 
 // wirePagedDevices is result_data for getDeviceListByPsId
@@ -90,8 +149,8 @@ type wirePlant struct {
 // inconsistency — picking one over the other risks a silent empty result on
 // a live response shaped the other way.
 type wirePagedDevices struct {
-	RowCountCamel json.Number  `json:"rowCount"`
-	RowCountSnake json.Number  `json:"row_count"`
+	RowCountCamel flexNumber   `json:"rowCount"`
+	RowCountSnake flexNumber   `json:"row_count"`
 	PageListCamel []wireDevice `json:"pageList"`
 	PageListSnake []wireDevice `json:"page_data"`
 }
@@ -100,10 +159,10 @@ type wirePagedDevices struct {
 // task's Device type needs (ps_key, device_sn, device_type, device_name)
 // are decoded.
 type wireDevice struct {
-	PsKey      string       `json:"ps_key"`
-	DeviceSN   string       `json:"device_sn"`
-	DeviceType *json.Number `json:"device_type"`
-	DeviceName *string      `json:"device_name"`
+	PsKey      flexString  `json:"ps_key"`
+	DeviceSN   flexString  `json:"device_sn"`
+	DeviceType *flexNumber `json:"device_type"`
+	DeviceName *flexString `json:"device_name"`
 }
 
 // wirePoint is one minute-series sample for either a device (keyed by
@@ -120,11 +179,11 @@ type wireDevice struct {
 // normalize.OptionalNumber (removed-behaviour 21: never a fabricated
 // zero).
 type wirePoint struct {
-	TimeStamp  string  `json:"time_stamp"`
-	Point1     *string `json:"p1"`
-	Point24    *string `json:"p24"`
-	Point83022 *string `json:"p83022"`
-	Point83025 *string `json:"p83025"`
+	TimeStamp  flexString  `json:"time_stamp"`
+	Point1     *flexString `json:"p1"`
+	Point24    *flexString `json:"p24"`
+	Point83022 *flexString `json:"p83022"`
+	Point83025 *flexString `json:"p83025"`
 }
 
 // wirePagedFaults is result_data for getFaultAlarmInfo. isolarTypes.ts:300-
@@ -137,8 +196,8 @@ type wirePoint struct {
 // non-empty (alarms.go), rather than picking one and risking a silent
 // empty result on a live response shaped the other way.
 type wirePagedFaults struct {
-	RowCountSnake json.Number `json:"row_count"`
-	RowCountCamel json.Number `json:"rowCount"`
+	RowCountSnake flexNumber  `json:"row_count"`
+	RowCountCamel flexNumber  `json:"rowCount"`
 	PageListSnake []wireFault `json:"page_list"`
 	PageListCamel []wireFault `json:"pageList"`
 }
@@ -154,17 +213,17 @@ type wirePagedFaults struct {
 // fault_code/fault_name/create_time/ps_id/ps_key/device_sn — the
 // empirically-confirmed shape — over isolarTypes.ts's stale declared one.
 type wireFault struct {
-	PsID       string  `json:"ps_id"`
-	PsKey      *string `json:"ps_key"`
-	DeviceSN   *string `json:"device_sn"`
-	FaultCode  string  `json:"fault_code"`
-	FaultName  string  `json:"fault_name"`
-	CreateTime string  `json:"create_time"`
+	PsID       flexString  `json:"ps_id"`
+	PsKey      *flexString `json:"ps_key"`
+	DeviceSN   *flexString `json:"device_sn"`
+	FaultCode  flexString  `json:"fault_code"`
+	FaultName  flexString  `json:"fault_name"`
+	CreateTime flexString  `json:"create_time"`
 	// F9: level/type/device/close time for the alarms tab (R286).
-	FaultLevel *json.Number `json:"fault_level"`
-	FaultType  *json.Number `json:"fault_type"`
-	DeviceName *string      `json:"device_name"`
-	OverTime   *string      `json:"over_time"`
+	FaultLevel *flexNumber `json:"fault_level"`
+	FaultType  *flexNumber `json:"fault_type"`
+	DeviceName *flexString `json:"device_name"`
+	OverTime   *flexString `json:"over_time"`
 }
 
 // wireDailyPoint is one day of getPowerStationPointDayMonthYearDataList; the

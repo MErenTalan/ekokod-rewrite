@@ -119,7 +119,7 @@ func (c *Client) Faults(ctx context.Context, creds integration.Credentials, from
 // json.Number is empty (the key was absent) — see wire.go's wirePagedFaults
 // doc for why this call hedges both spellings.
 func faultsRowCount(pd wirePagedFaults) (int64, error) {
-	if pd.RowCountCamel.String() != "" {
+	if pd.RowCountCamel != "" {
 		return pd.RowCountCamel.Int64()
 	}
 	return pd.RowCountSnake.Int64()
@@ -129,7 +129,7 @@ func mapFault(w wireFault, from, to time.Time) (Fault, error) {
 	if w.FaultCode == "" || w.PsID == "" {
 		return Fault{}, malformedErr(opGetFaultAlarmInfo)
 	}
-	occurredAt, err := normalize.LocalLayout(isolarTimestampLayout, w.CreateTime)
+	occurredAt, err := normalize.LocalLayout(isolarTimestampLayout, string(w.CreateTime))
 	if err != nil {
 		return Fault{}, err
 	}
@@ -137,26 +137,26 @@ func mapFault(w wireFault, from, to time.Time) (Fault, error) {
 		return Fault{}, errOutsideWindow
 	}
 	f := Fault{
-		Ref:        w.PsID + "|" + derefOr(w.PsKey, "") + "|" + w.FaultCode + "|" + w.CreateTime,
-		PSID:       w.PsID,
-		PSKey:      w.PsKey,
-		Code:       w.FaultCode,
-		Message:    w.FaultName,
+		Ref:        string(w.PsID) + "|" + derefOr(w.PsKey.ptr(), "") + "|" + string(w.FaultCode) + "|" + string(w.CreateTime),
+		PSID:       string(w.PsID),
+		PSKey:      w.PsKey.ptr(),
+		Code:       string(w.FaultCode),
+		Message:    string(w.FaultName),
 		OccurredAt: occurredAt,
 		Level:      optionalInt32(w.FaultLevel),
 		Type:       optionalInt32(w.FaultType),
-		DeviceName: w.DeviceName,
+		DeviceName: w.DeviceName.ptr(),
 	}
 	if w.OverTime != nil && *w.OverTime != "" {
-		if closed, err := normalize.LocalLayout(isolarTimestampLayout, *w.OverTime); err == nil {
+		if closed, err := normalize.LocalLayout(isolarTimestampLayout, string(*w.OverTime)); err == nil {
 			f.ClosedAt = &closed
 		}
 	}
 	return f, nil
 }
 
-func optionalInt32(n *json.Number) *int32 {
-	if n == nil {
+func optionalInt32(n *flexNumber) *int32 {
+	if n == nil || *n == "" {
 		return nil
 	}
 	v, err := n.Int64()

@@ -1,8 +1,10 @@
 package isolar
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/normalize"
@@ -94,11 +96,55 @@ func mapPlant(w wirePlant) (Plant, error) {
 	if w.PsID == "" {
 		return Plant{}, malformedErr(opQueryPowerStationList)
 	}
-	kw, err := normalize.OptionalNumber(derefOr(w.InstalledPower, ""))
+	power := w.InstalledPower
+	if isNullOrEmpty(power) {
+		power = w.InstallPower
+	}
+	kw, err := installedKw(power)
 	if err != nil {
 		return Plant{}, err
 	}
-	return Plant{PSID: w.PsID, Name: w.PsName, InstalledKw: kw}, nil
+	return Plant{PSID: string(w.PsID), Name: string(w.PsName), InstalledKw: kw}, nil
+}
+
+// installedKw reads installed power as the live API sends it: a plain number
+// (or numeric string) in W, or {"value": ..., "unit": "kWp"|"Wp"|"MWp"}.
+func installedKw(raw json.RawMessage) (*decimal.Decimal, error) {
+	if isNullOrEmpty(raw) {
+		return nil, nil
+	}
+	if t := bytes.TrimSpace(raw); t[0] == '{' {
+		var q struct {
+			Value flexString `json:"value"`
+			Unit  flexString `json:"unit"`
+		}
+		if err := json.Unmarshal(t, &q); err != nil {
+			return nil, malformedErr(opQueryPowerStationList)
+		}
+		v, err := normalize.OptionalNumber(string(q.Value))
+		if err != nil || v == nil {
+			return nil, err
+		}
+		u := strings.ToLower(string(q.Unit))
+		switch {
+		case strings.HasPrefix(u, "kw"):
+			return v, nil
+		case strings.HasPrefix(u, "mw"):
+			return normalize.Multiply(v, decimal.NewFromInt(1000)), nil
+		case strings.HasPrefix(u, "gw"):
+			return normalize.Multiply(v, decimal.NewFromInt(1000000)), nil
+		}
+		return normalize.WToKW(v), nil
+	}
+	var s flexString
+	if err := s.UnmarshalJSON(raw); err != nil {
+		return nil, malformedErr(opQueryPowerStationList)
+	}
+	v, err := normalize.OptionalNumber(string(s))
+	if err != nil {
+		return nil, err
+	}
+	return normalize.WToKW(v), nil
 }
 
 // Devices lists every device under plant psID, following rowCount across
@@ -158,7 +204,7 @@ func (c *Client) Devices(ctx context.Context, creds integration.Credentials, psI
 // when rowCount's json.Number is empty (the key was absent) — see wire.go's
 // wirePagedDevices doc for why this call hedges both spellings.
 func devicesRowCount(pd wirePagedDevices) (int64, error) {
-	if pd.RowCountCamel.String() != "" {
+	if pd.RowCountCamel != "" {
 		return pd.RowCountCamel.Int64()
 	}
 	return pd.RowCountSnake.Int64()
@@ -169,7 +215,7 @@ func mapDevice(w wireDevice) (Device, error) {
 		return Device{}, malformedErr(opGetDeviceListByPsID)
 	}
 	var deviceType *int32
-	if w.DeviceType != nil {
+	if w.DeviceType != nil && *w.DeviceType != "" {
 		n, err := w.DeviceType.Int64()
 		if err != nil {
 			return Device{}, malformedErr(opGetDeviceListByPsID)
@@ -177,7 +223,7 @@ func mapDevice(w wireDevice) (Device, error) {
 		v := int32(n)
 		deviceType = &v
 	}
-	return Device{PSKey: w.PsKey, DeviceSN: w.DeviceSN, DeviceType: deviceType, DeviceName: w.DeviceName}, nil
+	return Device{PSKey: string(w.PsKey), DeviceSN: string(w.DeviceSN), DeviceType: deviceType, DeviceName: w.DeviceName.ptr()}, nil
 }
 
 // derefOr returns *p, or fallback when p is nil.

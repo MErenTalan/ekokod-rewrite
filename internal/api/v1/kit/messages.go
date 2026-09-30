@@ -62,6 +62,7 @@ var messages = map[string][2]string{ // code → {tr, en}
 	"integration_config_invalid":     {"Entegrasyon yapılandırması eksik veya hatalı.", "The integration configuration is incomplete or invalid."},
 	"integration_auth_failed":        {"Sağlayıcıda kimlik doğrulama başarısız.", "Authentication with the provider failed."},
 	"integration_unavailable":        {"Sağlayıcıya şu anda ulaşılamıyor.", "The provider is currently unavailable."},
+	"integration_bad_response":       {"Sağlayıcı beklenmeyen bir yanıt döndürdü.", "The provider returned an unexpected response."},
 	"integration_already_configured": {"Bu entegrasyon zaten yapılandırılmış; güncelleyin.", "This integration is already configured; update it instead."},
 	"reset_token_invalid":            {"Şifre sıfırlama bağlantısı geçersiz veya süresi dolmuş.", "The password reset link is invalid or has expired."},
 }

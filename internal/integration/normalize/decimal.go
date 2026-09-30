@@ -111,11 +111,11 @@ func ProviderNumber(raw string) (decimal.Decimal, error) {
 }
 
 // OptionalNumber parses a provider numeric string that may signal "no
-// value": "", "null" and "-" all mean the register is unavailable and
+// value": "", "null", "-" and iSolar's "--" all mean the register is unavailable and
 // return (nil, nil) — never a zero decimal (removed-behaviour 21).
 func OptionalNumber(raw string) (*decimal.Decimal, error) {
 	s := strings.TrimSpace(raw)
-	if s == "" || s == "null" || s == "-" {
+	if s == "" || s == "null" || s == "-" || s == "--" {
 		return nil, nil
 	}
 	v, err := ProviderNumber(s)

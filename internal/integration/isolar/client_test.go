@@ -509,7 +509,7 @@ func TestISolarConfigErrorsAreErrConfig(t *testing.T) {
 // fixture matrix). Field mapping is checked here so both calls are still
 // proven correct end to end.
 func TestISolarPlantsAndFaultsMapEveryField(t *testing.T) {
-	plantsBody := []byte(`{"result_code":"1","result_msg":"success","result_data":{"rowCount":1,"pageList":[{"ps_id":"FX3001","ps_name":"Fixture Plant","installed_power":"220.500"}]}}`)
+	plantsBody := []byte(`{"result_code":"1","result_msg":"success","result_data":{"rowCount":1,"pageList":[{"ps_id":"FX3001","ps_name":"Fixture Plant","installed_power":"220500"}]}}`)
 	srv := fake.NewTLSServer(t,
 		fake.Route{Method: http.MethodPost, Path: "/openapi/platform/queryPowerStationList", Respond: fake.JSON(http.StatusOK, plantsBody)},
 		fake.Route{Method: http.MethodPost, Path: "/openapi/platform/getFaultAlarmInfo", Respond: fake.JSON(http.StatusOK, fake.Fixture(t, "isolar", "isolar_faults.json"))},
@@ -523,7 +523,7 @@ func TestISolarPlantsAndFaultsMapEveryField(t *testing.T) {
 	require.Equal(t, "FX3001", plants[0].PSID)
 	require.Equal(t, "Fixture Plant", plants[0].Name)
 	require.NotNil(t, plants[0].InstalledKw)
-	require.True(t, decimal.RequireFromString("220.500").Equal(*plants[0].InstalledKw))
+	require.True(t, decimal.RequireFromString("220.5").Equal(*plants[0].InstalledKw), "installed_power is in W")
 
 	// isolar_faults.json's create_time sits inside [fixtureFrom, fixtureFrom+48h).
 	faults, err := c.Faults(context.Background(), creds, fixtureFrom, fixtureFrom.Add(48*time.Hour))
@@ -536,6 +536,51 @@ func TestISolarPlantsAndFaultsMapEveryField(t *testing.T) {
 	require.Equal(t, "W-01", faults[0].Code)
 	require.Equal(t, "Fixture Fault", faults[0].Message)
 	require.False(t, faults[0].OccurredAt.IsZero())
+}
+
+// TestISolarLiveShapes: the live API sends ids and codes as numbers, installed
+// power as W or {value, unit}, counts as strings and "--" for no value (the
+// shapes arti-scada's parser was built against). One of these used to fail the
+// whole page as a malformed payload.
+func TestISolarLiveShapes(t *testing.T) {
+	plantsBody := []byte(`{"result_code":"1","result_msg":"success","result_data":{"rowCount":"3","pageList":[
+		{"ps_id":5001,"ps_name":"Karacabey GES","installed_power":3200000},
+		{"ps_id":"5002","ps_name":"Çatı GES","install_power":{"value":"450","unit":"kWp"}},
+		{"ps_id":5003,"ps_name":"Boş","installed_power":"--"}]}}`)
+	devicesBody := []byte(`{"result_code":"1","result_msg":"success","result_data":{"rowCount":2,"pageList":[
+		{"ps_key":"5001_1_1_1","device_sn":"A2231","device_type":1,"device_name":"SG110CX 1"},
+		{"ps_key":"5001_5_1_1","device_sn":"M1","device_type":"5","device_name":null}]}}`)
+	faultsBody := []byte(`{"result_code":"1","result_msg":"success","result_data":{"rowCount":1,"pageList":[
+		{"ps_id":5001,"ps_key":"5001_1_1_1","fault_code":10,"fault_name":"Fault","create_time":"20260102090000","fault_level":"","fault_type":2}]}}`)
+	srv := fake.NewTLSServer(t,
+		fake.Route{Method: http.MethodPost, Path: "/openapi/platform/queryPowerStationList", Respond: fake.JSON(http.StatusOK, plantsBody)},
+		fake.Route{Method: http.MethodPost, Path: "/openapi/platform/getDeviceListByPsId", Respond: fake.JSON(http.StatusOK, devicesBody)},
+		fake.Route{Method: http.MethodPost, Path: "/openapi/platform/getFaultAlarmInfo", Respond: fake.JSON(http.StatusOK, faultsBody)},
+	)
+	c := isolar.New(isolarTestPool(t, srv), isolar.Options{Clock: clock.NewFake(fixtureFrom)})
+	creds := isolarTestCreds(srv)
+
+	plants, err := c.Plants(context.Background(), creds)
+	require.NoError(t, err)
+	require.Len(t, plants, 3)
+	require.Equal(t, "5001", plants[0].PSID)
+	require.True(t, decimal.NewFromInt(3200).Equal(*plants[0].InstalledKw), "3,200,000 W = 3,200 kW")
+	require.Equal(t, "5002", plants[1].PSID)
+	require.True(t, decimal.NewFromInt(450).Equal(*plants[1].InstalledKw), "kWp object keeps its unit")
+	require.Nil(t, plants[2].InstalledKw, `"--" is no value, never zero`)
+
+	devices, err := c.Devices(context.Background(), creds, "5001")
+	require.NoError(t, err)
+	require.Len(t, devices, 2)
+	require.Equal(t, int32(5), *devices[1].DeviceType)
+	require.Nil(t, devices[1].DeviceName)
+
+	faults, err := c.Faults(context.Background(), creds, fixtureFrom, fixtureFrom.Add(48*time.Hour))
+	require.NoError(t, err)
+	require.Len(t, faults, 1)
+	require.Equal(t, "5001|5001_1_1_1|10|20260102090000", faults[0].Ref)
+	require.Nil(t, faults[0].Level)
+	require.Equal(t, int32(2), *faults[0].Type)
 }
 
 // TestISolarFaultsAcceptsRowCountAndPageListFallback: wire.go's
