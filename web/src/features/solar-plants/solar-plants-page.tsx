@@ -76,6 +76,8 @@ export function SolarPlantsPage() {
   const series = $api.useQuery('get', '/api/v1/plants/{id}/production',
     { params: { path, query: { ...scope, granularity, from: range.from, to: range.to } } }, { enabled: enabled && historyOk });
 
+  const tariffs = $api.useQuery('get', '/api/v1/solar-tariffs', { params: { query: { ...scope, plant_id: id, limit: 500 } } }, { enabled });
+
   const alarms = $api.useInfiniteQuery('get', '/api/v1/plants/{id}/alarms',
     { params: { path, query: { ...scope, limit: ALARM_PAGE } } },
     {
@@ -148,7 +150,7 @@ export function SolarPlantsPage() {
             <DevicesTabView devices={devices.data?.items ?? []} query={query} onQueryChange={setQuery} />
           ) },
           { value: 'history', label: t('tabs.history'), content: (
-            <HistoryTabView granularity={granularity} range={range} series={series.data} loading={series.isPending && historyOk}
+            <HistoryTabView granularity={granularity} range={range} series={series.data} tariffs={tariffs.data?.items} loading={series.isPending && historyOk}
               onGranularityChange={setGranularity} onRangeChange={setRange}
               onExport={() => void downloadFile(`/api/v1/plants/${id}/production/export`,
                 { ...scope, granularity, from: range.from, to: range.to }, `uretim-${range.from}-${range.to}.xlsx`)} />

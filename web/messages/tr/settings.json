@@ -274,6 +274,17 @@
       "empty": "Bu hesapta santral bulunamadı",
       "emptyDescription": "iSolarCloud hesabında görünen santral yok.",
       "job": "iSolar geçmiş verisi"
+    },
+    "finance": {
+      "title": "Finansal ayarlar",
+      "hint": "Satış fiyatı santralin gelirini ve Finansal analiz sayfasındaki gelir ile net tutarı hesaplar. Tarifeler › GES tarifeleri sekmesinde saklanır.",
+      "price": "Birim fiyat (para birimi/MWh)",
+      "currency": "Para birimi",
+      "from": "Fiyat geçerlilik başlangıcı",
+      "fromHintNew": "Boş bırakılırsa kurulum tarihi, o da yoksa bugün",
+      "fromHintChange": "Boş bırakılırsa bugün; aynı tarihli fiyat düzeltilir",
+      "current": "Geçerli fiyat: {price} {currency}/MWh ({date} tarihinden beri)",
+      "saved": "Santral fiyatı kaydedildi"
     }
   },
   "analyzers": {

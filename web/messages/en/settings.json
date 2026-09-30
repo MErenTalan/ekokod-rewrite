@@ -274,6 +274,17 @@
       "empty": "No plants on this account",
       "emptyDescription": "The iSolarCloud account shows no plants.",
       "job": "iSolar history"
+    },
+    "finance": {
+      "title": "Financial settings",
+      "hint": "The sale price prices the plant's revenue and the revenue and net figures of the Financial analysis page. It is stored under Tariffs › Solar tariffs.",
+      "price": "Unit price (currency/MWh)",
+      "currency": "Currency",
+      "from": "Price effective from",
+      "fromHintNew": "Empty: the installation date, or today without one",
+      "fromHintChange": "Empty: today; a price with the same date is corrected",
+      "current": "Current price: {price} {currency}/MWh (since {date})",
+      "saved": "Plant price saved"
     }
   },
   "analyzers": {

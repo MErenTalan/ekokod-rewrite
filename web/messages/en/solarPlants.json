@@ -47,7 +47,7 @@
     "since": "since {date}",
     "partialReason": "{days} days have no solar tariff and are not counted.",
     "unavailable": "No solar tariff",
-    "unavailableDescription": "Revenue is priced at the plant's solar tariff. Add one under Tariffs › Solar tariffs."
+    "unavailableDescription": "Revenue is priced at the plant's sale price. Edit the plant under Settings › Solar plants and enter its MWh price."
   },
   "charts": {
     "monthDaily": "Daily production this month",
@@ -105,7 +105,13 @@
       "month": "The monthly view shows at most 10 years."
     },
     "mixed": "Mixed sources",
-    "mixedReason": "Some days in this range come from the plant meter, others from the inverter sum or an end-of-day total."
+    "mixedReason": "Some days in this range come from the plant meter, others from the inverter sum or an end-of-day total.",
+    "summary": "Period summary",
+    "total": "Total",
+    "average": "Average",
+    "max": "Maximum",
+    "revenue": "Period revenue",
+    "unpricedReason": "Part of the period is before the first sale price; that production earned nothing here."
   },
   "alarms": {
     "title": "iSolarCloud alarms",

@@ -47,7 +47,7 @@
     "since": "{date} tarihinden beri",
     "partialReason": "{days} günün GES tarifesi yok; bu günler gelire katılmadı.",
     "unavailable": "GES tarifesi tanımlı değil",
-    "unavailableDescription": "Gelir, santralin GES tarifesiyle hesaplanır. Tarifeler › GES tarifeleri sekmesinden ekleyin."
+    "unavailableDescription": "Gelir, santralin satış fiyatıyla hesaplanır. Ayarlar › GES santralleri'nde santrali düzenleyip MWh fiyatını girin."
   },
   "charts": {
     "monthDaily": "Bu ayın günlük üretimi",
@@ -105,7 +105,13 @@
       "month": "Aylık görünüm en fazla 10 yıl gösterebilir."
     },
     "mixed": "Karışık kaynak",
-    "mixedReason": "Bu aralıkta bazı günler santral sayacından, bazıları inverter toplamından ya da gün sonu toplamından geliyor."
+    "mixedReason": "Bu aralıkta bazı günler santral sayacından, bazıları inverter toplamından ya da gün sonu toplamından geliyor.",
+    "summary": "Dönem özeti",
+    "total": "Toplam",
+    "average": "Ortalama",
+    "max": "Maksimum",
+    "revenue": "Dönem geliri",
+    "unpricedReason": "Dönemin bir kısmı ilk satış fiyatından önce; o üretim gelire katılmadı."
   },
   "alarms": {
     "title": "iSolarCloud alarmları",

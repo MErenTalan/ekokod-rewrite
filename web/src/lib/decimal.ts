@@ -23,3 +23,16 @@ export function fractionToPercent(fraction: string): string {
   const rest = digits.slice(2).replace(/0+$/, '');
   return `${sign}${whole}${rest ? `.${rest}` : ''}`;
 }
+
+/** Moves the decimal point: shiftDecimal('70.5', -3) → '0.0705' (a per-MWh price as per-kWh). */
+export function shiftDecimal(value: string, places: number): string {
+  const sign = value.startsWith('-') ? '-' : '';
+  const [int, frac = ''] = value.replace('-', '').split('.');
+  const point = int.length + places;
+  const digits = `${'0'.repeat(Math.max(0, -point))}${int}${frac}${'0'.repeat(Math.max(0, point - int.length - frac.length))}`;
+  const at = Math.max(point, 0);
+  const whole = digits.slice(0, at).replace(/^0+(?=\d)/, '') || '0';
+  const rest = digits.slice(at).replace(/0+$/, '');
+  const out = `${whole}${rest ? `.${rest}` : ''}`;
+  return out === '0' ? '0' : `${sign}${out}`;
+}

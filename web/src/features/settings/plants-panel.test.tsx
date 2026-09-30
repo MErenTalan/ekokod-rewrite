@@ -124,3 +124,80 @@ describe('PlantsPanel iSolar link (R281)', () => {
     await waitFor(() => expect(r.getByRole('dialog')).toHaveTextContent('Geçersiz değer'));
   });
 });
+
+describe('PlantsPanel sale price', () => {
+  const MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+  const tariff = { id: 't-1', plant_id: 'p-1', effective_from: '2025-01-01', feed_in_tariff: '0.0700', currency: 'USD', created_at: '' };
+  const posted = async (api: ReturnType<typeof mockApi>, path: string) =>
+    (await api.calls.find((c) => c.method === 'POST' && new URL(c.url).pathname === path)!.clone().json()) as Record<string, unknown>;
+
+  it('stores a new plant price per kWh from the installation date', async () => {
+    api = mockApi({
+      ...ROUTES,
+      'GET /api/v1/analyzers': { items: [] },
+      'POST /api/v1/solar-tariffs': Response.json({ ...tariff, id: 't-2', plant_id: 'p-2' }, { status: 201 }),
+    });
+    const r = renderWithProviders(
+      <SessionProvider me={me('company_admin')}>
+        <PlantsPanel />
+      </SessionProvider>,
+    );
+    await r.user.click(await r.findByRole('button', { name: 'Santral ekle' }));
+    await r.user.type(r.getByRole('textbox', { name: /^Santral ismi/ }), 'GES');
+    for (const m of MONTHS) await r.user.type(r.getByRole('textbox', { name: new RegExp(`^${m}`) }), '100');
+    await r.user.type(r.getByRole('textbox', { name: /^Birim fiyat/ }), '72.5');
+    await r.user.click(r.getByRole('button', { name: 'Kaydet' }));
+    await waitFor(() => expect(api.calls.some((c) => c.method === 'POST' && c.url.includes('/solar-tariffs'))).toBe(true));
+    const body = await posted(api, '/api/v1/solar-tariffs');
+    expect(body).toMatchObject({ plant_id: 'p-2', feed_in_tariff: '0.0725', currency: 'USD' });
+    expect(body.effective_from).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    await waitFor(() => expect(r.queryByRole('dialog')).toBeNull());
+  });
+
+  it('keeps edits typed into an existing plant and shows its price per MWh', async () => {
+    api = mockApi({
+      ...ROUTES,
+      'GET /api/v1/analyzers': { items: [] },
+      'GET /api/v1/solar-tariffs': { items: [tariff], next_cursor: null },
+      'PATCH /api/v1/power-plants/p-1': { ...plant, monthly_targets: [], alarm_recipients: [], devices: [] },
+      'POST /api/v1/solar-tariffs': Response.json({ ...tariff, id: 't-2' }, { status: 201 }),
+    });
+    const r = renderWithProviders(
+      <SessionProvider me={me('company_admin')}>
+        <PlantsPanel />
+      </SessionProvider>,
+    );
+    await r.user.click(await r.findByRole('button', { name: 'Santralı düzenle' }));
+    const price = await r.findByRole('textbox', { name: /^Birim fiyat/ });
+    expect(price).toHaveValue('70,00');
+    const name = r.getByRole('textbox', { name: /^Santral ismi/ });
+    await r.user.clear(name);
+    await r.user.type(name, 'Yeni GES');
+    expect(name).toHaveValue('Yeni GES');
+    await r.user.clear(price);
+    await r.user.type(price, '80');
+    await r.user.click(r.getByRole('button', { name: 'Kaydet' }));
+    await waitFor(() => expect(api.calls.some((c) => c.method === 'POST' && c.url.includes('/solar-tariffs'))).toBe(true));
+    expect((await api.calls.find((c) => c.method === 'PATCH')!.clone().json()).name).toBe('Yeni GES');
+    expect(await posted(api, '/api/v1/solar-tariffs')).toMatchObject({ plant_id: 'p-1', feed_in_tariff: '0.08', currency: 'USD' });
+  });
+
+  it('does not re-save an unchanged price', async () => {
+    api = mockApi({
+      ...ROUTES,
+      'GET /api/v1/analyzers': { items: [] },
+      'GET /api/v1/solar-tariffs': { items: [tariff], next_cursor: null },
+      'PATCH /api/v1/power-plants/p-1': { ...plant, monthly_targets: [], alarm_recipients: [], devices: [] },
+    });
+    const r = renderWithProviders(
+      <SessionProvider me={me('company_admin')}>
+        <PlantsPanel />
+      </SessionProvider>,
+    );
+    await r.user.click(await r.findByRole('button', { name: 'Santralı düzenle' }));
+    await r.findByRole('textbox', { name: /^Birim fiyat/ });
+    await r.user.click(r.getByRole('button', { name: 'Kaydet' }));
+    await waitFor(() => expect(r.queryByRole('dialog')).toBeNull());
+    expect(api.calls.some((c) => c.url.includes('/solar-tariffs') && c.method !== 'GET')).toBe(false);
+  });
+});

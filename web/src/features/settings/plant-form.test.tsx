@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { PlantDetail } from '@/lib/api/types';
 import { renderWithProviders } from '@/test/render';
 
-import { MONTH_KEYS, PlantFormView, emptyPlant, monthlyTargetsComplete, plantDraft, toPlantRequest } from './plant-form';
+import { MONTH_KEYS, PlantFormView, emptyPlant, monthlyTargetsComplete, plantDraft, toPlantRequest, toTariffRequest, withTariff } from './plant-form';
 
 const detail = {
   id: 'p-1',
@@ -72,5 +72,17 @@ describe('netting analyzer (R289)', () => {
     expect(cleared.netting_analyzer_id).toBeUndefined();
     expect((cleared as { clear_netting_analyzer?: boolean }).clear_netting_analyzer).toBe(true);
     expect((toPlantRequest(emptyPlant()) as { clear_netting_analyzer?: boolean }).clear_netting_analyzer).toBeUndefined();
+  });
+
+  it('turns the MWh price into a per-kWh solar tariff dated sensibly', () => {
+    const fresh = { ...emptyPlant(), priceMwh: '70', currency: 'EUR' as const, installationDate: '2024-05-01' };
+    expect(toTariffRequest(fresh, 'p-9', '2026-09-30')).toEqual({ plant_id: 'p-9', effective_from: '2024-05-01', feed_in_tariff: '0.07', currency: 'EUR' });
+    expect(toTariffRequest({ ...fresh, priceMwh: '' }, 'p-9', '2026-09-30')).toBeNull();
+    const saved = { id: 't', plant_id: 'p-1', effective_from: '2025-01-01', feed_in_tariff: '0.070000', currency: 'EUR' as const, created_at: '' };
+    const edit = withTariff(plantDraft(detail), saved);
+    expect(edit.priceMwh).toBe('70');
+    expect(toTariffRequest(edit, 'p-1', '2026-09-30')).toBeNull();
+    expect(toTariffRequest({ ...edit, priceMwh: '75' }, 'p-1', '2026-09-30')?.effective_from).toBe('2026-09-30');
+    expect(toTariffRequest({ ...edit, currency: 'USD' }, 'p-1', '2026-09-30')?.currency).toBe('USD');
   });
 });
