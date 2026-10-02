@@ -342,7 +342,7 @@ func (q *Queries) PlantDeviceSnapshotUpdate(ctx context.Context, arg PlantDevice
 }
 
 const plantListLinked = `-- name: PlantListLinked :many
-select id, company_id, name, installation_number, plant_kind, pv_brand_model, panel_power_w, panel_efficiency_pct, panel_count, string_count, orientation, tilt_angle_deg, total_capacity_kw, yearly_target_kwh, installation_date, address, latitude, longitude, isolar_ps_id, isolar_ps_key, isolar_ps_name, isolar_installed_kw, isolar_linked_at, created_at, updated_at, deleted_at, isolar_credential_id, netting_analyzer_id, isolar_last_sync_at, isolar_last_sync_error from power_plants
+select id, company_id, name, installation_number, plant_kind, pv_brand_model, panel_power_w, panel_efficiency_pct, panel_count, string_count, orientation, tilt_angle_deg, total_capacity_kw, yearly_target_kwh, installation_date, address, latitude, longitude, isolar_ps_id, isolar_ps_key, isolar_ps_name, isolar_installed_kw, isolar_linked_at, created_at, updated_at, deleted_at, isolar_credential_id, netting_analyzer_id, isolar_last_sync_at, isolar_last_sync_error, isolar_history_through from power_plants
 where company_id = $1 and deleted_at is null and isolar_ps_id is not null
 order by name
 `
@@ -387,6 +387,7 @@ func (q *Queries) PlantListLinked(ctx context.Context, companyID uuid.UUID) ([]P
 			&i.NettingAnalyzerID,
 			&i.IsolarLastSyncAt,
 			&i.IsolarLastSyncError,
+			&i.IsolarHistoryThrough,
 		); err != nil {
 			return nil, err
 		}
@@ -398,14 +399,35 @@ func (q *Queries) PlantListLinked(ctx context.Context, companyID uuid.UUID) ([]P
 	return items, nil
 }
 
+const plantSetHistoryThrough = `-- name: PlantSetHistoryThrough :execrows
+update power_plants
+set isolar_history_through = $1::date
+where id = $2 and company_id = $3 and deleted_at is null
+`
+
+type PlantSetHistoryThroughParams struct {
+	Through   pgtype.Date
+	ID        uuid.UUID
+	CompanyID uuid.UUID
+}
+
+// R506: a (re)link above clears it, so the next sync fetches the history again.
+func (q *Queries) PlantSetHistoryThrough(ctx context.Context, arg PlantSetHistoryThroughParams) (int64, error) {
+	result, err := q.db.Exec(ctx, plantSetHistoryThrough, arg.Through, arg.ID, arg.CompanyID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const plantSetIsolarLink = `-- name: PlantSetIsolarLink :one
 update power_plants
 set isolar_ps_id = $1, isolar_ps_key = $2,
     isolar_ps_name = $3, isolar_installed_kw = $4,
     isolar_linked_at = $5, isolar_credential_id = $6,
-    total_capacity_kw = $7, updated_at = now()
+    total_capacity_kw = $7, isolar_history_through = null, updated_at = now()
 where id = $8 and company_id = $9 and deleted_at is null
-returning id, company_id, name, installation_number, plant_kind, pv_brand_model, panel_power_w, panel_efficiency_pct, panel_count, string_count, orientation, tilt_angle_deg, total_capacity_kw, yearly_target_kwh, installation_date, address, latitude, longitude, isolar_ps_id, isolar_ps_key, isolar_ps_name, isolar_installed_kw, isolar_linked_at, created_at, updated_at, deleted_at, isolar_credential_id, netting_analyzer_id, isolar_last_sync_at, isolar_last_sync_error
+returning id, company_id, name, installation_number, plant_kind, pv_brand_model, panel_power_w, panel_efficiency_pct, panel_count, string_count, orientation, tilt_angle_deg, total_capacity_kw, yearly_target_kwh, installation_date, address, latitude, longitude, isolar_ps_id, isolar_ps_key, isolar_ps_name, isolar_installed_kw, isolar_linked_at, created_at, updated_at, deleted_at, isolar_credential_id, netting_analyzer_id, isolar_last_sync_at, isolar_last_sync_error, isolar_history_through
 `
 
 type PlantSetIsolarLinkParams struct {
@@ -464,6 +486,7 @@ func (q *Queries) PlantSetIsolarLink(ctx context.Context, arg PlantSetIsolarLink
 		&i.NettingAnalyzerID,
 		&i.IsolarLastSyncAt,
 		&i.IsolarLastSyncError,
+		&i.IsolarHistoryThrough,
 	)
 	return i, err
 }

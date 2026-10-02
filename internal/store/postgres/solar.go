@@ -293,7 +293,26 @@ func (r *PlantRepository) SetSyncState(ctx context.Context, s store.Scope, plant
 	return nil
 }
 
-// SetIsolarLink writes the link fields (nil clears them) and total capacity.
+// SetHistoryThrough records the day (day's own year, month, day) through
+// which the plant's stored production is whole (R506).
+func (r *PlantRepository) SetHistoryThrough(ctx context.Context, s store.Scope, plantID uuid.UUID, day time.Time) error {
+	if !s.Valid() {
+		return store.ErrInvalidScope
+	}
+	date := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, time.UTC)
+	n, err := r.q.PlantSetHistoryThrough(ctx, sqlcgen.PlantSetHistoryThroughParams{
+		Through: pgtype.Date{Time: date, Valid: true}, ID: plantID, CompanyID: s.CompanyID})
+	if err != nil {
+		return pgerr.Translate(r.pool, "set plant history through", err)
+	}
+	if n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
+// SetIsolarLink writes the link fields (nil clears them), total capacity, and
+// clears the history mark so the next sync fetches the history again.
 func (r *PlantRepository) SetIsolarLink(ctx context.Context, s store.Scope, p model.PowerPlant) (model.PowerPlant, error) {
 	if !s.Valid() {
 		return model.PowerPlant{}, store.ErrInvalidScope

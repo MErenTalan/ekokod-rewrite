@@ -1974,36 +1974,37 @@ type PlantProductionTotal struct {
 }
 
 type PowerPlant struct {
-	ID                  uuid.UUID
-	CompanyID           uuid.UUID
-	Name                string
-	InstallationNumber  *string
-	PlantKind           string
-	PvBrandModel        *string
-	PanelPowerW         pgtype.Numeric
-	PanelEfficiencyPct  pgtype.Numeric
-	PanelCount          *int32
-	StringCount         *int32
-	Orientation         NullPanelOrientation
-	TiltAngleDeg        pgtype.Numeric
-	TotalCapacityKw     pgtype.Numeric
-	YearlyTargetKwh     pgtype.Numeric
-	InstallationDate    pgtype.Date
-	Address             *string
-	Latitude            pgtype.Numeric
-	Longitude           pgtype.Numeric
-	IsolarPsID          *string
-	IsolarPsKey         *string
-	IsolarPsName        *string
-	IsolarInstalledKw   pgtype.Numeric
-	IsolarLinkedAt      pgtype.Timestamptz
-	CreatedAt           pgtype.Timestamptz
-	UpdatedAt           pgtype.Timestamptz
-	DeletedAt           pgtype.Timestamptz
-	IsolarCredentialID  *uuid.UUID
-	NettingAnalyzerID   *uuid.UUID
-	IsolarLastSyncAt    pgtype.Timestamptz
-	IsolarLastSyncError *string
+	ID                   uuid.UUID
+	CompanyID            uuid.UUID
+	Name                 string
+	InstallationNumber   *string
+	PlantKind            string
+	PvBrandModel         *string
+	PanelPowerW          pgtype.Numeric
+	PanelEfficiencyPct   pgtype.Numeric
+	PanelCount           *int32
+	StringCount          *int32
+	Orientation          NullPanelOrientation
+	TiltAngleDeg         pgtype.Numeric
+	TotalCapacityKw      pgtype.Numeric
+	YearlyTargetKwh      pgtype.Numeric
+	InstallationDate     pgtype.Date
+	Address              *string
+	Latitude             pgtype.Numeric
+	Longitude            pgtype.Numeric
+	IsolarPsID           *string
+	IsolarPsKey          *string
+	IsolarPsName         *string
+	IsolarInstalledKw    pgtype.Numeric
+	IsolarLinkedAt       pgtype.Timestamptz
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	IsolarCredentialID   *uuid.UUID
+	NettingAnalyzerID    *uuid.UUID
+	IsolarLastSyncAt     pgtype.Timestamptz
+	IsolarLastSyncError  *string
+	IsolarHistoryThrough pgtype.Date
 }
 
 type PowerPlantAlarmRecipient struct {

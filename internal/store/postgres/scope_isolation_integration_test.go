@@ -1427,6 +1427,8 @@ func TestScopeIsolation(t *testing.T) {
 		now := scopeIsoEpoch
 		require.ErrorIs(t, repo.UpdateDeviceSnapshot(ctx, tenantA.AdminScope, model.PlantDevice{ID: bf.deviceID, PlantID: bf.plantID, SnapshotAt: &now}), store.ErrNotFound)
 		require.ErrorIs(t, repo.SetSyncState(ctx, tenantA.AdminScope, bf.plantID, now, nil), store.ErrNotFound)
+		require.ErrorIs(t, repo.SetHistoryThrough(ctx, tenantA.AdminScope, bf.plantID, now), store.ErrNotFound)
+		require.NoError(t, repo.SetHistoryThrough(ctx, tenantB.AdminScope, bf.plantID, now), "positive control: the owner can")
 		_, err := repo.SetIsolarLink(ctx, tenantA.AdminScope, model.PowerPlant{ID: bf.plantID, CompanyID: tenantA.Company.ID})
 		require.ErrorIs(t, err, store.ErrNotFound)
 		scopeIsoAssertListExcludes(t,

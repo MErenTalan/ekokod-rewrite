@@ -510,7 +510,10 @@ type PlantRepository interface {
 	UpdateDeviceSnapshot(ctx context.Context, s Scope, d model.PlantDevice) error
 	// SetSyncState records the last iSolar sync and its closed error code (nil clears it).
 	SetSyncState(ctx context.Context, s Scope, plantID uuid.UUID, at time.Time, errCode *string) error
+	// SetHistoryThrough records the day through which stored production is whole (R506).
+	SetHistoryThrough(ctx context.Context, s Scope, plantID uuid.UUID, day time.Time) error
 	// SetIsolarLink writes the iSolar link fields, credential and total capacity; nil clears.
+	// It also clears the history mark.
 	SetIsolarLink(ctx context.Context, s Scope, p model.PowerPlant) (model.PowerPlant, error)
 	// ListLinked lists the company's iSolar-linked plants.
 	ListLinked(ctx context.Context, s Scope) ([]model.PowerPlant, error)

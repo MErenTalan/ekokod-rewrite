@@ -22,6 +22,7 @@ package job_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -341,7 +342,14 @@ func acceptEnqueueFetch(t *testing.T, e *acceptEnv, credentialID, analyzerID uui
 		CompanyID: e.tn.Company.ID, CredentialID: credentialID, AnalyzerID: analyzerID, Kind: kind, Window: window,
 	}, job.TaskOptions{MaxRetry: maxRetry})
 	require.NoError(t, err)
-	info, err := e.client.Enqueue(e.ctx, task)
+	// A cursor-driven fetch is unique while its task lives, and a run shows
+	// as finished in job_runs a moment before asynq retires the task: wait
+	// that moment out rather than race it.
+	var info *asynq.TaskInfo
+	require.Eventually(t, func() bool {
+		info, err = e.client.Enqueue(e.ctx, task)
+		return !errors.Is(err, asynq.ErrDuplicateTask)
+	}, 10*time.Second, 50*time.Millisecond)
 	require.NoError(t, err)
 	return info
 }
