@@ -293,7 +293,9 @@ func (s *Service) computeSubject(ctx context.Context, sc store.Scope, building m
 				return subject{}, err
 			}
 			for _, r := range got {
-				rows[r.AnalyzerID] = r
+				if billable(r) {
+					rows[r.AnalyzerID] = r
+				}
 			}
 		}
 	}
@@ -387,7 +389,7 @@ func (s *Service) partialRows(ctx context.Context, sc store.Scope, ids []uuid.UU
 				return energy.Window{}, nil, nil, err
 			}
 			for _, r := range got {
-				if j, ok := index[r.Window.From.UnixNano()]; ok {
+				if j, ok := index[r.Window.From.UnixNano()]; ok && billable(r) {
 					covered[j]++
 				}
 			}
@@ -420,6 +422,14 @@ func (s *Service) partialRows(ctx context.Context, sc store.Scope, ids []uuid.UU
 		}
 	}
 	return billed, missing, rows, nil
+}
+
+// billable reports whether a row can be invoiced: its boundary readings both
+// carry the active index (R501). A reading the gateway delivered without the
+// meter's registers differences to nil, and that day is missing, not billed.
+// A suspect row stays: it must block the bill, not shrink it.
+func billable(r consumption.Row) bool {
+	return r.Values[energy.ActiveImport] != nil || len(r.Suspect) > 0
 }
 
 // blockingAnomalies pages every unresolved anomaly that overlaps window (I-5).
