@@ -62,143 +62,6 @@ func TestAnalyticsPathCannotReachTheHypertable(t *testing.T) {
 	require.Empty(t, rows, "exactly the fake's zero rows; nothing else could have contributed")
 }
 
-// TestOpenMonthIsComposedFromDailyClosingIndexes is R88/R94's acceptance
-// test.
-//
-// Hand arithmetic: consumption_monthly has a closed January row (the
-// analyzer's monthly consumption for January itself is not what this test
-// checks). February is still open: the request's range ends mid-February,
-// so consumption_monthly has no row for it at all — exactly
-// materialized_only's documented behaviour for an in-progress bucket.
-//
-// Daily closing indexes: the last consumption_daily bucket BEFORE February
-// began is 31 Jan, active_index = 5000 (the closing register value at the
-// end of January). The last consumption_daily bucket INSIDE February (up to
-// the request's own truncation at 15 Feb) is 10 Feb, active_index = 5300.
-//
-//	composed February active_import = 5300 - 5000 = 300
-//
-// MaxDemandKw is the MAXIMUM over EVERY daily bucket inside February,
-// not merely the last one — 5 Feb's peak (96) is both earlier than and
-// larger than 10 Feb's own (42), so a bug that took only the last bucket's
-// figure would report 42, not the true 96.
-func TestOpenMonthIsComposedFromDailyClosingIndexes(t *testing.T) {
-	loc := istanbulLoc(t)
-	analyzerID := uuid.New()
-
-	janStart := time.Date(2026, 1, 1, 0, 0, 0, 0, loc)
-	jan31 := time.Date(2026, 1, 31, 0, 0, 0, 0, loc)
-	feb5 := time.Date(2026, 2, 5, 0, 0, 0, 0, loc)
-	feb10 := time.Date(2026, 2, 10, 0, 0, 0, 0, loc)
-	midFeb := time.Date(2026, 2, 15, 0, 0, 0, 0, loc)
-
-	analytics := fakeAnalytics{
-		monthlyRows: []model.ConsumptionBucket{
-			{AnalyzerID: analyzerID, Bucket: janStart, ActiveConsumption: dec("3000.0000"), ActiveIndex: dec("5000.0000")},
-		},
-		dailyRows: []model.ConsumptionBucket{
-			{AnalyzerID: analyzerID, Bucket: jan31, ActiveIndex: dec("5000.0000")},
-			{AnalyzerID: analyzerID, Bucket: feb5, ActiveIndex: dec("5150.0000"), MaxDemandKw: dec("96.0000")},
-			{AnalyzerID: analyzerID, Bucket: feb10, ActiveIndex: dec("5300.0000"), MaxDemandKw: dec("42.0000")},
-		},
-	}
-	a, err := consumption.NewAnalytics(consumption.AnalyticsDeps{Analytics: analytics, Log: testLog(t)})
-	require.NoError(t, err)
-
-	ctx := context.Background()
-	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
-	req := consumption.SeriesRequest{
-		AnalyzerIDs: []uuid.UUID{analyzerID},
-		Level:       energy.Monthly,
-		Range:       store.TimeRange{From: janStart, To: midFeb},
-	}
-
-	rows, err := a.Consumption(ctx, scope, req)
-	require.NoError(t, err)
-	require.Len(t, rows, 2, "January (closed, materialized) and February (open, composed)")
-
-	open := rows[len(rows)-1]
-	require.True(t, open.Partial, "the composed row must be marked Partial")
-	require.NotNil(t, open.Values[energy.ActiveImport])
-	require.Equal(t, "300", open.Values[energy.ActiveImport].String())
-	require.Equal(t, energy.KindLoadProfile, open.Source)
-	require.NotNil(t, open.MaxDemandKw)
-	require.Equal(t, "96", open.MaxDemandKw.String(), "the peak day, not the last day")
-
-	closed := rows[0]
-	require.False(t, closed.Partial, "January is a closed, materialized row")
-}
-
-// TestAnalyticsComposesEveryAbsentBucketNotOnlyTheLast is R94's acceptance
-// test (amending R88): consumption_monthly holds January only. Request
-// [Dec, Apr) has daily buckets in every month. December, February and March
-// must ALL be composed (Partial=true) — including February, which is
-// closed and NOT the last window in the request — while January stays
-// materialized (Partial=false), and a month with no daily buckets at all
-// (there are none here past March) is simply absent.
-func TestAnalyticsComposesEveryAbsentBucketNotOnlyTheLast(t *testing.T) {
-	loc := istanbulLoc(t)
-	analyzerID := uuid.New()
-
-	nov30 := time.Date(2025, 11, 30, 0, 0, 0, 0, loc)
-	dec1 := time.Date(2025, 12, 1, 0, 0, 0, 0, loc)
-	dec31 := time.Date(2025, 12, 31, 0, 0, 0, 0, loc)
-	jan1 := time.Date(2026, 1, 1, 0, 0, 0, 0, loc)
-	jan31 := time.Date(2026, 1, 31, 0, 0, 0, 0, loc)
-	feb15 := time.Date(2026, 2, 15, 0, 0, 0, 0, loc)
-	mar15 := time.Date(2026, 3, 15, 0, 0, 0, 0, loc)
-	apr1 := time.Date(2026, 4, 1, 0, 0, 0, 0, loc)
-
-	analytics := fakeAnalytics{
-		monthlyRows: []model.ConsumptionBucket{
-			{AnalyzerID: analyzerID, Bucket: jan1, ActiveConsumption: dec("999"), ActiveIndex: dec("2000")},
-		},
-		dailyRows: []model.ConsumptionBucket{
-			{AnalyzerID: analyzerID, Bucket: nov30, ActiveIndex: dec("400")},
-			{AnalyzerID: analyzerID, Bucket: dec1, ActiveIndex: dec("500")},
-			{AnalyzerID: analyzerID, Bucket: dec31, ActiveIndex: dec("1000")},
-			{AnalyzerID: analyzerID, Bucket: jan31, ActiveIndex: dec("2000")},
-			{AnalyzerID: analyzerID, Bucket: feb15, ActiveIndex: dec("2400")},
-			{AnalyzerID: analyzerID, Bucket: mar15, ActiveIndex: dec("3000")},
-		},
-	}
-	a, err := consumption.NewAnalytics(consumption.AnalyticsDeps{Analytics: analytics, Log: testLog(t)})
-	require.NoError(t, err)
-
-	ctx := context.Background()
-	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
-	rows, err := a.Consumption(ctx, scope, consumption.SeriesRequest{
-		AnalyzerIDs: []uuid.UUID{analyzerID},
-		Level:       energy.Monthly,
-		Range:       store.TimeRange{From: dec1, To: apr1},
-	})
-	require.NoError(t, err)
-
-	byMonth := make(map[string]consumption.Row, len(rows))
-	for _, r := range rows {
-		byMonth[r.Window.From.In(loc).Format("2006-01")] = r
-	}
-	require.Len(t, byMonth, 4, "Dec, Jan, Feb, Mar — no row at all past March, where there is no daily data")
-
-	dec := byMonth["2025-12"]
-	require.True(t, dec.Partial, "December is composed: no materialized row, but a daily bucket both before (Nov 30) and inside it")
-	require.Equal(t, "600", dec.Values[energy.ActiveImport].String(), "1000 - 400")
-
-	jan := byMonth["2026-01"]
-	require.False(t, jan.Partial, "January is the materialized row")
-
-	feb := byMonth["2026-02"]
-	require.True(t, feb.Partial, "February is closed and NOT the last window in the request, but must still be composed")
-	require.Equal(t, "400", feb.Values[energy.ActiveImport].String(), "2400 - 2000")
-
-	mar := byMonth["2026-03"]
-	require.True(t, mar.Partial)
-	require.Equal(t, "600", mar.Values[energy.ActiveImport].String(), "3000 - 2400")
-
-	_, hasApr := byMonth["2026-04"]
-	require.False(t, hasApr, "no daily bucket at all inside or before April: absent, not a zero row")
-}
-
 // TestAnalyticsQueriesTheWidenedBucketRange proves a monthly request
 // starting mid-month (Feb 15) must still query the aggregate from the WHOLE
 // bucket's own start (Feb 1), never from req.Range.From directly — the
@@ -450,117 +313,7 @@ func TestAnalyticsCallsUseTheCallersScope(t *testing.T) {
 	require.NoError(t, err, "every AnalyticsRepository call must use the caller's own Scope")
 }
 
-// TestComposedRowRatioComesFromConsumptionValuesNotClosingIndexes is Minor
-// M-b: composeOpenPeriodRow computes InductiveRatio/CapacitiveRatio from the
-// composed VALUES (the inside-minus-before deltas), never from the raw
-// closing indexes — a mutation that used insideIdx directly (analytics.go:
-// 268-269) stayed green because no test asserted a composed row's ratio at
-// all. The indexes and the values are deliberately different numbers here.
-func TestComposedRowRatioComesFromConsumptionValuesNotClosingIndexes(t *testing.T) {
-	loc := istanbulLoc(t)
-	analyzerID := uuid.New()
-	jan1 := time.Date(2026, 1, 1, 0, 0, 0, 0, loc)
-	jan15 := time.Date(2026, 1, 15, 0, 0, 0, 0, loc)
-	dec31 := time.Date(2025, 12, 31, 0, 0, 0, 0, loc)
-	feb1 := time.Date(2026, 2, 1, 0, 0, 0, 0, loc)
-
-	analytics := fakeAnalytics{
-		dailyRows: []model.ConsumptionBucket{
-			{AnalyzerID: analyzerID, Bucket: dec31, ActiveIndex: dec("1000"), InductiveIndex: dec("50"), CapacitiveIndex: dec("20")},
-			{AnalyzerID: analyzerID, Bucket: jan15, ActiveIndex: dec("1100"), InductiveIndex: dec("80"), CapacitiveIndex: dec("32")},
-		},
-	}
-	a, err := consumption.NewAnalytics(consumption.AnalyticsDeps{Analytics: analytics, Log: testLog(t)})
-	require.NoError(t, err)
-
-	ctx := context.Background()
-	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
-	rows, err := a.Consumption(ctx, scope, consumption.SeriesRequest{
-		AnalyzerIDs: []uuid.UUID{analyzerID},
-		Level:       energy.Monthly,
-		Range:       store.TimeRange{From: jan1, To: feb1},
-	})
-	require.NoError(t, err)
-	require.Len(t, rows, 1)
-	require.True(t, rows[0].Partial)
-
-	// Values: active 1100-1000=100, inductive 80-50=30 (ratio 0.3), capacitive
-	// 32-20=12 (ratio 0.12) — NOT the ratio of the raw closing indexes
-	// (80/1100 = 0.0727..., 32/1100 = 0.029...).
-	require.NotNil(t, rows[0].InductiveRatio)
-	require.Equal(t, "0.3", rows[0].InductiveRatio.String())
-	require.NotNil(t, rows[0].CapacitiveRatio)
-	require.Equal(t, "0.12", rows[0].CapacitiveRatio.String())
-}
-
-// TestAnalyticsCallsUseTheCallersScopeAtMonthlyComposition proves
-// composeMissingPeriods' own ConsumptionDaily call (analytics.go:185) also
-// uses the caller's own Scope — TestAnalyticsCallsUseTheCallersScope alone
-// only exercises Hourly, never this call.
-// monthlyRows is empty (no materialised row at all), forcing composition to
-// run; dailyRows supplies enough for composeOpenPeriodRow to emit a row.
-func TestAnalyticsCallsUseTheCallersScopeAtMonthlyComposition(t *testing.T) {
-	loc := istanbulLoc(t)
-	analyzerID := uuid.New()
-	sc := store.Scope{CompanyID: uuid.New(), BuildingIDs: []uuid.UUID{uuid.New()}}
-	jan1 := time.Date(2026, 1, 1, 0, 0, 0, 0, loc)
-	jan15 := time.Date(2026, 1, 15, 0, 0, 0, 0, loc)
-	dec31 := time.Date(2025, 12, 31, 0, 0, 0, 0, loc)
-	feb1 := time.Date(2026, 2, 1, 0, 0, 0, 0, loc)
-
-	analytics := fakeAnalytics{
-		t: t, wantScope: &sc,
-		monthlyRows: []model.ConsumptionBucket{}, // empty, never nil: forces composition, never a fallback to `rows`.
-		dailyRows: []model.ConsumptionBucket{
-			{AnalyzerID: analyzerID, Bucket: dec31, ActiveIndex: dec("1000")},
-			{AnalyzerID: analyzerID, Bucket: jan15, ActiveIndex: dec("1100")},
-		},
-	}
-	a, err := consumption.NewAnalytics(consumption.AnalyticsDeps{Analytics: analytics, Log: testLog(t)})
-	require.NoError(t, err)
-
-	ctx := context.Background()
-	rows, err := a.Consumption(ctx, sc, consumption.SeriesRequest{
-		AnalyzerIDs: []uuid.UUID{analyzerID},
-		Level:       energy.Monthly,
-		Range:       store.TimeRange{From: jan1, To: feb1},
-	})
-	require.NoError(t, err, "every AnalyticsRepository call, including composeMissingPeriods' ConsumptionDaily, must use the caller's own Scope")
-	require.Len(t, rows, 1, "sanity: composition actually ran and produced a row")
-}
-
 // --- A composed row with nothing before it is omitted, not all-nil -------
-
-// TestComposedRowIsOmittedWhenNoDailyBucketPrecedesThePeriod proves that
-// when there is no consumption_daily bucket at all before the missing period,
-// there is nothing to subtract from, so no row is emitted — never a row
-// whose every value is nil.
-func TestComposedRowIsOmittedWhenNoDailyBucketPrecedesThePeriod(t *testing.T) {
-	loc := istanbulLoc(t)
-	analyzerID := uuid.New()
-	jan1 := time.Date(2026, 1, 1, 0, 0, 0, 0, loc)
-	jan15 := time.Date(2026, 1, 15, 0, 0, 0, 0, loc)
-	feb1 := time.Date(2026, 2, 1, 0, 0, 0, 0, loc)
-
-	analytics := fakeAnalytics{
-		dailyRows: []model.ConsumptionBucket{
-			// Only a bucket INSIDE January — nothing before it at all.
-			{AnalyzerID: analyzerID, Bucket: jan15, ActiveIndex: dec("100")},
-		},
-	}
-	a, err := consumption.NewAnalytics(consumption.AnalyticsDeps{Analytics: analytics, Log: testLog(t)})
-	require.NoError(t, err)
-
-	ctx := context.Background()
-	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
-	rows, err := a.Consumption(ctx, scope, consumption.SeriesRequest{
-		AnalyzerIDs: []uuid.UUID{analyzerID},
-		Level:       energy.Monthly,
-		Range:       store.TimeRange{From: jan1, To: feb1},
-	})
-	require.NoError(t, err)
-	require.Empty(t, rows, "nothing to subtract from: no row, never an all-nil-values row")
-}
 
 // --- R102: a negative consumption is nil, never a suspicious number --------
 
@@ -600,41 +353,36 @@ func TestMaterialisedNegativeConsumptionIsNilNotNegative(t *testing.T) {
 	require.Nil(t, rows[0].Values[energy.ActiveImport], "a negative materialised consumption must come back nil, never -49880")
 }
 
-// TestComposedNegativeConsumptionIsNilNotNegative is
-// TestMaterialisedNegativeConsumptionIsNilNotNegative's counterpart for a
-// COMPOSED row (R94): the last consumption_daily closing index before the
-// missing month (50000) is higher than the last one inside it (120) — the
-// same meter-swap shape as the review's probe — so the composed
-// inside-minus-before subtraction goes negative and must come back nil, not
-// -49880.
-func TestComposedNegativeConsumptionIsNilNotNegative(t *testing.T) {
+// R499: a month or year the next period's first reading does not close is
+// Partial — still open, or its data stops short. Hours and days never are.
+func TestCoarseRowsArePartialUnlessClosedByABoundary(t *testing.T) {
 	loc := istanbulLoc(t)
-	analyzerID := uuid.New()
-	jan1 := time.Date(2026, 1, 1, 0, 0, 0, 0, loc)
-	jan31 := time.Date(2026, 1, 31, 0, 0, 0, 0, loc)
-	feb10 := time.Date(2026, 2, 10, 0, 0, 0, 0, loc)
-	midFeb := time.Date(2026, 2, 15, 0, 0, 0, 0, loc)
+	id := uuid.New()
+	jan := time.Date(2026, 1, 1, 0, 0, 0, 0, loc)
+	feb := time.Date(2026, 2, 1, 0, 0, 0, 0, loc)
 
-	analytics := fakeAnalytics{
-		dailyRows: []model.ConsumptionBucket{
-			{AnalyzerID: analyzerID, Bucket: jan31, ActiveIndex: dec("50000")},
-			{AnalyzerID: analyzerID, Bucket: feb10, ActiveIndex: dec("120")},
-		},
+	rows := []model.ConsumptionBucket{
+		{AnalyzerID: id, Bucket: jan, ActiveConsumption: dec("300"), ClosedByBoundary: true},
+		{AnalyzerID: id, Bucket: feb, ActiveConsumption: dec("120")},
 	}
-	a, err := consumption.NewAnalytics(consumption.AnalyticsDeps{Analytics: analytics, Log: testLog(t)})
+	a, err := consumption.NewAnalytics(consumption.AnalyticsDeps{
+		Analytics: fakeAnalytics{monthlyRows: rows, yearlyRows: rows[1:], dailyRows: rows[1:]}, Log: testLog(t)})
 	require.NoError(t, err)
-
-	ctx := context.Background()
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
-	rows, err := a.Consumption(ctx, scope, consumption.SeriesRequest{
-		AnalyzerIDs: []uuid.UUID{analyzerID},
-		Level:       energy.Monthly,
-		Range:       store.TimeRange{From: jan1, To: midFeb},
-	})
-	require.NoError(t, err)
-	require.Len(t, rows, 1, "January has no monthly materialised row either, but only February is under test here")
+	get := func(level energy.Level, from, to time.Time) []consumption.Row {
+		got, err := a.Consumption(context.Background(), scope, consumption.SeriesRequest{
+			AnalyzerIDs: []uuid.UUID{id}, Level: level, Range: store.TimeRange{From: from, To: to}})
+		require.NoError(t, err)
+		return got
+	}
 
-	feb := rows[0]
-	require.True(t, feb.Partial)
-	require.Nil(t, feb.Values[energy.ActiveImport], "a negative composed consumption (120 - 50000) must come back nil, never -49880")
+	monthly := get(energy.Monthly, jan, feb.AddDate(0, 1, 0))
+	require.Len(t, monthly, 2)
+	require.False(t, monthly[0].Partial, "January ends on February's first reading")
+	require.True(t, monthly[1].Partial, "nothing closes February")
+	require.Equal(t, "120", monthly[1].Values[energy.ActiveImport].String())
+
+	daily := get(energy.Daily, feb, feb.AddDate(0, 0, 1))
+	require.Len(t, daily, 1)
+	require.False(t, daily[0].Partial, "only months and years are marked")
 }

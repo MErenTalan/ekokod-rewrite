@@ -103,13 +103,10 @@ func Consumption(ctx context.Context, r Refresher, from, to time.Time, out io.Wr
 		return ws
 	}
 	month := func(d time.Time) time.Time { return d.AddDate(0, 1, 0) }
-	year := func(d time.Time) time.Time { return d.AddDate(1, 0, 0) }
 	pad := func(w store.TimeRange, before, after func(time.Time) time.Time) store.TimeRange {
 		return store.TimeRange{From: before(w.From), To: after(w.To)}
 	}
 	dayBack, dayOn := func(d time.Time) time.Time { return d.AddDate(0, 0, -1) }, func(d time.Time) time.Time { return d.AddDate(0, 0, 1) }
-	monthBack := func(d time.Time) time.Time { return d.AddDate(0, -1, 0) }
-	yearBack := func(d time.Time) time.Time { return d.AddDate(-1, 0, 0) }
 	refresh := func(label string, w store.TimeRange, fn func(store.TimeRange) error) {
 		if err := fn(w); err != nil {
 			t.fail(Failure{Scope: label, Period: w.From.Format("2006-01-02"), Error: err.Error()})
@@ -126,18 +123,7 @@ func Consumption(ctx context.Context, r Refresher, from, to time.Time, out io.Wr
 		refresh("plant_production", pad(w, dayBack, dayOn), func(w store.TimeRange) error { return r.RefreshPlantProduction(ctx, w) })
 		t.progress("consumption %s refreshed (hourly, daily, plants)", w.From.Format("2006-01"))
 	}
-	for _, w := range windows(year, yearStart(from)) {
-		refresh(string(store.ViewConsumptionMonthly), pad(w, monthBack, month), view(store.ViewConsumptionMonthly))
-		t.progress("consumption %s refreshed (monthly)", w.From.Format("2006"))
-	}
-	all := store.TimeRange{From: yearBack(yearStart(from)), To: year(year(yearStart(to)))}
-	refresh(string(store.ViewConsumptionYearly), all, view(store.ViewConsumptionYearly))
 	return t.result()
-}
-
-func yearStart(d time.Time) time.Time {
-	l := d.In(istanbul)
-	return time.Date(l.Year(), 1, 1, 0, 0, 0, 0, istanbul)
 }
 
 func monthStart(d time.Time) time.Time {

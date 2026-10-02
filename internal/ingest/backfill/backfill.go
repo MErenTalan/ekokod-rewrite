@@ -39,14 +39,6 @@ import (
 // than any real provider or storage limit).
 const maxBackfillSpan = 5 * 365 * 24 * time.Hour
 
-// aggregateHorizon is how far back the consumption aggregates reach without
-// a consumption.refresh run: 04-data-model.md's `start_offset => interval
-// '30 days'` minus one day of margin — the same amendment R100(6) makes to
-// internal/ingest's own enqueue threshold, so this informational message
-// never undersells what a backfill older than the ingest side's own
-// threshold already gets refreshed.
-const aggregateHorizon = 29 * 24 * time.Hour
-
 // Windows splits [from, to) into consecutive half-open windows of at most
 // max, aligned to Istanbul-local midnight so a window never splits a local
 // day. It is a thin wrapper over normalize.Chunk (S7 — the ONE range-chunking
@@ -226,14 +218,6 @@ func (b *Backfiller) Backfill(ctx context.Context, p job.BackfillPayload) error 
 				processed++
 			}
 		}
-	}
-
-	if p.From.Before(now.Add(-aggregateHorizon)) {
-		horizon := now.Add(-aggregateHorizon)
-		b.appendMessage(ctx, sc, p.CompanyID, "job", "backfill", "info",
-			fmt.Sprintf("Backfilled range before %s is not in the consumption aggregates until consumption.refresh runs for it (F3)",
-				horizon.Format(time.RFC3339)),
-			nil)
 	}
 
 	status := countsStatus(processed, skipped, failed)

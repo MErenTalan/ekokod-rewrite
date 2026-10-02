@@ -440,7 +440,6 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		Aggregates: adminAggregateRepo,
 		Locker:     redisLock,
 		Enqueuer:   consumptionRefreshEnq,
-		Clock:      clock.System(),
 		LockTTL:    cfg.ConsumptionRefreshLockTTL,
 		Location:   normalize.Istanbul,
 		Log:        log,

@@ -82,9 +82,11 @@ func TestWatchableTasksAreRetained(t *testing.T) {
 	}, job.TaskOptions{MaxRetry: 1})
 	require.NoError(t, err)
 
+	// A backfill is kept a day: its screen follows the fetch tasks it started.
+	want := map[*asynq.Task]time.Duration{refresh: time.Hour, sync: time.Hour, backfill: 24 * time.Hour}
 	for _, task := range []*asynq.Task{refresh, sync, backfill} {
 		info, eerr := client.Enqueue(context.Background(), task)
 		require.NoError(t, eerr, task.Type())
-		require.Equal(t, time.Hour, info.Retention, "%s must be retained for /jobs/{id}", task.Type())
+		require.Equal(t, want[task], info.Retention, "%s must be retained for /jobs/{id}", task.Type())
 	}
 }

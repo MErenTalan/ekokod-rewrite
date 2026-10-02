@@ -1037,17 +1037,9 @@ func TestScopeIsolation(t *testing.T) {
 
 	scopeIsoInsertPlatformData(t, ctx, pool)
 
-	// Important Finding 2: consumption_monthly, consumption_yearly and
-	// plant_production_monthly are materialized_only = true — refreshed ONCE
-	// here, after both af and bf are seeded, exactly as
-	// analyticsRefresh (analytics_integration_test.go, same package) does
-	// for its own tests: outside a transaction, via pool.Exec's implicit
-	// autocommit. consumption_monthly's January-2026 bucket (scopeIsoEpoch)
-	// is already closed relative to this phase's clock; consumption_yearly
-	// needs scopeIsoClosedYearEpoch's rows instead (see that var's own doc
-	// comment) since 2026 itself is still the current year.
-	analyticsRefresh(t, ctx, pool, "consumption_monthly")
-	analyticsRefresh(t, ctx, pool, "consumption_yearly")
+	// plant_production_monthly is materialized_only = true — refreshed ONCE
+	// here, after both af and bf are seeded, outside a transaction.
+	// Consumption months and years roll up from consumption_daily (R499).
 	analyticsRefresh(t, ctx, pool, "plant_production_monthly")
 
 	narrowRange := store.TimeRange{From: scopeIsoEpoch, To: scopeIsoEpoch.Add(2 * time.Hour)}

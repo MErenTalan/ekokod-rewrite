@@ -14,7 +14,6 @@ import (
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/job"
-	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/lock"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/consumption"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
@@ -51,15 +50,13 @@ func newRedisLocker(t *testing.T) lock.Locker {
 	return lock.NewRedis(client)
 }
 
-// TestRefreshConsumptionMaterialisesAClosedMonthBelowThePolicyWindow is
-// Task 6's TestRefreshMaterialisesAClosedMonth, driven through the real
-// consumption.Refresher end to end (real AdminAggregateRepository, real
-// Redis locker) rather than by calling repo.Refresh directly: readings are
-// inserted for a closed month two years ago, consumption_monthly is proven
-// ABSENT below the policy watermark, RefreshConsumption is called over
-// those readings' range, and consumption_monthly is proven present with the
-// hand-computed value.
-func TestRefreshConsumptionMaterialisesAClosedMonthBelowThePolicyWindow(t *testing.T) {
+// TestRefreshConsumptionShowsRecentRowsWrittenBelowTheWatermark is R500's
+// production scenario through the real Refresher (real aggregates, real
+// Redis lock): a live system's watermark sits about an hour back, and a
+// fetch then writes ten-day-old rows below it. They are absent from every
+// chart until a refresh covers them — and ten days is INSIDE the policy
+// window the refresher used to leave to the scheduled job.
+func TestRefreshConsumptionShowsRecentRowsWrittenBelowTheWatermark(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
@@ -69,54 +66,54 @@ func TestRefreshConsumptionMaterialisesAClosedMonthBelowThePolicyWindow(t *testi
 	analyticsRepo := postgres.NewAnalyticsRepository(pool)
 	aggregateRepo := admin.NewAggregateRepository(pool)
 
-	locker := newRedisLocker(t)
-
-	// A month about two years back, unambiguously closed relative to the
-	// fixed clock below — same fixture shape as Task 6's
-	// TestRefreshMaterialisesAClosedMonth.
-	monthStart := time.Date(2024, time.March, 1, 0, 0, 0, 0, testIstanbul)
-	monthWindow := store.TimeRange{From: monthStart, To: monthStart.AddDate(0, 1, 0)}
-
-	// clock.System() over a fixed March 2024 month would make this test's
-	// "NEWER than yearly's 5y" claim depend on the wall
-	// clock the suite happens to run under — true today, false from March
-	// 2029 onward, at which point yearly would also refresh and the test
-	// would keep passing without proving the stated thing anymore. A fake
-	// clock fixed exactly two years after monthStart proves the same fact
-	// (older than hourly's 30d, daily's 90d and monthly's 1y policy
-	// horizons, but newer than yearly's 5y) in any year this suite runs.
 	refresher, err := consumption.NewRefresher(consumption.RefreshDeps{
 		Aggregates: aggregateRepo,
-		Locker:     locker,
+		Locker:     newRedisLocker(t),
 		Enqueuer:   &fakeEnqueuer{},
-		Clock:      clock.NewFake(monthStart.AddDate(2, 0, 10)),
 		LockTTL:    2 * time.Minute,
 		Location:   testIstanbul,
 		Log:        discardLog(),
 	})
 	require.NoError(t, err)
 
-	firstReadingAt := time.Date(2024, time.March, 10, 12, 0, 0, 0, testIstanbul)
-	secondReadingAt := time.Date(2024, time.March, 20, 12, 0, 0, 0, testIstanbul)
-
-	insertRefreshLoadProfileReading(t, ctx, readingRepo, tenant.Scope, analyzer.ID, firstReadingAt, "1000")
-	insertRefreshLoadProfileReading(t, ctx, readingRepo, tenant.Scope, analyzer.ID, secondReadingAt, "1012.5")
-
-	before, err := analyticsRepo.ConsumptionMonthly(ctx, tenant.AdminScope, []uuid.UUID{analyzer.ID}, monthWindow)
-	require.NoError(t, err)
-	require.Empty(t, before, "a closed month below consumption_monthly's watermark is absent, not stale")
-
-	payload := job.ConsumptionRefreshPayload{
-		CompanyID:  tenant.Company.ID,
-		AnalyzerID: analyzer.ID,
-		From:       firstReadingAt,
-		To:         secondReadingAt.Add(time.Minute),
+	now := time.Now().UTC()
+	// The ongoing ingestion: readings in a closed hour and a closed day, then
+	// the routine refresh that moves both watermarks past them.
+	insertRefreshLoadProfileReading(t, ctx, readingRepo, tenant.Scope, analyzer.ID, now.Add(-30*time.Hour), "4990")
+	insertRefreshLoadProfileReading(t, ctx, readingRepo, tenant.Scope, analyzer.ID, now.Add(-2*time.Hour), "5000")
+	for _, view := range store.ConsumptionViews() {
+		require.NoError(t, aggregateRepo.Refresh(ctx, view, store.TimeRange{From: now.Add(-60 * 24 * time.Hour), To: now.Add(-time.Hour)}))
 	}
-	require.NoError(t, refresher.RefreshConsumption(ctx, payload))
 
-	after, err := analyticsRepo.ConsumptionMonthly(ctx, tenant.AdminScope, []uuid.UUID{analyzer.ID}, monthWindow)
+	day := now.Add(-10 * 24 * time.Hour).In(testIstanbul)
+	day = time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, testIstanbul)
+	first, second := day.Add(9*time.Hour), day.Add(15*time.Hour)
+	insertRefreshLoadProfileReading(t, ctx, readingRepo, tenant.Scope, analyzer.ID, first, "1000")
+	insertRefreshLoadProfileReading(t, ctx, readingRepo, tenant.Scope, analyzer.ID, second, "1012.5")
+	dayWindow := store.TimeRange{From: day, To: day.AddDate(0, 0, 1)}
+
+	before, err := analyticsRepo.ConsumptionDaily(ctx, tenant.AdminScope, []uuid.UUID{analyzer.ID}, dayWindow)
 	require.NoError(t, err)
-	require.Len(t, after, 1)
-	require.True(t, decimal.RequireFromString("12.5").Equal(*after[0].ActiveConsumption),
-		"want 12.5, got %s", after[0].ActiveConsumption.String())
+	require.Empty(t, before, "rows below the watermark are absent until a refresh covers them")
+
+	require.NoError(t, refresher.RefreshConsumption(ctx, job.ConsumptionRefreshPayload{
+		CompanyID: tenant.Company.ID, AnalyzerID: analyzer.ID, From: first, To: second.Add(time.Microsecond),
+	}))
+
+	daily, err := analyticsRepo.ConsumptionDaily(ctx, tenant.AdminScope, []uuid.UUID{analyzer.ID}, dayWindow)
+	require.NoError(t, err)
+	require.Len(t, daily, 1)
+	require.Equal(t, "12.5", daily[0].ActiveConsumption.String())
+
+	hourly, err := analyticsRepo.ConsumptionHourly(ctx, tenant.AdminScope, []uuid.UUID{analyzer.ID},
+		store.TimeRange{From: first, To: second.Add(time.Hour)})
+	require.NoError(t, err)
+	require.Len(t, hourly, 2, "both readings' hours")
+
+	// The month rolls up from the refreshed day (R499).
+	month := time.Date(day.Year(), day.Month(), 1, 0, 0, 0, 0, testIstanbul)
+	monthly, err := analyticsRepo.ConsumptionMonthly(ctx, tenant.AdminScope, []uuid.UUID{analyzer.ID},
+		store.TimeRange{From: month, To: month.AddDate(0, 1, 0)})
+	require.NoError(t, err)
+	require.Len(t, monthly, 1)
 }

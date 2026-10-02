@@ -48,25 +48,6 @@ func (a *fetchAccumulator) noteLoadProfilePersisted(kind model.ReadingKind, n in
 	}
 }
 
-// consumptionRefreshThreshold is R73's threshold, amended by R100(6):
-// consumption_hourly's start_offset (migration 00005,
-// `start_offset => interval '30 days'`), the smallest of the four
-// consumption continuous aggregates' refresh-policy windows, MINUS one day
-// of margin. The hourly policy itself only advances every
-// schedule_interval (30 minutes) and aligns inward, so without this margin
-// a new analyzer's oldest ~30-90 minutes of history could age out of
-// start_offset before the next policy run ever sees it, and — being inside
-// the (unamended) threshold — would never get a manual refresh either,
-// permanently orphaning it. 29 days leaves that one day of slack inside the
-// hourly window. An affected range that starts within this many days of
-// "now" is live data consumption_hourly's own real-time union already
-// covers, so enqueueing a refresh for it would be pointless. The boundary
-// is exclusive: a range starting EXACTLY consumptionRefreshThreshold before
-// now is still "within" the policy window and does not enqueue — only a
-// range starting strictly earlier does (see maybeEnqueueConsumptionRefresh's
-// use of time.Time.Before, never Before-or-equal).
-const consumptionRefreshThreshold = 29 * 24 * time.Hour
-
 // consumptionRefreshEnqueueTimeout bounds the context the enqueue call
 // itself runs under: failFetchRun may be reporting a run whose OWN ctx was
 // already cancelled (e.g. the caller gave up mid-fetch), but rows already
@@ -448,7 +429,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 
 	// R73: enqueue the affected range, not the requested window — a backfill
 	// of old data refreshes exactly the buckets it touched.
-	s.maybeEnqueueConsumptionRefresh(ctx, sc, p.CompanyID, analyzer.ID, acc, now)
+	s.maybeEnqueueConsumptionRefresh(ctx, sc, p.CompanyID, analyzer.ID, acc)
 
 	return nil
 }
@@ -470,25 +451,19 @@ func (s *Service) failFetchRun(ctx context.Context, sc store.Scope, runID, analy
 	// A partial run that persisted some rows before failing still touched
 	// real buckets that need refreshing — this call site is evaluated on
 	// acc.affectedFrom exactly like the success path below.
-	s.maybeEnqueueConsumptionRefresh(ctx, sc, sc.CompanyID, analyzerID, acc, at)
+	s.maybeEnqueueConsumptionRefresh(ctx, sc, sc.CompanyID, analyzerID, acc)
 	return wrapRedacted(errText, cause)
 }
 
-// shouldEnqueueConsumptionRefresh implements R73's threshold, amended
-// by R100(1), as a pure decision, independent of I/O, so the boundary
-// itself is trivial to pin with a table test: enqueue only when the seam is
-// wired (hasEnqueuer), enabled (config.ConsumptionRefreshEnabled, threaded
-// in as enabled), the run actually persisted a load_profile row
-// (hasLoadProfile — R100(1): the only kind every consumption continuous
-// aggregate reads), the affected range is non-empty (affectedFrom != nil —
-// an empty range never enqueues, on either finish path), AND affectedFrom is
-// STRICTLY earlier than now-consumptionRefreshThreshold (see the constant's
-// doc for why the boundary itself is excluded).
-func shouldEnqueueConsumptionRefresh(hasEnqueuer, enabled, hasLoadProfile bool, affectedFrom *time.Time, now time.Time) bool {
-	if !hasEnqueuer || !enabled || !hasLoadProfile || affectedFrom == nil {
-		return false
-	}
-	return affectedFrom.Before(now.Add(-consumptionRefreshThreshold))
+// shouldEnqueueConsumptionRefresh decides, as a pure function, whether a run
+// enqueues consumption.refresh: the seam is wired and enabled, the run
+// persisted a load_profile row (R100(1): the only kind the aggregates read)
+// and it touched a range. R500: however recent that range is — rows written
+// behind an aggregate's watermark are invisible until a refresh covers them,
+// and the former 29-day threshold left a fetch's own data out of every chart
+// until the scheduled policy came round.
+func shouldEnqueueConsumptionRefresh(hasEnqueuer, enabled, hasLoadProfile bool, affectedFrom *time.Time) bool {
+	return hasEnqueuer && enabled && hasLoadProfile && affectedFrom != nil
 }
 
 // refreshRangeFor converts acc's affected range into the [From, To) window
@@ -520,19 +495,15 @@ func refreshRangeFor(acc *fetchAccumulator) (from, to time.Time) {
 	return *acc.affectedFrom, acc.affectedTo.Add(time.Microsecond)
 }
 
-// maybeEnqueueConsumptionRefresh is R73's single enqueue call
-// site, shared by FetchReadings' success path and failFetchRun's partial
-// path so the threshold and gating logic live in exactly one place. now MUST
-// come from s.deps.Clock (never time.Now()): both call sites pass the same
-// `now` the run itself resolved its window against, so the threshold is
-// evaluated against the same clock as everything else in the run.
+// maybeEnqueueConsumptionRefresh is R73's single enqueue call site, shared by
+// FetchReadings' success path and failFetchRun's partial path.
 //
 // An enqueue failure is logged and recorded as a warning operational
 // message; it never turns a run that has already succeeded (or already
 // failed for its own reason) into a different outcome — this is called
 // strictly after finishRun/failFetchRun have recorded the run's own status.
-func (s *Service) maybeEnqueueConsumptionRefresh(ctx context.Context, sc store.Scope, companyID, analyzerID uuid.UUID, acc *fetchAccumulator, now time.Time) {
-	if !shouldEnqueueConsumptionRefresh(s.deps.ConsumptionRefresh != nil, s.opts.ConsumptionRefreshEnabled, acc.hasLoadProfile, acc.affectedFrom, now) {
+func (s *Service) maybeEnqueueConsumptionRefresh(ctx context.Context, sc store.Scope, companyID, analyzerID uuid.UUID, acc *fetchAccumulator) {
+	if !shouldEnqueueConsumptionRefresh(s.deps.ConsumptionRefresh != nil, s.opts.ConsumptionRefreshEnabled, acc.hasLoadProfile, acc.affectedFrom) {
 		return
 	}
 	from, to := refreshRangeFor(acc)

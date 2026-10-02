@@ -820,7 +820,7 @@ func TestIngestionEndToEndInterruptedFetchResumesFromCursor(t *testing.T) {
 	last := reqs[len(reqs)-1]
 	q, perr := url.ParseQuery(last.RawQuery)
 	require.NoError(t, perr)
-	require.Equal(t, phase1Cursor.UTC().Format(time.RFC3339), q.Get("start"),
+	require.Equal(t, acceptPM5340WallClock(phase1Cursor), q.Get("start"),
 		"phase 2's resumed request must start exactly at phase 1's cursor, not restart from InitialLookback")
 
 	rows := acceptRows(t, e, analyzer.ID, model.ReadingKindLoadProfile)
@@ -1027,9 +1027,15 @@ func TestIngestionARILTimeOfUseRegistersStoredAsNull(t *testing.T) {
 // 00:45=6.0, 01:45=7.5.
 // ---------------------------------------------------------------------------
 
+// acceptPM5340WallClock is how the adapter sends a window bound: the device
+// compares it to its Istanbul wall-clock meterDate as if that were UTC.
+func acceptPM5340WallClock(t time.Time) string {
+	return t.In(time.FixedZone("Europe/Istanbul", 3*60*60)).Format("2006-01-02T15:04:05") + "Z"
+}
+
 func acceptPM5340WindowRoute(from, to time.Time, items []string) fake.Route {
-	wantStart := from.UTC().Format(time.RFC3339)
-	wantEnd := to.UTC().Format(time.RFC3339)
+	wantStart := acceptPM5340WallClock(from)
+	wantEnd := acceptPM5340WallClock(to)
 	return fake.Route{
 		Method: http.MethodGet,
 		Path:   "/api/v1/readings",

@@ -72,7 +72,8 @@ func TestAnalyticsConsumptionHourlyAndDailyAreRealTime(t *testing.T) {
 	require.Len(t, daily, 1)
 }
 
-func TestAnalyticsConsumptionMonthlyAndYearlyRequireRefresh(t *testing.T) {
+// R499: months and years are rolled up from the real-time daily aggregate.
+func TestAnalyticsConsumptionMonthlyAndYearlyNeedNoRefresh(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
@@ -81,13 +82,7 @@ func TestAnalyticsConsumptionMonthlyAndYearlyRequireRefresh(t *testing.T) {
 	analyticsRepo := postgres.NewAnalyticsRepository(pool)
 	analyzerID := tenant.Analyzers[0].ID
 
-	// A YEAR bucket only closes at the end of its local year, and
-	// refresh_continuous_aggregate never materialises a bucket "now" is
-	// still inside — the exact behaviour migration 00005's header documents
-	// ("the year currently in progress is never in the materialized data").
-	// analyticsEpoch (2026) is the CURRENT year as of this phase's clock, so
-	// its year bucket is never closed; this test therefore uses a year
-	// that is unambiguously in the past instead.
+	// A second, long-past year: the roll-up covers any age without a refresh.
 	closedYearEpoch := time.Date(2020, time.January, 1, 0, 0, 0, 0, time.UTC)
 
 	rows := []model.MeterReading{
@@ -112,17 +107,6 @@ func TestAnalyticsConsumptionMonthlyAndYearlyRequireRefresh(t *testing.T) {
 	// start in UTC December.
 	monthWindow := store.TimeRange{From: analyticsEpoch.Add(-24 * time.Hour), To: analyticsEpoch.AddDate(0, 1, 0).Add(24 * time.Hour)}
 	yearWindow := store.TimeRange{From: closedYearEpoch.Add(-24 * time.Hour), To: closedYearEpoch.AddDate(1, 0, 0).Add(24 * time.Hour)}
-
-	// Before any refresh: materialized_only = true views have NO row for
-	// this still-open bucket, per migration 00005's header — absent, not an
-	// error and not zero. analyzerIDs is named explicitly (empty/nil means
-	// NO ROWS, fail-closed — Important finding 4).
-	before, err := analyticsRepo.ConsumptionMonthly(ctx, tenant.Scope, []uuid.UUID{analyzerID}, monthWindow)
-	require.NoError(t, err)
-	require.Empty(t, before)
-
-	analyticsRefresh(t, ctx, pool, "consumption_monthly")
-	analyticsRefresh(t, ctx, pool, "consumption_yearly")
 
 	monthly, err := analyticsRepo.ConsumptionMonthly(ctx, tenant.Scope, []uuid.UUID{analyzerID}, monthWindow)
 	require.NoError(t, err)
@@ -265,9 +249,6 @@ func TestAnalyticsConsumptionViewsIDsOutsideScopeContributeNoRowsAndEmptyIDsRetu
 	seed(tenantB.Scope, tenantB.Analyzers[0].ID, analyticsEpoch, "999.0000")
 	seed(tenantA.Scope, tenantA.Analyzers[0].ID, closedYearEpoch, "1.0000")
 	seed(tenantB.Scope, tenantB.Analyzers[0].ID, closedYearEpoch, "999.0000")
-
-	analyticsRefresh(t, ctx, pool, "consumption_monthly")
-	analyticsRefresh(t, ctx, pool, "consumption_yearly")
 
 	hourWindow := store.TimeRange{From: analyticsEpoch, To: analyticsEpoch.Add(time.Hour)}
 	dayWindow := store.TimeRange{From: analyticsEpoch.Add(-24 * time.Hour), To: analyticsEpoch.Add(48 * time.Hour)}
@@ -521,7 +502,7 @@ func TestAnalyticsHourlyMeterIsNotZero(t *testing.T) {
 	}
 	_, _, err := readingRepo.BulkInsert(ctx, tenant.Scope, rows)
 	require.NoError(t, err)
-	for _, v := range []string{"consumption_hourly", "consumption_daily", "consumption_monthly", "consumption_yearly"} {
+	for _, v := range []string{"consumption_hourly", "consumption_daily"} {
 		analyticsRefresh(t, ctx, pool, v)
 	}
 
@@ -538,4 +519,104 @@ func TestAnalyticsHourlyMeterIsNotZero(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, daily, 1)
 	require.Equal(t, "240", daily[0].ActiveConsumption.String(), "the whole day, 00:00 to 24:00")
+}
+
+// analyticsReading is one load_profile row; a nil active is a row whose meter
+// registers the gateway could not read (PM5340 sends these with generation only).
+func analyticsReading(analyzerID uuid.UUID, ts time.Time, active *decimal.Decimal, export string) model.MeterReading {
+	return model.MeterReading{AnalyzerID: analyzerID, Ts: ts, Kind: model.ReadingKindLoadProfile,
+		ActiveImport: active, ActiveExport: analyticsDecPtr(export), MultiplierApplied: decimal.RequireFromString("1"),
+		SourceProvider: model.IntegrationProviderPM5340, IngestedAt: time.Now().UTC()}
+}
+
+// R498: a register the meter did not report must not blank its bucket — the
+// bucket's first and last are the first and last REPORTED values.
+func TestAnalyticsNullRegistersDoNotBlankTheBucket(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
+	id := tenant.Analyzers[0].ID
+	ist := time.FixedZone("TRT", 3*3600)
+	day := time.Date(2026, time.January, 27, 0, 0, 0, 0, ist)
+
+	rows := []model.MeterReading{
+		analyticsReading(id, day, analyticsDecPtr("9000.0000"), "10"),
+		analyticsReading(id, day.Add(17*time.Hour), analyticsDecPtr("9121.0000"), "14"),
+		analyticsReading(id, day.Add(17*time.Hour+15*time.Minute), nil, "15"), // meter unreadable from here on
+		analyticsReading(id, day.Add(24*time.Hour), nil, "16"),
+		analyticsReading(id, day.Add(30*time.Hour), nil, "20"),
+	}
+	testfixtures.InsertReadings(t, ctx, pool, tenant.Scope.CompanyID, rows)
+	repo := postgres.NewAnalyticsRepository(pool)
+
+	daily, err := repo.ConsumptionDaily(ctx, tenant.Scope, []uuid.UUID{id}, store.TimeRange{From: day, To: day.Add(48 * time.Hour)})
+	require.NoError(t, err)
+	require.Len(t, daily, 2)
+	require.NotNil(t, daily[0].ActiveConsumption, "the day has two reported indexes")
+	require.Equal(t, "121", daily[0].ActiveConsumption.String())
+	require.Equal(t, "9121", daily[0].ActiveIndex.String(), "the closing index is the last reported one")
+	require.Equal(t, "6", daily[0].ActiveGeneration.String(), "export still differences to the next day's first reading")
+	require.Nil(t, daily[1].ActiveConsumption, "a day with no reported index has no consumption")
+
+	monthly, err := repo.ConsumptionMonthly(ctx, tenant.Scope, []uuid.UUID{id},
+		store.TimeRange{From: time.Date(2026, time.January, 1, 0, 0, 0, 0, ist), To: time.Date(2026, time.February, 1, 0, 0, 0, 0, ist)})
+	require.NoError(t, err)
+	require.Len(t, monthly, 1)
+	require.Equal(t, "121", monthly[0].ActiveConsumption.String())
+}
+
+// R499: months and years are rolled up from consumption_daily at query time,
+// so they need no refresh, include the meter's first month, and never absorb
+// a gap between two months into the later one.
+func TestAnalyticsMonthlyAndYearlyRollUpFromDaily(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 1)
+	id := tenant.Analyzers[0].ID
+	ist := time.FixedZone("TRT", 3*3600)
+	at := func(month time.Month, d, h int) time.Time { return time.Date(2025, month, d, h, 0, 0, 0, ist) }
+
+	rows := []model.MeterReading{
+		// The meter's first month starts mid-month.
+		analyticsReading(id, at(time.March, 21, 3), analyticsDecPtr("100"), "0"),
+		analyticsReading(id, at(time.March, 31, 23), analyticsDecPtr("180"), "0"),
+		// April is whole: readings on both edges.
+		analyticsReading(id, at(time.April, 1, 0), analyticsDecPtr("181"), "0"),
+		analyticsReading(id, at(time.April, 15, 0), analyticsDecPtr("250"), "0"),
+		analyticsReading(id, at(time.May, 1, 0), analyticsDecPtr("300"), "0"),
+		analyticsReading(id, at(time.May, 10, 0), analyticsDecPtr("340"), "0"),
+		// Nothing until late August: the register kept counting meanwhile.
+		analyticsReading(id, at(time.August, 27, 0), analyticsDecPtr("5000"), "0"),
+		analyticsReading(id, at(time.August, 31, 0), analyticsDecPtr("5040"), "0"),
+	}
+	testfixtures.InsertReadings(t, ctx, pool, tenant.Scope.CompanyID, rows)
+	repo := postgres.NewAnalyticsRepository(pool)
+
+	monthly, err := repo.ConsumptionMonthly(ctx, tenant.Scope, []uuid.UUID{id},
+		store.TimeRange{From: at(time.January, 1, 0), To: at(time.December, 1, 0)})
+	require.NoError(t, err)
+	got := map[time.Month]string{}
+	closed := map[time.Month]bool{}
+	for _, b := range monthly {
+		m := b.Bucket.In(ist).Month()
+		require.NotNil(t, b.ActiveConsumption, "%s", m)
+		got[m], closed[m] = b.ActiveConsumption.String(), b.ClosedByBoundary
+	}
+	require.Equal(t, map[time.Month]string{
+		time.March:  "81",  // 181 − 100: runs to April's first reading, which sits on the edge
+		time.April:  "119", // 300 − 181
+		time.May:    "40",  // 340 − 300: no reading on June's edge, so its own last
+		time.August: "40",  // 5040 − 5000: the gap since May is nobody's consumption
+	}, got)
+	require.Equal(t, map[time.Month]bool{time.March: true, time.April: true, time.May: false, time.August: false}, closed)
+	require.EqualValues(t, 2, monthly[0].ReadingCount)
+
+	yearly, err := repo.ConsumptionYearly(ctx, tenant.Scope, []uuid.UUID{id},
+		store.TimeRange{From: at(time.January, 1, 0), To: at(time.December, 31, 0)})
+	require.NoError(t, err)
+	require.Len(t, yearly, 1)
+	require.Equal(t, "4940", yearly[0].ActiveConsumption.String(), "a year is its last index minus its first")
+	require.False(t, yearly[0].ClosedByBoundary)
 }

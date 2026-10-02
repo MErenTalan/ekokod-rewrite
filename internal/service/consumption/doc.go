@@ -2,10 +2,8 @@
 // requires to be different functions with different guarantees (R61):
 //
 //   - Analytics.Consumption reads ONLY the continuous aggregates through
-//     store.AnalyticsRepository. It is fast and slightly understates a
-//     period at the finest levels (it misses the step between the last
-//     reading of one bucket and the first of the next), and it never
-//     touches meter_readings.
+//     store.AnalyticsRepository (months and years rolled up from the daily
+//     one, R499). It is fast, and it never touches meter_readings.
 //   - Billing.Consumption reads ONLY meter_readings at true period
 //     boundaries through store.ReadingRepository. It is exact, slower, and
 //     is the only path that may feed an invoice. A suspect period returns
@@ -187,27 +185,16 @@ type SeriesRequest struct {
 // produced the row (R62) — energy.Kind, not a bare string, so an invalid
 // value cannot compile. Indexes carries the register's CLOSING index for
 // the period (05 §5 "every index field", Task 9): Analytics fills it from
-// the bucket's own closing index columns, Billing from the end boundary
-// reading — a composed Analytics row (below) only ever has the seven
-// registers migration 00005 gives consumption_daily a closing-index column
-// to: the other five (every export register but active_export) are
-// always nil there, exactly as they are absent from bucketIndexes' map.
-// Partial is true for every bucket Analytics composes from consumption_daily
-// at Monthly/Yearly (R94, amending R88) — the still-open trailing period AND
-// any earlier closed-but-unrefreshed one — never set by Billing: R98 drops
-// every bucket whose To is after BillingDeps.Clock's Now before it can ever
-// become a row, so Billing has no open period left to mark Partial in the
-// first place; it must never silently emit an open period as if it were a
-// closed, complete one. A composed figure is closing-to-closing across
-// whatever materialisation gap it fills and is NOT directly comparable to
-// the later materialised row for the same window — it can differ by the
-// boundary step the materialised aggregate itself measures differently once
-// the underlying data is refreshed. Resolution is populated by Task 8's
-// override-substitution logic in billing.go: a register present here was
-// covered by a resolved manual_override anomaly for this window, and its
-// Values entry is the operator-supplied figure, not a derived one. Task 7
-// itself always leaves this nil — there is no anomaly-reading logic in
-// Task 7's own Consumption.
+// the bucket's own closing index (seven registers: the six import ones and
+// active_export), Billing from the end boundary reading.
+// Partial is set by Analytics only, on a month or year that the next
+// period's first reading does not close (R499): the period is still open, or
+// its data stops short of its end. Billing never sets it — R98 drops every
+// bucket that has not closed, so an invoice-grade figure is complete or
+// absent. Resolution is populated by Task 8's override-substitution logic in
+// billing.go: a register present here was covered by a resolved
+// manual_override anomaly for this window, and its Values entry is the
+// operator-supplied figure, not a derived one.
 type Row struct {
 	AnalyzerID uuid.UUID
 	Window     energy.Window
