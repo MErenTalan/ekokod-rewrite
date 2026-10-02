@@ -1,16 +1,16 @@
-# Handoff — ekokod rewrite: F21 audit fixes on `fix/f21-audit`, not merged, not deployed
+# Handoff — ekokod rewrite: F21 audit fixes merged into `main` and deployed
 
-> **STATUS (2026-10-02):** F21 audited every main feature against the real PM5340 gateway and through
-> the web UI, and fixed what it found (R498–R514 + web fixes) on branch **`fix/f21-audit`**
-> (`/home/personal/ekokod-f21-audit`, cut from `main` 8a21a33). Plan and rulings:
-> `docs/superpowers/plans/2026-10-02-f21-audit-fixes.md`.
-> **Not merged into `main`, not pushed, not deployed** — all three are the user's call. The server
-> (new.ekokod.com) still runs `ee91a8c`; `main`'s `1f4cb0d` is not deployed either.
+> **STATUS (2026-10-02 17:15):** F21 audited every main feature against the real PM5340 gateway and
+> through the web UI, and fixed what it found (R498–R514 + web fixes). Plan and rulings:
+> `docs/superpowers/plans/2026-10-02-f21-audit-fixes.md`. At the user's request the branch
+> `fix/f21-audit` was merged into `main` (**`de2dfeb`**) and deployed with `deploy-main.sh`:
+> new.ekokod.com runs `de2dfeb`, migrations 23 → 25 applied, every container healthy, no error in the
+> first minutes of worker/scheduler/api logs. Rollback material: `/opt/ekokod-new.prev-20261002-171105`
+> and `/root/ekokod-new-pre-de2dfeb-20261002-171105.dump`. **Nothing is pushed to a remote.**
 >
-> **To ship:** merge `fix/f21-audit` into `main`, then `! bash /home/personal/deploy-main.sh`
-> (migrations 00024 and 00025 run on start; a pg_dump is taken first). After it: each linked iSolar plant
-> pulls up to 400 days of history on its first sync, and the PM5340 history is pulled from
-> Ayarlar › Şirket › entegrasyon › "Geçmiş veriyi çek".
+> **After the deploy, on the server:** each linked iSolar plant pulls its history on its first sync;
+> the PM5340 history is pulled from Ayarlar › Şirket › entegrasyon › "Geçmiş veriyi çek". Neither was
+> watched to completion on the server.
 >
 > **Open, for the product owner to decide** (see the plan's "Known, not changed"): a year's figure
 > includes silent gaps; the power alarm reads PM5340's peak-demand register (as legacy did); iSolar
@@ -22,12 +22,12 @@
 ## Paste this as the first message of the next session (only when there is new input)
 
 > Bu, bcem-energy'nin (yeni adıyla ekokod) Go ile yeniden yazım projesi. Spesifikasyon `docs/rewrite/`
-> içinde. F0–F20 `main`'de. **F21 (gerçek veriyle özellik denetimi ve düzeltmeler) `fix/f21-audit`
-> dalında (`/home/personal/ekokod-f21-audit`) bitti; `main`'e merge edilmedi, deploy edilmedi.**
+> içinde. F0–F21 `main`'de (`/home/personal/ekokod-f17-ekocm` worktree'si `main`'i tutuyor). **F21 (gerçek
+> veriyle özellik denetimi ve düzeltmeler) merge edildi ve new.ekokod.com'a deploy edildi (`de2dfeb`).**
 >
-> Önce `/home/personal/ekokod-f21-audit/HANDOFF_NEXT_SESSION.md` ve
+> Önce `/home/personal/ekokod-f17-ekocm/HANDOFF_NEXT_SESSION.md` ve
 > `docs/superpowers/plans/2026-10-02-f21-audit-fixes.md`'yi oku. Sonra şu yeni girdiyle çalış:
-> **<buraya ne getirdiğini yaz — örn. "merge ettim ve deploy ettim, sunucuda şunu gördüm: …">**.
+> **<buraya ne getirdiğini yaz — örn. "sunucuda geçmiş veriyi çektim, şunu gördüm: …">**.
 >
 > **Çalışma düzeni (kesin):** paralel agent YOK, subagent YOK, Workflow YOK. İşi bu oturumda kendin
 > yürüt (`superpowers:executing-plans` + TDD). Her task sonunda diff'i oku, guard'ı kendi mutasyonunla
