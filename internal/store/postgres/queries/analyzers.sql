@@ -151,11 +151,24 @@ where id = sqlc.arg(id)
        or (building_id is not null and building_id = any(sqlc.arg(building_ids)::uuid[])))
   and deleted_at is null;
 
--- name: AnalyzerTouchLastReading :execrows
-update analyzers
-set last_reading_at = greatest(coalesce(last_reading_at, '-infinity'::timestamptz), sqlc.arg(at))
-where id = sqlc.arg(id)
-  and company_id = sqlc.arg(company_id)
-  and (sqlc.arg(all_buildings)::boolean
-       or (building_id is not null and building_id = any(sqlc.arg(building_ids)::uuid[])))
-  and deleted_at is null;
+-- name: AnalyzerTouchLastReading :one
+-- R508: the row is written, and so locked, only when the mark really moves:
+-- a backfill's older windows find it ahead and touch nothing. The recheck is
+-- on the row's own column, so two racing touches still end at the later one.
+-- found is whether the analyzer is visible at all.
+with visible as (
+    select v.id from analyzers v
+    where v.id = sqlc.arg(id)
+      and v.company_id = sqlc.arg(company_id)
+      and (sqlc.arg(all_buildings)::boolean
+           or (v.building_id is not null and v.building_id = any(sqlc.arg(building_ids)::uuid[])))
+      and v.deleted_at is null
+), touched as (
+    update analyzers a
+    set last_reading_at = sqlc.arg(at)
+    from visible
+    where a.id = visible.id
+      and (a.last_reading_at is null or a.last_reading_at < sqlc.arg(at))
+    returning a.id
+)
+select exists(select 1 from visible) as found, exists(select 1 from touched) as moved;

@@ -258,8 +258,11 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 			acc.addRejections(realRejected)
 			acc.addWarnings(res.Warnings)
 			for _, f := range sanityFlags {
-				s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "error",
-					"sustained register jump — review",
+				// A warning, not an error: nothing was lost (R509). It asks an
+				// operator whether the meter or its multiplier changed.
+				s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "warning",
+					fmt.Sprintf("%s: sayaç endeksinde kalıcı bir sıçrama görüldü (%s). Okumalar kaydedildi; sayaç ya da çarpan değişti mi, kontrol edin.",
+						analyzer.InstallationNumber, f.Ts.In(normalize.Istanbul).Format("02.01.2006 15:04")),
 					mustJSON(map[string]any{"analyzer_id": analyzer.ID, "kind": p.Kind, "ts": f.Ts}))
 			}
 

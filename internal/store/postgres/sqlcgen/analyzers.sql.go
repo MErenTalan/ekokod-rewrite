@@ -420,36 +420,53 @@ func (q *Queries) AnalyzerSoftDelete(ctx context.Context, arg AnalyzerSoftDelete
 	return result.RowsAffected(), nil
 }
 
-const analyzerTouchLastReading = `-- name: AnalyzerTouchLastReading :execrows
-update analyzers
-set last_reading_at = greatest(coalesce(last_reading_at, '-infinity'::timestamptz), $1)
-where id = $2
-  and company_id = $3
-  and ($4::boolean
-       or (building_id is not null and building_id = any($5::uuid[])))
-  and deleted_at is null
+const analyzerTouchLastReading = `-- name: AnalyzerTouchLastReading :one
+with visible as (
+    select v.id from analyzers v
+    where v.id = $1
+      and v.company_id = $2
+      and ($3::boolean
+           or (v.building_id is not null and v.building_id = any($4::uuid[])))
+      and v.deleted_at is null
+), touched as (
+    update analyzers a
+    set last_reading_at = $5
+    from visible
+    where a.id = visible.id
+      and (a.last_reading_at is null or a.last_reading_at < $5)
+    returning a.id
+)
+select exists(select 1 from visible) as found, exists(select 1 from touched) as moved
 `
 
 type AnalyzerTouchLastReadingParams struct {
-	At           pgtype.Timestamptz
 	ID           uuid.UUID
 	CompanyID    uuid.UUID
 	AllBuildings bool
 	BuildingIds  []uuid.UUID
+	At           pgtype.Timestamptz
 }
 
-func (q *Queries) AnalyzerTouchLastReading(ctx context.Context, arg AnalyzerTouchLastReadingParams) (int64, error) {
-	result, err := q.db.Exec(ctx, analyzerTouchLastReading,
-		arg.At,
+type AnalyzerTouchLastReadingRow struct {
+	Found bool
+	Moved bool
+}
+
+// R508: the row is written, and so locked, only when the mark really moves:
+// a backfill's older windows find it ahead and touch nothing. The recheck is
+// on the row's own column, so two racing touches still end at the later one.
+// found is whether the analyzer is visible at all.
+func (q *Queries) AnalyzerTouchLastReading(ctx context.Context, arg AnalyzerTouchLastReadingParams) (AnalyzerTouchLastReadingRow, error) {
+	row := q.db.QueryRow(ctx, analyzerTouchLastReading,
 		arg.ID,
 		arg.CompanyID,
 		arg.AllBuildings,
 		arg.BuildingIds,
+		arg.At,
 	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+	var i AnalyzerTouchLastReadingRow
+	err := row.Scan(&i.Found, &i.Moved)
+	return i, err
 }
 
 const analyzerUpdate = `-- name: AnalyzerUpdate :one
