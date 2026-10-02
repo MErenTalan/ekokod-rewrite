@@ -57,7 +57,15 @@ func (s *Service) RefreshAnalyzer(ctx context.Context, p job.RefreshAnalyzerPayl
 	}
 	if enqueued == 0 {
 		s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "warning",
-			fmt.Sprintf("Analizör %s için %s yenilemesi bu sağlayıcıda desteklenmiyor.", analyzer.InstallationNumber, p.Mode), nil)
+			fmt.Sprintf("Analizör %s: sağlayıcısı %s sunmuyor, yenilenecek veri yok.", analyzer.InstallationNumber, refreshModeText(p.Mode)), nil)
 	}
 	return nil
+}
+
+// refreshModeText names a refresh mode for an operator.
+func refreshModeText(mode string) string {
+	if mode == job.RefreshModeHourly {
+		return "saatlik değer"
+	}
+	return "enerji (endeks) değeri"
 }

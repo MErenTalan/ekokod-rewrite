@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { childProgress } from './use-job';
+import { childProgress, nothingToFetch } from './use-job';
 
 const base = { already_queued: 0, running: 0, succeeded: 0, partial: 0, failed: 0, errors: [] };
 
@@ -27,5 +27,18 @@ describe('childProgress', () => {
       total: 4,
       status: 'succeeded',
     });
+  });
+});
+
+describe('nothingToFetch', () => {
+  it('is a refresh the provider has no data for, not a finished 0 of 0', () => {
+    expect(nothingToFetch({ ...base, enqueued: 0 })).toBe(true);
+    expect(nothingToFetch(base)).toBe(true);
+  });
+
+  it('is not a run whose windows were already queued or did some work', () => {
+    expect(nothingToFetch({ ...base, already_queued: 2 })).toBe(false);
+    expect(nothingToFetch({ ...base, enqueued: 1, succeeded: 1 })).toBe(false);
+    expect(nothingToFetch({ ...base, running: 1 })).toBe(false);
   });
 });

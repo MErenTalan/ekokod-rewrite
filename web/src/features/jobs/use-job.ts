@@ -30,6 +30,11 @@ export function childProgress(c: Children): {
   return { done, total, status: 'succeeded' };
 }
 
+/** A finished parent that queued nothing: the provider has no such data to pull. */
+export function nothingToFetch(c: Children): boolean {
+  return childProgress(c).total === 0 && c.already_queued === 0;
+}
+
 const TONE: Record<string, JobView['status']> = {
   queued: 'queued',
   running: 'running',
@@ -90,6 +95,8 @@ export function useJob(
     const status = TONE[query.data?.status ?? 'queued'] ?? 'queued';
     const children = query.data?.children;
     if (children && status === 'succeeded') {
+      // "0 of 0 finished" reads as success; say that nothing was there to pull.
+      if (nothingToFetch(children)) return { job: { id: jobId, label, status, message: t('nothingToFetch') } };
       const p = childProgress(children);
       return {
         job: {

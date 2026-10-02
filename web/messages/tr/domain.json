@@ -56,6 +56,7 @@
     "progress": "{label} ilerlemesi",
     "stillRunning": "İş hâlâ çalışıyor; bu ekranı kapatabilirsiniz.",
     "refreshQueued": "Veri çekme başlatıldı; değerler birkaç dakika içinde görünür.",
+    "nothingToFetch": "Çekilecek veri yok: bu analizörün sağlayıcısı bu tür veriyi sunmuyor.",
     "children": "{done}/{total} alt iş bitti · {succeeded} başarılı · {failed} başarısız{already, plural, =0 {} other { · # pencere zaten kuyrukta}}"
   },
   "quality": {
