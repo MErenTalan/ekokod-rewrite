@@ -96,10 +96,10 @@ func (s *Service) Run(ctx context.Context, companyID uuid.UUID, now time.Time) e
 	}
 	// R219: ONE summary per run. A row per rule per hour would be millions a
 	// month, and the alarm log already records every firing.
-	return s.appendRunSummary(ctx, sc, status, processed, skipped, failed, notified)
+	return s.appendRunSummary(ctx, sc, processed, skipped, failed, notified)
 }
 
-func (s *Service) appendRunSummary(ctx context.Context, sc store.Scope, status string, processed, skipped, failed, notified int32) error {
+func (s *Service) appendRunSummary(ctx context.Context, sc store.Scope, processed, skipped, failed, notified int32) error {
 	messageStatus := "success"
 	switch {
 	case failed > 0:
@@ -110,8 +110,9 @@ func (s *Service) appendRunSummary(ctx context.Context, sc store.Scope, status s
 	companyID := sc.CompanyID
 	_, err := s.rd.Ops.AppendMessage(ctx, sc, model.OperationalMessage{
 		CompanyID: &companyID, Kind: "job", Category: runCategory, Status: messageStatus,
-		Message: fmt.Sprintf("Alarm değerlendirmesi tamamlandı (%s): %d kural işlendi, %d tetiklenmedi, %d hata, %d bildirim.",
-			status, processed, skipped, failed, notified),
+		// R514: what fired, in plain words; the run's status is the row's own.
+		Message: fmt.Sprintf("Alarm değerlendirmesi tamamlandı: %d kural işlendi, %d alarm tetiklendi, %d kural hata verdi, %d bildirim kuyruğa alındı.",
+			processed, processed-skipped, failed, notified),
 		CreatedAt: s.d.Clock.Now(),
 	})
 	return err

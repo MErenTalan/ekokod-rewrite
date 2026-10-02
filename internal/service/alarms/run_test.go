@@ -313,6 +313,9 @@ func TestRunRecordsOneJobRunAndOneSummaryMessage(t *testing.T) {
 	summaries := f.ops.byCategory("alarm-evaluate")
 	require.Len(t, summaries, 1)
 	require.Contains(t, summaries[0].Message, "1 kural işlendi")
+	// R514: plain Turkish, counting what fired rather than what did not.
+	require.Contains(t, summaries[0].Message, "1 alarm tetiklendi")
+	require.NotContains(t, summaries[0].Message, "success")
 }
 
 func TestRunCountsANonFiringRuleAsSkipped(t *testing.T) {
