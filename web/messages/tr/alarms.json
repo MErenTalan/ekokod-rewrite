@@ -34,6 +34,7 @@
     "powerMin": "Güç Min (kW)",
     "invoiceThresholdPct": "Fatura Artış Eşiği (%)",
     "inLast": "Son",
+    "unit": "Birim",
     "hours": "saat",
     "days": "gün"
   },
@@ -51,7 +52,8 @@
   "errors": {
     "required": "Bu alan zorunludur.",
     "invalid": "Geçersiz değer.",
-    "atLeastOne": "En az bir alarm limiti girilmelidir."
+    "atLeastOne": "En az bir alarm limiti girilmelidir.",
+    "periodMissing": "Girilen limitin süresi de girilmelidir: limit ve “Son” alanı birlikte doldurulur."
   },
   "events": {
     "title": "Alarm Logları",
@@ -62,6 +64,7 @@
     "delivered": "Gönderildi",
     "failed": "Gönderilemedi",
     "pending": "Bekliyor",
+    "noChannel": "Bildirim kanalı yok",
     "settingsTitle": "Kural ayarları",
     "emptyDescription": "Bu kural henüz tetiklenmedi."
   },

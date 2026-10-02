@@ -37,6 +37,22 @@ describe('alarm draft', () => {
     })).toEqual({});
   });
 
+  it('counts a limit with its period even when the unit was left at the shown default', () => {
+    const draft = { ...base, settings: { capacitive_ratio_threshold: '15', capacitive_period_value: '24' } };
+    expect(draftErrors(draft)).toEqual({});
+    expect(toAlarmRequest(draft).settings).toEqual({
+      capacitive_ratio_threshold: '15', capacitive_period_value: 24, capacitive_period_unit: 'hours',
+    });
+  });
+
+  it('names the missing half of a limit instead of asking for a limit', () => {
+    expect(draftErrors({ ...base, settings: { capacitive_ratio_threshold: '15' } }).settings).toBe('periodMissing');
+    expect(draftErrors({ ...base, settings: { capacitive_period_value: '24' } }).settings).toBe('periodMissing');
+    expect(draftErrors({ ...base, settings: {} }).settings).toBe('atLeastOne');
+    // A unit alone is what the select shows by default, not something typed.
+    expect(draftErrors({ ...base, settings: { capacitive_period_unit: 'days' } }).settings).toBe('atLeastOne');
+  });
+
   it('requires one power bound and one comms threshold', () => {
     expect(draftErrors({ ...base, type: 'current_voltage_power' })).toHaveProperty('settings');
     expect(draftErrors({ ...base, type: 'current_voltage_power', settings: { power_min: '5' } })).toEqual({});

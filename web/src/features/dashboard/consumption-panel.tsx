@@ -36,6 +36,8 @@ export type ConsumptionPanelViewProps = {
   onShowChange: (show: SeriesToggles) => void;
   actions?: ReactNode;
   loading?: boolean;
+  /** No building is selected, so nothing was asked for: the empty state says so rather than "no data". */
+  needsBuilding?: boolean;
 };
 
 /**
@@ -54,8 +56,12 @@ export function ConsumptionPanelView({
   onShowChange,
   actions,
   loading = false,
+  needsBuilding = false,
 }: ConsumptionPanelViewProps) {
   const t = useTranslations('dashboard.consumption');
+  const empty = needsBuilding
+    ? { title: t('selectBuilding'), description: t('selectBuildingHint') }
+    : { title: t('empty'), description: t('emptyHint') };
   const units = useTranslations('units');
   const locale = useLocale() as Locale;
   const [draft, setDraft] = useState({ granularity, range });
@@ -156,7 +162,7 @@ export function ConsumptionPanelView({
           data={data}
           series={series}
           loading={loading}
-          empty={{ title: t('empty'), description: t('emptyHint') }}
+          empty={empty}
         />
         {yoy ? (
           <BarChart
@@ -169,7 +175,7 @@ export function ConsumptionPanelView({
               { key: 'previous', label: t('previousYear'), kind: 'previous', unit: 'kWh' },
             ]}
             loading={loading}
-            empty={{ title: t('empty'), description: t('emptyHint') }}
+            empty={empty}
           />
         ) : (
           <p className="text-foreground-muted type-small">{t('yoyOnlyMonthly')}</p>
@@ -181,7 +187,7 @@ export function ConsumptionPanelView({
           getRowId={(row) => row.period_start}
           pageSize={10}
           loading={loading}
-          empty={{ title: t('empty'), description: t('emptyHint') }}
+          empty={empty}
         />
       </CardContent>
     </Card>

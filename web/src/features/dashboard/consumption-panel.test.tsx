@@ -56,6 +56,12 @@ describe('ConsumptionPanelView', () => {
     expect(onShowChange).toHaveBeenCalledWith({ active: true, inductive: true, capacitive: true });
   });
 
+  it('asks for a building instead of claiming there is no data when none is selected', () => {
+    const { getAllByText, queryByText } = renderWithProviders(view({ rows: [], needsBuilding: true }));
+    expect(getAllByText('Tüketimi görmek için bir bina seçin').length).toBeGreaterThan(0);
+    expect(queryByText('Seçilen dönem için veri yok')).toBeNull();
+  });
+
   it('shows the year-over-year bars only when a comparison was loaded', () => {
     const without = renderWithProviders(view());
     expect(without.getByText('Yıllık karşılaştırma, tek bir yıl içindeki aylık görünümde gösterilir.')).toBeInTheDocument();

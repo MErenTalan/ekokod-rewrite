@@ -19,6 +19,15 @@ describe('ReactiveStatusCard', () => {
     expect(getByText('Reaktif ceza uygulandı')).toBeInTheDocument();
   });
 
+  it('a measured ratio is shown to two decimals, not as the API sent it', () => {
+    const { getByText, queryByText } = renderWithProviders(
+      <ReactiveStatusCard {...base} inductive={{ ratio: '0.000085781276806649', limit: '0.20' }} capacitive={{ ratio: '0.37501667969271240397', limit: '0.15' }} />,
+    );
+    expect(getByText('%37,5')).toBeInTheDocument();
+    expect(getByText('%0,01')).toBeInTheDocument();
+    expect(queryByText(/501667/)).toBeNull();
+  });
+
   it('null ratio is no-data, never zero', () => {
     const { getAllByText, container } = renderWithProviders(
       <ReactiveStatusCard {...base} penaltyApplied={null} inductive={{ ratio: null, limit: '0.20' }} capacitive={{ ratio: null, limit: '0.15' }} />,

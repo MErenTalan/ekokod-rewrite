@@ -13,7 +13,7 @@ import { Switch } from '@/components/ui/switch';
 import type { Analyzer } from '@/lib/api/types';
 
 import { ALARM_KINDS, typeLabelKey } from './alarm-labels';
-import { clearForType, draftErrors, type AlarmDraft, type AlarmKind, type PeriodUnit, type SettingsKey } from './alarm-draft';
+import { clearForType, draftErrors, isPristine, type AlarmDraft, type AlarmKind, type PeriodUnit, type SettingsKey } from './alarm-draft';
 
 export type AlarmDialogViewProps = {
   open: boolean;
@@ -54,14 +54,22 @@ export function AlarmDialogView({
 
   const setSetting = (key: SettingsKey, value: string) =>
     onDraftChange({ ...draft, settings: { ...draft.settings, [key]: value } });
+  // An untouched form is not wrong yet: Save stays disabled, the text waits.
+  const pristine = isPristine(draft);
   const errorText = (key: string) => {
     const code = errors[key];
-    if (!code) return undefined;
-    // draftErrors only ever emits these three codes; the map keeps the key
-    // literal so next-intl can type-check it.
-    const messages = { required: t('errors.required'), invalid: t('errors.invalid'), atLeastOne: t('errors.atLeastOne') };
+    if (!code || pristine) return undefined;
+    // draftErrors only ever emits these codes; the map keeps the key literal
+    // so next-intl can type-check it.
+    const messages = {
+      required: t('errors.required'), invalid: t('errors.invalid'),
+      atLeastOne: t('errors.atLeastOne'), periodMissing: t('errors.periodMissing'),
+    };
     return messages[code as keyof typeof messages];
   };
+  const limitsAlert = errors.settings
+    ? <Alert tone={pristine ? 'info' : 'warning'} title={errorText('settings') ?? t('errors.atLeastOne')} />
+    : null;
 
   const unitOptions = [
     { value: 'hours', label: t('fields.hours') },
@@ -113,7 +121,7 @@ export function AlarmDialogView({
 
         {draft.type === 'reactive_limit' ? (
           <div className="flex flex-col gap-4">
-            {errors.settings ? <Alert tone="warning" title={t('errors.atLeastOne')} /> : null}
+            {limitsAlert}
             {REACTIVE_FIELDS.map((group) => (
               <div key={group.threshold} className="grid gap-3 sm:grid-cols-3">
                 <Input
@@ -129,7 +137,7 @@ export function AlarmDialogView({
                   onChange={(e) => setSetting(group.value, e.target.value)}
                 />
                 <Select
-                  label={t('fields.hours')}
+                  label={t('fields.unit')}
                   value={draft.settings[group.unit] ?? 'hours'}
                   onValueChange={(value) => setSetting(group.unit, value)}
                   options={unitOptions}
@@ -152,7 +160,7 @@ export function AlarmDialogView({
 
         {draft.type === 'current_voltage_power' ? (
           <div className="flex flex-col gap-3">
-            {errors.settings ? <Alert tone="warning" title={t('errors.atLeastOne')} /> : null}
+            {limitsAlert}
             <p className="text-foreground-muted type-caption">{t('powerDescription')}</p>
             <div className="grid gap-3 sm:grid-cols-2">
               <Input
@@ -191,7 +199,7 @@ export function AlarmDialogView({
             onChange={(e) => onDraftChange({ ...draft, frequencyValue: e.target.value })}
           />
           <Select
-            label={t('fields.inLast')}
+            label={t('fields.unit')}
             value={draft.frequencyUnit || 'hours'}
             error={errorText('frequencyUnit')}
             onValueChange={(value) => onDraftChange({ ...draft, frequencyUnit: value as PeriodUnit })}

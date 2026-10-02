@@ -97,6 +97,35 @@ describe('BillsPage', () => {
     expect(await screen.findByRole('button', { name: /Faturayı indir/ })).toBeVisible();
   });
 
+  it('shows the new bill in the table once its job ends, not only when it was queued', async () => {
+    const user = userEvent.setup();
+    let polls = 0;
+    let done = false;
+    const jobId = 'billing.generate:company:c-own:2026-08';
+    const fresh = {
+      ...demoDashboard,
+      buildings: [{
+        ...demoDashboard.buildings[0],
+        rows: [...demoDashboard.buildings[0].rows, { ...demoDashboard.buildings[0].rows[0], bill_id: 'bill-9', analyzer_name: 'Sayaç Yeni' }],
+      }],
+    };
+    api = mockApi({
+      ...ROUTES,
+      'GET /api/v1/bills/dashboard': () => Response.json(done ? fresh : demoDashboard),
+      'GET /api/v1/jobs/billing.generate%3Acompany%3Ac-own%3A2026-08': () => {
+        // The bill exists only when the job has ended: the first poll still runs.
+        done = ++polls > 1;
+        return Response.json({ id: jobId, type: 'billing.generate', status: done ? 'succeeded' : 'running' });
+      },
+      'GET /api/v1/bills': { items: [], total: 0 },
+    });
+    render();
+    await pickAugust(user);
+
+    await user.click(await screen.findByRole('button', { name: /Şirket faturası/ }));
+    expect(await screen.findByRole('cell', { name: 'Sayaç Yeni' }, { timeout: 6000 })).toBeVisible();
+  }, 10000);
+
   it('names the data condition that stopped a generation', async () => {
     const user = userEvent.setup();
     api = mockApi(ROUTES);

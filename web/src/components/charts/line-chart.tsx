@@ -7,6 +7,7 @@ import { formatNumber, unitSymbol } from '@/lib/format';
 
 import { ChartFrame, type BaseChartProps } from './_chart-frame';
 import { ChartTooltip } from './_chart-tooltip';
+import { isolatedDot } from './_isolated-dot';
 import { ACTIVE_DOT, AXIS, chartAnimation, GRID, LINE_CURSOR, seriesStyle, toPlot, toPlotData } from './_theme';
 import { usePrefersReducedMotion } from './use-reduced-motion';
 
@@ -28,9 +29,11 @@ export function LineChart({ band, directLabels = true, ...props }: LineChartProp
       {...props}
       legendExtra={band ? [{ label: band.label || t('forecastBand'), color: 'var(--color-forecast)', dash: '6 4', swatch: 'area' }] : undefined}
     >
-      {(plot) => (
+      {(plot) => {
+        const rows = toPlotData(plot, keys);
+        return (
         <ResponsiveContainer width="100%" height={height} initialDimension={{ width: 640, height }}>
-          <ComposedChart data={toPlotData(plot, keys)} margin={{ top: 8, right: labelRoom, bottom: 4, left: 4 }} accessibilityLayer title={title} desc={description}>
+          <ComposedChart data={rows} margin={{ top: 8, right: labelRoom, bottom: 4, left: 4 }} accessibilityLayer title={title} desc={description}>
             <CartesianGrid {...GRID} vertical={false} />
             <XAxis dataKey="x" tickFormatter={formatX} {...AXIS} />
             <YAxis
@@ -62,7 +65,7 @@ export function LineChart({ band, directLabels = true, ...props }: LineChartProp
                   stroke={style.color}
                   strokeDasharray={style.dash}
                   strokeWidth={2}
-                  dot={false}
+                  dot={isolatedDot(rows, s.key, style.color)}
                   activeDot={ACTIVE_DOT}
                   connectNulls={false}
                   {...chartAnimation(reduced)}
@@ -84,7 +87,8 @@ export function LineChart({ band, directLabels = true, ...props }: LineChartProp
             })}
           </ComposedChart>
         </ResponsiveContainer>
-      )}
+        );
+      }}
     </ChartFrame>
   );
 }

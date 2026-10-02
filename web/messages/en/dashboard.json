@@ -76,6 +76,8 @@
     "tableCaption": "Consumption data",
     "empty": "No data for the selected period",
     "emptyHint": "Widen the date range or refresh the values.",
+    "selectBuilding": "Select a building to see its consumption",
+    "selectBuildingHint": "Pick a building with “Select” in the buildings list and its consumption trend appears here.",
     "yoyTitle": "Year-over-year",
     "yoyDescription": "The selected months against the same months a year earlier.",
     "currentPeriod": "Selected period",

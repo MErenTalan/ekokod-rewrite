@@ -99,5 +99,26 @@
     "autoRefresh": "The list refreshes every 10 seconds."
   },
   "emptyDescription": "Automated jobs and alarms appear here.",
-  "emptyFilteredDescription": "Try a different filter."
+  "emptyFilteredDescription": "Try a different filter.",
+  "categories": {
+    "analyzerRefresh": "Data fetch",
+    "backfill": "History",
+    "alarmTrigger": "Alarm notification",
+    "alarmEvaluate": "Alarm evaluation",
+    "isolarAlarm": "iSolarCloud alarm",
+    "marketImport": "Market data import",
+    "billGeneration": "Bill generation",
+    "carbonAccrual": "Carbon accrual",
+    "consumptionSuspectPeriod": "Suspect consumption period",
+    "marketPrices": "Market prices",
+    "auth": "Sign-in",
+    "reportDelivery": "Report delivery"
+  },
+  "relatedTypes": {
+    "consumptionAnomaly": "Consumption anomaly",
+    "alarm": "Alarm",
+    "bill": "Bill",
+    "user": "User",
+    "report": "Report"
+  }
 }

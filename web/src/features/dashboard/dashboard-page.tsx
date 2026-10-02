@@ -61,6 +61,11 @@ export function DashboardPage() {
     if (visibleIds === null && buildings.length > 0) setVisibleIds(buildings.map((b) => b.id));
   }, [buildings, visibleIds]);
 
+  useEffect(() => {
+    // A company with one building has nothing to choose: its panels open on it.
+    if (!buildingId && buildings.length === 1) set({ buildingId: buildings[0].id });
+  }, [buildings, buildingId, set]);
+
   const shownIds = visibleIds ?? buildings.map((b) => b.id);
   const analyzerNames = useMemo(
     () => Object.fromEntries(analyzers.map((a) => [a.id, analyzerLabel(a)])),
@@ -166,6 +171,7 @@ export function DashboardPage() {
         show={show}
         onShowChange={setShow}
         loading={seriesQuery.isFetching}
+        needsBuilding={!enabled}
         actions={<RefreshActions analyzerId={analyzerId ?? null} />}
       />
       <SectorComparisonView
