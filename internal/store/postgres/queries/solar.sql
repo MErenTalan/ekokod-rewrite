@@ -57,9 +57,15 @@ update power_plants
 set isolar_ps_id = sqlc.narg(isolar_ps_id), isolar_ps_key = sqlc.narg(isolar_ps_key),
     isolar_ps_name = sqlc.narg(isolar_ps_name), isolar_installed_kw = sqlc.narg(isolar_installed_kw),
     isolar_linked_at = sqlc.narg(isolar_linked_at), isolar_credential_id = sqlc.narg(isolar_credential_id),
-    total_capacity_kw = sqlc.narg(total_capacity_kw), updated_at = now()
+    total_capacity_kw = sqlc.narg(total_capacity_kw), isolar_history_through = null, updated_at = now()
 where id = sqlc.arg(id) and company_id = sqlc.arg(company_id) and deleted_at is null
 returning *;
+
+-- name: PlantSetHistoryThrough :execrows
+-- R506: a (re)link above clears it, so the next sync fetches the history again.
+update power_plants
+set isolar_history_through = sqlc.arg(through)::date
+where id = sqlc.arg(id) and company_id = sqlc.arg(company_id) and deleted_at is null;
 
 -- name: PlantListLinked :many
 select * from power_plants

@@ -152,6 +152,16 @@ func (r *ReadingRepository) BulkInsert(ctx context.Context, s store.Scope, rows 
 	if len(rows) == 0 {
 		return 0, 0, nil
 	}
+	// R508: the whole transaction is repeated when it was a deadlock's victim.
+	err = retryOnDeadlock(ctx, func() error {
+		var once error
+		inserted, updated, once = r.bulkInsertOnce(ctx, s, rows)
+		return once
+	})
+	return inserted, updated, err
+}
+
+func (r *ReadingRepository) bulkInsertOnce(ctx context.Context, s store.Scope, rows []model.MeterReading) (inserted, updated int, err error) {
 
 	const op = "reading bulk insert"
 	buildingIDs, allBuildings := s.BuildingFilter()

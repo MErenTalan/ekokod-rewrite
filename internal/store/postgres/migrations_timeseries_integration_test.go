@@ -125,8 +125,7 @@ func TestContinuousAggregatesExist(t *testing.T) {
 	pool := policyDB(t, ctx)
 
 	for _, name := range []string{
-		"consumption_hourly", "consumption_daily", "consumption_monthly",
-		"consumption_yearly", "plant_production_daily", "plant_production_monthly",
+		"consumption_hourly", "consumption_daily", "plant_production_daily", "plant_production_monthly",
 	} {
 		var n int
 		require.NoError(t, pool.QueryRow(ctx,
@@ -155,9 +154,7 @@ func TestConsumptionColumnsAreNumeric(t *testing.T) {
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
 
-	for _, view := range []string{
-		"consumption_hourly", "consumption_daily", "consumption_monthly", "consumption_yearly",
-	} {
+	for _, view := range []string{"consumption_hourly", "consumption_daily"} {
 		for _, column := range []string{
 			"active_import_start", "active_import_end", "active_consumption",
 			"inductive_consumption", "capacitive_consumption",
@@ -302,12 +299,11 @@ func refreshWindow(t *testing.T, ctx context.Context, pool *pgxpool.Pool, view s
 }
 
 // TestConsumptionAggregatesComputeRegisterDeltas is the end-to-end proof that
-// all four consumption aggregates mean what §4.3 says they mean — consumption is
+// both consumption aggregates mean what §4.3 says they mean — consumption is
 // last minus first of the cumulative register inside the bucket, not a sum of
 // register values — and that each one buckets at the width it claims to.
-// consumption_daily, _monthly and _yearly are hand-copied thirty-line blocks, so
-// a wrong time_bucket literal in one of them would otherwise pass every other
-// assertion in this package.
+// Months and years are rolled up from consumption_daily (R499) and proven in
+// TestAnalyticsMonthlyAndYearlyRollUpFromDaily.
 //
 // It doubles as the timezone guard: every expected bucket below is an Istanbul
 // calendar boundary, and readings deliberately sit in the 00:00–03:00 local
@@ -321,9 +317,7 @@ func TestConsumptionAggregatesComputeRegisterDeltas(t *testing.T) {
 	analyzerID := seedAnalyzer(t, ctx, pool)
 	seedAnalyzerReadings(t, ctx, pool, analyzerID)
 
-	for _, view := range []string{
-		"consumption_hourly", "consumption_daily", "consumption_monthly", "consumption_yearly",
-	} {
+	for _, view := range []string{"consumption_hourly", "consumption_daily"} {
 		refreshAggregate(t, ctx, pool, view)
 	}
 
@@ -344,10 +338,6 @@ func TestConsumptionAggregatesComputeRegisterDeltas(t *testing.T) {
 			"01:00 through 23:45 Istanbul is one local day"},
 		{"consumption_daily", at(2025, time.January, 3, 0, 0), "30.0000", "12.5000", "1080.0000", 2,
 			"00:15 Istanbul belongs to 3 January"},
-		{"consumption_monthly", at(2025, time.January, 1, 0, 0), "90.0000", "20.0000", "1080.0000", 9,
-			"January starts at 00:00 Istanbul on 1 January"},
-		{"consumption_yearly", at(2025, time.January, 1, 0, 0), "90.0000", "20.0000", "1080.0000", 9,
-			"2025 starts at 00:00 Istanbul on 1 January"},
 	} {
 		var consumption, maxDemand, index pgtype.Numeric
 		var readings int64
@@ -365,14 +355,12 @@ func TestConsumptionAggregatesComputeRegisterDeltas(t *testing.T) {
 	}
 
 	// Nothing may land outside the Istanbul calendar boundaries above: a UTC
-	// bucket would show up here as an extra December 2024 / 2024 row.
-	for _, view := range []string{"consumption_daily", "consumption_monthly", "consumption_yearly"} {
-		var earliest time.Time
-		require.NoError(t, pool.QueryRow(ctx,
-			`select min(bucket) from `+pgIdent(t, view)+` where analyzer_id = $1`, analyzerID).Scan(&earliest))
-		require.True(t, earliest.Equal(at(2025, time.January, 1, 0, 0)),
-			"%s must not open a bucket before 00:00 Istanbul on 1 January 2025, got %s", view, earliest)
-	}
+	// bucket would show up here as an extra 31 December 2024 row.
+	var earliest time.Time
+	require.NoError(t, pool.QueryRow(ctx,
+		`select min(bucket) from consumption_daily where analyzer_id = $1`, analyzerID).Scan(&earliest))
+	require.True(t, earliest.Equal(at(2025, time.January, 1, 0, 0)),
+		"consumption_daily must not open a bucket before 00:00 Istanbul on 1 January 2025, got %s", earliest)
 }
 
 // TestPlantProductionAggregatesBucketInIstanbul does for the solar roll-ups what
@@ -446,8 +434,6 @@ func TestAggregateBucketsAreConfiguredForIstanbul(t *testing.T) {
 	for _, want := range []struct{ view, width, timezone string }{
 		{"consumption_hourly", "1 hour", ""},
 		{"consumption_daily", "1 day", "Europe/Istanbul"},
-		{"consumption_monthly", "1 month", "Europe/Istanbul"},
-		{"consumption_yearly", "1 year", "Europe/Istanbul"},
 		{"plant_production_daily", "1 day", "Europe/Istanbul"},
 		{"plant_production_monthly", "1 month", "Europe/Istanbul"},
 	} {
@@ -469,7 +455,7 @@ func TestAggregateBucketsAreConfiguredForIstanbul(t *testing.T) {
 
 // TestRefreshPolicyOffsetsAreConfigured pins the offsets themselves, not just
 // that a job exists. Only consumption_hourly's values come from the spec; the
-// other five were chosen in this task, which makes them exactly the values most
+// others were chosen in this task, which makes them exactly the values most
 // likely to be changed by accident later.
 func TestRefreshPolicyOffsetsAreConfigured(t *testing.T) {
 	t.Parallel()
@@ -479,8 +465,6 @@ func TestRefreshPolicyOffsetsAreConfigured(t *testing.T) {
 	for _, want := range []struct{ view, start, end, schedule string }{
 		{"consumption_hourly", "30 days", "1 hour", "30 minutes"},
 		{"consumption_daily", "90 days", "1 hour", "1 hour"},
-		{"consumption_monthly", "1 year", "1 hour", "6 hours"},
-		{"consumption_yearly", "5 years", "1 hour", "1 day"},
 		{"plant_production_daily", "90 days", "1 hour", "1 hour"},
 		{"plant_production_monthly", "1 year", "1 hour", "6 hours"},
 	} {
@@ -553,8 +537,7 @@ func requireNumericEquals(t *testing.T, want string, got pgtype.Numeric) {
 func pgIdent(t *testing.T, name string) string {
 	t.Helper()
 	switch name {
-	case "consumption_hourly", "consumption_daily", "consumption_monthly", "consumption_yearly",
-		"plant_production_daily", "plant_production_monthly":
+	case "consumption_hourly", "consumption_daily", "plant_production_daily", "plant_production_monthly":
 		return name
 	}
 	t.Fatalf("refusing to interpolate unknown relation %q", name)
@@ -698,21 +681,10 @@ func TestOpenBucketIsVisibleInRealTimeAggregates(t *testing.T) {
 }
 
 // TestOpenBucketIsDeliberatelyAbsentFromCoarseAggregates pins an absence, so it
-// has to say why: this is a decision, not an oversight, and the next person to
-// see a missing month-to-date figure must not "fix" it by flipping
-// materialized_only.
-//
-// consumption_monthly, consumption_yearly and plant_production_monthly stay
-// materialized_only. Their materialisation watermark sits at the end of the last
-// CLOSED month or year, so real-time aggregation would put a live scan of every
-// raw reading since then behind an innocuous dashboard query — in September,
-// consumption_yearly would rescan nine months per analyzer every time it is
-// read. That is a worse outcome than composing the figure explicitly.
-//
-// CONSTRAINT ON TASK 10: month-to-date and year-to-date must be composed —
-// closed buckets from the monthly or yearly aggregate, plus the open period
-// taken from consumption_daily or from meter_readings. The open bucket is not in
-// these views and must never be assumed to be.
+// has to say why: plant_production_monthly stays materialized_only, and the
+// solar read model composes the open month from plant_production_daily (R284).
+// Consumption has no monthly or yearly aggregate at all since R499: those are
+// rolled up from consumption_daily at query time, open period included.
 func TestOpenBucketIsDeliberatelyAbsentFromCoarseAggregates(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -722,7 +694,6 @@ func TestOpenBucketIsDeliberatelyAbsentFromCoarseAggregates(t *testing.T) {
 	analyzerID := seedAnalyzer(t, ctx, pool)
 	now := time.Now()
 	monthStart := istanbulBucketStart(now, "month")
-	yearStart := istanbulBucketStart(now, "year")
 	for i, active := range []string{"3000.0000", "3050.0000"} {
 		_, err := pool.Exec(ctx,
 			`insert into meter_readings (analyzer_id, ts, kind, active_import, source_provider)
@@ -737,8 +708,6 @@ func TestOpenBucketIsDeliberatelyAbsentFromCoarseAggregates(t *testing.T) {
 		 values ($1, $2, 9::numeric, 'plant_meter')`, plantID, monthStart)
 	require.NoError(t, err)
 
-	refreshPolicyRange(t, ctx, pool, "consumption_monthly", 365*24*time.Hour, now)
-	refreshPolicyRange(t, ctx, pool, "consumption_yearly", 5*365*24*time.Hour, now)
 	refreshPolicyRange(t, ctx, pool, "plant_production_monthly", 365*24*time.Hour, now)
 
 	// The rows exist and are reachable through a real-time view, so an absence
@@ -755,8 +724,6 @@ func TestOpenBucketIsDeliberatelyAbsentFromCoarseAggregates(t *testing.T) {
 		id             uuid.UUID
 		bucket         time.Time
 	}{
-		{"consumption_monthly", "analyzer_id", analyzerID, monthStart},
-		{"consumption_yearly", "analyzer_id", analyzerID, yearStart},
 		{"plant_production_monthly", "plant_id", plantID, monthStart},
 	} {
 		var n int
@@ -772,7 +739,7 @@ func TestOpenBucketIsDeliberatelyAbsentFromCoarseAggregates(t *testing.T) {
 }
 
 // TestMaterializedOnlyIsConfiguredPerView pins the split itself. Flipping any of
-// these six changes what a dashboard shows, or what a dashboard query costs,
+// these changes what a dashboard shows, or what a dashboard query costs,
 // without changing a line of Go — so it must trip a test rather than ship.
 func TestMaterializedOnlyIsConfiguredPerView(t *testing.T) {
 	t.Parallel()
@@ -787,8 +754,6 @@ func TestMaterializedOnlyIsConfiguredPerView(t *testing.T) {
 		{"consumption_hourly", false, "the open hour must be visible; the live tail is one hour"},
 		{"consumption_daily", false, "the open Istanbul day must be visible; the live tail is one day"},
 		{"plant_production_daily", false, "the open Istanbul day must be visible; the live tail is one day"},
-		{"consumption_monthly", true, "a live tail would rescan every reading since the last closed month"},
-		{"consumption_yearly", true, "a live tail would rescan every reading since the last closed year"},
 		{"plant_production_monthly", true, "a live tail would rescan every row since the last closed month"},
 	} {
 		var materializedOnly bool

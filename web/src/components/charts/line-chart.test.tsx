@@ -44,6 +44,17 @@ describe('LineChart', () => {
     setMatchMedia(() => false);
   });
 
+  it('marks a value that stands alone between gaps, which no segment would draw', () => {
+    setMatchMedia((q) => q.includes('reduce'));
+    const gappy = [
+      { x: 'Oca', thisYear: '2060', lastYear: null }, { x: 'Şub', thisYear: null, lastYear: null },
+      { x: 'Mar', thisYear: '1500', lastYear: null }, { x: 'Nis', thisYear: '1800', lastYear: null },
+    ];
+    const { container } = renderWithProviders(<LineChart {...props} data={gappy} />);
+    setMatchMedia(() => false);
+    expect(container.querySelectorAll('circle[data-isolated]')).toHaveLength(1);
+  });
+
   it('labels the value axis with the unit', () => {
     const { container } = renderWithProviders(<LineChart {...props} />);
     expect([...container.querySelectorAll('.recharts-label')].some((l) => l.textContent === 'kWh')).toBe(true);

@@ -93,8 +93,8 @@ func (s *Service) SyncPlantTask(ctx context.Context, p job.SolarSyncPayload) err
 }
 
 // SyncPlant fetches and stores one plant: devices, snapshots, yesterday and
-// today from minute series, and backfillDays before yesterday from the daily
-// series (R279). It records the plant's sync state either way.
+// today from minute series, and the days before yesterday that are still owed
+// from the daily series (R279, R506). It records the plant's sync state either way.
 func (s *Service) SyncPlant(ctx context.Context, companyID, plantID uuid.UUID, backfillDays int) (SyncResult, error) {
 	sc := store.SystemScope(companyID)
 	now := s.d.Clock.Now()
@@ -127,15 +127,49 @@ func (s *Service) syncPlant(ctx context.Context, sc store.Scope, plantID uuid.UU
 		return res, err
 	}
 	psID := *plant.IsolarPsID
-
-	devices, err := s.syncDevices(ctx, sc, creds, plant, &res)
-	if err != nil {
-		return res, err
-	}
-	if err := s.syncSnapshots(ctx, sc, creds, devices, now, &res); err != nil {
-		return res, err
-	}
 	today := dayOf(now)
+	yesterday := today.AddDate(0, 0, -1)
+
+	// R506: the live half and the history are independent. A failure of one
+	// is the sync's outcome, but it does not keep the other from arriving.
+	liveErr := s.syncLive(ctx, sc, creds, plant, psID, today, now, &res)
+	if isFinal(liveErr) {
+		return res, liveErr // the credential is refused: the history call would be too
+	}
+
+	from := historyFrom(plant.IsolarHistoryThrough, today, backfillDays)
+	if from.Before(yesterday) {
+		// With no mark yet, a stored day's intervals are all that is known
+		// about it; days owed after a mark stop where their sync did.
+		keepIntervals := plant.IsolarHistoryThrough == nil
+		if err := s.backfill(ctx, sc, creds, plant.ID, psID, from, yesterday, keepIntervals, &res); err != nil {
+			return res, firstErr(liveErr, err)
+		}
+	}
+	// Yesterday is whole only if its minute series arrived; otherwise it is
+	// still owed and comes from the daily series once it is no longer yesterday.
+	through := yesterday
+	if liveErr != nil {
+		through = yesterday.AddDate(0, 0, -1)
+	}
+	if plant.IsolarHistoryThrough == nil || dayFromDate(*plant.IsolarHistoryThrough).Before(through) {
+		if err := s.d.Plants.SetHistoryThrough(ctx, sc, plant.ID, through); err != nil {
+			return res, firstErr(liveErr, err)
+		}
+	}
+	return res, liveErr
+}
+
+// syncLive is the part of a sync that only the present can answer: devices,
+// realtime snapshots, and yesterday's and today's minute series.
+func (s *Service) syncLive(ctx context.Context, sc store.Scope, creds integration.Credentials, plant model.PowerPlant, psID string, today, now time.Time, res *SyncResult) error {
+	devices, err := s.syncDevices(ctx, sc, creds, plant, res)
+	if err != nil {
+		return err
+	}
+	if err := s.syncSnapshots(ctx, sc, creds, devices, now, res); err != nil {
+		return err
+	}
 	for _, day := range []time.Time{today.AddDate(0, 0, -1), today} {
 		to := day.AddDate(0, 0, 1)
 		if to.After(now) {
@@ -144,16 +178,42 @@ func (s *Service) syncPlant(ctx context.Context, sc store.Scope, plantID uuid.UU
 		if !day.Before(to) {
 			continue
 		}
-		if err := s.syncMinuteDay(ctx, sc, creds, plant.ID, psID, devices, day, to, &res); err != nil {
-			return res, err
+		if err := s.syncMinuteDay(ctx, sc, creds, plant.ID, psID, devices, day, to, res); err != nil {
+			return err
 		}
 	}
-	if backfillDays > 0 {
-		if err := s.backfill(ctx, sc, creds, plant.ID, psID, today.AddDate(0, 0, -backfillDays), today.AddDate(0, 0, -1), &res); err != nil {
-			return res, err
-		}
+	return nil
+}
+
+// historyFrom is the first day still owed (R506): the day after the history
+// mark, or the whole link backfill when there is none; an explicit request for
+// more days reaches further back.
+func historyFrom(through *time.Time, today time.Time, backfillDays int) time.Time {
+	from := today.AddDate(0, 0, -linkBackfillDays)
+	if through != nil {
+		from = dayFromDate(*through).AddDate(0, 0, 1)
 	}
-	return res, nil
+	if asked := today.AddDate(0, 0, -backfillDays); backfillDays > 0 && asked.Before(from) {
+		from = asked
+	}
+	return from
+}
+
+// dayFromDate is the Istanbul midnight of a stored date.
+func dayFromDate(d time.Time) time.Time {
+	return time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, istanbul)
+}
+
+// isFinal reports a failure retrying cannot heal (auth, a missing credential).
+func isFinal(err error) bool {
+	return err != nil && !classify(err).retry
+}
+
+func firstErr(a, b error) error {
+	if a != nil {
+		return a
+	}
+	return b
 }
 
 // syncDevices upserts the provider's device list and returns the stored devices.
@@ -302,8 +362,9 @@ func (s *Service) syncMinuteDay(ctx context.Context, sc store.Scope, creds integ
 }
 
 // backfill writes end-of-day totals for [from, to) in ≤31-day chunks (R281);
-// only days the provider answered for are replaced.
-func (s *Service) backfill(ctx context.Context, sc store.Scope, creds integration.Credentials, plantID uuid.UUID, psID string, from, to time.Time, res *SyncResult) error {
+// only days the provider answered for are replaced, and with keepIntervals
+// never a day that already holds interval rows.
+func (s *Service) backfill(ctx context.Context, sc store.Scope, creds integration.Credentials, plantID uuid.UUID, psID string, from, to time.Time, keepIntervals bool, res *SyncResult) error {
 	for start := from; start.Before(to); start = start.AddDate(0, 0, dailyChunk) {
 		end := start.AddDate(0, 0, dailyChunk)
 		if end.After(to) {
@@ -313,13 +374,25 @@ func (s *Service) backfill(ctx context.Context, sc store.Scope, creds integratio
 		if err != nil {
 			return err
 		}
+		kept := map[time.Time]bool{}
+		if keepIntervals && len(days) > 0 {
+			stored, err := s.d.Totals.Range(ctx, sc, plantID, store.TimeRange{From: start, To: end})
+			if err != nil {
+				return fmt.Errorf("backfill: %w", err)
+			}
+			for _, r := range stored {
+				if r.Basis != model.BasisDailyTotal {
+					kept[dayOf(r.Ts)] = true
+				}
+			}
+		}
 		var rows []model.PlantProductionTotal
 		var replaced []time.Time
 		for _, d := range days {
-			if d.Kwh == nil {
+			day := dayOf(d.Day)
+			if d.Kwh == nil || kept[day] {
 				continue
 			}
-			day := dayOf(d.Day)
 			rows = append(rows, model.PlantProductionTotal{PlantID: plantID, Ts: day, ProductionKwh: d.Kwh, Basis: model.BasisDailyTotal})
 			replaced = append(replaced, day)
 		}

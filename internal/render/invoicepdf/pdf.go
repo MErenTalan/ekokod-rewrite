@@ -116,23 +116,11 @@ func Render(d Document) ([]byte, error) {
 	}
 	kv(label(loc, "currency"), string(b.Currency))
 
-	if starts, ends := indexes(b.IndexStart), indexes(b.IndexEnd); len(starts)+len(ends) > 0 {
+	if rows := IndexRows(loc, b.IndexStart, b.IndexEnd); len(rows) > 0 {
 		heading(label(loc, "readings"))
-		keys := map[string]bool{}
-		for k := range starts {
-			keys[k] = true
-		}
-		for k := range ends {
-			keys[k] = true
-		}
-		sorted := make([]string, 0, len(keys))
-		for k := range keys {
-			sorted = append(sorted, k)
-		}
-		sort.Strings(sorted)
 		row(pdf, []float64{60, 50, 50}, []string{label(loc, "register"), label(loc, "start"), label(loc, "end")}, true)
-		for _, k := range sorted {
-			row(pdf, []float64{60, 50, 50}, []string{k, optNum(starts[k], 3), optNum(ends[k], 3)}, false)
+		for _, r := range rows {
+			row(pdf, []float64{60, 50, 50}, r[:], false)
 		}
 	}
 
@@ -167,8 +155,8 @@ func Render(d Document) ([]byte, error) {
 
 	if b.InductiveThreshold != nil || b.InductiveRatio != nil {
 		heading(label(loc, "reactive"))
-		kv(label(loc, "inductive")+" "+label(loc, "ratio")+" / "+label(loc, "limit"), optNum(b.InductiveRatio, 4)+" / "+optNum(b.InductiveThreshold, 2))
-		kv(label(loc, "capacitive")+" "+label(loc, "ratio")+" / "+label(loc, "limit"), optNum(b.CapacitiveRatio, 4)+" / "+optNum(b.CapacitiveThreshold, 2))
+		kv(label(loc, "inductive")+" "+label(loc, "ratio")+" / "+label(loc, "limit"), Percent(loc, b.InductiveRatio)+" / "+Percent(loc, b.InductiveThreshold))
+		kv(label(loc, "capacitive")+" "+label(loc, "ratio")+" / "+label(loc, "limit"), Percent(loc, b.CapacitiveRatio)+" / "+Percent(loc, b.CapacitiveThreshold))
 		applied := label(loc, "no")
 		if b.ReactivePenaltyApplied {
 			applied = label(loc, "yes")
@@ -231,6 +219,59 @@ func scopeKey(s model.BillScope) string {
 		return "building_scope"
 	}
 	return "analyzer"
+}
+
+// indexOrder is the order an invoice lists its registers in.
+var indexOrder = []string{
+	"active_import", "t1_import", "t2_import", "t3_import", "reactive_inductive_import", "reactive_capacitive_import",
+	"active_export", "t1_export", "t2_export", "t3_export", "reactive_inductive_export", "reactive_capacitive_export",
+}
+
+// IndexRows is the invoice's index table: label, opening and closing index of
+// every register the meter reported, in a fixed order. A register with no
+// index on either side is left out — most meters report four of the twelve.
+func IndexRows(locale string, start, end json.RawMessage) [][3]string {
+	locale = normaliseLocale(locale)
+	starts, ends := indexes(start), indexes(end)
+	index := func(v *decimal.Decimal) string {
+		if v == nil {
+			return "—"
+		}
+		return render.FormatDecimal(*v, 3, locale)
+	}
+	var out [][3]string
+	seen := map[string]bool{}
+	add := func(key string) {
+		if seen[key] || (starts[key] == nil && ends[key] == nil) {
+			return
+		}
+		seen[key] = true
+		out = append(out, [3]string{label(locale, "reg:"+key), index(starts[key]), index(ends[key])})
+	}
+	for _, key := range indexOrder {
+		add(key)
+	}
+	// A register this list does not know still shows, under its own name.
+	var rest []string
+	for key := range starts {
+		rest = append(rest, key)
+	}
+	for key := range ends {
+		rest = append(rest, key)
+	}
+	sort.Strings(rest)
+	for _, key := range rest {
+		add(key)
+	}
+	return out
+}
+
+// Percent renders a stored ratio (0.4474) as a percentage ("%44,74"), "—" when absent.
+func Percent(locale string, ratio *decimal.Decimal) string {
+	if ratio == nil {
+		return "—"
+	}
+	return "%" + render.FormatDecimal(ratio.Mul(decimal.NewFromInt(100)), 2, normaliseLocale(locale))
 }
 
 func indexes(raw json.RawMessage) map[string]*decimal.Decimal {

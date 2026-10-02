@@ -73,6 +73,7 @@ export function CompanyPanel() {
   });
   const verify = useApiMutation('post', '/api/v1/integration-credentials/{id}/verify', {
     success: credentials('verified'),
+    invalidate: ['/api/v1/integration-credentials'],
   });
   const discover = useApiMutation('post', '/api/v1/integration-credentials/{id}/discover', {
     success: credentials('discoverStarted'),

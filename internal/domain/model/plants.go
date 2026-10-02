@@ -58,6 +58,9 @@ type PowerPlant struct {
 	IsolarCredentialID  *uuid.UUID
 	IsolarLastSyncAt    *time.Time
 	IsolarLastSyncError *string
+	// IsolarHistoryThrough is the Istanbul day (its year, month and day)
+	// through which stored production is whole; nil until the history arrived (R506).
+	IsolarHistoryThrough *time.Time
 	// NettingAnalyzerID is the optional netting meter (R289); never a building scope.
 	NettingAnalyzerID *uuid.UUID
 

@@ -266,17 +266,76 @@ func TestValidateSanityJumpStopsAfterThreeConsecutive(t *testing.T) {
 
 	valid, rejected := ingest.Validate(&prev, history, rows, now, o)
 
-	require.Len(t, valid, 1, "only the fourth, sustained jump is kept")
-	require.True(t, valid[0].Ts.Equal(rows[3].Ts))
-
-	require.Len(t, rejected, 4)
-	for i := range 3 {
-		require.Equal(t, ingest.RejectSanityJump, rejected[i].Reason, fmt.Sprintf("rejection %d", i))
-		require.Equal(t, "active_import", rejected[i].Register)
+	// R509: a jump that proves sustained was real all along, so the three
+	// readings held back while it was in doubt are kept with it, in order.
+	require.Len(t, valid, 4, "the sustained jump and the three readings held for it")
+	for i := range 4 {
+		require.True(t, valid[i].Ts.Equal(rows[i].Ts), fmt.Sprintf("row %d", i))
 	}
-	require.Equal(t, ingest.RejectSanityJump, rejected[3].Reason)
-	require.Equal(t, "sustained", rejected[3].Register, "the fourth consecutive jump is flagged, not silently accepted")
-	require.True(t, rejected[3].Ts.Equal(rows[3].Ts))
+
+	require.Len(t, rejected, 1, "only the flag: nothing was lost")
+	require.Equal(t, ingest.RejectSanityJump, rejected[0].Reason)
+	require.Equal(t, "sustained", rejected[0].Register, "the fourth consecutive jump is flagged, not silently accepted")
+	require.True(t, rejected[0].Ts.Equal(rows[3].Ts))
+}
+
+// R509: a spike that comes back down was corrupt: it stays rejected, and the
+// streak starts over.
+func TestValidateSanityJumpSpikeThatReturnsIsDropped(t *testing.T) {
+	now := ts("2026-09-01T18:00:00Z")
+	o := validateOpts()
+
+	history := buildSanityHistory(24, decimal.Zero, decimal.NewFromInt(2)) // threshold 20 at elapsed == 1
+	prev := history[len(history)-1]
+	prevVal := *prev.ActiveImport
+	at := func(h int, add int64) model.MeterReading {
+		return reading(prev.Ts.Add(time.Duration(h)*time.Hour).Format(time.RFC3339),
+			map[string]string{"active_import": prevVal.Add(decimal.NewFromInt(add)).String()})
+	}
+
+	rows := []model.MeterReading{at(1, 900), at(2, 4), at(3, 6)}
+	valid, rejected := ingest.Validate(&prev, history, rows, now, o)
+	require.Len(t, valid, 2)
+	require.True(t, valid[0].Ts.Equal(rows[1].Ts) && valid[1].Ts.Equal(rows[2].Ts))
+	require.Len(t, rejected, 1)
+	require.True(t, rejected[0].Ts.Equal(rows[0].Ts))
+	require.Equal(t, "active_import", rejected[0].Register)
+}
+
+// R509: "typical" is the week's LARGEST interval, not its median. A site that
+// idles at night and works by day has a median near its standby load; ten
+// times that is an ordinary working hour, and on a real PM5340 history the
+// median rule turned 826 good daytime readings into jumps.
+func TestValidateSanityJumpAllowsAnOrdinaryWorkingDay(t *testing.T) {
+	now := ts("2026-09-01T18:00:00Z")
+	o := validateOpts()
+
+	// Three days of hourly readings: 16 idle hours at 0.25, 8 working at 3.5.
+	base := ts("2026-08-25T00:00:00Z")
+	val := decimal.Zero
+	var history []model.MeterReading
+	for h := 0; h <= 72; h++ {
+		history = append(history, reading(base.Add(time.Duration(h)*time.Hour).Format(time.RFC3339), map[string]string{"active_import": val.String()}))
+		step := "0.25"
+		if hour := h % 24; hour >= 8 && hour < 16 {
+			step = "3.5"
+		}
+		val = val.Add(decimal.RequireFromString(step))
+	}
+	prev := history[len(history)-1] // midnight, after idle hours
+	prevVal := *prev.ActiveImport
+	next := func(delta string) []model.MeterReading {
+		return []model.MeterReading{reading(prev.Ts.Add(time.Hour).Format(time.RFC3339),
+			map[string]string{"active_import": prevVal.Add(decimal.RequireFromString(delta)).String()})}
+	}
+
+	valid, rejected := ingest.Validate(&prev, history, next("3.6"), now, o)
+	require.Empty(t, rejected, "a working hour is 14 times the median and entirely ordinary")
+	require.Len(t, valid, 1)
+
+	valid, rejected = ingest.Validate(&prev, history, next("36"), now, o)
+	require.Empty(t, valid, "ten times the week's largest hour is not")
+	require.Len(t, rejected, 1)
 }
 
 // TestValidateSanityJumpStreakPersistsAcrossPages proves R13's "at most
@@ -315,21 +374,20 @@ func TestValidateSanityJumpStreakPersistsAcrossPages(t *testing.T) {
 		require.Equal(t, "active_import", r.Register)
 	}
 
-	// Page 2: row 3 is the streak's THIRD consecutive rejection; row 4 is
-	// its FOURTH (flagged "sustained", kept, streak trips); row 5 must be
-	// accepted silently — no flag, no re-arming.
+	// Page 2: row 3 is the streak's THIRD consecutive hold; row 4 is its
+	// FOURTH (flagged "sustained", streak trips) and brings every held row
+	// back with it, page 1's included (R509); row 5 is accepted silently —
+	// no flag, no re-arming.
 	page2 := []model.MeterReading{jumpRow(3), jumpRow(4), jumpRow(5)}
 	valid2, rejected2 := ingest.Validate(&prev, history, page2, now, o)
 
-	require.Len(t, valid2, 2, "the sustained (4th) jump and everything after it in the run are kept")
-	require.True(t, valid2[0].Ts.Equal(page2[1].Ts))
-	require.True(t, valid2[1].Ts.Equal(page2[2].Ts))
+	require.Len(t, valid2, 5, "the two rows held on page 1, then rows 3, 4 and 5")
+	for i, want := range []model.MeterReading{page1[0], page1[1], page2[0], page2[1], page2[2]} {
+		require.True(t, valid2[i].Ts.Equal(want.Ts), fmt.Sprintf("valid row %d", i))
+	}
 
-	require.Len(t, rejected2, 2, "row 3 (real reject) + row 4 (sustained flag) — row 5 gets no rejection entry at all")
+	require.Len(t, rejected2, 1, "only row 4's sustained flag")
 	require.Equal(t, ingest.RejectSanityJump, rejected2[0].Reason)
-	require.Equal(t, "active_import", rejected2[0].Register)
-	require.True(t, rejected2[0].Ts.Equal(page2[0].Ts))
-	require.Equal(t, ingest.RejectSanityJump, rejected2[1].Reason)
-	require.Equal(t, "sustained", rejected2[1].Register)
-	require.True(t, rejected2[1].Ts.Equal(page2[1].Ts))
+	require.Equal(t, "sustained", rejected2[0].Register)
+	require.True(t, rejected2[0].Ts.Equal(page2[1].Ts))
 }

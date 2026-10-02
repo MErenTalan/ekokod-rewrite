@@ -18,7 +18,7 @@ var labels = map[string]map[string]string{
 		model.BillLineExtraPrefix: "Ek bedel", model.BillLineTaxPrefix: "Vergi/fon",
 		"title": "Elektrik Faturası", "preview": "ÖNİZLEME — kesilmedi", "company": "Şirket", "building": "Bina", "scope": "Kapsam",
 		"period": "Dönem", "dates": "Tarih aralığı", "days": "Gün", "tariff_date": "Tarife yürürlük", "currency": "Para birimi",
-		"readings": "Endeksler", "register": "Sayaç", "start": "İlk", "end": "Son", "quantities": "Tüketim",
+		"readings": "Endeksler", "register": "Endeks", "start": "İlk", "end": "Son", "quantities": "Tüketim",
 		"lines": "Fatura kalemleri", "item": "Kalem", "quantity": "Miktar", "unit_price": "Birim fiyat", "amount": "Tutar",
 		"vat_base": "KDV matrahı", "total": "Ödenecek tutar", "reactive": "Reaktif", "ratio": "Oran", "limit": "Sınır",
 		"applied": "Uygulandı", "yes": "Evet", "no": "Hayır", "ptf": "PTF + YEKDEM", "hours_expected": "Beklenen saat",
@@ -26,7 +26,11 @@ var labels = map[string]map[string]string{
 		"members": "Sayaçlar", "flags": "İşaretler", "net": "Net tüketim", "active_import": "Aktif çekiş", "active_export": "Aktif veriş",
 		"inductive": "Endüktif", "capacitive": "Kapasitif", "max_demand": "Maksimum demant", "footnote": "Tutarlar yuvarlanmamış miktar ve birim fiyattan hesaplanır; kayıtlı 4/6 haneli değerlerden yeniden hesaplamada kuruş farkı olabilir.",
 		"analyzer": "Sayaç", "company_scope": "Şirket", "building_scope": "Bina",
-		"missing_days": "Eksik veri — bu fatura dönemin tamamını kapsamıyor. Verisi olmayan günler: ",
+		"missing_days":      "Eksik veri — bu fatura dönemin tamamını kapsamıyor. Verisi olmayan günler: ",
+		"reg:active_import": "Aktif çekiş (kWh)", "reg:t1_import": "T1 gündüz (kWh)", "reg:t2_import": "T2 puant (kWh)", "reg:t3_import": "T3 gece (kWh)",
+		"reg:reactive_inductive_import": "Endüktif reaktif (kVArh)", "reg:reactive_capacitive_import": "Kapasitif reaktif (kVArh)",
+		"reg:active_export": "Aktif veriş (kWh)", "reg:t1_export": "Veriş T1 (kWh)", "reg:t2_export": "Veriş T2 (kWh)", "reg:t3_export": "Veriş T3 (kWh)",
+		"reg:reactive_inductive_export": "Veriş endüktif (kVArh)", "reg:reactive_capacitive_export": "Veriş kapasitif (kVArh)",
 	},
 	"en": {
 		model.BillLineEnergy: "Energy", model.BillLineEnergyLowTier: "Energy (low tier)", model.BillLineEnergyHighTier: "Energy (high tier)",
@@ -45,7 +49,11 @@ var labels = map[string]map[string]string{
 		"members": "Meters", "flags": "Flags", "net": "Net consumption", "active_import": "Active import", "active_export": "Active export",
 		"inductive": "Inductive", "capacitive": "Capacitive", "max_demand": "Max demand", "footnote": "Amounts are computed from unrounded quantities and prices; re-deriving them from the stored 4/6-decimal values can differ by a kuruş.",
 		"analyzer": "Meter", "company_scope": "Company", "building_scope": "Building",
-		"missing_days": "Incomplete data — this bill does not cover the whole period. Days without data: ",
+		"missing_days":      "Incomplete data — this bill does not cover the whole period. Days without data: ",
+		"reg:active_import": "Active import (kWh)", "reg:t1_import": "T1 day (kWh)", "reg:t2_import": "T2 peak (kWh)", "reg:t3_import": "T3 night (kWh)",
+		"reg:reactive_inductive_import": "Reactive inductive (kVArh)", "reg:reactive_capacitive_import": "Reactive capacitive (kVArh)",
+		"reg:active_export": "Active export (kWh)", "reg:t1_export": "Export T1 (kWh)", "reg:t2_export": "Export T2 (kWh)", "reg:t3_export": "Export T3 (kWh)",
+		"reg:reactive_inductive_export": "Export inductive (kVArh)", "reg:reactive_capacitive_export": "Export capacitive (kVArh)",
 	},
 }
 
@@ -53,7 +61,15 @@ func label(locale, key string) string {
 	if v, ok := labels[locale][key]; ok {
 		return v
 	}
-	return key
+	return strings.TrimPrefix(key, "reg:")
+}
+
+// normaliseLocale falls back to the product's own locale.
+func normaliseLocale(locale string) string {
+	if _, ok := labels[locale]; !ok {
+		return "tr"
+	}
+	return locale
 }
 
 // lineLabel localises a line code; extra:/tax: codes keep their own name.

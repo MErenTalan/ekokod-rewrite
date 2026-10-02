@@ -236,7 +236,9 @@ func (s *Service) gridFactor(ctx context.Context, sc store.Scope) (*domain.GridF
 	if chosen == nil {
 		return nil, nil
 	}
-	f := &domain.GridFactor{Value: chosen.BaseFactor, Unit: chosen.BaseUnit}
+	// base_factor is kg CO2e per base_unit of activity; the unit says so,
+	// as the carbon and renewable screens do (it used to read just "kWh").
+	f := &domain.GridFactor{Value: chosen.BaseFactor, Unit: "kg CO2e/" + chosen.BaseUnit}
 	if chosen.SourceYear != nil {
 		y := int(*chosen.SourceYear)
 		f.SourceYear = &y

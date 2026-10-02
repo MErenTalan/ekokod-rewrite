@@ -32,6 +32,25 @@ describe('EventsDialogView', () => {
     expect(r.getByText(/535 authentication failed/)).toBeVisible();
   });
 
+  it('lists the limits the rule checks, with their periods', () => {
+    const r = view();
+    expect(r.getByText('Endüktif Oran (%): 20 — Son 24 saat')).toBeVisible();
+  });
+
+  it('says why each event fired', () => {
+    const r = view();
+    expect(r.getByText('Endüktif oran %25 eşiği aştı (%20)')).toBeVisible();
+  });
+
+  it('does not call a rule without a channel a failed delivery', () => {
+    const quiet = [{ ...demoEvents[1], notification_error: 'bildirim kanalı tanımlı değil' }];
+    const r = renderWithProviders(
+      <EventsDialogView open alarm={{ ...demoAlarms[0], channels: [] }} events={quiet as typeof demoEvents} onClose={() => {}} />,
+    );
+    expect(r.getByText('Bildirim kanalı yok')).toBeVisible();
+    expect(r.queryByText('Gönderilemedi')).toBeNull();
+  });
+
   it('says the rule has not fired when there is no history', () => {
     const r = view([]);
     expect(r.getByText('Log kaydı bulunamadı.')).toBeVisible();

@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableContainer, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { Alarm, AlarmEvent } from '@/lib/api/types';
-import { formatDateTime } from '@/lib/format';
+import { formatDateTime, formatNumber } from '@/lib/format';
 import type { Locale } from '@/i18n/locale';
 
 import { typeLabelKey } from './alarm-labels';
@@ -21,13 +21,35 @@ export type EventsDialogViewProps = {
   loading?: boolean;
 };
 
-/** Delivery state of one event: delivered, failed, or still queued. */
-function deliveryTone(event: AlarmEvent): { tone: 'success' | 'danger' | 'neutral'; key: 'delivered' | 'failed' | 'pending' } {
+type Delivery = { tone: 'success' | 'danger' | 'neutral'; key: 'delivered' | 'failed' | 'pending' | 'noChannel' };
+
+/** Delivery state of one event: delivered, failed, still queued, or nobody to tell. */
+function deliveryTone(event: AlarmEvent, hasChannel: boolean): Delivery {
   if (event.notified_at) return { tone: 'success', key: 'delivered' };
+  // A rule with no recipient fired as designed: nothing was meant to be sent.
+  if (!hasChannel) return { tone: 'neutral', key: 'noChannel' };
   // A null notified_at WITH an error is "fired and nobody was told" — a
   // different state from one still waiting for the notify task.
   if (event.notification_error) return { tone: 'danger', key: 'failed' };
   return { tone: 'neutral', key: 'pending' };
+}
+
+/** Each limit a rule can hold, with the period fields of the reactive ones. */
+const LIMITS = [
+  { threshold: 'inductive_ratio_threshold', label: 'fields.inductiveRatio', value: 'inductive_period_value', unit: 'inductive_period_unit' },
+  { threshold: 'capacitive_ratio_threshold', label: 'fields.capacitiveRatio', value: 'capacitive_period_value', unit: 'capacitive_period_unit' },
+  { threshold: 'active_consumption_max', label: 'fields.activeConsumptionMax', value: 'active_consumption_max_period_value', unit: 'active_consumption_max_period_unit' },
+  { threshold: 'active_consumption_min', label: 'fields.activeConsumptionMin', value: 'active_consumption_min_period_value', unit: 'active_consumption_min_period_unit' },
+  { threshold: 'communication_threshold_hours', label: 'fields.communicationThresholdHours' },
+  { threshold: 'power_max', label: 'fields.powerMax' },
+  { threshold: 'power_min', label: 'fields.powerMin' },
+  { threshold: 'invoice_threshold_pct', label: 'fields.invoiceThresholdPct' },
+] as const;
+
+/** The breach sentences the evaluator stored with the event. */
+function reasons(event: AlarmEvent): string[] {
+  const lines = (event.detail as { lines?: unknown } | null | undefined)?.lines;
+  return Array.isArray(lines) ? lines.filter((line): line is string => typeof line === 'string') : [];
 }
 
 /**
@@ -37,6 +59,16 @@ function deliveryTone(event: AlarmEvent): { tone: 'success' | 'danger' | 'neutra
 export function EventsDialogView({ open, alarm, events, onClose, loading = false }: EventsDialogViewProps) {
   const t = useTranslations('alarms');
   const locale = useLocale() as Locale;
+  const settings = (alarm?.settings ?? {}) as Record<string, string | number | null | undefined>;
+  const hasChannel = (alarm?.channels ?? []).length > 0;
+  const limits = LIMITS.flatMap((limit) => {
+    const threshold = settings[limit.threshold];
+    if (threshold === undefined || threshold === null || threshold === '') return [];
+    const period = 'value' in limit && settings[limit.value] != null
+      ? ` — ${t('fields.inLast')} ${settings[limit.value]} ${t(settings[limit.unit] === 'days' ? 'fields.days' : 'fields.hours')}`
+      : '';
+    return [`${t(limit.label)}: ${formatNumber(String(threshold))}${period}`];
+  });
 
   return (
     <Dialog
@@ -55,6 +87,11 @@ export function EventsDialogView({ open, alarm, events, onClose, loading = false
                 <Badge key={a.id} tone="neutral">{a.installation_number}</Badge>
               ))}
             </div>
+            {limits.length > 0 ? (
+              <ul className="text-foreground type-body">
+                {limits.map((line) => <li key={line}>{line}</li>)}
+              </ul>
+            ) : null}
           </section>
         ) : null}
 
@@ -74,13 +111,16 @@ export function EventsDialogView({ open, alarm, events, onClose, loading = false
               </TableHeader>
               <TableBody>
                 {events.map((event) => {
-                  const delivery = deliveryTone(event);
+                  const delivery = deliveryTone(event, hasChannel);
                   return (
                     <TableRow key={event.id}>
                       <TableCell>{formatDateTime(event.triggered_at, locale)}</TableCell>
                       <TableCell>
                         <p className="type-body">{event.message}</p>
-                        {event.notification_error ? (
+                        {reasons(event).map((line) => (
+                          <p key={line} className="text-foreground type-caption">{line}</p>
+                        ))}
+                        {event.notification_error && hasChannel ? (
                           <p className="text-foreground-muted type-caption">{event.notification_error}</p>
                         ) : null}
                       </TableCell>

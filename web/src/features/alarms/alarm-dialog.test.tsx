@@ -61,6 +61,27 @@ describe('AlarmDialogView', () => {
     expect(r.getByRole('button', { name: 'Kaydet' })).toBeDisabled();
   });
 
+  it('does not scold an untouched form', () => {
+    const r = renderWithProviders(
+      <AlarmDialogView open draft={emptyDraft()} analyzers={demoAnalyzers}
+        onDraftChange={() => {}} onSubmit={() => {}} onClose={() => {}} />,
+    );
+    expect(r.queryByText('Bu alan zorunludur.')).toBeNull();
+    expect(r.getByRole('button', { name: 'Kaydet' })).toBeDisabled();
+  });
+
+  it('says a typed limit still needs its period', () => {
+    const r = view({ type: 'reactive_limit', settings: { capacitive_ratio_threshold: '15' } });
+    expect(r.getByText(/süresi de girilmelidir/)).toBeVisible();
+    expect(r.queryByText('En az bir alarm limiti girilmelidir.')).toBeNull();
+  });
+
+  it('saves a limit whose unit was never touched', () => {
+    const r = view({ type: 'reactive_limit',
+      settings: { capacitive_ratio_threshold: '15', capacitive_period_value: '24' } });
+    expect(r.getByRole('button', { name: 'Kaydet' })).toBeEnabled();
+  });
+
   it('enables saving once the rule is complete', () => {
     const r = view({ type: 'data_communication', settings: { communication_threshold_hours: '6' } });
     expect(r.getByRole('button', { name: 'Kaydet' })).toBeEnabled();

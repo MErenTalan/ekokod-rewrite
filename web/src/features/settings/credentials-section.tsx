@@ -86,7 +86,8 @@ export function CredentialsSectionView({
         accessorFn: (row) => `${row.provider} · ${row.subtype}`,
         enableHiding: false,
       },
-      { id: 'username', header: t('username'), accessorFn: (row) => row.username ?? '—' },
+      // A gateway credential has no user: its address is what identifies it.
+      { id: 'username', header: t('username'), accessorFn: (row) => row.username ?? row.pm5340_url ?? '—' },
       {
         id: 'secret',
         header: t('status'),
@@ -95,7 +96,7 @@ export function CredentialsSectionView({
           row.original.has_secret ? (
             <StatusBadge status="success" label={t('secretStored')} />
           ) : (
-            <StatusBadge status="neutral" label="—" />
+            <StatusBadge status="neutral" label={row.original.pm5340_url ? t('noSecret') : '—'} />
           ),
       },
       {

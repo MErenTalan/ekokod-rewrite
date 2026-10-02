@@ -39,14 +39,6 @@ import (
 // than any real provider or storage limit).
 const maxBackfillSpan = 5 * 365 * 24 * time.Hour
 
-// aggregateHorizon is how far back the consumption aggregates reach without
-// a consumption.refresh run: 04-data-model.md's `start_offset => interval
-// '30 days'` minus one day of margin — the same amendment R100(6) makes to
-// internal/ingest's own enqueue threshold, so this informational message
-// never undersells what a backfill older than the ingest side's own
-// threshold already gets refreshed.
-const aggregateHorizon = 29 * 24 * time.Hour
-
 // Windows splits [from, to) into consecutive half-open windows of at most
 // max, aligned to Istanbul-local midnight so a window never splits a local
 // day. It is a thin wrapper over normalize.Chunk (S7 — the ONE range-chunking
@@ -128,7 +120,7 @@ func (b *Backfiller) Backfill(ctx context.Context, p job.BackfillPayload) error 
 	creds, err := b.deps.Credentials.Open(ctx, sc, p.CredentialID)
 	if err != nil {
 		errText := err.Error()
-		b.finishRun(ctx, sc, run.ID, "failed", 0, 0, 1, &errText, nil, now)
+		b.finishRun(ctx, sc, run.ID, "failed", 0, 0, 1, &errText, nil)
 		return err
 	}
 
@@ -140,7 +132,7 @@ func (b *Backfiller) Backfill(ctx context.Context, p job.BackfillPayload) error 
 	if !creds.IsActive {
 		cerr := &integration.Error{Kind: integration.ErrConfig, Provider: creds.Provider, Op: "backfill.credential_inactive"}
 		errText := redacted(creds, cerr)
-		b.finishRun(ctx, sc, run.ID, "failed", 0, 0, 1, &errText, nil, now)
+		b.finishRun(ctx, sc, run.ID, "failed", 0, 0, 1, &errText, nil)
 		b.appendMessage(ctx, sc, p.CompanyID, "job", "backfill", "error", errText, nil)
 		return cerr
 	}
@@ -148,14 +140,14 @@ func (b *Backfiller) Backfill(ctx context.Context, p job.BackfillPayload) error 
 	src, err := b.deps.Sources.Source(creds.Provider)
 	if err != nil {
 		errText := redacted(creds, err)
-		b.finishRun(ctx, sc, run.ID, "failed", 0, 0, 1, &errText, nil, now)
+		b.finishRun(ctx, sc, run.ID, "failed", 0, 0, 1, &errText, nil)
 		return err
 	}
 
 	analyzers, missing, err := b.resolveAnalyzers(ctx, sc, creds, p.AnalyzerIDs)
 	if err != nil {
 		errText := redacted(creds, err)
-		b.finishRun(ctx, sc, run.ID, "failed", 0, 0, 1, &errText, nil, now)
+		b.finishRun(ctx, sc, run.ID, "failed", 0, 0, 1, &errText, nil)
 		return err
 	}
 
@@ -228,17 +220,9 @@ func (b *Backfiller) Backfill(ctx context.Context, p job.BackfillPayload) error 
 		}
 	}
 
-	if p.From.Before(now.Add(-aggregateHorizon)) {
-		horizon := now.Add(-aggregateHorizon)
-		b.appendMessage(ctx, sc, p.CompanyID, "job", "backfill", "info",
-			fmt.Sprintf("Backfilled range before %s is not in the consumption aggregates until consumption.refresh runs for it (F3)",
-				horizon.Format(time.RFC3339)),
-			nil)
-	}
-
 	status := countsStatus(processed, skipped, failed)
 	b.finishRun(ctx, sc, run.ID, status, processed, skipped, failed, nil,
-		mustJSON(backfillRunDetail{Failures: failures, AlreadyEnqueued: alreadyEnqueued}), now)
+		mustJSON(backfillRunDetail{Failures: failures, AlreadyEnqueued: alreadyEnqueued}))
 	return nil
 }
 
@@ -405,8 +389,8 @@ func ptrBool(v bool) *bool { return &v }
 // Deps carries no logger (this package's whole surface is one method), so a
 // bookkeeping failure here is swallowed rather than overriding the
 // substantive outcome Backfill is already returning.
-func (b *Backfiller) finishRun(ctx context.Context, sc store.Scope, runID uuid.UUID, status string, processed, skipped, failed int32, errText *string, detail json.RawMessage, at time.Time) {
-	_, _ = b.deps.Ops.FinishRun(ctx, sc, runID, status, processed, skipped, failed, errText, detail, at)
+func (b *Backfiller) finishRun(ctx context.Context, sc store.Scope, runID uuid.UUID, status string, processed, skipped, failed int32, errText *string, detail json.RawMessage) {
+	_, _ = b.deps.Ops.FinishRun(ctx, sc, runID, status, processed, skipped, failed, errText, detail, b.deps.Clock.Now())
 }
 
 func (b *Backfiller) appendMessage(ctx context.Context, sc store.Scope, companyID uuid.UUID, kind, category, status, message string, metadata json.RawMessage) {

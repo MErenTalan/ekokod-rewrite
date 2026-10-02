@@ -36,6 +36,8 @@ type Interval struct {
 // Intervals turns one series of cumulative yield-today samples into interval
 // kWh: the first sample of an Istanbul day is its own value, later ones the
 // delta to the last known value; a negative delta is null and counted.
+// R507: a first sample in the midnight hour is only the baseline — the
+// counter can still hold yesterday's total there, and nothing is produced.
 func Intervals(samples []isolar.YieldSample) (out []Interval, resets int) {
 	sorted := append([]isolar.YieldSample(nil), samples...)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Ts.Before(sorted[j].Ts) })
@@ -49,6 +51,7 @@ func Intervals(samples []isolar.YieldSample) (out []Interval, resets int) {
 		if s.YieldTodayKwh != nil {
 			v := *s.YieldTodayKwh
 			switch {
+			case prev == nil && s.Ts.In(istanbul).Hour() == 0:
 			case prev == nil:
 				iv.Kwh = &v
 			case v.LessThan(*prev):

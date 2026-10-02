@@ -29,7 +29,8 @@ export type ReactiveStatusCardProps = {
 function RatioRow({ label, ratio, limit }: Ratio & { label: string }) {
   const t = useTranslations('domain.reactive');
   const limitPct = fractionToPercent(limit);
-  const shown = ratio === null ? null : formatQuantity(fractionToPercent(ratio), 'percent');
+  // Two decimals: the API's ratio is a 20-digit quotient, and the card used to print all of it.
+  const shown = ratio === null ? null : formatQuantity(fractionToPercent(ratio), 'percent', { maxFractionDigits: 2 });
   const over = ratio !== null && compareDecimal(ratio, limit) > 0;
   const max = Math.max(Number(limitPct) * 1.5, ratio === null ? 0 : Number(fractionToPercent(ratio)));
   return (

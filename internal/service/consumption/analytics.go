@@ -3,7 +3,6 @@ package consumption
 import (
 	"context"
 	"log/slog"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -53,14 +52,11 @@ type analyticsBucketKey struct {
 	bucket   int64
 }
 
-// Consumption serves charts and tables from the continuous aggregates. The
-// repository boundary-differences each bucket (F15q R471), so a bucket with
-// readings on its edges matches Billing. At Monthly/Yearly, EVERY requested bucket absent from the
-// materialised view — whether it is the still-open trailing period or an
-// earlier closed month/year the refresh policy has not reached yet (R94,
-// amending R88) — is composed from consumption_daily closing indexes,
-// clock-free — never from meter_readings, which would break R61's
-// structural separation.
+// Consumption serves charts and tables from the aggregates. The repository
+// boundary-differences each bucket (F15q R471), so a bucket with readings on
+// its edges matches Billing. R499: months and years are rolled up from
+// consumption_daily by the repository, so every period that has data has a
+// row; one the next period's first reading does not close is marked Partial.
 func (a *Analytics) Consumption(ctx context.Context, sc store.Scope, req SeriesRequest) ([]Row, error) {
 	if err := validateRequest(sc, req); err != nil {
 		return nil, err
@@ -72,13 +68,9 @@ func (a *Analytics) Consumption(ctx context.Context, sc store.Scope, req SeriesR
 		return nil, nil
 	}
 
-	// The aggregate is queried over the request WIDENED to whole
-	// buckets of Level — [wanted[0].From, wanted[last].To) — never
-	// req.Range directly. The materialised view's own predicate is
-	// `bucket >= from_ts`, so a From landing mid-bucket (e.g. a monthly
-	// request starting on the 15th) would otherwise silently drop the
-	// bucket containing it, even though Billing (which already expands to
-	// whole buckets) returns it.
+	// The aggregate is queried over the request WIDENED to whole buckets of
+	// Level, never req.Range directly: a From landing mid-bucket would
+	// otherwise drop the bucket containing it, which Billing returns.
 	queryRange := store.TimeRange{From: wanted[0].From, To: wanted[len(wanted)-1].To}
 
 	buckets, err := a.fetchBuckets(ctx, sc, req, queryRange)
@@ -91,45 +83,17 @@ func (a *Analytics) Consumption(ctx context.Context, sc store.Scope, req SeriesR
 		byKey[analyticsBucketKey{b.AnalyzerID, b.Bucket.UnixNano()}] = b
 	}
 
-	// R94 (amends R88): every requested bucket absent from the materialised
-	// view, at Monthly/Yearly, is a composition candidate — not only the
-	// trailing one. Analytics has no clock and so has no way to tell
-	// "genuinely still open" apart from "closed but not yet refreshed", and
-	// R94's fix is to stop trying: compose whichever windows are missing,
-	// wherever they fall in the request, as long as consumption_daily has
-	// buckets to compose them from.
-	needsCompose := req.Level == energy.Monthly || req.Level == energy.Yearly
-
-	missing := make(map[uuid.UUID][]energy.Window)
-	if needsCompose {
-		for _, id := range req.AnalyzerIDs {
-			for _, w := range wanted {
-				if _, ok := byKey[analyticsBucketKey{id, w.From.UnixNano()}]; !ok {
-					missing[id] = append(missing[id], w)
-				}
-			}
-		}
-	}
-
-	var composed map[analyticsBucketKey]Row
-	if len(missing) > 0 {
-		composed, err = a.composeMissingPeriods(ctx, sc, req.Level, wanted, missing)
-		if err != nil {
-			return nil, err
-		}
-	}
-
+	coarse := req.Level == energy.Monthly || req.Level == energy.Yearly
 	rows := make([]Row, 0, len(wanted)*len(req.AnalyzerIDs))
 	for _, id := range req.AnalyzerIDs {
 		for _, w := range wanted {
-			key := analyticsBucketKey{id, w.From.UnixNano()}
-			if b, ok := byKey[key]; ok {
-				rows = append(rows, bucketToRow(b, w))
+			b, ok := byKey[analyticsBucketKey{id, w.From.UnixNano()}]
+			if !ok {
 				continue
 			}
-			if row, ok := composed[key]; ok {
-				rows = append(rows, row)
-			}
+			row := bucketToRow(b, w)
+			row.Partial = coarse && !b.ClosedByBoundary
+			rows = append(rows, row)
 		}
 	}
 	return rows, nil
@@ -153,137 +117,10 @@ func (a *Analytics) fetchBuckets(ctx context.Context, sc store.Scope, req Series
 	}
 }
 
-// composeMissingPeriods implements R94 (amending R88): for every analyzer in
-// missing, compose every one of its listed windows from consumption_daily —
-// each register's value is the closing index of the last consumption_daily
-// bucket inside that window, minus the closing index of the last
-// consumption_daily bucket before it began; nil when either is missing. It
-// never reads meter_readings.
-//
-// ONE ConsumptionDaily call covers every analyzer and every missing window
-// at once, bounded to [Bucket(level, wanted[0].From-1ns).From,
-// wanted[last].To): the previous period's own start (before the very first
-// requested window) is computed with energy.Bucket rather than an arbitrary
-// look-back, so the query reaches back exactly one period before the
-// earliest possible missing window — never further, never less — and
-// forward to the end of the request.
-func (a *Analytics) composeMissingPeriods(ctx context.Context, sc store.Scope, level energy.Level, wanted []energy.Window, missing map[uuid.UUID][]energy.Window) (map[analyticsBucketKey]Row, error) {
-	analyzerIDs := make([]uuid.UUID, 0, len(missing))
-	for id := range missing {
-		analyzerIDs = append(analyzerIDs, id)
-	}
-
-	first := wanted[0]
-	last := wanted[len(wanted)-1]
-	prev := energy.Bucket(level, first.From.Add(-time.Nanosecond), istanbul)
-	dailyRange := store.TimeRange{From: prev.From, To: last.To}
-	if !dailyRange.Valid() {
-		return nil, nil
-	}
-
-	daily, err := a.deps.Analytics.ConsumptionDaily(ctx, sc, analyzerIDs, dailyRange)
-	if err != nil {
-		return nil, err
-	}
-
-	byAnalyzer := make(map[uuid.UUID][]model.ConsumptionBucket, len(analyzerIDs))
-	for _, d := range daily {
-		byAnalyzer[d.AnalyzerID] = append(byAnalyzer[d.AnalyzerID], d)
-	}
-
-	out := make(map[analyticsBucketKey]Row)
-	for id, windows := range missing {
-		dailyBuckets := byAnalyzer[id]
-		for _, w := range windows {
-			if row := composeOpenPeriodRow(id, w, dailyBuckets); row != nil {
-				out[analyticsBucketKey{id, w.From.UnixNano()}] = *row
-			}
-		}
-	}
-	return out, nil
-}
-
-// composeOpenPeriodRow is composeMissingPeriods' single-window arithmetic
-// (R94, amending R88), factored out so it has nothing left to depend on but
-// its inputs.
-//
-// When lastBefore is nil (no consumption_daily bucket exists before w
-// at all), there is nothing to subtract from and no composed row is
-// emitted — never a row whose every value is nil. bucketIndexes only ever
-// has keys for the seven registers migration 00005 gives a closing-index
-// column to; the other five (every export register but active_export) are
-// therefore always nil in a composed row, same as in a materialised one.
-//
-// MaxDemandKw is the MAXIMUM of MaxDemandKw over every daily bucket
-// strictly inside w, not merely the last one: a period's peak day is not
-// necessarily its most recent day.
-func composeOpenPeriodRow(analyzerID uuid.UUID, w energy.Window, dailyBuckets []model.ConsumptionBucket) *Row {
-	var lastBefore, lastInside *model.ConsumptionBucket
-	var maxDemand *decimal.Decimal
-	for i := range dailyBuckets {
-		b := &dailyBuckets[i]
-		switch {
-		case b.Bucket.Before(w.From):
-			if lastBefore == nil || b.Bucket.After(lastBefore.Bucket) {
-				lastBefore = b
-			}
-		case !b.Bucket.Before(w.From) && b.Bucket.Before(w.To):
-			if lastInside == nil || b.Bucket.After(lastInside.Bucket) {
-				lastInside = b
-			}
-			if b.MaxDemandKw != nil && (maxDemand == nil || b.MaxDemandKw.GreaterThan(*maxDemand)) {
-				v := *b.MaxDemandKw
-				maxDemand = &v
-			}
-		}
-	}
-	if lastInside == nil || lastBefore == nil {
-		// Nothing inside the period yet, or nothing before it to
-		// subtract from — either way there is no sound composed figure, so
-		// no row is emitted (never an all-nil-values row).
-		return nil
-	}
-
-	insideIdx := bucketIndexes(*lastInside)
-	beforeIdx := bucketIndexes(*lastBefore)
-
-	values := make(map[energy.Register]*decimal.Decimal, len(energy.AllRegisters()))
-	for _, reg := range energy.AllRegisters() {
-		inside := insideIdx[reg]
-		before := beforeIdx[reg]
-		if inside == nil || before == nil {
-			values[reg] = nil
-			continue
-		}
-		v := inside.Sub(*before)
-		// R102: a composed figure can go negative across a meter swap
-		// exactly as a materialised bucket's own delta column can
-		// (bucketValues above) — nonNegative applies the same rule here.
-		values[reg] = nonNegative(&v)
-	}
-
-	return &Row{
-		AnalyzerID:      analyzerID,
-		Window:          w,
-		Values:          values,
-		Indexes:         insideIdx,
-		InductiveRatio:  energy.Ratio(values[energy.ReactiveInductiveImport], values[energy.ActiveImport]),
-		CapacitiveRatio: energy.Ratio(values[energy.ReactiveCapacitiveImport], values[energy.ActiveImport]),
-		MaxDemandKw:     maxDemand,
-		Source:          energy.KindLoadProfile,
-		// R94: a composed row is closing-to-closing across whatever
-		// materialisation gap it fills and may differ from the later
-		// materialised row by the boundary step once the view
-		// catches up — Partial marks it as not directly comparable.
-		Partial: true,
-	}
-}
-
-// bucketToRow converts one materialised aggregate row into a Row. Ratios
-// are computed from the bucket's own consumption values with energy.Ratio
-// (R62), and Source is always energy.KindLoadProfile: every consumption_*
-// continuous aggregate is built over kind = 'load_profile' rows only
-// (migration 00005's filter).
+// bucketToRow converts one aggregate row into a Row. Ratios are computed from
+// the bucket's own consumption values with energy.Ratio (R62), and Source is
+// always energy.KindLoadProfile: every consumption aggregate is built over
+// kind = 'load_profile' rows only.
 func bucketToRow(b model.ConsumptionBucket, w energy.Window) Row {
 	values := bucketValues(b)
 	return Row{
@@ -301,10 +138,10 @@ func bucketToRow(b model.ConsumptionBucket, w energy.Window) Row {
 // bucketValues maps a ConsumptionBucket's per-register consumption (delta)
 // columns onto energy.Register. Every one of the twelve registers has an
 // entry, nil where the aggregate's own column is nil OR negative (R102: a
-// meter swap or other index discontinuity can make last-first inside a
-// bucket negative; Analytics has no suspicion channel, so a negative figure
-// comes back as an ordinary "no data" nil rather than a number nobody
-// flagged as wrong).
+// meter swap or other index discontinuity can make a bucket's difference
+// negative; Analytics has no suspicion channel, so a negative figure comes
+// back as an ordinary "no data" nil rather than a number nobody flagged as
+// wrong).
 func bucketValues(b model.ConsumptionBucket) map[energy.Register]*decimal.Decimal {
 	return map[energy.Register]*decimal.Decimal{
 		energy.ActiveImport:             nonNegative(b.ActiveConsumption),
@@ -323,12 +160,10 @@ func bucketValues(b model.ConsumptionBucket) map[energy.Register]*decimal.Decima
 }
 
 // nonNegative returns d unchanged, or nil when d is itself nil or negative
-// (R102): the Analytics path never returns a negative
-// consumption for a register — a materialised bucket's own delta column or a
-// composed row's closing-index subtraction can go negative across a meter
-// swap, and since Analytics has no suspicion channel (only Billing records
-// suspect periods), the only sound thing to surface is "unavailable", never
-// the negative number itself.
+// (R102): the Analytics path never returns a negative consumption for a
+// register — a bucket's difference can go negative across a meter swap, and
+// since Analytics has no suspicion channel (only Billing records suspect
+// periods), the only sound thing to surface is "unavailable".
 func nonNegative(d *decimal.Decimal) *decimal.Decimal {
 	if d == nil || d.IsNegative() {
 		return nil
@@ -336,13 +171,10 @@ func nonNegative(d *decimal.Decimal) *decimal.Decimal {
 	return d
 }
 
-// bucketIndexes maps a ConsumptionBucket's closing-index columns onto
-// energy.Register. Unlike bucketValues, only the seven registers migration
-// 00005 actually gives a closing-index column to are present as keys
-// (active_import through t3_import, plus active_export): the aggregate has
-// no per-register closing index for the other five export registers, and a
-// missing key reads identically to an explicit nil for any caller doing a
-// map lookup.
+// bucketIndexes maps a ConsumptionBucket's closing-index fields onto
+// energy.Register. Only the seven registers the model carries a closing index
+// for are present as keys (active_import through t3_import, plus
+// active_export); a missing key reads like an explicit nil.
 func bucketIndexes(b model.ConsumptionBucket) map[energy.Register]*decimal.Decimal {
 	return map[energy.Register]*decimal.Decimal{
 		energy.ActiveImport:             b.ActiveIndex,

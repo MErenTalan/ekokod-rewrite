@@ -102,6 +102,7 @@
     "provider": "Sağlayıcı",
     "status": "Durum",
     "secretStored": "Kayıtlı",
+    "noSecret": "Parola gerekmez",
     "lastVerified": "Son doğrulama",
     "never": "Hiç",
     "verify": "Doğrula",

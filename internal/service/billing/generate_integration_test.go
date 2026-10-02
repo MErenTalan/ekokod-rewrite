@@ -84,7 +84,9 @@ func (h *harness) seed(analyzer uuid.UUID, ts time.Time, active, inductive, capa
 	h.t.Helper()
 	r := model.MeterReading{AnalyzerID: analyzer, Ts: ts, Kind: model.ReadingKindLoadProfile, MultiplierApplied: decimal.NewFromInt(1),
 		SourceProvider: model.IntegrationProviderOSOS, IngestedAt: ts, ActiveExport: dec("0")}
-	r.ActiveImport = dec(active)
+	if active != "" {
+		r.ActiveImport = dec(active)
+	}
 	if inductive != "" {
 		r.ReactiveInductiveImport = dec(inductive)
 	}
@@ -336,6 +338,23 @@ func TestGenerateClosedPeriodWithMissingEndStillBills(t *testing.T) {
 	res, err := h.generate(h.tenant.Scope, model.BillScopeAnalyzer, a)
 	require.NoError(t, err, "the missing_readings anomaly just recorded does not block")
 	require.Equal(t, "200", res.Bill.NetConsumption.String())
+	require.Equal(t, h.days(20, 31), res.Bill.MissingDays)
+}
+
+// R501: a day whose readings carry no active index (the gateway answered,
+// the meter did not) is a missing day — never a bill that fails on a nil.
+func TestGenerateDaysWithoutAnActiveIndexAreMissing(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, 7092)
+	a := h.tenant.Analyzers[0].ID
+	h.seedDays(a, 20)
+	for d := 21; d <= 31; d++ { // rows to the period's very end, generation only
+		h.seed(a, h.window.From.AddDate(0, 0, d), "", "", "")
+	}
+
+	res, err := h.generate(h.tenant.Scope, model.BillScopeAnalyzer, a)
+	require.NoError(t, err)
+	require.Equal(t, "200", res.Bill.NetConsumption.String(), "20 days with an index × 10 kWh")
 	require.Equal(t, h.days(20, 31), res.Bill.MissingDays)
 }
 

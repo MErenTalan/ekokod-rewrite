@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/job"
-	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/lock"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/consumption"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
@@ -165,20 +164,11 @@ func (f *fakeEnqueuer) calledWith() []job.ConsumptionRefreshPayload {
 	return append([]job.ConsumptionRefreshPayload(nil), f.calls...)
 }
 
-// farFutureNow is a clock reading far enough past any test window below
-// that NO view's policy horizon (even yearly's 5 years) ever clips it — the
-// tests that assert exact, unclipped bucket ranges (finest-first order,
-// per-view bucket expansion, lock ordering, error propagation) use this so
-// R100(3)'s horizon clipping never interferes with what they are actually
-// testing.
-var farFutureNow = time.Date(2040, 1, 1, 0, 0, 0, 0, time.UTC)
-
-func validRefreshDeps(agg *fakeAggregates, locker lock.Locker, enq consumption.Enqueuer, now time.Time) consumption.RefreshDeps {
+func validRefreshDeps(agg *fakeAggregates, locker lock.Locker, enq consumption.Enqueuer) consumption.RefreshDeps {
 	return consumption.RefreshDeps{
 		Aggregates: agg,
 		Locker:     locker,
 		Enqueuer:   enq,
-		Clock:      clock.NewFake(now),
 		LockTTL:    time.Minute,
 		Location:   testIstanbul,
 		Log:        discardLog(),
@@ -190,7 +180,7 @@ func TestNewRefresherValidatesDeps(t *testing.T) {
 	agg := &fakeAggregates{}
 	locker := &fakeLocker{rec: &recorder{}}
 	enq := &fakeEnqueuer{}
-	valid := validRefreshDeps(agg, locker, enq, farFutureNow)
+	valid := validRefreshDeps(agg, locker, enq)
 
 	t.Run("valid deps succeed", func(t *testing.T) {
 		r, err := consumption.NewRefresher(valid)
@@ -215,13 +205,6 @@ func TestNewRefresherValidatesDeps(t *testing.T) {
 	t.Run("nil Enqueuer", func(t *testing.T) {
 		d := valid
 		d.Enqueuer = nil
-		_, err := consumption.NewRefresher(d)
-		require.Error(t, err)
-	})
-
-	t.Run("nil Clock", func(t *testing.T) {
-		d := valid
-		d.Clock = nil
 		_, err := consumption.NewRefresher(d)
 		require.Error(t, err)
 	})
@@ -255,12 +238,12 @@ func TestNewRefresherValidatesDeps(t *testing.T) {
 	})
 }
 
-// TestRefreshConsumptionRefreshesViewsFinestFirst proves the four views are
-// refreshed in exactly hourly, daily, monthly, yearly order.
+// TestRefreshConsumptionRefreshesViewsFinestFirst proves the views are
+// refreshed in exactly hourly, daily order (months and years have none, R499).
 func TestRefreshConsumptionRefreshesViewsFinestFirst(t *testing.T) {
 	agg := &fakeAggregates{}
 	locker := &fakeLocker{rec: &recorder{}}
-	r, err := consumption.NewRefresher(validRefreshDeps(agg, locker, &fakeEnqueuer{}, farFutureNow))
+	r, err := consumption.NewRefresher(validRefreshDeps(agg, locker, &fakeEnqueuer{}))
 	require.NoError(t, err)
 
 	from := time.Date(2025, 3, 14, 10, 10, 0, 0, testIstanbul)
@@ -272,19 +255,16 @@ func TestRefreshConsumptionRefreshesViewsFinestFirst(t *testing.T) {
 	require.Equal(t, []store.AggregateView{
 		store.ViewConsumptionHourly,
 		store.ViewConsumptionDaily,
-		store.ViewConsumptionMonthly,
-		store.ViewConsumptionYearly,
 	}, agg.viewsCalled())
 }
 
 // TestRefreshConsumptionExpandsEachViewToItsOwnBuckets proves each view
 // receives its own level-expanded range, not the raw payload window and not
-// another level's expansion, when now is far enough away that R100(3)'s
-// policy-horizon clip never trims it.
+// another level's expansion.
 func TestRefreshConsumptionExpandsEachViewToItsOwnBuckets(t *testing.T) {
 	agg := &fakeAggregates{}
 	locker := &fakeLocker{rec: &recorder{}}
-	r, err := consumption.NewRefresher(validRefreshDeps(agg, locker, &fakeEnqueuer{}, farFutureNow))
+	r, err := consumption.NewRefresher(validRefreshDeps(agg, locker, &fakeEnqueuer{}))
 	require.NoError(t, err)
 
 	from := time.Date(2025, 3, 14, 10, 10, 0, 0, testIstanbul)
@@ -292,7 +272,7 @@ func TestRefreshConsumptionExpandsEachViewToItsOwnBuckets(t *testing.T) {
 	payload := job.ConsumptionRefreshPayload{CompanyID: uuid.New(), AnalyzerID: uuid.New(), From: from, To: to}
 
 	require.NoError(t, r.RefreshConsumption(context.Background(), payload))
-	require.Len(t, agg.calls, 4)
+	require.Len(t, agg.calls, 2)
 
 	want := map[store.AggregateView]store.TimeRange{
 		store.ViewConsumptionHourly: {
@@ -302,14 +282,6 @@ func TestRefreshConsumptionExpandsEachViewToItsOwnBuckets(t *testing.T) {
 		store.ViewConsumptionDaily: {
 			From: time.Date(2025, 3, 14, 0, 0, 0, 0, testIstanbul),
 			To:   time.Date(2025, 3, 15, 0, 0, 0, 0, testIstanbul),
-		},
-		store.ViewConsumptionMonthly: {
-			From: time.Date(2025, 3, 1, 0, 0, 0, 0, testIstanbul),
-			To:   time.Date(2025, 4, 1, 0, 0, 0, 0, testIstanbul),
-		},
-		store.ViewConsumptionYearly: {
-			From: time.Date(2025, 1, 1, 0, 0, 0, 0, testIstanbul),
-			To:   time.Date(2026, 1, 1, 0, 0, 0, 0, testIstanbul),
 		},
 	}
 
@@ -329,7 +301,7 @@ func TestRefreshConsumptionHoldsOneGlobalLockAroundTheWholeRefresh(t *testing.T)
 	rec := &recorder{}
 	agg := &fakeAggregates{rec: rec}
 	locker := &fakeLocker{rec: rec}
-	r, err := consumption.NewRefresher(validRefreshDeps(agg, locker, &fakeEnqueuer{}, farFutureNow))
+	r, err := consumption.NewRefresher(validRefreshDeps(agg, locker, &fakeEnqueuer{}))
 	require.NoError(t, err)
 
 	from := time.Date(2025, 6, 1, 0, 0, 0, 0, testIstanbul)
@@ -342,8 +314,6 @@ func TestRefreshConsumptionHoldsOneGlobalLockAroundTheWholeRefresh(t *testing.T)
 		"acquire:consumption.refresh",
 		"refresh:consumption_hourly",
 		"refresh:consumption_daily",
-		"refresh:consumption_monthly",
-		"refresh:consumption_yearly",
 		"release:consumption.refresh",
 	}, rec.all())
 }
@@ -356,7 +326,7 @@ func TestRefreshConsumptionContentionReEnqueuesAndReturnsNil(t *testing.T) {
 	agg := &fakeAggregates{}
 	locker := &fakeLocker{rec: &recorder{}, failKeys: map[string]bool{"consumption.refresh": true}}
 	enq := &fakeEnqueuer{}
-	r, err := consumption.NewRefresher(validRefreshDeps(agg, locker, enq, farFutureNow))
+	r, err := consumption.NewRefresher(validRefreshDeps(agg, locker, enq))
 	require.NoError(t, err)
 
 	from := time.Date(2025, 6, 1, 0, 0, 0, 0, testIstanbul)
@@ -385,7 +355,7 @@ func TestRefreshConsumptionContentionSurfacesAReEnqueueFailure(t *testing.T) {
 	locker := &fakeLocker{rec: &recorder{}, failKeys: map[string]bool{"consumption.refresh": true}}
 	reEnqueueErr := errors.New("boom: re-enqueue failed")
 	enq := &fakeEnqueuer{err: reEnqueueErr}
-	r, err := consumption.NewRefresher(validRefreshDeps(agg, locker, enq, farFutureNow))
+	r, err := consumption.NewRefresher(validRefreshDeps(agg, locker, enq))
 	require.NoError(t, err)
 
 	from := time.Date(2025, 6, 1, 0, 0, 0, 0, testIstanbul)
@@ -412,7 +382,7 @@ func TestRefreshConsumptionReleasesLockWithAnUncancelledContext(t *testing.T) {
 			cancel()
 		}
 	}}
-	r, err := consumption.NewRefresher(validRefreshDeps(agg, locker, &fakeEnqueuer{}, farFutureNow))
+	r, err := consumption.NewRefresher(validRefreshDeps(agg, locker, &fakeEnqueuer{}))
 	require.NoError(t, err)
 
 	from := time.Date(2025, 6, 1, 0, 0, 0, 0, testIstanbul)
@@ -437,7 +407,7 @@ func TestRefreshConsumptionErrorOnOneViewAbortsTheRestButReleasesTheLock(t *test
 	failErr := errors.New("boom: daily refresh failed")
 	agg := &fakeAggregates{rec: rec, failView: store.ViewConsumptionDaily, failErr: failErr}
 	locker := &fakeLocker{rec: rec}
-	r, err := consumption.NewRefresher(validRefreshDeps(agg, locker, &fakeEnqueuer{}, farFutureNow))
+	r, err := consumption.NewRefresher(validRefreshDeps(agg, locker, &fakeEnqueuer{}))
 	require.NoError(t, err)
 
 	from := time.Date(2025, 6, 1, 0, 0, 0, 0, testIstanbul)
@@ -477,7 +447,7 @@ func TestRefreshConsumptionRejectsInvalidPayloadsWithSkipRetry(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			agg := &fakeAggregates{}
 			locker := &fakeLocker{rec: &recorder{}}
-			r, err := consumption.NewRefresher(validRefreshDeps(agg, locker, &fakeEnqueuer{}, farFutureNow))
+			r, err := consumption.NewRefresher(validRefreshDeps(agg, locker, &fakeEnqueuer{}))
 			require.NoError(t, err)
 
 			err = r.RefreshConsumption(context.Background(), payload)
@@ -488,99 +458,29 @@ func TestRefreshConsumptionRejectsInvalidPayloadsWithSkipRetry(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// R100(3): a view is refreshed only for the part of the window older than
-// its own policy start_offset (hourly 30d, daily 90d, monthly 1y, yearly
-// 5y), clipped to whole buckets; a view with nothing older is skipped
-// entirely.
-// ---------------------------------------------------------------------------
-
-// refreshNow anchors every policy-horizon test below: windows are placed at
-// fixed offsets from it, never from time.Now().
-var refreshNow = time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)
-
-// TestRefreshConsumptionSkipsEveryViewWhenWindowIsEntirelyInsideHourlyPolicy
-// proves a window entirely inside the hourly policy window (< 30 days old,
-// therefore also inside daily/monthly/yearly's wider windows) refreshes
-// NOTHING: every view's scheduled policy already covers it live.
-func TestRefreshConsumptionSkipsEveryViewWhenWindowIsEntirelyInsideHourlyPolicy(t *testing.T) {
+// R500: a window is refreshed in full however recent it is. Rows a fetch wrote
+// behind a view's watermark are invisible until a refresh covers them, and
+// waiting for the scheduled policy left every chart stale for up to an hour.
+func TestRefreshConsumptionRefreshesARecentWindowInFull(t *testing.T) {
 	agg := &fakeAggregates{}
 	locker := &fakeLocker{rec: &recorder{}}
-	r, err := consumption.NewRefresher(validRefreshDeps(agg, locker, &fakeEnqueuer{}, refreshNow))
+	r, err := consumption.NewRefresher(validRefreshDeps(agg, locker, &fakeEnqueuer{}))
 	require.NoError(t, err)
 
-	from := refreshNow.Add(-5 * 24 * time.Hour)
-	to := from.Add(2 * time.Hour)
+	now := time.Now()
+	from, to := now.Add(-40*24*time.Hour), now.Add(-10*time.Minute)
 	payload := job.ConsumptionRefreshPayload{CompanyID: uuid.New(), From: from, To: to}
 
 	require.NoError(t, r.RefreshConsumption(context.Background(), payload))
-	require.Empty(t, agg.calls, "a window entirely inside the hourly policy window must refresh nothing")
-}
+	require.Equal(t, []store.AggregateView{store.ViewConsumptionHourly, store.ViewConsumptionDaily}, agg.viewsCalled())
 
-// TestRefreshConsumptionTwoHundredDayOldWindowRefreshesHourlyAndDailyOnly
-// proves a 200-day-old window is older than hourly's (30d) and daily's
-// (90d) horizons but NEWER than monthly's (1y) and yearly's (5y) — so only
-// hourly and daily are refreshed.
-func TestRefreshConsumptionTwoHundredDayOldWindowRefreshesHourlyAndDailyOnly(t *testing.T) {
-	agg := &fakeAggregates{}
-	locker := &fakeLocker{rec: &recorder{}}
-	r, err := consumption.NewRefresher(validRefreshDeps(agg, locker, &fakeEnqueuer{}, refreshNow))
-	require.NoError(t, err)
+	hourly, ok := agg.rangeFor(store.ViewConsumptionHourly)
+	require.True(t, ok)
+	require.True(t, hourly.From.Equal(from.Truncate(time.Hour)), "from: %v", hourly.From)
+	require.False(t, hourly.To.Before(to), "the refreshed range must reach the window's own end, got %v", hourly.To)
 
-	from := refreshNow.Add(-200 * 24 * time.Hour)
-	to := from.Add(2 * time.Hour)
-	payload := job.ConsumptionRefreshPayload{CompanyID: uuid.New(), From: from, To: to}
-
-	require.NoError(t, r.RefreshConsumption(context.Background(), payload))
-	require.Equal(t, []store.AggregateView{
-		store.ViewConsumptionHourly,
-		store.ViewConsumptionDaily,
-	}, agg.viewsCalled(), "a 200-day-old window must refresh hourly and daily but not monthly or yearly")
-}
-
-// TestRefreshConsumptionTwoYearOldWindowRefreshesEverythingButYearly proves
-// a 2-year-old window is older than hourly (30d), daily (90d) and monthly
-// (1y) horizons but NEWER than yearly's (5y) — so hourly, daily and monthly
-// refresh, and yearly is skipped.
-func TestRefreshConsumptionTwoYearOldWindowRefreshesEverythingButYearly(t *testing.T) {
-	agg := &fakeAggregates{}
-	locker := &fakeLocker{rec: &recorder{}}
-	r, err := consumption.NewRefresher(validRefreshDeps(agg, locker, &fakeEnqueuer{}, refreshNow))
-	require.NoError(t, err)
-
-	from := refreshNow.Add(-2 * 365 * 24 * time.Hour)
-	to := from.Add(2 * time.Hour)
-	payload := job.ConsumptionRefreshPayload{CompanyID: uuid.New(), From: from, To: to}
-
-	require.NoError(t, r.RefreshConsumption(context.Background(), payload))
-	require.Equal(t, []store.AggregateView{
-		store.ViewConsumptionHourly,
-		store.ViewConsumptionDaily,
-		store.ViewConsumptionMonthly,
-	}, agg.viewsCalled(), "a 2-year-old window must refresh hourly, daily and monthly but not yearly")
-}
-
-// TestRefreshConsumptionClipsAWindowStraddlingTheHourlyHorizon proves the
-// "clipped to whole buckets" half of R100(3): a window spanning from 40
-// days ago to 10 days ago straddles the hourly policy's 30-day horizon —
-// the refreshed range must stop at the horizon's own hour bucket, not
-// extend all the way to the window's original (much newer) To.
-func TestRefreshConsumptionClipsAWindowStraddlingTheHourlyHorizon(t *testing.T) {
-	agg := &fakeAggregates{}
-	locker := &fakeLocker{rec: &recorder{}}
-	r, err := consumption.NewRefresher(validRefreshDeps(agg, locker, &fakeEnqueuer{}, refreshNow))
-	require.NoError(t, err)
-
-	from := refreshNow.Add(-40 * 24 * time.Hour)
-	to := refreshNow.Add(-10 * 24 * time.Hour)
-	payload := job.ConsumptionRefreshPayload{CompanyID: uuid.New(), From: from, To: to}
-
-	require.NoError(t, r.RefreshConsumption(context.Background(), payload))
-
-	rng, ok := agg.rangeFor(store.ViewConsumptionHourly)
-	require.True(t, ok, "the hourly view must still be refreshed for its older part")
-
-	horizon := refreshNow.Add(-30 * 24 * time.Hour).In(testIstanbul).Truncate(time.Hour)
-	require.True(t, rng.To.Equal(horizon), "hourly refresh must stop at the policy horizon's own bucket, want %v got %v", horizon, rng.To)
-	require.True(t, rng.To.Before(to.In(testIstanbul)), "the clipped range must not reach the window's original (too recent) To")
+	daily, ok := agg.rangeFor(store.ViewConsumptionDaily)
+	require.True(t, ok)
+	require.False(t, daily.From.After(from))
+	require.False(t, daily.To.Before(to))
 }

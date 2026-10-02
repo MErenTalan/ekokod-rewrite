@@ -56,6 +56,7 @@
     "progress": "{label} progress",
     "stillRunning": "The job is still running; you can leave this screen.",
     "refreshQueued": "The pull has started; the values appear within a few minutes.",
+    "nothingToFetch": "Nothing to fetch: this analyzer’s provider does not offer this kind of data.",
     "children": "{done}/{total} sub-tasks finished · {succeeded} succeeded · {failed} failed{already, plural, =0 {} other { · # windows already queued}}"
   },
   "quality": {

@@ -45,6 +45,12 @@ const STATUS_LABEL = {
  *  and timestamp. */
 export function MessageTableView({ messages, filtered, loading = false }: MessageTableViewProps) {
   const t = useTranslations('messages');
+  // The server's codes are kebab- or snake-case; message keys are camelCase.
+  // An unknown code is shown as it is rather than hidden.
+  const label = (group: 'categories' | 'relatedTypes', code: string) => {
+    const key = `${group}.${code.replace(/[-_]([a-z0-9])/g, (_, c: string) => c.toUpperCase())}`;
+    return t.has(key as never) ? t(key as never) : code;
+  };
   const locale = useLocale() as Locale;
 
   if (loading) return <Skeleton className="h-64 w-full" />;
@@ -84,7 +90,7 @@ export function MessageTableView({ messages, filtered, loading = false }: Messag
                 <TableCell>
                   <p className="type-body">{message.message}</p>
                   <p className="text-foreground-muted type-caption">
-                    {t('table.category')}: {message.category}
+                    {t('table.category')}: {label('categories', message.category)}
                   </p>
                 </TableCell>
                 <TableCell className="max-w-sm break-words">
@@ -94,7 +100,9 @@ export function MessageTableView({ messages, filtered, loading = false }: Messag
                   {/* Both null is an ordinary state: a message about nothing in
                       particular, such as a run summary. */}
                   {message.related_type ? (
-                    <span className="type-body">{message.related_type}</span>
+                    <span className="type-body">
+                      {label('relatedTypes', message.related_type)}
+                    </span>
                   ) : (
                     '—'
                   )}

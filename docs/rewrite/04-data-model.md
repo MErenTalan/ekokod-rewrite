@@ -373,9 +373,11 @@ select add_continuous_aggregate_policy('consumption_hourly',
     schedule_interval => interval '30 minutes');
 ```
 
-`consumption_daily`, `consumption_monthly` and `consumption_yearly` follow the same shape,
-hierarchically rolled up from the level below where TimescaleDB permits it, or defined directly over
-the hypertable where boundary semantics require it.
+`consumption_daily` follows the same shape. Months and years are not materialised: they are rolled
+up from `consumption_daily` at query time (F21 R499, migration 00024 — the monthly and yearly
+aggregates were only refreshed inside their policy horizon, so a history pull never reached them).
+Every `first()`/`last()` carries `filter (where <register> is not null)`, so a reading whose register
+the meter did not report cannot null its bucket (R498).
 
 **Boundary semantics.** A continuous aggregate buckets by wall time and computes
 `last − first` *within* the bucket, which misses the step between the last reading of one bucket

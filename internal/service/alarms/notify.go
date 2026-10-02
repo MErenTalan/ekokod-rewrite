@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -79,6 +80,10 @@ func (s *Service) Notify(ctx context.Context, n Notification) error {
 		return nil // the event is gone; there is nothing to deliver
 	}
 
+	// R514: every Messages row of a firing says what fired; the delivery
+	// outcome follows it.
+	fired := fmt.Sprintf("Alarm tetiklendi: %s (%s) — %s.", rule.Alarm.Name, label, strings.Join(lines, "; "))
+
 	// R211: say it once, with a COUNT and never a number — Messages rows are
 	// exported, and a phone number in one is the tenant's data leaving the app.
 	if smsCount > 0 {
@@ -87,20 +92,25 @@ func (s *Service) Notify(ctx context.Context, n Notification) error {
 	}
 
 	if len(emails) == 0 {
+		// A rule nobody subscribed to fired as designed: a warning, not an error.
 		reason := "bildirim kanalı tanımlı değil"
 		if smsCount > 0 {
 			reason = "yalnızca SMS numarası tanımlı, SMS henüz gönderilmiyor"
 		}
-		return s.markFailed(ctx, sc, n, reason, nil)
+		return s.markUnsent(ctx, sc, n, "warning", fired, reason, nil)
 	}
 
 	settings, err := s.nd.SMTP.Get(ctx, sc)
+	if errors.Is(err, store.ErrNotFound) {
+		// Not configured is the whole story; the driver's text adds nothing.
+		return s.markUnsent(ctx, sc, n, "error", fired, "şirketin SMTP ayarları yok", nil)
+	}
 	if err != nil {
-		return s.markFailed(ctx, sc, n, "şirketin SMTP ayarları yok", err)
+		return s.markUnsent(ctx, sc, n, "error", fired, "SMTP ayarları okunamadı", err)
 	}
 	password, err := s.nd.SMTP.OpenPassword(ctx, sc)
 	if err != nil {
-		return s.markFailed(ctx, sc, n, "SMTP parolası okunamadı", err)
+		return s.markUnsent(ctx, sc, n, "error", fired, "SMTP parolası okunamadı", err)
 	}
 
 	now := s.d.Clock.Now()
@@ -109,13 +119,12 @@ func (s *Service) Notify(ctx context.Context, n Notification) error {
 	if err := s.nd.Mail.Send(ctx, settings, password, msg); err != nil {
 		// The SMTP server's reply can quote what it rejected, so the password's
 		// own fragments are removed before the text reaches Messages.
-		return s.markFailed(ctx, sc, n, "e-posta gönderilemedi", err, secret.Fragments(string(password))...)
+		return s.markUnsent(ctx, sc, n, "error", fired, "e-posta gönderilemedi", err, secret.Fragments(string(password))...)
 	}
 	if err := s.d.Alarms.MarkNotified(ctx, sc, n.EventID, now, nil); err != nil {
 		return err // recorded nothing: retry
 	}
-	s.appendMessage(ctx, sc, n, "info", fmt.Sprintf(
-		"Alarm bildirimi gönderildi: %s (%s), %d alıcı.", rule.Alarm.Name, label, len(emails)))
+	s.appendMessage(ctx, sc, n, "info", fmt.Sprintf("%s Bildirim %d alıcıya gönderildi.", fired, len(emails)))
 	return nil
 }
 
@@ -185,10 +194,10 @@ func analyzerLabel(rule Rule, analyzerID *uuid.UUID) string {
 	return rule.Alarm.Name
 }
 
-// markFailed records the failure on the event and in Messages, then returns
-// nil (R222). The cause is scrubbed: an SMTP reply can quote the credentials
+// markUnsent records the undelivered event on itself and in Messages, then
+// returns nil (R222). The cause is scrubbed: an SMTP reply can quote the credentials
 // it rejected, and both sinks are operator-facing and exported.
-func (s *Service) markFailed(ctx context.Context, sc store.Scope, n Notification, reason string, cause error, hide ...string) error {
+func (s *Service) markUnsent(ctx context.Context, sc store.Scope, n Notification, status, fired, reason string, cause error, hide ...string) error {
 	text := reason
 	if cause != nil {
 		text = reason + ": " + secret.Redact(cause.Error(), hide)
@@ -198,7 +207,7 @@ func (s *Service) markFailed(ctx context.Context, sc store.Scope, n Notification
 	if err := s.d.Alarms.MarkNotified(ctx, sc, n.EventID, time.Time{}, &text); err != nil {
 		return err // could not even record it: retry
 	}
-	s.appendMessage(ctx, sc, n, "error", "Alarm bildirimi gönderilemedi: "+text)
+	s.appendMessage(ctx, sc, n, status, fired+" Bildirim gönderilmedi: "+text+".")
 	return nil
 }
 

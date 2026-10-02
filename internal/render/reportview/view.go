@@ -131,6 +131,9 @@ func (f formatter) currencyDeltas(ds []report.CurrencyDelta) string {
 	if len(ds) == 0 {
 		return "—"
 	}
+	if len(ds) == 1 { // the amount beside it already names the one currency
+		return f.delta(report.Delta{Pct: ds[0].Pct})
+	}
 	parts := make([]string, 0, len(ds))
 	for _, d := range ds {
 		parts = append(parts, d.Currency+" "+f.delta(report.Delta{Pct: d.Pct}))

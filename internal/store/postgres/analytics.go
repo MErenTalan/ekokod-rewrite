@@ -15,24 +15,18 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/sqlcgen"
 )
 
-// AnalyticsRepository implements store.AnalyticsRepository: the MATERIALISED
-// reads over the six continuous aggregates (migration 00005), for dashboards
-// and reports. This is deliberately NOT the billing-grade surface — that is
-// ReadingRepository.BoundaryReadings, which reads meter_readings directly —
-// and the two live in different files with different names so the
-// distinction 04-data-model.md §4.3 requires is impossible to miss in code.
+// AnalyticsRepository implements store.AnalyticsRepository: the aggregate
+// reads for dashboards and reports. This is deliberately NOT the
+// billing-grade surface — that is ReadingRepository.BoundaryReadings, which
+// reads meter_readings directly — and the two live in different files with
+// different names so the distinction 04-data-model.md §4.3 requires is
+// impossible to miss in code.
 //
-// consumption_hourly/daily/monthly/yearly have no company_id and join
-// through analyzers; plant_production_daily/monthly have no company_id and
-// join through power_plants, which itself has no building_id.
-//
-// consumption_monthly, consumption_yearly and plant_production_monthly are
-// materialized_only = true (migration 00005): the bucket currently in
-// progress is ABSENT from them, not stale. A caller wanting month-to-date or
-// year-to-date must compose the closed buckets these methods return with the
-// open period read from consumption_daily/meter_readings — this repository
-// does not do that composition, and callers must not "fix" a missing
-// current-period row by asking migration 00005 to flip materialized_only.
+// consumption_hourly/daily have no company_id and join through analyzers;
+// months and years are rolled up from consumption_daily at query time
+// (R499). plant_production_daily/monthly have no company_id and join through
+// power_plants, which itself has no building_id; plant_production_monthly is
+// materialized_only = true, so its open month is ABSENT, not stale.
 //
 // Bucket boundaries for every view coarser than hourly (Daily, Monthly,
 // Yearly, on both the consumption and production sides) are
@@ -89,27 +83,25 @@ func (r *AnalyticsRepository) ConsumptionDaily(ctx context.Context, s store.Scop
 }
 
 // ConsumptionMonthly implements store.AnalyticsRepository.ConsumptionMonthly.
-// The open month is ABSENT from consumption_monthly (materialized_only =
-// true): see this file's header.
+// R499: rolled up from consumption_daily at query time, so the open month is
+// whole and a backfilled one needs no refresh.
 func (r *AnalyticsRepository) ConsumptionMonthly(ctx context.Context, s store.Scope, analyzerIDs []uuid.UUID, tr store.TimeRange) ([]model.ConsumptionBucket, error) {
-	return r.consumption(ctx, energy.Monthly, "analytics consumption monthly", s, analyzerIDs, tr,
-		func(p sqlcgen.AnalyticsConsumptionHourlyParams) ([]sqlcgen.ConsumptionHourly, error) {
-			rows, err := r.q.AnalyticsConsumptionMonthly(ctx, sqlcgen.AnalyticsConsumptionMonthlyParams(p))
-			out := make([]sqlcgen.ConsumptionHourly, len(rows))
-			for i, row := range rows {
-				out[i] = sqlcgen.ConsumptionHourly(row)
-			}
-			return out, err
-		})
+	return r.rollup(ctx, energy.Monthly, pgtype.Interval{Months: 1, Valid: true}, "analytics consumption monthly", s, analyzerIDs, tr)
 }
 
-// ConsumptionYearly implements store.AnalyticsRepository.ConsumptionYearly.
-// The open year is ABSENT from consumption_yearly (materialized_only =
-// true): see this file's header.
+// ConsumptionYearly implements store.AnalyticsRepository.ConsumptionYearly,
+// rolled up like ConsumptionMonthly.
 func (r *AnalyticsRepository) ConsumptionYearly(ctx context.Context, s store.Scope, analyzerIDs []uuid.UUID, tr store.TimeRange) ([]model.ConsumptionBucket, error) {
-	return r.consumption(ctx, energy.Yearly, "analytics consumption yearly", s, analyzerIDs, tr,
+	return r.rollup(ctx, energy.Yearly, pgtype.Interval{Months: 12, Valid: true}, "analytics consumption yearly", s, analyzerIDs, tr)
+}
+
+func (r *AnalyticsRepository) rollup(ctx context.Context, level energy.Level, width pgtype.Interval, op string, s store.Scope, analyzerIDs []uuid.UUID, tr store.TimeRange) ([]model.ConsumptionBucket, error) {
+	return r.consumption(ctx, level, op, s, analyzerIDs, tr,
 		func(p sqlcgen.AnalyticsConsumptionHourlyParams) ([]sqlcgen.ConsumptionHourly, error) {
-			rows, err := r.q.AnalyticsConsumptionYearly(ctx, sqlcgen.AnalyticsConsumptionYearlyParams(p))
+			rows, err := r.q.AnalyticsConsumptionRollup(ctx, sqlcgen.AnalyticsConsumptionRollupParams{
+				Width: width, CompanyID: p.CompanyID, AllBuildings: p.AllBuildings, BuildingIds: p.BuildingIds,
+				AnalyzerIds: p.AnalyzerIds, FromTs: p.FromTs, ToTs: p.ToTs,
+			})
 			out := make([]sqlcgen.ConsumptionHourly, len(rows))
 			for i, row := range rows {
 				out[i] = sqlcgen.ConsumptionHourly(row)

@@ -106,6 +106,11 @@ const splitTargets = (raw: string) =>
 const EMAIL_RE = /^[^@\s]+@[^@\s.]+(\.[^@\s.]+)+$/;
 const PHONE_RE = /^\+?[0-9]{10,15}$/;
 
+/** True while nothing has been typed into a new rule: no error is shown yet. */
+export function isPristine(draft: AlarmDraft): boolean {
+  return !draft.id && JSON.stringify(draft) === JSON.stringify(emptyDraft());
+}
+
 /** The 422 the server would return, checked here first (R230, R231). */
 export function draftErrors(draft: AlarmDraft): Record<string, string> {
   const errors: Record<string, string> = {};
@@ -115,7 +120,10 @@ export function draftErrors(draft: AlarmDraft): Record<string, string> {
   const has = (key: SettingsKey) => Boolean(draft.settings[key]?.trim());
   switch (draft.type) {
     case 'reactive_limit':
-      if (!REACTIVE_GROUPS.some((group) => group.every(has))) errors.settings = 'atLeastOne';
+      // The unit select shows "hours" without the draft holding it, so a
+      // group is its threshold and period value; the unit defaults on send.
+      if (REACTIVE_GROUPS.some(([threshold, value]) => has(threshold) !== has(value))) errors.settings = 'periodMissing';
+      else if (!REACTIVE_GROUPS.some(([threshold, value]) => has(threshold) && has(value))) errors.settings = 'atLeastOne';
       break;
     case 'data_communication':
       if (!has('communication_threshold_hours')) errors.communication_threshold_hours = 'required';
@@ -156,6 +164,13 @@ export function toAlarmRequest(draft: AlarmDraft): AlarmFields {
     settings[key] = (key.endsWith('_period_value') || key === 'communication_threshold_hours'
       ? Number(raw)
       : raw) as never;
+  }
+
+  if (draft.type === 'reactive_limit') {
+    for (const [, value, unit] of REACTIVE_GROUPS) {
+      if (settings[value] === undefined) delete settings[unit];
+      else if (settings[unit] === undefined) settings[unit] = 'hours';
+    }
   }
 
   const channels: NonNullable<AlarmFields['channels']> = [];

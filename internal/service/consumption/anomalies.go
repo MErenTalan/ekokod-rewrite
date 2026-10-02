@@ -346,7 +346,7 @@ func (b *Billing) createAnomalyForReason(ctx context.Context, sc store.Scope, ro
 	if err != nil {
 		return err
 	}
-	message := anomalyMessageText(row, string(reason), regs)
+	message := anomalyMessageText(b.meterLabel(ctx, sc, row.AnalyzerID), row, reason, regs)
 	return b.dedupAndCreateAnomaly(ctx, sc, row.AnalyzerID, row.Window, string(reason), detail, message)
 }
 
@@ -489,32 +489,74 @@ func (b *Billing) createMissingReadingsAnomaly(ctx context.Context, sc store.Sco
 	if err != nil {
 		return err
 	}
-	message := missingReadingsMessageText(analyzerID, gap)
+	message := missingReadingsMessageText(b.meterLabel(ctx, sc, analyzerID), gap)
 	return b.dedupAndCreateAnomaly(ctx, sc, analyzerID, gap.Window, string(energy.ReasonMissingReadings), detail, message)
 }
 
+// meterLabel names an analyzer the way an operator knows it: its installation
+// number, or its id when the analyzer cannot be read (R510).
+func (b *Billing) meterLabel(ctx context.Context, sc store.Scope, analyzerID uuid.UUID) string {
+	if b.deps.Analyzers != nil {
+		if a, err := b.deps.Analyzers.Get(ctx, sc, analyzerID); err == nil && a.InstallationNumber != "" {
+			return a.InstallationNumber
+		}
+	}
+	return analyzerID.String()
+}
+
+// periodText renders a window in the product's own clock and language.
+func periodText(w energy.Window) string {
+	const layout = "02.01.2006 15:04"
+	return w.From.In(istanbul).Format(layout) + " – " + w.To.In(istanbul).Format(layout)
+}
+
+var boundaryText = map[string]string{"start": "başında", "end": "sonunda"}
+
 // missingReadingsMessageText renders R60's "one human-readable sentence" for
 // R97's own reason, naming the missing boundary side(s).
-func missingReadingsMessageText(analyzerID uuid.UUID, gap bucketGap) string {
-	return fmt.Sprintf(
-		"Analyzer %s: consumption for %s to %s is missing readings at the %s boundary.",
-		analyzerID, gap.Window.From.UTC().Format(time.RFC3339), gap.Window.To.UTC().Format(time.RFC3339),
-		strings.Join(gap.Boundaries, " and "),
-	)
+func missingReadingsMessageText(meter string, gap bucketGap) string {
+	sides := make([]string, 0, len(gap.Boundaries))
+	for _, side := range gap.Boundaries {
+		sides = append(sides, boundaryText[side])
+	}
+	return fmt.Sprintf("%s: %s döneminin %s okuma yok; bu dönemin tüketimi hesaplanamadı.",
+		meter, periodText(gap.Window), strings.Join(sides, " ve "))
+}
+
+var reasonText = map[energy.Reason]string{
+	energy.ReasonNegativeDelta: "endeks geriye gitti",
+	energy.ReasonMeterReset:    "sayaç sıfırlandı",
+}
+
+var registerText = map[energy.Register]string{
+	energy.ActiveImport: "aktif tüketim", energy.ReactiveInductiveImport: "endüktif reaktif", energy.ReactiveCapacitiveImport: "kapasitif reaktif",
+	energy.T1Import: "T1", energy.T2Import: "T2", energy.T3Import: "T3",
+	energy.ActiveExport: "aktif üretim", energy.ReactiveInductiveExport: "endüktif reaktif (üretim)",
+	energy.ReactiveCapacitiveExport: "kapasitif reaktif (üretim)",
+	energy.T1Export:                 "T1 (üretim)", energy.T2Export: "T2 (üretim)", energy.T3Export: "T3 (üretim)",
 }
 
 // anomalyMessageText renders R60's "one human-readable sentence".
-func anomalyMessageText(row Row, reason string, regs map[energy.Register]energy.Suspicion) string {
-	names := make([]string, 0, len(regs))
+func anomalyMessageText(meter string, row Row, reason energy.Reason, regs map[energy.Register]energy.Suspicion) string {
+	keys := make([]string, 0, len(regs))
 	for reg := range regs {
-		names = append(names, string(reg))
+		keys = append(keys, string(reg))
 	}
-	sort.Strings(names)
-	return fmt.Sprintf(
-		"Analyzer %s: consumption for %s to %s is suspect (%s) for register(s) %s.",
-		row.AnalyzerID, row.Window.From.UTC().Format(time.RFC3339), row.Window.To.UTC().Format(time.RFC3339),
-		reason, strings.Join(names, ", "),
-	)
+	sort.Strings(keys)
+	names := make([]string, 0, len(keys))
+	for _, k := range keys {
+		name, ok := registerText[energy.Register(k)]
+		if !ok {
+			name = k
+		}
+		names = append(names, name)
+	}
+	why, ok := reasonText[reason]
+	if !ok {
+		why = string(reason)
+	}
+	return fmt.Sprintf("%s: %s döneminde %s (%s); bu dönemin tüketimi şüpheli, inceleyip çözümleyin.",
+		meter, periodText(row.Window), why, strings.Join(names, ", "))
 }
 
 // anomalyPeriodKey identifies one (period_start, period_end) pair for

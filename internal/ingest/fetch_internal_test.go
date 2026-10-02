@@ -10,14 +10,12 @@ import (
 // fetchInternalTestNow anchors every table case below.
 var fetchInternalTestNow = time.Date(2026, time.June, 15, 12, 0, 0, 0, time.UTC)
 
-// TestShouldEnqueueConsumptionRefresh is a pure, unit-level table test of
-// the decision shouldEnqueueConsumptionRefresh implements: R73's
-// threshold, amended by R100(1) (hasLoadProfile) and R100(6) (29-day
-// threshold, one day of margin inside consumption_hourly's own 30-day
-// policy window).
+// TestShouldEnqueueConsumptionRefresh is a pure table test of the enqueue
+// decision: R100(1)'s hasLoadProfile gate, and R500 — a recent range enqueues
+// exactly like an old one.
 func TestShouldEnqueueConsumptionRefresh(t *testing.T) {
 	past := fetchInternalTestNow.Add(-40 * 24 * time.Hour)
-	recent := fetchInternalTestNow.Add(-1 * 24 * time.Hour)
+	recent := fetchInternalTestNow.Add(-time.Hour)
 
 	cases := []struct {
 		name           string
@@ -31,37 +29,16 @@ func TestShouldEnqueueConsumptionRefresh(t *testing.T) {
 		{"config disabled", true, false, true, &past, false},
 		{"no load_profile persisted (R100(1))", true, true, false, &past, false},
 		{"nil affected range", true, true, true, nil, false},
-		{"recent affected range (inside the policy window)", true, true, true, &recent, false},
-		{"everything satisfied", true, true, true, &past, true},
+		{"recent affected range (R500)", true, true, true, &recent, true},
+		{"old affected range", true, true, true, &past, true},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := shouldEnqueueConsumptionRefresh(c.hasEnqueuer, c.enabled, c.hasLoadProfile, c.affectedFrom, fetchInternalTestNow)
+			got := shouldEnqueueConsumptionRefresh(c.hasEnqueuer, c.enabled, c.hasLoadProfile, c.affectedFrom)
 			require.Equal(t, c.want, got)
 		})
 	}
-}
-
-// TestShouldEnqueueConsumptionRefreshTwentyNineDayBoundary pins R100(6)'s
-// exact boundary as a pure, unit-level test (the integration-level proof —
-// TestFetchDoesNotEnqueueAtExactlyTwentyNineDaysBoundary /
-// TestFetchEnqueuesJustPastTheTwentyNineDayBoundary in
-// fetch_refresh_test.go — drives the real pipeline; this pins the boundary
-// function itself without a database). A mutation changing
-// consumptionRefreshThreshold's 29 back to 30, or Before to
-// Before-or-equal, must turn one of these two cases red.
-func TestShouldEnqueueConsumptionRefreshTwentyNineDayBoundary(t *testing.T) {
-	// Deliberately a LITERAL 29*24h, not consumptionRefreshThreshold itself
-	// — comparing against the constant would make this test tautological
-	// (it would still pass even if the constant drifted back to 30 days).
-	exactlyTwentyNineDays := fetchInternalTestNow.Add(-29 * 24 * time.Hour)
-	require.False(t, shouldEnqueueConsumptionRefresh(true, true, true, &exactlyTwentyNineDays, fetchInternalTestNow),
-		"exactly 29 days ago is still within the policy window — the boundary is exclusive")
-
-	justPast := exactlyTwentyNineDays.Add(-time.Microsecond)
-	require.True(t, shouldEnqueueConsumptionRefresh(true, true, true, &justPast, fetchInternalTestNow),
-		"one microsecond past the 29-day threshold must enqueue")
 }
 
 // TestNoteLoadProfilePersisted proves fetchAccumulator.hasLoadProfile only

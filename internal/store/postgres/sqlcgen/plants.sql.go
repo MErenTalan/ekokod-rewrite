@@ -126,7 +126,7 @@ values ($1, $2, $3, $4,
         $21, $22, $23,
         $24,
         coalesce($25::timestamptz, now()), coalesce($25::timestamptz, now()))
-returning id, company_id, name, installation_number, plant_kind, pv_brand_model, panel_power_w, panel_efficiency_pct, panel_count, string_count, orientation, tilt_angle_deg, total_capacity_kw, yearly_target_kwh, installation_date, address, latitude, longitude, isolar_ps_id, isolar_ps_key, isolar_ps_name, isolar_installed_kw, isolar_linked_at, created_at, updated_at, deleted_at, isolar_credential_id, netting_analyzer_id, isolar_last_sync_at, isolar_last_sync_error
+returning id, company_id, name, installation_number, plant_kind, pv_brand_model, panel_power_w, panel_efficiency_pct, panel_count, string_count, orientation, tilt_angle_deg, total_capacity_kw, yearly_target_kwh, installation_date, address, latitude, longitude, isolar_ps_id, isolar_ps_key, isolar_ps_name, isolar_installed_kw, isolar_linked_at, created_at, updated_at, deleted_at, isolar_credential_id, netting_analyzer_id, isolar_last_sync_at, isolar_last_sync_error, isolar_history_through
 `
 
 type PlantCreateParams struct {
@@ -219,6 +219,7 @@ func (q *Queries) PlantCreate(ctx context.Context, arg PlantCreateParams) (Power
 		&i.NettingAnalyzerID,
 		&i.IsolarLastSyncAt,
 		&i.IsolarLastSyncError,
+		&i.IsolarHistoryThrough,
 	)
 	return i, err
 }
@@ -430,7 +431,7 @@ func (q *Queries) PlantDevicesList(ctx context.Context, arg PlantDevicesListPara
 
 const plantGet = `-- name: PlantGet :one
 
-select id, company_id, name, installation_number, plant_kind, pv_brand_model, panel_power_w, panel_efficiency_pct, panel_count, string_count, orientation, tilt_angle_deg, total_capacity_kw, yearly_target_kwh, installation_date, address, latitude, longitude, isolar_ps_id, isolar_ps_key, isolar_ps_name, isolar_installed_kw, isolar_linked_at, created_at, updated_at, deleted_at, isolar_credential_id, netting_analyzer_id, isolar_last_sync_at, isolar_last_sync_error from power_plants
+select id, company_id, name, installation_number, plant_kind, pv_brand_model, panel_power_w, panel_efficiency_pct, panel_count, string_count, orientation, tilt_angle_deg, total_capacity_kw, yearly_target_kwh, installation_date, address, latitude, longitude, isolar_ps_id, isolar_ps_key, isolar_ps_name, isolar_installed_kw, isolar_linked_at, created_at, updated_at, deleted_at, isolar_credential_id, netting_analyzer_id, isolar_last_sync_at, isolar_last_sync_error, isolar_history_through from power_plants
 where id = $1 and company_id = $2 and deleted_at is null
 `
 
@@ -478,12 +479,13 @@ func (q *Queries) PlantGet(ctx context.Context, arg PlantGetParams) (PowerPlant,
 		&i.NettingAnalyzerID,
 		&i.IsolarLastSyncAt,
 		&i.IsolarLastSyncError,
+		&i.IsolarHistoryThrough,
 	)
 	return i, err
 }
 
 const plantGetForShare = `-- name: PlantGetForShare :one
-select id, company_id, name, installation_number, plant_kind, pv_brand_model, panel_power_w, panel_efficiency_pct, panel_count, string_count, orientation, tilt_angle_deg, total_capacity_kw, yearly_target_kwh, installation_date, address, latitude, longitude, isolar_ps_id, isolar_ps_key, isolar_ps_name, isolar_installed_kw, isolar_linked_at, created_at, updated_at, deleted_at, isolar_credential_id, netting_analyzer_id, isolar_last_sync_at, isolar_last_sync_error from power_plants
+select id, company_id, name, installation_number, plant_kind, pv_brand_model, panel_power_w, panel_efficiency_pct, panel_count, string_count, orientation, tilt_angle_deg, total_capacity_kw, yearly_target_kwh, installation_date, address, latitude, longitude, isolar_ps_id, isolar_ps_key, isolar_ps_name, isolar_installed_kw, isolar_linked_at, created_at, updated_at, deleted_at, isolar_credential_id, netting_analyzer_id, isolar_last_sync_at, isolar_last_sync_error, isolar_history_through from power_plants
 where id = $1 and company_id = $2 and deleted_at is null
 for share
 `
@@ -535,12 +537,13 @@ func (q *Queries) PlantGetForShare(ctx context.Context, arg PlantGetForSharePara
 		&i.NettingAnalyzerID,
 		&i.IsolarLastSyncAt,
 		&i.IsolarLastSyncError,
+		&i.IsolarHistoryThrough,
 	)
 	return i, err
 }
 
 const plantList = `-- name: PlantList :many
-select id, company_id, name, installation_number, plant_kind, pv_brand_model, panel_power_w, panel_efficiency_pct, panel_count, string_count, orientation, tilt_angle_deg, total_capacity_kw, yearly_target_kwh, installation_date, address, latitude, longitude, isolar_ps_id, isolar_ps_key, isolar_ps_name, isolar_installed_kw, isolar_linked_at, created_at, updated_at, deleted_at, isolar_credential_id, netting_analyzer_id, isolar_last_sync_at, isolar_last_sync_error from power_plants
+select id, company_id, name, installation_number, plant_kind, pv_brand_model, panel_power_w, panel_efficiency_pct, panel_count, string_count, orientation, tilt_angle_deg, total_capacity_kw, yearly_target_kwh, installation_date, address, latitude, longitude, isolar_ps_id, isolar_ps_key, isolar_ps_name, isolar_installed_kw, isolar_linked_at, created_at, updated_at, deleted_at, isolar_credential_id, netting_analyzer_id, isolar_last_sync_at, isolar_last_sync_error, isolar_history_through from power_plants
 where company_id = $1
   and (cardinality($2::uuid[]) = 0 or id = any($2::uuid[]))
   and ($3::text is null or plant_kind = $3)
@@ -610,6 +613,7 @@ func (q *Queries) PlantList(ctx context.Context, arg PlantListParams) ([]PowerPl
 			&i.NettingAnalyzerID,
 			&i.IsolarLastSyncAt,
 			&i.IsolarLastSyncError,
+			&i.IsolarHistoryThrough,
 		); err != nil {
 			return nil, err
 		}
@@ -772,7 +776,7 @@ set name = $1,
     netting_analyzer_id = $22,
     updated_at = $23
 where id = $24 and company_id = $25 and deleted_at is null
-returning id, company_id, name, installation_number, plant_kind, pv_brand_model, panel_power_w, panel_efficiency_pct, panel_count, string_count, orientation, tilt_angle_deg, total_capacity_kw, yearly_target_kwh, installation_date, address, latitude, longitude, isolar_ps_id, isolar_ps_key, isolar_ps_name, isolar_installed_kw, isolar_linked_at, created_at, updated_at, deleted_at, isolar_credential_id, netting_analyzer_id, isolar_last_sync_at, isolar_last_sync_error
+returning id, company_id, name, installation_number, plant_kind, pv_brand_model, panel_power_w, panel_efficiency_pct, panel_count, string_count, orientation, tilt_angle_deg, total_capacity_kw, yearly_target_kwh, installation_date, address, latitude, longitude, isolar_ps_id, isolar_ps_key, isolar_ps_name, isolar_installed_kw, isolar_linked_at, created_at, updated_at, deleted_at, isolar_credential_id, netting_analyzer_id, isolar_last_sync_at, isolar_last_sync_error, isolar_history_through
 `
 
 type PlantUpdateParams struct {
@@ -863,6 +867,7 @@ func (q *Queries) PlantUpdate(ctx context.Context, arg PlantUpdateParams) (Power
 		&i.NettingAnalyzerID,
 		&i.IsolarLastSyncAt,
 		&i.IsolarLastSyncError,
+		&i.IsolarHistoryThrough,
 	)
 	return i, err
 }

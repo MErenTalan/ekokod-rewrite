@@ -36,6 +36,7 @@ type fakeISolar struct {
 	realtime []isolar.DeviceSnapshot
 	faults   []isolar.Fault
 	err      error
+	errOn    map[string]error // per operation, over err
 	calls    map[string]int
 	dailyWin [][2]time.Time
 }
@@ -45,6 +46,9 @@ func (f *fakeISolar) hit(op string) error {
 		f.calls = map[string]int{}
 	}
 	f.calls[op]++
+	if err, ok := f.errOn[op]; ok {
+		return err
+	}
 	return f.err
 }
 
@@ -181,6 +185,22 @@ func inverterFake() *fakeISolar {
 	}
 }
 
+// historyThrough sets the plant's history mark to the given March day.
+func (h *harness) historyThrough(t *testing.T, day int) {
+	t.Helper()
+	require.NoError(t, postgres.NewPlantRepository(h.pool).SetHistoryThrough(context.Background(), h.sc, h.plant.ID, at(day, 0)))
+}
+
+func (h *harness) storedHistoryThrough(t *testing.T) string {
+	t.Helper()
+	p, err := postgres.NewPlantRepository(h.pool).Get(context.Background(), h.sc, h.plant.ID)
+	require.NoError(t, err)
+	if p.IsolarHistoryThrough == nil {
+		return ""
+	}
+	return p.IsolarHistoryThrough.Format(time.DateOnly)
+}
+
 func (h *harness) totals(t *testing.T, from, to time.Time) []model.PlantProductionTotal {
 	t.Helper()
 	rows, err := postgres.NewProductionTotalsRepository(h.pool).Range(context.Background(), h.sc, h.plant.ID, store.TimeRange{From: from, To: to})
@@ -238,6 +258,7 @@ func TestSyncBackfillUsesDailyTotalsBeforeYesterday(t *testing.T) {
 	fake := inverterFake()
 	fake.daily = []isolar.DailyYield{{Day: at(5, 0), Kwh: d("40")}, {Day: at(8, 0), Kwh: d("38")}, {Day: at(9, 0), Kwh: d("99")}}
 	h := newHarness(t, fake, okOpener())
+	h.historyThrough(t, 8) // nothing is owed, so only the asked-for days are fetched
 	_, err := h.svc.SyncPlant(context.Background(), h.tenant.Company.ID, h.plant.ID, 5)
 	require.NoError(t, err)
 
@@ -249,6 +270,96 @@ func TestSyncBackfillUsesDailyTotalsBeforeYesterday(t *testing.T) {
 	require.True(t, rows[0].Ts.Equal(at(5, 0)))
 	require.Equal(t, model.BasisDailyTotal, rows[0].Basis)
 	requireDec(t, "38", rows[1].ProductionKwh, "day 8")
+}
+
+// R506: a plant whose history never arrived gets it on its next sync, however
+// that sync was started, and only once.
+func TestSyncFetchesTheMissingHistoryOnce(t *testing.T) {
+	t.Parallel()
+	fake := inverterFake()
+	fake.daily = []isolar.DailyYield{{Day: at(1, 0), Kwh: d("40")}, {Day: at(8, 0), Kwh: d("38")}}
+	h := newHarness(t, fake, okOpener())
+	require.Empty(t, h.storedHistoryThrough(t), "a fresh link owes its whole history")
+
+	_, err := h.svc.SyncPlant(context.Background(), h.tenant.Company.ID, h.plant.ID, 0)
+	require.NoError(t, err)
+	require.Len(t, fake.dailyWin, 13, "400 days in 31-day requests")
+	require.True(t, fake.dailyWin[0][0].Equal(at(10, 0).AddDate(0, 0, -400)), "from: %v", fake.dailyWin[0][0])
+	require.True(t, fake.dailyWin[12][1].Equal(at(9, 0)), "to yesterday, which the minute series covers")
+	require.Len(t, h.totals(t, at(1, 0), at(9, 0)), 2)
+	require.Equal(t, "2026-03-09", h.storedHistoryThrough(t))
+
+	_, err = h.svc.SyncPlant(context.Background(), h.tenant.Company.ID, h.plant.ID, 0)
+	require.NoError(t, err)
+	require.Len(t, fake.dailyWin, 13, "nothing is owed any more")
+}
+
+// R506: days no sync covered (the worker was down) are fetched as daily totals.
+func TestSyncFillsTheDaysSinceTheLastSync(t *testing.T) {
+	t.Parallel()
+	fake := inverterFake()
+	fake.daily = []isolar.DailyYield{{Day: at(6, 0), Kwh: d("41")}, {Day: at(7, 0), Kwh: d("42")}, {Day: at(8, 0), Kwh: d("43")}}
+	h := newHarness(t, fake, okOpener())
+	h.historyThrough(t, 5)
+
+	_, err := h.svc.SyncPlant(context.Background(), h.tenant.Company.ID, h.plant.ID, 0)
+	require.NoError(t, err)
+	require.Len(t, fake.dailyWin, 1)
+	require.True(t, fake.dailyWin[0][0].Equal(at(6, 0)) && fake.dailyWin[0][1].Equal(at(9, 0)), "window: %v", fake.dailyWin[0])
+	require.Len(t, h.totals(t, at(6, 0), at(9, 0)), 3)
+	require.Equal(t, "2026-03-09", h.storedHistoryThrough(t))
+}
+
+// R506: the history does not wait for the minute series to work. On the live
+// system a parameter the minute call got wrong ended every sync before the
+// history was asked for.
+func TestSyncFetchesHistoryEvenWhenTheMinuteSeriesFails(t *testing.T) {
+	t.Parallel()
+	fake := inverterFake()
+	fake.daily = []isolar.DailyYield{{Day: at(8, 0), Kwh: d("38")}}
+	down := &integration.Error{Kind: integration.ErrUpstreamUnavailable, Provider: integration.ProviderISolar, Op: "plant_minute"}
+	fake.errOn = map[string]error{"plant_minute": down}
+	h := newHarness(t, fake, okOpener())
+	h.historyThrough(t, 6)
+
+	_, err := h.svc.SyncPlant(context.Background(), h.tenant.Company.ID, h.plant.ID, 0)
+	require.ErrorIs(t, err, integration.ErrUpstreamUnavailable, "the minute failure is still the sync's outcome")
+	require.Len(t, h.totals(t, at(7, 0), at(9, 0)), 1, "day 8 arrived")
+	require.Equal(t, "2026-03-08", h.storedHistoryThrough(t), "yesterday is still owed: its minute series failed")
+}
+
+// R506: on an install that synced before the history mark existed, the first
+// history fetch must not flatten a day that already has its intervals into
+// one daily total.
+func TestSyncHistoryKeepsDaysThatAlreadyHaveIntervals(t *testing.T) {
+	t.Parallel()
+	fake := inverterFake()
+	fake.daily = []isolar.DailyYield{{Day: at(6, 0), Kwh: d("40")}, {Day: at(7, 0), Kwh: d("99")}}
+	h := newHarness(t, fake, okOpener())
+	ctx := context.Background()
+	_, err := postgres.NewProductionTotalsRepository(h.pool).ReplaceDays(ctx, h.sc, h.plant.ID, []time.Time{at(7, 0)},
+		[]model.PlantProductionTotal{
+			{PlantID: h.plant.ID, Ts: at(7, 10), ProductionKwh: d("12"), Basis: model.BasisPlantMeter},
+			{PlantID: h.plant.ID, Ts: at(7, 11), ProductionKwh: d("15"), Basis: model.BasisPlantMeter},
+		})
+	require.NoError(t, err)
+
+	_, err = h.svc.SyncPlant(ctx, h.tenant.Company.ID, h.plant.ID, 0)
+	require.NoError(t, err)
+	day7 := h.totals(t, at(7, 0), at(8, 0))
+	require.Len(t, day7, 2, "the day keeps its intervals")
+	require.Equal(t, model.BasisPlantMeter, day7[0].Basis)
+	day6 := h.totals(t, at(6, 0), at(7, 0))
+	require.Len(t, day6, 1)
+	require.Equal(t, model.BasisDailyTotal, day6[0].Basis)
+
+	// A day owed after the mark is replaced: its intervals stop where the sync did.
+	h.historyThrough(t, 6)
+	_, err = h.svc.SyncPlant(ctx, h.tenant.Company.ID, h.plant.ID, 0)
+	require.NoError(t, err)
+	day7 = h.totals(t, at(7, 0), at(8, 0))
+	require.Len(t, day7, 1)
+	requireDec(t, "99", day7[0].ProductionKwh, "the day's own total")
 }
 
 func TestSyncTwiceSameRows(t *testing.T) {

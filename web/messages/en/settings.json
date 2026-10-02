@@ -102,6 +102,7 @@
     "provider": "Provider",
     "status": "Status",
     "secretStored": "Stored",
+    "noSecret": "No password needed",
     "lastVerified": "Last verified",
     "never": "Never",
     "verify": "Verify",

@@ -42,6 +42,24 @@ func TestReactiveFiresWhenInductiveRatioExceeds(t *testing.T) {
 	require.Equal(t, "20", v.Breaches[0].Threshold.String())
 }
 
+// R505: the ratio is compared at full precision and reported at two decimals;
+// "Kapasitif oran %39.285892302324422217" was what an operator used to read.
+func TestReactiveRatioIsReportedAtTwoDecimals(t *testing.T) {
+	t.Parallel()
+	// 28 kWh active, 11 kVarh inductive → 39.2857…%.
+	in := alarm.ReactiveInput{AnalyzerID: uuid.New(),
+		Inductive: []model.MeterReading{reading(0, "1000", "100", "0"), reading(24, "1028", "111", "0")}}
+	v := alarm.EvaluateReactive(reactiveRule(), in)
+	require.Len(t, v.Breaches, 1)
+	require.Equal(t, "39.29", v.Breaches[0].Measured.String())
+
+	// 20.004% is over 20 and must still fire, though it reads as 20.
+	in.Inductive = []model.MeterReading{reading(0, "1000", "0", "0"), reading(24, "26000", "5001", "0")}
+	v = alarm.EvaluateReactive(reactiveRule(), in)
+	require.True(t, v.Fired(), "the comparison is not rounded")
+	require.Equal(t, "20", v.Breaches[0].Measured.String())
+}
+
 func TestReactiveStaysSilentAtOrBelowThreshold(t *testing.T) {
 	t.Parallel()
 	// Exactly 20% is not "> 20": legacy used a strict comparison.

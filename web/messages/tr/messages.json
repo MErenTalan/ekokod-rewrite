@@ -99,5 +99,26 @@
     "autoRefresh": "Liste 10 saniyede bir yenilenir."
   },
   "emptyDescription": "Otomatik işlemler ve alarmlar burada görünür.",
-  "emptyFilteredDescription": "Farklı bir filtre deneyin."
+  "emptyFilteredDescription": "Farklı bir filtre deneyin.",
+  "categories": {
+    "analyzerRefresh": "Veri çekme",
+    "backfill": "Geçmiş veri",
+    "alarmTrigger": "Alarm bildirimi",
+    "alarmEvaluate": "Alarm değerlendirme",
+    "isolarAlarm": "iSolarCloud alarmı",
+    "marketImport": "Piyasa verisi aktarımı",
+    "billGeneration": "Fatura oluşturma",
+    "carbonAccrual": "Karbon hesabı",
+    "consumptionSuspectPeriod": "Şüpheli tüketim dönemi",
+    "marketPrices": "Piyasa fiyatları",
+    "auth": "Oturum",
+    "reportDelivery": "Rapor gönderimi"
+  },
+  "relatedTypes": {
+    "consumptionAnomaly": "Tüketim anomalisi",
+    "alarm": "Alarm",
+    "bill": "Fatura",
+    "user": "Kullanıcı",
+    "report": "Rapor"
+  }
 }

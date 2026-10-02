@@ -129,11 +129,11 @@ type AnalyticsConsumptionHourlyParams struct {
 	ToTs         pgtype.Timestamptz
 }
 
-// AnalyticsRepository's queries, over the six continuous aggregates
+// AnalyticsRepository's queries, over the four continuous aggregates
 // (migration 00005). These are MATERIALISED reads for dashboards and
 // reports — never the billing-grade surface, which is ReadingRepository.
 //
-// None of the six aggregates carry a company_id: the consumption_* ones join
+// None of the aggregates carry a company_id: the consumption_* ones join
 // through analyzers, the plant_production_* ones through power_plants (which
 // has no building_id at all, per PlantRepository's doc). analyzer_ids /
 // plant_ids are REQUIRED POSITIONAL parameters (repository.go's
@@ -213,19 +213,64 @@ func (q *Queries) AnalyticsConsumptionHourly(ctx context.Context, arg AnalyticsC
 	return items, nil
 }
 
-const analyticsConsumptionMonthly = `-- name: AnalyticsConsumptionMonthly :many
-select c.analyzer_id, c.bucket, c.active_import_start, c.active_import_end, c.active_consumption, c.inductive_consumption, c.capacitive_consumption, c.t1_consumption, c.t2_consumption, c.t3_consumption, c.active_generation, c.inductive_generation, c.capacitive_generation, c.t1_generation, c.t2_generation, c.t3_generation, c.max_demand_kw, c.active_index, c.inductive_index, c.capacitive_index, c.t1_index, c.t2_index, c.t3_index, c.active_generation_index, c.reading_count, c.first_ts, c.inductive_consumption_start, c.capacitive_consumption_start, c.t1_consumption_start, c.t2_consumption_start, c.t3_consumption_start, c.active_generation_start, c.inductive_generation_start, c.capacitive_generation_start, c.t1_generation_start, c.t2_generation_start, c.t3_generation_start, c.inductive_generation_index, c.capacitive_generation_index, c.t1_generation_index, c.t2_generation_index, c.t3_generation_index from consumption_monthly c
-join analyzers a on a.id = c.analyzer_id
-where a.company_id = $1
-  and ($2::boolean or a.building_id = any($3::uuid[]))
+const analyticsConsumptionRollup = `-- name: AnalyticsConsumptionRollup :many
+select
+    d.analyzer_id,
+    time_bucket($1::interval, d.bucket, 'Europe/Istanbul')::timestamptz as bucket,
+    (first(d.active_import_start, d.bucket) filter (where d.active_import_start is not null))::numeric as active_import_start,
+    (last(d.active_import_end, d.bucket) filter (where d.active_import_end is not null))::numeric as active_import_end,
+    null::numeric as active_consumption,
+    null::numeric as inductive_consumption,
+    null::numeric as capacitive_consumption,
+    null::numeric as t1_consumption,
+    null::numeric as t2_consumption,
+    null::numeric as t3_consumption,
+    null::numeric as active_generation,
+    null::numeric as inductive_generation,
+    null::numeric as capacitive_generation,
+    null::numeric as t1_generation,
+    null::numeric as t2_generation,
+    null::numeric as t3_generation,
+    max(d.max_demand_kw)::numeric as max_demand_kw,
+    (last(d.active_index, d.bucket) filter (where d.active_index is not null))::numeric as active_index,
+    (last(d.inductive_index, d.bucket) filter (where d.inductive_index is not null))::numeric as inductive_index,
+    (last(d.capacitive_index, d.bucket) filter (where d.capacitive_index is not null))::numeric as capacitive_index,
+    (last(d.t1_index, d.bucket) filter (where d.t1_index is not null))::numeric as t1_index,
+    (last(d.t2_index, d.bucket) filter (where d.t2_index is not null))::numeric as t2_index,
+    (last(d.t3_index, d.bucket) filter (where d.t3_index is not null))::numeric as t3_index,
+    (last(d.active_generation_index, d.bucket) filter (where d.active_generation_index is not null))::numeric as active_generation_index,
+    sum(d.reading_count)::bigint as reading_count,
+    min(d.first_ts)::timestamptz as first_ts,
+    (first(d.inductive_consumption_start, d.bucket) filter (where d.inductive_consumption_start is not null))::numeric as inductive_consumption_start,
+    (first(d.capacitive_consumption_start, d.bucket) filter (where d.capacitive_consumption_start is not null))::numeric as capacitive_consumption_start,
+    (first(d.t1_consumption_start, d.bucket) filter (where d.t1_consumption_start is not null))::numeric as t1_consumption_start,
+    (first(d.t2_consumption_start, d.bucket) filter (where d.t2_consumption_start is not null))::numeric as t2_consumption_start,
+    (first(d.t3_consumption_start, d.bucket) filter (where d.t3_consumption_start is not null))::numeric as t3_consumption_start,
+    (first(d.active_generation_start, d.bucket) filter (where d.active_generation_start is not null))::numeric as active_generation_start,
+    (first(d.inductive_generation_start, d.bucket) filter (where d.inductive_generation_start is not null))::numeric as inductive_generation_start,
+    (first(d.capacitive_generation_start, d.bucket) filter (where d.capacitive_generation_start is not null))::numeric as capacitive_generation_start,
+    (first(d.t1_generation_start, d.bucket) filter (where d.t1_generation_start is not null))::numeric as t1_generation_start,
+    (first(d.t2_generation_start, d.bucket) filter (where d.t2_generation_start is not null))::numeric as t2_generation_start,
+    (first(d.t3_generation_start, d.bucket) filter (where d.t3_generation_start is not null))::numeric as t3_generation_start,
+    (last(d.inductive_generation_index, d.bucket) filter (where d.inductive_generation_index is not null))::numeric as inductive_generation_index,
+    (last(d.capacitive_generation_index, d.bucket) filter (where d.capacitive_generation_index is not null))::numeric as capacitive_generation_index,
+    (last(d.t1_generation_index, d.bucket) filter (where d.t1_generation_index is not null))::numeric as t1_generation_index,
+    (last(d.t2_generation_index, d.bucket) filter (where d.t2_generation_index is not null))::numeric as t2_generation_index,
+    (last(d.t3_generation_index, d.bucket) filter (where d.t3_generation_index is not null))::numeric as t3_generation_index
+from consumption_daily d
+join analyzers a on a.id = d.analyzer_id
+where a.company_id = $2
+  and ($3::boolean or a.building_id = any($4::uuid[]))
   and a.deleted_at is null
-  and c.analyzer_id = any($4::uuid[])
-  and c.bucket >= $5::timestamptz
-  and c.bucket < $6::timestamptz
-order by c.analyzer_id, c.bucket
+  and d.analyzer_id = any($5::uuid[])
+  and d.bucket >= $6::timestamptz
+  and d.bucket < $7::timestamptz
+group by d.analyzer_id, 2
+order by d.analyzer_id, 2
 `
 
-type AnalyticsConsumptionMonthlyParams struct {
+type AnalyticsConsumptionRollupParams struct {
+	Width        pgtype.Interval
 	CompanyID    uuid.UUID
 	AllBuildings bool
 	BuildingIds  []uuid.UUID
@@ -234,14 +279,59 @@ type AnalyticsConsumptionMonthlyParams struct {
 	ToTs         pgtype.Timestamptz
 }
 
-// materialized_only = true (migration 00005): the open month is ABSENT from
-// this view, not stale. A caller wanting month-to-date must compose this with
-// the open period from consumption_daily or meter_readings; this repository
-// does not do that composition, and must not be "fixed" by flipping
-// materialized_only (see migration 00005's own header). Buckets are
-// Europe/Istanbul-local instants, same as ConsumptionDaily above.
-func (q *Queries) AnalyticsConsumptionMonthly(ctx context.Context, arg AnalyticsConsumptionMonthlyParams) ([]ConsumptionMonthly, error) {
-	rows, err := q.db.Query(ctx, analyticsConsumptionMonthly,
+type AnalyticsConsumptionRollupRow struct {
+	AnalyzerID                 uuid.UUID
+	Bucket                     pgtype.Timestamptz
+	ActiveImportStart          pgtype.Numeric
+	ActiveImportEnd            pgtype.Numeric
+	ActiveConsumption          pgtype.Numeric
+	InductiveConsumption       pgtype.Numeric
+	CapacitiveConsumption      pgtype.Numeric
+	T1Consumption              pgtype.Numeric
+	T2Consumption              pgtype.Numeric
+	T3Consumption              pgtype.Numeric
+	ActiveGeneration           pgtype.Numeric
+	InductiveGeneration        pgtype.Numeric
+	CapacitiveGeneration       pgtype.Numeric
+	T1Generation               pgtype.Numeric
+	T2Generation               pgtype.Numeric
+	T3Generation               pgtype.Numeric
+	MaxDemandKw                pgtype.Numeric
+	ActiveIndex                pgtype.Numeric
+	InductiveIndex             pgtype.Numeric
+	CapacitiveIndex            pgtype.Numeric
+	T1Index                    pgtype.Numeric
+	T2Index                    pgtype.Numeric
+	T3Index                    pgtype.Numeric
+	ActiveGenerationIndex      pgtype.Numeric
+	ReadingCount               int64
+	FirstTs                    pgtype.Timestamptz
+	InductiveConsumptionStart  pgtype.Numeric
+	CapacitiveConsumptionStart pgtype.Numeric
+	T1ConsumptionStart         pgtype.Numeric
+	T2ConsumptionStart         pgtype.Numeric
+	T3ConsumptionStart         pgtype.Numeric
+	ActiveGenerationStart      pgtype.Numeric
+	InductiveGenerationStart   pgtype.Numeric
+	CapacitiveGenerationStart  pgtype.Numeric
+	T1GenerationStart          pgtype.Numeric
+	T2GenerationStart          pgtype.Numeric
+	T3GenerationStart          pgtype.Numeric
+	InductiveGenerationIndex   pgtype.Numeric
+	CapacitiveGenerationIndex  pgtype.Numeric
+	T1GenerationIndex          pgtype.Numeric
+	T2GenerationIndex          pgtype.Numeric
+	T3GenerationIndex          pgtype.Numeric
+}
+
+// R499: months and years are rolled up from consumption_daily (real-time),
+// so the open period is whole and nothing waits for a refresh. width is
+// '1 month' or '1 year'; buckets are Europe/Istanbul-local, and from_ts/to_ts
+// must be bucket boundaries of width. The delta columns are NULL: the
+// repository differences boundaries itself (R471).
+func (q *Queries) AnalyticsConsumptionRollup(ctx context.Context, arg AnalyticsConsumptionRollupParams) ([]AnalyticsConsumptionRollupRow, error) {
+	rows, err := q.db.Query(ctx, analyticsConsumptionRollup,
+		arg.Width,
 		arg.CompanyID,
 		arg.AllBuildings,
 		arg.BuildingIds,
@@ -253,103 +343,9 @@ func (q *Queries) AnalyticsConsumptionMonthly(ctx context.Context, arg Analytics
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ConsumptionMonthly
+	var items []AnalyticsConsumptionRollupRow
 	for rows.Next() {
-		var i ConsumptionMonthly
-		if err := rows.Scan(
-			&i.AnalyzerID,
-			&i.Bucket,
-			&i.ActiveImportStart,
-			&i.ActiveImportEnd,
-			&i.ActiveConsumption,
-			&i.InductiveConsumption,
-			&i.CapacitiveConsumption,
-			&i.T1Consumption,
-			&i.T2Consumption,
-			&i.T3Consumption,
-			&i.ActiveGeneration,
-			&i.InductiveGeneration,
-			&i.CapacitiveGeneration,
-			&i.T1Generation,
-			&i.T2Generation,
-			&i.T3Generation,
-			&i.MaxDemandKw,
-			&i.ActiveIndex,
-			&i.InductiveIndex,
-			&i.CapacitiveIndex,
-			&i.T1Index,
-			&i.T2Index,
-			&i.T3Index,
-			&i.ActiveGenerationIndex,
-			&i.ReadingCount,
-			&i.FirstTs,
-			&i.InductiveConsumptionStart,
-			&i.CapacitiveConsumptionStart,
-			&i.T1ConsumptionStart,
-			&i.T2ConsumptionStart,
-			&i.T3ConsumptionStart,
-			&i.ActiveGenerationStart,
-			&i.InductiveGenerationStart,
-			&i.CapacitiveGenerationStart,
-			&i.T1GenerationStart,
-			&i.T2GenerationStart,
-			&i.T3GenerationStart,
-			&i.InductiveGenerationIndex,
-			&i.CapacitiveGenerationIndex,
-			&i.T1GenerationIndex,
-			&i.T2GenerationIndex,
-			&i.T3GenerationIndex,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const analyticsConsumptionYearly = `-- name: AnalyticsConsumptionYearly :many
-select c.analyzer_id, c.bucket, c.active_import_start, c.active_import_end, c.active_consumption, c.inductive_consumption, c.capacitive_consumption, c.t1_consumption, c.t2_consumption, c.t3_consumption, c.active_generation, c.inductive_generation, c.capacitive_generation, c.t1_generation, c.t2_generation, c.t3_generation, c.max_demand_kw, c.active_index, c.inductive_index, c.capacitive_index, c.t1_index, c.t2_index, c.t3_index, c.active_generation_index, c.reading_count, c.first_ts, c.inductive_consumption_start, c.capacitive_consumption_start, c.t1_consumption_start, c.t2_consumption_start, c.t3_consumption_start, c.active_generation_start, c.inductive_generation_start, c.capacitive_generation_start, c.t1_generation_start, c.t2_generation_start, c.t3_generation_start, c.inductive_generation_index, c.capacitive_generation_index, c.t1_generation_index, c.t2_generation_index, c.t3_generation_index from consumption_yearly c
-join analyzers a on a.id = c.analyzer_id
-where a.company_id = $1
-  and ($2::boolean or a.building_id = any($3::uuid[]))
-  and a.deleted_at is null
-  and c.analyzer_id = any($4::uuid[])
-  and c.bucket >= $5::timestamptz
-  and c.bucket < $6::timestamptz
-order by c.analyzer_id, c.bucket
-`
-
-type AnalyticsConsumptionYearlyParams struct {
-	CompanyID    uuid.UUID
-	AllBuildings bool
-	BuildingIds  []uuid.UUID
-	AnalyzerIds  []uuid.UUID
-	FromTs       pgtype.Timestamptz
-	ToTs         pgtype.Timestamptz
-}
-
-// materialized_only = true: the open year is ABSENT, same as
-// AnalyticsConsumptionMonthly above. Buckets are Europe/Istanbul-local
-// instants, same as ConsumptionDaily above.
-func (q *Queries) AnalyticsConsumptionYearly(ctx context.Context, arg AnalyticsConsumptionYearlyParams) ([]ConsumptionYearly, error) {
-	rows, err := q.db.Query(ctx, analyticsConsumptionYearly,
-		arg.CompanyID,
-		arg.AllBuildings,
-		arg.BuildingIds,
-		arg.AnalyzerIds,
-		arg.FromTs,
-		arg.ToTs,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ConsumptionYearly
-	for rows.Next() {
-		var i ConsumptionYearly
+		var i AnalyticsConsumptionRollupRow
 		if err := rows.Scan(
 			&i.AnalyzerID,
 			&i.Bucket,

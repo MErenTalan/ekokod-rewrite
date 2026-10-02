@@ -63,8 +63,8 @@ func buildingBill(t *testing.T, ctx context.Context, pool *pgxpool.Pool, sc stor
 
 // reportFixture seeds March 2026 for a tenant:
 //   - Buildings[0]/Analyzers[0]: 2 kWh/h active, 0.5 kWh/h export; Buildings[1]/Analyzers[2]: 1 kWh/h.
-//     consumption_monthly is last − first reading of the month: 743 steps in
-//     March's 744 hourly readings (04 §4.3's understatement), so 1486 and 743 kWh;
+//     the month is last − first reading: 743 steps in March's 744 hourly
+//     readings (nothing on April's edge closes it), so 1486 and 743 kWh;
 //     inductive 20 %, capacitive 5 % of each step; export 371.5 kWh.
 //   - building bills 2026-03: ₺5000 (energy 3000, net 1400) and ₺2500 (energy 1500, net 700);
 //     2025-03 for Buildings[0]: ₺4000.
@@ -112,10 +112,8 @@ func reportFixture(t *testing.T) (*report.Service, testfixtures.Tenant, uuid.UUI
 		BaseUnit: "kg CO2e/kWh", SourceYear: &year})
 	require.NoError(t, err)
 
-	for _, view := range []string{"consumption_monthly", "plant_production_monthly"} {
-		_, err := pool.Exec(ctx, "call refresh_continuous_aggregate('"+view+"', NULL, NULL)")
-		require.NoError(t, err)
-	}
+	_, err = pool.Exec(ctx, "call refresh_continuous_aggregate('plant_production_monthly', NULL, NULL)")
+	require.NoError(t, err)
 	return realService(t, pool), tenant, plant.ID, pool
 }
 

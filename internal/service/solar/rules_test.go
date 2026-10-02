@@ -40,7 +40,7 @@ func TestIntervalsResetAndGap(t *testing.T) {
 	out, resets := solar.Intervals(samples)
 	require.Equal(t, 1, resets)
 	require.Len(t, out, 5)
-	for i, want := range []string{"1.0", "2.5", "", "1.5", ""} {
+	for i, want := range []string{"", "2.5", "", "1.5", ""} {
 		requireDec(t, want, out[i].Kwh, out[i].Ts.String())
 	}
 	requireDec(t, "2.4", out[1].PowerKw, "power passes through")
@@ -49,13 +49,35 @@ func TestIntervalsResetAndGap(t *testing.T) {
 func TestIntervalsRestartEachIstanbulDay(t *testing.T) {
 	out, resets := solar.Intervals([]isolar.YieldSample{
 		{Ts: at(10, 23), YieldTodayKwh: d("40")},
-		{Ts: at(11, 0), YieldTodayKwh: d("0.5")},
-		{Ts: at(11, 1), YieldTodayKwh: d("1.5")},
+		{Ts: at(11, 6), YieldTodayKwh: d("0.5")},
+		{Ts: at(11, 7), YieldTodayKwh: d("1.5")},
 	})
 	require.Zero(t, resets, "a new day starts from zero, not a reset")
 	requireDec(t, "40", out[0].Kwh, "first of day 10")
-	requireDec(t, "0.5", out[1].Kwh, "first of day 11")
+	requireDec(t, "0.5", out[1].Kwh, "first of day 11: the yield since midnight")
 	requireDec(t, "1.0", out[2].Kwh, "delta")
+}
+
+// R507: a day's first sample in the midnight hour is its baseline, never
+// energy. The counter can still show yesterday's total there, and counting it
+// would add a whole day's yield to the next one.
+func TestIntervalsMidnightSampleIsTheBaseline(t *testing.T) {
+	five := func(day, hour int) time.Time { return at(day, hour).Add(5 * time.Minute) }
+	out, resets := solar.Intervals([]isolar.YieldSample{
+		{Ts: five(11, 0), YieldTodayKwh: d("450")}, // yesterday's total, not yet cleared
+		{Ts: five(11, 1), YieldTodayKwh: d("0")},
+		{Ts: five(11, 7), YieldTodayKwh: d("2")},
+		{Ts: five(11, 8), YieldTodayKwh: d("5")},
+	})
+	require.Equal(t, 1, resets, "the counter clearing after midnight")
+	total := decimal.Zero
+	for _, iv := range out {
+		if iv.Kwh != nil {
+			total = total.Add(*iv.Kwh)
+		}
+	}
+	require.Equal(t, "5", total.String(), "the day is its own yield")
+	requireDec(t, "", out[0].Kwh, "the midnight sample")
 }
 
 func TestSumByTimestamp(t *testing.T) {

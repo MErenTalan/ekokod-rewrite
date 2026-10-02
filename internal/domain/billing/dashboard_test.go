@@ -113,6 +113,29 @@ func TestDashboardCarriesTheCompanyBillOfItsCurrency(t *testing.T) {
 	require.Equal(t, company.BillID, *got.Netting[0].CompanyBillID)
 }
 
+// R512: the generate card can issue a building invoice on its own. A building
+// with nothing but that invoice still has its section and counts in the
+// netting — the dashboard used to stay empty for it.
+func TestDashboardShowsABuildingThatOnlyHasItsBuildingBill(t *testing.T) {
+	t.Parallel()
+	only, both := uuid.New(), uuid.New()
+	rows := []billing.DashboardRow{analyzerRow(both, "A", "100", "250")}
+	got := billing.BuildDashboard(rows, []billing.DashboardRow{buildingRow(both, "100", "250"), buildingRow(only, "300", "900")}, nil)
+
+	require.Len(t, got.Buildings, 2)
+	alone := got.Buildings[1]
+	require.Equal(t, only, alone.BuildingID)
+	require.Empty(t, alone.Rows)
+	require.NotNil(t, alone.BuildingBill)
+	require.Equal(t, "900", alone.TotalInvoice.String(), "its total is the one invoice it has")
+	require.Equal(t, "300", alone.TotalConsumption.String())
+	require.False(t, alone.DivergesFromRows, "there are no rows to diverge from")
+
+	require.Len(t, got.Netting, 1)
+	require.Equal(t, "1150", got.Netting[0].TotalInvoice.String(), "250 from the analyzer row, 900 from the building invoice; the other building invoice repeats its row")
+	require.Equal(t, "400", got.Netting[0].TotalConsumption.String())
+}
+
 func TestDashboardWithoutRowsHasNoTotals(t *testing.T) {
 	t.Parallel()
 	got := billing.BuildDashboard(nil, nil, nil)

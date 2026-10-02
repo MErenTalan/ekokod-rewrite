@@ -66,6 +66,7 @@ func boundaryDifference(level energy.Level, rows []boundaryBucket, tr store.Time
 			rows[i+1].b.Bucket.Equal(w.To) && rows[i+1].firstTS.Equal(w.To) {
 			next = &rows[i+1]
 		}
+		cur.b.ClosedByBoundary = next != nil
 		onEdge := cur.firstTS.Equal(w.From)
 		deltas := consumptionDeltas(&cur.b)
 		for r := 0; r < registerCount; r++ {

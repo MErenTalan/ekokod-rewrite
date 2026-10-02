@@ -95,8 +95,8 @@ func fillHourly(ctx context.Context, pool *pgxpool.Pool, sc store.Scope, ids []u
 	if total == 0 {
 		return 0, nil
 	}
-	// Monthly and yearly figures are composed from the daily view (R94), so the
-	// two finest views are enough for backfilled history to become visible.
+	// Months and years are rolled up from the daily view (R499), so the two
+	// views are enough for backfilled history to become visible.
 	aggregates := admin.NewAggregateRepository(pool)
 	for _, view := range []store.AggregateView{store.ViewConsumptionHourly, store.ViewConsumptionDaily} {
 		if err := aggregates.Refresh(ctx, view, store.TimeRange{From: earliest.Add(-48 * time.Hour), To: end.Add(time.Hour)}); err != nil {

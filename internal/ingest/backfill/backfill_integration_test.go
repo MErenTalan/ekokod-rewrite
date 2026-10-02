@@ -562,54 +562,6 @@ func TestBackfillRejectsInvertedAndFutureRanges(t *testing.T) {
 	require.Empty(t, runs, "a malformed range must never start a job run")
 }
 
-// TestBackfillWarnsAboutAggregateHorizon: a From more than 30 days before
-// now appends exactly one info operational message naming the R17
-// aggregate horizon; a From within it appends none.
-func TestBackfillWarnsAboutAggregateHorizon(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	pool := testfixtures.NewIsolatedDB(t)
-	ops := postgres.NewOpsRepository(pool)
-
-	run := func(t *testing.T, seed int64, from, to time.Time) []model.OperationalMessage {
-		tn := testfixtures.NewTenant(t, ctx, pool, seed)
-		analyzer := tn.Analyzers[0]
-		creds := integration.Credentials{CredentialID: uuid.New(), CompanyID: tn.Company.ID, Provider: integration.ProviderOSOS, Subtype: analyzer.ProviderSubtype}
-		src := &fakePlanner{provider: integration.ProviderOSOS, kinds: []model.ReadingKind{model.ReadingKindLoadProfile}, maxWindow: 30 * 24 * time.Hour}
-		enq := newBackfillRealEnqueuer(t)
-		clk := clock.NewFake(backfillTestNow)
-		b := backfill.New(backfillTestDeps(pool, creds, src, enq, clk))
-
-		payload := job.BackfillPayload{CompanyID: tn.Company.ID, CredentialID: creds.CredentialID, AnalyzerIDs: []uuid.UUID{analyzer.ID}, From: from, To: to}
-		require.NoError(t, b.Backfill(ctx, payload))
-
-		messages, err := ops.ListMessages(ctx, tn.Scope, store.MessageFilter{})
-		require.NoError(t, err)
-		return messages
-	}
-
-	t.Run("range reaches before the horizon", func(t *testing.T) {
-		t.Parallel()
-		from := backfillTestNow.Add(-40 * 24 * time.Hour)
-		to := backfillTestNow.Add(-35 * 24 * time.Hour)
-		messages := run(t, 15005, from, to)
-
-		require.Len(t, messages, 1)
-		require.Equal(t, "job", messages[0].Kind)
-		require.Equal(t, "info", messages[0].Status)
-		require.Contains(t, messages[0].Message, "is not in the consumption aggregates until consumption.refresh runs for it (F3)")
-	})
-
-	t.Run("range stays within the horizon", func(t *testing.T) {
-		t.Parallel()
-		from := backfillTestNow.Add(-10 * 24 * time.Hour)
-		to := backfillTestNow.Add(-5 * 24 * time.Hour)
-		messages := run(t, 15006, from, to)
-
-		require.Empty(t, messages, "a range entirely within the 30-day horizon gets no warning")
-	})
-}
-
 // TestBackfillRefusesInactiveCredential is X-M3's Backfill half (final
 // review B): see internal/ingest's TestFetchReadingsRefusesInactiveCredential
 // for the full rationale. An inactive credential must stop before any

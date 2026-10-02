@@ -510,7 +510,10 @@ type PlantRepository interface {
 	UpdateDeviceSnapshot(ctx context.Context, s Scope, d model.PlantDevice) error
 	// SetSyncState records the last iSolar sync and its closed error code (nil clears it).
 	SetSyncState(ctx context.Context, s Scope, plantID uuid.UUID, at time.Time, errCode *string) error
+	// SetHistoryThrough records the day through which stored production is whole (R506).
+	SetHistoryThrough(ctx context.Context, s Scope, plantID uuid.UUID, day time.Time) error
 	// SetIsolarLink writes the iSolar link fields, credential and total capacity; nil clears.
+	// It also clears the history mark.
 	SetIsolarLink(ctx context.Context, s Scope, p model.PowerPlant) (model.PowerPlant, error)
 	// ListLinked lists the company's iSolar-linked plants.
 	ListLinked(ctx context.Context, s Scope) ([]model.PowerPlant, error)
@@ -738,10 +741,11 @@ type ProductionRepository interface {
 	Latest(ctx context.Context, s Scope, plantID uuid.UUID, r TimeRange) (*model.PlantProduction, error)
 }
 
-// AnalyticsRepository reads the six continuous aggregates.
+// AnalyticsRepository reads the continuous aggregates; months and years are
+// rolled up from the daily one at query time (R499).
 //
-// Everything here is MATERIALISED and therefore may lag the hypertable by up
-// to the aggregate's refresh lag. It is correct for dashboards and reports and
+// Everything here is AGGREGATED and may lag the hypertable by up to the
+// aggregate's refresh lag. It is correct for dashboards and reports and
 // WRONG for billing, which must go through ReadingRepository.BoundaryReadings.
 // The names are chosen so that no call site can mistake one for the other.
 //
@@ -774,28 +778,19 @@ type AnalyticsRepository interface {
 // caller input (R72).
 type AggregateView string
 
-// The four consumption aggregates migration 00005 built. plant_production_*
-// is out of scope for F3's refresh seam (R71/R72/R73 name only the
-// consumption path F2's ingestion pipeline backfills).
+// The consumption aggregates (migration 00024). plant_production_* is out of
+// scope for F3's refresh seam (R71/R72/R73 name only the consumption path
+// F2's ingestion pipeline backfills).
 const (
-	ViewConsumptionHourly  AggregateView = "consumption_hourly"
-	ViewConsumptionDaily   AggregateView = "consumption_daily"
-	ViewConsumptionMonthly AggregateView = "consumption_monthly"
-	ViewConsumptionYearly  AggregateView = "consumption_yearly"
+	ViewConsumptionHourly AggregateView = "consumption_hourly"
+	ViewConsumptionDaily  AggregateView = "consumption_daily"
 )
 
-// ConsumptionViews returns the four consumption aggregates, finest first. A
-// refresh walks them in this order so that a coarser view is never expected
-// to reflect a finer one that has not been refreshed yet (R71) — even though,
-// per migration 00005's operator note, each view is in fact defined directly
-// over meter_readings and refreshing one never depends on another having run.
+// ConsumptionViews returns the consumption aggregates, finest first (R71).
+// Months and years have no view of their own: AnalyticsRepository rolls them
+// up from consumption_daily (R499).
 func ConsumptionViews() []AggregateView {
-	return []AggregateView{
-		ViewConsumptionHourly,
-		ViewConsumptionDaily,
-		ViewConsumptionMonthly,
-		ViewConsumptionYearly,
-	}
+	return []AggregateView{ViewConsumptionHourly, ViewConsumptionDaily}
 }
 
 // PriceRepository is a tenant's READ access to the market price series and the

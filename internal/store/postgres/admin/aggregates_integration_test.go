@@ -18,17 +18,6 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
 )
 
-// aggregatesIstanbul is loaded once so every test in this file evaluates
-// month boundaries the same way migration 00005's consumption_monthly does
-// (time_bucket('1 month', ts, 'Europe/Istanbul')).
-var aggregatesIstanbul = func() *time.Location {
-	loc, err := time.LoadLocation("Europe/Istanbul")
-	if err != nil {
-		panic(err)
-	}
-	return loc
-}()
-
 // insertLoadProfileReading writes one load_profile reading through
 // ReadingRepository, matching analytics_integration_test.go's fixture style.
 func insertLoadProfileReading(t *testing.T, ctx context.Context, readingRepo *postgres.ReadingRepository, scope store.Scope, analyzerID uuid.UUID, ts time.Time, activeImport string) {
@@ -41,45 +30,6 @@ func insertLoadProfileReading(t *testing.T, ctx context.Context, readingRepo *po
 	}
 	_, _, err := readingRepo.BulkInsert(ctx, scope, []model.MeterReading{row})
 	require.NoError(t, err)
-}
-
-// TestRefreshMaterialisesAClosedMonth is the refresh proof for a
-// materialized_only view: consumption_monthly's watermark sits at the end of
-// the last CLOSED month (migration 00005's header), so a closed month from
-// roughly two years back is unambiguously below it and absent until refreshed
-// explicitly — no real-time union can rescue it, unlike consumption_hourly.
-func TestRefreshMaterialisesAClosedMonth(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	pool := testfixtures.NewIsolatedDB(t)
-	tenant := testfixtures.NewTenant(t, ctx, pool, 6001)
-	analyzer := tenant.Analyzers[0]
-	readingRepo := postgres.NewReadingRepository(pool)
-	analyticsRepo := postgres.NewAnalyticsRepository(pool)
-	repo := admin.NewAggregateRepository(pool)
-
-	// A month about two years back, unambiguously closed relative to any
-	// clock this test runs under.
-	monthStart := time.Date(2024, time.March, 1, 0, 0, 0, 0, aggregatesIstanbul)
-	monthEnd := monthStart.AddDate(0, 1, 0)
-	monthWindow := store.TimeRange{From: monthStart, To: monthEnd}
-
-	insertLoadProfileReading(t, ctx, readingRepo, tenant.Scope, analyzer.ID,
-		time.Date(2024, time.March, 10, 12, 0, 0, 0, aggregatesIstanbul), "1000")
-	insertLoadProfileReading(t, ctx, readingRepo, tenant.Scope, analyzer.ID,
-		time.Date(2024, time.March, 20, 12, 0, 0, 0, aggregatesIstanbul), "1012.5")
-
-	before, err := analyticsRepo.ConsumptionMonthly(ctx, tenant.AdminScope, []uuid.UUID{analyzer.ID}, monthWindow)
-	require.NoError(t, err)
-	require.Empty(t, before, "a closed month below consumption_monthly's watermark is absent, not stale")
-
-	require.NoError(t, repo.Refresh(ctx, store.ViewConsumptionMonthly, monthWindow))
-
-	after, err := analyticsRepo.ConsumptionMonthly(ctx, tenant.AdminScope, []uuid.UUID{analyzer.ID}, monthWindow)
-	require.NoError(t, err)
-	require.Len(t, after, 1)
-	require.True(t, decimal.RequireFromString("12.5").Equal(*after[0].ActiveConsumption),
-		"want 12.5, got %s", after[0].ActiveConsumption.String())
 }
 
 // TestRefreshMaterialisesAnHourBelowTheWatermark is the refresh proof for a
@@ -189,15 +139,12 @@ func TestRefreshReturnsTheDatabaseError(t *testing.T) {
 	require.NotErrorIs(t, err, store.ErrInvalidRange)
 }
 
-// TestRefreshWalksTheFourViewsFinestFirst pins store.ConsumptionViews' order:
-// a caller that refreshes in this order never has a coarser view appear to
-// lag a finer one it depends on for its own story about the data (R71).
-func TestRefreshWalksTheFourViewsFinestFirst(t *testing.T) {
+// TestRefreshWalksTheViewsFinestFirst pins store.ConsumptionViews' order
+// (R71). Months and years have no view: they roll up from daily (R499).
+func TestRefreshWalksTheViewsFinestFirst(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, []store.AggregateView{
 		store.ViewConsumptionHourly,
 		store.ViewConsumptionDaily,
-		store.ViewConsumptionMonthly,
-		store.ViewConsumptionYearly,
 	}, store.ConsumptionViews())
 }

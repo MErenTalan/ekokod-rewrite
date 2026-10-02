@@ -332,7 +332,6 @@ func TestContinuousAggregateBucketsAreTimestamptz(t *testing.T) {
 
 	aggregates := map[string]bool{
 		"ConsumptionHourly": false, "ConsumptionDaily": false,
-		"ConsumptionMonthly": false, "ConsumptionYearly": false,
 		"PlantProductionDaily": false, "PlantProductionMonthly": false,
 	}
 

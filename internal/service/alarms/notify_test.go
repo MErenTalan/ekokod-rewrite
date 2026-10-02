@@ -231,3 +231,31 @@ func TestNotifyWithoutDepsIsAnError(t *testing.T) {
 	svc, _ := newTestService(t)
 	require.Error(t, svc.Notify(context.Background(), alarms.Notification{CompanyID: companyID}))
 }
+
+func TestNotifyWithoutAChannelSaysWhatFiredAsAWarning(t *testing.T) {
+	t.Parallel()
+	// R514: a rule nobody subscribed to fired as designed. Messages must say
+	// what fired, and must not file it under errors.
+	svc, f := newNotifyService(t, nil)
+	require.NoError(t, svc.Notify(context.Background(), f.n))
+
+	require.Empty(t, f.statuses("error"))
+	warnings := f.statuses("warning")
+	require.Len(t, warnings, 1)
+	require.Contains(t, warnings[0].Message, "Alarm tetiklendi: İletişim (INST-0000)")
+	require.Contains(t, warnings[0].Message, "Analizör 6 saattir veri göndermiyor (eşik: 6 saat)")
+	require.Contains(t, warnings[0].Message, "bildirim kanalı tanımlı değil")
+	require.NotNil(t, f.alarms.notifyErr[f.n.EventID])
+}
+
+func TestNotifyMessagesAlwaysSayWhatFired(t *testing.T) {
+	t.Parallel()
+	// R514: the Messages row is where an operator reads the firing.
+	svc, f := newNotifyService(t, []model.AlarmChannel{email("ops@example.com")}, withoutSMTP())
+	require.NoError(t, svc.Notify(context.Background(), f.n))
+	require.Contains(t, f.statuses("error")[0].Message, "Analizör 6 saattir veri göndermiyor")
+
+	svc, f = newNotifyService(t, []model.AlarmChannel{email("ops@example.com")})
+	require.NoError(t, svc.Notify(context.Background(), f.n))
+	require.Contains(t, f.statuses("info")[0].Message, "Analizör 6 saattir veri göndermiyor")
+}

@@ -286,21 +286,26 @@ func (r *AnalyzerRepository) SoftDelete(ctx context.Context, s store.Scope, id u
 	return nil
 }
 
-// TouchLastReading advances last_reading_at, never retreats it: GREATEST
-// against the stored value (or -infinity if unset) makes an out-of-order
-// backfill unable to make an analyzer look staler than it is.
+// TouchLastReading advances last_reading_at, never retreats it, so an
+// out-of-order backfill cannot make an analyzer look staler than it is. The
+// row is written only when the mark really moves (R508).
 func (r *AnalyzerRepository) TouchLastReading(ctx context.Context, s store.Scope, id uuid.UUID, at time.Time) error {
 	if !s.Valid() {
 		return store.ErrInvalidScope
 	}
 	ids, all := s.BuildingFilter()
-	n, err := r.q.AnalyzerTouchLastReading(ctx, sqlcgen.AnalyzerTouchLastReadingParams{
-		At: ts(at), ID: id, CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: ids,
+	var row sqlcgen.AnalyzerTouchLastReadingRow
+	err := retryOnDeadlock(ctx, func() error { // R508
+		var qerr error
+		row, qerr = r.q.AnalyzerTouchLastReading(ctx, sqlcgen.AnalyzerTouchLastReadingParams{
+			At: ts(at), ID: id, CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: ids,
+		})
+		return qerr
 	})
 	if err != nil {
 		return pgerr.Translate(r.pool, "touch analyzer last reading", err)
 	}
-	if n == 0 {
+	if !row.Found {
 		return store.ErrNotFound
 	}
 	return nil

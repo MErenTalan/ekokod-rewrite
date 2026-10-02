@@ -112,7 +112,7 @@ func Scale(ctx context.Context, pool *pgxpool.Pool, hasher auth.Hasher, o ScaleO
 		}
 		written += tag.RowsAffected()
 	}
-	for _, view := range []string{"consumption_hourly", "consumption_daily", "consumption_monthly", "consumption_yearly"} {
+	for _, view := range []string{"consumption_hourly", "consumption_daily"} {
 		if _, err := conn.Exec(ctx, "call refresh_continuous_aggregate($1::regclass, null, null)", view); err != nil {
 			return ScaleResult{}, fmt.Errorf("seed scale: refresh %s: %w", view, err)
 		}

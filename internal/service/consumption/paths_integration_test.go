@@ -230,22 +230,15 @@ func TestNarrowScopeSeesNothingOnBothPaths(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, aEmpty)
 
-	// The Monthly billing-kind Range/look-back and the Analytics composition
-	// path (composeMissingPeriods' ConsumptionDaily call) run only at
-	// Monthly, never at Hourly, so a Scope check that only ran at Hourly
-	// above would leave them unexercised. consumption_monthly is
-	// deliberately NEVER refreshed here, so Analytics must compose from
-	// consumption_daily — a scope leak here would return a Partial row for
-	// the out-of-scope analyzer instead of an empty slice.
+	// The Monthly billing-kind Range/look-back and the Analytics monthly
+	// roll-up (R499) run only at Monthly, never at Hourly, so a Scope check
+	// that only ran at Hourly above would leave them unexercised.
 	loc, err := time.LoadLocation("Europe/Istanbul")
 	require.NoError(t, err)
 	dec31 := time.Date(2025, 12, 31, 0, 0, 0, 0, loc)
 	jan1 := time.Date(2026, 1, 1, 0, 0, 0, 0, loc)
 	feb1 := jan1.AddDate(0, 1, 0)
 	for _, id := range []uuid.UUID{inScope, outOfScope} {
-		// A reading strictly BEFORE January is required too: composing
-		// January needs a consumption_daily bucket both inside the month
-		// (Jan 1) and before it (Dec 31) to diff against.
 		pathsSeedReading(t, ctx, repo, tenant.AdminScope, readingRow(id, dec31, model.ReadingKindLoadProfile, map[string]string{"active_import": "500"}))
 		pathsSeedReading(t, ctx, repo, tenant.AdminScope, readingRow(id, jan1, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}))
 		pathsSeedReading(t, ctx, repo, tenant.AdminScope, readingRow(id, feb1, model.ReadingKindLoadProfile, map[string]string{"active_import": "1380"}))
@@ -263,7 +256,8 @@ func TestNarrowScopeSeesNothingOnBothPaths(t *testing.T) {
 	monthlyARows, err := analytics.Consumption(ctx, tenant.Scope, monthlyReq(inScope))
 	require.NoError(t, err)
 	require.Len(t, monthlyARows, 1)
-	require.True(t, monthlyARows[0].Partial, "consumption_monthly is never refreshed here: the row must be composed")
+	require.False(t, monthlyARows[0].Partial, "February's first reading closes January")
+	require.Equal(t, "380", monthlyARows[0].Values[energy.ActiveImport].String())
 
 	// The narrow scope must see nothing of the out-of-scope analyzer at
 	// Monthly either, on either path.
@@ -271,7 +265,7 @@ func TestNarrowScopeSeesNothingOnBothPaths(t *testing.T) {
 	require.ErrorIs(t, err, store.ErrNotFound)
 	monthlyAEmpty, err := analytics.Consumption(ctx, tenant.Scope, monthlyReq(outOfScope))
 	require.NoError(t, err)
-	require.Empty(t, monthlyAEmpty, "the composition path must never leak a composed row to a narrow scope")
+	require.Empty(t, monthlyAEmpty, "the roll-up must never leak a row to a narrow scope")
 }
 
 // TestAnalyticsIsolatesTenants proves the Analytics half: the other tenant's
@@ -296,9 +290,6 @@ func TestAnalyticsIsolatesTenants(t *testing.T) {
 	pathsSeedReading(t, ctx, repo, tenantB.Scope, readingRow(id, jan1, model.ReadingKindLoadProfile, map[string]string{"active_import": "1000"}))
 	pathsSeedReading(t, ctx, repo, tenantB.Scope, readingRow(id, feb1, model.ReadingKindLoadProfile, map[string]string{"active_import": "2000"}))
 
-	_, err = pool.Exec(ctx, "call refresh_continuous_aggregate('consumption_monthly', NULL, NULL)")
-	require.NoError(t, err)
-
 	analytics, err := consumption.NewAnalytics(consumption.AnalyticsDeps{Analytics: pathsNewAnalyticsRepo(pool), Log: testfixtures.DiscardLogger()})
 	require.NoError(t, err)
 
@@ -315,14 +306,12 @@ func TestAnalyticsIsolatesTenants(t *testing.T) {
 	require.Empty(t, cross)
 }
 
-// TestAnalyticsComposesClosedUnrefreshedMonthsAgainstARealDatabase is R94's
-// integration acceptance test: consumption_monthly is NEVER refreshed.
-// load_profile readings run continuously from Dec 31 through Mar 10. A
-// request for [Jan 1, Apr 1) must return a composed, Partial row for EVERY
-// one of January, February and March — not only March, which happens to be
-// the LAST window in the request: composing only the trailing window would
-// silently drop January and February.
-func TestAnalyticsComposesClosedUnrefreshedMonthsAgainstARealDatabase(t *testing.T) {
+// TestAnalyticsMonthsNeedNoRefreshAgainstARealDatabase is R499's integration
+// acceptance test: nothing is refreshed. load_profile readings run every 12
+// hours from Dec 31 through Mar 9. A request for [Jan 1, Apr 1) must return
+// every month with its true figure; only March, which nothing closes, is
+// Partial.
+func TestAnalyticsMonthsNeedNoRefreshAgainstARealDatabase(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)
@@ -360,10 +349,17 @@ func TestAnalyticsComposesClosedUnrefreshedMonthsAgainstARealDatabase(t *testing
 	for _, r := range got {
 		byMonth[r.Window.From.In(loc).Format("2006-01")] = r
 	}
-	require.Contains(t, byMonth, "2026-01", "January must not silently disappear")
-	require.Contains(t, byMonth, "2026-02", "February must not silently disappear, even though it is not the last window")
-	require.Contains(t, byMonth, "2026-03")
-	for _, m := range []string{"2026-01", "2026-02", "2026-03"} {
-		require.True(t, byMonth[m].Partial, "%s must be composed, never materialized: consumption_monthly is never refreshed here", m)
+	for _, want := range []struct {
+		month, kwh string
+		partial    bool
+	}{
+		{"2026-01", "620", false}, // 62 half-days at 10 kWh, to February's first reading
+		{"2026-02", "560", false}, // 56 half-days
+		{"2026-03", "170", true},  // 1 Mar 00:00 to 9 Mar 12:00, and nothing after
+	} {
+		require.Contains(t, byMonth, want.month)
+		row := byMonth[want.month]
+		require.Equal(t, want.kwh, row.Values[energy.ActiveImport].String(), want.month)
+		require.Equal(t, want.partial, row.Partial, want.month)
 	}
 }

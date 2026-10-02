@@ -34,6 +34,7 @@
     "powerMin": "Power min (kW)",
     "invoiceThresholdPct": "Invoice increase threshold (%)",
     "inLast": "In the last",
+    "unit": "Unit",
     "hours": "hours",
     "days": "days"
   },
@@ -51,7 +52,8 @@
   "errors": {
     "required": "This field is required.",
     "invalid": "Invalid value.",
-    "atLeastOne": "At least one alarm limit is required."
+    "atLeastOne": "At least one alarm limit is required.",
+    "periodMissing": "A limit needs its period too: fill the limit and its “Last” field together."
   },
   "events": {
     "title": "Alarm log",
@@ -62,6 +64,7 @@
     "delivered": "Sent",
     "failed": "Not sent",
     "pending": "Pending",
+    "noChannel": "No notification channel",
     "settingsTitle": "Rule settings",
     "emptyDescription": "This rule has not fired yet."
   },

@@ -3,6 +3,7 @@ package ingest
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/hibiken/asynq"
@@ -36,7 +37,7 @@ func (s *Service) SyncAnalyzers(ctx context.Context, p job.SyncAnalyzersPayload)
 	creds, err := s.deps.Credentials.Open(ctx, sc, p.CredentialID)
 	if err != nil {
 		errText := err.Error()
-		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil, now)
+		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil)
 		return classifyStoreErr(err) // M14
 	}
 
@@ -47,22 +48,24 @@ func (s *Service) SyncAnalyzers(ctx context.Context, p job.SyncAnalyzersPayload)
 	if !creds.IsActive {
 		cerr := &integration.Error{Kind: integration.ErrConfig, Provider: creds.Provider, Op: "sync_analyzers.credential_inactive"}
 		errText := redacted(creds, cerr)
-		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil, now)
-		s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "error", errText, nil)
+		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil)
+		s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "error",
+			fmt.Sprintf("%s entegrasyonu devre dışı bırakıldığı için eşitlenmedi.", creds.Provider), nil)
 		return wrapRedacted(errText, cerr)
 	}
 
 	src, err := s.deps.Sources.Source(creds.Provider)
 	if err != nil {
 		errText := redacted(creds, err)
-		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil, now)
+		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil)
 		return wrapRedacted(errText, err)
 	}
 
 	if verr := src.Verify(ctx, creds); verr != nil {
 		errText := redacted(creds, verr)
-		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil, now)
-		s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "error", errText, nil)
+		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil)
+		s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "error",
+			failureMessage(string(creds.Provider)+" entegrasyonu", verr, errText), nil)
 		return wrapRedacted(errText, verr)
 	}
 
@@ -70,15 +73,16 @@ func (s *Service) SyncAnalyzers(ctx context.Context, p job.SyncAnalyzersPayload)
 	if !ok {
 		err := &integration.Error{Kind: integration.ErrMalformedPayload, Provider: creds.Provider, Op: "sync_analyzers.provider"}
 		errText := redacted(creds, err)
-		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil, now)
+		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil)
 		return wrapRedacted(errText, err)
 	}
 
 	points, derr := src.DiscoverMeteringPoints(ctx, creds)
 	if derr != nil {
 		errText := redacted(creds, derr)
-		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil, now)
-		s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "error", errText, nil)
+		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil)
+		s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "error",
+			failureMessage(string(creds.Provider)+" entegrasyonu", derr, errText), nil)
 		return wrapRedacted(errText, derr)
 	}
 
@@ -99,7 +103,7 @@ func (s *Service) SyncAnalyzers(ctx context.Context, p job.SyncAnalyzersPayload)
 	})
 	if lerr != nil {
 		errText := lerr.Error()
-		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, failed, &errText, mustJSON(syncRunDetail{FailedPoints: failedPoints}), now)
+		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, failed, &errText, mustJSON(syncRunDetail{FailedPoints: failedPoints}))
 		return lerr
 	}
 
@@ -131,7 +135,7 @@ func (s *Service) SyncAnalyzers(ctx context.Context, p job.SyncAnalyzersPayload)
 	}
 
 	status := countsStatus(processed, skipped, failed)
-	s.finishRun(ctx, sc, run.ID, status, processed, skipped, failed, nil, mustJSON(syncRunDetail{FailedPoints: failedPoints}), now)
+	s.finishRun(ctx, sc, run.ID, status, processed, skipped, failed, nil, mustJSON(syncRunDetail{FailedPoints: failedPoints}))
 	return nil
 }
 
@@ -153,7 +157,7 @@ func (s *Service) upsertMeteringPoint(ctx context.Context, sc store.Scope, provi
 		// — it changes bills — the same shape the fetch path (fetch.go)
 		// uses for a multiplier resolved mid-fetch.
 		if pt.MeterMultiplier != nil && !existing.MeterMultiplier.Equal(*pt.MeterMultiplier) {
-			s.appendMessage(ctx, sc, sc.CompanyID, "job", "analyzer-refresh", "warning", "meter multiplier changed",
+			s.appendMessage(ctx, sc, sc.CompanyID, "job", "analyzer-refresh", "warning", multiplierMessage(result),
 				mustJSON(map[string]any{"analyzer_id": result.ID, "multiplier": result.MeterMultiplier.String()}))
 		}
 		return result, nil

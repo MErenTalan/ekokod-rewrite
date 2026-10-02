@@ -147,7 +147,7 @@ func seedOps(ctx context.Context, pool *pgxpool.Pool, sc store.Scope, alarmID uu
 			Message: "Alarm tetiklendi: Endüktif izleme", Detail: &detail,
 			RelatedType: &related, RelatedID: &alarmID, CreatedAt: now.Add(-2 * time.Hour)},
 		{CompanyID: &company, Kind: "job", Category: "alarm-evaluate", Status: "success",
-			Message:   "Alarm değerlendirmesi tamamlandı (success): 4 kural işlendi, 3 tetiklenmedi, 0 hata, 1 bildirim.",
+			Message:   "Alarm değerlendirmesi tamamlandı: 4 kural işlendi, 1 alarm tetiklendi, 0 kural hata verdi, 1 bildirim kuyruğa alındı.",
 			CreatedAt: now.Add(-1 * time.Hour)},
 		{CompanyID: &company, Kind: "system", Category: "auth", Status: "info",
 			Message: "Oturum açıldı", CreatedAt: now.Add(-30 * time.Minute)},

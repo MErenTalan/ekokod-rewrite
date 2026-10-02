@@ -217,6 +217,11 @@ type ConsumptionBucket struct {
 	// bucket with too few readings is suspect even when its arithmetic is
 	// sound.
 	ReadingCount int64
+
+	// ClosedByBoundary reports that the next bucket's first reading sits on
+	// this bucket's end, so the bucket is whole (R499). A bucket still open,
+	// or one whose data stops short of its end, has it false.
+	ClosedByBoundary bool
 }
 
 // PlantProductionBucket is one row of either plant production continuous

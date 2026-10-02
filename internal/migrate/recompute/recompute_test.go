@@ -162,8 +162,6 @@ func TestConsumptionWindowsFitTheirBuckets(t *testing.T) {
 		"consumption_hourly 2025-11-30→2026-01-02", "consumption_daily 2025-11-30→2026-01-02", "plants 2025-11-30→2026-01-02",
 		"consumption_hourly 2025-12-31→2026-02-02", "consumption_daily 2025-12-31→2026-02-02", "plants 2025-12-31→2026-02-02",
 		"consumption_hourly 2026-01-31→2026-03-02", "consumption_daily 2026-01-31→2026-03-02", "plants 2026-01-31→2026-03-02",
-		"consumption_monthly 2024-12-01→2026-02-01", "consumption_monthly 2025-12-01→2027-02-01",
-		"consumption_yearly 2024-01-01→2028-01-01",
 	}, r.calls)
 }
 

@@ -76,6 +76,8 @@
     "tableCaption": "Tüketim verileri",
     "empty": "Seçilen dönem için veri yok",
     "emptyHint": "Tarih aralığını genişletin veya verileri yenileyin.",
+    "selectBuilding": "Tüketimi görmek için bir bina seçin",
+    "selectBuildingHint": "Binalar listesindeki “Seç” ile bir bina seçtiğinizde tüketim eğilimi burada görünür.",
     "yoyTitle": "Yıllık karşılaştırma",
     "yoyDescription": "Seçilen aylar ile bir önceki yılın aynı ayları.",
     "currentPeriod": "Seçili dönem",
