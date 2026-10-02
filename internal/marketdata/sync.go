@@ -222,7 +222,7 @@ func (s *Syncer) logError(msg string, err error) {
 }
 
 // appendMissingHoursMessage appends the one operator-facing warning the
-// task-12 brief names: "<n> PTF hours missing", Metadata carrying the
+// task-12 brief names (in Turkish since R510), Metadata carrying the
 // per-day breakdown.
 func (s *Syncer) appendMissingHoursMessage(ctx context.Context, missing map[string][]time.Time) error {
 	metadata, err := json.Marshal(map[string]any{"days": missing})
@@ -233,7 +233,7 @@ func (s *Syncer) appendMissingHoursMessage(ctx context.Context, missing map[stri
 		Kind:      "job",
 		Category:  "market-prices",
 		Status:    "warning",
-		Message:   fmt.Sprintf("%d PTF hours missing", totalMissing(missing)),
+		Message:   fmt.Sprintf("EPİAŞ'tan %d saatin PTF değeri alınamadı.", totalMissing(missing)),
 		Metadata:  metadata,
 		CreatedAt: s.Clock.Now(),
 	})

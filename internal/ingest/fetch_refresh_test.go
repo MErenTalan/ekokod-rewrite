@@ -13,6 +13,7 @@ package ingest_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -421,7 +422,7 @@ func TestAnEnqueueFailureDoesNotFailTheFetchRun(t *testing.T) {
 	require.NoError(t, err)
 	found := false
 	for _, m := range msgs {
-		if m.Message == "consumption.refresh enqueue failed" {
+		if strings.Contains(m.Message, "yenileme kuyruğuna alınamadı") {
 			found = true
 		}
 	}

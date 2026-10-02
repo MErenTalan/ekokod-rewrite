@@ -322,6 +322,24 @@ func TestPM5340NullsStayNull(t *testing.T) {
 	require.True(t, sawGenerationNil)
 }
 
+// R513: a gateway with no inverter behind it sends currentGeneration null on
+// every row. That is not a gap worth a warning on every fetch; only a null
+// among rows that do carry generation is.
+func TestPM5340NoWarningWhenNoRowHasGeneration(t *testing.T) {
+	body := []byte(`{"items":[
+		{"meterDate":"05/01/2026 08:00","activeImport_kWh":1523.75,"inductive_kvarh":88.4,"capacitive_kvarh":12.1,"dmdKwPeak_kW":45.2,"currentGeneration":null,"deviceId":56529},
+		{"meterDate":"05/01/2026 08:15","activeImport_kWh":1524.9,"inductive_kvarh":88.6,"capacitive_kvarh":12.15,"dmdKwPeak_kW":46,"currentGeneration":null,"deviceId":56529}
+	],"limit":500,"cursorNext":null,"hasMore":false,"sort":"asc","filters":{}}`)
+	srv := fake.NewTLSServer(t, fake.Route{Method: http.MethodGet, Path: "/api/v1/readings", Respond: fake.JSON(http.StatusOK, body)})
+	pool, _ := pm5340TestPool(t, srv)
+	src := pm5340.New(pool, pm5340.Options{Clock: clock.NewFake(fixtureNow)})
+
+	res, err := src.FetchReadings(context.Background(), pm5340TestCreds(srv), pm5340TestRequest())
+	require.NoError(t, err)
+	require.Len(t, res.Readings, 2)
+	require.Empty(t, res.Warnings)
+}
+
 // TestPM5340FollowsCursorPages: the pagination case, focused on request
 // shape — the second request carries cursor=<cursorNext> (adapter-
 // patterns.md item 5: count recorded requests and assert their params).

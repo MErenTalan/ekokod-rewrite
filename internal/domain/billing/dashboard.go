@@ -134,7 +134,15 @@ type DashboardPlants struct {
 // mixed into them.
 func BuildDashboard(rows, buildingBills, companyBills []DashboardRow) DashboardResult {
 	out := DashboardResult{Buildings: groupByBuilding(rows, buildingBills)}
-	out.Netting = netPerCurrency(rows, companyBills)
+	// R512: a building invoiced on its own nets through its building invoice;
+	// one that has analyzer rows nets through those, never both.
+	netted := append([]DashboardRow(nil), rows...)
+	for _, b := range out.Buildings {
+		if len(b.Rows) == 0 && b.BuildingBill != nil {
+			netted = append(netted, *b.BuildingBill)
+		}
+	}
+	out.Netting = netPerCurrency(netted, companyBills)
 	return out
 }
 
@@ -161,11 +169,17 @@ func groupByBuilding(rows, buildingBills []DashboardRow) []DashboardBuilding {
 		if bill.BuildingID == nil {
 			continue
 		}
+		copied := bill
 		b := byID[*bill.BuildingID]
 		if b == nil {
+			// R512: a building invoiced on its own, with no analyzer rows.
+			// Its section's totals are that one invoice's.
+			byID[*bill.BuildingID] = &DashboardBuilding{BuildingID: *bill.BuildingID, BuildingName: bill.BuildingName,
+				Currency: bill.Currency, TotalConsumption: bill.Consumption, TotalProduction: bill.Production,
+				TotalInvoice: bill.Invoice, BuildingBill: &copied}
+			order = append(order, *bill.BuildingID)
 			continue
 		}
-		copied := bill
 		b.BuildingBill = &copied
 		b.DivergesFromRows = bill.Invoice.Sub(b.TotalInvoice).Abs().GreaterThan(divergenceTolerance)
 	}

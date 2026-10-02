@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -537,13 +538,14 @@ func TestIngestionRejectionsAreCountedAndSurfaced(t *testing.T) {
 	require.NoError(t, err)
 	var found bool
 	for _, m := range messages {
-		if m.Message == "3 readings rejected" {
+		if strings.Contains(m.Message, "3 okuma kaydedilmedi") {
+			require.True(t, strings.HasPrefix(m.Message, analyzer.InstallationNumber+": "), "the message names the meter: %s", m.Message)
 			found = true
 			require.Equal(t, "warning", m.Status)
 			require.Equal(t, "job", m.Kind)
 		}
 	}
-	require.True(t, found, "expected a '3 readings rejected' warning message")
+	require.True(t, found, "expected a '3 okuma kaydedilmedi' warning message")
 }
 
 // TestIngestionEmptyWindowDoesNotAdvanceCursor (R19).
@@ -740,7 +742,7 @@ func TestIngestionMultiplierChangeIsAppliedAndReported(t *testing.T) {
 	require.NoError(t, err)
 	var found bool
 	for _, m := range messages {
-		if m.Message == "meter multiplier changed" {
+		if strings.Contains(m.Message, "sayaç çarpanı") {
 			found = true
 			require.Equal(t, "warning", m.Status)
 		}
@@ -794,7 +796,7 @@ func TestIngestionNotProviderResolvedMultiplierNeverPersists(t *testing.T) {
 	messages, err := repos.ops.ListMessages(ctx, tn.Scope, store.MessageFilter{})
 	require.NoError(t, err)
 	for _, m := range messages {
-		require.NotEqual(t, "meter multiplier changed", m.Message, "no 'meter multiplier changed' message for a not-provider-resolved value")
+		require.NotContains(t, m.Message, "sayaç çarpanı", "no multiplier message for a not-provider-resolved value")
 	}
 }
 
@@ -1297,7 +1299,7 @@ func TestSyncMultiplierChangeIsAppliedAndReported(t *testing.T) {
 	require.NoError(t, merr)
 	var found bool
 	for _, m := range messages {
-		if m.Message == "meter multiplier changed" {
+		if strings.Contains(m.Message, "sayaç çarpanı") {
 			found = true
 			require.Equal(t, "warning", m.Status)
 		}
@@ -1411,7 +1413,7 @@ func TestIngestionMultiplierUpdateFailureDoesNotReportOrMutate(t *testing.T) {
 	messages, merr := repos.ops.ListMessages(ctx, tn.Scope, store.MessageFilter{})
 	require.NoError(t, merr)
 	for _, m := range messages {
-		require.NotEqual(t, "meter multiplier changed", m.Message, "M1: no 'meter multiplier changed' message on a failed update")
+		require.NotContains(t, m.Message, "sayaç çarpanı", "M1: no multiplier message on a failed update")
 	}
 }
 
@@ -1496,8 +1498,10 @@ func TestIngestionWarningMessagesEmittedInSortedCodeOrder(t *testing.T) {
 	require.NoError(t, err)
 	byCode := map[string]model.OperationalMessage{}
 	for _, m := range messages {
-		if m.Message == "aaa_code" || m.Message == "mmm_code" || m.Message == "zzz_code" {
-			byCode[m.Message] = m
+		for _, code := range []string{"aaa_code", "mmm_code", "zzz_code"} {
+			if strings.Contains(m.Message, code) { // an unknown code is shown as it came
+				byCode[code] = m
+			}
 		}
 	}
 	require.Len(t, byCode, 3)

@@ -123,7 +123,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 
 	if !analyzer.IsActive || analyzer.DeletedAt != nil {
 		s.finishRun(ctx, sc, run.ID, "success", 0, 1, 0, nil, nil)
-		s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "info", "analyzer inactive", nil)
+		s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "info", inactiveMessage(analyzer), nil)
 		return nil
 	}
 
@@ -144,7 +144,8 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 		cerr := &integration.Error{Kind: integration.ErrConfig, Provider: creds.Provider, Op: "fetch_readings.credential_inactive"}
 		errText := redacted(creds, cerr)
 		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 1, &errText, nil)
-		s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "error", errText, nil)
+		s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "error",
+			fmt.Sprintf("%s: entegrasyon devre dışı bırakıldığı için veri çekilmedi.", analyzer.InstallationNumber), nil)
 		return wrapRedacted(errText, cerr)
 	}
 
@@ -212,7 +213,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 			pages++
 			if pages > s.opts.MaxPagesPerRun {
 				err := fmt.Errorf("ingest: exceeded max pages per run (%d)", s.opts.MaxPagesPerRun)
-				return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, err, acc)
+				return s.failFetchRun(ctx, sc, run.ID, analyzer, p.Kind, creds, err, acc)
 			}
 
 			if !loaded {
@@ -220,12 +221,12 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 				prev, lerr = s.deps.Readings.Latest(ctx, sc, analyzer.ID,
 					store.TimeRange{From: chunk.From.Add(-35 * 24 * time.Hour), To: chunk.From}, p.Kind)
 				if lerr != nil {
-					return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, lerr, acc)
+					return s.failFetchRun(ctx, sc, run.ID, analyzer, p.Kind, creds, lerr, acc)
 				}
 				history, lerr = s.deps.Readings.Range(ctx, sc, analyzer.ID,
 					store.TimeRange{From: chunk.From.Add(-7 * 24 * time.Hour), To: chunk.From}, p.Kind)
 				if lerr != nil {
-					return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, lerr, acc)
+					return s.failFetchRun(ctx, sc, run.ID, analyzer, p.Kind, creds, lerr, acc)
 				}
 				loaded = true
 			}
@@ -240,7 +241,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 			}
 			res, ferr := src.FetchReadings(ctx, creds, req)
 			if ferr != nil {
-				return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, ferr, acc)
+				return s.failFetchRun(ctx, sc, run.ID, analyzer, p.Kind, creds, ferr, acc)
 			}
 
 			kept, dedupeRejected := Dedupe(res.Readings)
@@ -269,7 +270,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 			if len(valid) > 0 {
 				inserted, updated, ierr := s.deps.Readings.BulkInsert(ctx, sc, valid)
 				if ierr != nil {
-					return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, ierr, acc)
+					return s.failFetchRun(ctx, sc, run.ID, analyzer, p.Kind, creds, ierr, acc)
 				}
 				acc.processed += int32(inserted + updated)
 
@@ -283,7 +284,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 
 				for _, hook := range s.deps.Hooks[analyzer.Provider] {
 					if herr := hook.AfterPersist(ctx, sc, analyzer, p.Kind, pageMinTs, pageMaxTs); herr != nil {
-						return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, herr, acc)
+						return s.failFetchRun(ctx, sc, run.ID, analyzer, p.Kind, creds, herr, acc)
 					}
 				}
 
@@ -313,14 +314,14 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 					rangeResets, rerr := s.deps.Readings.Range(ctx, sc, analyzer.ID,
 						store.TimeRange{From: kindMinTs, To: kindMaxTs.Add(time.Microsecond)}, model.ReadingKindReset)
 					if rerr != nil {
-						return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, rerr, acc)
+						return s.failFetchRun(ctx, sc, run.ID, analyzer, p.Kind, creds, rerr, acc)
 					}
 					resets = append(resets, rangeResets...)
 
 					for _, d := range DetectNegativeDeltas(prev, kindRows, resets) {
 						exists, eerr := s.negativeDeltaAnomalyExists(ctx, sc, analyzer.ID, d)
 						if eerr != nil {
-							return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, eerr, acc)
+							return s.failFetchRun(ctx, sc, run.ID, analyzer, p.Kind, creds, eerr, acc)
 						}
 						if exists {
 							continue
@@ -332,7 +333,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 							Reason:      "negative_delta",
 							Detail:      mustJSON(map[string]string{"register": d.Register, "kind": string(p.Kind)}),
 						}); cerr != nil {
-							return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, cerr, acc)
+							return s.failFetchRun(ctx, sc, run.ID, analyzer, p.Kind, creds, cerr, acc)
 						}
 						acc.anomaliesCreated++
 					}
@@ -344,14 +345,14 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 					// never move it — see resolveFetchWindow's doc).
 					if allowCursorAdvance {
 						if cerr := s.deps.Cursors.RecordSuccess(ctx, sc, analyzer.ID, p.Kind, kindMaxTs, now); cerr != nil {
-							return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, cerr, acc)
+							return s.failFetchRun(ctx, sc, run.ID, analyzer, p.Kind, creds, cerr, acc)
 						}
 					}
 					// R502: the last-reading mark only ever moves forward, so
 					// a backfill window sets it too; the cursor above stays
 					// gated.
 					if terr := s.deps.Analyzers.TouchLastReading(ctx, sc, analyzer.ID, kindMaxTs); terr != nil {
-						return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, terr, acc)
+						return s.failFetchRun(ctx, sc, run.ID, analyzer, p.Kind, creds, terr, acc)
 					}
 
 					last := kindRows[len(kindRows)-1]
@@ -360,7 +361,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 
 				if hourly := convertHourlyValues(analyzer.ID, analyzer.Provider, res.HourlyValues); len(hourly) > 0 {
 					if _, _, herr := s.deps.ProviderSeries.UpsertHourly(ctx, sc, hourly); herr != nil {
-						return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, herr, acc)
+						return s.failFetchRun(ctx, sc, run.ID, analyzer, p.Kind, creds, herr, acc)
 					}
 				}
 
@@ -397,7 +398,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 							s.deps.Log.ErrorContext(ctx, "ingest: update analyzer multiplier failed", "analyzer_id", analyzer.ID, "error", uerr)
 						} else {
 							analyzer = newA
-							s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "warning", "meter multiplier changed",
+							s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "warning", multiplierMessage(analyzer),
 								mustJSON(map[string]any{"analyzer_id": analyzer.ID, "multiplier": analyzer.MeterMultiplier.String()}))
 						}
 					}
@@ -411,7 +412,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 			// pagination would loop forever (or worse, walk backwards).
 			if !res.NextCursor.After(req.From) {
 				badCursor := &integration.Error{Kind: integration.ErrMalformedPayload, Provider: creds.Provider, Op: "fetch_readings.next_cursor"}
-				return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, badCursor, acc)
+				return s.failFetchRun(ctx, sc, run.ID, analyzer, p.Kind, creds, badCursor, acc)
 			}
 			reqFrom = *res.NextCursor
 		}
@@ -422,14 +423,14 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 
 	if acc.skipped > 0 {
 		s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "warning",
-			fmt.Sprintf("%d readings rejected", acc.skipped), mustJSON(acc.rejections))
+			rejectedMessage(analyzer, acc.skipped, acc.rejections), mustJSON(acc.rejections))
 	}
 	// A fixed, sorted order — acc.warnings is a map, and iterating it
 	// directly would emit these messages in an unpredictable order from one
 	// run to the next.
 	for _, code := range sortedWarningCodes(acc.warnings) {
-		s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "warning", code,
-			mustJSON(map[string]int32{"count": acc.warnings[code]}))
+		s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "warning", warningMessage(analyzer, code, acc.warnings[code]),
+			mustJSON(map[string]any{"code": code, "count": acc.warnings[code]}))
 	}
 
 	// R73: enqueue the affected range, not the requested window — a backfill
@@ -445,14 +446,15 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 // without handing the job layer cause's own, possibly credential-bearing,
 // text — the wrapper's Error() is exactly errText below; its Unwrap()
 // still reaches cause.
-func (s *Service) failFetchRun(ctx context.Context, sc store.Scope, runID, analyzerID uuid.UUID, kind model.ReadingKind, creds integration.Credentials, cause error, acc *fetchAccumulator) error {
+func (s *Service) failFetchRun(ctx context.Context, sc store.Scope, runID uuid.UUID, analyzer model.Analyzer, kind model.ReadingKind, creds integration.Credentials, cause error, acc *fetchAccumulator) error {
+	analyzerID := analyzer.ID
 	errText := redacted(creds, cause)
 	if rerr := s.deps.Cursors.RecordFailure(ctx, sc, analyzerID, kind, errText, s.deps.Clock.Now()); rerr != nil {
 		s.deps.Log.ErrorContext(ctx, "ingest: record cursor failure failed", "error", rerr)
 	}
 	status := fetchRunStatus(1, acc.processed > 0)
 	s.finishRun(ctx, sc, runID, status, acc.processed, acc.skipped, 1, &errText, acc.detail())
-	s.appendMessage(ctx, sc, sc.CompanyID, "job", "analyzer-refresh", "error", errText, nil)
+	s.appendMessage(ctx, sc, sc.CompanyID, "job", "analyzer-refresh", "error", failureMessage(analyzer.InstallationNumber, cause, errText), nil)
 	// A partial run that persisted some rows before failing still touched
 	// real buckets that need refreshing — this call site is evaluated on
 	// acc.affectedFrom exactly like the success path below.
@@ -529,7 +531,7 @@ func (s *Service) maybeEnqueueConsumptionRefresh(ctx context.Context, sc store.S
 		return
 	}
 	s.deps.Log.WarnContext(ctx, "ingest: enqueue consumption.refresh failed", "analyzer_id", analyzerID, "error", err)
-	s.appendMessage(ctx, sc, companyID, "job", "analyzer-refresh", "warning", "consumption.refresh enqueue failed",
+	s.appendMessage(ctx, sc, companyID, "job", "analyzer-refresh", "warning", "Tüketim özetleri yenileme kuyruğuna alınamadı; grafikler bir süre eski kalabilir.",
 		mustJSON(map[string]string{"error": err.Error()}))
 }
 

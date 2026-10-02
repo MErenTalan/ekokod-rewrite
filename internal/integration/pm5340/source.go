@@ -157,9 +157,19 @@ func (s *Source) FetchReadings(ctx context.Context, creds integration.Credential
 	var (
 		readings []model.MeterReading
 		warnings []integration.Warning
-		seen     = make(map[time.Time]model.MeterReading)
-		cursor   string
+		// generationNil is held apart until the fetch has shown whether this
+		// gateway reports generation at all (R513).
+		generationNil []integration.Warning
+		hasGeneration bool
+		seen          = make(map[time.Time]model.MeterReading)
+		cursor        string
 	)
+	done := func(next *time.Time) integration.FetchResult {
+		if hasGeneration {
+			warnings = append(warnings, generationNil...)
+		}
+		return integration.FetchResult{Readings: readings, Warnings: warnings, NextCursor: next}
+	}
 
 	for page := 1; ; page++ {
 		tmpl := base + "/api/v1/readings?limit={limit}&sort=asc&start={start}&end={end}"
@@ -205,7 +215,9 @@ func (s *Source) FetchReadings(ctx context.Context, creds integration.Credential
 			seen[reading.Ts] = reading
 
 			if reading.IntervalGenerationKwh == nil {
-				warnings = append(warnings, generationNilWarning(i))
+				generationNil = append(generationNil, generationNilWarning(i))
+			} else {
+				hasGeneration = true
 			}
 
 			readings = append(readings, reading)
@@ -214,10 +226,10 @@ func (s *Source) FetchReadings(ctx context.Context, creds integration.Credential
 		hasMore := env.HasMore != nil && *env.HasMore
 		next := env.CursorNext
 		if !hasMore || next == nil || *next == "" {
-			return integration.FetchResult{Readings: readings, Warnings: warnings}, nil
+			return done(nil), nil
 		}
 		if page >= s.pageBudget {
-			return integration.FetchResult{Readings: readings, Warnings: warnings, NextCursor: lastCoveredTs(readings)}, nil
+			return done(lastCoveredTs(readings)), nil
 		}
 		cursor = *next
 	}

@@ -271,7 +271,7 @@ func TestSyncPricesReportsMissingHoursWithoutFilling(t *testing.T) {
 	require.Nil(t, messages[0].CompanyID)
 	require.Equal(t, "job", messages[0].Kind)
 	require.Equal(t, "warning", messages[0].Status)
-	require.Equal(t, "1 PTF hours missing", messages[0].Message)
+	require.Equal(t, "EPİAŞ'tan 1 saatin PTF değeri alınamadı.", messages[0].Message)
 
 	// jsonb round-trip: AppendPlatformMessage's metadata column
 	// ({"days": missing}, sync.go's appendMissingHoursMessage).

@@ -103,24 +103,24 @@ func (s *Service) ReactiveStatus(ctx context.Context, sc store.Scope, month time
 			continue
 		}
 		view.HasData = true
-		net := *active
 		export := sound(row, energy.ActiveExport)
 		known := decimal.Zero
 		if export != nil {
-			net = decimal.Max(net.Sub(*export), decimal.Zero)
 			known = *export
 		}
 		in := reactive.Input{
-			NetConsumption: net, Inductive: sound(row, energy.ReactiveInductiveImport), Capacitive: sound(row, energy.ReactiveCapacitiveImport),
+			Inductive: sound(row, energy.ReactiveInductiveImport), Capacitive: sound(row, energy.ReactiveCapacitiveImport),
 			ActiveExport: export, ActiveExportKnownSum: known, InstalledPowerKw: a.InstalledPowerKw, Params: params,
 		}
+		usage := model.GenerationUsageNone
 		if a.BuildingID != nil {
 			if t, err := s.d.Tariffs.Effective(ctx, sc, *a.BuildingID, start); err == nil {
-				in.Term, in.UserGroup = t.Term, t.UserGroup
+				in.Term, in.UserGroup, usage = t.Term, t.UserGroup, t.GenerationUsage
 			} else if !errors.Is(err, store.ErrNotFound) {
 				return ReactiveStatus{}, err
 			}
 		}
+		in.NetConsumption = reactiveNet(*active, export, usage)
 		res := reactive.Evaluate(in)
 		view.InductiveRatio, view.CapacitiveRatio = res.InductiveRatio, res.CapacitiveRatio
 		view.ExemptReason, view.PenaltyApplies = res.ExemptReason, res.Applied
@@ -157,4 +157,14 @@ func higher(current *ReactiveExtreme, v ReactiveAnalyzer, ratio *decimal.Decimal
 		return current
 	}
 	return &ReactiveExtreme{AnalyzerID: v.AnalyzerID, BuildingID: v.BuildingID, Ratio: *ratio}
+}
+
+// reactiveNet is the invoice's own net consumption (02 §6.1): generation comes
+// off it only under a tariff that subtracts it (R511). The screen used to
+// subtract it always, and showed 71 % where the invoice said 45 %.
+func reactiveNet(active decimal.Decimal, export *decimal.Decimal, usage model.GenerationUsage) decimal.Decimal {
+	if export == nil || usage != model.GenerationUsageSubtractFromConsumption {
+		return active
+	}
+	return decimal.Max(active.Sub(*export), decimal.Zero)
 }
