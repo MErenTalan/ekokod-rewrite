@@ -1,21 +1,33 @@
-# Handoff — ekokod rewrite: F0–F17 COMPLETE; waiting on the product owner
+# Handoff — ekokod rewrite: F21 audit fixes on `fix/f21-audit`, not merged, not deployed
 
-> **STATUS (2026-09-26):** F17 split the carbon module (EKOCM) out of EKORM into its own frontend
-> module at `/ekocm`, on branch **`phase/f17-ekocm-module`** (`/home/personal/ekokod-f17-ekocm`, cut from
-> `main` b3dbddb). What still needs the product owner is unchanged: **`SENDEN-GEREKENLER.md`**.
-> **Nothing is pushed; `main` is untouched. Pushing and merging are the user's call.**
+> **STATUS (2026-10-02):** F21 audited every main feature against the real PM5340 gateway and through
+> the web UI, and fixed what it found (R498–R514 + web fixes) on branch **`fix/f21-audit`**
+> (`/home/personal/ekokod-f21-audit`, cut from `main` 8a21a33). Plan and rulings:
+> `docs/superpowers/plans/2026-10-02-f21-audit-fixes.md`.
+> **Not merged into `main`, not pushed, not deployed** — all three are the user's call. The server
+> (new.ekokod.com) still runs `ee91a8c`; `main`'s `1f4cb0d` is not deployed either.
+>
+> **To ship:** merge `fix/f21-audit` into `main`, then `! bash /home/personal/deploy-main.sh`
+> (migrations 00024 and 00025 run on start; a pg_dump is taken first). After it: each linked iSolar plant
+> pulls up to 400 days of history on its first sync, and the PM5340 history is pulled from
+> Ayarlar › Şirket › entegrasyon › "Geçmiş veriyi çek".
+>
+> **Open, for the product owner to decide** (see the plan's "Known, not changed"): a year's figure
+> includes silent gaps; the power alarm reads PM5340's peak-demand register (as legacy did); iSolar
+> changes could not be run live (no credentials); reading the server's `job_runs` was not permitted
+> in the audit session, so the server-side errors were reproduced locally instead.
 
 ---
 
 ## Paste this as the first message of the next session (only when there is new input)
 
 > Bu, bcem-energy'nin (yeni adıyla ekokod) Go ile yeniden yazım projesi. Spesifikasyon `docs/rewrite/`
-> içinde. **F0–F17'nin hepsi bitti.** Son dal `phase/f17-ekocm-module` (`/home/personal/ekokod-f17-ekocm`),
-> `main`'den açıldı. EKOCM artık `/ekocm` altında ayrı bir frontend modülü. Hiçbir şey push edilmedi.
+> içinde. F0–F20 `main`'de. **F21 (gerçek veriyle özellik denetimi ve düzeltmeler) `fix/f21-audit`
+> dalında (`/home/personal/ekokod-f21-audit`) bitti; `main`'e merge edilmedi, deploy edilmedi.**
 >
-> Önce `/home/personal/ekokod-f17-ekocm/HANDOFF_NEXT_SESSION.md`, `SENDEN-GEREKENLER.md` ve
-> `docs/superpowers/plans/2026-09-26-f17-ekocm-module.md`'yi oku. Sonra şu yeni girdiyle çalış:
-> **<buraya ne getirdiğini yaz>**.
+> Önce `/home/personal/ekokod-f21-audit/HANDOFF_NEXT_SESSION.md` ve
+> `docs/superpowers/plans/2026-10-02-f21-audit-fixes.md`'yi oku. Sonra şu yeni girdiyle çalış:
+> **<buraya ne getirdiğini yaz — örn. "merge ettim ve deploy ettim, sunucuda şunu gördüm: …">**.
 >
 > **Çalışma düzeni (kesin):** paralel agent YOK, subagent YOK, Workflow YOK. İşi bu oturumda kendin
 > yürüt (`superpowers:executing-plans` + TDD). Her task sonunda diff'i oku, guard'ı kendi mutasyonunla
@@ -29,6 +41,28 @@
 > `PLAYWRIGHT_BROWSERS_PATH=/home/personal/.cache/ms-playwright E2E_API_PORT=18082 PW_PROJECT=e2e pnpm exec playwright test --project=e2e --workers=1 <dosyalar>`.
 
 ---
+
+## F21 — what changed (2026-10-02)
+
+Rulings R498–R514 and the web fixes are listed in `docs/superpowers/plans/2026-10-02-f21-audit-fixes.md`.
+- **Consumption**: migration 00024 (null-safe hourly/daily aggregates; monthly/yearly dropped, rolled up
+  from daily at query time); every fetch refreshes its own range.
+- **Bills**: a day without an active index is a missing day (January was failing outright); a building
+  with only a building bill appears on the dashboard; invoice PDF names its registers.
+- **Ingest**: `last_reading_at` after a backfill, honest run times, deadlock retry, a sanity rule that no
+  longer rejects ordinary load, Turkish operator messages, the PM5340 definition in the seed.
+- **iSolar**: migration 00025 (`isolar_history_through`), history on any sync, midnight baseline.
+- **Alarms**: the dialog could not save a reactive rule; log dialog and Messages now say what fired.
+- **Web**: finished jobs refetch the screen (`useJob`), verification refreshes the credential list,
+  dashboard/messages/chart polish.
+- Gates: `make lint` 0 issues, `check-generate`, `check-api-docs`, every touched Go package with
+  `-tags=integration`, web lint + typecheck + i18n parity + vitest 1260+. **e2e was not run.**
+- How it was tested: a local `ekokod api` + `worker` (no scheduler) on a scratch database in the shared
+  test Postgres (`ekokod-test-pg`, port 55432) and Redis db 5/6, `next dev -p 13100`, a PM5340
+  credential pointing at the real gateway, then `job-runs/alarm.evaluate/trigger?company_id=…` as
+  the platform admin for the scheduled path. Playwright scripts drove the UI; nothing of that is in the repo.
+- Lessons: check `git status` before `git add -A` (two stray log files had to be filtered out of three
+  commits); never drop a continuous aggregate while its refresh job runs (TimescaleDB 2.30 segfaults).
 
 ## F17 — what changed (2026-09-26)
 
