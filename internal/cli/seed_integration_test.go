@@ -48,7 +48,7 @@ func TestCLISeedLoadsRealDatasets(t *testing.T) {
 	var first bytes.Buffer
 	require.NoError(t, cli.Execute(context.Background(), []string{"seed"}, &first))
 	require.Contains(t, first.String(), "emission factors: 186 rows (196 conversions)")
-	require.Contains(t, first.String(), "integration definitions: 3 rows")
+	require.Contains(t, first.String(), "integration definitions: 4 rows")
 	require.Contains(t, first.String(), "national tariff schedule: 17 rows")
 
 	// A second run converges rather than duplicating or erroring: prints the
@@ -69,6 +69,6 @@ func TestCLISeedLoadsRealDatasets(t *testing.T) {
 	var second bytes.Buffer
 	require.NoError(t, cli.Execute(context.Background(), []string{"seed"}, &second))
 	require.Contains(t, second.String(), "emission factors: 186 rows (196 conversions)")
-	require.Contains(t, second.String(), "integration definitions: 3 rows")
+	require.Contains(t, second.String(), "integration definitions: 4 rows")
 	require.Contains(t, second.String(), "national tariff schedule: 17 rows")
 }

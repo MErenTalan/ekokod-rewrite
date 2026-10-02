@@ -117,12 +117,12 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 	analyzer, err := s.deps.Analyzers.Get(ctx, sc, p.AnalyzerID)
 	if err != nil {
 		errText := err.Error()
-		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 1, &errText, nil, now)
+		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 1, &errText, nil)
 		return classifyStoreErr(err) // M14
 	}
 
 	if !analyzer.IsActive || analyzer.DeletedAt != nil {
-		s.finishRun(ctx, sc, run.ID, "success", 0, 1, 0, nil, nil, now)
+		s.finishRun(ctx, sc, run.ID, "success", 0, 1, 0, nil, nil)
 		s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "info", "analyzer inactive", nil)
 		return nil
 	}
@@ -130,7 +130,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 	creds, err := s.deps.Credentials.Open(ctx, sc, p.CredentialID)
 	if err != nil {
 		errText := err.Error()
-		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 1, &errText, nil, now)
+		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 1, &errText, nil)
 		return classifyStoreErr(err) // M14
 	}
 
@@ -143,7 +143,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 	if !creds.IsActive {
 		cerr := &integration.Error{Kind: integration.ErrConfig, Provider: creds.Provider, Op: "fetch_readings.credential_inactive"}
 		errText := redacted(creds, cerr)
-		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 1, &errText, nil, now)
+		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 1, &errText, nil)
 		s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "error", errText, nil)
 		return wrapRedacted(errText, cerr)
 	}
@@ -151,7 +151,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 	src, err := s.deps.Sources.Source(creds.Provider)
 	if err != nil {
 		errText := redacted(creds, err)
-		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 1, &errText, nil, now)
+		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 1, &errText, nil)
 		return wrapRedacted(errText, err)
 	}
 
@@ -159,7 +159,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 	if !ok || analyzer.Provider != modelProvider {
 		mismatch := &integration.Error{Kind: integration.ErrMalformedPayload, Provider: creds.Provider, Op: "fetch_readings.provider_mismatch"}
 		errText := redacted(creds, mismatch)
-		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 1, &errText, nil, now)
+		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 1, &errText, nil)
 		return wrapRedacted(errText, mismatch)
 	}
 
@@ -172,7 +172,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 	if analyzer.ProviderSubtype != creds.Subtype {
 		mismatch := &integration.Error{Kind: integration.ErrConfig, Provider: creds.Provider, Op: "fetch_readings.subtype_mismatch"}
 		errText := redacted(creds, mismatch)
-		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 1, &errText, nil, now)
+		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 1, &errText, nil)
 		return wrapRedacted(errText, mismatch)
 	}
 
@@ -181,7 +181,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 	from, to, allowCursorAdvance, err := s.resolveFetchWindow(ctx, sc, p, now)
 	if err != nil {
 		errText := err.Error()
-		s.finishRun(ctx, sc, run.ID, "failed", acc.processed, acc.skipped, 1, &errText, acc.detail(), now)
+		s.finishRun(ctx, sc, run.ID, "failed", acc.processed, acc.skipped, 1, &errText, acc.detail())
 		return err
 	}
 
@@ -197,7 +197,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 	if len(chunks) == 0 {
 		// R19: an empty window never advances the cursor, and a run that
 		// fetched nothing is not a failure.
-		s.finishRun(ctx, sc, run.ID, "success", 0, 0, 0, nil, acc.detail(), now)
+		s.finishRun(ctx, sc, run.ID, "success", 0, 0, 0, nil, acc.detail())
 		return nil
 	}
 
@@ -212,7 +212,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 			pages++
 			if pages > s.opts.MaxPagesPerRun {
 				err := fmt.Errorf("ingest: exceeded max pages per run (%d)", s.opts.MaxPagesPerRun)
-				return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, err, acc, now)
+				return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, err, acc)
 			}
 
 			if !loaded {
@@ -220,12 +220,12 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 				prev, lerr = s.deps.Readings.Latest(ctx, sc, analyzer.ID,
 					store.TimeRange{From: chunk.From.Add(-35 * 24 * time.Hour), To: chunk.From}, p.Kind)
 				if lerr != nil {
-					return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, lerr, acc, now)
+					return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, lerr, acc)
 				}
 				history, lerr = s.deps.Readings.Range(ctx, sc, analyzer.ID,
 					store.TimeRange{From: chunk.From.Add(-7 * 24 * time.Hour), To: chunk.From}, p.Kind)
 				if lerr != nil {
-					return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, lerr, acc, now)
+					return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, lerr, acc)
 				}
 				loaded = true
 			}
@@ -240,7 +240,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 			}
 			res, ferr := src.FetchReadings(ctx, creds, req)
 			if ferr != nil {
-				return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, ferr, acc, now)
+				return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, ferr, acc)
 			}
 
 			kept, dedupeRejected := Dedupe(res.Readings)
@@ -266,7 +266,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 			if len(valid) > 0 {
 				inserted, updated, ierr := s.deps.Readings.BulkInsert(ctx, sc, valid)
 				if ierr != nil {
-					return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, ierr, acc, now)
+					return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, ierr, acc)
 				}
 				acc.processed += int32(inserted + updated)
 
@@ -280,7 +280,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 
 				for _, hook := range s.deps.Hooks[analyzer.Provider] {
 					if herr := hook.AfterPersist(ctx, sc, analyzer, p.Kind, pageMinTs, pageMaxTs); herr != nil {
-						return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, herr, acc, now)
+						return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, herr, acc)
 					}
 				}
 
@@ -310,14 +310,14 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 					rangeResets, rerr := s.deps.Readings.Range(ctx, sc, analyzer.ID,
 						store.TimeRange{From: kindMinTs, To: kindMaxTs.Add(time.Microsecond)}, model.ReadingKindReset)
 					if rerr != nil {
-						return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, rerr, acc, now)
+						return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, rerr, acc)
 					}
 					resets = append(resets, rangeResets...)
 
 					for _, d := range DetectNegativeDeltas(prev, kindRows, resets) {
 						exists, eerr := s.negativeDeltaAnomalyExists(ctx, sc, analyzer.ID, d)
 						if eerr != nil {
-							return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, eerr, acc, now)
+							return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, eerr, acc)
 						}
 						if exists {
 							continue
@@ -329,24 +329,26 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 							Reason:      "negative_delta",
 							Detail:      mustJSON(map[string]string{"register": d.Register, "kind": string(p.Kind)}),
 						}); cerr != nil {
-							return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, cerr, acc, now)
+							return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, cerr, acc)
 						}
 						acc.anomaliesCreated++
 					}
 
-					// R19: the cursor and last-reading watermark advance
-					// only when at least one p.Kind row was persisted this
-					// page AND this run is allowed to move the live cursor
-					// at all (an explicit window that starts after a
-					// gap the cursor has not covered yet must never move
-					// it — see resolveFetchWindow's doc).
+					// R19: the cursor advances only when at least one p.Kind
+					// row was persisted this page AND this run is allowed to
+					// move the live cursor at all (an explicit window that
+					// starts after a gap the cursor has not covered yet must
+					// never move it — see resolveFetchWindow's doc).
 					if allowCursorAdvance {
 						if cerr := s.deps.Cursors.RecordSuccess(ctx, sc, analyzer.ID, p.Kind, kindMaxTs, now); cerr != nil {
-							return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, cerr, acc, now)
+							return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, cerr, acc)
 						}
-						if terr := s.deps.Analyzers.TouchLastReading(ctx, sc, analyzer.ID, kindMaxTs); terr != nil {
-							return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, terr, acc, now)
-						}
+					}
+					// R502: the last-reading mark only ever moves forward, so
+					// a backfill window sets it too; the cursor above stays
+					// gated.
+					if terr := s.deps.Analyzers.TouchLastReading(ctx, sc, analyzer.ID, kindMaxTs); terr != nil {
+						return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, terr, acc)
 					}
 
 					last := kindRows[len(kindRows)-1]
@@ -355,7 +357,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 
 				if hourly := convertHourlyValues(analyzer.ID, analyzer.Provider, res.HourlyValues); len(hourly) > 0 {
 					if _, _, herr := s.deps.ProviderSeries.UpsertHourly(ctx, sc, hourly); herr != nil {
-						return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, herr, acc, now)
+						return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, herr, acc)
 					}
 				}
 
@@ -406,14 +408,14 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 			// pagination would loop forever (or worse, walk backwards).
 			if !res.NextCursor.After(req.From) {
 				badCursor := &integration.Error{Kind: integration.ErrMalformedPayload, Provider: creds.Provider, Op: "fetch_readings.next_cursor"}
-				return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, badCursor, acc, now)
+				return s.failFetchRun(ctx, sc, run.ID, analyzer.ID, p.Kind, creds, badCursor, acc)
 			}
 			reqFrom = *res.NextCursor
 		}
 	}
 
 	status := fetchRunStatus(0, acc.processed > 0)
-	s.finishRun(ctx, sc, run.ID, status, acc.processed, acc.skipped, 0, nil, acc.detail(), now)
+	s.finishRun(ctx, sc, run.ID, status, acc.processed, acc.skipped, 0, nil, acc.detail())
 
 	if acc.skipped > 0 {
 		s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "warning",
@@ -440,13 +442,13 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 // without handing the job layer cause's own, possibly credential-bearing,
 // text — the wrapper's Error() is exactly errText below; its Unwrap()
 // still reaches cause.
-func (s *Service) failFetchRun(ctx context.Context, sc store.Scope, runID, analyzerID uuid.UUID, kind model.ReadingKind, creds integration.Credentials, cause error, acc *fetchAccumulator, at time.Time) error {
+func (s *Service) failFetchRun(ctx context.Context, sc store.Scope, runID, analyzerID uuid.UUID, kind model.ReadingKind, creds integration.Credentials, cause error, acc *fetchAccumulator) error {
 	errText := redacted(creds, cause)
-	if rerr := s.deps.Cursors.RecordFailure(ctx, sc, analyzerID, kind, errText, at); rerr != nil {
+	if rerr := s.deps.Cursors.RecordFailure(ctx, sc, analyzerID, kind, errText, s.deps.Clock.Now()); rerr != nil {
 		s.deps.Log.ErrorContext(ctx, "ingest: record cursor failure failed", "error", rerr)
 	}
 	status := fetchRunStatus(1, acc.processed > 0)
-	s.finishRun(ctx, sc, runID, status, acc.processed, acc.skipped, 1, &errText, acc.detail(), at)
+	s.finishRun(ctx, sc, runID, status, acc.processed, acc.skipped, 1, &errText, acc.detail())
 	s.appendMessage(ctx, sc, sc.CompanyID, "job", "analyzer-refresh", "error", errText, nil)
 	// A partial run that persisted some rows before failing still touched
 	// real buckets that need refreshing — this call site is evaluated on

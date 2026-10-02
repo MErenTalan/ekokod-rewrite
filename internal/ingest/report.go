@@ -175,16 +175,17 @@ func mustJSON(v any) json.RawMessage {
 // silently discarded, but also never overrides the error the caller is
 // already returning (finishing the bookkeeping row is best-effort once the
 // substantive outcome is already decided).
-func (s *Service) finishRun(ctx context.Context, sc store.Scope, runID uuid.UUID, status string, processed, skipped, failed int32, errText *string, detail json.RawMessage, at time.Time) {
-	if _, err := s.deps.Ops.FinishRun(ctx, sc, runID, status, processed, skipped, failed, errText, detail, at); err != nil {
+func (s *Service) finishRun(ctx context.Context, sc store.Scope, runID uuid.UUID, status string, processed, skipped, failed int32, errText *string, detail json.RawMessage) {
+	// R503: stamped now, not with the reading taken when the run started.
+	if _, err := s.deps.Ops.FinishRun(ctx, sc, runID, status, processed, skipped, failed, errText, detail, s.deps.Clock.Now()); err != nil {
 		s.deps.Log.ErrorContext(ctx, "ingest: finish job run failed", "run_id", runID, "error", err)
 	}
 }
 
 // finishPlatformRun is finishRun's AdminJournalRepository sibling, for
 // Dispatch's platform-wide run.
-func (s *Service) finishPlatformRun(ctx context.Context, runID uuid.UUID, status string, processed, skipped, failed int32, errText *string, detail json.RawMessage, at time.Time) {
-	if _, err := s.deps.AdminJournal.FinishPlatformRun(ctx, runID, status, processed, skipped, failed, errText, detail, at); err != nil {
+func (s *Service) finishPlatformRun(ctx context.Context, runID uuid.UUID, status string, processed, skipped, failed int32, errText *string, detail json.RawMessage) {
+	if _, err := s.deps.AdminJournal.FinishPlatformRun(ctx, runID, status, processed, skipped, failed, errText, detail, s.deps.Clock.Now()); err != nil {
 		s.deps.Log.ErrorContext(ctx, "ingest: finish platform job run failed", "run_id", runID, "error", err)
 	}
 }

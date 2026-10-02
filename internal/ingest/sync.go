@@ -36,7 +36,7 @@ func (s *Service) SyncAnalyzers(ctx context.Context, p job.SyncAnalyzersPayload)
 	creds, err := s.deps.Credentials.Open(ctx, sc, p.CredentialID)
 	if err != nil {
 		errText := err.Error()
-		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil, now)
+		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil)
 		return classifyStoreErr(err) // M14
 	}
 
@@ -47,7 +47,7 @@ func (s *Service) SyncAnalyzers(ctx context.Context, p job.SyncAnalyzersPayload)
 	if !creds.IsActive {
 		cerr := &integration.Error{Kind: integration.ErrConfig, Provider: creds.Provider, Op: "sync_analyzers.credential_inactive"}
 		errText := redacted(creds, cerr)
-		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil, now)
+		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil)
 		s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "error", errText, nil)
 		return wrapRedacted(errText, cerr)
 	}
@@ -55,13 +55,13 @@ func (s *Service) SyncAnalyzers(ctx context.Context, p job.SyncAnalyzersPayload)
 	src, err := s.deps.Sources.Source(creds.Provider)
 	if err != nil {
 		errText := redacted(creds, err)
-		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil, now)
+		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil)
 		return wrapRedacted(errText, err)
 	}
 
 	if verr := src.Verify(ctx, creds); verr != nil {
 		errText := redacted(creds, verr)
-		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil, now)
+		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil)
 		s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "error", errText, nil)
 		return wrapRedacted(errText, verr)
 	}
@@ -70,14 +70,14 @@ func (s *Service) SyncAnalyzers(ctx context.Context, p job.SyncAnalyzersPayload)
 	if !ok {
 		err := &integration.Error{Kind: integration.ErrMalformedPayload, Provider: creds.Provider, Op: "sync_analyzers.provider"}
 		errText := redacted(creds, err)
-		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil, now)
+		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil)
 		return wrapRedacted(errText, err)
 	}
 
 	points, derr := src.DiscoverMeteringPoints(ctx, creds)
 	if derr != nil {
 		errText := redacted(creds, derr)
-		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil, now)
+		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil)
 		s.appendMessage(ctx, sc, p.CompanyID, "job", "analyzer-refresh", "error", errText, nil)
 		return wrapRedacted(errText, derr)
 	}
@@ -99,7 +99,7 @@ func (s *Service) SyncAnalyzers(ctx context.Context, p job.SyncAnalyzersPayload)
 	})
 	if lerr != nil {
 		errText := lerr.Error()
-		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, failed, &errText, mustJSON(syncRunDetail{FailedPoints: failedPoints}), now)
+		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, failed, &errText, mustJSON(syncRunDetail{FailedPoints: failedPoints}))
 		return lerr
 	}
 
@@ -131,7 +131,7 @@ func (s *Service) SyncAnalyzers(ctx context.Context, p job.SyncAnalyzersPayload)
 	}
 
 	status := countsStatus(processed, skipped, failed)
-	s.finishRun(ctx, sc, run.ID, status, processed, skipped, failed, nil, mustJSON(syncRunDetail{FailedPoints: failedPoints}), now)
+	s.finishRun(ctx, sc, run.ID, status, processed, skipped, failed, nil, mustJSON(syncRunDetail{FailedPoints: failedPoints}))
 	return nil
 }
 

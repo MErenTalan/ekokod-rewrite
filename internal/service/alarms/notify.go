@@ -95,8 +95,12 @@ func (s *Service) Notify(ctx context.Context, n Notification) error {
 	}
 
 	settings, err := s.nd.SMTP.Get(ctx, sc)
+	if errors.Is(err, store.ErrNotFound) {
+		// Not configured is the whole story; the driver's text adds nothing.
+		return s.markFailed(ctx, sc, n, "şirketin SMTP ayarları yok", nil)
+	}
 	if err != nil {
-		return s.markFailed(ctx, sc, n, "şirketin SMTP ayarları yok", err)
+		return s.markFailed(ctx, sc, n, "SMTP ayarları okunamadı", err)
 	}
 	password, err := s.nd.SMTP.OpenPassword(ctx, sc)
 	if err != nil {

@@ -29,15 +29,10 @@ const wantEmissionFactorCount = 186
 // values, not emission factors, so they carry no ISO 14064 category.
 const wantEquivalenceCount = 4
 
-// wantIntegrationDefinitionCount: the legacy code hardcodes exactly the three
-// iSolar regions (ISOLAR_REGIONS in
-// bcem-energy/src/utils/isolar/isolarPoints.ts, lines 197-214) as a closed,
-// literal set of gateway/endpoint templates. GRIDBOX, OSOS, ARIL and PM5340
-// have no equivalent hardcoded subtype or endpoint data anywhere in the
-// legacy code: their `Integration` Mongo documents are entirely
-// admin-authored at runtime (see task-12a report), so seeding a row for them
-// would be inventing data the brief forbids.
-const wantIntegrationDefinitionCount = 3
+// wantIntegrationDefinitionCount: iSolar's three regional gateways (EU, CN,
+// AU), plus PM5340, which needs no endpoint at all (R504) — without its row
+// a fresh install could not offer a PM5340 gateway.
+const wantIntegrationDefinitionCount = 4
 
 func TestEmissionFactorsDecodeAndValidate(t *testing.T) {
 	t.Parallel()
@@ -154,7 +149,8 @@ func TestIntegrationDefinitionsDecodeAndValidate(t *testing.T) {
 	seen := make(map[key]bool, len(defs))
 	for _, d := range defs {
 		require.True(t, d.Provider.Valid(), "provider %q", d.Provider)
-		require.Equal(t, model.IntegrationProviderISolar, d.Provider, "task-12a seeds only iSolar; see report")
+		require.Contains(t, []model.IntegrationProvider{model.IntegrationProviderISolar, model.IntegrationProviderPM5340}, d.Provider,
+			"only providers whose endpoints are public knowledge are seeded")
 		require.NotEmpty(t, d.Subtype)
 		require.NotEmpty(t, d.Endpoints)
 

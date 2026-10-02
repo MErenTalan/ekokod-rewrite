@@ -61,5 +61,10 @@
       "get_device_point_minute_data_list": "/openapi/platform/getDevicePointMinuteDataList",
       "get_fault_alarm_info": "/openapi/platform/getFaultAlarmInfo"
     }
+  },
+  {
+    "provider": "pm5340",
+    "subtype": "PM5340",
+    "endpoints": {}
   }
 ]

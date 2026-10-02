@@ -30,7 +30,7 @@ func (s *Service) Dispatch(ctx context.Context) error {
 	refs, err := s.deps.AdminIngestion.ActiveCredentials(ctx)
 	if err != nil {
 		errText := err.Error()
-		s.finishPlatformRun(ctx, run.ID, "failed", 0, 0, 0, &errText, nil, now)
+		s.finishPlatformRun(ctx, run.ID, "failed", 0, 0, 0, &errText, nil)
 		return err
 	}
 
@@ -62,6 +62,6 @@ func (s *Service) Dispatch(ctx context.Context) error {
 	}
 
 	status := countsStatus(processed, skipped, failed)
-	s.finishPlatformRun(ctx, run.ID, status, processed, skipped, failed, nil, nil, now)
+	s.finishPlatformRun(ctx, run.ID, status, processed, skipped, failed, nil, nil)
 	return nil
 }

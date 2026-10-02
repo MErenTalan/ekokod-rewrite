@@ -122,7 +122,8 @@ func (v *Verdict) ratio(field string, g group, rows []model.MeterReading, pick r
 		pct = reactiveDiff.DivRound(activeDiff, divisionScale).Mul(hundred)
 	}
 	if pct.GreaterThan(*g.threshold) {
-		v.Breaches = append(v.Breaches, Breach{Field: field, Measured: pct, Threshold: *g.threshold, Window: w})
+		// R505: compared at full precision, reported at two decimals.
+		v.Breaches = append(v.Breaches, Breach{Field: field, Measured: pct.Round(2), Threshold: *g.threshold, Window: w})
 	}
 }
 
@@ -212,7 +213,7 @@ func EvaluateInvoice(a model.Alarm, analyzerID uuid.UUID, latest, previous *mode
 	pct := latest.TotalCost.Sub(previous.TotalCost).
 		DivRound(previous.TotalCost, divisionScale).Mul(hundred)
 	if pct.GreaterThan(*a.InvoiceThresholdPct) {
-		v.Breaches = append(v.Breaches, Breach{Field: FieldInvoicePct, Measured: pct,
+		v.Breaches = append(v.Breaches, Breach{Field: FieldInvoicePct, Measured: pct.Round(2),
 			Threshold: *a.InvoiceThresholdPct, Extra: map[string]string{
 				"period_key":     latest.PeriodKey,
 				"bill_id":        latest.ID.String(),

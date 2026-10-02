@@ -1082,6 +1082,15 @@ func TestIngestionExplicitWindowWithNoCursorNeverSetsLiveCursor(t *testing.T) {
 	_, cerr := repos.cursors.Get(ctx, tn.Scope, analyzer.ID, model.ReadingKindLoadProfile)
 	require.ErrorIs(t, cerr, store.ErrNotFound, "an explicit window with no prior cursor must never create the live cursor")
 
+	// R502: the analyzer's last-reading mark is not the cursor. It only ever
+	// moves forward, so a backfill sets it: without it the analyzer showed as
+	// passive after its whole history arrived and the communication alarm
+	// had nothing to judge.
+	touched, gerr := repos.analyzers.Get(ctx, tn.Scope, analyzer.ID)
+	require.NoError(t, gerr)
+	require.NotNil(t, touched.LastReadingAt, "a backfill must mark the analyzer's last reading")
+	require.True(t, touched.LastReadingAt.Equal(recentRows[len(recentRows)-1].Ts), "got %v", touched.LastReadingAt)
+
 	// The FIRST cursor-driven run (Window nil) must still resolve to
 	// now-InitialLookback — NOT to recentWindowStart's own bound, which the
 	// backfill window happened to reach.
@@ -1601,4 +1610,38 @@ func TestSyncAnalyzersRefusesInactiveCredential(t *testing.T) {
 	messages, merr := repos.ops.ListMessages(ctx, tn.Scope, store.MessageFilter{})
 	require.NoError(t, merr)
 	require.NotEmpty(t, messages, "the inactive-credential refusal must leave an operational message")
+}
+
+// R503: a run is finished when it finishes. It was stamped with the clock
+// reading taken at its start, so every fetch looked instantaneous and
+// finished_at could even precede started_at.
+func TestIngestionFetchRunIsStampedWhenItFinishes(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tn := testfixtures.NewTenant(t, ctx, pool, 9160)
+	repos := ingestTestNewRepos(pool)
+
+	analyzer := tn.Analyzers[0]
+	creds := integration.Credentials{CredentialID: uuid.New(), CompanyID: tn.Company.ID, Provider: integration.ProviderOSOS, Subtype: analyzer.ProviderSubtype}
+	src := newFakeAdapter(integration.ProviderOSOS, 24*time.Hour, model.ReadingKindLoadProfile)
+	start := ingestTestIstanbulMidnight.Add(10 * 24 * time.Hour)
+	clk := clock.NewFake(start)
+	svc := ingestTestNewService(t, repos, creds, src, newRecordingEnqueuer(), clk, ingest.Options{})
+
+	windowStart := ingestTestIstanbulMidnight.Add(9 * 24 * time.Hour)
+	src.setSteps(fetchStep{
+		before: func() { clk.Advance(90 * time.Second) }, // the provider takes its time
+		result: integration.FetchResult{Readings: ingestTestQuarterHourly(analyzer.ID, windowStart, 4)},
+	})
+	require.NoError(t, svc.FetchReadings(ctx, job.FetchReadingsPayload{
+		CompanyID: tn.Company.ID, CredentialID: creds.CredentialID, AnalyzerID: analyzer.ID,
+		Kind: model.ReadingKindLoadProfile, Window: ingestTestWindow(windowStart, time.Hour),
+	}))
+
+	runs, err := repos.ops.ListRuns(ctx, tn.Scope, store.JobRunFilter{JobType: ptrString(job.TypeIntegrationFetchReadings), Page: store.Page{Limit: 5}})
+	require.NoError(t, err)
+	require.Len(t, runs, 1)
+	require.NotNil(t, runs[0].FinishedAt)
+	require.True(t, runs[0].FinishedAt.Equal(start.Add(90*time.Second)), "finished_at: %v", runs[0].FinishedAt)
 }
