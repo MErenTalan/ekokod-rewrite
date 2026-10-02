@@ -56,7 +56,9 @@ Rulings R498–R514 and the web fixes are listed in `docs/superpowers/plans/2026
 - **Web**: finished jobs refetch the screen (`useJob`), verification refreshes the credential list,
   dashboard/messages/chart polish.
 - Gates: `make lint` 0 issues, `check-generate`, `check-api-docs`, every touched Go package with
-  `-tags=integration`, web lint + typecheck + i18n parity + vitest 1260+. **e2e was not run.**
+  `-tags=integration`, web lint + typecheck + i18n parity + vitest 1260+, `next build`, module chunks,
+  **e2e green** in four foreground chunks (one stale assertion fixed: "Platforma Git" leads to `/modules`
+  since F17). A lone FAIL in a large Go chunk is the testcontainers Redis readiness timeout under load.
 - How it was tested: a local `ekokod api` + `worker` (no scheduler) on a scratch database in the shared
   test Postgres (`ekokod-test-pg`, port 55432) and Redis db 5/6, `next dev -p 13100`, a PM5340
   credential pointing at the real gateway, then `job-runs/alarm.evaluate/trigger?company_id=…` as

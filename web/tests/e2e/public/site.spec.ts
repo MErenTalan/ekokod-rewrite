@@ -76,5 +76,6 @@ test('a signed-in user sees the way back to the platform (Q-H11)', async ({ page
   await login(page, USERS.companyAdmin.email);
   await page.goto('/');
   await page.getByRole('link', { name: 'Platforma Git' }).click();
-  await expect(page).toHaveURL(/\/ekorm/);
+  // F17 R491: the way back is the module chooser, not one module.
+  await expect(page).toHaveURL(/\/modules/);
 });
