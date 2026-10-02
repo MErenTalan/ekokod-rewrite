@@ -96,9 +96,12 @@ func mapPlant(w wirePlant) (Plant, error) {
 	if w.PsID == "" {
 		return Plant{}, malformedErr(opQueryPowerStationList)
 	}
-	power := w.InstalledPower
-	if isNullOrEmpty(power) {
-		power = w.InstallPower
+	var power json.RawMessage
+	for _, candidate := range []json.RawMessage{w.InstalledPower, w.InstallPower, w.TotalCapcity, w.TotalCapacity, w.DesignCapacity} {
+		if !isNullOrEmpty(candidate) {
+			power = candidate
+			break
+		}
 	}
 	kw, err := installedKw(power)
 	if err != nil {
@@ -121,7 +124,8 @@ func installedKw(raw json.RawMessage) (*decimal.Decimal, error) {
 		if err := json.Unmarshal(t, &q); err != nil {
 			return nil, malformedErr(opQueryPowerStationList)
 		}
-		v, err := normalize.OptionalNumber(string(q.Value))
+		// iSolarCloud writes thousands with a comma ("5,661.2").
+		v, err := normalize.OptionalNumber(strings.ReplaceAll(string(q.Value), ",", ""))
 		if err != nil || v == nil {
 			return nil, err
 		}

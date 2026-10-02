@@ -276,8 +276,11 @@ func (s *Service) syncMinuteDay(ctx context.Context, sc store.Scope, creds integ
 	basis := model.BasisPlantMeter
 	intervals, resets := Intervals(plantSamples)
 	res.Resets += resets
+	inverterSum := SumByTimestamp(deviceSeries...)
 	if len(plantSamples) == 0 {
-		basis, intervals = model.BasisInverterSum, SumByTimestamp(deviceSeries...)
+		basis, intervals = model.BasisInverterSum, inverterSum
+	} else {
+		FillPower(intervals, inverterSum)
 	}
 	var rows []model.PlantProductionTotal
 	for _, iv := range intervals {

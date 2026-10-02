@@ -78,6 +78,16 @@ func daysOf(from time.Time, n int, kwh string) map[time.Time]decimal.Decimal {
 }
 
 // R283: the tariff effective each day prices that day.
+// The plant meter's own power wins; a missing one takes the inverters' sum,
+// and a timestamp neither has stays empty (never a fabricated zero).
+func TestFillPower(t *testing.T) {
+	meter := []solar.Interval{{Ts: at(10, 9), Kwh: d("1.2"), PowerKw: d("4")}, {Ts: at(10, 10), Kwh: d("2.3")}, {Ts: at(10, 11), Kwh: d("1")}}
+	solar.FillPower(meter, []solar.Interval{{Ts: at(10, 9), PowerKw: d("9")}, {Ts: at(10, 10), PowerKw: d("2.5")}})
+	require.True(t, d("4").Equal(*meter[0].PowerKw))
+	require.True(t, d("2.5").Equal(*meter[1].PowerKw))
+	require.Nil(t, meter[2].PowerKw)
+}
+
 func TestRevenueTariffChangeMidMonth(t *testing.T) {
 	days := daysOf(at(1, 0), 20, "10")
 	out, unpriced := solar.RevenueOver(days, []solar.DayTariff{

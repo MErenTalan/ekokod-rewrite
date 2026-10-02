@@ -123,13 +123,19 @@ export function CredentialsSectionView({
         empty={{ title: t('empty'), description: t('emptyHint') }}
         rowActions={(row) => [
           { type: 'item' as const, label: t('verify'), onSelect: () => onVerify(row) },
-          { type: 'item' as const, label: t('discover'), onSelect: () => onDiscover(row) },
-          {
-            type: 'item' as const,
-            label: t('backfill'),
-            onSelect: () =>
-              setBackfill({ credential: row, range: { from: shiftDay(today, -30), to: today } }),
-          },
+          // iSolar has no analyzers: its data comes through the plant link (Solar plants), so
+          // discovery and the analyzer backfill would only start a task that cannot succeed.
+          ...(row.provider === 'isolar'
+            ? []
+            : [
+                { type: 'item' as const, label: t('discover'), onSelect: () => onDiscover(row) },
+                {
+                  type: 'item' as const,
+                  label: t('backfill'),
+                  onSelect: () =>
+                    setBackfill({ credential: row, range: { from: shiftDay(today, -30), to: today } }),
+                },
+              ]),
           ...(row.provider === 'isolar'
             ? [
                 {

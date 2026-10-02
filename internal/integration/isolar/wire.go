@@ -136,6 +136,10 @@ type wirePlant struct {
 	// live-API parser); some responses name it install_power.
 	InstalledPower json.RawMessage `json:"installed_power"`
 	InstallPower   json.RawMessage `json:"install_power"`
+	// The other names arti-scada's live parser accepts ("capcity" is the API's spelling).
+	TotalCapcity   json.RawMessage `json:"total_capcity"`
+	TotalCapacity  json.RawMessage `json:"total_capacity"`
+	DesignCapacity json.RawMessage `json:"design_capacity"`
 }
 
 // wirePagedDevices is result_data for getDeviceListByPsId
@@ -183,7 +187,7 @@ type wirePoint struct {
 	Point1     *flexString `json:"p1"`
 	Point24    *flexString `json:"p24"`
 	Point83022 *flexString `json:"p83022"`
-	Point83025 *flexString `json:"p83025"`
+	Point83033 *flexString `json:"p83033"`
 }
 
 // wirePagedFaults is result_data for getFaultAlarmInfo. isolarTypes.ts:300-

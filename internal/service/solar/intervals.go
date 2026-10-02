@@ -88,6 +88,21 @@ func SumByTimestamp(series ...[]Interval) []Interval {
 	return out
 }
 
+// FillPower gives each interval without a power reading the one from
+// fallback at the same timestamp: the plant meter may answer energy without
+// power, and the inverters' sum is then the best figure there is.
+func FillPower(intervals, fallback []Interval) {
+	byTs := make(map[int64]*decimal.Decimal, len(fallback))
+	for _, iv := range fallback {
+		byTs[iv.Ts.UnixNano()] = iv.PowerKw
+	}
+	for i := range intervals {
+		if intervals[i].PowerKw == nil {
+			intervals[i].PowerKw = byTs[intervals[i].Ts.UnixNano()]
+		}
+	}
+}
+
 func addPtr(a, b *decimal.Decimal) *decimal.Decimal {
 	switch {
 	case b == nil:
