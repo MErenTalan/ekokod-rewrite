@@ -41,7 +41,8 @@ func TestDeviceMinuteSeriesReturnsCumulativeYieldInKwh(t *testing.T) {
 	require.Equal(t, "p1,p24", requestBody(t, srv, 0)["points"])
 }
 
-// F2 defect 2: a plant has its own points, 83022 (daily yield) and 83025 (active power).
+// F2 defect 2: a plant has its own points, 83022 (daily yield) and 83033 (plant power);
+// 83025 is equivalent hours, not power.
 func TestPlantMinuteSeriesAsksForPlantPoints(t *testing.T) {
 	srv := fake.NewTLSServer(t, plantMinuteRoute(fake.JSON(http.StatusOK, fake.Fixture(t, "isolar", "isolar_plant_minute.json"))))
 	c := isolar.New(isolarTestPool(t, srv), isolar.Options{Clock: clock.NewFake(fixtureFrom)})
@@ -51,7 +52,7 @@ func TestPlantMinuteSeriesAsksForPlantPoints(t *testing.T) {
 	require.Len(t, samples, 1)
 	require.True(t, decimal.RequireFromString("5").Equal(*samples[0].YieldTodayKwh))
 	require.True(t, decimal.RequireFromString("8").Equal(*samples[0].ActivePowerKw))
-	require.Equal(t, "p83022,p83025", requestBody(t, srv, 0)["points"])
+	require.Equal(t, "p83022,p83033", requestBody(t, srv, 0)["points"])
 }
 
 func TestPlantDailySeriesOneRowPerDay(t *testing.T) {

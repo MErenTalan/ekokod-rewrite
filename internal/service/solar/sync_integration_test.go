@@ -173,7 +173,7 @@ func inverterFake() *fakeISolar {
 	return &fakeISolar{
 		devices: []isolar.Device{{PSKey: "K1", DeviceSN: sn, DeviceType: &typ}},
 		device: map[string][]isolar.YieldSample{"K1": {
-			{Ts: at(10, 9), YieldTodayKwh: d("1.0")}, {Ts: at(10, 10), YieldTodayKwh: d("3.0")},
+			{Ts: at(10, 9), YieldTodayKwh: d("1.0")}, {Ts: at(10, 10), YieldTodayKwh: d("3.0"), ActivePowerKw: d("2.5")},
 		}},
 		plant: []isolar.YieldSample{{Ts: at(10, 9), YieldTodayKwh: d("1.2"), ActivePowerKw: d("4")}, {Ts: at(10, 10), YieldTodayKwh: d("3.5")}},
 		realtime: []isolar.DeviceSnapshot{{PSKey: "K1", DeviceSN: sn, FaultStatus: &status, At: syncNow.Add(-10 * time.Minute),
@@ -201,6 +201,7 @@ func TestSyncWritesPlantMeterTotals(t *testing.T) {
 	requireDec(t, "2.3", rows[1].ProductionKwh, "delta")
 	require.Equal(t, model.BasisPlantMeter, rows[0].Basis)
 	requireDec(t, "4", rows[0].ActivePowerKw, "plant power")
+	requireDec(t, "2.5", rows[1].ActivePowerKw, "the meter gave no power: the inverters' sum fills it")
 
 	devices, err := postgres.NewPlantRepository(h.pool).Devices(context.Background(), h.sc, h.plant.ID)
 	require.NoError(t, err)

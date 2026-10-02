@@ -69,11 +69,13 @@ const MaxWindowMinute = 24 * time.Hour
 const MaxWindowDay = 31 * 24 * time.Hour
 
 // Minute-series points (06 §6): an inverter reports 1 yield today (Wh) and
-// 24 active power (W); a plant reports 83022 daily yield (Wh) and 83025
-// active power (W). F2 asked plants for the inverter points (F9 finding).
+// 24 active power (W); a plant reports 83022 daily yield (Wh) and 83033
+// plant power (W). 83025, which legacy labelled "Active Power", is the
+// plant's equivalent hours: live it only ever grew through the day (0 to
+// ~4.8), so it is not asked for.
 const (
 	devicePoints = "p1,p24" // minute endpoints take "p"-prefixed ids (legacy, arti-scada)
-	plantPoints  = "p83022,p83025"
+	plantPoints  = "p83022,p83033"
 )
 
 // Endpoints keys this package never hard-codes a value for (R40): every

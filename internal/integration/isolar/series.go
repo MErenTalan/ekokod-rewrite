@@ -141,7 +141,7 @@ func (c *Client) PlantMinuteSeries(ctx context.Context, creds integration.Creden
 
 		for _, points := range byKey {
 			for _, wp := range points {
-				s, mapErr := mapPoint(string(wp.TimeStamp), wp.Point83022.ptr(), wp.Point83025.ptr(), w[0], w[1])
+				s, mapErr := mapPoint(string(wp.TimeStamp), wp.Point83022.ptr(), wp.Point83033.ptr(), w[0], w[1])
 				if mapErr != nil {
 					continue
 				}

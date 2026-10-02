@@ -543,10 +543,11 @@ func TestISolarPlantsAndFaultsMapEveryField(t *testing.T) {
 // shapes arti-scada's parser was built against). One of these used to fail the
 // whole page as a malformed payload.
 func TestISolarLiveShapes(t *testing.T) {
-	plantsBody := []byte(`{"result_code":"1","result_msg":"success","result_data":{"rowCount":"3","pageList":[
+	plantsBody := []byte(`{"result_code":"1","result_msg":"success","result_data":{"rowCount":"4","pageList":[
 		{"ps_id":5001,"ps_name":"Karacabey GES","installed_power":3200000},
 		{"ps_id":"5002","ps_name":"Çatı GES","install_power":{"value":"450","unit":"kWp"}},
-		{"ps_id":5003,"ps_name":"Boş","installed_power":"--"}]}}`)
+		{"ps_id":5003,"ps_name":"Boş","installed_power":"--"},
+		{"ps_id":5004,"ps_name":"Kapasite","total_capcity":{"value":"5,661.2","unit":"kWp"}}]}}`)
 	devicesBody := []byte(`{"result_code":"1","result_msg":"success","result_data":{"rowCount":2,"pageList":[
 		{"ps_key":"5001_1_1_1","device_sn":"A2231","device_type":1,"device_name":"SG110CX 1"},
 		{"ps_key":"5001_5_1_1","device_sn":"M1","device_type":"5","device_name":null}]}}`)
@@ -562,7 +563,8 @@ func TestISolarLiveShapes(t *testing.T) {
 
 	plants, err := c.Plants(context.Background(), creds)
 	require.NoError(t, err)
-	require.Len(t, plants, 3)
+	require.Len(t, plants, 4)
+	require.True(t, decimal.RequireFromString("5661.2").Equal(*plants[3].InstalledKw), "total_capcity, comma as thousands")
 	require.Equal(t, "5001", plants[0].PSID)
 	require.True(t, decimal.NewFromInt(3200).Equal(*plants[0].InstalledKw), "3,200,000 W = 3,200 kW")
 	require.Equal(t, "5002", plants[1].PSID)

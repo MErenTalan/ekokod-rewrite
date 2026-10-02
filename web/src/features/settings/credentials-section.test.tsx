@@ -80,6 +80,9 @@ describe('CredentialsSectionView', () => {
     await r.user.keyboard('{Escape}');
     await r.user.click(r.getAllByRole('button', { name: /İşlemler/ })[1]);
     expect(await r.findByRole('menuitem', { name: "iSolarCloud'a bağlan" })).toBeInTheDocument();
+    // iSolar has no analyzers to discover or backfill; its history comes through the plant link.
+    expect(r.queryByRole('menuitem', { name: 'Analizörleri keşfet' })).toBeNull();
+    expect(r.queryByRole('menuitem', { name: 'Geçmiş veriyi çek' })).toBeNull();
   });
 
   it('asks for a range before backfilling', async () => {
