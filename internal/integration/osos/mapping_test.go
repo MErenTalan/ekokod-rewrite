@@ -160,22 +160,33 @@ func TestMapEnergyRowRejectsTypeMismatchedRow(t *testing.T) {
 }
 
 func TestMapHourlyValueUnparseable(t *testing.T) {
-	_, field, ok := mapHourlyValue(mustRaw(t, wireHourlyValue{MeterDate: "garbage"}))
+	_, field, ok := mapHourlyValue(json.RawMessage(`{"meterDate":"garbage"}`))
 	require.False(t, ok)
-	require.Equal(t, "meter_date", field)
+	require.Equal(t, "meterDate", field)
 
-	_, field, ok = mapHourlyValue(mustRaw(t, wireHourlyValue{MeterDate: "01/08/2026 10:00:00", ActiveConsumption: "not-a-number"}))
+	_, field, ok = mapHourlyValue(json.RawMessage(`{"meterDate":"2026-10-03 10:00:00","activeConsumption":"not-a-number"}`))
 	require.False(t, ok)
 	require.Equal(t, "activeConsumption", field)
 }
 
-// TestMapHourlyValueRejectsTypeMismatchedRow is TestMapEnergyRowRejectsTypeMismatchedRow's
-// hourly_values counterpart (I7).
-func TestMapHourlyValueRejectsTypeMismatchedRow(t *testing.T) {
-	raw := json.RawMessage(`{"meter_date":"01/08/2026 10:00:00","activeConsumption":42}`)
-	_, field, ok := mapHourlyValue(raw)
-	require.False(t, ok)
-	require.Equal(t, "activeConsumption", field)
+// TestMapHourlyValueRealShape pins the live hourly-meter-information shape
+// (2026-10-05): "meterDate" as "YYYY-MM-DD HH:mm:ss" Istanbul time, values as
+// bare JSON numbers.
+func TestMapHourlyValueRealShape(t *testing.T) {
+	hv, field, ok := mapHourlyValue(json.RawMessage(`{"meterDate":"2026-10-03 08:00:00","activeConsumption":1.163,"activeGeneration":0.0}`))
+	require.True(t, ok, field)
+	require.True(t, hv.Ts.Equal(time.Date(2026, 10, 3, 5, 0, 0, 0, time.UTC)), "got %s", hv.Ts)
+	require.True(t, decimal.RequireFromString("1.163").Equal(*hv.ActiveConsumption))
+	require.True(t, decimal.Zero.Equal(*hv.ActiveGeneration), "a reported 0.0 is a real zero, not nil")
+}
+
+// TestMapHourlyValueLegacyShape keeps the documented string shape readable.
+func TestMapHourlyValueLegacyShape(t *testing.T) {
+	hv, field, ok := mapHourlyValue(json.RawMessage(`{"meter_date":"01/08/2026 10:00:00","activeConsumption":"12,500","activeGeneration":null}`))
+	require.True(t, ok, field)
+	require.True(t, hv.Ts.Equal(time.Date(2026, 8, 1, 7, 0, 0, 0, time.UTC)))
+	require.True(t, decimal.RequireFromString("12.5").Equal(*hv.ActiveConsumption))
+	require.Nil(t, hv.ActiveGeneration)
 }
 
 // TestMapEnergyRowNilVsZero pins I3 at the mapping boundary: "", "null" (the

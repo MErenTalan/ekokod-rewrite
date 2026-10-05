@@ -170,10 +170,8 @@ func (s *Service) upsertMeteringPoint(ctx context.Context, sc store.Scope, provi
 }
 
 // newAnalyzerFromMeteringPoint builds a brand-new analyzer from a discovered
-// point. R27: newly discovered analyzers are created INACTIVE — an operator
-// reviews and activates them, rather than the pipeline starting to fetch
-// readings for a metering point nobody has confirmed belongs to this
-// company yet.
+// point. R27 (revised F22): created ACTIVE — the UI has no activation control,
+// so an inactive analyzer could never be fetched.
 func newAnalyzerFromMeteringPoint(companyID uuid.UUID, provider model.IntegrationProvider, subtype string, pt integration.MeteringPoint, now time.Time) model.Analyzer {
 	multiplier := decimal.NewFromInt(1)
 	if pt.MeterMultiplier != nil {
@@ -203,7 +201,7 @@ func newAnalyzerFromMeteringPoint(companyID uuid.UUID, provider model.Integratio
 		Longitude:          pt.Longitude,
 		EtsoCode:           pt.EtsoCode,
 		DefinitionType:     pt.DefinitionType,
-		IsActive:           false,
+		IsActive:           true,
 		CreatedAt:          now,
 		UpdatedAt:          now,
 	}

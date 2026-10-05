@@ -420,6 +420,38 @@ func TestIngestionOneAnalyzerFailureDoesNotAbortTheRun(t *testing.T) {
 	})
 }
 
+// TestSyncCreatesDiscoveredAnalyzersActive (R27 as revised by F22): the UI
+// offers no way to activate an analyzer, so a discovered point is created
+// active and gets its first fetch in the same sync.
+func TestSyncCreatesDiscoveredAnalyzersActive(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tn := testfixtures.NewTenant(t, ctx, pool, 9131)
+	repos := ingestTestNewRepos(pool)
+
+	creds := integration.Credentials{CredentialID: uuid.New(), CompanyID: tn.Company.ID, Provider: integration.ProviderOSOS, Subtype: "DiscoverSub"}
+	src := newFakeAdapter(integration.ProviderOSOS, 24*time.Hour, model.ReadingKindLoadProfile)
+	src.points = []integration.MeteringPoint{{InstallationNumber: "NEW-1"}}
+	enq := newRecordingEnqueuer()
+	svc, err := ingest.New(ingest.Deps{
+		Analyzers: repos.analyzers, Readings: repos.readings, Cursors: repos.cursors,
+		Anomalies: repos.anomalies, Ops: repos.ops, ProviderSeries: repos.series,
+		AdminIngestion: repos.adminIngestion, AdminJournal: repos.adminJournal,
+		Credentials: fixedCredentialOpener(creds), Sources: sourceMap{creds.Provider: src},
+		Enqueuer: enq, Clock: clock.NewFake(ingestTestNow), Log: testfixtures.DiscardLogger(),
+	}, ingest.Options{})
+	require.NoError(t, err)
+
+	require.NoError(t, svc.SyncAnalyzers(ctx, job.SyncAnalyzersPayload{CompanyID: tn.Company.ID, CredentialID: creds.CredentialID}))
+
+	// AdminScope: a new analyzer has no building yet, outside tn.Scope's grant.
+	a, err := repos.analyzers.GetByInstallation(ctx, tn.AdminScope, model.IntegrationProviderOSOS, "DiscoverSub", "NEW-1")
+	require.NoError(t, err)
+	require.True(t, a.IsActive, "a discovered analyzer must be active: nothing in the UI can activate it later")
+	require.Len(t, enq.enqueued(), 1, "the new analyzer's first fetch is enqueued by the same sync")
+}
+
 // ok1Untouched is a small sanity read used by part A above to confirm the
 // pre-seeded active analyzers are still there (and still visible) after the
 // sync run touched them.

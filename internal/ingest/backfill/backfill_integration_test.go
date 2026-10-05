@@ -607,3 +607,28 @@ func TestBackfillRefusesInactiveCredential(t *testing.T) {
 	require.NoError(t, merr)
 	require.NotEmpty(t, messages, "the inactive-credential refusal must leave an operational message")
 }
+
+// TestBackfillWithNoActiveAnalyzerFails (F22): a credential with no active
+// analyzer used to finish a 0/0/0 "success" — the user saw "done" and no data.
+func TestBackfillWithNoActiveAnalyzerFails(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tn := testfixtures.NewTenant(t, ctx, pool, 15011)
+
+	creds := integration.Credentials{CredentialID: uuid.New(), CompanyID: tn.Company.ID, Provider: integration.ProviderOSOS, Subtype: "NoAnalyzerSub", IsActive: true}
+	src := &fakePlanner{provider: integration.ProviderOSOS, kinds: []model.ReadingKind{model.ReadingKindLoadProfile}, maxWindow: 30 * 24 * time.Hour}
+	b := backfill.New(backfillTestDeps(pool, creds, src, newBackfillRealEnqueuer(t), clock.NewFake(backfillTestNow)))
+
+	from := backfillTestNow.Add(-10 * 24 * time.Hour)
+	require.NoError(t, b.Backfill(ctx, job.BackfillPayload{CompanyID: tn.Company.ID, CredentialID: creds.CredentialID, From: from, To: backfillTestNow}))
+
+	runs := backfillTestRuns(t, ctx, postgres.NewOpsRepository(pool), tn.Scope)
+	require.Len(t, runs, 1)
+	require.Equal(t, "failed", runs[0].Status)
+	require.NotNil(t, runs[0].Error)
+
+	messages, err := postgres.NewOpsRepository(pool).ListMessages(ctx, tn.Scope, store.MessageFilter{})
+	require.NoError(t, err)
+	require.NotEmpty(t, messages, "the user must be told why nothing was fetched")
+}

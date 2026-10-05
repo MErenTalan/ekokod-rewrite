@@ -680,12 +680,30 @@ func TestOSOSFortyFiveDayWindowMakesExactlyTwoRequestsWithExpectedDates(t *testi
 	q0, err := url.ParseQuery(energyReqs[0].RawQuery)
 	require.NoError(t, err)
 	require.Equal(t, normalize.FormatOSOSDate(from), q0.Get("start"))
-	require.Equal(t, normalize.FormatOSOSDate(mid), q0.Get("end"))
+	// OSOS's endDate is inclusive and a 30-day span is rejected: ask up to To-1s.
+	require.Equal(t, normalize.FormatOSOSDate(mid.Add(-time.Second)), q0.Get("end"))
 
 	q1, err := url.ParseQuery(energyReqs[1].RawQuery)
 	require.NoError(t, err)
 	require.Equal(t, normalize.FormatOSOSDate(mid), q1.Get("start"))
-	require.Equal(t, normalize.FormatOSOSDate(to), q1.Get("end"))
+	require.Equal(t, normalize.FormatOSOSDate(to.Add(-time.Second)), q1.Get("end"))
+}
+
+// TestOSOSRejectedRangeKeepsStatus: OSOS answers a rejected query with HTTP
+// 200 and {"status":4,"message":...} — no "energy". The failure stays
+// non-retryable and names OSOS's status so the job error is diagnosable.
+func TestOSOSRejectedRangeKeepsStatus(t *testing.T) {
+	srv := fake.NewTLSServer(t,
+		authRoute(testToken),
+		energyRoute([]byte(`{"status":4,"message":"Sorguladığınız tarih aralığı sınırların dışında."}`)),
+	)
+	pool, _ := ososTestPool(t, srv)
+	src := osos.New(pool, osos.Options{Clock: clock.NewFake(fixtureNow)})
+	req := ososTestRequest(model.ReadingKindDaily,
+		time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC))
+	_, err := src.FetchReadings(context.Background(), ososTestCreds(srv), req)
+	require.ErrorIs(t, err, integration.ErrMalformedPayload)
+	require.Contains(t, err.Error(), "status 4")
 }
 
 // TestOSOSPageBudgetTruncationStillFetchesHourlyForCoveredRange proves I8 /

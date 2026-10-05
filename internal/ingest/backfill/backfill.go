@@ -151,6 +151,16 @@ func (b *Backfiller) Backfill(ctx context.Context, p job.BackfillPayload) error 
 		return err
 	}
 
+	// F22: no active analyzer means nothing to plan — say so instead of a
+	// silent 0/0/0 "success".
+	if len(analyzers) == 0 && len(missing) == 0 {
+		errText := "no active analyzers for this integration"
+		b.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil)
+		b.appendMessage(ctx, sc, p.CompanyID, "job", "backfill", "error",
+			"Geçmiş veri çekilmedi: bu entegrasyona bağlı aktif analizör yok.", nil)
+		return nil
+	}
+
 	kinds := resolveKinds(p.Kinds, src.Kinds(creds))
 
 	// R53: p.Force re-mints every window's task id with THIS run's own id

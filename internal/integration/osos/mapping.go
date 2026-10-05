@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/shopspring/decimal"
 
@@ -215,17 +216,42 @@ func mapHourlyValue(raw json.RawMessage) (hv integration.HourlyValue, field stri
 		return integration.HourlyValue{}, unmarshalTypeErrorField(err), false
 	}
 
-	ts, err := normalize.OSOSDate(v.MeterDate)
+	ts, err := hourlyDate(v)
 	if err != nil {
-		return integration.HourlyValue{}, "meter_date", false
+		return integration.HourlyValue{}, "meterDate", false
 	}
-	consumption, err := normalize.OptionalNumber(v.ActiveConsumption)
+	consumption, err := optionalOSOSNumber(v.ActiveConsumption)
 	if err != nil {
 		return integration.HourlyValue{}, "activeConsumption", false
 	}
-	generation, err := normalize.OptionalNumber(v.ActiveGeneration)
+	generation, err := optionalOSOSNumber(v.ActiveGeneration)
 	if err != nil {
 		return integration.HourlyValue{}, "activeGeneration", false
 	}
 	return integration.HourlyValue{Ts: ts, ActiveConsumption: consumption, ActiveGeneration: generation}, "", true
+}
+
+// hourlyDate reads "meterDate" ("YYYY-MM-DD HH:mm:ss", Istanbul local) or,
+// failing that, the legacy "meter_date" ("DD/MM/YYYY HH:mm:ss").
+func hourlyDate(v wireHourlyValue) (time.Time, error) {
+	if v.MeterDate != "" {
+		if ts, err := normalize.ISO8601(v.MeterDate); err == nil {
+			return ts, nil
+		}
+		return normalize.OSOSDate(v.MeterDate)
+	}
+	return normalize.OSOSDate(v.MeterDateLegacy)
+}
+
+// optionalOSOSNumber converts a bare JSON number exactly and a string with
+// the provider's locale rules; empty means unavailable (nil).
+func optionalOSOSNumber(n ososNumber) (*decimal.Decimal, error) {
+	if !n.IsNumber {
+		return normalize.OptionalNumber(n.Text)
+	}
+	v, err := normalize.JSONNumber(json.Number(n.Text))
+	if err != nil {
+		return nil, err
+	}
+	return &v, nil
 }

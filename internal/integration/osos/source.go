@@ -303,6 +303,8 @@ func monthsIntersecting(from, to time.Time) []ososMonth {
 }
 
 // fetchEnergyValues GETs energy_values for one window and returns its rows,
+// asking for [w.From, w.To-1s]: OSOS's endDate is inclusive and it rejects a
+// span of exactly 30 days (status 4), which MaxWindow chunks otherwise make.
 // undecoded (I7: decoding is per-row, in FetchReadings' caller loop, via
 // mapEnergyRow, so one bad row never fails the other rows in this page).
 func (s *Source) fetchEnergyValues(ctx context.Context, cl *httpx.Client, token string, creds integration.Credentials, installationNumber, dataType string, w normalize.Window) ([]json.RawMessage, error) {
@@ -318,7 +320,7 @@ func (s *Source) fetchEnergyValues(ctx context.Context, cl *httpx.Client, token 
 		Params: map[string]httpx.Param{
 			"secret_token":       {Value: token, Secret: true},
 			"start_date":         {Value: normalize.FormatOSOSDate(w.From)},
-			"end_date":           {Value: normalize.FormatOSOSDate(w.To)},
+			"end_date":           {Value: normalize.FormatOSOSDate(w.To.Add(-time.Second))},
 			"installationNumber": {Value: installationNumber},
 			"dataType":           {Value: dataType},
 		},
@@ -334,7 +336,11 @@ func (s *Source) fetchEnergyValues(ctx context.Context, cl *httpx.Client, token 
 	// "energy":[] decodes to a non-nil pointer to a zero-length slice and
 	// stays a genuine empty result.
 	if err := json.Unmarshal(resp.Body, &body); err != nil || body.Energy == nil {
-		return nil, &integration.Error{Kind: integration.ErrMalformedPayload, Provider: integration.ProviderOSOS, Op: "energy_values", HTTPStatus: resp.Status}
+		e := &integration.Error{Kind: integration.ErrMalformedPayload, Provider: integration.ProviderOSOS, Op: "energy_values", HTTPStatus: resp.Status}
+		if body.Status != nil {
+			e.Detail = fmt.Sprintf("status %d", *body.Status)
+		}
+		return nil, e
 	}
 	return *body.Energy, nil
 }

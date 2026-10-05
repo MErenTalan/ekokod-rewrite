@@ -68,8 +68,14 @@ type wireInstallation struct {
 //     would turn one bad row into a whole-page ErrMalformedPayload — exactly
 //     the non-retryable-failure-from-one-row bug adapter-patterns.md item 7
 //     warns against). See mapEnergyRow, which does the per-row decode.
+//
+// Status and Message are OSOS's own result envelope: a rejected query (e.g.
+// status 4, "Sorguladığınız tarih aralığı sınırların dışında." for a range of
+// 30 days or more) still answers HTTP 200, with no "energy" key.
 type energyResponse struct {
-	Energy *[]json.RawMessage `json:"energy"`
+	Status  *int               `json:"status"`
+	Message string             `json:"message"`
+	Energy  *[]json.RawMessage `json:"energy"`
 }
 
 // wireEnergyRow is one cumulative-index reading. UP (u_p_kW) has no
@@ -117,8 +123,41 @@ type wireHourlyBlock struct {
 	ValueList []json.RawMessage `json:"valueList"`
 }
 
+// wireHourlyValue is one hourly row as OSOS really sends it: "meterDate" in
+// "YYYY-MM-DD HH:mm:ss" and bare JSON numbers. MeterDateLegacy keeps the
+// older documented "meter_date" spelling readable.
 type wireHourlyValue struct {
-	MeterDate         string `json:"meter_date"`
-	ActiveConsumption string `json:"activeConsumption"`
-	ActiveGeneration  string `json:"activeGeneration"`
+	MeterDate         string     `json:"meterDate"`
+	MeterDateLegacy   string     `json:"meter_date"`
+	ActiveConsumption ososNumber `json:"activeConsumption"`
+	ActiveGeneration  ososNumber `json:"activeGeneration"`
+}
+
+// ososNumber is a value OSOS sends either as a JSON string ("12,500") or as
+// a bare JSON number (0.214). It keeps the literal text — never a float64.
+type ososNumber struct {
+	Text     string
+	IsNumber bool
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (n *ososNumber) UnmarshalJSON(b []byte) error {
+	if string(b) == "null" {
+		*n = ososNumber{}
+		return nil
+	}
+	if len(b) > 0 && b[0] == '"' {
+		var s string
+		if err := json.Unmarshal(b, &s); err != nil {
+			return err
+		}
+		*n = ososNumber{Text: s}
+		return nil
+	}
+	var num json.Number
+	if err := json.Unmarshal(b, &num); err != nil {
+		return err
+	}
+	*n = ososNumber{Text: num.String(), IsNumber: true}
+	return nil
 }
