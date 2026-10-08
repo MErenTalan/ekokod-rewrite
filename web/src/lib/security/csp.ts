@@ -2,7 +2,7 @@
  * F15a R452: the web app's security headers and its nonce-based Content Security Policy.
  * Pure functions of the nonce and the environment, so the middleware and its tests agree.
  */
-import { mapTileUrl } from '../map-config';
+import { mapOrigins } from '../map-config';
 
 type Env = Record<string, string | undefined>;
 
@@ -27,7 +27,7 @@ function originOf(url: string | undefined): string | null {
 
 /** Q-L2's policy. The map tile origin and an opted-in analytics origin are the only extra sources. */
 export function contentSecurityPolicy(nonce: string, env: Env = process.env): string {
-  const tiles = originOf(mapTileUrl(env));
+  const tiles = mapOrigins(env);
   const analytics = env.EKOKOD_FEATURE_ANALYTICS === 'true' ? originOf(env.EKOKOD_ANALYTICS_SRC) : null;
   const dev = env.NODE_ENV === 'development';
   const extra = (...sources: (string | null)[]) => sources.filter((s): s is string => Boolean(s));
@@ -35,9 +35,9 @@ export function contentSecurityPolicy(nonce: string, env: Env = process.env): st
     ['default-src', ["'self'"]],
     ['script-src', ["'self'", `'nonce-${nonce}'`, "'strict-dynamic'", ...extra(analytics), ...(dev ? ["'unsafe-eval'"] : [])]],
     ['style-src', ["'self'", "'unsafe-inline'"]],
-    ['img-src', ["'self'", 'data:', 'blob:', ...extra(tiles)]],
+    ['img-src', ["'self'", 'data:', 'blob:', ...tiles]],
     ['font-src', ["'self'", 'data:']],
-    ['connect-src', ["'self'", ...extra(tiles, analytics)]],
+    ['connect-src', ["'self'", ...tiles, ...extra(analytics)]],
     ['worker-src', ["'self'", 'blob:']],
     ['object-src', ["'none'"]],
     ['base-uri', ["'self'"]],

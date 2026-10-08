@@ -21,11 +21,13 @@
     "emptyHint": "Ayarlar › Binalar sayfasından ekleyebilirsiniz.",
     "analyzerCount": "{count} analizör",
     "centerOnMap": "{name} binasını haritada göster",
-    "chooseAnalyzer": "Analizör seçin",
     "unnamed": "İsimsiz bina",
     "select": "Seç",
     "active": "Aktif",
-    "passive": "Pasif"
+    "passive": "Pasif",
+    "hint": "İşaretli binalar ve analizörler haritada görünür; “Seç” grafikleri ve diğer panelleri o kayda göre doldurur.",
+    "analyzersOf": "{name} analizörleri",
+    "selectAnalyzer": "{name} analizörünü seç"
   },
   "bill": {
     "title": "Son fatura",

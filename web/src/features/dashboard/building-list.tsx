@@ -1,6 +1,6 @@
 'use client';
 
-import { MapPin } from 'lucide-react';
+import { ChevronDown, MapPin } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useMemo, useState } from 'react';
 
@@ -9,7 +9,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { EmptyState } from '@/components/ui/empty-state';
 import { IconButton } from '@/components/ui/icon-button';
-import { RadioGroup } from '@/components/ui/radio-group';
 import { SearchInput } from '@/components/ui/search-input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -32,6 +31,9 @@ export type BuildingListViewProps = {
   /** Buildings whose markers the map shows; the checkboxes drive it (legacy). */
   visibleIds: string[];
   onVisibleChange: (ids: string[]) => void;
+  /** Analyzers whose markers the map's analyzer tab shows: checkboxes too, all by default (legacy, F24). */
+  visibleAnalyzerIds: string[];
+  onVisibleAnalyzersChange: (ids: string[]) => void;
   onSelectBuilding: (id: string) => void;
   onSelectAnalyzer: (id: string) => void;
   onFocus: (id: string) => void;
@@ -39,9 +41,10 @@ export type BuildingListViewProps = {
 };
 
 /**
- * The searchable building list of 01 §7.2: selecting a row drives every other
- * widget, the checkboxes decide which markers the map draws, and a building
- * with several analyzers offers them as a radio group.
+ * The searchable building list of 01 §7.2: "Seç" drives every other widget,
+ * the checkboxes decide which markers the map draws. A building's analyzers
+ * unfold under it with the same pair — a checkbox for the map and "Seç" for
+ * the panels — instead of a single-choice radio that read as a map filter (F24).
  */
 export function BuildingListView({
   buildings,
@@ -50,6 +53,8 @@ export function BuildingListView({
   selectedAnalyzerId,
   visibleIds,
   onVisibleChange,
+  visibleAnalyzerIds,
+  onVisibleAnalyzersChange,
   onSelectBuilding,
   onSelectAnalyzer,
   onFocus,
@@ -58,6 +63,7 @@ export function BuildingListView({
   const t = useTranslations('dashboard.list');
   const [query, setQuery] = useState('');
   const [activeOnly, setActiveOnly] = useState(false);
+  const [expanded, setExpanded] = useState<string[]>([]);
 
   const shown = useMemo(() => {
     const needle = normaliseTurkish(query);
@@ -68,7 +74,13 @@ export function BuildingListView({
     });
   }, [buildings, query, activeOnly]);
 
-  const allShown = shown.length > 0 && shown.every((b) => visibleIds.includes(b.id));
+  const shownAnalyzers = analyzers.filter((a) => shown.some((b) => b.id === a.buildingId)).map((a) => a.id);
+  const allShown =
+    shown.length > 0 && shown.every((b) => visibleIds.includes(b.id)) && shownAnalyzers.every((id) => visibleAnalyzerIds.includes(id));
+  const toggleAll = () => {
+    onVisibleChange(allShown ? [] : shown.map((b) => b.id));
+    onVisibleAnalyzersChange(allShown ? [] : shownAnalyzers);
+  };
 
   return (
     <Card>
@@ -76,13 +88,14 @@ export function BuildingListView({
         <CardTitle>{t('title')}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
+        <p className="text-foreground-muted type-caption">{t('hint')}</p>
         <SearchInput label={t('search')} labelVisibility="hidden" value={query} onValueChange={setQuery} placeholder={t('search')} />
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Checkbox label={t('activeOnly')} checked={activeOnly} onCheckedChange={setActiveOnly} />
           <Button
             size="sm"
             variant="ghost"
-            onClick={() => onVisibleChange(allShown ? [] : shown.map((b) => b.id))}
+            onClick={toggleAll}
             disabled={shown.length === 0}
           >
             {allShown ? t('deselectAll') : t('selectAll')}
@@ -99,6 +112,8 @@ export function BuildingListView({
             {shown.map((building) => {
               const own = analyzers.filter((a) => a.buildingId === building.id);
               const selected = building.id === selectedBuildingId;
+              // The selected building opens on its analyzers; any other unfolds on demand.
+              const open = own.length > 0 && (expanded.includes(building.id) !== selected);
               return (
                 <li
                   key={building.id}
@@ -122,9 +137,24 @@ export function BuildingListView({
                           status={building.status === 'active' ? 'success' : 'neutral'}
                           label={building.status === 'active' ? t('active') : t('passive')}
                         />
-                        <span className="text-foreground-muted type-caption">
-                          {t('analyzerCount', { count: building.analyzerCount })}
-                        </span>
+                        {own.length > 0 ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            iconEnd={ChevronDown}
+                            aria-expanded={open}
+                            className="h-auto px-1 py-0 text-foreground-muted type-caption [&[aria-expanded=true]_svg]:rotate-180"
+                            onClick={() =>
+                              setExpanded(expanded.includes(building.id) ? expanded.filter((id) => id !== building.id) : [...expanded, building.id])
+                            }
+                          >
+                            {t('analyzerCount', { count: building.analyzerCount })}
+                          </Button>
+                        ) : (
+                          <span className="text-foreground-muted type-caption">
+                            {t('analyzerCount', { count: building.analyzerCount })}
+                          </span>
+                        )}
                       </span>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
@@ -144,15 +174,39 @@ export function BuildingListView({
                       />
                     </div>
                   </div>
-                  {selected && own.length > 1 ? (
-                    <div className="ps-8">
-                      <RadioGroup
-                        label={t('chooseAnalyzer')}
-                        options={own.map((a) => ({ value: a.id, label: a.name }))}
-                        value={selectedAnalyzerId ?? ''}
-                        onValueChange={onSelectAnalyzer}
-                      />
-                    </div>
+                  {open ? (
+                    <ul className="flex flex-col gap-1 ps-6" aria-label={t('analyzersOf', { name: building.name || t('unnamed') })}>
+                      {own.map((analyzer) => {
+                        const chosen = analyzer.id === selectedAnalyzerId;
+                        return (
+                          <li key={analyzer.id} className="flex items-center justify-between gap-2">
+                            <Checkbox
+                              label={analyzer.name}
+                              checked={visibleAnalyzerIds.includes(analyzer.id)}
+                              onCheckedChange={(checked) =>
+                                onVisibleAnalyzersChange(
+                                  checked
+                                    ? [...visibleAnalyzerIds, analyzer.id]
+                                    : visibleAnalyzerIds.filter((id) => id !== analyzer.id),
+                                )
+                              }
+                            />
+                            <Button
+                              size="sm"
+                              variant={chosen ? 'primary' : 'ghost'}
+                              aria-pressed={chosen}
+                              aria-label={t('selectAnalyzer', { name: analyzer.name })}
+                              onClick={() => {
+                                if (!selected) onSelectBuilding(building.id);
+                                onSelectAnalyzer(analyzer.id);
+                              }}
+                            >
+                              {t('select')}
+                            </Button>
+                          </li>
+                        );
+                      })}
+                    </ul>
                   ) : null}
                 </li>
               );

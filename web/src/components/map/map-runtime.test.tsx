@@ -3,17 +3,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders } from '@/test/render';
 
+import { GOOGLE_TILES, OPENFREEMAP_STYLE } from '@/lib/map-config';
+
 import { Map, styleFor, type MapMarker } from './map';
 import { MapConfigProvider } from './_map-config';
 
-type Handler = () => void;
-const created = vi.hoisted(() => [] as { options: Record<string, unknown>; handlers: Record<string, Handler[]> }[]);
+type Handler = (e?: unknown) => void;
+const created = vi.hoisted(() => [] as { options: Record<string, unknown>; handlers: Record<string, Handler[]>; styles: unknown[] }[]);
 const workerUrls = vi.hoisted(() => [] as string[]);
 vi.mock('maplibre-gl', () => {
   class FakeMap {
     handlers: Record<string, Handler[]> = {};
+    styles: unknown[] = [];
     constructor(options: Record<string, unknown>) {
-      created.push({ options, handlers: this.handlers });
+      created.push({ options, handlers: this.handlers, styles: this.styles });
+    }
+    setStyle(style: unknown) {
+      this.styles.push(style);
     }
     on(event: string, handler: Handler) {
       (this.handlers[event] ??= []).push(handler);
@@ -38,7 +44,7 @@ vi.mock('maplibre-gl', () => {
 });
 
 const markers: MapMarker[] = [{ id: 'm1', name: 'Merkez Bina', lat: 41.01, lng: 28.97, status: 'active' }];
-const fire = (event: string) => act(() => created.at(-1)!.handlers[event]?.forEach((h) => h()));
+const fire = (event: string, e?: unknown) => act(() => created.at(-1)!.handlers[event]?.forEach((h) => h(e)));
 
 beforeEach(() => {
   created.length = 0;
@@ -94,5 +100,23 @@ describe('Map with the server-configured source (F23)', () => {
     expect(styleFor('https://tiles.openfreemap.org/styles/positron')).toBe('https://tiles.openfreemap.org/styles/positron');
     expect(styleFor('https://x.example.com/style.json')).toBe('https://x.example.com/style.json');
     expect(styleFor('https://tile.example.com/{z}/{x}/{y}.png')).toMatchObject({ sources: { tiles: { type: 'raster' } } });
+  });
+
+  it('swaps refused Google tiles for OpenFreeMap once, and keeps them once a tile drew', async () => {
+    const r = renderWithProviders(<Map markers={markers} label="Bina konumları" tileUrl={GOOGLE_TILES} />);
+    await waitFor(() => expect(created).toHaveLength(1));
+    expect(created[0]!.options.style).toMatchObject({ sources: { tiles: { tiles: GOOGLE_TILES.split(' '), attribution: '© Google', maxzoom: 20 } } });
+    fire('load');
+    fire('error', { tile: {}, error: new Error('403') });
+    fire('error', { tile: {}, error: new Error('403') });
+    expect(created[0]!.styles).toEqual([OPENFREEMAP_STYLE]);
+    expect(r.queryByRole('table', { name: 'Bina konumları' })).toBeNull();
+    r.unmount();
+
+    renderWithProviders(<Map markers={markers} label="Bina konumları" tileUrl={GOOGLE_TILES} />);
+    await waitFor(() => expect(created).toHaveLength(2));
+    fire('sourcedata', { tile: {} });
+    fire('error', { tile: {}, error: new Error('429') });
+    expect(created[1]!.styles).toEqual([]);
   });
 });

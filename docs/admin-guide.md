@@ -26,8 +26,9 @@ bölümleri görür.
    "Test e-postası gönder" ile deneyin.
 3. **Ayarlar → Binalar:** her tesis için bir bina açın. **Fatura kesim günü** fatura dönemlerini
    belirler. Konum bilgisi haritada ve hava durumunda kullanılır. Harita altlığı varsayılan olarak
-   OpenFreeMap'ten gelir (ücretsiz, anahtar gerekmez); internetsiz kurulumda `.env` içinde
-   `EKOKOD_MAP_TILE_URL=none` verin, harita yerine konum listesi gösterilir.
+   Google sokak haritasından (Türkçe etiketli) gelir; Google karoları yüklenemezse OpenFreeMap'e
+   geçilir. Yalnızca OpenFreeMap için `.env` içinde `EKOKOD_MAP_TILE_URL=openfreemap`, internetsiz
+   kurulumda `EKOKOD_MAP_TILE_URL=none` verin (harita yerine konum listesi gösterilir).
 4. **Ayarlar → Entegrasyonlar:** sağlayıcıyı (OSOS/EDAŞ, GridBox, PM5340, iSolarCloud) ve kullanıcı
    bilgilerini girin. Sonra **Doğrula**, ardından **Analizörleri keşfet**. Geçmiş için **Geçmiş
    veriyi çek** ile bir tarih aralığı seçin. Şifreler şifreli saklanır ve bir daha gösterilmez;

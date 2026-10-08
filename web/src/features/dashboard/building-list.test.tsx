@@ -21,6 +21,8 @@ const view = (overrides: Partial<React.ComponentProps<typeof BuildingListView>> 
     analyzers={analyzers}
     visibleIds={['b-1', 'b-2']}
     onVisibleChange={() => {}}
+    visibleAnalyzerIds={['a-1', 'a-2', 'a-3']}
+    onVisibleAnalyzersChange={() => {}}
     onSelectBuilding={() => {}}
     onSelectAnalyzer={() => {}}
     onFocus={() => {}}
@@ -36,13 +38,27 @@ describe('BuildingListView', () => {
     expect(r.queryByRole('checkbox', { name: 'Tuzla Fabrika' })).toBeNull();
   });
 
-  it('filters to active buildings and clears the whole visible set', async () => {
+  it('filters to active buildings and clears the whole visible set, analyzers included', async () => {
     const onVisibleChange = vi.fn();
-    const r = renderWithProviders(view({ onVisibleChange }));
+    const onVisibleAnalyzersChange = vi.fn();
+    const r = renderWithProviders(view({ onVisibleChange, onVisibleAnalyzersChange }));
     await r.user.click(r.getByRole('checkbox', { name: 'Yalnızca aktif' }));
     expect(r.queryByRole('checkbox', { name: 'Tuzla Fabrika' })).toBeNull();
     await r.user.click(r.getByRole('button', { name: 'Tümünü kaldır' }));
     expect(onVisibleChange).toHaveBeenCalledWith([]);
+    expect(onVisibleAnalyzersChange).toHaveBeenCalledWith([]);
+  });
+
+  it('shows analyzers on the map by checkbox, several at once, not by a single choice (F24)', async () => {
+    const onVisibleAnalyzersChange = vi.fn();
+    const r = renderWithProviders(view({ selectedBuildingId: 'b-1', visibleAnalyzerIds: ['a-3'], onVisibleAnalyzersChange }));
+    expect(r.queryByRole('radio')).toBeNull();
+    await r.user.click(r.getByRole('checkbox', { name: 'Analizör 1' }));
+    expect(onVisibleAnalyzersChange).toHaveBeenLastCalledWith(['a-3', 'a-1']);
+    // Another building's analyzers unfold on demand.
+    expect(r.queryByRole('checkbox', { name: 'Analizör 3' })).toBeNull();
+    await r.user.click(r.getByRole('button', { name: '1 analizör' }));
+    expect(r.getByRole('checkbox', { name: 'Analizör 3' })).toBeChecked();
   });
 
   it('offers the analyzers of the selected building and reports the choice', async () => {
@@ -52,7 +68,8 @@ describe('BuildingListView', () => {
     const r = renderWithProviders(
       view({ selectedBuildingId: 'b-1', selectedAnalyzerId: 'a-1', onSelectAnalyzer, onSelectBuilding, onFocus }),
     );
-    await r.user.click(r.getByRole('radio', { name: 'Analizör 2' }));
+    expect(r.getByRole('button', { name: 'Analizör 1 analizörünü seç' })).toHaveAttribute('aria-pressed', 'true');
+    await r.user.click(r.getByRole('button', { name: 'Analizör 2 analizörünü seç' }));
     expect(onSelectAnalyzer).toHaveBeenCalledWith('a-2');
     // Every row offers "Seç"; the second one belongs to the building that is not selected yet.
     await r.user.click(r.getAllByRole('button', { name: 'Seç' })[1]);

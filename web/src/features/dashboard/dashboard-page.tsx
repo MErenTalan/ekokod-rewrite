@@ -49,6 +49,7 @@ export function DashboardPage() {
   const today = istanbulToday();
 
   const [visibleIds, setVisibleIds] = useState<string[] | null>(null);
+  const [visibleAnalyzerIds, setVisibleAnalyzerIds] = useState<string[] | null>(null);
   const [focusId, setFocusId] = useState<string | undefined>();
   const [show, setShow] = useState<SeriesToggles>({ active: true, inductive: true, capacitive: false });
   const [applied, setApplied] = useState<{ granularity: Granularity; range: DateRange }>({
@@ -62,11 +63,17 @@ export function DashboardPage() {
   }, [buildings, visibleIds]);
 
   useEffect(() => {
+    // So does every analyzer (legacy AnalyzerList, F24).
+    if (visibleAnalyzerIds === null && analyzers.length > 0) setVisibleAnalyzerIds(analyzers.map((a) => a.id));
+  }, [analyzers, visibleAnalyzerIds]);
+
+  useEffect(() => {
     // A company with one building has nothing to choose: its panels open on it.
     if (!buildingId && buildings.length === 1) set({ buildingId: buildings[0].id });
   }, [buildings, buildingId, set]);
 
   const shownIds = visibleIds ?? buildings.map((b) => b.id);
+  const shownAnalyzerIds = visibleAnalyzerIds ?? analyzers.map((a) => a.id);
   const analyzerNames = useMemo(
     () => Object.fromEntries(analyzers.map((a) => [a.id, analyzerLabel(a)])),
     [analyzers],
@@ -118,7 +125,7 @@ export function DashboardPage() {
             buildings={buildings
               .filter((b) => shownIds.includes(b.id))
               .map((b) => ({ id: b.id, name: b.name, lat: b.latitude ?? null, lng: b.longitude ?? null, status: b.activity_status ?? 'passive' }))}
-            analyzers={analyzers.map((a) => ({
+            analyzers={analyzers.filter((a) => shownAnalyzerIds.includes(a.id)).map((a) => ({
               id: a.id,
               name: analyzerLabel(a),
               lat: a.latitude ?? null,
@@ -148,6 +155,8 @@ export function DashboardPage() {
             selectedAnalyzerId={analyzerId}
             visibleIds={shownIds}
             onVisibleChange={setVisibleIds}
+            visibleAnalyzerIds={shownAnalyzerIds}
+            onVisibleAnalyzersChange={setVisibleAnalyzerIds}
             onSelectBuilding={(id) => set({ buildingId: id })}
             onSelectAnalyzer={(id) => set({ analyzerId: id })}
             onFocus={setFocusId}
