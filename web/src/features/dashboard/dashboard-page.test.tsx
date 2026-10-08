@@ -1,4 +1,4 @@
-import { waitFor } from '@testing-library/react';
+import { waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { MeResponse } from '@/lib/api/errors';
@@ -86,6 +86,24 @@ describe('DashboardPage', () => {
     await waitFor(() =>
       expect(r.getByText('Sektörde karşılaştırma için yeterli bina yok (en az 3).')).toBeInTheDocument(),
     );
+  });
+
+  it('maps every analyzer by default and drops one whose box is cleared (F24)', async () => {
+    localStorage.setItem(selectionKey('u-company_admin'), JSON.stringify({ buildingId: 'b-1' }));
+    const located = (id: string, no: string) => ({ ...ROUTES['GET /api/v1/analyzers'].items[0], id, installation_number: no, latitude: '39.9', longitude: '32.8' });
+    api = mockApi({ ...ROUTES, 'GET /api/v1/analyzers': { items: [located('a-1', '1001'), located('a-2', '1002')] } });
+    const r = renderWithProviders(
+      <SessionProvider me={me('company_admin')}>
+        <DashboardPage />
+      </SessionProvider>,
+    );
+    await r.user.click(await r.findByRole('tab', { name: 'Analizörler' }));
+    const table = await r.findByRole('table', { name: 'Analizör konumları' });
+    await waitFor(() => expect(within(table).getByRole('row', { name: /1002/ })).toBeInTheDocument());
+    expect(within(table).getByRole('row', { name: /1001/ })).toBeInTheDocument();
+    await r.user.click(r.getByRole('checkbox', { name: '1002' }));
+    await waitFor(() => expect(within(r.getByRole('table', { name: 'Analizör konumları' })).queryByRole('row', { name: /1002/ })).toBeNull());
+    expect(within(r.getByRole('table', { name: 'Analizör konumları' })).getByRole('row', { name: /1001/ })).toBeInTheDocument();
   });
 
   it('hides the refresh actions from a read-only role', async () => {

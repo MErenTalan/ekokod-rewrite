@@ -21,11 +21,13 @@
     "emptyHint": "Add one from Settings › Buildings.",
     "analyzerCount": "{count} analyzers",
     "centerOnMap": "Show {name} on the map",
-    "chooseAnalyzer": "Choose an analyzer",
     "unnamed": "Unnamed building",
     "select": "Select",
     "active": "Active",
-    "passive": "Passive"
+    "passive": "Passive",
+    "hint": "Ticked buildings and analyzers appear on the map; “Select” fills the charts and other panels for that record.",
+    "analyzersOf": "Analyzers of {name}",
+    "selectAnalyzer": "Select analyzer {name}"
   },
   "bill": {
     "title": "Latest bill",

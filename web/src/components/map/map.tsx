@@ -6,7 +6,7 @@ import { List } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useEffect, useRef, useState } from 'react';
 
-import { DEFAULT_MAP_STYLE, DEFAULT_MAP_STYLE_DARK } from '@/lib/map-config';
+import { fallbackStyleFor } from '@/lib/map-config';
 
 import { Alert } from '../ui/alert';
 import { Button } from '../ui/button';
@@ -29,11 +29,6 @@ const TILE_TIMEOUT_MS = 8000;
 /** Türkiye, for a map with nothing located on it yet. */
 const HOME: { center: [number, number]; zoom: number } = { center: [35.2, 39.0], zoom: 4.6 };
 
-function prefersDark() {
-  const theme = document.documentElement.dataset.theme;
-  return theme === 'dark' || (theme !== 'light' && window.matchMedia?.('(prefers-color-scheme: dark)').matches === true);
-}
-
 function webglAvailable() {
   try {
     const canvas = document.createElement('canvas');
@@ -43,11 +38,23 @@ function webglAvailable() {
   }
 }
 
-/** A `{z}/{x}/{y}` template is raster tiles; any other URL is a style (OpenFreeMap's has no `.json`). */
-export const styleFor = (url: string) =>
-  url.includes('{z}')
-    ? { version: 8 as const, sources: { tiles: { type: 'raster' as const, tiles: [url], tileSize: 256 } }, layers: [{ id: 'tiles', type: 'raster' as const, source: 'tiles' }] }
-    : url;
+/**
+ * `{z}/{x}/{y}` templates (space-separated, load-balanced) are raster tiles; any
+ * other URL is a style (OpenFreeMap's has no `.json`). Google's are 512 px
+ * (`scale=2`) drawn at 256, so they stay sharp on HiDPI screens.
+ */
+export const styleFor = (source: string) => {
+  const tiles = source.split(/\s+/).filter(Boolean);
+  if (!tiles[0]?.includes('{z}')) return source;
+  const google = tiles[0].includes('.google.com/');
+  return {
+    version: 8 as const,
+    sources: {
+      tiles: { type: 'raster' as const, tiles, tileSize: 256, maxzoom: google ? 20 : 19, ...(google ? { attribution: '© Google' } : {}) },
+    },
+    layers: [{ id: 'tiles', type: 'raster' as const, source: 'tiles' }],
+  };
+};
 
 /** MapLibre when a tile source is configured and loads within 8 s; otherwise the coordinate list (no public OSM default, Q5). */
 export function Map({ markers, label, focusId, tileUrl: tileUrlProp, height = 360, onMarkerSelect }: MapProps) {
@@ -87,13 +94,12 @@ export function Map({ markers, label, focusId, tileUrl: tileUrlProp, height = 36
         if (cancelled || !container.current) return;
         // The bundle loses the worker's own URL; scripts/copy-maplibre-worker.ts serves it (F23).
         maplibre.setWorkerUrl?.(`/maplibre/${maplibre.getVersion?.()}/maplibre-gl-worker.js`);
-        const style = tileUrl === DEFAULT_MAP_STYLE && prefersDark() ? DEFAULT_MAP_STYLE_DARK : tileUrl;
         const initial = markersRef.current;
         const bounds = new maplibre.LngLatBounds();
         initial.forEach((m) => bounds.extend([m.lng, m.lat]));
         const instance = new maplibre.Map({
           container: container.current,
-          style: styleFor(style),
+          style: styleFor(tileUrl),
           ...(initial.length ? { bounds, fitBoundsOptions: { padding: 48, maxZoom: 14 } } : HOME),
           attributionControl: { compact: true },
         });
@@ -105,9 +111,27 @@ export function Map({ markers, label, focusId, tileUrl: tileUrlProp, height = 36
           instanceRef.current = { map: instance, lib: maplibre };
           setState('ready');
         });
+        // Unofficial Google tiles may be refused one day: the first tile error
+        // before any tile drew swaps in the fallback style, once (F24).
+        const fallback = fallbackStyleFor(tileUrl);
+        let tileDrawn = false;
+        let switched = false;
+        instance.on('sourcedata', (e) => {
+          if ((e as { tile?: unknown }).tile) tileDrawn = true;
+        });
         // Only a style that never loads means no map: a single tile or glyph
         // failing later used to swap a working map for the list.
-        instance.on('error', () => !cancelled && !loaded && setState('fallback'));
+        instance.on('error', (e) => {
+          if (cancelled) return;
+          if ((e as { tile?: unknown } | undefined)?.tile) {
+            if (fallback && !tileDrawn && !switched) {
+              switched = true;
+              instance.setStyle(styleFor(fallback));
+            }
+            return;
+          }
+          if (!loaded) setState('fallback');
+        });
       })
       .catch(() => !cancelled && setState('fallback'));
     return () => {

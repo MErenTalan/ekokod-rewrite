@@ -148,7 +148,7 @@ configuration.** No secret has a default.
 |----------|:--------:|---------|
 | `NEXT_PUBLIC_API_URL` | ✅ | API base URL |
 | `NEXT_PUBLIC_APP_BASE_PATH` | | `/ekorm` |
-| `EKOKOD_MAP_TILE_URL` | | Map tiles, read by the web server at request time (F23): style JSON or raster template; empty = OpenFreeMap, `none` = coordinate list only. `NEXT_PUBLIC_MAP_TILE_URL` is still read as a fallback but is baked in at build time |
+| `EKOKOD_MAP_TILE_URL` | | Map tiles, read by the web server at request time (F23/F24): style URL or raster templates (space-separated); empty = Google street tiles with Turkish labels, falling back to OpenFreeMap if refused; `openfreemap` = OpenFreeMap only; `none` = coordinate list only. `NEXT_PUBLIC_MAP_TILE_URL` is still read as a fallback but is baked in at build time |
 | `NEXT_PUBLIC_ANALYTICS_ID` | | Only when the analytics flag is on |
 
 ---

@@ -22,6 +22,8 @@ const meta = {
     selectedAnalyzerId: 'a-1',
     visibleIds: ['b-1', 'b-2'],
     onVisibleChange: () => {},
+    visibleAnalyzerIds: analyzers.map((a) => a.id),
+    onVisibleAnalyzersChange: () => {},
     onSelectBuilding: () => {},
     onSelectAnalyzer: () => {},
     onFocus: () => {},

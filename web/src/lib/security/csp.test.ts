@@ -30,8 +30,9 @@ describe('the content security policy (R452)', () => {
     expect(on).toContain("'strict-dynamic' https://stats.example.com");
   });
 
-  it('allows the default map source, and none when the map is off (F23)', () => {
-    expect(contentSecurityPolicy('n', {})).toContain("connect-src 'self' https://tiles.openfreemap.org");
+  it('allows the default map sources, and none when the map is off (F24)', () => {
+    const csp = contentSecurityPolicy('n', {});
+    expect(csp).toContain("connect-src 'self' https://mt0.google.com https://mt1.google.com https://mt2.google.com https://mt3.google.com https://tiles.openfreemap.org");
     const off = contentSecurityPolicy('n', { EKOKOD_MAP_TILE_URL: 'none' });
     expect(off).toContain("connect-src 'self';");
     expect(off).toContain("img-src 'self' data: blob:;");

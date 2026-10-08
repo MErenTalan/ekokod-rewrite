@@ -37,3 +37,18 @@ field the response names, for clearer notifications, and for the same care on ev
   TileJSON, sprites, glyphs and vector tiles from tiles.openfreemap.org load, the worker comes from
   `/maplibre/6.10.0/`, markers drawn. CSP headers checked at runtime with the variable unset and `none`.
 - e2e (Playwright `e2e` project) not run: it needs Docker.
+
+## F24 follow-up (2026-10-09, branch `fix/f24-map-tiles-analyzers`)
+
+The product owner found the OpenFreeMap positron map plain and asked for the Google layer an older
+legacy build used (`{s}.google.com/vt/lyrs=m`), and pointed out that the dashboard's analyzer radio read
+as a map filter that hid every other analyzer.
+
+| # | Ruling | Where |
+|---|--------|-------|
+| R524 | Default tiles are Google's street tiles (`lyrs=m&hl=tr&scale=2`, mt0–mt3), at the owner's request. They are not a documented Google API (Maps Platform terms only cover its official APIs), so the first tile error before any tile drew swaps in OpenFreeMap liberty; `EKOKOD_MAP_TILE_URL=openfreemap` uses OpenFreeMap only. Supersedes R521's default. | `lib/map-config.ts`, `components/map/map.tsx`, CSP |
+| R525 | A building's analyzers unfold under it as checkboxes deciding which analyzer markers the map shows (all by default, as legacy's AnalyzerList), each with its own "Seç" for the panels; "Tümünü seç/kaldır" covers buildings and analyzers. | `features/dashboard/building-list.tsx`, `dashboard-page.tsx` |
+
+Verified: web vitest 1296, lint, typecheck, build; built app with a fake API in Chromium (Google tiles drawn,
+an analyzer unticked leaves the map, Google answered 403 → OpenFreeMap drawn); e2e dashboard, consumption,
+modules, responsive, security headers and the a11y pages.
