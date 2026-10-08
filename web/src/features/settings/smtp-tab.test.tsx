@@ -46,7 +46,7 @@ describe('SmtpTabView', () => {
     const dialog = await r.findByRole('dialog');
     await r.user.type(r.getByLabelText(/Alıcı adresi/), 'test@ornek.com.tr');
     await r.user.click(within(dialog).getByRole('button', { name: 'Test e-postası gönder' }));
-    expect(onTest).toHaveBeenCalledWith('test@ornek.com.tr');
+    expect(onTest).toHaveBeenCalledWith('test@ornek.com.tr', expect.any(Function));
   });
 
   it('cannot send a test before any settings exist', () => {

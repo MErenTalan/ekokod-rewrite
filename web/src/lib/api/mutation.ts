@@ -89,6 +89,16 @@ export function useApiMutation<M extends Method, P extends PathsWithMethod<paths
 
 const MAX_NAMED = 4;
 
+/** The danger toast a hand-rolled mutation shows for a failure it does not render itself. */
+export function useFailureToast(): (error: unknown) => void {
+  const feedback = useTranslations('feedback');
+  const toast = useToast();
+  return useCallback(
+    (error: unknown) => toast.toast({ tone: 'danger', title: errorMessage(error, feedback('saveFailed')), description: failureHint(error, feedback) }),
+    [toast, feedback],
+  );
+}
+
 type Feedback = (key: 'networkError' | 'errorReference', values?: Record<string, string>) => string;
 
 /** What the operator can do about a failure the form cannot mark. */

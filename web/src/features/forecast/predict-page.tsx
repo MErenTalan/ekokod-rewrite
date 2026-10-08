@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { DateRangePicker, type DateRange } from '@/components/ui/date-range-picker';
 import { Select } from '@/components/ui/select';
 import { ScopePicker } from '@/features/scope/scope-picker';
+import { useFailureToast } from '@/lib/api/mutation';
 import { errorCodeOf } from '@/lib/api/problem';
 import { $api } from '@/lib/api/query';
 import { addDays, istanbulToday } from '@/lib/dates';
@@ -46,13 +47,19 @@ export function PredictPage() {
     params: { query: { ...scope, analyzer_id: analyzerId ?? '', from: new Date(origin).toISOString(), to: new Date(origin + horizon * HOUR).toISOString() } },
   }, { enabled });
   const run = $api.useMutation('post', '/api/v1/forecast/run');
+  const failed = useFailureToast();
 
   const onRun = () => {
     if (!analyzerId) return;
     setUnavailable(false);
     run.mutate({ params: { query: scope }, body: { analyzer_id: analyzerId, horizon_hours: horizon } }, {
       onSuccess: (res) => setRan(res ?? null),
-      onError: (err) => setUnavailable(errorCodeOf(err) === 'forecast_unavailable'),
+      onError: (err) => {
+        const unavailable = errorCodeOf(err) === 'forecast_unavailable';
+        setUnavailable(unavailable);
+        // Unavailability has its own panel; anything else used to fail silently.
+        if (!unavailable) failed(err);
+      },
     });
   };
 

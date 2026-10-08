@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { clearForType, draftErrors, draftFrom, emptyDraft, toAlarmRequest } from './alarm-draft';
+import { clearForType, draftErrors, draftFrom, emptyDraft, serverFieldErrors, toAlarmRequest } from './alarm-draft';
 
 const base = { ...emptyDraft(), name: 'Test', analyzerIds: ['a-1'] };
 
@@ -115,5 +115,24 @@ describe('alarm draft', () => {
     expect(draft.channels).toEqual({ email: true, sms: true });
     expect(draft.settings.communication_threshold_hours).toBe('6');
     expect(draftErrors(draft)).toEqual({});
+  });
+
+  it('sends a Turkish-typed threshold with a point and marks a non-number', () => {
+    const power = { ...base, type: 'current_voltage_power' as const, settings: { power_max: '1.250,5', power_min: '12,5' } };
+    expect(toAlarmRequest(power).settings).toEqual({ power_max: '1250.5', power_min: '12.5' });
+    expect(draftErrors({ ...power, settings: { power_max: '12,5,0' } }).power_max).toBe('invalid');
+    const comms = { ...base, type: 'data_communication' as const, settings: { communication_threshold_hours: '6,5' } };
+    expect(draftErrors(comms).communication_threshold_hours).toBe('invalid');
+    expect(draftErrors({ ...base, frequencyValue: 'iki', frequencyUnit: 'hours' as const }).frequencyValue).toBe('invalid');
+  });
+
+  it('reads the API field errors by the dialog field they belong to', () => {
+    const d = { ...base, channels: { email: true, sms: true }, emailTargets: 'a@b.co, c@d.co', smsTargets: '05321234567' };
+    expect(
+      serverFieldErrors(d, {
+        'settings.power_max': 'x', analyzer_ids: 'y', 'channels[1].target': 'e', 'channels[2].target': 's',
+        notification_frequency_value: 'f',
+      }),
+    ).toEqual({ power_max: 'x', analyzerIds: 'y', emailTargets: 'e', smsTargets: 's', frequencyValue: 'f' });
   });
 });

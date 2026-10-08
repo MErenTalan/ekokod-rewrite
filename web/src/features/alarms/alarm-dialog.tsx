@@ -13,7 +13,7 @@ import { Switch } from '@/components/ui/switch';
 import type { Analyzer } from '@/lib/api/types';
 
 import { ALARM_KINDS, typeLabelKey } from './alarm-labels';
-import { clearForType, draftErrors, isPristine, type AlarmDraft, type AlarmKind, type PeriodUnit, type SettingsKey } from './alarm-draft';
+import { clearForType, draftErrors, isPristine, serverFieldErrors, type AlarmDraft, type AlarmKind, type PeriodUnit, type SettingsKey } from './alarm-draft';
 
 export type AlarmDialogViewProps = {
   open: boolean;
@@ -23,6 +23,8 @@ export type AlarmDialogViewProps = {
   onSubmit: () => void;
   onClose: () => void;
   saving?: boolean;
+  /** The API's field errors for the last save, by API field name. */
+  serverErrors?: Record<string, string>;
 };
 
 /** One threshold with the period it is measured over (R230's "group"). */
@@ -46,17 +48,20 @@ const REACTIVE_FIELDS: Group[] = [
  * threshold typed under one type can never be submitted under another.
  */
 export function AlarmDialogView({
-  open, draft, analyzers, onDraftChange, onSubmit, onClose, saving = false,
+  open, draft, analyzers, onDraftChange, onSubmit, onClose, saving = false, serverErrors = {},
 }: AlarmDialogViewProps) {
   const t = useTranslations('alarms');
   const common = useTranslations('common');
   const errors = draftErrors(draft);
+  const server = serverFieldErrors(draft, serverErrors);
 
   const setSetting = (key: SettingsKey, value: string) =>
     onDraftChange({ ...draft, settings: { ...draft.settings, [key]: value } });
   // An untouched form is not wrong yet: Save stays disabled, the text waits.
   const pristine = isPristine(draft);
   const errorText = (key: string) => {
+    // The server answered about the data that was sent: its message wins.
+    if (server[key]) return server[key];
     const code = errors[key];
     if (!code || pristine) return undefined;
     // draftErrors only ever emits these codes; the map keeps the key literal
@@ -115,6 +120,7 @@ export function AlarmDialogView({
           label={t('type')}
           required
           value={draft.type}
+          error={errorText('type')}
           onValueChange={(value) => onDraftChange(clearForType(draft, value as AlarmKind))}
           options={ALARM_KINDS.map((kind) => ({ value: kind, label: t(typeLabelKey(kind)) }))}
         />
@@ -128,12 +134,14 @@ export function AlarmDialogView({
                   label={t(group.labelKey)}
                   inputMode="decimal"
                   value={draft.settings[group.threshold] ?? ''}
+                  error={errorText(group.threshold)}
                   onChange={(e) => setSetting(group.threshold, e.target.value)}
                 />
                 <Input
                   label={t('fields.inLast')}
                   inputMode="numeric"
                   value={draft.settings[group.value] ?? ''}
+                  error={errorText(group.value)}
                   onChange={(e) => setSetting(group.value, e.target.value)}
                 />
                 <Select
@@ -167,12 +175,14 @@ export function AlarmDialogView({
                 label={t('fields.powerMax')}
                 inputMode="decimal"
                 value={draft.settings.power_max ?? ''}
+                error={errorText('power_max')}
                 onChange={(e) => setSetting('power_max', e.target.value)}
               />
               <Input
                 label={t('fields.powerMin')}
                 inputMode="decimal"
                 value={draft.settings.power_min ?? ''}
+                error={errorText('power_min')}
                 onChange={(e) => setSetting('power_min', e.target.value)}
               />
             </div>
@@ -196,6 +206,7 @@ export function AlarmDialogView({
             label={t('notification.frequency')}
             inputMode="numeric"
             value={draft.frequencyValue}
+            error={errorText('frequencyValue')}
             onChange={(e) => onDraftChange({ ...draft, frequencyValue: e.target.value })}
           />
           <Select

@@ -10,10 +10,11 @@ const draft = (over: Partial<AlarmDraft> = {}): AlarmDraft => ({
   ...emptyDraft(), name: 'Kural', analyzerIds: ['a-1'], ...over,
 });
 
-const view = (over: Partial<AlarmDraft> = {}, onDraftChange = vi.fn()) =>
+const view = (over: Partial<AlarmDraft> = {}, onDraftChange = vi.fn(), serverErrors: Record<string, string> = {}) =>
   renderWithProviders(
     <AlarmDialogView
       open
+      serverErrors={serverErrors}
       draft={draft(over)}
       analyzers={demoAnalyzers}
       onDraftChange={onDraftChange}
@@ -85,5 +86,14 @@ describe('AlarmDialogView', () => {
   it('enables saving once the rule is complete', () => {
     const r = view({ type: 'data_communication', settings: { communication_threshold_hours: '6' } });
     expect(r.getByRole('button', { name: 'Kaydet' })).toBeEnabled();
+  });
+
+  it('shows the API’s field errors next to the fields they name', () => {
+    const r = view({ type: 'current_voltage_power', settings: { power_max: '10' } }, vi.fn(), {
+      'settings.power_max': 'Aralık dışında',
+      name: 'Çok uzun',
+    });
+    expect(r.getByLabelText(/Güç Maks/)).toHaveAccessibleDescription('Aralık dışında');
+    expect(r.getByRole('textbox', { name: /^Ad/ })).toHaveAccessibleDescription('Çok uzun');
   });
 });

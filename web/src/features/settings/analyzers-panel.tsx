@@ -79,7 +79,11 @@ export function AnalyzersPanel() {
 
       <Dialog
         open={assigning !== null}
-        onOpenChange={(open) => !open && setAssigning(null)}
+        onOpenChange={(open) => {
+          if (open) return;
+          setAssigning(null);
+          update.clearFieldErrors();
+        }}
         title={t('assignTitle')}
         footer={
           <Button
@@ -101,6 +105,7 @@ export function AnalyzersPanel() {
             label={t('building')}
             options={(buildings.data?.items ?? []).map((b) => ({ value: b.id, label: b.name }))}
             value={assigning.buildingId}
+            error={update.fieldErrors.building_id ?? update.fieldErrors.unassign_building}
             placeholder={t('unassign')}
             onValueChange={(buildingId) => setAssigning({ ...assigning, buildingId })}
           />

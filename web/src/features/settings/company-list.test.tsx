@@ -1,3 +1,4 @@
+import { act, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { Company } from '@/lib/api/types';
@@ -54,7 +55,11 @@ describe('CompanyListView', () => {
     await r.user.click(r.getByRole('button', { name: 'Şirket ekle' }));
     await r.user.type(await r.findByLabelText(/Şirket adı/), 'Yeni Müşteri');
     await r.user.click(r.getByRole('button', { name: 'Kaydet' }));
-    expect(onCreate).toHaveBeenCalledWith({ name: 'Yeni Müşteri' });
+    expect(onCreate).toHaveBeenCalledWith({ name: 'Yeni Müşteri' }, expect.any(Function));
+    // A refused create keeps the dialog (and its marked fields) open; only success closes it.
+    expect(r.getByRole('dialog')).toBeInTheDocument();
+    act(() => onCreate.mock.calls[0]![1]());
+    await waitFor(() => expect(r.queryByRole('dialog')).toBeNull());
 
     // The own company's delete is disabled, so the second row is the one that asks.
     await r.user.click(r.getAllByRole('button', { name: 'Sil' })[1]);

@@ -14,6 +14,7 @@ import { Select } from '@/components/ui/select';
 import { Tabs } from '@/components/ui/tabs';
 import { ScopePicker } from '@/features/scope/scope-picker';
 import type { Locale } from '@/i18n/locale';
+import { useFailureToast } from '@/lib/api/mutation';
 import { errorCodeOf, fieldErrors } from '@/lib/api/problem';
 import { $api } from '@/lib/api/query';
 import type { Translator } from '@/lib/api/types';
@@ -35,12 +36,18 @@ const IDLE: Outcome = { forecast: null, unavailable: false, errors: {} };
 /** One forecast call's life: result, unavailability (503) and field errors (422). */
 function useOutcome() {
   const forms = useTranslations('forms') as unknown as Translator;
+  const failed = useFailureToast();
   const [outcome, setOutcome] = useState<Outcome>(IDLE);
   return {
     outcome,
     handlers: {
       onSuccess: (res: Forecast | undefined) => setOutcome({ ...IDLE, forecast: res ?? null }),
-      onError: (err: unknown) => setOutcome({ forecast: null, unavailable: errorCodeOf(err) === 'forecast_unavailable', errors: fieldErrors(err, forms) }),
+      onError: (err: unknown) => {
+        const next = { forecast: null, unavailable: errorCodeOf(err) === 'forecast_unavailable', errors: fieldErrors(err, forms) };
+        setOutcome(next);
+        // Unavailability and field errors render in place; anything else used to fail silently.
+        if (!next.unavailable && Object.keys(next.errors).length === 0) failed(err);
+      },
     },
     reset: () => setOutcome(IDLE),
   };
@@ -69,6 +76,7 @@ export function AiPage() {
   const weekly = $api.useMutation('post', '/api/v1/forecast/weekly');
   const monthly = $api.useMutation('post', '/api/v1/forecast/monthly');
   const anomaly = $api.useMutation('post', '/api/v1/anomaly/check');
+  const failed = useFailureToast();
 
   const [day, setDay] = useState<string | null>(addDays(today, 1));
   const nextMonday = addDays(startOfWeek(today), 7);
@@ -185,7 +193,12 @@ export function AiPage() {
                 const ts = `${checkDay}T${String(checkHour).padStart(2, '0')}:00:00+03:00`;
                 anomaly.mutate({ params: { query: scope }, body: { ...body, ts, ...(actual ? { actual } : {}) } }, {
                   onSuccess: (res) => { setVerdict(res ?? null); setCheckErrors({}); },
-                  onError: (err) => { setVerdict(null); setCheckErrors(fieldErrors(err, forms)); },
+                  onError: (err) => {
+                    const errors = fieldErrors(err, forms);
+                    setVerdict(null);
+                    setCheckErrors(errors);
+                    if (Object.keys(errors).length === 0) failed(err);
+                  },
                 });
               }}>
               {t('anomaly.check')}

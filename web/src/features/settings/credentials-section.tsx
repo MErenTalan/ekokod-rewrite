@@ -34,15 +34,18 @@ export type CredentialsSectionViewProps = {
   buildings: Building[];
   /** Creating a credential needs the definition catalogue, which only admins read (R201). */
   canCreate: boolean;
-  onSave: (draft: CredentialDraft) => void;
+  /** `done` closes the dialog: only a successful save closes it, so a refusal stays readable (R199). */
+  onSave: (draft: CredentialDraft, done: () => void) => void;
   onVerify: (credential: IntegrationCredential) => void;
   onDiscover: (credential: IntegrationCredential) => void;
-  onBackfill: (credential: IntegrationCredential, range: BackfillRange) => void;
+  onBackfill: (credential: IntegrationCredential, range: BackfillRange, done: () => void) => void;
   onDelete: (credential: IntegrationCredential) => void;
   onConnectIsolar: (credential: IntegrationCredential) => void;
   job?: JobView | null;
   onDismissJob?: () => void;
   fieldErrors?: Record<string, string>;
+  /** The API's field errors for the last history pull (from / to). */
+  backfillErrors?: Record<string, string>;
   saving?: boolean;
   loading?: boolean;
   today: string;
@@ -63,6 +66,7 @@ export function CredentialsSectionView({
   job = null,
   onDismissJob,
   fieldErrors = {},
+  backfillErrors = {},
   saving = false,
   loading = false,
   today,
@@ -165,8 +169,7 @@ export function CredentialsSectionView({
           <Button
             loading={saving}
             onClick={() => {
-              if (draft) onSave(draft);
-              setDraft(null);
+              if (draft) onSave(draft, () => setDraft(null));
             }}
           >
             {common('save')}
@@ -192,8 +195,7 @@ export function CredentialsSectionView({
         footer={
           <Button
             onClick={() => {
-              if (backfill) onBackfill(backfill.credential, backfill.range);
-              setBackfill(null);
+              if (backfill) onBackfill(backfill.credential, backfill.range, () => setBackfill(null));
             }}
           >
             {t('backfill')}
@@ -205,6 +207,7 @@ export function CredentialsSectionView({
             <DatePicker
               label={t('backfillFrom')}
               value={backfill.range.from}
+              error={backfillErrors.from}
               max={today}
               onValueChange={(from) =>
                 setBackfill({ ...backfill, range: { ...backfill.range, from: from ?? today } })
@@ -213,6 +216,7 @@ export function CredentialsSectionView({
             <DatePicker
               label={t('backfillTo')}
               value={backfill.range.to}
+              error={backfillErrors.to}
               max={today}
               onValueChange={(to) =>
                 setBackfill({ ...backfill, range: { ...backfill.range, to: to ?? today } })

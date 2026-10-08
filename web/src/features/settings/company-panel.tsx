@@ -96,11 +96,12 @@ export function CompanyPanel() {
       loading={credentialList.isLoading}
       saving={saveCredential.isPending}
       fieldErrors={saveCredential.fieldErrors}
+      backfillErrors={backfill.fieldErrors}
       today={today}
       job={job}
       onDismissJob={() => setStartedJob(null)}
-      onSave={(draft: CredentialDraft) =>
-        saveCredential.mutate({ params: { query: scope }, body: toCredentialRequest(draft) })
+      onSave={(draft: CredentialDraft, done) =>
+        saveCredential.mutate({ params: { query: scope }, body: toCredentialRequest(draft) }, { onSuccess: done })
       }
       onVerify={(credential) =>
         verify.mutate({ params: { path: { id: credential.id }, query: scope } })
@@ -117,7 +118,7 @@ export function CompanyPanel() {
           },
         )
       }
-      onBackfill={(credential, range) =>
+      onBackfill={(credential, range, done) =>
         backfill.mutate(
           {
             params: { path: { id: credential.id }, query: scope }, // The end day is inclusive; the server clamps a `to` past now.
@@ -127,11 +128,13 @@ export function CompanyPanel() {
             },
           },
           {
-            onSuccess: (data) =>
+            onSuccess: (data) => {
+              done();
               setStartedJob({
                 id: (data as { job_id: string }).job_id,
                 label: credentials('backfill'),
-              }),
+              });
+            },
           },
         )
       }
@@ -172,7 +175,8 @@ export function CompanyPanel() {
           saving={createCompany.isPending}
           onLoadMore={() => setCursor(companies.data?.next_cursor ?? undefined)}
           onActAs={(id) => set({ companyId: id })}
-          onCreate={(values) => createCompany.mutate({ body: values })}
+          onCreate={(values, done) => createCompany.mutate({ body: values }, { onSuccess: done })}
+          fieldErrors={createCompany.fieldErrors}
           onDelete={(target) => deleteCompany.mutate({ params: { path: { id: target.id } } })}
         />
       ) : null}
