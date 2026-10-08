@@ -97,6 +97,7 @@ export function CredentialFormView({ definitions, buildings, value, onChange, mo
       {mode === 'create' ? (
         <Select
           label={t('definition')}
+          error={fieldErrors.subtype ?? fieldErrors.provider}
           required
           options={definitions.map((d) => ({ value: `${d.provider}|${d.subtype}`, label: `${d.provider} · ${d.subtype}` }))}
           value={value.subtype ? `${value.provider}|${value.subtype}` : null}
@@ -110,15 +111,15 @@ export function CredentialFormView({ definitions, buildings, value, onChange, mo
 
       {value.provider === 'isolar' ? (
         <>
-          <Input label={t('appKey')} required={mode === 'create'} value={value.appKey} onChange={(e) => set({ appKey: e.target.value })} />
-          <Input label={t('secretKey')} required={mode === 'create'} type="password" autoComplete="off" value={value.secretKey} onChange={(e) => set({ secretKey: e.target.value })} />
-          <Input label={t('appId')} required={mode === 'create'} value={value.appId} onChange={(e) => set({ appId: e.target.value })} />
-          <Input label={t('region')} value={value.isolarRegion} onChange={(e) => set({ isolarRegion: e.target.value })} />
+          <Input label={t('appKey')} error={fieldErrors['extra.app_key'] ?? fieldErrors.app_key} required={mode === 'create'} value={value.appKey} onChange={(e) => set({ appKey: e.target.value })} />
+          <Input label={t('secretKey')} error={fieldErrors['extra.secret_key'] ?? fieldErrors.secret_key} required={mode === 'create'} type="password" autoComplete="off" value={value.secretKey} onChange={(e) => set({ secretKey: e.target.value })} />
+          <Input label={t('appId')} error={fieldErrors['extra.app_id'] ?? fieldErrors.app_id} required={mode === 'create'} value={value.appId} onChange={(e) => set({ appId: e.target.value })} />
+          <Input label={t('region')} error={fieldErrors.isolar_region} value={value.isolarRegion} onChange={(e) => set({ isolarRegion: e.target.value })} />
         </>
       ) : value.provider === 'pm5340' ? (
         <>
           <Input label={t('pm5340Url')} required value={value.pm5340Url} error={fieldErrors.pm5340_url} onChange={(e) => set({ pm5340Url: e.target.value })} />
-          <Input label={t('installationNumber')} value={value.installationNumber} onChange={(e) => set({ installationNumber: e.target.value })} />
+          <Input label={t('installationNumber')} error={fieldErrors.installation_number} value={value.installationNumber} onChange={(e) => set({ installationNumber: e.target.value })} />
         </>
       ) : (
         <>

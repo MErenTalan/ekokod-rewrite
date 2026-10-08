@@ -14,14 +14,17 @@ import type { SMTPPutRequest, SMTPSettings } from '@/lib/api/types';
 export type SmtpTabViewProps = {
   settings: SMTPSettings | null;
   onSave: (values: SMTPPutRequest) => void;
-  onTest: (to: string) => void;
+  /** `done` closes the test dialog once the mail went out; a failure keeps it open. */
+  onTest: (to: string, done: () => void) => void;
   fieldErrors?: Record<string, string>;
+  /** The API's field errors for the last test send. */
+  testErrors?: Record<string, string>;
   saving?: boolean;
   testing?: boolean;
 };
 
 /** Per-company outbound mail (01 §7.15, R172): the password is write-only. */
-export function SmtpTabView({ settings, onSave, onTest, fieldErrors = {}, saving = false, testing = false }: SmtpTabViewProps) {
+export function SmtpTabView({ settings, onSave, onTest, fieldErrors = {}, testErrors = {}, saving = false, testing = false }: SmtpTabViewProps) {
   const t = useTranslations('settings.smtp');
   const common = useTranslations('common');
   const [values, setValues] = useState({
@@ -90,15 +93,14 @@ export function SmtpTabView({ settings, onSave, onTest, fieldErrors = {}, saving
           <Button
             loading={testing}
             onClick={() => {
-              onTest(testTo);
-              setTestOpen(false);
+              onTest(testTo, () => setTestOpen(false));
             }}
           >
             {t('test')}
           </Button>
         }
       >
-        <Input label={t('testTo')} type="email" value={testTo} onChange={(e) => setTestTo(e.target.value)} required />
+        <Input label={t('testTo')} type="email" value={testTo} error={testErrors.to} onChange={(e) => setTestTo(e.target.value)} required />
       </Dialog>
     </Card>
   );

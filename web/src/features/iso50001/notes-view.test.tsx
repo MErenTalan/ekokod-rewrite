@@ -18,7 +18,9 @@ describe('NotesView', () => {
     await r.user.type(r.getByRole('textbox', { name: 'Başlık' }), 'Politika');
     await r.user.type(r.getByRole('textbox', { name: /^Not/ }), 'Yayımlandı');
     await r.user.click(r.getByRole('button', { name: 'Notu Listeye Ekle' }));
-    expect(props.onAdd).toHaveBeenCalledWith({ title: 'Politika', body: 'Yayımlandı' });
+    expect(props.onAdd).toHaveBeenCalledWith({ title: 'Politika', body: 'Yayımlandı' }, expect.any(Function));
+    // The text stays until the save succeeds, so a refusal does not lose it.
+    expect(r.getByLabelText(/Not/i, { selector: 'textarea' })).toHaveValue('Yayımlandı');
   });
 
   it('edits in place, cancels, and updates', async () => {
@@ -28,7 +30,7 @@ describe('NotesView', () => {
     await r.user.clear(body);
     await r.user.type(body, 'Güncel');
     await r.user.click(r.getByRole('button', { name: 'Güncelle' }));
-    expect(props.onUpdate).toHaveBeenCalledWith(expect.objectContaining({ id: 'n-1' }), { title: 'Politika', body: 'Güncel' });
+    expect(props.onUpdate).toHaveBeenCalledWith(expect.objectContaining({ id: 'n-1' }), { title: 'Politika', body: 'Güncel' }, expect.any(Function));
     await r.user.click(r.getAllByRole('button', { name: 'Düzenle' })[0]);
     await r.user.click(r.getByRole('button', { name: 'Vazgeç' }));
     expect(r.queryByRole('button', { name: 'Güncelle' })).toBeNull();

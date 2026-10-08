@@ -156,6 +156,7 @@ export function CalendarPage() {
         periods={vacations.data?.periods ?? []}
         readOnly={!canEdit}
         saving={saveVacations.isPending}
+        fieldErrors={saveVacations.fieldErrors}
         onSave={(values) => {
           saveVacations.mutate({ params: { query: scope }, body: values }, { onSuccess: () => setVacationsOpen(false) });
         }}

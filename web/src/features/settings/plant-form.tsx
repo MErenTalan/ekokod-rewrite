@@ -188,9 +188,10 @@ export function PlantFormView({ value, onChange, devices, fieldErrors = {}, anal
   return (
     <div className="flex flex-col gap-4">
       <Input label={t('name')} value={value.name} error={fieldErrors.name} onChange={(e) => set({ name: e.target.value })} required />
-      <Input label={t('installationNumber')} value={value.installationNumber} onChange={(e) => set({ installationNumber: e.target.value })} />
+      <Input label={t('installationNumber')} error={fieldErrors.installation_number} value={value.installationNumber} onChange={(e) => set({ installationNumber: e.target.value })} />
       <Select
         label={t('kind')}
+        error={fieldErrors.plant_kind}
         options={[
           { value: 'rooftop', label: t('rooftop') },
           { value: 'grid', label: t('grid') },
@@ -206,7 +207,7 @@ export function PlantFormView({ value, onChange, devices, fieldErrors = {}, anal
         value={value.nettingAnalyzerId || NO_ANALYZER}
         onValueChange={(id) => set({ nettingAnalyzerId: id === NO_ANALYZER ? '' : id })}
       />
-      <Input label={t('pvBrandModel')} value={value.pvBrandModel} onChange={(e) => set({ pvBrandModel: e.target.value })} />
+      <Input label={t('pvBrandModel')} error={fieldErrors.pv_brand_model} value={value.pvBrandModel} onChange={(e) => set({ pvBrandModel: e.target.value })} />
       <div className="flex flex-wrap gap-4">
         <NumberInput label={t('panelPower')} value={value.panelPowerW} error={fieldErrors.panel_power_w} onValueChange={(v) => set({ panelPowerW: v ?? '' })} fractionDigits={2} />
         <NumberInput label={t('panelEfficiency')} value={value.panelEfficiencyPct} error={fieldErrors.panel_efficiency_pct} onValueChange={(v) => set({ panelEfficiencyPct: v ?? '' })} fractionDigits={2} />
@@ -216,6 +217,7 @@ export function PlantFormView({ value, onChange, devices, fieldErrors = {}, anal
       <div className="flex flex-wrap gap-4">
         <Select
           label={t('orientation')}
+          error={fieldErrors.orientation}
           options={ORIENTATIONS.map((value) => ({ value, label: t(`orientations.${value}`) }))}
           value={value.orientation || null}
           onValueChange={(orientation) => set({ orientation: orientation as PlantDraft['orientation'] })}
@@ -223,8 +225,8 @@ export function PlantFormView({ value, onChange, devices, fieldErrors = {}, anal
         <NumberInput label={t('tilt')} value={value.tiltAngleDeg} error={fieldErrors.tilt_angle_deg} onValueChange={(v) => set({ tiltAngleDeg: v ?? '' })} fractionDigits={2} />
         <NumberInput label={t('capacity')} value={value.totalCapacityKw} error={fieldErrors.total_capacity_kw} onValueChange={(v) => set({ totalCapacityKw: v ?? '' })} fractionDigits={2} />
       </div>
-      <DatePicker label={t('installationDate')} value={value.installationDate} onValueChange={(date) => set({ installationDate: date })} />
-      <Textarea label={t('address')} value={value.address} rows={2} onChange={(e) => set({ address: e.target.value })} />
+      <DatePicker label={t('installationDate')} error={fieldErrors.installation_date} value={value.installationDate} onValueChange={(date) => set({ installationDate: date })} />
+      <Textarea label={t('address')} error={fieldErrors.address} value={value.address} rows={2} onChange={(e) => set({ address: e.target.value })} />
       <div className="flex flex-wrap gap-4">
         <NumberInput label={t('latitude')} value={value.latitude} error={fieldErrors.latitude} onValueChange={(v) => set({ latitude: v ?? '' })} min="-90" max="90" fractionDigits={6} />
         <NumberInput label={t('longitude')} value={value.longitude} error={fieldErrors.longitude} onValueChange={(v) => set({ longitude: v ?? '' })} min="-180" max="180" fractionDigits={6} />
@@ -238,6 +240,7 @@ export function PlantFormView({ value, onChange, devices, fieldErrors = {}, anal
             <NumberInput
               key={month}
               label={t(`months.${month}`)}
+              error={fieldErrors[`monthly_targets[${index}]`] ?? (index === 0 ? fieldErrors.monthly_targets : undefined)}
               required
               value={value.monthlyTargets[index] ?? ''}
               onValueChange={(v) => set({ monthlyTargets: value.monthlyTargets.map((target, i) => (i === index ? (v ?? '') : target)) })}
@@ -263,6 +266,7 @@ export function PlantFormView({ value, onChange, devices, fieldErrors = {}, anal
           />
           <Select
             label={t('finance.currency')}
+            error={fieldErrors.currency}
             options={CURRENCIES.map((c) => ({ value: c, label: c }))}
             value={value.currency}
             onValueChange={(currency) => set({ currency: currency as Currency })}

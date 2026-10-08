@@ -40,7 +40,8 @@ export type DefinitionDraft = {
 export type IntegrationsTabViewProps = {
   definitions: IntegrationDefinition[];
   endpointKeys?: ProviderEndpointKeys[];
-  onSave: (draft: DefinitionDraft) => void;
+  /** `done` closes the dialog: only a successful save closes it, so a refusal stays readable (R199). */
+  onSave: (draft: DefinitionDraft, done: () => void) => void;
   onDelete: (definition: IntegrationDefinition) => void;
   fieldErrors?: Record<string, string>;
   saving?: boolean;
@@ -181,8 +182,7 @@ export function IntegrationsTabView({
             loading={saving}
             disabled={invalidUrl || draftMissing.length > 0}
             onClick={() => {
-              if (draft) onSave(draft);
-              setDraft(null);
+              if (draft) onSave(draft, () => setDraft(null));
             }}
           >
             {common('save')}
@@ -193,6 +193,7 @@ export function IntegrationsTabView({
           <div className="flex flex-col gap-4">
             <Select
               label={t('provider')}
+              error={fieldErrors.provider}
               options={PROVIDERS.map((value) => ({ value, label: value }))}
               value={draft.provider}
               onValueChange={(provider) =>

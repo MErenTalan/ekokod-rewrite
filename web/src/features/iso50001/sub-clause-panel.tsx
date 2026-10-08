@@ -35,8 +35,10 @@ export function SubClausePanel({ buildingId, clause }: { buildingId: string; cla
         notes={notes.data?.items ?? []}
         editable={editable}
         saving={add.isPending || update.isPending}
-        onAdd={(d) => add.mutate({ ...path, body: { title: orNull(d.title), body: d.body } })}
-        onUpdate={(n, d) => update.mutate({ params: { path: { id: n.id }, query: scope }, body: { clause_id: clause, title: orNull(d.title), body: d.body } })}
+        onAdd={(d, done) => add.mutate({ ...path, body: { title: orNull(d.title), body: d.body } }, { onSuccess: done })}
+        onUpdate={(n, d, done) =>
+          update.mutate({ params: { path: { id: n.id }, query: scope }, body: { clause_id: clause, title: orNull(d.title), body: d.body } }, { onSuccess: done })}
+        fieldErrors={{ ...add.fieldErrors, ...update.fieldErrors }}
         onDelete={(n) => removeNote.mutate({ params: { path: { id: n.id }, query: scope } })}
       />
       <FilesView

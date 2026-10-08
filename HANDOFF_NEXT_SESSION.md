@@ -1,4 +1,16 @@
-# Handoff — ekokod rewrite: F21 audit fixes merged into `main` and deployed
+# Handoff — ekokod rewrite: F23 map and form error fixes on `fix/f23-map-form-errors` (not merged)
+
+> **STATUS (2026-10-08):** branch `fix/f23-map-form-errors` (`/home/personal/ekokod-f23-fixes`, cut from
+> `main` @ 57db26d) fixes the dashboard map (four root causes) and makes every form show the API's field
+> errors with a clearer toast (R515–R523, `docs/superpowers/plans/2026-10-08-f23-map-and-form-errors.md`).
+> **Not merged, not deployed, nothing pushed.** Go `-tags=integration` suites and the Playwright e2e
+> project were not run (Docker unreachable from WSL that session) — run them before merging.
+> Deploy note: the map needs no setting (OpenFreeMap by default); an air-gapped install sets
+> `EKOKOD_MAP_TILE_URL=none` in `.env`. The web image must be rebuilt (the build copies the MapLibre worker).
+
+---
+
+## Previous: F21 audit fixes merged into `main` and deployed
 
 > **STATUS (2026-10-02 17:15):** F21 audited every main feature against the real PM5340 gateway and
 > through the web UI, and fixed what it found (R498–R514 + web fixes). Plan and rulings:

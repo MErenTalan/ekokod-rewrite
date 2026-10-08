@@ -71,6 +71,20 @@ describe('PredictPage', () => {
     expect(r.getByRole('figure', { name: 'Gerçekleşen ve tahmin' })).toBeInTheDocument();
   });
 
+  it('says why a run failed instead of doing nothing', async () => {
+    api = mockApi({
+      ...ROUTES,
+      'POST /api/v1/forecast/run': Response.json(
+        { error: { code: 'internal', message: 'Beklenmeyen bir hata oluştu.', request_id: 'req-7' } },
+        { status: 500 },
+      ),
+    });
+    const r = render();
+    await r.user.click(await r.findByRole('button', { name: 'Tahmin et' }));
+    expect(await r.findByText('Beklenmeyen bir hata oluştu.')).toBeInTheDocument();
+    expect(r.getByText(/şu kodu iletin: req-7/)).toBeInTheDocument();
+  });
+
   it('offers read-only roles the stored forecast only', async () => {
     api = mockApi(ROUTES);
     const r = render('company_readonly_admin');

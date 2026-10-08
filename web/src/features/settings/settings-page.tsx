@@ -116,7 +116,8 @@ export function SettingsPage({ slots }: { slots?: Partial<Record<SettingsTabId, 
         saving={saveSmtp.isPending}
         testing={testSmtp.isPending}
         onSave={(values) => saveSmtp.mutate({ params: { query: scope }, body: values })}
-        onTest={(to) => testSmtp.mutate({ params: { query: scope }, body: { to } })}
+        onTest={(to, done) => testSmtp.mutate({ params: { query: scope }, body: { to } }, { onSuccess: done })}
+        testErrors={testSmtp.fieldErrors}
       />
     ),
     integrations: (
@@ -126,12 +127,12 @@ export function SettingsPage({ slots }: { slots?: Partial<Record<SettingsTabId, 
         loading={definitions.isLoading}
         saving={createDefinition.isPending || updateDefinition.isPending}
         fieldErrors={{ ...createDefinition.fieldErrors, ...updateDefinition.fieldErrors }}
-        onSave={(draft) => {
+        onSave={(draft, done) => {
           const endpoints = Object.fromEntries(draft.endpoints.filter((e) => e.url).map((e) => [e.key, e.url]));
           if (draft.id) {
-            updateDefinition.mutate({ params: { path: { id: draft.id } }, body: { subtype: draft.subtype, endpoints } });
+            updateDefinition.mutate({ params: { path: { id: draft.id } }, body: { subtype: draft.subtype, endpoints } }, { onSuccess: done });
           } else {
-            createDefinition.mutate({ body: { provider: draft.provider, subtype: draft.subtype, endpoints } });
+            createDefinition.mutate({ body: { provider: draft.provider, subtype: draft.subtype, endpoints } }, { onSuccess: done });
           }
         }}
         onDelete={(definition) => deleteDefinition.mutate({ params: { path: { id: definition.id } } })}

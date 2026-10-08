@@ -59,6 +59,7 @@ export function TariffFormView({
     out_of_range: forms('errors.outOfRange'),
     duplicate: forms('errors.duplicate'),
     invalid: forms('errors.invalid'),
+    decimal: forms('errors.decimal'),
   };
   // The server's own message wins: it answered about the data that was sent.
   const errorText = (field: string) => serverErrors[field] ?? (errors[field] ? codeMessages[errors[field]] ?? codeMessages.invalid : undefined);
@@ -120,22 +121,22 @@ export function TariffFormView({
       <section className="flex flex-col gap-4">
         <h3 className="type-h3">{t('sections.classification')}</h3>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Select label={t('fields.energyType')} required disabled={readOnly} value={draft.energyType}
+          <Select label={t('fields.energyType')} required disabled={readOnly} value={draft.energyType} error={errorText('energy_type')}
             options={options(ENERGY_TYPES, 'energyType')}
             onValueChange={(value) => set({ energyType: value as TariffDraft['energyType'] })} />
-          <Select label={t('fields.voltageLevel')} required disabled={readOnly} value={draft.voltageLevel}
+          <Select label={t('fields.voltageLevel')} required disabled={readOnly} value={draft.voltageLevel} error={errorText('voltage_level')}
             options={options(VOLTAGE_LEVELS, 'voltageLevel')}
             onValueChange={(value) => set({ voltageLevel: value as TariffDraft['voltageLevel'] })} />
-          <Select label={t('fields.userGroup')} required disabled={readOnly} value={draft.userGroup}
+          <Select label={t('fields.userGroup')} required disabled={readOnly} value={draft.userGroup} error={errorText('user_group')}
             options={options(USER_GROUPS, 'userGroup')}
             onValueChange={(value) => set({ userGroup: value as TariffDraft['userGroup'] })} />
-          <Select label={t('fields.supplyCompany')} required disabled={readOnly} value={draft.supplyCompany}
+          <Select label={t('fields.supplyCompany')} required disabled={readOnly} value={draft.supplyCompany} error={errorText('supply_company')}
             options={options(SUPPLY_COMPANIES, 'supplyCompany')}
             onValueChange={(value) => set({ supplyCompany: value as TariffDraft['supplyCompany'] })} />
-          <Select label={t('fields.priceType')} required disabled={readOnly} value={draft.priceType}
+          <Select label={t('fields.priceType')} required disabled={readOnly} value={draft.priceType} error={errorText('price_type')}
             options={options(PRICE_TYPES, 'priceType')}
             onValueChange={(value) => mode({ priceType: value as TariffDraft['priceType'] })} />
-          <Select label={t('fields.term')} required disabled={readOnly} value={draft.term}
+          <Select label={t('fields.term')} required disabled={readOnly} value={draft.term} error={errorText('term')}
             options={options(TERMS, 'term')}
             onValueChange={(value) => mode({ term: value as TariffDraft['term'] })} />
         </div>
@@ -160,11 +161,11 @@ export function TariffFormView({
                 {price('kbkT3', 'fields.kbkT3', true)}
               </>
             ) : null}
-            <Select label={t('fields.distributionPriceSource')} disabled={readOnly} value={draft.distributionPriceSource}
+            <Select label={t('fields.distributionPriceSource')} disabled={readOnly} value={draft.distributionPriceSource} error={errorText('distribution_price_source')}
               options={options(PRICE_SOURCES, 'priceSource')}
               onValueChange={(value) => set({ distributionPriceSource: value as 'kbk' | 'fixed' })} />
             {draft.distributionPriceSource === 'kbk' ? price('kbkDistributionCostTlPerKwh', 'fields.kbkDistributionCost', true) : null}
-            <Select label={t('fields.reactivePriceSource')} disabled={readOnly} value={draft.reactivePriceSource}
+            <Select label={t('fields.reactivePriceSource')} disabled={readOnly} value={draft.reactivePriceSource} error={errorText('reactive_price_source')}
               options={options(PRICE_SOURCES, 'priceSource')}
               onValueChange={(value) => set({ reactivePriceSource: value as 'kbk' | 'fixed' })} />
             {draft.reactivePriceSource === 'kbk' ? price('kbkReactivePower', 'fields.kbkReactivePower', true) : null}
@@ -181,12 +182,12 @@ export function TariffFormView({
           <div className="flex flex-col gap-3">
             {draft.manualYekdem.map((row, i) => (
               <div key={i} className="grid items-end gap-3 sm:grid-cols-4">
-                <Input label={t('fields.year')} inputMode="numeric" disabled={readOnly} value={row.year}
+                <Input label={t('fields.year')} inputMode="numeric" disabled={readOnly} value={row.year} error={errorText(`manual_yekdem[${i}].year`)}
                   onChange={(e) => set({ manualYekdem: replace(draft.manualYekdem, i, { ...row, year: e.target.value }) })} />
                 <Input label={t('fields.month')} inputMode="numeric" disabled={readOnly} value={row.month}
                   error={errorText(`manual_yekdem[${i}].month`) ?? errorText(`manual_yekdem[${i}]`)}
                   onChange={(e) => set({ manualYekdem: replace(draft.manualYekdem, i, { ...row, month: e.target.value }) })} />
-                <Input label={t('fields.value')} inputMode="decimal" disabled={readOnly} value={row.value}
+                <Input label={t('fields.value')} inputMode="decimal" disabled={readOnly} value={row.value} error={errorText(`manual_yekdem[${i}].value`)}
                   onChange={(e) => set({ manualYekdem: replace(draft.manualYekdem, i, { ...row, value: e.target.value }) })} />
                 {readOnly ? null : (
                   <Button variant="ghost" onClick={() => set({ manualYekdem: remove(draft.manualYekdem, i) })}>{t('remove')}</Button>
@@ -228,7 +229,7 @@ export function TariffFormView({
           <h3 className="type-h3">{t('sections.power')}</h3>
           <div className="grid gap-4 sm:grid-cols-2">
             {price('contractedPowerKw', 'fields.contractedPowerKw', true)}
-            <Select label={t('fields.powerPriceSource')} disabled={readOnly} value={draft.powerPriceSource}
+            <Select label={t('fields.powerPriceSource')} disabled={readOnly} value={draft.powerPriceSource} error={errorText('power_price_source')}
               options={options(PRICE_SOURCES, 'priceSource')}
               onValueChange={(value) => set({ powerPriceSource: value as 'kbk' | 'fixed' })} />
             {ptf && draft.powerPriceSource === 'kbk'
@@ -241,7 +242,7 @@ export function TariffFormView({
       <section className="flex flex-col gap-4">
         <h3 className="type-h3">{t('sections.generation')}</h3>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Select label={t('fields.generationUsage')} required disabled={readOnly} value={draft.generationUsage}
+          <Select label={t('fields.generationUsage')} required disabled={readOnly} value={draft.generationUsage} error={errorText('generation_usage')}
             options={options(GENERATION_USAGES, 'generationUsage')}
             onValueChange={(value) => set({ generationUsage: value as TariffDraft['generationUsage'] })} />
           {draft.generationUsage === 'subtract_from_total' ? price('generationPricePerKwh', 'fields.generationPricePerKwh', true) : null}

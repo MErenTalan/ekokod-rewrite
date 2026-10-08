@@ -11,6 +11,7 @@ import { Select } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableContainer, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { Locale } from '@/i18n/locale';
+import { isDecimalText, toDecimalString } from '@/lib/decimal';
 import { formatDate } from '@/lib/format';
 import type { NationalTariff } from '@/lib/api/types';
 
@@ -22,9 +23,13 @@ export type NationalTariffDraft = NationalTariffFields;
 
 export type DefaultsTabViewProps = {
   entries: NationalTariff[];
-  onPublish: (draft: NationalTariffDraft) => void;
+  /** `done` closes the dialog: only a saved row closes it, so a refusal stays readable (R199). */
+  onPublish: (draft: NationalTariffDraft, done: () => void) => void;
   onDelete: (id: string) => void;
   loading?: boolean;
+  /** The API's field errors for the last publish. */
+  fieldErrors?: Record<string, string>;
+  saving?: boolean;
 };
 
 const USER_GROUPS = [
@@ -33,6 +38,31 @@ const USER_GROUPS = [
 ] as const;
 const VOLTAGE_LEVELS = ['lv', 'mv'] as const;
 const TERMS = ['monomial', 'binomial'] as const;
+
+const REQUIRED = ['effective_from', 'energy_price', 'distribution_price', 'vat_rate'] as const;
+const DECIMALS = ['energy_price', 'distribution_price', 'vat_rate', 'power_price', 'overuse_price', 'daily_threshold_kwh'] as const;
+
+/** Field → code the API would answer, checked before the request. */
+function localErrors(draft: NationalTariffDraft): Record<string, string> {
+  const errors: Record<string, string> = {};
+  for (const key of REQUIRED) if (!String(draft[key] ?? '').trim()) errors[key] = 'required';
+  for (const key of DECIMALS) {
+    const value = String(draft[key] ?? '').trim();
+    if (value && !isDecimalText(value)) errors[key] = 'decimal';
+  }
+  return errors;
+}
+
+/** Decimals with a point, blank optionals left out (a cleared field is not ""). */
+function toRequest(draft: NationalTariffDraft): NationalTariffDraft {
+  const body: Record<string, unknown> = { ...draft };
+  for (const key of [...DECIMALS, 'source'] as const) {
+    const value = String(draft[key] ?? '').trim();
+    if (!value) delete body[key];
+    else body[key] = key === 'source' ? value : toDecimalString(value);
+  }
+  return body as NationalTariffDraft;
+}
 
 const emptyDraft = (): NationalTariffDraft => ({
   effective_from: '', user_group: 'commercial', voltage_level: 'lv', term: 'monomial',
@@ -44,17 +74,21 @@ const emptyDraft = (): NationalTariffDraft => ({
  * (R243): the same catalogue the public bill calculator will read, which is
  * why publishing the same key edits the row rather than adding another.
  */
-export function DefaultsTabView({ entries, onPublish, onDelete, loading = false }: DefaultsTabViewProps) {
+export function DefaultsTabView({ entries, onPublish, onDelete, loading = false, fieldErrors = {}, saving = false }: DefaultsTabViewProps) {
   const t = useTranslations('tariffs');
   const common = useTranslations('common');
+  const forms = useTranslations('forms');
   const locale = useLocale() as Locale;
   const [open, setOpen] = useState(false);
+  const [attempted, setAttempted] = useState(false);
   const [draft, setDraft] = useState<NationalTariffDraft>(emptyDraft());
+  const local = attempted ? localErrors(draft) : {};
+  const error = (key: string) => fieldErrors[key] ?? (local[key] ? forms(`errors.${local[key]}` as never) : undefined);
 
   const submit = () => {
-    if (!draft.effective_from || !draft.energy_price || !draft.distribution_price || !draft.vat_rate) return;
-    onPublish(draft);
-    setOpen(false);
+    setAttempted(true);
+    if (Object.keys(localErrors(draft)).length > 0) return;
+    onPublish(toRequest(draft), () => setOpen(false));
   };
 
   return (
@@ -67,6 +101,7 @@ export function DefaultsTabView({ entries, onPublish, onDelete, loading = false 
         <Button
           onClick={() => {
             setDraft(emptyDraft());
+            setAttempted(false);
             setOpen(true);
           }}
         >
@@ -125,7 +160,7 @@ export function DefaultsTabView({ entries, onPublish, onDelete, loading = false 
         footer={
           <>
             <Button variant="ghost" onClick={() => setOpen(false)}>{common('cancel')}</Button>
-            <Button onClick={submit}>{common('save')}</Button>
+            <Button loading={saving} onClick={submit}>{common('save')}</Button>
           </>
         }
       >
@@ -135,12 +170,14 @@ export function DefaultsTabView({ entries, onPublish, onDelete, loading = false 
             required
             type="date"
             value={draft.effective_from}
+            error={error('effective_from')}
             onChange={(e) => setDraft({ ...draft, effective_from: e.target.value })}
           />
           <Select
             label={t('fields.userGroup')}
             required
             value={draft.user_group}
+            error={error('user_group')}
             options={USER_GROUPS.map((g) => ({ value: g, label: t(`options.userGroup.${optionKey(g)}` as never) }))}
             onValueChange={(user_group) => setDraft({ ...draft, user_group: user_group as NationalTariffDraft['user_group'] })}
           />
@@ -148,6 +185,7 @@ export function DefaultsTabView({ entries, onPublish, onDelete, loading = false 
             label={t('fields.voltageLevel')}
             required
             value={draft.voltage_level}
+            error={error('voltage_level')}
             options={VOLTAGE_LEVELS.map((v) => ({ value: v, label: t(`options.voltageLevel.${optionKey(v)}` as never) }))}
             onValueChange={(voltage_level) => setDraft({ ...draft, voltage_level: voltage_level as NationalTariffDraft['voltage_level'] })}
           />
@@ -155,6 +193,7 @@ export function DefaultsTabView({ entries, onPublish, onDelete, loading = false 
             label={t('fields.term')}
             required
             value={draft.term}
+            error={error('term')}
             options={TERMS.map((term) => ({ value: term, label: t(`options.term.${optionKey(term)}` as never) }))}
             onValueChange={(term) => setDraft({ ...draft, term: term as NationalTariffDraft['term'] })}
           />
@@ -163,6 +202,7 @@ export function DefaultsTabView({ entries, onPublish, onDelete, loading = false 
             required
             inputMode="decimal"
             value={draft.energy_price}
+            error={error('energy_price')}
             onChange={(e) => setDraft({ ...draft, energy_price: e.target.value })}
           />
           <Input
@@ -170,6 +210,7 @@ export function DefaultsTabView({ entries, onPublish, onDelete, loading = false 
             required
             inputMode="decimal"
             value={draft.distribution_price}
+            error={error('distribution_price')}
             onChange={(e) => setDraft({ ...draft, distribution_price: e.target.value })}
           />
           <Input
@@ -177,29 +218,34 @@ export function DefaultsTabView({ entries, onPublish, onDelete, loading = false 
             required
             inputMode="decimal"
             value={draft.vat_rate}
+            error={error('vat_rate')}
             onChange={(e) => setDraft({ ...draft, vat_rate: e.target.value })}
           />
           <Input
             label={t('defaults.powerPrice')}
             inputMode="decimal"
             value={draft.power_price ?? ''}
+            error={error('power_price')}
             onChange={(e) => setDraft({ ...draft, power_price: e.target.value })}
           />
           <Input
             label={t('defaults.overusePrice')}
             inputMode="decimal"
             value={draft.overuse_price ?? ''}
+            error={error('overuse_price')}
             onChange={(e) => setDraft({ ...draft, overuse_price: e.target.value })}
           />
           <Input
             label={t('defaults.dailyThreshold')}
             inputMode="decimal"
             value={draft.daily_threshold_kwh ?? ''}
+            error={error('daily_threshold_kwh')}
             onChange={(e) => setDraft({ ...draft, daily_threshold_kwh: e.target.value })}
           />
           <Input
             label={t('defaults.source')}
             value={draft.source ?? ''}
+            error={error('source')}
             onChange={(e) => setDraft({ ...draft, source: e.target.value })}
           />
         </div>

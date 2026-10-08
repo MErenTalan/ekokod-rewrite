@@ -1,4 +1,5 @@
 import type { Tariff, TariffFields } from '@/lib/api/types';
+import { isDecimalText, toDecimalString } from '@/lib/decimal';
 
 /** The §7.11 form's own state. Every price is a string end to end (R248): no
  *  price passes through a float on its way to an invoice. */
@@ -160,6 +161,19 @@ export function applyMode(draft: TariffDraft, change: ModeChange): TariffDraft {
 
 const filled = (v: string) => v.trim().length > 0;
 
+/** Every free-text price on the form, by API name. */
+const DECIMAL_FIELDS = [
+  ['single_time_price', 'singleTimePrice'], ['t1_price', 't1Price'], ['t2_price', 't2Price'], ['t3_price', 't3Price'],
+  ['overuse_price', 'overusePrice'], ['overuse_threshold_kwh_per_day', 'overuseThresholdKwhPerDay'],
+  ['distribution_cost', 'distributionCost'], ['reactive_power_price', 'reactivePowerPrice'],
+  ['green_energy_price', 'greenEnergyPrice'], ['green_energy_distribution_cost', 'greenEnergyDistributionCost'],
+  ['contracted_power_kw', 'contractedPowerKw'], ['power_unit_price', 'powerUnitPrice'],
+  ['generation_price_per_kwh', 'generationPricePerKwh'], ['vat_rate', 'vatRate'], ['kbk_energy', 'kbkEnergy'],
+  ['kbk_t1', 'kbkT1'], ['kbk_t2', 'kbkT2'], ['kbk_t3', 'kbkT3'], ['kbk_power_price', 'kbkPowerPrice'],
+  ['kbk_overuse_price', 'kbkOverusePrice'], ['kbk_reactive_power', 'kbkReactivePower'],
+  ['kbk_distribution_cost_tl_per_kwh', 'kbkDistributionCostTlPerKwh'],
+] as const satisfies readonly (readonly [string, keyof TariffDraft])[];
+
 /** The 422 the server would answer, checked here first: field → code, using
  *  the API's own field names and codes so one message table serves both. */
 export function draftErrors(draft: TariffDraft): Record<string, string> {
@@ -216,6 +230,15 @@ export function draftErrors(draft: TariffDraft): Record<string, string> {
       if (charge.basis === 'per_contracted_kw' && !filled(draft.contractedPowerKw)) errors[`extra_charges[${i}].basis`] = 'required';
     }
   });
+  // A typed number the API could not read: checked last, so it wins over 'required'.
+  const decimal = (field: string, value: string) => {
+    if (filled(value) && !isDecimalText(value)) errors[field] = 'decimal';
+  };
+  for (const [field, key] of DECIMAL_FIELDS) decimal(field, draft[key]);
+  draft.taxes.forEach((tax, i) => decimal(`taxes[${i}].rate`, tax.rate));
+  draft.extraCharges.forEach((charge, i) => decimal(`extra_charges[${i}].amount`, charge.amount));
+  draft.manualYekdem.forEach((row, i) => decimal(`manual_yekdem[${i}].value`, row.value));
+
   const seen = new Set<string>();
   draft.manualYekdem.forEach((row, i) => {
     const month = Number(row.month);
@@ -245,32 +268,27 @@ export function toTariffRequest(draft: TariffDraft): TariffFields {
     power_price_source: draft.powerPriceSource,
     reactive_price_source: draft.reactivePriceSource,
     distribution_price_source: draft.distributionPriceSource,
-    taxes: draft.taxes.filter((t) => filled(t.name) || filled(t.rate)).map((t) => ({ name: t.name, rate: t.rate })),
+    taxes: draft.taxes.filter((t) => filled(t.name) || filled(t.rate)).map((t) => ({ name: t.name, rate: toDecimalString(t.rate) })),
     extra_charges: draft.extraCharges
       .filter((c) => filled(c.name) || filled(c.amount))
-      .map((c) => ({ name: c.name, basis: c.basis, amount: c.amount })),
+      .map((c) => ({ name: c.name, basis: c.basis, amount: toDecimalString(c.amount) })),
     manual_yekdem: draft.usePtfYekdem
       ? draft.manualYekdem
           .filter((y) => filled(y.value))
-          .map((y) => ({ year: Number(y.year), month: Number(y.month), value: y.value }))
+          .map((y) => ({ year: Number(y.year), month: Number(y.month), value: toDecimalString(y.value) }))
       : [],
   };
   if (filled(draft.buildingId)) body.building_id = draft.buildingId;
   if (filled(draft.name)) body.name = draft.name;
 
-  const optional: [string, string][] = [
-    ['single_time_price', draft.singleTimePrice], ['t1_price', draft.t1Price], ['t2_price', draft.t2Price],
-    ['t3_price', draft.t3Price], ['overuse_price', draft.overusePrice],
-    ['overuse_threshold_kwh_per_day', draft.overuseThresholdKwhPerDay], ['distribution_cost', draft.distributionCost],
-    ['reactive_power_price', draft.reactivePowerPrice], ['green_energy_price', draft.greenEnergyPrice],
-    ['green_energy_distribution_cost', draft.greenEnergyDistributionCost], ['contracted_power_kw', draft.contractedPowerKw],
-    ['power_unit_price', draft.powerUnitPrice], ['generation_price_per_kwh', draft.generationPricePerKwh],
-    ['vat_rate', draft.vatRate], ['kbk_energy', draft.kbkEnergy], ['kbk_t1', draft.kbkT1], ['kbk_t2', draft.kbkT2],
-    ['kbk_t3', draft.kbkT3], ['kbk_power_price', draft.kbkPowerPrice], ['kbk_overuse_price', draft.kbkOverusePrice],
-    ['kbk_reactive_power', draft.kbkReactivePower], ['kbk_distribution_cost_tl_per_kwh', draft.kbkDistributionCostTlPerKwh],
-  ];
-  for (const [key, value] of optional) {
-    if (filled(value)) body[key] = value;
+  for (const [field, key] of DECIMAL_FIELDS) {
+    if (filled(draft[key])) body[field] = toDecimalString(draft[key]);
   }
   return body as TariffFields;
+}
+
+/** A template or bulk body nests the tariff under `tariff`; its field errors
+ *  come back as `tariff.<field>` and the form knows them without the prefix. */
+export function nestedTariffErrors(errors: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(errors).map(([field, message]) => [field.replace(/^tariff\./, ''), message]));
 }

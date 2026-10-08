@@ -32,6 +32,8 @@ export type VacationDialogViewProps = {
   onSave: (values: VacationsPutRequest) => void;
   readOnly?: boolean;
   saving?: boolean;
+  /** The API's field errors for the last save (`periods[0].end_date`, `weekend_days`). */
+  fieldErrors?: Record<string, string>;
 };
 
 /**
@@ -47,6 +49,7 @@ export function VacationDialogView({
   onSave,
   readOnly = false,
   saving = false,
+  fieldErrors = {},
 }: VacationDialogViewProps) {
   const t = useTranslations('calendar');
   const weekdays = useTranslations('calendar.weekdays');
@@ -89,6 +92,7 @@ export function VacationDialogView({
             ))}
           </div>
           {days.length === 7 ? <Alert tone="warning" title={t('allDaysWarning')} /> : null}
+          {fieldErrors.weekend_days ? <p className="text-danger type-small">{fieldErrors.weekend_days}</p> : null}
         </fieldset>
 
         <fieldset className="flex flex-col gap-3">
@@ -100,19 +104,21 @@ export function VacationDialogView({
                 label={t('periodStart')}
                 value={row.start_date}
                 disabled={readOnly}
+                error={fieldErrors[`periods[${index}].start_date`]}
                 onValueChange={(date) => setRows(rows.map((r, i) => (i === index ? { ...r, start_date: date ?? r.start_date } : r)))}
               />
               <DatePicker
                 label={t('periodEnd')}
                 value={row.end_date}
                 disabled={readOnly}
-                error={row.end_date < row.start_date ? t('periodInvalid') : undefined}
+                error={row.end_date < row.start_date ? t('periodInvalid') : fieldErrors[`periods[${index}].end_date`]}
                 onValueChange={(date) => setRows(rows.map((r, i) => (i === index ? { ...r, end_date: date ?? r.end_date } : r)))}
               />
               <Input
                 label={t('periodDescription')}
                 value={row.description ?? ''}
                 disabled={readOnly}
+                error={fieldErrors[`periods[${index}].description`]}
                 onChange={(e) => setRows(rows.map((r, i) => (i === index ? { ...r, description: e.target.value } : r)))}
               />
               {readOnly ? null : (

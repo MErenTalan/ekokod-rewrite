@@ -93,6 +93,6 @@ describe('CredentialsSectionView', () => {
     const dialog = await r.findByRole('dialog');
     expect(dialog).toHaveTextContent('Başlangıç');
     await r.user.click(r.getAllByRole('button', { name: 'Geçmiş veriyi çek' }).at(-1)!);
-    expect(onBackfill).toHaveBeenCalledWith(credentials[0], { from: '2026-08-18', to: '2026-09-17' });
+    expect(onBackfill).toHaveBeenCalledWith(credentials[0], { from: '2026-08-18', to: '2026-09-17' }, expect.any(Function));
   });
 });

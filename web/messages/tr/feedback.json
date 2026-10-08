@@ -19,5 +19,9 @@
   "loadFailed": "Veriler yüklenemedi",
   "saveFailed": "Kaydedilemedi",
   "deleted": "Silindi",
-  "created": "Oluşturuldu"
+  "created": "Oluşturuldu",
+  "invalidFields": "Düzeltilmesi gereken alanlar: {fields}",
+  "moreFields": "ve {count} alan daha",
+  "networkError": "Sunucuya ulaşılamadı. Bağlantınızı kontrol edip tekrar deneyin.",
+  "errorReference": "Sayfayı yenileyip tekrar deneyin. Sorun sürerse yöneticinize şu kodu iletin: {reference}"
 }

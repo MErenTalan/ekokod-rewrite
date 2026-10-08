@@ -17,13 +17,16 @@ export type NotesViewProps = {
   notes: ISONote[];
   editable: boolean;
   saving: boolean;
-  onAdd: (d: NoteDraft) => void;
-  onUpdate: (n: ISONote, d: NoteDraft) => void;
+  /** `done` clears the editor: a refused note keeps the operator's text (R199). */
+  onAdd: (d: NoteDraft, done: () => void) => void;
+  onUpdate: (n: ISONote, d: NoteDraft, done: () => void) => void;
+  /** The API's field errors for the last save (title, body). */
+  fieldErrors?: Record<string, string>;
   onDelete: (n: ISONote) => void;
 };
 
 /** R346: a sub-clause's titled notes with add, edit in place, cancel and a confirmed delete. */
-export function NotesView({ notes, editable, saving, onAdd, onUpdate, onDelete }: NotesViewProps) {
+export function NotesView({ notes, editable, saving, onAdd, onUpdate, onDelete, fieldErrors = {} }: NotesViewProps) {
   const t = useTranslations('iso');
   const locale = useLocale() as Locale;
   const [draft, setDraft] = useState<NoteDraft>({ title: '', body: '' });
@@ -32,18 +35,20 @@ export function NotesView({ notes, editable, saving, onAdd, onUpdate, onDelete }
   const editingNote = notes.find((n) => n.id === editing);
   const submit = () => {
     const d = { title: draft.title.trim(), body: draft.body.trim() };
-    if (editingNote) onUpdate(editingNote, d);
-    else onAdd(d);
-    setDraft({ title: '', body: '' });
-    setEditing(null);
+    const done = () => {
+      setDraft({ title: '', body: '' });
+      setEditing(null);
+    };
+    if (editingNote) onUpdate(editingNote, d, done);
+    else onAdd(d, done);
   };
   return (
     <section className="flex flex-col gap-3">
       <h4 className="type-body font-semibold">{t('notes.title')}</h4>
       {editable ? (
         <div className="flex flex-col gap-2">
-          <Input label={t('notes.noteTitle')} value={draft.title} maxLength={200} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
-          <Textarea label={t('notes.body')} value={draft.body} maxLength={10000} rows={3} onChange={(e) => setDraft({ ...draft, body: e.target.value })} />
+          <Input label={t('notes.noteTitle')} value={draft.title} maxLength={200} error={fieldErrors.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
+          <Textarea label={t('notes.body')} value={draft.body} maxLength={10000} rows={3} error={fieldErrors.body} onChange={(e) => setDraft({ ...draft, body: e.target.value })} />
           <div className="flex gap-2">
             <Button size="sm" loading={saving} disabled={!draft.body.trim()} onClick={submit}>
               {editingNote ? t('notes.update') : t('notes.add')}

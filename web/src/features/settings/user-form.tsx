@@ -143,6 +143,7 @@ export function UserFormView({
       {companies ? (
         <Select
           label={t('company')}
+          error={fieldErrors.company_id}
           required
           options={companies.map((c) => ({ value: c.id, label: c.name }))}
           value={value.companyId ?? ''}

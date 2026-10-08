@@ -21,7 +21,10 @@ export type CompanyListViewProps = {
   hasMore: boolean;
   onLoadMore: () => void;
   onActAs: (companyId: string | undefined) => void;
-  onCreate: (values: CompanyCreateRequest) => void;
+  /** `done` closes the dialog: only a successful save closes it, so a refusal stays readable (R199). */
+  onCreate: (values: CompanyCreateRequest, done: () => void) => void;
+  /** The API's field errors for the last create. */
+  fieldErrors?: Record<string, string>;
   onDelete: (company: Company) => void;
   saving?: boolean;
   loading?: boolean;
@@ -39,6 +42,7 @@ export function CompanyListView({
   onDelete,
   saving = false,
   loading = false,
+  fieldErrors = {},
 }: CompanyListViewProps) {
   const t = useTranslations('settings.company');
   const settings = useTranslations('settings');
@@ -117,8 +121,7 @@ export function CompanyListView({
           <Button
             loading={saving}
             onClick={() => {
-              if (draft) onCreate(draft);
-              setDraft(null);
+              if (draft) onCreate(draft, () => setDraft(null));
             }}
           >
             {common('save')}
@@ -127,8 +130,8 @@ export function CompanyListView({
       >
         {draft ? (
           <div className="flex flex-col gap-4">
-            <Input label={t('name')} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} required />
-            <Input label={t('sector')} value={draft.sector ?? ''} onChange={(e) => setDraft({ ...draft, sector: e.target.value })} />
+            <Input label={t('name')} value={draft.name} error={fieldErrors.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} required />
+            <Input label={t('sector')} value={draft.sector ?? ''} error={fieldErrors.sector} onChange={(e) => setDraft({ ...draft, sector: e.target.value })} />
           </div>
         ) : null}
       </Dialog>

@@ -42,7 +42,24 @@ describe('SolarTabView', () => {
     await user.type(r.getByLabelText(/Feed-in tarifesi/), '2.75');
     await user.click(r.getByRole('button', { name: /Kaydet/ }));
 
-    expect(r.onCreate).toHaveBeenCalledWith(expect.objectContaining({ effective_from: '2026-09-01', feed_in_tariff: '2.75' }));
+    expect(r.onCreate).toHaveBeenCalledWith(expect.objectContaining({ effective_from: '2026-09-01', feed_in_tariff: '2.75' }), expect.any(Function));
+  });
+
+  it('reads a Turkish comma and names a missing field', async () => {
+    const user = userEvent.setup();
+    const r = view({ fieldErrors: { notes: 'Metin çok uzun.' } });
+    await user.click(r.getByRole('button', { name: /Yeni tarife/ }));
+    expect(r.getByText('Metin çok uzun.')).toBeVisible();
+    await user.click(r.getByRole('button', { name: /Kaydet/ }));
+    expect(r.onCreate).not.toHaveBeenCalled();
+    expect(r.getAllByText('Zorunlu alan')).toHaveLength(2);
+
+    await user.type(r.getByLabelText(/Yürürlük tarihi/), '2026-09-01');
+    await user.type(r.getByLabelText(/Feed-in tarifesi/), '2,75');
+    await user.click(r.getByRole('button', { name: /Kaydet/ }));
+    const [body] = r.onCreate.mock.calls[0]!;
+    expect(body).toMatchObject({ feed_in_tariff: '2.75' });
+    expect(body).not.toHaveProperty('purchase_price');
   });
 
   it('offers an add-first-tariff action when the plant has none', () => {

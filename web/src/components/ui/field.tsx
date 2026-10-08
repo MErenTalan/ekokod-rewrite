@@ -51,7 +51,8 @@ export function Field({
   const describedBy = [descriptionId, errorId].filter(Boolean).join(' ') || undefined;
   const Label = as;
   return (
-    <div className={cn('flex min-w-0 flex-col gap-1.5', className)}>
+    // data-field-*: a failed save names the marked fields in its toast (useApiMutation).
+    <div className={cn('flex min-w-0 flex-col gap-1.5', className)} data-field-label={error ? label : undefined} data-field-error={error || undefined}>
       <Label
         id={labelId}
         htmlFor={as === 'label' ? controlId : undefined}

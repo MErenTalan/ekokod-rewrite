@@ -3,7 +3,9 @@ import { getLocale, getMessages } from 'next-intl/server';
 import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 
+import { MapConfigProvider } from '@/components/map/_map-config';
 import { AppProviders } from '@/components/providers';
+import { mapTileUrl } from '@/lib/map-config';
 import { htmlAttributes, parseUiPreferences, UI_COOKIE } from '@/lib/ui-preferences';
 import { UiPreferencesProvider } from '@/lib/ui-preferences-provider';
 import { fontVariables } from '@/styles/fonts';
@@ -25,7 +27,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body>
         <NextIntlClientProvider messages={messages}>
           <UiPreferencesProvider initial={prefs}>
-            <AppProviders>{children}</AppProviders>
+            <MapConfigProvider tileUrl={mapTileUrl()}>
+              <AppProviders>{children}</AppProviders>
+            </MapConfigProvider>
           </UiPreferencesProvider>
         </NextIntlClientProvider>
       </body>

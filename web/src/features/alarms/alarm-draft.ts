@@ -1,3 +1,4 @@
+import { isDecimalText, toDecimalString } from '@/lib/decimal';
 import type { Alarm, AlarmAnalyzer, AlarmChannel, AlarmFields, AlarmSettings } from '@/lib/api/types';
 
 /** The four rule types of 01 §7.12. */
@@ -136,6 +137,13 @@ export function draftErrors(draft: AlarmDraft): Record<string, string> {
       break;
   }
 
+  // A number the API could not read is named here rather than sent as NaN/null.
+  for (const key of SETTINGS_BY_TYPE[draft.type]) {
+    const raw = draft.settings[key]?.trim();
+    if (!raw || key.endsWith('_period_unit')) continue;
+    if (isIntegerSetting(key) ? !INTEGER_RE.test(raw) : !isDecimalText(raw)) errors[key] = 'invalid';
+  }
+  if (draft.frequencyValue.trim() && !INTEGER_RE.test(draft.frequencyValue.trim())) errors.frequencyValue = 'invalid';
   if (draft.frequencyValue.trim() && !draft.frequencyUnit) errors.frequencyUnit = 'required';
   if (draft.channels.email) {
     const emails = splitTargets(draft.emailTargets);
@@ -150,6 +158,26 @@ export function draftErrors(draft: AlarmDraft): Record<string, string> {
   return errors;
 }
 
+const INTEGER_RE = /^\d+$/;
+const isIntegerSetting = (key: string) => key.endsWith('_period_value') || key === 'communication_threshold_hours';
+
+/** The API's field errors keyed by the dialog field that shows them (R199). */
+export function serverFieldErrors(draft: AlarmDraft, errors: Record<string, string>): Record<string, string> {
+  const emailCount = draft.channels.email ? splitTargets(draft.emailTargets).length : 0;
+  const out: Record<string, string> = {};
+  for (const [field, message] of Object.entries(errors)) {
+    const channel = /^channels\[(\d+)\]/.exec(field);
+    const key = channel
+      ? Number(channel[1]) < emailCount ? 'emailTargets' : 'smsTargets'
+      : field.startsWith('analyzer_ids') ? 'analyzerIds'
+      : field === 'notification_frequency_value' ? 'frequencyValue'
+      : field === 'notification_frequency_unit' ? 'frequencyUnit'
+      : field.replace(/^settings\./, '');
+    out[key] ??= message;
+  }
+  return out;
+}
+
 /**
  * Maps a draft to the request body. Only the type's own settings are emitted,
  * so a voltage threshold can never be sent even if one were in the draft.
@@ -161,9 +189,7 @@ export function toAlarmRequest(draft: AlarmDraft): AlarmFields {
     if (!raw) continue;
     // Period values and the hour threshold are integers; every other number
     // crosses as a string, because 05 §1 forbids JSON numbers for decimals.
-    settings[key] = (key.endsWith('_period_value') || key === 'communication_threshold_hours'
-      ? Number(raw)
-      : raw) as never;
+    settings[key] = (isIntegerSetting(key) ? Number(raw) : key.endsWith('_period_unit') ? raw : toDecimalString(raw)) as never;
   }
 
   if (draft.type === 'reactive_limit') {

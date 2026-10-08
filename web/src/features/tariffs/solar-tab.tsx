@@ -11,6 +11,7 @@ import { Select } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableContainer, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { Locale } from '@/i18n/locale';
+import { isDecimalText, toDecimalString } from '@/lib/decimal';
 import { formatDate } from '@/lib/format';
 import type { SolarTariff } from '@/lib/api/types';
 
@@ -27,34 +28,64 @@ export type SolarTabViewProps = {
   tariffs: SolarTariff[];
   /** tariffs.edit (A/CA) gates the writes; the history is A/CA/CR. */
   canEdit: boolean;
-  onCreate: (draft: SolarTariffDraft) => void;
+  /** `done` closes the dialog: only a saved tariff closes it, so a refusal stays readable (R199). */
+  onCreate: (draft: SolarTariffDraft, done: () => void) => void;
   onDelete: (id: string) => void;
   loading?: boolean;
+  /** The API's field errors for the last save. */
+  fieldErrors?: Record<string, string>;
+  saving?: boolean;
 };
 
 const CURRENCIES = ['TRY', 'USD', 'EUR'] as const;
 
 /** The solar tab of 01 §7.11: a plant's feed-in and purchase prices. */
+function localErrors(draft: SolarTariffDraft): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (!draft.effective_from) errors.effective_from = 'required';
+  for (const key of ['feed_in_tariff', 'purchase_price'] as const) {
+    const value = String(draft[key] ?? '').trim();
+    if (value && !isDecimalText(value)) errors[key] = 'decimal';
+    else if (!value && key === 'feed_in_tariff') errors[key] = 'required';
+  }
+  return errors;
+}
+
+function toRequest(draft: SolarTariffDraft): SolarTariffDraft {
+  const body: Record<string, unknown> = { ...draft, feed_in_tariff: toDecimalString(draft.feed_in_tariff) };
+  const purchase = String(draft.purchase_price ?? '').trim();
+  if (purchase) body.purchase_price = toDecimalString(purchase);
+  else delete body.purchase_price;
+  if (!String(draft.notes ?? '').trim()) delete body.notes;
+  return body as SolarTariffDraft;
+}
+
 export function SolarTabView({
-  plants, plantID, onPlantChange, tariffs, canEdit, onCreate, onDelete, loading = false,
+  plants, plantID, onPlantChange, tariffs, canEdit, onCreate, onDelete, loading = false, fieldErrors = {}, saving = false,
 }: SolarTabViewProps) {
   const t = useTranslations('tariffs');
   const common = useTranslations('common');
+  const forms = useTranslations('forms');
+  const [attempted, setAttempted] = useState(false);
   const locale = useLocale() as Locale;
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<SolarTariffDraft>({
     plant_id: plantID ?? '', effective_from: '', feed_in_tariff: '', currency: 'TRY',
   });
 
+  const local = attempted ? localErrors(draft) : {};
+  const error = (key: string) => fieldErrors[key] ?? (local[key] ? forms(`errors.${local[key]}` as never) : undefined);
+
   const startCreate = () => {
     setDraft({ plant_id: plantID ?? '', effective_from: '', feed_in_tariff: '', currency: 'TRY' });
+    setAttempted(false);
     setOpen(true);
   };
 
   const submit = () => {
-    if (!plantID || !draft.effective_from || !draft.feed_in_tariff) return;
-    onCreate({ ...draft, plant_id: plantID });
-    setOpen(false);
+    setAttempted(true);
+    if (!plantID || Object.keys(localErrors(draft)).length > 0) return;
+    onCreate(toRequest({ ...draft, plant_id: plantID }), () => setOpen(false));
   };
 
   return (
@@ -124,7 +155,7 @@ export function SolarTabView({
         footer={
           <>
             <Button variant="ghost" onClick={() => setOpen(false)}>{common('cancel')}</Button>
-            <Button onClick={submit}>{common('save')}</Button>
+            <Button loading={saving} onClick={submit}>{common('save')}</Button>
           </>
         }
       >
@@ -134,6 +165,7 @@ export function SolarTabView({
             required
             type="date"
             value={draft.effective_from}
+            error={error('effective_from')}
             onChange={(e) => setDraft({ ...draft, effective_from: e.target.value })}
           />
           <Input
@@ -141,23 +173,27 @@ export function SolarTabView({
             required
             inputMode="decimal"
             value={draft.feed_in_tariff}
+            error={error('feed_in_tariff')}
             onChange={(e) => setDraft({ ...draft, feed_in_tariff: e.target.value })}
           />
           <Input
             label={t('solar.purchasePrice')}
             inputMode="decimal"
             value={draft.purchase_price ?? ''}
+            error={error('purchase_price')}
             onChange={(e) => setDraft({ ...draft, purchase_price: e.target.value })}
           />
           <Select
             label={t('fields.currency')}
             value={draft.currency}
+            error={error('currency')}
             options={CURRENCIES.map((c) => ({ value: c, label: t(`options.currency.${c}` as never) }))}
             onValueChange={(currency) => setDraft({ ...draft, currency: currency as SolarTariffDraft['currency'] })}
           />
           <Input
             label={t('solar.notes')}
             value={draft.notes ?? ''}
+            error={error('notes')}
             onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
           />
         </div>

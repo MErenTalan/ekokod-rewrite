@@ -112,8 +112,13 @@ export function AlarmsPage() {
           analyzers={analyzers.data?.items ?? []}
           onDraftChange={setDraft}
           onSubmit={submit}
-          onClose={() => setDraft(null)}
+          onClose={() => {
+            setDraft(null);
+            create.clearFieldErrors();
+            update.clearFieldErrors();
+          }}
           saving={create.isPending || update.isPending}
+          serverErrors={draft.id ? update.fieldErrors : create.fieldErrors}
         />
       ) : null}
 

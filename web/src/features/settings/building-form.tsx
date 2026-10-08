@@ -128,6 +128,7 @@ export function BuildingFormView({
       {companies && !value.id ? (
         <Select
           label={t('company')}
+          error={fieldErrors.company_id}
           required
           options={companies.map((c) => ({ value: c.id, label: c.name }))}
           value={value.companyId ?? ''}
@@ -143,6 +144,7 @@ export function BuildingFormView({
       />
       <Textarea
         label={t('address')}
+        error={fieldErrors.address}
         value={value.address}
         rows={2}
         onChange={(e) => set({ address: e.target.value })}
@@ -223,6 +225,7 @@ export function BuildingFormView({
           <div key={index} className="flex flex-wrap items-end gap-2">
             <Input
               label={t('contactName')}
+              error={fieldErrors[`contacts[${index}].name`]}
               value={contact.name}
               onChange={(e) =>
                 set({
@@ -234,6 +237,7 @@ export function BuildingFormView({
             />
             <Input
               label={t('contactPhone')}
+              error={fieldErrors[`contacts[${index}].phone`]}
               value={contact.phone}
               onChange={(e) =>
                 set({

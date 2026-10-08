@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { applyMode, draftErrors, draftFrom, emptyDraft, toTariffRequest } from './tariff-draft';
+import { applyMode, draftErrors, draftFrom, emptyDraft, nestedTariffErrors, toTariffRequest } from './tariff-draft';
 import type { TariffDraft } from './tariff-draft';
 
 const filled = (over: Partial<TariffDraft> = {}): TariffDraft => ({
@@ -146,5 +146,40 @@ describe('draftFrom', () => {
     expect(back.usePtfYekdem).toBe(true);
     expect(back.taxes).toEqual([{ name: 'BTV', rate: '5' }]);
     expect(back.singleTimePrice).toBe('');
+  });
+});
+
+describe('Turkish decimals', () => {
+  it('sends a comma-typed price with a decimal point', () => {
+    const body = toTariffRequest(
+      filled({
+        singleTimePrice: '3,15',
+        distributionCost: '1.234,5',
+        taxes: [{ name: 'BTV', rate: '1,5' }],
+        extraCharges: [{ name: 'Sayaç', basis: 'fixed_per_period', amount: '12,75' }],
+        usePtfYekdem: true,
+        manualYekdem: [{ year: '2026', month: '9', value: '0,42' }],
+      }),
+    );
+    expect(body.single_time_price).toBe('3.15');
+    expect(body.distribution_cost).toBe('1234.5');
+    expect(body.taxes).toEqual([{ name: 'BTV', rate: '1.5' }]);
+    expect(body.extra_charges).toEqual([{ name: 'Sayaç', basis: 'fixed_per_period', amount: '12.75' }]);
+    expect(body.manual_yekdem).toEqual([{ year: 2026, month: 9, value: '0.42' }]);
+  });
+
+  it('marks a price that is no number before the request is sent', () => {
+    const errors = draftErrors(filled({ singleTimePrice: '3,1,5', taxes: [{ name: 'BTV', rate: 'yüzde 1' }] }));
+    expect(errors.single_time_price).toBe('decimal');
+    expect(errors['taxes[0].rate']).toBe('decimal');
+    expect(draftErrors(filled({ singleTimePrice: '3,15' })).single_time_price).toBeUndefined();
+  });
+});
+
+it('reads a nested tariff error by its form field name', () => {
+  expect(nestedTariffErrors({ 'tariff.t1_price': 'x', 'tariff.taxes[0].rate': 'y', name: 'z' })).toEqual({
+    t1_price: 'x',
+    'taxes[0].rate': 'y',
+    name: 'z',
   });
 });

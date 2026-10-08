@@ -2,6 +2,8 @@
  * F15a R452: the web app's security headers and its nonce-based Content Security Policy.
  * Pure functions of the nonce and the environment, so the middleware and its tests agree.
  */
+import { mapTileUrl } from '../map-config';
+
 type Env = Record<string, string | undefined>;
 
 /** A fresh 128-bit nonce, base64. */
@@ -25,7 +27,7 @@ function originOf(url: string | undefined): string | null {
 
 /** Q-L2's policy. The map tile origin and an opted-in analytics origin are the only extra sources. */
 export function contentSecurityPolicy(nonce: string, env: Env = process.env): string {
-  const tiles = originOf(env.NEXT_PUBLIC_MAP_TILE_URL);
+  const tiles = originOf(mapTileUrl(env));
   const analytics = env.EKOKOD_FEATURE_ANALYTICS === 'true' ? originOf(env.EKOKOD_ANALYTICS_SRC) : null;
   const dev = env.NODE_ENV === 'development';
   const extra = (...sources: (string | null)[]) => sources.filter((s): s is string => Boolean(s));

@@ -188,6 +188,8 @@ services:
       EKOKOD_FEATURE_ANALYTICS: ${EKOKOD_FEATURE_ANALYTICS:-false}
       EKOKOD_ANALYTICS_SRC: ${EKOKOD_ANALYTICS_SRC:-}
       EKOKOD_ANALYTICS_SITE: ${EKOKOD_ANALYTICS_SITE:-}
+      # F23: the dashboard map's tiles, read at request time; empty = OpenFreeMap, none = list only.
+      EKOKOD_MAP_TILE_URL: ${EKOKOD_MAP_TILE_URL:-}
     ports: ["${EKOKOD_WEB_PORT:-3000}:3000"]
     depends_on:
       api: { condition: service_healthy }

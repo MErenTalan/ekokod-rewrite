@@ -75,6 +75,7 @@ describe('IntegrationsTabView', () => {
           { key: 'analyzers_list', url: 'https://api.aydem/list' },
         ],
       }),
+      expect.any(Function),
     );
   });
 

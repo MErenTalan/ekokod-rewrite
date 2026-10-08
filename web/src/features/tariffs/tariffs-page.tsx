@@ -21,7 +21,7 @@ import { BulkTabView } from './bulk-tab';
 import { DefaultsTabView, type NationalTariffDraft } from './defaults-tab';
 import { IcmalTabView, type IcmalConfirmation } from './icmal-tab';
 import { SolarTabView, type SolarTariffDraft } from './solar-tab';
-import { draftFrom, emptyDraft, toTariffRequest, type TariffDraft } from './tariff-draft';
+import { draftFrom, emptyDraft, nestedTariffErrors, toTariffRequest, type TariffDraft } from './tariff-draft';
 import { TariffFormView } from './tariff-form';
 import { TariffHistoryView } from './tariff-history';
 import { TemplatesTabView, type TemplateApply } from './templates-tab';
@@ -33,6 +33,7 @@ const LIST_LIMIT = 200;
 export function TariffsPage() {
   const t = useTranslations('tariffs');
   const common = useTranslations('common');
+  const forms = useTranslations('forms');
   const { can } = useSession();
   const scope = useScopeParams();
   const { buildingId } = useSelection();
@@ -43,6 +44,7 @@ export function TariffsPage() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [templateDraft, setTemplateDraft] = useState<{ id?: string; name: string; description: string; isDefault: boolean; tariff: TariffDraft } | null>(null);
+  const [templateNameMissing, setTemplateNameMissing] = useState(false);
   const [icmalResult, setIcmalResult] = useState<IcmalImport | null>(null);
   const [icmalFailure, setIcmalFailure] = useState<'unreadable' | undefined>();
   const [plantID, setPlantID] = useState<string | null>(null);
@@ -124,6 +126,8 @@ export function TariffsPage() {
   const publishDefault = useApiMutation('post', '/api/v1/national-tariff-schedule', { success: t('defaults.saved'), invalidate });
   const deleteDefault = useApiMutation('delete', '/api/v1/national-tariff-schedule/{id}', { success: t('defaults.deleted'), invalidate });
 
+  const templateErrors = templateDraft?.id ? updateTemplate.fieldErrors : createTemplate.fieldErrors;
+
   const close = () => {
     setDraft(null);
     setEditing(null);
@@ -140,7 +144,10 @@ export function TariffsPage() {
   };
 
   const submitTemplate = () => {
-    if (!templateDraft || templateDraft.name.trim() === '') return;
+    if (!templateDraft) return;
+    // An unnamed template used to do nothing at all on save; now the field says why.
+    setTemplateNameMissing(templateDraft.name.trim() === '');
+    if (templateDraft.name.trim() === '') return;
     const body = {
       name: templateDraft.name,
       description: templateDraft.description || undefined,
@@ -298,7 +305,9 @@ export function TariffsPage() {
           tariffs={solarTariffs.data?.items ?? []}
           canEdit={canEdit}
           loading={solarTariffs.isPending && plantID !== null}
-          onCreate={(body: SolarTariffDraft) => createSolar.mutate({ params: { query: scope }, body })}
+          onCreate={(body: SolarTariffDraft, done) => createSolar.mutate({ params: { query: scope }, body }, { onSuccess: done })}
+          fieldErrors={createSolar.fieldErrors}
+          saving={createSolar.isPending}
           onDelete={(id) => deleteSolar.mutate({ params: { path: { id }, query: scope } })}
         />
       ),
@@ -312,7 +321,9 @@ export function TariffsPage() {
         <DefaultsTabView
           entries={defaults.data?.items ?? []}
           loading={defaults.isPending}
-          onPublish={(body: NationalTariffDraft) => publishDefault.mutate({ params: { query: {} }, body })}
+          onPublish={(body: NationalTariffDraft, done) => publishDefault.mutate({ params: { query: {} }, body }, { onSuccess: done })}
+          fieldErrors={publishDefault.fieldErrors}
+          saving={publishDefault.isPending}
           onDelete={(id) => deleteDefault.mutate({ params: { path: { id }, query: {} } })}
         />
       ),
@@ -345,11 +356,13 @@ export function TariffsPage() {
               label={t('templates.name')}
               required
               value={templateDraft.name}
+              error={templateNameMissing && !templateDraft.name.trim() ? forms('errors.required') : templateErrors.name}
               onChange={(e) => setTemplateDraft({ ...templateDraft, name: e.target.value })}
             />
             <Input
               label={t('templates.descriptionField')}
               value={templateDraft.description}
+              error={templateErrors.description}
               onChange={(e) => setTemplateDraft({ ...templateDraft, description: e.target.value })}
             />
             <Switch
@@ -363,7 +376,7 @@ export function TariffsPage() {
               draft={templateDraft.tariff}
               onDraftChange={(tariff) => setTemplateDraft({ ...templateDraft, tariff })}
               onSubmit={submitTemplate}
-              serverErrors={templateDraft.id ? updateTemplate.fieldErrors : createTemplate.fieldErrors}
+              serverErrors={nestedTariffErrors(templateErrors)}
               hideActions
             />
           </div>
@@ -389,7 +402,7 @@ export function TariffsPage() {
               draft={bulkDraft.tariff}
               onDraftChange={(tariff) => setBulkDraft({ ...bulkDraft, tariff })}
               onSubmit={submitBulk}
-              serverErrors={bulkAssign.fieldErrors}
+              serverErrors={nestedTariffErrors(bulkAssign.fieldErrors)}
               saving={bulkAssign.isPending}
               hideActions
             />

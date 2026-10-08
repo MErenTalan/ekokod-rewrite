@@ -13,6 +13,7 @@ import type { DateRange } from '@/components/ui/date-range-picker';
 import { RefreshActions } from '@/features/jobs/refresh-actions';
 import { ScopePicker } from '@/features/scope/scope-picker';
 import { downloadFile } from '@/lib/api/download';
+import { useFailureToast } from '@/lib/api/mutation';
 import { $api } from '@/lib/api/query';
 import type { ConsumptionRow } from '@/lib/api/types';
 import { addDays, istanbulToday } from '@/lib/dates';
@@ -70,6 +71,7 @@ export function ConsumptionPage() {
     { enabled: enabled && tab === 'detailed' },
   );
   const anomaly = $api.useMutation('post', '/api/v1/anomaly/check');
+  const failed = useFailureToast();
 
   const rows = series.data?.items ?? [];
   const exportFile = async (format: ExportFormat) => {
@@ -123,10 +125,14 @@ export function ConsumptionPage() {
                       canCheckAlarm={can('anomaly.check') && Boolean(analyzerId)}
                       onCheckAlarm={(row) => {
                         setAlarmRow(row);
-                        anomaly.mutate({
-                          params: { query: scope },
-                          body: { analyzer_id: analyzerId ?? '', ts: row.period_start, actual: row.active_import ?? '0' },
-                        });
+                        anomaly.mutate(
+                          {
+                            params: { query: scope },
+                            body: { analyzer_id: analyzerId ?? '', ts: row.period_start, actual: row.active_import ?? '0' },
+                          },
+                          // The dialog has no error state of its own: say why there is no verdict.
+                          { onError: failed },
+                        );
                       }}
                       onExport={exportFile}
                       onPrint={() => window.print()}
