@@ -95,4 +95,11 @@ describe('useApiMutation', () => {
     await waitFor(() => expect(r.getByText('Kaydedilemedi')).toBeInTheDocument());
     expect(r.getByText('Sunucuya ulaşılamadı. Bağlantınızı kontrol edip tekrar deneyin.')).toBeInTheDocument();
   });
+
+  it('reads a proxy error page as the server not being reached', async () => {
+    api = mockApi({ 'POST /api/v1/buildings': new Response('<html>502 Bad Gateway</html>', { status: 502, headers: { 'content-type': 'text/html' } }) });
+    const r = renderWithProviders(<Form />);
+    await r.user.click(r.getByRole('button', { name: 'Kaydet' }));
+    await waitFor(() => expect(r.getByText('Sunucuya ulaşılamadı. Bağlantınızı kontrol edip tekrar deneyin.')).toBeInTheDocument());
+  });
 });

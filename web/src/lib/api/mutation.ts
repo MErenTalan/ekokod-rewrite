@@ -103,7 +103,8 @@ type Feedback = (key: 'networkError' | 'errorReference', values?: Record<string,
 
 /** What the operator can do about a failure the form cannot mark. */
 function failureHint(error: unknown, feedback: Feedback): string | undefined {
-  if (error instanceof Error) return feedback('networkError');
+  // A thrown fetch, or a proxy's HTML page (502/504) read back as text: the API was not reached.
+  if (error instanceof Error || typeof error === 'string') return feedback('networkError');
   const reference = requestIdOf(error);
   const code = errorCodeOf(error);
   // A malformed request or a server fault is not the operator's to fix: give support a handle.
