@@ -30,6 +30,13 @@ describe('the content security policy (R452)', () => {
     expect(on).toContain("'strict-dynamic' https://stats.example.com");
   });
 
+  it('allows the default map source, and none when the map is off (F23)', () => {
+    expect(contentSecurityPolicy('n', {})).toContain("connect-src 'self' https://tiles.openfreemap.org");
+    const off = contentSecurityPolicy('n', { EKOKOD_MAP_TILE_URL: 'none' });
+    expect(off).toContain("connect-src 'self';");
+    expect(off).toContain("img-src 'self' data: blob:;");
+  });
+
   it('lets React refresh evaluate code in development only', () => {
     expect(contentSecurityPolicy('n', { NODE_ENV: 'development' })).toContain("'unsafe-eval'");
   });

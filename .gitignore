@@ -2,6 +2,7 @@
 /dist/
 /web/node_modules
 /web/.next/
+/web/public/maplibre/
 /web/out/
 /web/coverage/
 /web/next-env.d.ts
