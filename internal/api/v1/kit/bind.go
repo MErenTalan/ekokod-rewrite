@@ -142,28 +142,24 @@ func decodeBody(r *http.Request, dst any) error {
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
-		// A wrong JSON type names its field, so the form can mark that field.
-		var typeErr *json.UnmarshalTypeError
-		if errors.As(err, &typeErr) && typeErr.Field != "" {
-			return perr.Validation.WithParams(map[string]any{typeErr.Field: []string{"invalid"}})
+		if !json.Valid(raw) {
+			return ErrInvalidBody.WithParams(map[string]any{"reason": "malformed JSON"})
 		}
-		return ErrInvalidBody.WithParams(map[string]any{"reason": bodyReason(err)})
+		// A value its field cannot hold (a Turkish "12,5", a bad date) is the
+		// operator's to fix: 422 naming every such field so the form marks it.
+		p := findBodyProblems(raw, reflect.TypeOf(dst))
+		if len(p.values) > 0 {
+			return perr.Validation.WithParams(p.values)
+		}
+		if len(p.unknown) > 0 {
+			return ErrInvalidBody.WithParams(map[string]any{"reason": "unknown field", "field": p.unknown[0]})
+		}
+		return ErrInvalidBody.WithParams(map[string]any{"reason": "malformed JSON"})
 	}
 	if dec.More() {
-		return ErrInvalidBody
+		return ErrInvalidBody.WithParams(map[string]any{"reason": "trailing data"})
 	}
 	return nil
-}
-
-func bodyReason(err error) string {
-	var typeErr *json.UnmarshalTypeError
-	if errors.As(err, &typeErr) {
-		return "invalid type for " + typeErr.Field
-	}
-	if msg := err.Error(); strings.HasPrefix(msg, "json: unknown field ") {
-		return "unknown field " + strings.TrimPrefix(msg, "json: unknown field ")
-	}
-	return "malformed JSON"
 }
 
 func collectQueryNames(t reflect.Type, into map[string]bool) {

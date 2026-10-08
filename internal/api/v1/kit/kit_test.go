@@ -100,11 +100,34 @@ func TestBindValidation422(t *testing.T) {
 	require.Equal(t, map[string]any{"name": []string{"required"}, "children[0].rate": []string{"required"}}, e.Params)
 }
 
-func TestBindDecimalRejectsJSONNumber(t *testing.T) {
+// A value the field's type cannot hold is the operator's typo, not a broken
+// client: it names the field (a Turkish "12,5" used to be an opaque invalid_body).
+func TestBindBadValueNamesTheField(t *testing.T) {
 	_, err := bind(t, http.MethodPatch, thing, `{"name":"x","total_area_m2":12.5}`)
-	requireCode(t, err, "invalid_body")
-	_, err = bind(t, http.MethodPatch, thing, `{"name":"x","total_area_m2":"12,5"}`)
-	requireCode(t, err, "invalid_body")
+	e := requireCode(t, err, "validation_failed")
+	require.Equal(t, map[string]any{"total_area_m2": []string{"decimal"}}, e.Params)
+
+	_, err = bind(t, http.MethodPatch, thing, `{"name":"x","total_area_m2":"12,5","children":[{"rate":"20"},{"rate":"abc"}]}`)
+	e = requireCode(t, err, "validation_failed")
+	require.Equal(t, http.StatusUnprocessableEntity, e.Status)
+	require.Equal(t, map[string]any{"total_area_m2": []string{"decimal"}, "children[1].rate": []string{"decimal"}}, e.Params)
+
+	var dated struct {
+		From   dto.Date   `json:"effective_from"`
+		Owner  *uuid.UUID `json:"building_id,omitempty"`
+		Active bool       `json:"is_active"`
+	}
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/x",
+		strings.NewReader(`{"effective_from":"08.10.2026","building_id":"b-1","is_active":"yes"}`))
+	e = requireCode(t, kit.Bind(req, &dated), "validation_failed")
+	require.Equal(t, map[string]any{"effective_from": []string{"date"}, "building_id": []string{"uuid"}, "is_active": []string{"invalid"}}, e.Params)
+}
+
+// An unknown field is a client bug: it stays invalid_body but names the field.
+func TestBindUnknownFieldIsNamed(t *testing.T) {
+	_, err := bind(t, http.MethodPatch, thing, `{"name":"x","children":[{"rate":"1","extra":true}]}`)
+	e := requireCode(t, err, "invalid_body")
+	require.Equal(t, map[string]any{"reason": "unknown field", "field": "children[0].extra"}, e.Params)
 }
 
 func TestBindBadPathAndQueryValues(t *testing.T) {
