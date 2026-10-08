@@ -1,12 +1,16 @@
-# Handoff — ekokod rewrite: F23 map and form error fixes on `fix/f23-map-form-errors` (not merged)
+# Handoff — ekokod rewrite: F23 map and form error fixes merged into `main` and deployed
 
-> **STATUS (2026-10-08):** branch `fix/f23-map-form-errors` (`/home/personal/ekokod-f23-fixes`, cut from
-> `main` @ 57db26d) fixes the dashboard map (four root causes) and makes every form show the API's field
-> errors with a clearer toast (R515–R523, `docs/superpowers/plans/2026-10-08-f23-map-and-form-errors.md`).
-> **Not merged, not deployed, nothing pushed.** Go `-tags=integration` suites and the Playwright e2e
-> project were not run (Docker unreachable from WSL that session) — run them before merging.
-> Deploy note: the map needs no setting (OpenFreeMap by default); an air-gapped install sets
-> `EKOKOD_MAP_TILE_URL=none` in `.env`. The web image must be rebuilt (the build copies the MapLibre worker).
+> **STATUS (2026-10-09 01:55):** `fix/f23-map-form-errors` fixed the dashboard map (four root causes) and
+> made every form show the API's field errors with a clearer toast (R515–R523,
+> `docs/superpowers/plans/2026-10-08-f23-map-and-form-errors.md`). Gates before the merge: Go
+> `internal/api/v1/...` with `-tags=integration`, `internal/arch`, golangci-lint, check-api-docs, web
+> vitest 1290+, lint, typecheck, `next build`, **e2e 205/205** in four foreground chunks. Merged into
+> `main` as **`eb74ee7`** and deployed with `deploy-main.sh`: new.ekokod.com runs `eb74ee7`, no migration
+> (still 25), every container healthy, no error log in the first minutes, the MapLibre worker is served
+> from `/maplibre/6.10.0/` and the CSP allows tiles.openfreemap.org. Rollback:
+> `/opt/ekokod-new.prev-20261009-015208`, `/root/ekokod-new-pre-eb74ee7-20261009-015208.dump`.
+> **Nothing is pushed to a remote.** Map setting: none needed (OpenFreeMap by default); an air-gapped
+> install sets `EKOKOD_MAP_TILE_URL=none`.
 
 ---
 
