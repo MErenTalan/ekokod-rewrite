@@ -1,4 +1,17 @@
-# Handoff — ekokod rewrite: F23 map and form error fixes merged into `main` and deployed
+# Handoff — ekokod rewrite: F24 (Google map tiles, analyzer map checkboxes) on top of F23, deployed
+
+> **STATUS (2026-10-09 02:32):** `main` @ **73dd3e4** runs on new.ekokod.com (deploy-main.sh, no migration,
+> every container healthy, no error log). F24 (`fix/f24-map-tiles-analyzers`, R524–R525 appended to
+> `docs/superpowers/plans/2026-10-08-f23-map-and-form-errors.md`): the map defaults to Google street
+> tiles with Turkish labels (the owner's request; an undocumented Google endpoint, so a refused tile swaps
+> in OpenFreeMap liberty), and the dashboard list shows a building's analyzers as map checkboxes (all by
+> default) with their own "Seç". Rollback: `/opt/ekokod-new.prev-20261009-022952`,
+> `/root/ekokod-new-pre-73dd3e4-20261009-022952.dump`. **Nothing is pushed to a remote.**
+
+---
+
+## Previous: F23 map and form error fixes merged into `main` and deployed
+
 
 > **STATUS (2026-10-09 01:55):** `fix/f23-map-form-errors` fixed the dashboard map (four root causes) and
 > made every form show the API's field errors with a clearer toast (R515–R523,
