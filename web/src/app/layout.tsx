@@ -3,7 +3,7 @@ import { getLocale, getMessages } from 'next-intl/server';
 import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 
-import { MapConfigProvider } from '@/components/map/map-config';
+import { MapConfigProvider } from '@/components/map/_map-config';
 import { AppProviders } from '@/components/providers';
 import { mapTileUrl } from '@/lib/map-config';
 import { htmlAttributes, parseUiPreferences, UI_COOKIE } from '@/lib/ui-preferences';

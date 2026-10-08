@@ -11,7 +11,7 @@ import { DEFAULT_MAP_STYLE, DEFAULT_MAP_STYLE_DARK } from '@/lib/map-config';
 import { Alert } from '../ui/alert';
 import { Button } from '../ui/button';
 import { MapMarkerList } from './_map-marker-list';
-import { useMapTileUrl } from './map-config';
+import { useMapTileUrl } from './_map-config';
 
 export type MapMarker = { id: string; name: string; lat: number; lng: number; status: 'active' | 'passive' };
 export type MapProps = {

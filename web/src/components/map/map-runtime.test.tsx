@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '@/test/render';
 
 import { Map, styleFor, type MapMarker } from './map';
-import { MapConfigProvider } from './map-config';
+import { MapConfigProvider } from './_map-config';
 
 type Handler = () => void;
 const created = vi.hoisted(() => [] as { options: Record<string, unknown>; handlers: Record<string, Handler[]> }[]);
