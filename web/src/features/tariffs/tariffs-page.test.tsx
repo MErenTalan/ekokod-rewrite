@@ -94,6 +94,32 @@ describe('TariffsPage', () => {
     });
   });
 
+  it('sends Turkish-typed prices with a point and marks a field the API refuses', async () => {
+    selectBuilding();
+    const user = userEvent.setup();
+    api = mockApi({
+      ...ROUTES,
+      'POST /api/v1/tariffs': Response.json(
+        { error: { code: 'validation_failed', message: 'Girilen bilgiler geçersiz.', details: { reactive_power_price: ['out_of_range'] } } },
+        { status: 422 },
+      ),
+    });
+    render();
+
+    await user.click(await screen.findByRole('button', { name: /Yeni tarife/ }));
+    await user.type(screen.getByLabelText(/Yürürlük tarihi/), '2026-10-01');
+    await user.type(screen.getByLabelText(/Tek zamanlı fiyat/), '3,15');
+    await user.type(screen.getByLabelText(/Dağıtım bedeli/), '0,85');
+    await user.type(screen.getByLabelText(/Reaktif güç bedeli/), '1,2');
+    await user.type(screen.getByLabelText(/KDV oranı/), '20');
+    await user.click(screen.getByRole('button', { name: /Kaydet/ }));
+
+    await waitFor(() => expect(screen.getByText(/Düzeltilmesi gereken alanlar: Reaktif güç bedeli/)).toBeVisible());
+    const post = api.calls.find((c) => c.method === 'POST' && new URL(c.url).pathname === '/api/v1/tariffs')!;
+    expect(await post.json()).toMatchObject({ single_time_price: '3.15', distribution_cost: '0.85', reactive_power_price: '1.2' });
+    expect(screen.getByLabelText(/Reaktif güç bedeli/)).toHaveAccessibleDescription('Aralık dışında');
+  });
+
   it('shows only the tabs the principal may use (R246/R247)', async () => {
     selectBuilding();
     api = mockApi(ROUTES);

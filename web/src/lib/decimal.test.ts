@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { compareDecimal, fractionToPercent, shiftDecimal } from './decimal';
+import { compareDecimal, fractionToPercent, isDecimalText, shiftDecimal, toDecimalString } from './decimal';
 
 describe('decimal strings', () => {
   it('compares without floats', () => {
@@ -28,5 +28,24 @@ describe('decimal strings', () => {
     expect(shiftDecimal('2', 3)).toBe('2000');
     expect(shiftDecimal('-1.5', 3)).toBe('-1500');
     expect(shiftDecimal('0', -3)).toBe('0');
+  });
+});
+
+describe('toDecimalString', () => {
+  it('reads a Turkish comma and keeps a lone dot as the decimal point', () => {
+    expect(toDecimalString('2,45')).toBe('2.45');
+    expect(toDecimalString(' 1.234,56 ')).toBe('1234.56');
+    expect(toDecimalString('1,234.5')).toBe('1234.5');
+    expect(toDecimalString('2.450')).toBe('2.450');
+    expect(toDecimalString('-0,5')).toBe('-0.5');
+    expect(toDecimalString('20')).toBe('20');
+  });
+
+  it('hands text that is no number back for the API to name', () => {
+    expect(toDecimalString('2,4,5')).toBe('2,4,5');
+    expect(toDecimalString(' abc ')).toBe('abc');
+    expect(isDecimalText('2,45')).toBe(true);
+    expect(isDecimalText('1,2,3')).toBe(false);
+    expect(isDecimalText('')).toBe(false);
   });
 });

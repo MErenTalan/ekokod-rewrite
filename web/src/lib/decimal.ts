@@ -36,3 +36,23 @@ export function shiftDecimal(value: string, places: number): string {
   const out = `${whole}${rest ? `.${rest}` : ''}`;
   return out === '0' ? '0' : `${sign}${out}`;
 }
+
+/**
+ * A typed decimal as the API's plain string: a Turkish comma becomes the point
+ * ('2,45' → '2.45', '1.234,56' → '1234.56'); a lone dot stays a decimal point,
+ * as the API has always read it. Text that is no number is returned trimmed,
+ * so the API names the field instead of the form guessing.
+ */
+export function toDecimalString(text: string): string {
+  const s = text.replace(/\s/g, '');
+  const comma = s.lastIndexOf(',');
+  const dot = s.lastIndexOf('.');
+  let out = s;
+  if (comma >= 0 && dot < 0) out = s.replace(',', '.');
+  else if (comma > dot) out = s.replace(/\./g, '').replace(',', '.');
+  else if (comma >= 0) out = s.replace(/,/g, '');
+  return /^-?\d+(\.\d+)?$/.test(out) ? out : text.trim();
+}
+
+/** Whether toDecimalString found a number in the text. */
+export const isDecimalText = (text: string) => /^-?\d+(\.\d+)?$/.test(toDecimalString(text));

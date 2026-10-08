@@ -62,6 +62,8 @@
     "mismatch": "Toplam tüketim T1, T2 ve T3'ün toplamına eşit olmalı.",
     "noTariff": "Bu tarih için yayımlanmış bir tarife yok.",
     "notAvailable": "Bu abone grubu için bu seçenek yok.",
-    "integer": "Tam sayı girin"
+    "integer": "Tam sayı girin",
+    "decimal": "Geçerli bir sayı girin, örn. 1234,56",
+    "date": "Geçerli bir tarih girin"
   }
 }

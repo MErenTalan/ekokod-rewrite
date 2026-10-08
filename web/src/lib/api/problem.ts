@@ -1,7 +1,7 @@
 // The error envelope (05 §1) read back into what a form needs (R199).
 import type { Translator } from './types';
 
-type Envelope = { error?: { code?: unknown; message?: unknown; details?: unknown } };
+type Envelope = { error?: { code?: unknown; message?: unknown; details?: unknown; request_id?: unknown } };
 
 function envelope(body: unknown): Envelope['error'] | undefined {
   const error = (body as Envelope | null)?.error;
@@ -18,6 +18,12 @@ export function errorMessage(body: unknown, fallback: string): string {
 export function errorCodeOf(body: unknown): string | undefined {
   const code = envelope(body)?.code;
   return typeof code === 'string' ? code : undefined;
+}
+
+/** The request id the API logged the failure under, for a support reference. */
+export function requestIdOf(body: unknown): string | undefined {
+  const id = envelope(body)?.request_id;
+  return typeof id === 'string' && id ? id : undefined;
 }
 
 /**
@@ -37,6 +43,8 @@ const CODE_KEYS: Record<string, string> = {
   url: 'url',
   uuid: 'uuid',
   numeric: 'numeric',
+  decimal: 'decimal',
+  date: 'date',
   must_be_empty: 'mustBeEmpty',
   must_be_try: 'mustBeTry',
   out_of_range: 'outOfRange',
@@ -75,8 +83,9 @@ export function fieldErrors(body: unknown, t: Translator): Record<string, string
   if (!details || typeof details !== 'object') return {};
   const out: Record<string, string> = {};
   for (const [field, codes] of Object.entries(details as Record<string, unknown>)) {
-    const code = Array.isArray(codes) ? codes[0] : codes;
-    if (typeof code !== 'string') continue;
+    // Field details are code lists; scalars (reason, parameter) describe the request, not a field.
+    if (!Array.isArray(codes) || typeof codes[0] !== 'string') continue;
+    const code = codes[0];
     out[field] = translateCode(t, code);
   }
   return out;

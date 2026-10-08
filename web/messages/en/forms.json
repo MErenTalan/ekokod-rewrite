@@ -62,6 +62,8 @@
     "mismatch": "The total must equal the sum of T1, T2 and T3.",
     "noTariff": "No published tariff covers this date.",
     "notAvailable": "This option is not available for this subscriber group.",
-    "integer": "Enter a whole number"
+    "integer": "Enter a whole number",
+    "decimal": "Enter a valid number, e.g. 1234.56",
+    "date": "Enter a valid date"
   }
 }

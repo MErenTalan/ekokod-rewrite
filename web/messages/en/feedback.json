@@ -19,5 +19,9 @@
   "loadFailed": "Could not load the data",
   "saveFailed": "Could not be saved",
   "deleted": "Deleted",
-  "created": "Created"
+  "created": "Created",
+  "invalidFields": "Fields to correct: {fields}",
+  "moreFields": "and {count} more",
+  "networkError": "The server could not be reached. Check your connection and try again.",
+  "errorReference": "Reload the page and try again. If it persists, give your administrator this code: {reference}"
 }
