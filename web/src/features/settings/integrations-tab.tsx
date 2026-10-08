@@ -193,6 +193,7 @@ export function IntegrationsTabView({
           <div className="flex flex-col gap-4">
             <Select
               label={t('provider')}
+              error={fieldErrors.provider}
               options={PROVIDERS.map((value) => ({ value, label: value }))}
               value={draft.provider}
               onValueChange={(provider) =>

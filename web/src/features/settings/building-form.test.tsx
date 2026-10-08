@@ -61,6 +61,20 @@ describe('BuildingFormView', () => {
     expect(r.getByText('1 ile 31 arasında olmalı')).toBeInTheDocument();
   });
 
+  it('shows the API errors on the address and a contact row', () => {
+    const r = renderWithProviders(
+      <BuildingFormView
+        value={buildingDraft(detail)}
+        onChange={vi.fn()}
+        users={users}
+        tariffHistory={[]}
+        fieldErrors={{ address: 'Çok uzun', 'contacts[0].phone': 'Geçersiz değer' }}
+      />,
+    );
+    expect(r.getByLabelText('Adres')).toHaveAccessibleDescription('Çok uzun');
+    expect(r.getByLabelText('Telefon')).toHaveAccessibleDescription('Geçersiz değer');
+  });
+
   it('adds and removes contact rows up to the limit', async () => {
     const onChange = vi.fn();
     const full = { ...buildingDraft(detail), contacts: Array.from({ length: MAX_CONTACTS }, () => ({ name: '', phone: '' })) };

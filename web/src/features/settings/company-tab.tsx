@@ -60,12 +60,12 @@ export function CompanyTabView({ company, canEdit, onSave, fieldErrors = {}, sav
             }}
           >
             <Input label={t('name')} value={values.name} disabled={!canEdit} error={fieldErrors.name} onChange={(e) => setValues({ ...values, name: e.target.value })} required />
-            <Textarea label={t('address')} value={values.address} disabled={!canEdit} rows={2} onChange={(e) => setValues({ ...values, address: e.target.value })} />
+            <Textarea label={t('address')} error={fieldErrors.address} value={values.address} disabled={!canEdit} rows={2} onChange={(e) => setValues({ ...values, address: e.target.value })} />
             <Input label={t('sector')} value={values.sector} disabled={!canEdit} error={fieldErrors.sector} onChange={(e) => setValues({ ...values, sector: e.target.value })} />
-            <NumberInput label={t('totalArea')} value={values.total_area_m2} disabled={!canEdit} onValueChange={(v) => setValues({ ...values, total_area_m2: v ?? '' })} fractionDigits={2} />
-            <NumberInput label={t('personnel')} value={values.personnel_count} disabled={!canEdit} onValueChange={(v) => setValues({ ...values, personnel_count: v ?? '' })} fractionDigits={0} />
-            <Input label={t('contactName')} value={values.contact_name} disabled={!canEdit} onChange={(e) => setValues({ ...values, contact_name: e.target.value })} />
-            <Input label={t('contactPhone')} value={values.contact_phone} disabled={!canEdit} onChange={(e) => setValues({ ...values, contact_phone: e.target.value })} />
+            <NumberInput label={t('totalArea')} error={fieldErrors.total_area_m2} value={values.total_area_m2} disabled={!canEdit} onValueChange={(v) => setValues({ ...values, total_area_m2: v ?? '' })} fractionDigits={2} />
+            <NumberInput label={t('personnel')} error={fieldErrors.personnel_count} value={values.personnel_count} disabled={!canEdit} onValueChange={(v) => setValues({ ...values, personnel_count: v ?? '' })} fractionDigits={0} />
+            <Input label={t('contactName')} error={fieldErrors.contact_name} value={values.contact_name} disabled={!canEdit} onChange={(e) => setValues({ ...values, contact_name: e.target.value })} />
+            <Input label={t('contactPhone')} error={fieldErrors.contact_phone} value={values.contact_phone} disabled={!canEdit} onChange={(e) => setValues({ ...values, contact_phone: e.target.value })} />
             {canEdit ? (
               <Button type="submit" loading={saving} className="self-start">
                 {common('save')}
