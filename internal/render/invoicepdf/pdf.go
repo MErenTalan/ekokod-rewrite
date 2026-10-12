@@ -420,13 +420,14 @@ func reactiveStatus(b model.Bill, lines []model.BillLine) string {
 	flagged := func(f string) bool {
 		return b.FlagReason != nil && slices.Contains(strings.Split(*b.FlagReason, ","), f)
 	}
+	waived := slices.ContainsFunc(lines, func(l model.BillLine) bool { return l.Code == model.BillLineReactiveWaiver })
 	switch {
-	case b.Scope == model.BillScopeCompany && b.ReactivePenaltyApplied:
+	case b.Scope == model.BillScopeCompany && b.ReactivePenalty.IsPositive(): // net of waivers
 		return "st:company_charged"
+	case waived:
+		return "st:waived"
 	case b.Scope == model.BillScopeCompany:
 		return "st:company_none"
-	case slices.ContainsFunc(lines, func(l model.BillLine) bool { return l.Code == model.BillLineReactiveWaiver }):
-		return "st:waived"
 	case b.ReactivePenaltyApplied:
 		return "st:charged"
 	case flagged("reactive_data_missing"):

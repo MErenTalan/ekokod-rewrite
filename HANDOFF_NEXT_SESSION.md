@@ -1,4 +1,18 @@
-# Handoff — ekokod rewrite: F24 (Google map tiles, analyzer map checkboxes) on top of F23, deployed
+# Handoff — ekokod rewrite: F25 (invoice PDF redesign + EPDK 2022 reactive rules), not merged
+
+> **STATUS (2026-10-12):** branch `fix/f25-invoice-pdf` (worktree `/home/personal/ekokod-f25-invoice`,
+> from `main` @b5ece58), rulings R526–R530 in `docs/superpowers/plans/2026-10-12-f25-invoice-pdf-and-reactive.md`.
+> Reactive rules now follow EPDK Kurul Kararı 10961 (RG 30.04.2022) from 2022-05-01 via migration 00026:
+> monomial subscribers pay, exemption ≤ 15 kW, bands split at 50, only the higher side when both exceed,
+> a calendar year's first violation is printed and deducted (`reactive_waiver` line). The invoice PDF is
+> redesigned (masthead + amount due, subscriber/tariff cards, KPI tiles, line table, reactive chip, footer).
+> Gates green (see the plan's Status). **Not merged, not deployed, nothing pushed.** Deploy = migration
+> 26; check prod `billing_parameters` for rows after 2022-05-01 first; existing bills keep their old figures
+> until regenerated with force.
+
+---
+
+## Previous: F24 (Google map tiles, analyzer map checkboxes) on top of F23, deployed
 
 > **STATUS (2026-10-09 02:32):** `main` @ **73dd3e4** runs on new.ekokod.com (deploy-main.sh, no migration,
 > every container healthy, no error log). F24 (`fix/f24-map-tiles-analyzers`, R524–R525 appended to

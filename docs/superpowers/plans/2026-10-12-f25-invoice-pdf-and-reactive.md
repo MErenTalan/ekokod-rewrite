@@ -28,3 +28,21 @@ Usul ve Esaslar" Madde 13) found five differences; the owner chose to fix them i
 Gates: touched packages whole with `-tags=integration` (`domain/reactive`, `domain/billing`,
 `domain/tariff`, `store/postgres` (+`/admin`), `service/billing`, `render/invoicepdf`), `internal/arch`,
 golangci-lint on touched packages.
+
+## Status (2026-10-12)
+
+Both tasks done on `fix/f25-invoice-pdf` (311741d reactive, 0d68ef7 PDF, then a company-chip fix).
+Gates green: `domain/reactive`, `domain/billing` (property oracle extended; two engine mutations
+caught), `domain/tariff`, `store/postgres` whole incl. `TestScopeIsolationCoversEveryRepository`,
+`store/postgres/admin`, `migrate/legacy`, `service/billing` (prior-violation mutation caught),
+`worker`, `render/...`, `internal/arch`, golangci-lint. Visual review: `go test ./internal/render/invoicepdf
+-run TestWriteSamples -samples=DIR` writes building, waived analyzer, English company and flagged samples.
+
+Not done / for the owner:
+- Not merged, not deployed. Deploying runs migration 00026; existing bills are not recomputed —
+  a period priced under the new rules needs a forced regeneration.
+- Before deploying, check new.ekokod.com has no `billing_parameters` row dated after 2022-05-01 (it would
+  shadow R526's row): `select effective_from from billing_parameters order by 1;` (the read was not
+  permitted from this session).
+- Confirm against a real invoice: 50 kVA band applied to installed kW, the 2022-05-01 date, and whether
+  a later EPDK decision changed Madde 13.

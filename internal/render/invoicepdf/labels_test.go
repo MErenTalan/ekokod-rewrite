@@ -84,7 +84,8 @@ func TestReactiveStatus(t *testing.T) {
 		{"no data", model.Bill{Scope: model.BillScopeBuilding, InductiveThreshold: &limit, FlagReason: flag("reactive_data_missing")}, nil, "st:no_data"},
 		{"no power", model.Bill{Scope: model.BillScopeBuilding, FlagReason: flag("ptf_data_missing,installed_power_missing")}, nil, "st:no_power"},
 		{"exempt", model.Bill{Scope: model.BillScopeBuilding}, nil, "st:exempt"},
-		{"company charged", model.Bill{Scope: model.BillScopeCompany, ReactivePenaltyApplied: true}, nil, "st:company_charged"},
+		{"company charged", model.Bill{Scope: model.BillScopeCompany, ReactivePenaltyApplied: true, ReactivePenalty: decimal.RequireFromString("5")}, waiver, "st:company_charged"},
+		{"company all waived", model.Bill{Scope: model.BillScopeCompany, ReactivePenaltyApplied: true}, waiver, "st:waived"},
 		{"company none", model.Bill{Scope: model.BillScopeCompany}, nil, "st:company_none"},
 	}
 	for _, c := range cases {
