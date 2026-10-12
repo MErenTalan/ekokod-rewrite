@@ -7,9 +7,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -52,12 +55,16 @@ func document(scope model.BillScope) invoicepdf.Document {
 		{Code: "extra:Kapasite", Quantity: dp("1"), UnitPrice: dp("25"), Amount: decimal.RequireFromString("25"), SortOrder: 2},
 		{Code: model.BillLineVat, Unit: &pct, RatePct: dp("20"), Amount: decimal.RequireFromString("8000.02"), SortOrder: 3},
 	}
-	d := invoicepdf.Document{Bill: b, Lines: lines, CompanyName: "Ekokod Test A.Ş.", BuildingName: "ĞÜŞİÖÇ ğüşıöç Binası"}
+	name, contracted, installed := "Merkez OSB", decimal.RequireFromString("250"), decimal.RequireFromString("320")
+	tar := &model.Tariff{Name: &name, UserGroup: model.UserGroupIndustrial, VoltageLevel: model.VoltageLevelMV, Term: model.TariffTermBinomial,
+		PriceType: model.PriceTypeSingleTime, SupplyCompany: model.SupplyCompanyPrivate, UsePtfYekdem: true, ContractedPowerKw: &contracted}
+	d := invoicepdf.Document{Bill: b, Lines: lines, CompanyName: "Ekokod Test A.Ş.", BuildingName: "ĞÜŞİÖÇ ğüşıöç Binası",
+		Tariff: tar, InstalledPowerKw: &installed, Members: []invoicepdf.Member{{AnalyzerID: id, Name: "Ana pano", InstallationNumber: "4001234567"}}}
 	if scope != model.BillScopeAnalyzer {
 		d.Members = []invoicepdf.Member{{AnalyzerID: id, Name: "Sayaç 1", InstallationNumber: "T-1"}, {AnalyzerID: id, Name: "Sayaç 2", InstallationNumber: "T-2"}}
 	}
 	if scope == model.BillScopeCompany {
-		d.BuildingName = ""
+		d.BuildingName, d.Tariff, d.InstalledPowerKw = "", nil, nil
 	}
 	return d
 }
@@ -160,4 +167,67 @@ func TestRenderAllScopes(t *testing.T) {
 			require.Greater(t, len(out), 1000)
 		}
 	}
+}
+
+func pageCount(t *testing.T, pdf []byte) int {
+	t.Helper()
+	m := regexp.MustCompile(`/Type /Pages\s*/Kids \[[^\]]*\]\s*/Count (\d+)`).FindSubmatch(pdf)
+	require.NotNil(t, m, "no page tree")
+	n, err := strconv.Atoi(string(m[1]))
+	require.NoError(t, err)
+	return n
+}
+
+// A long meter list flows onto further pages (the table repeats its header).
+func TestRenderLongMemberListAddsPages(t *testing.T) {
+	d := document(model.BillScopeCompany)
+	d.Uncompressed = true
+	out, err := invoicepdf.Render(d)
+	require.NoError(t, err)
+	require.Equal(t, 1, pageCount(t, out))
+	for i := range 60 {
+		d.Members = append(d.Members, invoicepdf.Member{Name: fmt.Sprintf("Sayaç %d", i), InstallationNumber: fmt.Sprintf("T-%d", i)})
+	}
+	out, err = invoicepdf.Render(d)
+	require.NoError(t, err)
+	require.Greater(t, pageCount(t, out), 1)
+}
+
+var samples = flag.String("samples", "", "write sample invoices into this directory for a visual review")
+
+// TestWriteSamples renders the review set: go test -run TestWriteSamples -samples=DIR.
+func TestWriteSamples(t *testing.T) {
+	if *samples == "" {
+		t.Skip("no -samples directory")
+	}
+	write := func(file string, d invoicepdf.Document) {
+		out, err := invoicepdf.Render(d)
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(filepath.Join(*samples, file), out, 0o644))
+	}
+	b := document(model.BillScopeBuilding)
+	b.Bill.MaxDemandKw = dp("210.5")
+	write("building.pdf", b)
+
+	a := document(model.BillScopeAnalyzer)
+	unit := "kVArh"
+	a.Bill.ReactivePenaltyApplied, a.Bill.InductiveRatio = true, dp("0.648")
+	a.Lines = append(a.Lines[:1:1], model.BillLine{Code: model.BillLineReactiveInductive, Quantity: dp("800"), Unit: &unit, UnitPrice: dp("1.234567"), Amount: decimal.RequireFromString("987.65"), SortOrder: 0},
+		model.BillLine{Code: model.BillLineReactiveWaiver, Amount: decimal.RequireFromString("-987.65"), SortOrder: 0})
+	a.Lines = append(a.Lines, document(model.BillScopeAnalyzer).Lines[1:]...)
+	write("analyzer-waived.pdf", a)
+
+	c := document(model.BillScopeCompany)
+	c.Locale = "en"
+	for i := range 40 {
+		c.Members = append(c.Members, invoicepdf.Member{Name: "Meter", InstallationNumber: fmt.Sprintf("T-%d", i)})
+	}
+	write("company-en.pdf", c)
+
+	f := document(model.BillScopeBuilding)
+	reason := "ptf_data_missing,installed_power_missing"
+	f.Bill.Status, f.Bill.FlagReason = model.BillStatusFlagged, &reason
+	f.Bill.MissingDays = []string{"2026-01-20", "2026-01-21", "2026-01-25"}
+	f.Bill.InductiveThreshold, f.Bill.CapacitiveThreshold = nil, nil
+	write("flagged.pdf", f)
 }

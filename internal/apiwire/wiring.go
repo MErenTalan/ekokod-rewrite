@@ -225,7 +225,8 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 	billRequests := billingsvc.Requests{
 		Service: billingService, Enqueuer: enqueuer, MaxRetry: cfg.Worker.MaxRetries, Location: istanbul, Tasks: taskInspector,
 		Renderer: billingsvc.PDFRenderer{Bills: billRepo, Companies: postgres.NewCompanyRepository(pool),
-			Buildings: postgres.NewBuildingRepository(pool), Analyzers: postgres.NewAnalyzerRepository(pool), Root: cfg.Storage.Root},
+			Buildings: postgres.NewBuildingRepository(pool), Analyzers: postgres.NewAnalyzerRepository(pool),
+			Tariffs: postgres.NewTariffRepository(pool), Root: cfg.Storage.Root},
 	}
 
 	// F8b reports: the API previews, enqueues and serves files; it never

@@ -160,7 +160,7 @@ func TestRenderHandlerWritesFileAndPath(t *testing.T) {
 	require.NoError(t, err)
 	root := t.TempDir()
 	r := billingsvc.PDFRenderer{Bills: h.bills, Companies: postgres.NewCompanyRepository(h.pool), Buildings: postgres.NewBuildingRepository(h.pool),
-		Analyzers: postgres.NewAnalyzerRepository(h.pool), Root: root}
+		Analyzers: postgres.NewAnalyzerRepository(h.pool), Tariffs: h.tariffs, Root: root}
 	require.NoError(t, r.Render(h.ctx, job.BillingRenderPayload{CompanyID: h.tenant.Company.ID, BillID: res.Bill.ID}))
 	b, err := h.bills.Get(h.ctx, h.tenant.AdminScope, res.Bill.ID)
 	require.NoError(t, err)
@@ -175,4 +175,11 @@ func TestRenderHandlerWritesFileAndPath(t *testing.T) {
 	entries, err := os.ReadDir(root + "/bills/" + h.tenant.Company.ID.String())
 	require.NoError(t, err)
 	require.Len(t, entries, 1, "no temp file left behind")
+
+	withTariff, _, err := r.Bytes(h.ctx, job.BillingRenderPayload{CompanyID: h.tenant.Company.ID, BillID: res.Bill.ID})
+	require.NoError(t, err)
+	r.Tariffs = nil
+	without, _, err := r.Bytes(h.ctx, job.BillingRenderPayload{CompanyID: h.tenant.Company.ID, BillID: res.Bill.ID})
+	require.NoError(t, err)
+	require.Greater(t, len(withTariff), len(without), "R530: the tariff card is printed")
 }

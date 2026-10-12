@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
+	"github.com/shopspring/decimal"
 
 	domain "github.com/MErenTalan/ekokod-rewrite/internal/domain/billing"
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
@@ -187,6 +188,7 @@ type PDFRenderer struct {
 	Companies store.CompanyRepository
 	Buildings store.BuildingRepository
 	Analyzers store.AnalyzerRepository
+	Tariffs   store.TariffRepository // R530: the tariff card; nil prints none
 	Root      string
 }
 
@@ -227,12 +229,26 @@ func (r PDFRenderer) Bytes(ctx context.Context, p job.BillingRenderPayload) ([]b
 			return nil, model.Bill{}, err
 		}
 		slices.SortFunc(analyzers, func(a, b model.Analyzer) int { return compareStrings(a.InstallationNumber, b.InstallationNumber) })
+		installed := make([]*decimal.Decimal, 0, len(analyzers))
 		for _, a := range analyzers {
 			name := ""
 			if a.MeteringPointName != nil {
 				name = *a.MeteringPointName
 			}
 			doc.Members = append(doc.Members, invoicepdf.Member{AnalyzerID: a.ID, Name: name, InstallationNumber: a.InstallationNumber})
+			installed = append(installed, a.InstalledPowerKw)
+		}
+		if b.Scope != model.BillScopeCompany {
+			doc.InstalledPowerKw = domain.SumInstalledPower(installed) // as billing summed it
+		}
+	}
+	if r.Tariffs != nil && b.TariffID != nil && b.Scope != model.BillScopeCompany {
+		t, err := r.Tariffs.Get(ctx, sc, *b.TariffID)
+		switch {
+		case err == nil:
+			doc.Tariff = &t
+		case !errors.Is(err, store.ErrNotFound): // a deleted tariff just prints no card
+			return nil, model.Bill{}, err
 		}
 	}
 	pdf, err := invoicepdf.Render(doc)
