@@ -7,8 +7,8 @@
 > a calendar year's first violation is printed and deducted (`reactive_waiver` line). The invoice PDF is
 > redesigned (masthead + amount due, subscriber/tariff cards, KPI tiles, line table, reactive chip, footer).
 > Gates green (see the plan's Status). **Not merged, not deployed, nothing pushed.** Deploy = migration
-> 26; check prod `billing_parameters` for rows after 2022-05-01 first; existing bills keep their old figures
-> until regenerated with force.
+> 26 (prod `billing_parameters` has only the seed row, checked 2026-10-12); existing bills keep their old
+> figures until regenerated with force.
 
 ---
 

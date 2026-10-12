@@ -41,8 +41,7 @@ caught), `domain/tariff`, `store/postgres` whole incl. `TestScopeIsolationCovers
 Not done / for the owner:
 - Not merged, not deployed. Deploying runs migration 00026; existing bills are not recomputed —
   a period priced under the new rules needs a forced regeneration.
-- Before deploying, check new.ekokod.com has no `billing_parameters` row dated after 2022-05-01 (it would
-  shadow R526's row): `select effective_from from billing_parameters order by 1;` (the read was not
-  permitted from this session).
+- new.ekokod.com checked by the owner (2026-10-12): `billing_parameters` holds only the 2000-01-01 seed
+  row, so migration 00026's 2022-05-01 row will take effect there.
 - Confirm against a real invoice: 50 kVA band applied to installed kW, the 2022-05-01 date, and whether
   a later EPDK decision changed Madde 13.
