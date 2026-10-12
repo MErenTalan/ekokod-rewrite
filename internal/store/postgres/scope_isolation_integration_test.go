@@ -846,7 +846,9 @@ func seedScopeIsoFixtures(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 
 	// --- bills (building-parented, with children) ----------------------------
 	billRepo := postgres.NewBillRepository(pool)
-	bill, err := billRepo.Create(ctx, adminScope, billFixtureRow(companyID, &buildingID, nil, model.BillScopeBuilding, "2026-01"),
+	billRow := billFixtureRow(companyID, &buildingID, nil, model.BillScopeBuilding, "2026-01")
+	billRow.ReactivePenaltyApplied = true // ReactiveViolationBefore reads it
+	bill, err := billRepo.Create(ctx, adminScope, billRow,
 		[]model.BillLine{{Code: "energy", Label: "Energy", Amount: billDec("10.0000")}}, nil)
 	require.NoError(t, err)
 	f.billID = bill.ID
@@ -1805,6 +1807,15 @@ func TestScopeIsolation(t *testing.T) {
 		scopeIsoAssertGetNotFound(t,
 			func(s store.Scope) ([]model.BillHourlyDetail, error) { return repo.HourlyDetail(ctx, s, bf.billID) },
 			tenantA.AdminScope, tenantB.AdminScope, "BillRepository.HourlyDetail cross-tenant")
+		violated := func(s store.Scope, building uuid.UUID) bool {
+			v, err := repo.ReactiveViolationBefore(ctx, s, model.BillScopeBuilding, building, "2026-02")
+			require.NoError(t, err)
+			return v
+		}
+		require.True(t, violated(tenantB.AdminScope, bf.buildingID), "BillRepository.ReactiveViolationBefore owner")
+		require.False(t, violated(tenantA.AdminScope, bf.buildingID), "BillRepository.ReactiveViolationBefore cross-tenant")
+		require.True(t, violated(tenantA.AdminScope, af.buildingID), "BillRepository.ReactiveViolationBefore owner")
+		require.False(t, violated(tenantA.Scope, af.buildingID), "BillRepository.ReactiveViolationBefore narrow-scope")
 		// Important Finding 4: tenant B's company-level bill must be
 		// invisible even to tenant A's AdminScope.
 		scopeIsoAssertGetNotFound(t,

@@ -135,7 +135,8 @@ insert into billing_parameters (
   effective_from, reactive_penalty_basis, reactive_exempt_below_kw, reactive_exempt_terms,
   reactive_exempt_user_groups, reactive_generation_exempt_kwh, reactive_bands, tiering_groups,
   tiering_mode, tiering_voltage_levels, tiering_supply_companies, ptf_missing_hour_tolerance,
-  demand_overrun_multiplier, money_rounding_mode
+  demand_overrun_multiplier, money_rounding_mode, reactive_exempt_inclusive,
+  reactive_charge_higher_side, reactive_first_violation_waived
 ) values (
   $1, $2, $3,
   $4::text[]::tariff_term[],
@@ -143,7 +144,8 @@ insert into billing_parameters (
   $6, $7, $8,
   $9, $10::text[]::voltage_level[],
   $11::text[]::supply_company[],
-  $12, $13, $14
+  $12, $13, $14,
+  $15, $16, $17
 )
 on conflict (effective_from) do update set
   reactive_penalty_basis = excluded.reactive_penalty_basis,
@@ -158,49 +160,59 @@ on conflict (effective_from) do update set
   tiering_supply_companies = excluded.tiering_supply_companies,
   ptf_missing_hour_tolerance = excluded.ptf_missing_hour_tolerance,
   demand_overrun_multiplier = excluded.demand_overrun_multiplier,
-  money_rounding_mode = excluded.money_rounding_mode
+  money_rounding_mode = excluded.money_rounding_mode,
+  reactive_exempt_inclusive = excluded.reactive_exempt_inclusive,
+  reactive_charge_higher_side = excluded.reactive_charge_higher_side,
+  reactive_first_violation_waived = excluded.reactive_first_violation_waived
 returning effective_from, reactive_penalty_basis, reactive_exempt_below_kw,
   reactive_exempt_terms::text[] as reactive_exempt_terms,
   reactive_exempt_user_groups::text[] as reactive_exempt_user_groups,
   reactive_generation_exempt_kwh, reactive_bands, tiering_groups, tiering_mode,
   tiering_voltage_levels::text[] as tiering_voltage_levels,
   tiering_supply_companies::text[] as tiering_supply_companies,
-  ptf_missing_hour_tolerance, demand_overrun_multiplier, money_rounding_mode, created_at
+  ptf_missing_hour_tolerance, demand_overrun_multiplier, money_rounding_mode,
+  reactive_exempt_inclusive, reactive_charge_higher_side, reactive_first_violation_waived, created_at
 `
 
 type AdminUpsertBillingParametersParams struct {
-	EffectiveFrom               pgtype.Date
-	ReactivePenaltyBasis        ReactivePenaltyBasis
-	ReactiveExemptBelowKw       pgtype.Numeric
-	ReactiveExemptTerms         []string
-	ReactiveExemptUserGroups    []string
-	ReactiveGenerationExemptKwh pgtype.Numeric
-	ReactiveBands               []byte
-	TieringGroups               []byte
-	TieringMode                 TieringMode
-	TieringVoltageLevels        []string
-	TieringSupplyCompanies      []string
-	PtfMissingHourTolerance     pgtype.Numeric
-	DemandOverrunMultiplier     pgtype.Numeric
-	MoneyRoundingMode           MoneyRoundingMode
+	EffectiveFrom                pgtype.Date
+	ReactivePenaltyBasis         ReactivePenaltyBasis
+	ReactiveExemptBelowKw        pgtype.Numeric
+	ReactiveExemptTerms          []string
+	ReactiveExemptUserGroups     []string
+	ReactiveGenerationExemptKwh  pgtype.Numeric
+	ReactiveBands                []byte
+	TieringGroups                []byte
+	TieringMode                  TieringMode
+	TieringVoltageLevels         []string
+	TieringSupplyCompanies       []string
+	PtfMissingHourTolerance      pgtype.Numeric
+	DemandOverrunMultiplier      pgtype.Numeric
+	MoneyRoundingMode            MoneyRoundingMode
+	ReactiveExemptInclusive      bool
+	ReactiveChargeHigherSide     bool
+	ReactiveFirstViolationWaived bool
 }
 
 type AdminUpsertBillingParametersRow struct {
-	EffectiveFrom               pgtype.Date
-	ReactivePenaltyBasis        ReactivePenaltyBasis
-	ReactiveExemptBelowKw       pgtype.Numeric
-	ReactiveExemptTerms         []string
-	ReactiveExemptUserGroups    []string
-	ReactiveGenerationExemptKwh pgtype.Numeric
-	ReactiveBands               []byte
-	TieringGroups               []byte
-	TieringMode                 TieringMode
-	TieringVoltageLevels        []string
-	TieringSupplyCompanies      []string
-	PtfMissingHourTolerance     pgtype.Numeric
-	DemandOverrunMultiplier     pgtype.Numeric
-	MoneyRoundingMode           MoneyRoundingMode
-	CreatedAt                   pgtype.Timestamptz
+	EffectiveFrom                pgtype.Date
+	ReactivePenaltyBasis         ReactivePenaltyBasis
+	ReactiveExemptBelowKw        pgtype.Numeric
+	ReactiveExemptTerms          []string
+	ReactiveExemptUserGroups     []string
+	ReactiveGenerationExemptKwh  pgtype.Numeric
+	ReactiveBands                []byte
+	TieringGroups                []byte
+	TieringMode                  TieringMode
+	TieringVoltageLevels         []string
+	TieringSupplyCompanies       []string
+	PtfMissingHourTolerance      pgtype.Numeric
+	DemandOverrunMultiplier      pgtype.Numeric
+	MoneyRoundingMode            MoneyRoundingMode
+	ReactiveExemptInclusive      bool
+	ReactiveChargeHigherSide     bool
+	ReactiveFirstViolationWaived bool
+	CreatedAt                    pgtype.Timestamptz
 }
 
 // billing_parameters is platform-wide and dated (R106); keyed on effective_from.
@@ -220,6 +232,9 @@ func (q *Queries) AdminUpsertBillingParameters(ctx context.Context, arg AdminUps
 		arg.PtfMissingHourTolerance,
 		arg.DemandOverrunMultiplier,
 		arg.MoneyRoundingMode,
+		arg.ReactiveExemptInclusive,
+		arg.ReactiveChargeHigherSide,
+		arg.ReactiveFirstViolationWaived,
 	)
 	var i AdminUpsertBillingParametersRow
 	err := row.Scan(
@@ -237,6 +252,9 @@ func (q *Queries) AdminUpsertBillingParameters(ctx context.Context, arg AdminUps
 		&i.PtfMissingHourTolerance,
 		&i.DemandOverrunMultiplier,
 		&i.MoneyRoundingMode,
+		&i.ReactiveExemptInclusive,
+		&i.ReactiveChargeHigherSide,
+		&i.ReactiveFirstViolationWaived,
 		&i.CreatedAt,
 	)
 	return i, err

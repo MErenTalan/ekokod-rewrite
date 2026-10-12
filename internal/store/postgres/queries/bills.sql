@@ -36,6 +36,21 @@ where bills.company_id = sqlc.arg(company_id)
   and bills.status <> 'superseded'
   and (bills.building_id is null or exists (select 1 from buildings b where b.id = bills.building_id and b.deleted_at is null));
 
+-- R529: did a live bill of the same subject record a reactive violation
+-- earlier in period_key's calendar year?
+-- name: BillReactiveViolationBefore :one
+select exists (
+  select 1 from bills
+  where bills.company_id = sqlc.arg(company_id)
+    and (sqlc.arg(all_buildings)::boolean or bills.building_id = any(sqlc.arg(building_ids)::uuid[]))
+    and bills.scope = sqlc.arg(bill_scope)
+    and coalesce(bills.analyzer_id, bills.building_id, bills.company_id) = sqlc.arg(subject_id)
+    and bills.period_key >= sqlc.arg(year_start)::text
+    and bills.period_key < sqlc.arg(period_key)::text
+    and bills.status <> 'superseded'
+    and bills.reactive_penalty_applied
+)::boolean as violated;
+
 -- name: BillVisible :one
 select exists (
   select 1 from bills

@@ -19,7 +19,8 @@ select effective_from, reactive_penalty_basis, reactive_exempt_below_kw,
   reactive_generation_exempt_kwh, reactive_bands, tiering_groups, tiering_mode,
   tiering_voltage_levels::text[] as tiering_voltage_levels,
   tiering_supply_companies::text[] as tiering_supply_companies,
-  ptf_missing_hour_tolerance, demand_overrun_multiplier, money_rounding_mode, created_at
+  ptf_missing_hour_tolerance, demand_overrun_multiplier, money_rounding_mode,
+  reactive_exempt_inclusive, reactive_charge_higher_side, reactive_first_violation_waived, created_at
 from billing_parameters
 where effective_from <= $1
 order by effective_from desc
@@ -27,21 +28,24 @@ limit 1
 `
 
 type BillingParametersEffectiveRow struct {
-	EffectiveFrom               pgtype.Date
-	ReactivePenaltyBasis        ReactivePenaltyBasis
-	ReactiveExemptBelowKw       pgtype.Numeric
-	ReactiveExemptTerms         []string
-	ReactiveExemptUserGroups    []string
-	ReactiveGenerationExemptKwh pgtype.Numeric
-	ReactiveBands               []byte
-	TieringGroups               []byte
-	TieringMode                 TieringMode
-	TieringVoltageLevels        []string
-	TieringSupplyCompanies      []string
-	PtfMissingHourTolerance     pgtype.Numeric
-	DemandOverrunMultiplier     pgtype.Numeric
-	MoneyRoundingMode           MoneyRoundingMode
-	CreatedAt                   pgtype.Timestamptz
+	EffectiveFrom                pgtype.Date
+	ReactivePenaltyBasis         ReactivePenaltyBasis
+	ReactiveExemptBelowKw        pgtype.Numeric
+	ReactiveExemptTerms          []string
+	ReactiveExemptUserGroups     []string
+	ReactiveGenerationExemptKwh  pgtype.Numeric
+	ReactiveBands                []byte
+	TieringGroups                []byte
+	TieringMode                  TieringMode
+	TieringVoltageLevels         []string
+	TieringSupplyCompanies       []string
+	PtfMissingHourTolerance      pgtype.Numeric
+	DemandOverrunMultiplier      pgtype.Numeric
+	MoneyRoundingMode            MoneyRoundingMode
+	ReactiveExemptInclusive      bool
+	ReactiveChargeHigherSide     bool
+	ReactiveFirstViolationWaived bool
+	CreatedAt                    pgtype.Timestamptz
 }
 
 // Billing parameters (migration 00014): platform-wide, dated (R106). Enum
@@ -64,6 +68,9 @@ func (q *Queries) BillingParametersEffective(ctx context.Context, effectiveOn pg
 		&i.PtfMissingHourTolerance,
 		&i.DemandOverrunMultiplier,
 		&i.MoneyRoundingMode,
+		&i.ReactiveExemptInclusive,
+		&i.ReactiveChargeHigherSide,
+		&i.ReactiveFirstViolationWaived,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -76,27 +83,31 @@ select effective_from, reactive_penalty_basis, reactive_exempt_below_kw,
   reactive_generation_exempt_kwh, reactive_bands, tiering_groups, tiering_mode,
   tiering_voltage_levels::text[] as tiering_voltage_levels,
   tiering_supply_companies::text[] as tiering_supply_companies,
-  ptf_missing_hour_tolerance, demand_overrun_multiplier, money_rounding_mode, created_at
+  ptf_missing_hour_tolerance, demand_overrun_multiplier, money_rounding_mode,
+  reactive_exempt_inclusive, reactive_charge_higher_side, reactive_first_violation_waived, created_at
 from billing_parameters
 order by effective_from
 `
 
 type BillingParametersListRow struct {
-	EffectiveFrom               pgtype.Date
-	ReactivePenaltyBasis        ReactivePenaltyBasis
-	ReactiveExemptBelowKw       pgtype.Numeric
-	ReactiveExemptTerms         []string
-	ReactiveExemptUserGroups    []string
-	ReactiveGenerationExemptKwh pgtype.Numeric
-	ReactiveBands               []byte
-	TieringGroups               []byte
-	TieringMode                 TieringMode
-	TieringVoltageLevels        []string
-	TieringSupplyCompanies      []string
-	PtfMissingHourTolerance     pgtype.Numeric
-	DemandOverrunMultiplier     pgtype.Numeric
-	MoneyRoundingMode           MoneyRoundingMode
-	CreatedAt                   pgtype.Timestamptz
+	EffectiveFrom                pgtype.Date
+	ReactivePenaltyBasis         ReactivePenaltyBasis
+	ReactiveExemptBelowKw        pgtype.Numeric
+	ReactiveExemptTerms          []string
+	ReactiveExemptUserGroups     []string
+	ReactiveGenerationExemptKwh  pgtype.Numeric
+	ReactiveBands                []byte
+	TieringGroups                []byte
+	TieringMode                  TieringMode
+	TieringVoltageLevels         []string
+	TieringSupplyCompanies       []string
+	PtfMissingHourTolerance      pgtype.Numeric
+	DemandOverrunMultiplier      pgtype.Numeric
+	MoneyRoundingMode            MoneyRoundingMode
+	ReactiveExemptInclusive      bool
+	ReactiveChargeHigherSide     bool
+	ReactiveFirstViolationWaived bool
+	CreatedAt                    pgtype.Timestamptz
 }
 
 func (q *Queries) BillingParametersList(ctx context.Context) ([]BillingParametersListRow, error) {
@@ -123,6 +134,9 @@ func (q *Queries) BillingParametersList(ctx context.Context) ([]BillingParameter
 			&i.PtfMissingHourTolerance,
 			&i.DemandOverrunMultiplier,
 			&i.MoneyRoundingMode,
+			&i.ReactiveExemptInclusive,
+			&i.ReactiveChargeHigherSide,
+			&i.ReactiveFirstViolationWaived,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err

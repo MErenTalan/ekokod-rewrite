@@ -1,6 +1,7 @@
 package billing_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/shopspring/decimal"
@@ -233,6 +234,44 @@ func TestReactiveAppliedAddsLinesAndVatBase(t *testing.T) {
 	require.Equal(t, "1000", inv.ReactivePenalty.String())
 	// energy 2600 (tiered: 900×2.5 + 100×3.5) + distribution 500 + power 4000 + reactive 1000
 	require.Equal(t, "8100", inv.VatBase.String())
+}
+
+// R529: a year's first violation is printed and deducted on the same invoice.
+func TestReactiveFirstViolationIsDeducted(t *testing.T) {
+	in := reactiveInput(t)
+	in.Params.ReactiveFirstViolationWaived = true
+	inv := compute(t, in)
+	a := amounts(inv)
+	require.Equal(t, "1000.00", a[model.BillLineReactiveInductive], "the charge is still printed")
+	require.Equal(t, "-1000.00", a[model.BillLineReactiveWaiver])
+	require.True(t, inv.ReactiveWaived)
+	require.True(t, inv.Reactive.Applied, "later months must see the violation")
+	require.True(t, inv.ReactivePenalty.IsZero(), "the net reactive charge")
+	require.Equal(t, "7100", inv.VatBase.String(), "8100 − the deducted 1000")
+	codes := make([]string, len(inv.Lines))
+	for i, l := range inv.Lines {
+		codes[i] = l.Code
+	}
+	require.Equal(t, model.BillLineReactiveWaiver, codes[slices.Index(codes, model.BillLineReactiveInductive)+1], "deduction follows the reactive lines")
+
+	in.ReactivePriorViolation = true
+	inv = compute(t, in)
+	require.NotContains(t, amounts(inv), model.BillLineReactiveWaiver, "a second violation in the year is charged")
+	require.Equal(t, "1000", inv.ReactivePenalty.String())
+
+	in = reactiveInput(t)
+	inv = compute(t, in)
+	require.NotContains(t, amounts(inv), model.BillLineReactiveWaiver, "rule off: legacy charges every violation")
+	require.False(t, inv.ReactiveWaived)
+}
+
+func TestReactiveWaiverNeedsACharge(t *testing.T) {
+	in := reactiveInput(t)
+	in.Params.ReactiveFirstViolationWaived = true
+	in.Quantities.ReactiveInductive = dp("100") // 0.10 ≤ 0.20
+	inv := compute(t, in)
+	require.NotContains(t, amounts(inv), model.BillLineReactiveWaiver)
+	require.False(t, inv.ReactiveWaived)
 }
 
 func TestReactiveExemptionsProduceNoLines(t *testing.T) {

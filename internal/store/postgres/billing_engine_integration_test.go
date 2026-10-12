@@ -11,13 +11,17 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
+	"github.com/MErenTalan/ekokod-rewrite/internal/domain/tariff"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/admin"
 	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
 )
 
-var seedParamsDate = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+var (
+	seedParamsDate = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+	epdk2022Date   = time.Date(2022, 5, 1, 0, 0, 0, 0, time.UTC) // R526's row
+)
 
 func TestMigration00014RoundTrips(t *testing.T) {
 	t.Parallel()
@@ -63,9 +67,10 @@ func TestBillingParametersSeedDefaults(t *testing.T) {
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1402)
 
-	p, err := postgres.NewBillingParameterRepository(pool).Effective(ctx, tenant.Scope, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	p, err := postgres.NewBillingParameterRepository(pool).Effective(ctx, tenant.Scope, time.Date(2022, 4, 30, 0, 0, 0, 0, time.UTC))
 	require.NoError(t, err)
 	require.True(t, p.EffectiveFrom.Equal(seedParamsDate))
+	require.False(t, p.ReactiveExemptInclusive || p.ReactiveChargeHigherSide || p.ReactiveFirstViolationWaived, "legacy rules before R526")
 	require.Equal(t, model.ReactivePenaltyBasisWholeQuantity, p.ReactivePenaltyBasis)
 	require.True(t, p.ReactiveExemptBelowKw.Equal(decimal.NewFromInt(9)))
 	require.Equal(t, []model.TariffTerm{model.TariffTermMonomial}, p.ReactiveExemptTerms)
@@ -79,6 +84,48 @@ func TestBillingParametersSeedDefaults(t *testing.T) {
 	require.True(t, p.ReactiveGenerationExemptKwh.Equal(decimal.NewFromInt(1)))
 }
 
+// TestBillingParametersEPDK2022Row: migration 00026's row (R526–R529).
+func TestBillingParametersEPDK2022Row(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 1411)
+	repo := postgres.NewBillingParameterRepository(pool)
+
+	p, err := repo.Effective(ctx, tenant.Scope, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	require.NoError(t, err)
+	require.True(t, p.EffectiveFrom.Equal(epdk2022Date))
+	require.Empty(t, p.ReactiveExemptTerms, "monomial subscribers pay")
+	require.Equal(t, []model.DistributionUserGroup{model.UserGroupResidential, model.UserGroupResidentialPlus,
+		model.UserGroupMartyrsFamilies, model.UserGroupLighting, model.UserGroupPublicLighting}, p.ReactiveExemptUserGroups)
+	require.Equal(t, "15", p.ReactiveExemptBelowKw.String())
+	require.True(t, p.ReactiveExemptInclusive)
+	require.True(t, p.ReactiveChargeHigherSide)
+	require.True(t, p.ReactiveFirstViolationWaived)
+	require.Equal(t, model.ReactivePenaltyBasisWholeQuantity, p.ReactivePenaltyBasis)
+	require.Len(t, p.ReactiveBands, 2)
+	require.Equal(t, "15", p.ReactiveBands[0].MinKw.String())
+	require.Equal(t, "50", p.ReactiveBands[0].MaxKw.String())
+	require.Equal(t, "0.33", p.ReactiveBands[0].Inductive.String())
+	require.Equal(t, "0.2", p.ReactiveBands[0].Capacitive.String())
+	require.Equal(t, "50", p.ReactiveBands[1].MinKw.String())
+	require.Nil(t, p.ReactiveBands[1].MaxKw)
+	require.Equal(t, "0.2", p.ReactiveBands[1].Inductive.String())
+	require.Equal(t, "0.15", p.ReactiveBands[1].Capacitive.String())
+	require.NoError(t, tariff.ValidateParams(p))
+	// Everything else is copied from the seed row.
+	require.True(t, p.DemandOverrunMultiplier.Equal(decimal.NewFromInt(2)))
+	require.True(t, p.PTFMissingHourTolerance.Equal(decimal.RequireFromString("0.02")))
+	require.Equal(t, "30", p.TieringGroups[model.UserGroupCommercial].String())
+
+	p.EffectiveFrom = time.Date(2031, 1, 1, 0, 0, 0, 0, time.UTC)
+	p.ReactiveChargeHigherSide = false
+	saved, err := admin.NewCatalogueRepository(pool).UpsertBillingParameters(ctx, p)
+	require.NoError(t, err)
+	require.True(t, saved.ReactiveExemptInclusive && saved.ReactiveFirstViolationWaived)
+	require.False(t, saved.ReactiveChargeHigherSide, "the admin upsert writes each flag")
+}
+
 // TestBillingParametersDecodeBandsAndGroupsExactly: jsonb decimals decode from
 // their strings exactly (mutation: via float64 → the float guard or this test).
 func TestBillingParametersDecodeBandsAndGroupsExactly(t *testing.T) {
@@ -87,7 +134,7 @@ func TestBillingParametersDecodeBandsAndGroupsExactly(t *testing.T) {
 	pool := testfixtures.NewIsolatedDB(t)
 	tenant := testfixtures.NewTenant(t, ctx, pool, 1403)
 
-	p, err := postgres.NewBillingParameterRepository(pool).Effective(ctx, tenant.Scope, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	p, err := postgres.NewBillingParameterRepository(pool).Effective(ctx, tenant.Scope, time.Date(2022, 4, 30, 0, 0, 0, 0, time.UTC))
 	require.NoError(t, err)
 	require.Len(t, p.ReactiveBands, 2)
 	b0, b1 := p.ReactiveBands[0], p.ReactiveBands[1]
@@ -129,14 +176,14 @@ func TestBillingParametersEffectivePicksGreatestNotAfter(t *testing.T) {
 	istanbul := istanbulForTest(t)
 	got, err := repo.Effective(ctx, tenant.Scope, time.Date(2025, 12, 31, 23, 59, 0, 0, istanbul))
 	require.NoError(t, err)
-	require.True(t, got.EffectiveFrom.Equal(seedParamsDate))
+	require.True(t, got.EffectiveFrom.Equal(epdk2022Date))
 	got, err = repo.Effective(ctx, tenant.Scope, time.Date(2026, 1, 1, 0, 0, 0, 0, istanbul))
 	require.NoError(t, err)
 	require.Equal(t, "3", got.DemandOverrunMultiplier.String())
 
 	list, err := repo.List(ctx, tenant.Scope)
 	require.NoError(t, err)
-	require.Len(t, list, 2)
+	require.Len(t, list, 3, "seed, R526's 2022 row, the new one")
 
 	_, err = repo.Effective(ctx, store.Scope{}, time.Now())
 	require.ErrorIs(t, err, store.ErrInvalidScope)

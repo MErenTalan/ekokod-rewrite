@@ -39,6 +39,9 @@ type Input struct {
 	Quantities       Quantities
 	InstalledPowerKw *decimal.Decimal
 	Pricing          *tariff.Pricing // required iff Tariff.UsePtfYekdem
+	// ReactivePriorViolation: the subject already had a reactive violation
+	// earlier in this calendar year, so no first-violation deduction (R529).
+	ReactivePriorViolation bool
 }
 
 // Line is one invoice line; Amount is rounded (R112).
@@ -84,6 +87,7 @@ type Invoice struct {
 
 	Reactive           reactive.Result
 	ReactivePowerPrice *decimal.Decimal
+	ReactiveWaived     bool // R529: ReactivePenalty is net of the deducted first violation
 
 	GenerationUsage       model.GenerationUsage
 	GenerationPricePerKwh *decimal.Decimal
@@ -267,6 +271,10 @@ func Compute(in Input) (Invoice, error) {
 				inv.ReactivePenalty = inv.ReactivePenalty.Add(add(priced(side.code, *side.charged, UnitKvarh, *reactivePrice)))
 			}
 		}
+	}
+	if p.ReactiveFirstViolationWaived && !in.ReactivePriorViolation && inv.ReactivePenalty.IsPositive() {
+		add(Line{Code: model.BillLineReactiveWaiver, Amount: inv.ReactivePenalty.Neg()})
+		inv.ReactivePenalty, inv.ReactiveWaived = decimal.Zero, true
 	}
 
 	// 7. Extra charges (R126), inside the VAT base.
