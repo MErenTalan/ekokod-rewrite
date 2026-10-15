@@ -1,4 +1,4 @@
-# Handoff — ekokod rewrite: F25 (invoice PDF redesign + EPDK 2022 reactive rules), not merged
+# Handoff — ekokod rewrite: F25 (invoice PDF redesign + EPDK 2022 reactive rules), merged and deployed
 
 > **STATUS (2026-10-12):** branch `fix/f25-invoice-pdf` (worktree `/home/personal/ekokod-f25-invoice`,
 > from `main` @b5ece58), rulings R526–R530 in `docs/superpowers/plans/2026-10-12-f25-invoice-pdf-and-reactive.md`.
@@ -6,8 +6,9 @@
 > monomial subscribers pay, exemption ≤ 15 kW, bands split at 50, only the higher side when both exceed,
 > a calendar year's first violation is printed and deducted (`reactive_waiver` line). The invoice PDF is
 > redesigned (masthead + amount due, subscriber/tariff cards, KPI tiles, line table, reactive chip, footer).
-> Gates green (see the plan's Status). **Not merged, not deployed, nothing pushed.** Deploy = migration
-> 26 (prod `billing_parameters` has only the seed row, checked 2026-10-12); existing bills keep their old
+> **2026-10-15 12:36:** merged into `main` (**02f3b00**) and deployed with `deploy-main.sh`; migration
+> 25→26 applied, all containers healthy. Rollback: `/opt/ekokod-new.prev-20261015-123514`,
+> `/root/ekokod-new-pre-02f3b00-20261015-123514.dump`. Nothing pushed. Existing bills keep their old
 > figures until regenerated with force.
 
 ---
