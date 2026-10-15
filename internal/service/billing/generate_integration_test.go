@@ -738,3 +738,33 @@ func TestGenerateMatchesDomainComputeOverRandomTariffs(t *testing.T) {
 		}
 	}
 }
+
+// TestGenerateDeductsOnlyTheYearsFirstReactiveViolation: R529 under migration
+// 00026's parameters — January's violation is deducted, February's is charged.
+func TestGenerateDeductsOnlyTheYearsFirstReactiveViolation(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, 7050)
+	a := h.tenant.Analyzers[0]
+	feb, err := domain.Period("2026-02", 15, h.loc)
+	require.NoError(t, err)
+	h.seed(a.ID, h.window.From, "1000", "0", "0")
+	h.seed(a.ID, h.window.To, "1500", "300", "0") // 300 kVArh / 500 kWh = 0.60 > 0.20
+	h.seed(a.ID, feb.To, "2000", "600", "0")
+
+	jan, err := h.generate(h.tenant.Scope, model.BillScopeAnalyzer, a.ID)
+	require.NoError(t, err)
+	require.Equal(t, model.BillStatusIssued, jan.Bill.Status, "flag reason %v", jan.Bill.FlagReason)
+	lines := lineAmounts(t, h, jan.Bill.ID)
+	require.Equal(t, "370.37", lines[model.BillLineReactiveInductive], "300 × 1.234567")
+	require.Equal(t, "-370.37", lines[model.BillLineReactiveWaiver])
+	require.True(t, jan.Bill.ReactivePenalty.IsZero())
+	require.True(t, jan.Bill.ReactivePenaltyApplied)
+
+	h.clock.Set(feb.To.Add(73 * time.Hour))
+	febBill, err := h.generate(h.tenant.Scope, model.BillScopeAnalyzer, a.ID, func(r *billingsvc.GenerateRequest) { r.PeriodKey = "2026-02" })
+	require.NoError(t, err)
+	lines = lineAmounts(t, h, febBill.Bill.ID)
+	require.Equal(t, "370.37", lines[model.BillLineReactiveInductive])
+	require.NotContains(t, lines, model.BillLineReactiveWaiver, "the year's second violation is charged")
+	require.Equal(t, "370.37", febBill.Bill.ReactivePenalty.StringFixed(2))
+}

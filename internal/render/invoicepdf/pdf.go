@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -14,13 +15,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 	"golang.org/x/image/font/gofont/gobold"
+	"golang.org/x/image/font/gofont/gomedium"
 	"golang.org/x/image/font/gofont/goregular"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/render"
 )
 
-// Member is one analyzer rolled into a building or company bill.
+// Member is one analyzer rolled into a bill.
 type Member struct {
 	AnalyzerID         uuid.UUID
 	Name               string
@@ -34,7 +36,11 @@ type Document struct {
 	Members      []Member
 	CompanyName  string
 	BuildingName string // empty for company scope
-	Locale       string // "tr" (default) | "en"
+	// Tariff is the version that priced the bill; nil for a company bill.
+	Tariff *model.Tariff
+	// InstalledPowerKw is the members' summed kurulu güç, as billing used it.
+	InstalledPowerKw *decimal.Decimal
+	Locale           string // "tr" (default) | "en"
 	// Uncompressed disables stream compression (tests inspect the font CMap).
 	Uncompressed bool
 }
@@ -47,178 +53,506 @@ var istanbul = func() *time.Location {
 	return loc
 }()
 
+// invoice carries one render's state.
+type invoice struct {
+	painter
+	d Document
+	b model.Bill
+}
+
 // Render is deterministic: identical Documents give identical bytes.
 func Render(d Document) ([]byte, error) {
-	loc := d.Locale
-	if loc != "en" {
-		loc = "tr"
-	}
-	b := d.Bill
-	pdf := fpdf.New("P", "mm", "A4", "")
-	pdf.SetCompression(!d.Uncompressed)
-	pdf.SetCatalogSort(true)
-	pdf.SetCreationDate(b.ComputedAt)
-	pdf.SetModificationDate(b.ComputedAt)
-	pdf.AddUTF8FontFromBytes("Go", "", goregular.TTF)
-	pdf.AddUTF8FontFromBytes("Go", "B", gobold.TTF)
-	pdf.SetTitle(label(loc, "title")+" "+b.PeriodKey, true)
-	pdf.SetAutoPageBreak(true, 15)
-	pdf.AddPage()
+	loc := normaliseLocale(d.Locale)
+	f := fpdf.New("P", "mm", "A4", "")
+	f.SetCompression(!d.Uncompressed)
+	f.SetCatalogSort(true)
+	f.SetCreationDate(d.Bill.ComputedAt)
+	f.SetModificationDate(d.Bill.ComputedAt)
+	f.AddUTF8FontFromBytes("Go", "", goregular.TTF)
+	f.AddUTF8FontFromBytes("Go", "B", gobold.TTF)
+	f.AddUTF8FontFromBytes("GoMedium", "", gomedium.TTF)
+	f.SetTitle(label(loc, "title")+" "+d.Bill.PeriodKey, true)
+	f.SetMargins(margin, 14, margin)
+	f.SetCellMargin(1.5)
+	f.SetAutoPageBreak(true, breakAt)
+	f.AliasNbPages("{nb}")
 
-	money := func(v decimal.Decimal) string { return render.FormatMoney(v, loc) }
-	num := func(v decimal.Decimal, places int32) string { return render.FormatDecimal(v, places, loc) }
-	optNum := func(v *decimal.Decimal, places int32) string {
-		if v == nil {
-			return "—"
-		}
-		return num(*v, places)
-	}
-	heading := func(text string) {
-		pdf.Ln(3)
-		pdf.SetFont("Go", "B", 11)
-		pdf.CellFormat(0, 7, text, "B", 1, "L", false, 0, "")
-		pdf.SetFont("Go", "", 9)
-	}
-	kv := func(k, v string) {
-		pdf.CellFormat(55, 5, k, "", 0, "L", false, 0, "")
-		pdf.CellFormat(0, 5, v, "", 1, "L", false, 0, "")
-	}
+	inv := &invoice{painter: painter{f: f, loc: loc}, d: d, b: d.Bill}
+	f.SetHeaderFuncMode(inv.pageHeader, false)
+	f.SetFooterFunc(inv.pageFooter)
+	f.AddPage()
 
-	pdf.SetFont("Go", "B", 16)
-	pdf.CellFormat(0, 10, label(loc, "title"), "", 1, "L", false, 0, "")
-	if b.Status == model.BillStatusFlagged {
-		pdf.SetFont("Go", "B", 12)
-		pdf.SetTextColor(180, 0, 0)
-		reason := ""
-		if b.FlagReason != nil {
-			reason = " (" + *b.FlagReason + ")"
-		}
-		pdf.CellFormat(0, 8, label(loc, "preview")+reason, "1", 1, "C", false, 0, "")
-		pdf.SetTextColor(0, 0, 0)
-	}
-	if len(b.MissingDays) > 0 {
-		pdf.SetFont("Go", "B", 9)
-		pdf.SetTextColor(160, 90, 0)
-		pdf.MultiCell(0, 5, label(loc, "missing_days")+strings.Join(DayRanges(b.MissingDays), ", "), "1", "L", false)
-		pdf.SetTextColor(0, 0, 0)
-	}
-	pdf.SetFont("Go", "", 9)
-	kv(label(loc, "company"), d.CompanyName)
-	if d.BuildingName != "" {
-		kv(label(loc, "building"), d.BuildingName)
-	}
-	kv(label(loc, "scope"), label(loc, scopeKey(b.Scope)))
-	kv(label(loc, "period"), b.PeriodKey)
-	kv(label(loc, "dates"), b.PeriodStart.In(istanbul).Format("02.01.2006")+" – "+b.PeriodEnd.In(istanbul).Format("02.01.2006"))
-	kv(label(loc, "days"), fmt.Sprint(b.DaysInPeriod))
-	if b.TariffEffectiveFrom != nil {
-		kv(label(loc, "tariff_date"), b.TariffEffectiveFrom.Format("02.01.2006"))
-	}
-	kv(label(loc, "currency"), string(b.Currency))
-
-	if rows := IndexRows(loc, b.IndexStart, b.IndexEnd); len(rows) > 0 {
-		heading(label(loc, "readings"))
-		row(pdf, []float64{60, 50, 50}, []string{label(loc, "register"), label(loc, "start"), label(loc, "end")}, true)
-		for _, r := range rows {
-			row(pdf, []float64{60, 50, 50}, r[:], false)
-		}
-	}
-
-	heading(label(loc, "quantities"))
-	kv(label(loc, "active_import"), num(b.ActiveImport, 3)+" kWh")
-	kv(label(loc, "active_export"), num(b.ActiveExport, 3)+" kWh")
-	kv(label(loc, "net"), num(b.NetConsumption, 3)+" kWh")
-	kv(label(loc, "inductive"), num(b.InductiveKvarh, 3)+" kVArh")
-	kv(label(loc, "capacitive"), num(b.CapacitiveKvarh, 3)+" kVArh")
-	kv(label(loc, "max_demand"), optNum(b.MaxDemandKw, 3)+" kW")
-
-	heading(label(loc, "lines"))
-	widths := []float64{70, 35, 35, 40}
-	row(pdf, widths, []string{label(loc, "item"), label(loc, "quantity"), label(loc, "unit_price"), label(loc, "amount")}, true)
-	lines := append([]model.BillLine(nil), d.Lines...)
-	sort.SliceStable(lines, func(i, j int) bool { return lines[i].SortOrder < lines[j].SortOrder })
-	for _, l := range lines {
-		qty := optNum(l.Quantity, 3)
-		if l.Unit != nil && l.Quantity != nil {
-			qty += " " + *l.Unit
-		}
-		price := optNum(l.UnitPrice, 6)
-		if l.RatePct != nil {
-			price = "%" + num(*l.RatePct, 2)
-		}
-		row(pdf, widths, []string{lineLabel(loc, l.Code), qty, price, money(l.Amount)}, false)
-	}
-	pdf.SetFont("Go", "B", 10)
-	row(pdf, widths, []string{label(loc, "vat_base"), "", "", money(b.VatBase)}, false)
-	row(pdf, widths, []string{label(loc, "total"), "", "", money(b.TotalCost) + " " + string(b.Currency)}, false)
-	pdf.SetFont("Go", "", 9)
-
-	if b.InductiveThreshold != nil || b.InductiveRatio != nil {
-		heading(label(loc, "reactive"))
-		kv(label(loc, "inductive")+" "+label(loc, "ratio")+" / "+label(loc, "limit"), Percent(loc, b.InductiveRatio)+" / "+Percent(loc, b.InductiveThreshold))
-		kv(label(loc, "capacitive")+" "+label(loc, "ratio")+" / "+label(loc, "limit"), Percent(loc, b.CapacitiveRatio)+" / "+Percent(loc, b.CapacitiveThreshold))
-		applied := label(loc, "no")
-		if b.ReactivePenaltyApplied {
-			applied = label(loc, "yes")
-		}
-		kv(label(loc, "applied"), applied)
-	}
-	if b.PtfYekdemUsed {
-		heading(label(loc, "ptf"))
-		opt := func(v *int32) string {
-			if v == nil {
-				return "—"
-			}
-			return fmt.Sprint(*v)
-		}
-		kv(label(loc, "hours_expected"), opt(b.PtfHoursExpected))
-		kv(label(loc, "hours_matched"), opt(b.PtfHoursMatched))
-		kv(label(loc, "hours_missing"), opt(b.PtfHoursMissing))
-		kv(label(loc, "ptf_average"), optNum(b.PtfAverage, 2)+" TL/MWh")
-		kv(label(loc, "yekdem"), optNum(b.YekdemUsed, 2)+" TL/MWh")
-	}
-	if len(d.Members) > 0 && b.Scope != model.BillScopeAnalyzer {
-		heading(label(loc, "members"))
-		for _, m := range d.Members {
-			pdf.CellFormat(0, 5, strings.TrimSpace(m.Name+" "+m.InstallationNumber), "", 1, "L", false, 0, "")
-		}
-	}
-	pdf.Ln(4)
-	pdf.SetFont("Go", "", 7)
-	pdf.MultiCell(0, 4, label(loc, "footnote"), "", "L", false)
+	inv.masthead()
+	inv.banners()
+	inv.cards()
+	inv.tiles()
+	inv.lines()
+	inv.details()
+	inv.readings()
+	inv.members()
 
 	var buf bytes.Buffer
-	if err := pdf.Output(&buf); err != nil {
+	if err := f.Output(&buf); err != nil {
 		return nil, fmt.Errorf("invoicepdf: %w", err)
 	}
 	return buf.Bytes(), nil
 }
 
-func row(pdf *fpdf.Fpdf, widths []float64, cells []string, header bool) {
-	style := ""
-	if header {
-		style = "B"
-	}
-	pdf.SetFont("Go", style, 9)
-	for i, c := range cells {
-		align := "R"
-		if i == 0 {
-			align = "L"
-		}
-		pdf.CellFormat(widths[i], 6, c, "B", 0, align, false, 0, "")
-	}
-	pdf.Ln(-1)
-	pdf.SetFont("Go", "", 9)
+// sep separates facts on one line (Go's middle dot sits too high).
+const sep = "  •  "
+
+func (v *invoice) money(x decimal.Decimal) string { return render.FormatMoney(x, v.loc) }
+func (v *invoice) num(x decimal.Decimal, places int32) string {
+	return render.FormatDecimal(x, places, v.loc)
 }
 
-func scopeKey(s model.BillScope) string {
-	switch s {
-	case model.BillScopeCompany:
-		return "company_scope"
-	case model.BillScopeBuilding:
-		return "building_scope"
+func (v *invoice) optNum(x *decimal.Decimal, places int32) string {
+	if x == nil {
+		return "—"
 	}
-	return "analyzer"
+	return v.num(*x, places)
+}
+
+func (v *invoice) date(t time.Time) string { return t.In(istanbul).Format("02.01.2006") }
+
+func (v *invoice) periodLine() string {
+	return monthLabel(v.loc, v.b.PeriodKey) + sep + v.date(v.b.PeriodStart) + " – " + v.date(v.b.PeriodEnd) +
+		sep + fmt.Sprint(v.b.DaysInPeriod) + " " + label(v.loc, "days")
+}
+
+// masthead: wordmark, title and period on the left; amount due on the right.
+func (v *invoice) masthead() {
+	f := v.f
+	v.fill(brand)
+	f.Rect(0, 0, pageW, 2.5, "F")
+	f.RoundedRect(margin, 10.6, 4.6, 4.6, 1.2, "1234", "F")
+	v.font("B", 12)
+	v.color(brand)
+	v.text(margin+5.2, 10, 40, 5.8, "ekokod", "L")
+	v.font("B", 17)
+	v.color(ink)
+	v.text(margin-1.5, 18.5, 110, 9, v.upper(label(v.loc, "title")), "L")
+	v.font("", 9)
+	v.color(muted)
+	v.text(margin-1.5, 27.5, 110, 5, v.periodLine(), "L")
+
+	const bx, by, bw, bh = 124.0, 9.0, 74.0, 26.0
+	v.fill(brand)
+	f.RoundedRect(bx, by, bw, bh, 3, "1234", "F")
+	v.font("B", 7.5)
+	v.color(brandTint)
+	v.text(bx+3, by+3, bw-6, 4.5, v.upper(label(v.loc, "amount_due")), "L")
+	v.font("B", 19)
+	v.color(white)
+	v.text(bx+3, by+8.5, bw-6, 9, v.money(v.b.TotalCost), "L")
+	v.font("", 7.5)
+	v.color(brandTint)
+	v.text(bx+3, by+19, bw-6, 4.5, label(v.loc, "vat_included")+sep+string(v.b.Currency), "L")
+	f.SetY(by + bh + 5)
+}
+
+// pageHeader runs on every page; the first page has the masthead instead.
+func (v *invoice) pageHeader() {
+	if v.f.PageNo() == 1 {
+		return
+	}
+	v.fill(brand)
+	v.f.Rect(0, 0, pageW, 2.5, "F")
+	v.font("", 7.5)
+	v.color(muted)
+	v.text(margin-1.5, 6, contentW, 4.5, label(v.loc, "title")+sep+monthLabel(v.loc, v.b.PeriodKey)+sep+v.d.CompanyName, "L")
+	v.f.SetY(14)
+}
+
+func (v *invoice) pageFooter() {
+	f := v.f
+	v.stroke(rule)
+	f.SetLineWidth(0.3)
+	f.Line(margin, footerTop, margin+contentW, footerTop)
+	v.font("", 7)
+	v.color(subtle)
+	v.text(margin-1.5, footerTop+1.5, 150, 4, label(v.loc, "footer_note"), "L")
+	v.text(margin-1.5, footerTop+5.5, 150, 4, label(v.loc, "computed")+" "+v.b.ComputedAt.In(istanbul).Format("02.01.2006 15:04")+
+		sep+label(v.loc, "bill_no")+" "+strings.ToUpper(v.b.ID.String()[:8]), "L")
+	v.text(pageW-margin-40+1.5, footerTop+1.5, 40, 4, fmt.Sprintf("%s %d / {nb}", label(v.loc, "page"), f.PageNo()), "R")
+}
+
+// banners: the preview and missing-days notices.
+func (v *invoice) banners() {
+	f := v.f
+	if v.b.Status == model.BillStatusFlagged {
+		text := label(v.loc, "preview")
+		if v.b.FlagReason != nil {
+			text += sep + flagText(v.loc, *v.b.FlagReason)
+		}
+		y := f.GetY()
+		v.fill(dangerTint)
+		f.RoundedRect(margin, y, contentW, 8, 2, "1234", "F")
+		v.font("B", 8.5)
+		v.color(danger)
+		v.text(margin+2, y, contentW-4, 8, text, "L")
+		f.SetY(y + 10)
+	}
+	if len(v.b.MissingDays) > 0 {
+		text := label(v.loc, "missing_days") + strings.Join(DayRanges(v.b.MissingDays), ", ")
+		v.font("B", 8)
+		lines := f.SplitText(text, contentW-8)
+		h := float64(len(lines))*4.2 + 4
+		y := f.GetY()
+		v.fill(warningTint)
+		f.RoundedRect(margin, y, contentW, h, 2, "1234", "F")
+		v.color(warning)
+		for i, l := range lines {
+			v.text(margin+2, y+2+float64(i)*4.2, contentW-4, 4.2, l, "L")
+		}
+		f.SetY(y + h + 2)
+	}
+}
+
+// cards: subscriber and tariff side by side.
+func (v *invoice) cards() {
+	b := v.b
+	sub := [][2]string{{label(v.loc, "company"), v.d.CompanyName}}
+	if v.d.BuildingName != "" {
+		sub = append(sub, [2]string{label(v.loc, "building"), v.d.BuildingName})
+	}
+	sub = append(sub, [2]string{label(v.loc, "scope"), label(v.loc, "scope_"+string(b.Scope))})
+	if b.Scope == model.BillScopeAnalyzer && len(v.d.Members) > 0 {
+		m := v.d.Members[0]
+		sub = append(sub, [2]string{label(v.loc, "meter"), strings.TrimSpace(m.InstallationNumber + "  " + m.Name)})
+	} else if len(v.d.Members) > 0 {
+		sub = append(sub, [2]string{label(v.loc, "meters"), fmt.Sprint(len(v.d.Members))})
+	}
+	if v.d.InstalledPowerKw != nil {
+		sub = append(sub, [2]string{label(v.loc, "installed_power"), v.num(*v.d.InstalledPowerKw, 3) + " kW"})
+	}
+
+	var tar [][2]string
+	if t := v.d.Tariff; t != nil {
+		if t.Name != nil && *t.Name != "" {
+			tar = append(tar, [2]string{label(v.loc, "tariff_name"), *t.Name})
+		}
+		tar = append(tar,
+			[2]string{label(v.loc, "user_group"), label(v.loc, "ug:"+string(t.UserGroup))},
+			[2]string{label(v.loc, "voltage_term"), label(v.loc, "vl:"+string(t.VoltageLevel)) + sep + label(v.loc, "term:"+string(t.Term))})
+		pt := label(v.loc, "pt:"+string(t.PriceType))
+		if t.UsePtfYekdem {
+			pt += sep + label(v.loc, "ptf_yekdem")
+		}
+		tar = append(tar, [2]string{label(v.loc, "price_type"), pt}, [2]string{label(v.loc, "supply"), label(v.loc, "sc:"+string(t.SupplyCompany))})
+		if t.ContractedPowerKw != nil {
+			tar = append(tar, [2]string{label(v.loc, "contracted_power"), v.num(*t.ContractedPowerKw, 3) + " kW"})
+		}
+	} else if b.Scope == model.BillScopeCompany {
+		tar = append(tar, [2]string{label(v.loc, "tariff"), label(v.loc, "per_building")})
+	}
+	if b.TariffEffectiveFrom != nil {
+		tar = append(tar, [2]string{label(v.loc, "tariff_date"), b.TariffEffectiveFrom.Format("02.01.2006")})
+	}
+
+	h := cardHeight(max(len(sub), len(tar)))
+	v.ensure(h)
+	y := v.f.GetY()
+	w := (contentW - gap) / 2
+	v.card(margin, y, w, h, label(v.loc, "subscriber"), nil)
+	v.kv(margin+1.5, y+9, w-3, 30, sub)
+	v.card(margin+w+gap, y, w, h, label(v.loc, "tariff"), nil)
+	v.kv(margin+w+gap+1.5, y+9, w-3, 30, tar)
+	v.f.SetY(y + h + gap)
+}
+
+// tiles: net consumption, max demand and the two reactive ratios.
+func (v *invoice) tiles() {
+	const h = 23.0
+	b := v.b
+	v.ensure(h)
+	y := v.f.GetY()
+	w := (contentW - 3*3) / 4
+	tile := func(i int, title, value, unit, sub string) float64 {
+		x := margin + float64(i)*(w+3)
+		v.stroke(rule)
+		v.f.SetLineWidth(0.3)
+		v.fill(wash)
+		v.f.RoundedRect(x, y, w, h, 2, "1234", "FD")
+		v.font("B", 6.8)
+		v.color(subtle)
+		v.text(x+1.5, y+2.5, w-3, 4, v.upper(title), "L")
+		v.font("B", 12.5)
+		v.color(ink)
+		v.text(x+1.5, y+6.8, w-3, 7, value, "L")
+		vw := v.f.GetStringWidth(value)
+		v.font("", 7.5)
+		v.color(muted)
+		v.text(x+1.5+vw+1, y+7.9, w-vw-4, 6, unit, "L")
+		v.font("", 7)
+		v.color(muted)
+		v.text(x+1.5, y+h-5.6, w-3, 4.5, sub, "L")
+		return x
+	}
+
+	tile(0, label(v.loc, "net"), v.num(b.NetConsumption, 3), "kWh",
+		label(v.loc, "import")+" "+v.num(b.ActiveImport, 0)+sep+label(v.loc, "export")+" "+v.num(b.ActiveExport, 0))
+
+	demandSub := label(v.loc, "no_demand")
+	if b.MaxDemandKw != nil {
+		demandSub = ""
+	}
+	if t := v.d.Tariff; t != nil && t.ContractedPowerKw != nil {
+		demandSub = label(v.loc, "contract") + " " + v.num(*t.ContractedPowerKw, 0) + " kW"
+	}
+	unit := "kW"
+	if b.MaxDemandKw == nil {
+		unit = ""
+	}
+	tile(1, label(v.loc, "max_demand"), v.optNum(b.MaxDemandKw, 3), unit, demandSub)
+
+	ratio := func(i int, title string, r, limit *decimal.Decimal) {
+		sub := label(v.loc, "no_limit")
+		if limit != nil {
+			sub = label(v.loc, "limit") + " " + Percent(v.loc, limit)
+		}
+		x := tile(i, title, Percent(v.loc, r), "", sub)
+		v.bar(x+3, y+14.6, w-6, r, limit)
+	}
+	ratio(2, label(v.loc, "inductive_ratio"), b.InductiveRatio, b.InductiveThreshold)
+	ratio(3, label(v.loc, "capacitive_ratio"), b.CapacitiveRatio, b.CapacitiveThreshold)
+	v.f.SetY(y + h + 2)
+}
+
+// splitLines returns the lines above the VAT base in sort order, then the VAT
+// and generation credit lines that print below it.
+func splitLines(lines []model.BillLine) (body []model.BillLine, vat, credit *model.BillLine) {
+	sorted := slices.Clone(lines)
+	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].SortOrder < sorted[j].SortOrder })
+	for i := range sorted {
+		switch sorted[i].Code {
+		case model.BillLineVat:
+			vat = &sorted[i]
+		case model.BillLineGenerationCredit:
+			credit = &sorted[i]
+		default:
+			body = append(body, sorted[i])
+		}
+	}
+	return body, vat, credit
+}
+
+func (v *invoice) lineCells(l model.BillLine) []string {
+	qty := ""
+	if l.Quantity != nil {
+		qty = v.num(*l.Quantity, 3)
+		if l.Unit != nil && *l.Unit != "" && *l.Unit != "%" {
+			qty += " " + label(v.loc, "unit:"+*l.Unit)
+		}
+	}
+	price := ""
+	switch {
+	case l.RatePct != nil:
+		price = pct(v.loc, *l.RatePct, 2)
+	case l.UnitPrice != nil:
+		price = v.num(*l.UnitPrice, 6)
+	}
+	return []string{lineLabel(v.loc, l.Code), qty, price, v.money(l.Amount)}
+}
+
+// lines: the charge table, VAT base, VAT, credit and the amount due.
+func (v *invoice) lines() {
+	v.section(label(v.loc, "lines"))
+	t := &table{p: &v.painter, widths: []float64{86, 36, 30, 34}, aligns: []string{"L", "R", "R", "R"},
+		head: []string{label(v.loc, "item"), label(v.loc, "quantity"), label(v.loc, "unit_price"), label(v.loc, "amount")}}
+	t.header()
+	body, vat, credit := splitLines(v.d.Lines)
+	for _, l := range body {
+		if l.Amount.IsNegative() {
+			t.add(v.lineCells(l), ink, ink, ink, brand)
+			continue
+		}
+		t.add(v.lineCells(l))
+	}
+	t.end()
+
+	sum := func(name, amount string, bold bool) {
+		v.ensure(6)
+		y := v.f.GetY()
+		style := ""
+		if bold {
+			style = "M"
+		}
+		v.font(style, 8.5)
+		v.color(muted)
+		v.text(margin+92, y, 60, 6, name, "R")
+		v.color(ink)
+		v.text(margin+contentW-34, y, 34, 6, amount, "R")
+		v.f.SetY(y + 6)
+	}
+	v.f.SetY(v.f.GetY() + 1)
+	sum(label(v.loc, "vat_base"), v.money(v.b.VatBase), true)
+	if vat != nil {
+		name := label(v.loc, model.BillLineVat)
+		if vat.RatePct != nil {
+			name += " (" + pct(v.loc, *vat.RatePct, 0) + ")"
+		}
+		sum(name, v.money(vat.Amount), false)
+	}
+	if credit != nil {
+		sum(label(v.loc, model.BillLineGenerationCredit), v.money(credit.Amount), false)
+	}
+
+	v.ensure(14)
+	y := v.f.GetY() + 1.5
+	v.fill(brand)
+	v.f.RoundedRect(margin, y, contentW, 10, 2, "1234", "F")
+	v.font("B", 9)
+	v.color(white)
+	v.text(margin+2, y, 90, 10, v.upper(label(v.loc, "amount_due")), "L")
+	v.font("B", 12)
+	v.text(margin+contentW-80, y, 78, 10, v.money(v.b.TotalCost)+" "+string(v.b.Currency), "R")
+	v.f.SetY(y + 11.5)
+	v.font("", 6.5)
+	v.color(subtle)
+	v.f.SetX(margin)
+	v.f.MultiCell(contentW, 3.4, label(v.loc, "footnote"), "", "L", false)
+	v.f.SetY(v.f.GetY() + 2)
+}
+
+// reactiveStatus is the reactive card's chip key.
+func reactiveStatus(b model.Bill, lines []model.BillLine) string {
+	flagged := func(f string) bool {
+		return b.FlagReason != nil && slices.Contains(strings.Split(*b.FlagReason, ","), f)
+	}
+	waived := slices.ContainsFunc(lines, func(l model.BillLine) bool { return l.Code == model.BillLineReactiveWaiver })
+	switch {
+	case b.Scope == model.BillScopeCompany && b.ReactivePenalty.IsPositive(): // net of waivers
+		return "st:company_charged"
+	case waived:
+		return "st:waived"
+	case b.Scope == model.BillScopeCompany:
+		return "st:company_none"
+	case b.ReactivePenaltyApplied:
+		return "st:charged"
+	case flagged("reactive_data_missing"):
+		return "st:no_data"
+	case flagged("installed_power_missing"):
+		return "st:no_power"
+	case b.InductiveThreshold != nil || b.CapacitiveThreshold != nil:
+		return "st:within"
+	}
+	return "st:exempt"
+}
+
+func (v *invoice) statusChip(key string) *chip {
+	c := &chip{text: label(v.loc, key), fg: muted, tint: headerFill}
+	switch key {
+	case "st:charged", "st:company_charged":
+		c.fg, c.tint = danger, dangerTint
+	case "st:waived", "st:no_power", "st:no_data":
+		c.fg, c.tint = warning, warningTint
+	case "st:within", "st:company_none":
+		c.fg, c.tint = success, successTint
+	}
+	return c
+}
+
+// details: the reactive card beside the PTF or energy-mix card.
+func (v *invoice) details() {
+	b := v.b
+	side := func(kvarh decimal.Decimal, r, limit *decimal.Decimal) string {
+		s := v.num(kvarh, 3) + " kVArh"
+		switch {
+		case limit != nil:
+			s += sep + Percent(v.loc, r) + " / " + Percent(v.loc, limit)
+		case r != nil:
+			s += sep + Percent(v.loc, r)
+		}
+		return s
+	}
+	reactive := [][2]string{
+		{label(v.loc, "inductive"), side(b.InductiveKvarh, b.InductiveRatio, b.InductiveThreshold)},
+		{label(v.loc, "capacitive"), side(b.CapacitiveKvarh, b.CapacitiveRatio, b.CapacitiveThreshold)},
+	}
+	if b.ReactivePowerPrice != nil {
+		reactive = append(reactive, [2]string{label(v.loc, "reactive_price"), v.num(*b.ReactivePowerPrice, 6) + " " + string(b.Currency) + "/kVArh"})
+	}
+
+	var title string
+	var other [][2]string
+	if b.PtfYekdemUsed {
+		title = label(v.loc, "ptf_yekdem")
+		opt := func(x *int32) string {
+			if x == nil {
+				return "—"
+			}
+			return fmt.Sprint(*x)
+		}
+		other = [][2]string{
+			{label(v.loc, "hours"), opt(b.PtfHoursMatched) + " / " + opt(b.PtfHoursExpected)},
+			{label(v.loc, "hours_missing"), opt(b.PtfHoursMissing)},
+			{label(v.loc, "ptf_average"), v.optNum(b.PtfAverage, 2) + " TL/MWh"},
+			{label(v.loc, "yekdem"), v.optNum(b.YekdemUsed, 2) + " TL/MWh"},
+		}
+	} else {
+		title = label(v.loc, "energy_card")
+		if b.EffectiveEnergyPrice != nil {
+			other = append(other, [2]string{label(v.loc, "effective_price"), v.num(*b.EffectiveEnergyPrice, 6) + " " + string(b.Currency) + "/kWh"})
+		}
+		if !b.T1Kwh.IsZero() || !b.T2Kwh.IsZero() || !b.T3Kwh.IsZero() {
+			for _, band := range []struct {
+				key string
+				kwh decimal.Decimal
+			}{{"t1", b.T1Kwh}, {"t2", b.T2Kwh}, {"t3", b.T3Kwh}} {
+				other = append(other, [2]string{label(v.loc, band.key), v.num(band.kwh, 3) + " kWh"})
+			}
+		}
+		if b.TieredApplied {
+			other = append(other, [2]string{label(v.loc, "low_tier"), v.num(b.LowTierKwh, 3) + " kWh"},
+				[2]string{label(v.loc, "high_tier"), v.num(b.HighTierKwh, 3) + " kWh"})
+		}
+	}
+
+	h := cardHeight(max(len(reactive), len(other)))
+	v.ensure(h + 4)
+	y := v.f.GetY() + 2
+	w := (contentW - gap) / 2
+	if len(other) == 0 {
+		w = contentW
+	}
+	v.card(margin, y, w, h, label(v.loc, "reactive"), v.statusChip(reactiveStatus(b, v.d.Lines)))
+	v.kv(margin+1.5, y+9, w-3, 24, reactive)
+	if len(other) > 0 {
+		v.card(margin+w+gap, y, w, h, title, nil)
+		v.kv(margin+w+gap+1.5, y+9, w-3, 40, other)
+	}
+	v.f.SetY(y + h + 2)
+}
+
+func (v *invoice) readings() {
+	rows := IndexRows(v.loc, v.b.IndexStart, v.b.IndexEnd)
+	if len(rows) == 0 {
+		return
+	}
+	v.section(label(v.loc, "readings"))
+	t := &table{p: &v.painter, widths: []float64{66, 40, 40, 40}, aligns: []string{"L", "R", "R", "R"},
+		head: []string{label(v.loc, "register"), label(v.loc, "start"), label(v.loc, "end"), label(v.loc, "diff")}}
+	t.header()
+	for _, r := range rows {
+		t.add(r[:])
+	}
+	t.end()
+	v.f.SetY(v.f.GetY() + 2)
+}
+
+func (v *invoice) members() {
+	if len(v.d.Members) == 0 || v.b.Scope == model.BillScopeAnalyzer {
+		return
+	}
+	v.section(fmt.Sprintf("%s (%d)", label(v.loc, "members"), len(v.d.Members)))
+	t := &table{p: &v.painter, widths: []float64{50, 136}, aligns: []string{"L", "L"},
+		head: []string{label(v.loc, "installation"), label(v.loc, "name")}}
+	t.header()
+	for _, m := range v.d.Members {
+		t.add([]string{m.InstallationNumber, m.Name})
+	}
+	t.end()
 }
 
 // indexOrder is the order an invoice lists its registers in.
@@ -227,10 +561,11 @@ var indexOrder = []string{
 	"active_export", "t1_export", "t2_export", "t3_export", "reactive_inductive_export", "reactive_capacitive_export",
 }
 
-// IndexRows is the invoice's index table: label, opening and closing index of
-// every register the meter reported, in a fixed order. A register with no
-// index on either side is left out — most meters report four of the twelve.
-func IndexRows(locale string, start, end json.RawMessage) [][3]string {
+// IndexRows is the invoice's index table: label, opening and closing index and
+// their difference for every register the meter reported, in a fixed order. A
+// register with no index on either side is left out — most meters report four
+// of the twelve.
+func IndexRows(locale string, start, end json.RawMessage) [][4]string {
 	locale = normaliseLocale(locale)
 	starts, ends := indexes(start), indexes(end)
 	index := func(v *decimal.Decimal) string {
@@ -239,14 +574,18 @@ func IndexRows(locale string, start, end json.RawMessage) [][3]string {
 		}
 		return render.FormatDecimal(*v, 3, locale)
 	}
-	var out [][3]string
+	var out [][4]string
 	seen := map[string]bool{}
 	add := func(key string) {
 		if seen[key] || (starts[key] == nil && ends[key] == nil) {
 			return
 		}
 		seen[key] = true
-		out = append(out, [3]string{label(locale, "reg:"+key), index(starts[key]), index(ends[key])})
+		diff := "—"
+		if starts[key] != nil && ends[key] != nil {
+			diff = render.FormatDecimal(ends[key].Sub(*starts[key]), 3, locale)
+		}
+		out = append(out, [4]string{label(locale, "reg:"+key), index(starts[key]), index(ends[key]), diff})
 	}
 	for _, key := range indexOrder {
 		add(key)
@@ -266,12 +605,22 @@ func IndexRows(locale string, start, end json.RawMessage) [][3]string {
 	return out
 }
 
-// Percent renders a stored ratio (0.4474) as a percentage ("%44,74"), "—" when absent.
+// Percent renders a stored ratio (0.4474) as a percentage ("%44,74",
+// "44.74%" in English), "—" when absent.
 func Percent(locale string, ratio *decimal.Decimal) string {
 	if ratio == nil {
 		return "—"
 	}
-	return "%" + render.FormatDecimal(ratio.Mul(decimal.NewFromInt(100)), 2, normaliseLocale(locale))
+	return pct(normaliseLocale(locale), ratio.Mul(decimal.NewFromInt(100)), 2)
+}
+
+// pct places the sign where each language writes it.
+func pct(locale string, x decimal.Decimal, places int32) string {
+	n := render.FormatDecimal(x, places, locale)
+	if locale == "en" {
+		return n + "%"
+	}
+	return "%" + n
 }
 
 func indexes(raw json.RawMessage) map[string]*decimal.Decimal {

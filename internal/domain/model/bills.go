@@ -143,6 +143,7 @@ const (
 	BillLineDemandOverrun      = "demand_overrun"
 	BillLineReactiveInductive  = "reactive_inductive"
 	BillLineReactiveCapacitive = "reactive_capacitive"
+	BillLineReactiveWaiver     = "reactive_waiver" // R529: negative, deducts a year's first violation
 	BillLineVat                = "vat"
 	BillLineGenerationCredit   = "generation_credit"
 	BillLineExtraPrefix        = "extra:"
@@ -154,7 +155,7 @@ const (
 var BillLineCodes = []string{
 	BillLineEnergy, BillLineEnergyLowTier, BillLineEnergyHighTier, BillLineEnergyT1, BillLineEnergyT2, BillLineEnergyT3,
 	BillLineDistribution, BillLineGreenEnergy, BillLinePower, BillLineDemandOverrun, BillLineReactiveInductive,
-	BillLineReactiveCapacitive, BillLineVat, BillLineGenerationCredit,
+	BillLineReactiveCapacitive, BillLineReactiveWaiver, BillLineVat, BillLineGenerationCredit,
 }
 
 // BillLine is one printed line of a bill. Mirrors table `bill_lines`

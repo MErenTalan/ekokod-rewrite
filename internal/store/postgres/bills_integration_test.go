@@ -475,3 +475,49 @@ func TestBillCreateRefusesOwnAnalyzerIDOutsideNarrowScope(t *testing.T) {
 // typo — fixture values here are constants, so a parse failure is a bug in
 // the test rather than a runtime condition worth threading an error for.
 func billDec(s string) decimal.Decimal { return decimal.RequireFromString(s) }
+
+// TestBillReactiveViolationBeforeLooksAtEarlierLiveBillsOfTheYear: R529's
+// history read counts only this subject's live bills earlier in the same year.
+func TestBillReactiveViolationBeforeLooksAtEarlierLiveBillsOfTheYear(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenant := testfixtures.NewTenant(t, ctx, pool, 290)
+	repo := postgres.NewBillRepository(pool)
+	building, analyzer := tenant.Buildings[0].ID, tenant.Analyzers[0].ID
+
+	create := func(scope model.BillScope, key string, applied bool) model.Bill {
+		var a *uuid.UUID
+		if scope == model.BillScopeAnalyzer {
+			a = &analyzer
+		}
+		row := billFixtureRow(tenant.Company.ID, &building, a, scope, key)
+		row.ReactivePenaltyApplied = applied
+		b, err := repo.Create(ctx, tenant.Scope, row, nil, nil)
+		require.NoError(t, err)
+		return b
+	}
+	violated := func(scope model.BillScope, subject uuid.UUID, key string) bool {
+		v, err := repo.ReactiveViolationBefore(ctx, tenant.Scope, scope, subject, key)
+		require.NoError(t, err)
+		return v
+	}
+
+	require.False(t, violated(model.BillScopeBuilding, building, "2026-03"))
+	create(model.BillScopeBuilding, "2025-11", true)
+	create(model.BillScopeBuilding, "2026-01", false)
+	require.False(t, violated(model.BillScopeBuilding, building, "2026-03"), "last year's violation does not count")
+	feb := create(model.BillScopeBuilding, "2026-02", true)
+	require.True(t, violated(model.BillScopeBuilding, building, "2026-03"))
+	require.False(t, violated(model.BillScopeBuilding, building, "2026-02"), "only earlier months")
+	require.False(t, violated(model.BillScopeAnalyzer, analyzer, "2026-03"), "another subject's history")
+
+	replacement := billFixtureRow(tenant.Company.ID, &building, nil, model.BillScopeBuilding, "2026-02")
+	_, err := repo.Supersede(ctx, tenant.Scope, feb.ID, replacement, nil, nil, time.Now().UTC())
+	require.NoError(t, err)
+	require.False(t, violated(model.BillScopeBuilding, building, "2026-03"), "a superseded bill does not count")
+
+	create(model.BillScopeAnalyzer, "2026-02", true)
+	require.True(t, violated(model.BillScopeAnalyzer, analyzer, "2026-03"))
+	require.False(t, violated(model.BillScopeBuilding, building, "2026-03"))
+}

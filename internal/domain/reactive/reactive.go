@@ -70,7 +70,7 @@ func Evaluate(in Input) Result {
 		r.Exempt, r.ExemptReason = true, ExemptUserGroup
 	case in.ActiveExportKnownSum.GreaterThan(p.ReactiveGenerationExemptKwh): // I-18: known lower bound
 		r.Exempt, r.ExemptReason = true, ExemptGeneration
-	case in.InstalledPowerKw != nil && p.ReactiveExemptBelowKw != nil && in.InstalledPowerKw.LessThan(*p.ReactiveExemptBelowKw):
+	case in.InstalledPowerKw != nil && p.ReactiveExemptBelowKw != nil && BelowExemption(*in.InstalledPowerKw, p):
 		r.Exempt, r.ExemptReason = true, ExemptBelowKw
 	}
 	if r.Exempt {
@@ -112,7 +112,26 @@ func Evaluate(in Input) Result {
 	}
 	r.InductiveKvarhCharged, r.InductivePenalty = side(in.Inductive, band.Inductive, MissingInductive)
 	r.CapacitiveKvarhCharged, r.CapacitivePenalty = side(in.Capacitive, band.Capacitive, MissingCapacitive)
+	if p.ReactiveChargeHigherSide && r.InductiveKvarhCharged != nil && r.CapacitiveKvarhCharged != nil {
+		// R528 (13/6): only the larger measured register is billed; a tie bills inductive.
+		if in.Capacitive.GreaterThan(*in.Inductive) {
+			r.InductiveKvarhCharged, r.InductivePenalty = nil, decimal.Zero
+		} else {
+			r.CapacitiveKvarhCharged, r.CapacitivePenalty = nil, decimal.Zero
+		}
+	}
 	return r
+}
+
+// BelowExemption reports whether kw falls under the size exemption (R527).
+func BelowExemption(kw decimal.Decimal, p model.BillingParameters) bool {
+	if p.ReactiveExemptBelowKw == nil {
+		return false
+	}
+	if p.ReactiveExemptInclusive {
+		return kw.LessThanOrEqual(*p.ReactiveExemptBelowKw)
+	}
+	return kw.LessThan(*p.ReactiveExemptBelowKw)
 }
 
 func ratio(reg *decimal.Decimal, net decimal.Decimal) *decimal.Decimal {

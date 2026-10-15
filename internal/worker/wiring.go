@@ -543,7 +543,7 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 			BillingGenerate: billingsvc.JobGenerator{Service: billingService, Ops: opsRepo, Enqueuer: jobClient,
 				Clock: clock.System(), MaxRetry: cfg.Worker.MaxRetries},
 			BillingRender: billingsvc.PDFRenderer{Bills: billRepo, Companies: postgres.NewCompanyRepository(pool),
-				Buildings: buildingRepo, Analyzers: analyzerRepo, Root: cfg.Storage.Root},
+				Buildings: buildingRepo, Analyzers: analyzerRepo, Tariffs: postgres.NewTariffRepository(pool), Root: cfg.Storage.Root},
 			AlarmDispatch: alarmJobs,
 			AlarmEvaluate: alarmJobs,
 			AlarmNotify:   alarmJobs,

@@ -194,3 +194,67 @@ func TestReactiveNilUnitPriceReportsQuantityWithZeroPenalty(t *testing.T) {
 	require.Equal(t, "500", r.InductiveKvarhCharged.String())
 	require.True(t, r.InductivePenalty.IsZero())
 }
+
+// epdk2022 is the R526 row: 15 kW inclusive exemption, 50 kW band, higher side only.
+func epdk2022(in reactive.Input) reactive.Input {
+	in.Params.ReactiveExemptBelowKw, in.Params.ReactiveExemptInclusive = dp("15"), true
+	in.Params.ReactiveChargeHigherSide = true
+	in.Params.ReactiveExemptTerms = nil
+	in.Params.ReactiveBands = []model.ReactiveBand{
+		{MinKw: d("15"), MaxKw: dp("50"), Inductive: d("0.33"), Capacitive: d("0.20")},
+		{MinKw: d("50"), Inductive: d("0.20"), Capacitive: d("0.15")},
+	}
+	return in
+}
+
+func TestReactiveInclusiveExemptionCoversItsBound(t *testing.T) {
+	in := epdk2022(base())
+	in.InstalledPowerKw = dp("15")
+	exempt(t, in, reactive.ExemptBelowKw)
+	in.InstalledPowerKw = dp("15.001")
+	r := reactive.Evaluate(in)
+	require.False(t, r.Exempt)
+	require.Equal(t, "0.33", r.InductiveLimit.String(), "15.001 kW is in the first band")
+	in.Params.ReactiveExemptInclusive = false
+	in.InstalledPowerKw = dp("15")
+	require.False(t, reactive.Evaluate(in).Exempt, "legacy rule: only below the bound")
+}
+
+func TestReactiveMonomialPaysWithoutTermExemption(t *testing.T) {
+	in := epdk2022(base())
+	in.Term = model.TariffTermMonomial
+	r := reactive.Evaluate(in)
+	require.False(t, r.Exempt)
+	require.True(t, r.Applied)
+}
+
+func TestReactiveBothSidesExceededChargesHigherRegister(t *testing.T) {
+	in := epdk2022(base())
+	in.Inductive, in.Capacitive = dp("300"), dp("400") // 0.30 > 0.20, 0.40 > 0.15
+	r := reactive.Evaluate(in)
+	require.True(t, r.Applied)
+	require.Nil(t, r.InductiveKvarhCharged, "the lower side is not billed")
+	require.True(t, r.InductivePenalty.IsZero())
+	require.Equal(t, "400", r.CapacitiveKvarhCharged.String())
+	require.Equal(t, "1058.2", r.CapacitivePenalty.String())
+
+	in.Inductive = dp("400")
+	r = reactive.Evaluate(in)
+	require.Equal(t, "400", r.InductiveKvarhCharged.String(), "a tie bills inductive")
+	require.Nil(t, r.CapacitiveKvarhCharged)
+
+	in.Params.ReactiveChargeHigherSide = false
+	r = reactive.Evaluate(in)
+	require.NotNil(t, r.InductiveKvarhCharged)
+	require.NotNil(t, r.CapacitiveKvarhCharged, "legacy rule: both sides billed")
+}
+
+func TestReactiveHigherSideComparesRegistersUnderExcessBasis(t *testing.T) {
+	in := epdk2022(base())
+	in.Params.ReactivePenaltyBasis = model.ReactivePenaltyBasisExcessOverLimit
+	// inductive 450 (excess 250) vs capacitive 420 (excess 270): the larger register wins.
+	in.Inductive, in.Capacitive = dp("450"), dp("420")
+	r := reactive.Evaluate(in)
+	require.Equal(t, "250", r.InductiveKvarhCharged.String())
+	require.Nil(t, r.CapacitiveKvarhCharged)
+}

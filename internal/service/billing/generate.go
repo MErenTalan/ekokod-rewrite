@@ -104,7 +104,7 @@ func (s *Service) Generate(ctx context.Context, sc store.Scope, req GenerateRequ
 	if req.Scope == model.BillScopeCompany {
 		subj, err = s.computeCompany(ctx, sc, req.PeriodKey)
 	} else {
-		subj, err = s.computeSubject(ctx, sc, *building, members, req.PeriodKey)
+		subj, err = s.computeSubject(ctx, sc, *building, members, req.PeriodKey, req.Scope, req.SubjectID)
 		if req.Scope == model.BillScopeAnalyzer {
 			subj.analyzer = &members[0]
 		}
@@ -193,7 +193,7 @@ func (s *Service) repairHourlyDetail(ctx context.Context, sc store.Scope, live m
 	if err != nil || len(have) > 0 {
 		return err
 	}
-	subj, err := s.computeSubject(ctx, sc, *building, members, req.PeriodKey)
+	subj, err := s.computeSubject(ctx, sc, *building, members, req.PeriodKey, req.Scope, req.SubjectID)
 	if err != nil {
 		return err
 	}
@@ -228,7 +228,7 @@ func (s *Service) computeCompany(ctx context.Context, sc store.Scope, key string
 		if len(analyzers) == 0 {
 			continue
 		}
-		subj, err := s.computeSubject(ctx, sc, b, analyzers, key)
+		subj, err := s.computeSubject(ctx, sc, b, analyzers, key, model.BillScopeBuilding, b.ID)
 		var ce *ComputeError
 		if errors.As(err, &ce) {
 			ce.Detail["building_id"] = b.ID.String()
@@ -252,8 +252,9 @@ func (s *Service) computeCompany(ctx context.Context, sc store.Scope, key string
 	return subject{invoice: combined, members: members, missingDays: sortedKeys(missing)}, nil
 }
 
-// computeSubject prices one analyzer or building for key (steps 2–8).
-func (s *Service) computeSubject(ctx context.Context, sc store.Scope, building model.Building, analyzers []model.Analyzer, key string) (subject, error) {
+// computeSubject prices one analyzer or building for key (steps 2–8);
+// billScope and subjectID name whose bill history decides R529's waiver.
+func (s *Service) computeSubject(ctx context.Context, sc store.Scope, building model.Building, analyzers []model.Analyzer, key string, billScope model.BillScope, subjectID uuid.UUID) (subject, error) {
 	window, err := domain.Period(key, int(building.BillCutoffDay), s.loc)
 	if err != nil {
 		return subject{}, fmt.Errorf("%w: %w", ErrInvalidRequest, err)
@@ -345,6 +346,11 @@ func (s *Service) computeSubject(ctx context.Context, sc store.Scope, building m
 		PeriodKey: key, Period: window, Days: domain.DaysInPeriod(window, s.loc),
 		Tariff: t, Taxes: taxes, ExtraCharges: extras, Params: params,
 		Quantities: domain.AggregateQuantities(quantities), InstalledPowerKw: domain.SumInstalledPower(installed),
+	}
+	if params.ReactiveFirstViolationWaived {
+		if in.ReactivePriorViolation, err = s.deps.Bills.ReactiveViolationBefore(ctx, sc, billScope, subjectID, key); err != nil {
+			return subject{}, err
+		}
 	}
 	if t.UsePtfYekdem {
 		pricing, err := s.price(ctx, sc, t, ids, billed, params)

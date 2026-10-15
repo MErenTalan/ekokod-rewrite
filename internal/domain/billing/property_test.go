@@ -327,7 +327,8 @@ func oracleCompute(in billing.Input) oracleOut {
 	// Reactive (02 §6.6, R117, R118, I-18).
 	exempt := slices.Contains(p.ReactiveExemptTerms, t.Term) || slices.Contains(p.ReactiveExemptUserGroups, t.UserGroup) ||
 		q.ActiveExportKnownSum.GreaterThan(p.ReactiveGenerationExemptKwh) ||
-		(in.InstalledPowerKw != nil && p.ReactiveExemptBelowKw != nil && in.InstalledPowerKw.LessThan(*p.ReactiveExemptBelowKw))
+		(in.InstalledPowerKw != nil && p.ReactiveExemptBelowKw != nil && (in.InstalledPowerKw.LessThan(*p.ReactiveExemptBelowKw) ||
+			p.ReactiveExemptInclusive && in.InstalledPowerKw.Equal(*p.ReactiveExemptBelowKw)))
 	if !exempt {
 		if q.ActiveExport == nil && q.ActiveExportPartial {
 			o.flags[billing.FlagGenerationDataMissing] = true
@@ -345,11 +346,13 @@ func oracleCompute(in billing.Input) oracleOut {
 		if band == nil {
 			o.flags[billing.FlagInstalledPowerMissing] = true
 		} else {
-			for _, side := range []struct {
+			type sideT struct {
 				code  string
 				reg   *decimal.Decimal
 				limit decimal.Decimal
-			}{{"reactive_inductive", q.ReactiveInductive, band.Inductive}, {"reactive_capacitive", q.ReactiveCapacitive, band.Capacitive}} {
+			}
+			var over []sideT
+			for _, side := range []sideT{{"reactive_inductive", q.ReactiveInductive, band.Inductive}, {"reactive_capacitive", q.ReactiveCapacitive, band.Capacitive}} {
 				if side.reg == nil {
 					o.flags[billing.FlagReactiveDataMissing] = true
 					continue
@@ -360,7 +363,20 @@ func oracleCompute(in billing.Input) oracleOut {
 				} else {
 					exceeded = side.reg.DivRound(net, 30).GreaterThan(side.limit)
 				}
-				if !exceeded || reactivePrice == nil {
+				if exceeded {
+					over = append(over, side)
+				}
+			}
+			if p.ReactiveChargeHigherSide && len(over) == 2 {
+				if over[1].reg.GreaterThan(*over[0].reg) {
+					over = over[1:]
+				} else {
+					over = over[:1]
+				}
+			}
+			reactiveSum := zero
+			for _, side := range over {
+				if reactivePrice == nil {
 					continue
 				}
 				kvarh := *side.reg
@@ -368,8 +384,12 @@ func oracleCompute(in billing.Input) oracleOut {
 					kvarh = kvarh.Sub(side.limit.Mul(net))
 				}
 				if kvarh.IsPositive() {
-					lineSum = lineSum.Add(charge(side.code, round(kvarh.Mul(*reactivePrice))))
+					reactiveSum = reactiveSum.Add(charge(side.code, round(kvarh.Mul(*reactivePrice))))
 				}
+			}
+			lineSum = lineSum.Add(reactiveSum)
+			if p.ReactiveFirstViolationWaived && !in.ReactivePriorViolation && reactiveSum.IsPositive() {
+				lineSum = lineSum.Add(charge("reactive_waiver", reactiveSum.Neg()))
 			}
 		}
 	}
@@ -440,6 +460,7 @@ func randomInput(r *rand.Rand, loc *time.Location) billing.Input {
 		p.ReactiveExemptBelowKw = nil
 		p.ReactiveBands[0].MinKw = decimal.Zero
 	}
+	p.ReactiveExemptInclusive, p.ReactiveChargeHigherSide, p.ReactiveFirstViolationWaived = pick(2) == 0, pick(2) == 0, pick(2) == 0
 	p.ReactiveExemptTerms = subset(r, model.TariffTerms())
 	p.ReactiveExemptUserGroups = subset(r, groups)
 	p.TieringVoltageLevels = subset(r, model.VoltageLevels())
@@ -518,6 +539,10 @@ func randomInput(r *rand.Rand, loc *time.Location) billing.Input {
 	in := billing.Input{
 		PeriodKey: "2026-01", Period: energy.Window{From: from, To: from.AddDate(0, 0, days)}, Days: days,
 		Tariff: t, Params: p, Quantities: q, InstalledPowerKw: maybe(10, dec(80, 2)),
+		ReactivePriorViolation: pick(2) == 0,
+	}
+	if p.ReactiveExemptBelowKw != nil && pick(10) == 0 {
+		in.InstalledPowerKw = decPtr(*p.ReactiveExemptBelowKw) // R527's boundary
 	}
 	for i := range pick(4) {
 		in.Taxes = append(in.Taxes, model.TariffTax{Name: fmt.Sprintf("T%d", i), Rate: dec(10, 3), SortOrder: int16(pick(3))})

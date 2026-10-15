@@ -166,6 +166,7 @@ func CombineCompany(periodKey string, buildings []Invoice) (Invoice, error) {
 		out.DemandDataAvailable = out.DemandDataAvailable && b.DemandDataAvailable
 		out.PtfYekdemUsed = out.PtfYekdemUsed || b.PtfYekdemUsed
 		out.Reactive.Applied = out.Reactive.Applied || b.Reactive.Applied
+		out.ReactiveWaived = out.ReactiveWaived || b.ReactiveWaived
 		if b.GenerationUsage != out.GenerationUsage {
 			out.GenerationUsage = model.GenerationUsageNone
 		}

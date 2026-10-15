@@ -1043,6 +1043,10 @@ type BillRepository interface {
 	// unambiguous.
 	Current(ctx context.Context, s Scope, billScope model.BillScope, subjectID uuid.UUID, periodKey string) (model.Bill, error)
 
+	// ReactiveViolationBefore reports whether a live bill of the same subject
+	// recorded a reactive violation earlier in periodKey's calendar year (R529).
+	ReactiveViolationBefore(ctx context.Context, s Scope, billScope model.BillScope, subjectID uuid.UUID, periodKey string) (bool, error)
+
 	// Create inserts a bill. It returns ErrConflict if a non-superseded bill
 	// already exists for the same (scope, subject, period): recomputation
 	// goes through Supersede, never through a delete-and-insert.

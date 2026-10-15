@@ -18,19 +18,22 @@ type ReactiveBand struct {
 // product owner has not confirmed (R106). Mirrors table `billing_parameters`
 // (migration 00014); it resolves by EffectiveFrom like a tariff.
 type BillingParameters struct {
-	EffectiveFrom               time.Time
-	ReactivePenaltyBasis        ReactivePenaltyBasis
-	ReactiveExemptBelowKw       *decimal.Decimal // nil = no size exemption
-	ReactiveExemptTerms         []TariffTerm
-	ReactiveExemptUserGroups    []DistributionUserGroup
-	ReactiveGenerationExemptKwh decimal.Decimal
-	ReactiveBands               []ReactiveBand
-	TieringGroups               map[DistributionUserGroup]decimal.Decimal // group → kWh/day threshold
-	TieringMode                 TieringMode
-	TieringVoltageLevels        []VoltageLevel
-	TieringSupplyCompanies      []SupplyCompany // C-3: gates tiering off free-market contracts
-	PTFMissingHourTolerance     decimal.Decimal // fraction, 0..1
-	DemandOverrunMultiplier     decimal.Decimal
-	MoneyRoundingMode           MoneyRoundingMode
-	CreatedAt                   time.Time
+	EffectiveFrom                time.Time
+	ReactivePenaltyBasis         ReactivePenaltyBasis
+	ReactiveExemptBelowKw        *decimal.Decimal // nil = no size exemption
+	ReactiveExemptInclusive      bool             // R527: exempt up to and including ReactiveExemptBelowKw
+	ReactiveChargeHigherSide     bool             // R528: both sides exceeded → bill only the larger register
+	ReactiveFirstViolationWaived bool             // R529: a calendar year's first violation is deducted
+	ReactiveExemptTerms          []TariffTerm
+	ReactiveExemptUserGroups     []DistributionUserGroup
+	ReactiveGenerationExemptKwh  decimal.Decimal
+	ReactiveBands                []ReactiveBand
+	TieringGroups                map[DistributionUserGroup]decimal.Decimal // group → kWh/day threshold
+	TieringMode                  TieringMode
+	TieringVoltageLevels         []VoltageLevel
+	TieringSupplyCompanies       []SupplyCompany // C-3: gates tiering off free-market contracts
+	PTFMissingHourTolerance      decimal.Decimal // fraction, 0..1
+	DemandOverrunMultiplier      decimal.Decimal
+	MoneyRoundingMode            MoneyRoundingMode
+	CreatedAt                    time.Time
 }

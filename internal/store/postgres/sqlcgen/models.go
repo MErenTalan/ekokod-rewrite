@@ -1385,21 +1385,24 @@ type BillMember struct {
 }
 
 type BillingParameter struct {
-	EffectiveFrom               pgtype.Date
-	ReactivePenaltyBasis        ReactivePenaltyBasis
-	ReactiveExemptBelowKw       pgtype.Numeric
-	ReactiveExemptTerms         []TariffTerm
-	ReactiveExemptUserGroups    []DistributionUserGroup
-	ReactiveGenerationExemptKwh pgtype.Numeric
-	ReactiveBands               []byte
-	TieringGroups               []byte
-	TieringMode                 TieringMode
-	TieringVoltageLevels        []VoltageLevel
-	TieringSupplyCompanies      []SupplyCompany
-	PtfMissingHourTolerance     pgtype.Numeric
-	DemandOverrunMultiplier     pgtype.Numeric
-	MoneyRoundingMode           MoneyRoundingMode
-	CreatedAt                   pgtype.Timestamptz
+	EffectiveFrom                pgtype.Date
+	ReactivePenaltyBasis         ReactivePenaltyBasis
+	ReactiveExemptBelowKw        pgtype.Numeric
+	ReactiveExemptTerms          []TariffTerm
+	ReactiveExemptUserGroups     []DistributionUserGroup
+	ReactiveGenerationExemptKwh  pgtype.Numeric
+	ReactiveBands                []byte
+	TieringGroups                []byte
+	TieringMode                  TieringMode
+	TieringVoltageLevels         []VoltageLevel
+	TieringSupplyCompanies       []SupplyCompany
+	PtfMissingHourTolerance      pgtype.Numeric
+	DemandOverrunMultiplier      pgtype.Numeric
+	MoneyRoundingMode            MoneyRoundingMode
+	CreatedAt                    pgtype.Timestamptz
+	ReactiveExemptInclusive      bool
+	ReactiveChargeHigherSide     bool
+	ReactiveFirstViolationWaived bool
 }
 
 type Building struct {

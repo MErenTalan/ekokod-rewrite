@@ -1016,6 +1016,47 @@ func (q *Queries) BillMemberList(ctx context.Context, arg BillMemberListParams) 
 	return items, nil
 }
 
+const billReactiveViolationBefore = `-- name: BillReactiveViolationBefore :one
+select exists (
+  select 1 from bills
+  where bills.company_id = $1
+    and ($2::boolean or bills.building_id = any($3::uuid[]))
+    and bills.scope = $4
+    and coalesce(bills.analyzer_id, bills.building_id, bills.company_id) = $5
+    and bills.period_key >= $6::text
+    and bills.period_key < $7::text
+    and bills.status <> 'superseded'
+    and bills.reactive_penalty_applied
+)::boolean as violated
+`
+
+type BillReactiveViolationBeforeParams struct {
+	CompanyID    uuid.UUID
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
+	BillScope    BillScope
+	SubjectID    *uuid.UUID
+	YearStart    string
+	PeriodKey    string
+}
+
+// R529: did a live bill of the same subject record a reactive violation
+// earlier in period_key's calendar year?
+func (q *Queries) BillReactiveViolationBefore(ctx context.Context, arg BillReactiveViolationBeforeParams) (bool, error) {
+	row := q.db.QueryRow(ctx, billReactiveViolationBefore,
+		arg.CompanyID,
+		arg.AllBuildings,
+		arg.BuildingIds,
+		arg.BillScope,
+		arg.SubjectID,
+		arg.YearStart,
+		arg.PeriodKey,
+	)
+	var violated bool
+	err := row.Scan(&violated)
+	return violated, err
+}
+
 const billSetPDFPath = `-- name: BillSetPDFPath :execrows
 update bills set pdf_path = $1, updated_at = now()
 where id = $2 and company_id = $3

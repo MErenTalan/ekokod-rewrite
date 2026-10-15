@@ -38,17 +38,20 @@ func Decode(r Row) (model.BillingParameters, error) {
 		return model.BillingParameters{}, fmt.Errorf("billing_parameters.tiering_groups: %w", err)
 	}
 	out := model.BillingParameters{
-		EffectiveFrom:            r.EffectiveFrom.Time,
-		ReactivePenaltyBasis:     model.ReactivePenaltyBasis(r.ReactivePenaltyBasis),
-		ReactiveExemptTerms:      convert[model.TariffTerm](r.ReactiveExemptTerms),
-		ReactiveExemptUserGroups: convert[model.DistributionUserGroup](r.ReactiveExemptUserGroups),
-		ReactiveBands:            make([]model.ReactiveBand, 0, len(bands)),
-		TieringGroups:            make(map[model.DistributionUserGroup]decimal.Decimal, len(groups)),
-		TieringMode:              model.TieringMode(r.TieringMode),
-		TieringVoltageLevels:     convert[model.VoltageLevel](r.TieringVoltageLevels),
-		TieringSupplyCompanies:   convert[model.SupplyCompany](r.TieringSupplyCompanies),
-		MoneyRoundingMode:        model.MoneyRoundingMode(r.MoneyRoundingMode),
-		CreatedAt:                r.CreatedAt.Time,
+		EffectiveFrom:                r.EffectiveFrom.Time,
+		ReactivePenaltyBasis:         model.ReactivePenaltyBasis(r.ReactivePenaltyBasis),
+		ReactiveExemptTerms:          convert[model.TariffTerm](r.ReactiveExemptTerms),
+		ReactiveExemptUserGroups:     convert[model.DistributionUserGroup](r.ReactiveExemptUserGroups),
+		ReactiveBands:                make([]model.ReactiveBand, 0, len(bands)),
+		TieringGroups:                make(map[model.DistributionUserGroup]decimal.Decimal, len(groups)),
+		TieringMode:                  model.TieringMode(r.TieringMode),
+		TieringVoltageLevels:         convert[model.VoltageLevel](r.TieringVoltageLevels),
+		TieringSupplyCompanies:       convert[model.SupplyCompany](r.TieringSupplyCompanies),
+		MoneyRoundingMode:            model.MoneyRoundingMode(r.MoneyRoundingMode),
+		ReactiveExemptInclusive:      r.ReactiveExemptInclusive,
+		ReactiveChargeHigherSide:     r.ReactiveChargeHigherSide,
+		ReactiveFirstViolationWaived: r.ReactiveFirstViolationWaived,
+		CreatedAt:                    r.CreatedAt.Time,
 	}
 	var err error
 	if out.ReactiveExemptBelowKw, err = pgnum.NumericToDecimalPtr(r.ReactiveExemptBelowKw); err != nil {
@@ -115,20 +118,23 @@ func Encode(p model.BillingParameters, effectiveFrom pgtype.Date) (sqlcgen.Admin
 		return sqlcgen.AdminUpsertBillingParametersParams{}, err
 	}
 	return sqlcgen.AdminUpsertBillingParametersParams{
-		EffectiveFrom:               effectiveFrom,
-		ReactivePenaltyBasis:        sqlcgen.ReactivePenaltyBasis(p.ReactivePenaltyBasis),
-		ReactiveExemptBelowKw:       pgnum.DecimalPtrToNumeric(p.ReactiveExemptBelowKw),
-		ReactiveExemptTerms:         strs(p.ReactiveExemptTerms),
-		ReactiveExemptUserGroups:    strs(p.ReactiveExemptUserGroups),
-		ReactiveGenerationExemptKwh: pgnum.DecimalToNumeric(p.ReactiveGenerationExemptKwh),
-		ReactiveBands:               bandsJSON,
-		TieringGroups:               groupsJSON,
-		TieringMode:                 sqlcgen.TieringMode(p.TieringMode),
-		TieringVoltageLevels:        strs(p.TieringVoltageLevels),
-		TieringSupplyCompanies:      strs(p.TieringSupplyCompanies),
-		PtfMissingHourTolerance:     pgnum.DecimalToNumeric(p.PTFMissingHourTolerance),
-		DemandOverrunMultiplier:     pgnum.DecimalToNumeric(p.DemandOverrunMultiplier),
-		MoneyRoundingMode:           sqlcgen.MoneyRoundingMode(p.MoneyRoundingMode),
+		EffectiveFrom:                effectiveFrom,
+		ReactivePenaltyBasis:         sqlcgen.ReactivePenaltyBasis(p.ReactivePenaltyBasis),
+		ReactiveExemptBelowKw:        pgnum.DecimalPtrToNumeric(p.ReactiveExemptBelowKw),
+		ReactiveExemptTerms:          strs(p.ReactiveExemptTerms),
+		ReactiveExemptUserGroups:     strs(p.ReactiveExemptUserGroups),
+		ReactiveGenerationExemptKwh:  pgnum.DecimalToNumeric(p.ReactiveGenerationExemptKwh),
+		ReactiveBands:                bandsJSON,
+		TieringGroups:                groupsJSON,
+		TieringMode:                  sqlcgen.TieringMode(p.TieringMode),
+		TieringVoltageLevels:         strs(p.TieringVoltageLevels),
+		ReactiveExemptInclusive:      p.ReactiveExemptInclusive,
+		ReactiveChargeHigherSide:     p.ReactiveChargeHigherSide,
+		ReactiveFirstViolationWaived: p.ReactiveFirstViolationWaived,
+		TieringSupplyCompanies:       strs(p.TieringSupplyCompanies),
+		PtfMissingHourTolerance:      pgnum.DecimalToNumeric(p.PTFMissingHourTolerance),
+		DemandOverrunMultiplier:      pgnum.DecimalToNumeric(p.DemandOverrunMultiplier),
+		MoneyRoundingMode:            sqlcgen.MoneyRoundingMode(p.MoneyRoundingMode),
 	}, nil
 }
 

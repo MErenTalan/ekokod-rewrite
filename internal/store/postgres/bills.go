@@ -131,6 +131,26 @@ func (r *BillRepository) Current(ctx context.Context, s store.Scope, billScope m
 	return billFromRow(row)
 }
 
+// ReactiveViolationBefore implements store.BillRepository.ReactiveViolationBefore.
+func (r *BillRepository) ReactiveViolationBefore(ctx context.Context, s store.Scope, billScope model.BillScope, subjectID uuid.UUID, periodKey string) (bool, error) {
+	if !s.Valid() {
+		return false, store.ErrInvalidScope
+	}
+	if len(periodKey) != len("2006-01") {
+		return false, fmt.Errorf("reactive violation before: period key %q", periodKey)
+	}
+	ids, all := s.BuildingFilter()
+	violated, err := r.q.BillReactiveViolationBefore(ctx, sqlcgen.BillReactiveViolationBeforeParams{
+		CompanyID: s.CompanyID, AllBuildings: all, BuildingIds: ids,
+		BillScope: sqlcgen.BillScope(billScope), SubjectID: &subjectID,
+		YearStart: periodKey[:4] + "-01", PeriodKey: periodKey,
+	})
+	if err != nil {
+		return false, pgerr.Translate(r.pool, "reactive violation before", err)
+	}
+	return violated, nil
+}
+
 // Create inserts a bill, its lines and its members in one transaction, after
 // confirming every referenced id is visible to the Scope. See Create's
 // Isolation comment in repository.go.

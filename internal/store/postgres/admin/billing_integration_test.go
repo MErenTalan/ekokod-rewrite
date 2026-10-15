@@ -39,7 +39,7 @@ func TestUpsertBillingParametersIsIdempotentOnEffectiveFrom(t *testing.T) {
 
 	var n int
 	require.NoError(t, pool.QueryRow(ctx, `select count(*) from billing_parameters`).Scan(&n))
-	require.Equal(t, 2, n, "seed + one converged row")
+	require.Equal(t, 3, n, "seed + R526's 2022 row + one converged row")
 }
 
 func TestBillableBuildingsExcludesDeletedAndAnalyzerless(t *testing.T) {
