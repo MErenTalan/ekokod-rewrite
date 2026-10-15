@@ -137,6 +137,32 @@ func TestRenderListsMissingDays(t *testing.T) {
 	require.Greater(t, len(out), len(plain), "the missing-days note is drawn")
 }
 
+// prosumer is a hourly-netted residential bill with the informational sale (R531).
+func prosumer() invoicepdf.Document {
+	d := document(model.BillScopeAnalyzer)
+	unit := "kWh"
+	d.Bill.ActiveImport, d.Bill.ActiveExport, d.Bill.NetConsumption = decimal.RequireFromString("315.091"), decimal.RequireFromString("476.321"), decimal.RequireFromString("309.4")
+	d.Lines = []model.BillLine{
+		{Code: model.BillLineEnergy, Quantity: dp("309.4"), Unit: &unit, UnitPrice: dp("1.212443"), Amount: decimal.RequireFromString("375.13"), SortOrder: 0},
+		d.Lines[3],
+		{Code: model.BillLineGenerationSale, Quantity: dp("470.63"), Unit: &unit, UnitPrice: dp("0.9"), Amount: decimal.RequireFromString("423.57"), SortOrder: 5},
+	}
+	return d
+}
+
+func TestRenderPrintsGenerationSaleNote(t *testing.T) {
+	d := prosumer()
+	d.Uncompressed = true
+	out, err := invoicepdf.Render(d)
+	require.NoError(t, err)
+	without := prosumer()
+	without.Uncompressed = true
+	without.Lines = without.Lines[:2]
+	plain, err := invoicepdf.Render(without)
+	require.NoError(t, err)
+	require.Greater(t, len(out), len(plain), "the sale note is drawn")
+}
+
 func TestRenderGoldenHash(t *testing.T) {
 	out, err := invoicepdf.Render(document(model.BillScopeAnalyzer))
 	require.NoError(t, err)
@@ -230,4 +256,5 @@ func TestWriteSamples(t *testing.T) {
 	f.Bill.MissingDays = []string{"2026-01-20", "2026-01-21", "2026-01-25"}
 	f.Bill.InductiveThreshold, f.Bill.CapacitiveThreshold = nil, nil
 	write("flagged.pdf", f)
+	write("prosumer.pdf", prosumer())
 }

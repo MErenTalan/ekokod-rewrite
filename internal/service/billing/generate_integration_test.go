@@ -768,3 +768,49 @@ func TestGenerateDeductsOnlyTheYearsFirstReactiveViolation(t *testing.T) {
 	require.NotContains(t, lines, model.BillLineReactiveWaiver, "the year's second violation is charged")
 	require.Equal(t, "370.37", febBill.Bill.ReactivePenalty.StringFixed(2))
 }
+
+// R531: per day 12 import-only hours, one hour with both (overlap 1 kWh) and
+// 11 export-only hours → import 403, export 744, overlap 31 over January.
+func TestGenerateNetsGenerationHourly(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, 7020)
+	a := h.tenant.Analyzers[0].ID
+	b := h.tenant.Buildings[0].ID
+	_, err := h.tariffs.Create(h.ctx, h.tenant.AdminScope, model.Tariff{
+		BuildingID: &b, EffectiveFrom: time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC), Currency: model.CurrencyTRY,
+		EnergyType: model.EnergyTypeGrid, VoltageLevel: model.VoltageLevelLV, UserGroup: model.UserGroupResidential,
+		PriceType: model.PriceTypeSingleTime, Term: model.TariffTermMonomial, SupplyCompany: model.SupplyCompanyPrivate,
+		SingleTimePrice: dec("2"), DistributionCost: decimal.RequireFromString("0.5"), ReactivePowerPrice: decimal.RequireFromString("1"),
+		GenerationUsage: model.GenerationUsageSubtractFromConsumption, GenerationPricePerKwh: dec("0.3"), VatRate: decimal.NewFromInt(20),
+		CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	})
+	require.NoError(t, err)
+	var rows []model.MeterReading
+	imp, exp := decimal.NewFromInt(1000), decimal.NewFromInt(5000)
+	for i, ts := 0, h.window.From; !ts.After(h.window.To); i, ts = i+1, ts.Add(time.Hour) {
+		rows = append(rows, model.MeterReading{AnalyzerID: a, Ts: ts, Kind: model.ReadingKindLoadProfile, MultiplierApplied: decimal.NewFromInt(1),
+			SourceProvider: model.IntegrationProviderOSOS, IngestedAt: ts, ActiveImport: dec(imp.String()), ReactiveInductiveImport: dec("0"),
+			ReactiveCapacitiveImport: dec("0"), ActiveExport: dec(exp.String())})
+		if hour := i % 24; hour <= 12 {
+			imp = imp.Add(decimal.NewFromInt(1))
+		}
+		if hour := i % 24; hour >= 12 {
+			exp = exp.Add(decimal.NewFromInt(2))
+		}
+	}
+	_, _, err = h.readings.BulkInsert(h.ctx, h.tenant.AdminScope, rows)
+	require.NoError(t, err)
+
+	res, err := h.generate(h.tenant.Scope, model.BillScopeAnalyzer, a)
+	require.NoError(t, err)
+	bill := res.Bill
+	require.Equal(t, model.BillStatusIssued, bill.Status, "flag reason %v", bill.FlagReason)
+	require.Equal(t, "403", bill.ActiveImport.String())
+	require.Equal(t, "744", bill.ActiveExport.String())
+	require.Equal(t, "372", bill.NetConsumption.String(), "403 − hourly overlap 31")
+	amounts := lineAmounts(t, h, bill.ID)
+	require.Equal(t, "744.00", amounts[model.BillLineEnergy], "372 × 2")
+	require.Equal(t, "201.50", amounts[model.BillLineDistribution], "the whole import 403 × 0.5")
+	require.Equal(t, "213.90", amounts[model.BillLineGenerationSale], "(744 − 31) × 0.3, informational")
+	require.Equal(t, "1134.60", bill.TotalCost.StringFixed(2), "(744 + 201.50) × 1.2, the sale left out")
+}

@@ -98,16 +98,19 @@ func TestSplitLinesMovesVatAndCreditBelowTheBase(t *testing.T) {
 	lines := []model.BillLine{
 		{Code: model.BillLineVat, Amount: amount("20"), SortOrder: 3},
 		{Code: model.BillLineGenerationCredit, Amount: amount("-5"), SortOrder: 4},
+		{Code: model.BillLineGenerationSale, Amount: amount("7"), SortOrder: 5},
 		{Code: model.BillLineDistribution, Amount: amount("40"), SortOrder: 1},
 		{Code: model.BillLineEnergy, Amount: amount("60"), SortOrder: 0},
 	}
-	body, vat, credit := splitLines(lines)
+	body, vat, credit, sale := splitLines(lines)
 	require.Len(t, body, 2)
 	require.Equal(t, model.BillLineEnergy, body[0].Code)
 	require.Equal(t, model.BillLineDistribution, body[1].Code)
 	require.Equal(t, "20", vat.Amount.String())
 	require.Equal(t, "-5", credit.Amount.String())
-	_, vat, credit = splitLines(body)
+	require.Equal(t, "7", sale.Amount.String(), "R531: the sale prints below the amount due")
+	_, vat, credit, sale = splitLines(body)
 	require.Nil(t, vat)
 	require.Nil(t, credit)
+	require.Nil(t, sale)
 }

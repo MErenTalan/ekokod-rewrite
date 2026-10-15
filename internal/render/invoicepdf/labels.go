@@ -17,7 +17,7 @@ var labels = map[string]map[string]string{
 		model.BillLineDistribution: "Dağıtım bedeli", model.BillLineGreenEnergy: "Yeşil enerji bedeli", model.BillLinePower: "Güç bedeli",
 		model.BillLineDemandOverrun: "Güç aşım bedeli", model.BillLineReactiveInductive: "Reaktif bedel (endüktif)",
 		model.BillLineReactiveCapacitive: "Reaktif bedel (kapasitif)", model.BillLineReactiveWaiver: "Reaktif bedel tenzili (yılın ilk ihlali)",
-		model.BillLineVat: "KDV", model.BillLineGenerationCredit: "Üretim mahsubu",
+		model.BillLineVat: "KDV", model.BillLineGenerationCredit: "Üretim mahsubu", model.BillLineGenerationSale: "Üretim satış bedeli (bilgi)",
 		model.BillLineExtraPrefix: "Ek bedel", model.BillLineTaxPrefix: "Vergi/fon",
 
 		"title": "Elektrik Faturası", "amount_due": "Ödenecek tutar", "vat_included": "KDV dahil", "days": "gün",
@@ -39,7 +39,8 @@ var labels = map[string]map[string]string{
 
 		"lines": "Fatura kalemleri", "item": "Kalem", "quantity": "Miktar", "unit_price": "Birim fiyat", "amount": "Tutar",
 		"vat_base": "KDV matrahı", "unit:period": "dönem",
-		"footnote": "Tutarlar yuvarlanmamış miktar ve birim fiyattan hesaplanır; kayıtlı 4/6 haneli değerlerden yeniden hesaplamada kuruş farkı olabilir.",
+		"sale_note": "saatlik mahsup sonrası şebekeye verilen fazla üretim; ödenecek tutara dahil değildir.",
+		"footnote":  "Tutarlar yuvarlanmamış miktar ve birim fiyattan hesaplanır; kayıtlı 4/6 haneli değerlerden yeniden hesaplamada kuruş farkı olabilir.",
 
 		"reactive": "Reaktif", "inductive": "Endüktif", "capacitive": "Kapasitif", "reactive_price": "Reaktif birim fiyat",
 		"st:charged": "Ceza uygulandı", "st:waived": "İlk ihlal — tenzil edildi", "st:within": "Sınır içinde", "st:exempt": "Muaf",
@@ -73,7 +74,7 @@ var labels = map[string]map[string]string{
 		model.BillLineDistribution: "Distribution", model.BillLineGreenEnergy: "Green energy", model.BillLinePower: "Power",
 		model.BillLineDemandOverrun: "Demand overrun", model.BillLineReactiveInductive: "Reactive (inductive)",
 		model.BillLineReactiveCapacitive: "Reactive (capacitive)", model.BillLineReactiveWaiver: "Reactive waived (first violation of the year)",
-		model.BillLineVat: "VAT", model.BillLineGenerationCredit: "Generation credit",
+		model.BillLineVat: "VAT", model.BillLineGenerationCredit: "Generation credit", model.BillLineGenerationSale: "Generation sale (info)",
 		model.BillLineExtraPrefix: "Extra charge", model.BillLineTaxPrefix: "Tax/fund",
 
 		"title": "Electricity Invoice", "amount_due": "Amount due", "vat_included": "VAT included", "days": "days",
@@ -95,7 +96,8 @@ var labels = map[string]map[string]string{
 
 		"lines": "Invoice lines", "item": "Item", "quantity": "Quantity", "unit_price": "Unit price", "amount": "Amount",
 		"vat_base": "VAT base", "unit:period": "period",
-		"footnote": "Amounts are computed from unrounded quantities and prices; re-deriving them from the stored 4/6-decimal values can differ by a kuruş.",
+		"sale_note": "excess generation fed to the grid after hourly netting; not part of the amount due.",
+		"footnote":  "Amounts are computed from unrounded quantities and prices; re-deriving them from the stored 4/6-decimal values can differ by a kuruş.",
 
 		"reactive": "Reactive", "inductive": "Inductive", "capacitive": "Capacitive", "reactive_price": "Reactive unit price",
 		"st:charged": "Penalty charged", "st:waived": "First violation — waived", "st:within": "Within limits", "st:exempt": "Exempt",

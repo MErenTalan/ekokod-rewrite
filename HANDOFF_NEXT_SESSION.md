@@ -1,4 +1,13 @@
-# Handoff — ekokod rewrite: F25 (invoice PDF redesign + EPDK 2022 reactive rules), merged and deployed
+# Handoff — ekokod rewrite: F26 (hourly netting for prosumers, R531), merged and deployed
+
+> **STATUS (2026-10-15):** `fix/f26-hourly-netting` (worktree `/home/personal/ekokod-f26-netting`), ruling R531 in
+> `docs/superpowers/plans/2026-10-15-f26-hourly-netting.md`. "Tüketimden düş" now nets hourly, distribution is
+> charged on the whole import, the excess sale is an informational line under the amount due. No migration.
+> **Owner to do:** fix Gaye Hanım EV's tariff (all-in price, sale price) and force-regenerate its bills.
+
+---
+
+## Previous: F25 (invoice PDF redesign + EPDK 2022 reactive rules), merged and deployed
 
 > **STATUS (2026-10-12):** branch `fix/f25-invoice-pdf` (worktree `/home/personal/ekokod-f25-invoice`,
 > from `main` @b5ece58), rulings R526–R530 in `docs/superpowers/plans/2026-10-12-f25-invoice-pdf-and-reactive.md`.

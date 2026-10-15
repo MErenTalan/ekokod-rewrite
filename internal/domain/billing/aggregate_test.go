@@ -53,6 +53,30 @@ func TestAggregateActiveExportKnownSumIgnoresNilMembers(t *testing.T) {
 	require.False(t, none.ActiveExportPartial, "no member reports export")
 }
 
+func TestAggregateHourlyOverlapSumsMembersWithHourlyData(t *testing.T) {
+	q := billing.AggregateQuantities([]billing.Quantities{
+		{ActiveImport: dp("1"), HourlyOverlapKwh: dp("4")},
+		{ActiveImport: dp("1")},
+		{ActiveImport: dp("1"), HourlyOverlapKwh: dp("6")},
+	})
+	require.Equal(t, "10", q.HourlyOverlapKwh.String(), "R531: a member without hourly data adds nothing")
+	require.Nil(t, billing.AggregateQuantities([]billing.Quantities{{ActiveImport: dp("1")}}).HourlyOverlapKwh)
+}
+
+func TestCombineCompanyKeepsGenerationSaleLast(t *testing.T) {
+	in := baseInput(t)
+	in.Tariff.GenerationUsage, in.Tariff.GenerationPricePerKwh = model.GenerationUsageSubtractFromConsumption, dp("0.5")
+	in.Quantities.ActiveExport, in.Quantities.HourlyOverlapKwh = dp("100"), dp("40")
+	inv := compute(t, in)
+	c, err := billing.CombineCompany("2026-01", []billing.Invoice{inv, inv})
+	require.NoError(t, err)
+	last := c.Lines[len(c.Lines)-1]
+	require.Equal(t, model.BillLineGenerationSale, last.Code)
+	require.Equal(t, "120", last.Quantity.String())
+	require.Equal(t, "60.00", last.Amount.StringFixed(2))
+	require.True(t, c.TotalCost.Equal(inv.TotalCost.Mul(d("2"))), "the sale never reaches the total")
+}
+
 func TestAggregateMaxDemandOnlyForSingleMember(t *testing.T) {
 	one := billing.AggregateQuantities([]billing.Quantities{{ActiveImport: dp("1"), MaxDemandKw: dp("40")}})
 	require.Equal(t, "40", one.MaxDemandKw.String())

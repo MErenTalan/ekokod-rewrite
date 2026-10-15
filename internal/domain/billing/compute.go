@@ -25,6 +25,9 @@ type Quantities struct {
 	ActiveExportPartial                   bool            // I-18: some members reported export, some did not
 	MaxDemandKw                           *decimal.Decimal
 	IndexStart, IndexEnd                  map[string]*decimal.Decimal
+	// HourlyOverlapKwh is Σ min(import, export) over sound hours (R531); nil
+	// when no hourly data was read.
+	HourlyOverlapKwh *decimal.Decimal
 }
 
 // Input is everything one invoice computation needs.
@@ -144,9 +147,17 @@ func Compute(in Input) (Invoice, error) {
 		flags[FlagGenerationDataMissing] = true
 	}
 	inv.ActiveExport = export
-	net := inv.ActiveImport
+	net, excess := inv.ActiveImport, decimal.Zero
 	if t.GenerationUsage == model.GenerationUsageSubtractFromConsumption {
-		net = decimal.Max(decimal.Zero, net.Sub(export))
+		// R531: hourly netting; hours without sound data stay fully billed.
+		overlap := decimal.Zero
+		if q.HourlyOverlapKwh != nil {
+			overlap = *q.HourlyOverlapKwh
+		} else if export.IsPositive() {
+			flags[FlagGenerationDataMissing] = true
+		}
+		net = decimal.Max(decimal.Zero, net.Sub(overlap))
+		excess = decimal.Max(decimal.Zero, export.Sub(overlap))
 	}
 	inv.NetConsumption = net
 
@@ -195,11 +206,7 @@ func Compute(in Input) (Invoice, error) {
 			inv.LowTierPrice, inv.HighTierPrice = t.SingleTimePrice, t.OverusePrice
 			energyLine(model.BillLineEnergyHighTier, net, t.OverusePrice)
 		case wouldTier:
-			offset := decimal.Zero
-			if t.GenerationUsage == model.GenerationUsageSubtractFromConsumption {
-				offset = export // R122: spec formula kept verbatim
-			}
-			limit := decimal.Max(decimal.Zero, decimal.NewFromInt(int64(in.Days)).Mul(threshold).Sub(offset))
+			limit := decimal.NewFromInt(int64(in.Days)).Mul(threshold) // R531 drops R122's export offset
 			inv.TieredApplied = true
 			inv.LowTierKwh = decimal.Min(net, limit)
 			inv.HighTierKwh = decimal.Max(decimal.Zero, net.Sub(inv.LowTierKwh))
@@ -226,9 +233,9 @@ func Compute(in Input) (Invoice, error) {
 		}
 	}
 
-	// 3. Distribution on all net (removed-behaviour 3).
+	// 3. Distribution on the whole import, whatever the generation (R531).
 	if distributionPrice != nil {
-		inv.DistributionCost = add(priced(model.BillLineDistribution, net, UnitKwh, *distributionPrice))
+		inv.DistributionCost = add(priced(model.BillLineDistribution, inv.ActiveImport, UnitKwh, *distributionPrice))
 	}
 
 	// 4. Green energy.
@@ -335,6 +342,15 @@ func Compute(in Input) (Invoice, error) {
 		add(credit)
 	}
 	inv.TotalCost = decimal.Max(decimal.Zero, inv.VatBase.Add(inv.VatCost).Sub(inv.GenerationCredit))
+
+	// 11. R531: the hourly excess sale is informational, outside every total.
+	if t.GenerationUsage == model.GenerationUsageSubtractFromConsumption && q.ActiveExport != nil {
+		sale := Line{Code: model.BillLineGenerationSale, Quantity: &excess, Unit: UnitKwh}
+		if price := t.GenerationPricePerKwh; price != nil {
+			sale.UnitPrice, sale.Amount = price, Round2(excess.Mul(*price), mode)
+		}
+		inv.Lines = append(inv.Lines, sale)
+	}
 	inv.Flags = sortedFlags(flags)
 	return inv, nil
 }

@@ -54,6 +54,7 @@
     "powerUnitPrice": "Power unit price (TL/kW/month)",
     "generationUsage": "Generation usage",
     "generationPricePerKwh": "Generation price (TL/kWh)",
+    "generationSalePricePerKwh": "Generation sale price (TL/kWh)",
     "vatRate": "VAT rate (%)",
     "usePtfYekdem": "PTF + YEKDEM",
     "kbkEnergy": "Energy KBK",

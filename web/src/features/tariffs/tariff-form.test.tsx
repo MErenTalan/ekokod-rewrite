@@ -53,6 +53,20 @@ describe('TariffFormView', () => {
     expect(r.onSubmit).toHaveBeenCalledTimes(1);
   });
 
+  it('offers an optional sale price for hourly netting and a required price for a total credit', async () => {
+    const user = userEvent.setup();
+    const none = view();
+    expect(none.queryByLabelText(/Üretim satış fiyatı/)).toBeNull();
+    none.unmount();
+    const total = view({ generationUsage: 'subtract_from_total' });
+    expect(total.getByLabelText(/^Üretim fiyatı/)).toBeVisible();
+    total.unmount();
+    const r = view({ generationUsage: 'subtract_from_consumption' });
+    expect(r.getByLabelText(/Üretim satış fiyatı/)).toBeVisible();
+    await user.click(r.getByRole('button', { name: /Kaydet/ }));
+    expect(r.onSubmit).toHaveBeenCalledTimes(1);
+  });
+
   it('reveals contracted power and the power price only for a binomial tariff', () => {
     expect(view().queryByLabelText(/Sözleşme gücü/)).toBeNull();
     expect(view({ term: 'binomial' }).getByLabelText(/Sözleşme gücü/)).toBeVisible();

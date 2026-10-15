@@ -324,6 +324,11 @@ func (s *Service) computeSubject(ctx context.Context, sc store.Scope, building m
 	if len(suspect) > 0 {
 		return subject{}, computeErr(CodeUnresolvedAnomaly, "analyzer_ids", strings.Join(suspect, ","))
 	}
+	if t.GenerationUsage == model.GenerationUsageSubtractFromConsumption {
+		if err := s.addHourlyOverlap(ctx, sc, ids, billed, quantities); err != nil {
+			return subject{}, err
+		}
+	}
 	if blocking, err := s.blockingAnomalies(ctx, sc, ids, billed, partial); err != nil {
 		return subject{}, err
 	} else if len(blocking) > 0 {
@@ -462,6 +467,28 @@ func (s *Service) blockingAnomalies(ctx context.Context, sc store.Scope, ids []u
 		}
 	}
 	return out, nil
+}
+
+// addHourlyOverlap fills each member's hourly netting overlap (R531);
+// quantities[i] belongs to ids[i].
+func (s *Service) addHourlyOverlap(ctx context.Context, sc store.Scope, ids []uuid.UUID, window energy.Window, quantities []domain.Quantities) error {
+	hours := int(window.To.Sub(window.From) / time.Hour)
+	byAnalyzer := map[uuid.UUID][]consumption.Row{}
+	for _, chunk := range chunks(ids, max(1, min(maxChunk, consumption.MaxCells/max(1, hours)))) {
+		rows, err := s.deps.Consumption.Consumption(ctx, sc, consumption.SeriesRequest{
+			AnalyzerIDs: chunk, Level: energy.Hourly, Range: store.TimeRange{From: window.From, To: window.To},
+		})
+		if err != nil {
+			return err
+		}
+		for _, r := range rows {
+			byAnalyzer[r.AnalyzerID] = append(byAnalyzer[r.AnalyzerID], r)
+		}
+	}
+	for i, id := range ids {
+		quantities[i].HourlyOverlapKwh = consumption.HourlyOverlap(byAnalyzer[id])
+	}
+	return nil
 }
 
 // price loads hourly consumption and market data and runs tariff.Price (R108, R124).

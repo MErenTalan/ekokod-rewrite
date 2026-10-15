@@ -320,8 +320,8 @@ func (v *invoice) tiles() {
 }
 
 // splitLines returns the lines above the VAT base in sort order, then the VAT
-// and generation credit lines that print below it.
-func splitLines(lines []model.BillLine) (body []model.BillLine, vat, credit *model.BillLine) {
+// and generation credit lines that print below it and the informational sale (R531).
+func splitLines(lines []model.BillLine) (body []model.BillLine, vat, credit, sale *model.BillLine) {
 	sorted := slices.Clone(lines)
 	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].SortOrder < sorted[j].SortOrder })
 	for i := range sorted {
@@ -330,11 +330,13 @@ func splitLines(lines []model.BillLine) (body []model.BillLine, vat, credit *mod
 			vat = &sorted[i]
 		case model.BillLineGenerationCredit:
 			credit = &sorted[i]
+		case model.BillLineGenerationSale:
+			sale = &sorted[i]
 		default:
 			body = append(body, sorted[i])
 		}
 	}
-	return body, vat, credit
+	return body, vat, credit, sale
 }
 
 func (v *invoice) lineCells(l model.BillLine) []string {
@@ -361,7 +363,7 @@ func (v *invoice) lines() {
 	t := &table{p: &v.painter, widths: []float64{86, 36, 30, 34}, aligns: []string{"L", "R", "R", "R"},
 		head: []string{label(v.loc, "item"), label(v.loc, "quantity"), label(v.loc, "unit_price"), label(v.loc, "amount")}}
 	t.header()
-	body, vat, credit := splitLines(v.d.Lines)
+	body, vat, credit, sale := splitLines(v.d.Lines)
 	for _, l := range body {
 		if l.Amount.IsNegative() {
 			t.add(v.lineCells(l), ink, ink, ink, brand)
@@ -408,11 +410,31 @@ func (v *invoice) lines() {
 	v.font("B", 12)
 	v.text(margin+contentW-80, y, 78, 10, v.money(v.b.TotalCost)+" "+string(v.b.Currency), "R")
 	v.f.SetY(y + 11.5)
+	if sale != nil {
+		v.saleNote(*sale)
+	}
 	v.font("", 6.5)
 	v.color(subtle)
 	v.f.SetX(margin)
 	v.f.MultiCell(contentW, 3.4, label(v.loc, "footnote"), "", "L", false)
 	v.f.SetY(v.f.GetY() + 2)
+}
+
+// saleNote prints the hourly excess generation sale, outside the amount due (R531).
+func (v *invoice) saleNote(l model.BillLine) {
+	text := label(v.loc, model.BillLineGenerationSale) + ": "
+	if l.Quantity != nil {
+		text += v.num(*l.Quantity, 3) + " kWh"
+	}
+	if l.UnitPrice != nil {
+		text += " × " + v.num(*l.UnitPrice, 6) + " = " + v.money(l.Amount) + " " + string(v.b.Currency)
+	}
+	v.ensure(6)
+	v.font("M", 7.5)
+	v.color(muted)
+	v.f.SetX(margin)
+	v.f.MultiCell(contentW, 3.8, text+" — "+label(v.loc, "sale_note"), "", "L", false)
+	v.f.SetY(v.f.GetY() + 1)
 }
 
 // reactiveStatus is the reactive card's chip key.
