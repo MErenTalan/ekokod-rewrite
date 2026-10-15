@@ -769,9 +769,9 @@ func TestGenerateDeductsOnlyTheYearsFirstReactiveViolation(t *testing.T) {
 	require.Equal(t, "370.37", febBill.Bill.ReactivePenalty.StringFixed(2))
 }
 
-// R531: per day 12 import-only hours, one hour with both (overlap 1 kWh) and
-// 11 export-only hours → import 403, export 744, overlap 31 over January.
-func TestGenerateNetsGenerationHourly(t *testing.T) {
+// R532: a prosumer exporting more than it imports (403 vs 744 kWh over
+// January) pays only distribution on the whole import.
+func TestGenerateNetsGenerationMonthly(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t, 7020)
 	a := h.tenant.Analyzers[0].ID
@@ -807,10 +807,10 @@ func TestGenerateNetsGenerationHourly(t *testing.T) {
 	require.Equal(t, model.BillStatusIssued, bill.Status, "flag reason %v", bill.FlagReason)
 	require.Equal(t, "403", bill.ActiveImport.String())
 	require.Equal(t, "744", bill.ActiveExport.String())
-	require.Equal(t, "372", bill.NetConsumption.String(), "403 − hourly overlap 31")
+	require.True(t, bill.NetConsumption.IsZero(), "monthly 403 − 744 floors at 0")
 	amounts := lineAmounts(t, h, bill.ID)
-	require.Equal(t, "744.00", amounts[model.BillLineEnergy], "372 × 2")
+	require.Equal(t, "0.00", amounts[model.BillLineEnergy])
 	require.Equal(t, "201.50", amounts[model.BillLineDistribution], "the whole import 403 × 0.5")
-	require.Equal(t, "213.90", amounts[model.BillLineGenerationSale], "(744 − 31) × 0.3, informational")
-	require.Equal(t, "1134.60", bill.TotalCost.StringFixed(2), "(744 + 201.50) × 1.2, the sale left out")
+	require.Equal(t, "102.30", amounts[model.BillLineGenerationSale], "(744 − 403) × 0.3, informational")
+	require.Equal(t, "241.80", bill.TotalCost.StringFixed(2), "201.50 × 1.2, the sale left out")
 }

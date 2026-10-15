@@ -25,9 +25,6 @@ type Quantities struct {
 	ActiveExportPartial                   bool            // I-18: some members reported export, some did not
 	MaxDemandKw                           *decimal.Decimal
 	IndexStart, IndexEnd                  map[string]*decimal.Decimal
-	// HourlyOverlapKwh is Σ min(import, export) over sound hours (R531); nil
-	// when no hourly data was read.
-	HourlyOverlapKwh *decimal.Decimal
 }
 
 // Input is everything one invoice computation needs.
@@ -148,16 +145,9 @@ func Compute(in Input) (Invoice, error) {
 	}
 	inv.ActiveExport = export
 	net, excess := inv.ActiveImport, decimal.Zero
-	if t.GenerationUsage == model.GenerationUsageSubtractFromConsumption {
-		// R531: hourly netting; hours without sound data stay fully billed.
-		overlap := decimal.Zero
-		if q.HourlyOverlapKwh != nil {
-			overlap = *q.HourlyOverlapKwh
-		} else if export.IsPositive() {
-			flags[FlagGenerationDataMissing] = true
-		}
-		net = decimal.Max(decimal.Zero, net.Sub(overlap))
-		excess = decimal.Max(decimal.Zero, export.Sub(overlap))
+	if t.GenerationUsage == model.GenerationUsageSubtractFromConsumption { // R532: monthly, as the real bills net
+		net = decimal.Max(decimal.Zero, net.Sub(export))
+		excess = decimal.Max(decimal.Zero, export.Sub(inv.ActiveImport))
 	}
 	inv.NetConsumption = net
 
@@ -206,7 +196,7 @@ func Compute(in Input) (Invoice, error) {
 			inv.LowTierPrice, inv.HighTierPrice = t.SingleTimePrice, t.OverusePrice
 			energyLine(model.BillLineEnergyHighTier, net, t.OverusePrice)
 		case wouldTier:
-			limit := decimal.NewFromInt(int64(in.Days)).Mul(threshold) // R531 drops R122's export offset
+			limit := decimal.NewFromInt(int64(in.Days)).Mul(threshold) // R531: no export offset on top of the netted consumption
 			inv.TieredApplied = true
 			inv.LowTierKwh = decimal.Min(net, limit)
 			inv.HighTierKwh = decimal.Max(decimal.Zero, net.Sub(inv.LowTierKwh))
@@ -343,7 +333,7 @@ func Compute(in Input) (Invoice, error) {
 	}
 	inv.TotalCost = decimal.Max(decimal.Zero, inv.VatBase.Add(inv.VatCost).Sub(inv.GenerationCredit))
 
-	// 11. R531: the hourly excess sale is informational, outside every total.
+	// 11. R531: the excess sale is informational, outside every total.
 	if t.GenerationUsage == model.GenerationUsageSubtractFromConsumption && q.ActiveExport != nil {
 		sale := Line{Code: model.BillLineGenerationSale, Quantity: &excess, Unit: UnitKwh}
 		if price := t.GenerationPricePerKwh; price != nil {

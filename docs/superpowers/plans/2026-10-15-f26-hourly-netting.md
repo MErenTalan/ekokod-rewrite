@@ -1,4 +1,4 @@
-# F26 — hourly netting for prosumers (R531)
+# F26 — prosumer netting (R531, netting period superseded by R532)
 
 **Status:** done 2026-10-15 on `fix/f26-hourly-netting`; merged and deployed the same day.
 
@@ -14,3 +14,7 @@ and residential producers sell the excess at a (cheap) sale price that should be
 
 **After deploy:** fix Gaye Hanım's tariff (single all-in price ~1.2124, not energy 0.494 + distribution
 1.2124; sale price when known) and force-regenerate Jul–Sep bills.
+
+| R532 | **Supersedes R531's hourly netting.** The first regenerated September bill (611.53 TL) did not match Enerjisa (420.23 TL): Enerjisa nets **monthly** — export 476 > import 315 → energy 0, only the half distribution price (1.21244339 = 2.42 / 2, entered as the tariff's distribution cost) × the whole import 315.091 = 382.03 + 10 % VAT. The tariff owner confirmed (2026-10-15). So `subtract_from_consumption`: net = max(0, import − export) per period; excess = max(0, export − import) for the informational sale line; distribution on the whole import and no tier offset stay from R531; no hourly reads; the reactive screen uses the same monthly net. `TestGenerationSubtractFromConsumptionMatchesRealProsumerBill` reproduces the Enerjisa bill to the kuruş. | Energy charged to a prosumer whose month nets to zero |
+
+**Correction:** the tariff (energy 0.494, distribution 1.2124) was right; 1.2124 is the producers' half distribution price. Only a forced regeneration is needed.
