@@ -54,6 +54,7 @@
     "powerUnitPrice": "Güç birim fiyatı (TL/kW/ay)",
     "generationUsage": "Üretim kullanımı",
     "generationPricePerKwh": "Üretim fiyatı (TL/kWh)",
+    "generationSalePricePerKwh": "Üretim satış fiyatı (TL/kWh)",
     "vatRate": "KDV oranı (%)",
     "usePtfYekdem": "PTF + YEKDEM",
     "kbkEnergy": "Enerji KBK",

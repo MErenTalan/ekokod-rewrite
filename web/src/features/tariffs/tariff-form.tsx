@@ -246,6 +246,7 @@ export function TariffFormView({
             options={options(GENERATION_USAGES, 'generationUsage')}
             onValueChange={(value) => set({ generationUsage: value as TariffDraft['generationUsage'] })} />
           {draft.generationUsage === 'subtract_from_total' ? price('generationPricePerKwh', 'fields.generationPricePerKwh', true) : null}
+          {draft.generationUsage === 'subtract_from_consumption' ? price('generationPricePerKwh', 'fields.generationSalePricePerKwh') : null}
         </div>
       </section>
 

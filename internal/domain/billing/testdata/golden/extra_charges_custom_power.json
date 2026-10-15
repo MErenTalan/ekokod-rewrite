@@ -100,6 +100,9 @@
       "EffectiveFrom": "2000-01-01T00:00:00Z",
       "ReactivePenaltyBasis": "whole_quantity",
       "ReactiveExemptBelowKw": "9",
+      "ReactiveExemptInclusive": false,
+      "ReactiveChargeHigherSide": false,
+      "ReactiveFirstViolationWaived": false,
       "ReactiveExemptTerms": [
         "monomial"
       ],
@@ -150,10 +153,12 @@
       "ActiveExportPartial": false,
       "MaxDemandKw": "130",
       "IndexStart": null,
-      "IndexEnd": null
+      "IndexEnd": null,
+      "HourlyOverlapKwh": null
     },
     "InstalledPowerKw": "50",
-    "Pricing": null
+    "Pricing": null,
+    "ReactivePriorViolation": false
   },
   "expected": {
     "lines": [

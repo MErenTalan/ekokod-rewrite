@@ -64,11 +64,11 @@ func checkScenario(in billing.Input, inv billing.Invoice) string {
 		if !l.Amount.Equal(l.Amount.Truncate(2)) {
 			return fmt.Sprintf("line %s amount %s has more than 2 decimals", l.Code, l.Amount)
 		}
-		if l.Code != model.BillLineVat && l.Code != model.BillLineGenerationCredit {
+		if l.Code != model.BillLineVat && l.Code != model.BillLineGenerationCredit && l.Code != model.BillLineGenerationSale {
 			sum = sum.Add(l.Amount)
 		}
-		if l.Code == model.BillLineDistribution && !l.Quantity.Equal(inv.NetConsumption) {
-			return "distribution quantity is not the net consumption"
+		if l.Code == model.BillLineDistribution && !l.Quantity.Equal(inv.ActiveImport) {
+			return "distribution quantity is not the whole import (R531)"
 		}
 		tier := l.Code == model.BillLineEnergyLowTier || l.Code == model.BillLineEnergyHighTier
 		if tier && (in.Tariff.PriceType == model.PriceTypeMultiTime || in.Tariff.UsePtfYekdem ||
@@ -216,12 +216,15 @@ func oracleCompute(in billing.Input) oracleOut {
 	} else if t.GenerationUsage != model.GenerationUsageNone {
 		o.flags[billing.FlagGenerationDataMissing] = true
 	}
-	net := *q.ActiveImport
+	net, excess := *q.ActiveImport, zero
 	if t.GenerationUsage == model.GenerationUsageSubtractFromConsumption {
-		net = net.Sub(exportKwh)
-		if net.IsNegative() {
-			net = zero
+		overlap := zero
+		if q.HourlyOverlapKwh != nil {
+			overlap = *q.HourlyOverlapKwh
+		} else if exportKwh.IsPositive() {
+			o.flags[billing.FlagGenerationDataMissing] = true
 		}
+		net, excess = decimal.Max(zero, net.Sub(overlap)), decimal.Max(zero, exportKwh.Sub(overlap))
 	}
 	o.net = net
 
@@ -271,14 +274,7 @@ func oracleCompute(in billing.Input) oracleOut {
 			o.tiered, o.high = true, net
 			energyCost = charge("energy_high_tier", round(net.Mul(*t.OverusePrice)))
 		default:
-			offset := zero
-			if t.GenerationUsage == model.GenerationUsageSubtractFromConsumption {
-				offset = exportKwh
-			}
-			limit := days.Mul(threshold).Sub(offset)
-			if limit.IsNegative() {
-				limit = zero
-			}
+			limit := days.Mul(threshold)
 			o.tiered = true
 			o.low = net
 			if limit.LessThan(net) {
@@ -303,7 +299,7 @@ func oracleCompute(in billing.Input) oracleOut {
 	}
 	lineSum := energyCost
 	if distributionPrice != nil {
-		lineSum = lineSum.Add(charge("distribution", round(net.Mul(*distributionPrice))))
+		lineSum = lineSum.Add(charge("distribution", round(q.ActiveImport.Mul(*distributionPrice))))
 	}
 	if t.GreenEnergyPrice != nil || t.GreenEnergyDistributionCost != nil {
 		g := zero
@@ -431,6 +427,13 @@ func oracleCompute(in billing.Input) oracleOut {
 	if o.total.IsNegative() {
 		o.total = zero
 	}
+	if t.GenerationUsage == model.GenerationUsageSubtractFromConsumption && q.ActiveExport != nil {
+		sale := zero
+		if t.GenerationPricePerKwh != nil {
+			sale = round(excess.Mul(*t.GenerationPricePerKwh))
+		}
+		charge("generation_sale", sale)
+	}
 	return o
 }
 
@@ -475,8 +478,11 @@ func randomInput(r *rand.Rand, loc *time.Location) billing.Input {
 		UsePtfYekdem:     pick(10) < 3,
 		PowerPriceSource: model.PriceSources()[pick(2)], ReactivePriceSource: model.PriceSources()[pick(2)], DistributionPriceSource: model.PriceSources()[pick(2)],
 	}
-	if t.GenerationUsage == model.GenerationUsageSubtractFromTotal {
+	switch t.GenerationUsage {
+	case model.GenerationUsageSubtractFromTotal:
 		t.GenerationPricePerKwh = decPtr(dec(3, 4))
+	case model.GenerationUsageSubtractFromConsumption:
+		t.GenerationPricePerKwh = maybe(30, dec(3, 4))
 	}
 	if pick(5) == 0 {
 		t.GreenEnergyPrice, t.GreenEnergyDistributionCost = maybe(30, dec(1, 4)), maybe(30, dec(1, 4))
@@ -534,6 +540,9 @@ func randomInput(r *rand.Rand, loc *time.Location) billing.Input {
 	}
 	if pick(5) != 0 {
 		q.MaxDemandKw = decPtr(dec(700, 2))
+	}
+	if q.ActiveExport != nil { // R531: overlap ≤ min(import, export)
+		q.HourlyOverlapKwh = maybe(25, decimal.Min(imp, *q.ActiveExport).Mul(decimal.New(r.Int64N(1001), -3)))
 	}
 
 	in := billing.Input{

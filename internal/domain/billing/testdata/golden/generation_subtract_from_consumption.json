@@ -1,5 +1,5 @@
 {
-  "description": "net 400 = 500 − 100; low tier 30×8 − 100 = 140 (R122)",
+  "description": "R531: net 400 = 500 − hourly overlap 100; low tier 30×8; distribution on 500; sale info 200 × 0.25",
   "input": {
     "PeriodKey": "2026-01",
     "Period": {
@@ -33,7 +33,7 @@
       "ContractedPowerKw": null,
       "PowerUnitPrice": null,
       "GenerationUsage": "subtract_from_consumption",
-      "GenerationPricePerKwh": null,
+      "GenerationPricePerKwh": "0.25",
       "VatRate": "20",
       "UsePtfYekdem": false,
       "KbkEnergy": null,
@@ -59,6 +59,9 @@
       "EffectiveFrom": "2000-01-01T00:00:00Z",
       "ReactivePenaltyBasis": "whole_quantity",
       "ReactiveExemptBelowKw": "9",
+      "ReactiveExemptInclusive": false,
+      "ReactiveChargeHigherSide": false,
+      "ReactiveFirstViolationWaived": false,
       "ReactiveExemptTerms": [
         "monomial"
       ],
@@ -104,61 +107,70 @@
       "T3": null,
       "ReactiveInductive": "0",
       "ReactiveCapacitive": "0",
-      "ActiveExport": "100",
+      "ActiveExport": "300",
       "ActiveExportKnownSum": "0",
       "ActiveExportPartial": false,
       "MaxDemandKw": null,
       "IndexStart": null,
-      "IndexEnd": null
+      "IndexEnd": null,
+      "HourlyOverlapKwh": "100"
     },
     "InstalledPowerKw": "50",
-    "Pricing": null
+    "Pricing": null,
+    "ReactivePriorViolation": false
   },
   "expected": {
     "lines": [
       {
         "code": "energy_low_tier",
-        "quantity": "140",
+        "quantity": "240",
         "unit_price": "2",
         "rate_pct": null,
-        "amount": "280"
+        "amount": "480"
       },
       {
         "code": "energy_high_tier",
-        "quantity": "260",
+        "quantity": "160",
         "unit_price": "3",
         "rate_pct": null,
-        "amount": "780"
+        "amount": "480"
       },
       {
         "code": "distribution",
-        "quantity": "400",
+        "quantity": "500",
         "unit_price": "0.5",
         "rate_pct": null,
-        "amount": "200"
+        "amount": "250"
       },
       {
         "code": "vat",
         "quantity": null,
         "unit_price": null,
         "rate_pct": "20",
-        "amount": "252"
+        "amount": "242"
+      },
+      {
+        "code": "generation_sale",
+        "quantity": "200",
+        "unit_price": "0.25",
+        "rate_pct": null,
+        "amount": "50"
       }
     ],
     "net_consumption": "400",
-    "low_tier_kwh": "140",
-    "high_tier_kwh": "260",
-    "energy_cost": "1060",
-    "distribution_cost": "200",
+    "low_tier_kwh": "240",
+    "high_tier_kwh": "160",
+    "energy_cost": "960",
+    "distribution_cost": "250",
     "power_cost": "0",
     "demand_overrun_cost": "0",
     "reactive_penalty": "0",
     "extra_charges_cost": "0",
     "other_taxes_cost": "0",
-    "vat_base": "1260",
-    "vat_cost": "252",
+    "vat_base": "1210",
+    "vat_cost": "242",
     "generation_credit": "0",
-    "total_cost": "1512",
+    "total_cost": "1452",
     "flags": [],
     "tiered_applied": true,
     "reactive_applied": false,

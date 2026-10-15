@@ -134,12 +134,34 @@ func TestGenerationNone(t *testing.T) {
 func TestGenerationSubtractFromConsumption(t *testing.T) {
 	in := residential(t, "500")
 	in.Tariff.GenerationUsage = model.GenerationUsageSubtractFromConsumption
-	in.Quantities.ActiveExport = dp("100")
+	in.Tariff.GenerationPricePerKwh = dp("0.25")
+	in.Quantities.ActiveExport, in.Quantities.HourlyOverlapKwh = dp("300"), dp("100")
 	inv := compute(t, in)
-	require.Equal(t, "400", inv.NetConsumption.String())
-	require.Equal(t, "140", inv.LowTierKwh.String(), "R122: 30×8 − 100")
-	require.Equal(t, "260", inv.HighTierKwh.String())
-	require.Equal(t, "1060.00", inv.EnergyCost.StringFixed(2))
+	require.Equal(t, "400", inv.NetConsumption.String(), "R531: 500 − hourly overlap 100")
+	require.Equal(t, "240", inv.LowTierKwh.String(), "R531: 30×8, no export offset")
+	require.Equal(t, "160", inv.HighTierKwh.String())
+	require.Equal(t, "960.00", inv.EnergyCost.StringFixed(2))
+	require.Equal(t, "500", line(t, inv, model.BillLineDistribution).Quantity.String(), "distribution on the whole import")
+	require.Equal(t, "1210", inv.VatBase.String(), "the sale stays outside the VAT base")
+	require.Equal(t, "1452", inv.TotalCost.String())
+	sale := line(t, inv, model.BillLineGenerationSale)
+	require.Equal(t, "200", sale.Quantity.String(), "export 300 − overlap 100")
+	require.Equal(t, "50.00", sale.Amount.StringFixed(2))
+	require.Equal(t, model.BillLineGenerationSale, inv.Lines[len(inv.Lines)-1].Code)
+	require.Empty(t, inv.Flags)
+}
+
+func TestGenerationSubtractFromConsumptionWithoutHourlyData(t *testing.T) {
+	in := residential(t, "224")
+	in.Tariff.GenerationUsage = model.GenerationUsageSubtractFromConsumption
+	in.Quantities.ActiveExport = dp("768")
+	inv := compute(t, in)
+	require.Equal(t, "224", inv.NetConsumption.String(), "no hourly data: the import stays billed, never netted monthly")
+	require.Equal(t, []billing.Flag{billing.FlagGenerationDataMissing}, inv.Flags)
+	sale := line(t, inv, model.BillLineGenerationSale)
+	require.Equal(t, "768", sale.Quantity.String())
+	require.Nil(t, sale.UnitPrice, "no sale price: kWh only")
+	require.True(t, sale.Amount.IsZero())
 }
 
 func TestGenerationSubtractFromTotal(t *testing.T) {
@@ -161,7 +183,7 @@ func TestGenerationSubtractFromTotal(t *testing.T) {
 func TestGenerationMultiTimeProRata(t *testing.T) {
 	in := multiTime(t)
 	in.Tariff.GenerationUsage = model.GenerationUsageSubtractFromConsumption
-	in.Quantities.ActiveImport, in.Quantities.ActiveExport = dp("600"), dp("200")
+	in.Quantities.ActiveImport, in.Quantities.ActiveExport, in.Quantities.HourlyOverlapKwh = dp("600"), dp("700"), dp("200")
 	in.Quantities.T1, in.Quantities.T2, in.Quantities.T3 = dp("250"), dp("150"), dp("100")
 	inv := compute(t, in)
 	require.Equal(t, "200", line(t, inv, model.BillLineEnergyT1).Quantity.String())

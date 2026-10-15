@@ -38,6 +38,12 @@ func AggregateQuantities(members []Quantities) Quantities {
 	out.ReactiveInductive = sum(func(q Quantities) *decimal.Decimal { return q.ReactiveInductive })
 	out.ReactiveCapacitive = sum(func(q Quantities) *decimal.Decimal { return q.ReactiveCapacitive })
 	out.ActiveExport = sum(func(q Quantities) *decimal.Decimal { return q.ActiveExport })
+	for _, m := range members { // a member without hourly data adds no overlap (R531)
+		if m.HourlyOverlapKwh != nil {
+			v := val(out.HourlyOverlapKwh).Add(*m.HourlyOverlapKwh)
+			out.HourlyOverlapKwh = &v
+		}
+	}
 	reported := 0
 	for _, m := range members {
 		out.ActiveExportKnownSum = out.ActiveExportKnownSum.Add(m.ActiveExportKnownSum)
@@ -197,13 +203,15 @@ func CombineCompany(periodKey string, buildings []Invoice) (Invoice, error) {
 			}
 		}
 	}
-	// Merged lines keep VAT and the generation credit last, as on a building invoice.
+	// Merged lines keep VAT, the generation credit and the sale info last, as on a building invoice.
 	rank := func(code string) int {
 		switch code {
 		case model.BillLineVat:
 			return 1
 		case model.BillLineGenerationCredit:
 			return 2
+		case model.BillLineGenerationSale:
+			return 3
 		}
 		return 0
 	}
