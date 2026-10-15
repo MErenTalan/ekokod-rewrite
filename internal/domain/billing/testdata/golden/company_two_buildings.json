@@ -113,8 +113,7 @@
         "ActiveExportPartial": false,
         "MaxDemandKw": null,
         "IndexStart": null,
-        "IndexEnd": null,
-        "HourlyOverlapKwh": null
+        "IndexEnd": null
       },
       "InstalledPowerKw": "50",
       "Pricing": null,
@@ -232,8 +231,7 @@
         "ActiveExportPartial": false,
         "MaxDemandKw": null,
         "IndexStart": null,
-        "IndexEnd": null,
-        "HourlyOverlapKwh": null
+        "IndexEnd": null
       },
       "InstalledPowerKw": "50",
       "Pricing": null,

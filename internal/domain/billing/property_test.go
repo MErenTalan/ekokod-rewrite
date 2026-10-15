@@ -218,13 +218,7 @@ func oracleCompute(in billing.Input) oracleOut {
 	}
 	net, excess := *q.ActiveImport, zero
 	if t.GenerationUsage == model.GenerationUsageSubtractFromConsumption {
-		overlap := zero
-		if q.HourlyOverlapKwh != nil {
-			overlap = *q.HourlyOverlapKwh
-		} else if exportKwh.IsPositive() {
-			o.flags[billing.FlagGenerationDataMissing] = true
-		}
-		net, excess = decimal.Max(zero, net.Sub(overlap)), decimal.Max(zero, exportKwh.Sub(overlap))
+		net, excess = decimal.Max(zero, net.Sub(exportKwh)), decimal.Max(zero, exportKwh.Sub(*q.ActiveImport))
 	}
 	o.net = net
 
@@ -540,9 +534,6 @@ func randomInput(r *rand.Rand, loc *time.Location) billing.Input {
 	}
 	if pick(5) != 0 {
 		q.MaxDemandKw = decPtr(dec(700, 2))
-	}
-	if q.ActiveExport != nil { // R531: overlap ≤ min(import, export)
-		q.HourlyOverlapKwh = maybe(25, decimal.Min(imp, *q.ActiveExport).Mul(decimal.New(r.Int64N(1001), -3)))
 	}
 
 	in := billing.Input{

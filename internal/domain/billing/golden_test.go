@@ -186,10 +186,10 @@ func goldenSeeds(t *testing.T) map[string]func() goldenFile {
 		"single_rate_tiered_commercial":  single("commercial 1200 kWh / 30 days: 900 low at 2.5, 300 high at 3.5", with(base, func(in *billing.Input) { in.Quantities.ActiveImport = dp("1200") })),
 		"multi_time_no_tiering":          single("residential multi-time far above threshold: bands at their own prices, never tiered or averaged", func() billing.Input { return multiTime(t) }),
 		"generation_none":                single("export 100 ignored under generation_usage none", with(base, func(in *billing.Input) { in.Quantities.ActiveExport = dp("100") })),
-		"generation_subtract_from_consumption": single("R531: net 400 = 500 − hourly overlap 100; low tier 30×8; distribution on 500; sale info 200 × 0.25", func() billing.Input {
+		"generation_subtract_from_consumption": single("R532: net 400 = 500 − 100 monthly; low tier 30×8 (R531); distribution on 500; no excess to sell", func() billing.Input {
 			in := residential(t, "500")
 			in.Tariff.GenerationUsage, in.Tariff.GenerationPricePerKwh = model.GenerationUsageSubtractFromConsumption, dp("0.25")
-			in.Quantities.ActiveExport, in.Quantities.HourlyOverlapKwh = dp("300"), dp("100")
+			in.Quantities.ActiveExport = dp("100")
 			return in
 		}),
 		"generation_subtract_from_total": single("credit 100 × 1.5 after VAT", with(base, func(in *billing.Input) {

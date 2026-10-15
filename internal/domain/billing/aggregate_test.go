@@ -53,20 +53,10 @@ func TestAggregateActiveExportKnownSumIgnoresNilMembers(t *testing.T) {
 	require.False(t, none.ActiveExportPartial, "no member reports export")
 }
 
-func TestAggregateHourlyOverlapSumsMembersWithHourlyData(t *testing.T) {
-	q := billing.AggregateQuantities([]billing.Quantities{
-		{ActiveImport: dp("1"), HourlyOverlapKwh: dp("4")},
-		{ActiveImport: dp("1")},
-		{ActiveImport: dp("1"), HourlyOverlapKwh: dp("6")},
-	})
-	require.Equal(t, "10", q.HourlyOverlapKwh.String(), "R531: a member without hourly data adds nothing")
-	require.Nil(t, billing.AggregateQuantities([]billing.Quantities{{ActiveImport: dp("1")}}).HourlyOverlapKwh)
-}
-
 func TestCombineCompanyKeepsGenerationSaleLast(t *testing.T) {
 	in := baseInput(t)
 	in.Tariff.GenerationUsage, in.Tariff.GenerationPricePerKwh = model.GenerationUsageSubtractFromConsumption, dp("0.5")
-	in.Quantities.ActiveExport, in.Quantities.HourlyOverlapKwh = dp("100"), dp("40")
+	in.Quantities.ActiveExport = dp("660")
 	inv := compute(t, in)
 	c, err := billing.CombineCompany("2026-01", []billing.Invoice{inv, inv})
 	require.NoError(t, err)

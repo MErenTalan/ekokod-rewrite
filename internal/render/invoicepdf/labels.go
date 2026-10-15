@@ -39,7 +39,7 @@ var labels = map[string]map[string]string{
 
 		"lines": "Fatura kalemleri", "item": "Kalem", "quantity": "Miktar", "unit_price": "Birim fiyat", "amount": "Tutar",
 		"vat_base": "KDV matrahı", "unit:period": "dönem",
-		"sale_note": "saatlik mahsup sonrası şebekeye verilen fazla üretim; ödenecek tutara dahil değildir.",
+		"sale_note": "mahsup sonrası şebekeye verilen fazla üretim; ödenecek tutara dahil değildir.",
 		"footnote":  "Tutarlar yuvarlanmamış miktar ve birim fiyattan hesaplanır; kayıtlı 4/6 haneli değerlerden yeniden hesaplamada kuruş farkı olabilir.",
 
 		"reactive": "Reaktif", "inductive": "Endüktif", "capacitive": "Kapasitif", "reactive_price": "Reaktif birim fiyat",
@@ -96,7 +96,7 @@ var labels = map[string]map[string]string{
 
 		"lines": "Invoice lines", "item": "Item", "quantity": "Quantity", "unit_price": "Unit price", "amount": "Amount",
 		"vat_base": "VAT base", "unit:period": "period",
-		"sale_note": "excess generation fed to the grid after hourly netting; not part of the amount due.",
+		"sale_note": "excess generation fed to the grid after netting; not part of the amount due.",
 		"footnote":  "Amounts are computed from unrounded quantities and prices; re-deriving them from the stored 4/6-decimal values can differ by a kuruş.",
 
 		"reactive": "Reactive", "inductive": "Inductive", "capacitive": "Capacitive", "reactive_price": "Reactive unit price",

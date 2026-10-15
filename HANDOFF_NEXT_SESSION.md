@@ -1,9 +1,10 @@
-# Handoff — ekokod rewrite: F26 (hourly netting for prosumers, R531), merged and deployed
+# Handoff — ekokod rewrite: F26 (prosumer netting, R531 + R532), merged and deployed
 
-> **STATUS (2026-10-15):** `fix/f26-hourly-netting` (worktree `/home/personal/ekokod-f26-netting`), ruling R531 in
-> `docs/superpowers/plans/2026-10-15-f26-hourly-netting.md`. "Tüketimden düş" now nets hourly, distribution is
-> charged on the whole import, the excess sale is an informational line under the amount due. No migration.
-> **Owner to do:** fix Gaye Hanım EV's tariff (all-in price, sale price) and force-regenerate its bills.
+> **STATUS (2026-10-15):** rulings in `docs/superpowers/plans/2026-10-15-f26-hourly-netting.md`. R531 (hourly netting,
+> distribution on the whole import, informational sale line) was deployed as b383988; R532 (branch
+> `fix/f26b-monthly-netting`) switches the netting back to **monthly** because the real Enerjisa bill nets monthly —
+> reproduced to the kuruş (420.23 TL). No migration. **Owner to do:** force-regenerate Gaye Hanım EV's bills;
+> optional: a 0.046 kWh gap between the bill's import (315.045) and its index difference (315.091) in Sep 2026.
 
 ---
 

@@ -120,15 +120,7 @@ func (s *Service) ReactiveStatus(ctx context.Context, sc store.Scope, month time
 				return ReactiveStatus{}, err
 			}
 		}
-		var overlap *decimal.Decimal
-		if usage == model.GenerationUsageSubtractFromConsumption && export != nil {
-			hourly, err := s.d.Series.Consumption(ctx, sc, consumption.SeriesRequest{AnalyzerIDs: []uuid.UUID{a.ID}, Level: energy.Hourly, Range: store.TimeRange{From: start, To: end}})
-			if err != nil {
-				return ReactiveStatus{}, mapErr(err)
-			}
-			overlap = consumption.HourlyOverlap(hourly)
-		}
-		in.NetConsumption = reactiveNet(*active, overlap, usage)
+		in.NetConsumption = reactiveNet(*active, export, usage)
 		res := reactive.Evaluate(in)
 		view.InductiveRatio, view.CapacitiveRatio = res.InductiveRatio, res.CapacitiveRatio
 		view.ExemptReason, view.PenaltyApplies = res.ExemptReason, res.Applied
@@ -168,10 +160,10 @@ func higher(current *ReactiveExtreme, v ReactiveAnalyzer, ratio *decimal.Decimal
 }
 
 // reactiveNet is the invoice's own net consumption: only a tariff that
-// subtracts generation nets it, hour by hour (R511, R531).
-func reactiveNet(active decimal.Decimal, overlap *decimal.Decimal, usage model.GenerationUsage) decimal.Decimal {
-	if overlap == nil || usage != model.GenerationUsageSubtractFromConsumption {
+// subtracts generation nets it, monthly (R511, R532).
+func reactiveNet(active decimal.Decimal, export *decimal.Decimal, usage model.GenerationUsage) decimal.Decimal {
+	if export == nil || usage != model.GenerationUsageSubtractFromConsumption {
 		return active
 	}
-	return decimal.Max(active.Sub(*overlap), decimal.Zero)
+	return decimal.Max(active.Sub(*export), decimal.Zero)
 }

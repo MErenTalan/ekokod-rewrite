@@ -1,5 +1,5 @@
 {
-  "description": "R531: net 400 = 500 − hourly overlap 100; low tier 30×8; distribution on 500; sale info 200 × 0.25",
+  "description": "R532: net 400 = 500 − 100 monthly; low tier 30×8 (R531); distribution on 500; no excess to sell",
   "input": {
     "PeriodKey": "2026-01",
     "Period": {
@@ -107,13 +107,12 @@
       "T3": null,
       "ReactiveInductive": "0",
       "ReactiveCapacitive": "0",
-      "ActiveExport": "300",
+      "ActiveExport": "100",
       "ActiveExportKnownSum": "0",
       "ActiveExportPartial": false,
       "MaxDemandKw": null,
       "IndexStart": null,
-      "IndexEnd": null,
-      "HourlyOverlapKwh": "100"
+      "IndexEnd": null
     },
     "InstalledPowerKw": "50",
     "Pricing": null,
@@ -151,10 +150,10 @@
       },
       {
         "code": "generation_sale",
-        "quantity": "200",
+        "quantity": "0",
         "unit_price": "0.25",
         "rate_pct": null,
-        "amount": "50"
+        "amount": "0"
       }
     ],
     "net_consumption": "400",
