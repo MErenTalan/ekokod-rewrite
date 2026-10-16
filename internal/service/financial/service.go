@@ -83,17 +83,18 @@ func (s *Service) Year(ctx context.Context, sc store.Scope, year int) (Year, err
 		return Year{}, store.ErrNotFound
 	}
 	in := YearInputs{Year: year, Production: map[uuid.UUID]map[int]decimal.Decimal{}, FeedIn: map[uuid.UUID]map[int]Price{}}
-	scope := model.BillScopeBuilding
 	for m := 1; m <= 12; m++ {
 		key := fmt.Sprintf("%04d-%02d", year, m)
-		for offset := int32(0); ; offset += pageSize {
-			page, err := s.d.Bills.List(ctx, sc, store.BillFilter{BillScope: &scope, PeriodKey: &key, Page: store.Page{Limit: pageSize, Offset: offset}})
-			if err != nil {
-				return Year{}, err
-			}
-			in.Bills = append(in.Bills, page...)
-			if len(page) < pageSize {
-				break
+		for _, scope := range []model.BillScope{model.BillScopeBuilding, model.BillScopeAnalyzer} {
+			for offset := int32(0); ; offset += pageSize {
+				page, err := s.d.Bills.List(ctx, sc, store.BillFilter{BillScope: &scope, PeriodKey: &key, Page: store.Page{Limit: pageSize, Offset: offset}})
+				if err != nil {
+					return Year{}, err
+				}
+				in.Bills = append(in.Bills, page...)
+				if len(page) < pageSize {
+					break
+				}
 			}
 		}
 	}

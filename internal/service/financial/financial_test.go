@@ -136,3 +136,26 @@ func TestMonthWithoutBillsUsesMeterReadings(t *testing.T) {
 }
 
 func decP(s string) *decimal.Decimal { v := dec(s); return &v }
+
+// A building without a building bill that month counts its analyzer bills;
+// one with a building bill does not count them again.
+func TestAnalyzerBillsFillABuildingWithoutABuildingBill(t *testing.T) {
+	b1, b2 := uuid.New(), uuid.New()
+	mk := func(period string, scope model.BillScope, building uuid.UUID, kwh, cost string) model.Bill {
+		b := bill(period, kwh, cost, model.CurrencyTRY)
+		b.Scope, b.BuildingID = scope, &building
+		return b
+	}
+	y := financial.BuildYear(financial.YearInputs{Year: 2026, Bills: []model.Bill{
+		mk("2026-02", model.BillScopeAnalyzer, b1, "406.849", "1588.27"),
+		mk("2026-08", model.BillScopeBuilding, b1, "224", "298.90"),
+		mk("2026-08", model.BillScopeAnalyzer, b1, "224", "298.90"),
+		mk("2026-08", model.BillScopeAnalyzer, b2, "100", "50"),
+		{ID: uuid.New(), Scope: model.BillScopeCompany, PeriodKey: "2026-08", ActiveImport: dec("999"), TotalCost: dec("999"), Currency: model.CurrencyTRY},
+	}})
+	requireDec(t, "406.849", y.Months[1].ConsumptionKwh, "February: only the analyzer bill")
+	require.Equal(t, "1588.27", amount(t, y.Months[1].Cost, model.CurrencyTRY))
+	requireDec(t, "324", y.Months[7].ConsumptionKwh, "b1's building bill + b2's analyzer bill; company bill ignored")
+	require.Equal(t, "348.90", amount(t, y.Months[7].Cost, model.CurrencyTRY))
+	require.Equal(t, 2, y.BillMonths)
+}

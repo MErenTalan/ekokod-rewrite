@@ -50,6 +50,14 @@ func TestFinancialReconcilesFixture(t *testing.T) {
 		NetConsumption: dec("99999"), TotalCost: dec("99999"), ComputedAt: time.Now(), IndexStart: []byte(`{}`), IndexEnd: []byte(`{}`)}, nil, nil)
 	require.NoError(t, err)
 
+	// An analyzer bill of a building that has a building bill must not count twice.
+	_, err = bills.Create(ctx, sc, model.Bill{CompanyID: tenant.Company.ID, BuildingID: &building.ID, AnalyzerID: &tenant.Analyzers[0].ID,
+		Scope: model.BillScopeAnalyzer, PeriodKey: "2026-01", PeriodStart: time.Date(2026, 1, 1, 0, 0, 0, 0, ist),
+		PeriodEnd: time.Date(2026, 2, 1, 0, 0, 0, 0, ist), DaysInPeriod: 31, Currency: model.CurrencyTRY, Status: model.BillStatusIssued,
+		GenerationUsage: model.GenerationUsageNone, ActiveImport: dec("777"), TotalCost: dec("777"), ComputedAt: time.Now(),
+		IndexStart: []byte(`{}`), IndexEnd: []byte(`{}`)}, nil, nil)
+	require.NoError(t, err)
+
 	totals := postgres.NewProductionTotalsRepository(pool)
 	day := func(p model.PowerPlant, m, d int, kwh string) {
 		v := dec(kwh)
