@@ -1,6 +1,6 @@
 {
   "title": "Financial Analysis",
-  "subtitle": "Cost, revenue and net position from the company's building invoices and plant production",
+  "subtitle": "Cost, revenue and net position from the company's building invoices, meter readings and plant production",
   "year": "Year",
   "month": "Month",
   "wholeYear": "Whole year",
@@ -27,9 +27,11 @@
     "production": "Production",
     "revenue": "Production revenue",
     "net": "Net cost",
-    "coverage": "{withData} of {of} months have data{suffix, select, other {}}",
+    "coverage": "{withData} of {of} months have invoices{suffix, select, other {}}",
     "coverageMonth": "No invoices for this month",
-    "partial": "Some plants have no feed-in tariff; revenue is incomplete."
+    "partial": "Part of the production has no sale price; revenue is incomplete.",
+    "measuredMonth": "No invoices for this month; consumption and production are from the meters.",
+    "measuredYear": "Months without invoices use the meter readings."
   },
   "offset": {
     "title": "Netting (computed)",
@@ -53,7 +55,7 @@
   },
   "chart": {
     "title": "Monthly consumption and production",
-    "description": "Consumption from building invoices and plant production, kWh",
+    "description": "Consumption and production from invoices (meters when there is none), kWh",
     "consumption": "Consumption",
     "production": "Production",
     "month": "Month",
@@ -70,7 +72,8 @@
     "offset": "Difference (kWh)",
     "net": "Net",
     "total": "Year total",
-    "partialMark": "partial"
+    "partialMark": "partial",
+    "measuredMark": "metered"
   },
   "noAccess": "Financial analysis is company-level",
   "noAccessHint": "This screen is for company admins and company readers."

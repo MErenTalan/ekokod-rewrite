@@ -36,9 +36,7 @@ export function MonthlyTable({ monthly }: { monthly: FinancialMonthly }) {
       <TableCell numeric>{kwh(m.production_kwh)}</TableCell>
       <TableCell numeric>
         <MoneyLines list={m.revenue} />
-        {m.revenue_partial ? (
-          <Badge tone="warning">{t('table.partialMark')}</Badge>
-        ) : null}
+        {m.revenue_partial ? <Badge tone="warning">{t('table.partialMark')}</Badge> : null}
       </TableCell>
       <TableCell numeric>{kwh(m.offset_kwh)}</TableCell>
       <TableCell numeric>
@@ -64,7 +62,14 @@ export function MonthlyTable({ monthly }: { monthly: FinancialMonthly }) {
         <TableBody>
           {monthly.items.map((m) => (
             <TableRow key={m.month}>
-              <TableCell>{t(`months.m${m.month}` as 'months.m1')}</TableCell>
+              <TableCell>
+                {t(`months.m${m.month}` as 'months.m1')}
+                {m.measured ? (
+                  <Badge tone="neutral" className="ms-2">
+                    {t('table.measuredMark')}
+                  </Badge>
+                ) : null}
+              </TableCell>
               {cells(m)}
             </TableRow>
           ))}

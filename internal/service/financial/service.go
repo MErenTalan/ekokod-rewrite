@@ -101,6 +101,10 @@ func (s *Service) Year(ctx context.Context, sc store.Scope, year int) (Year, err
 	if err != nil {
 		return Year{}, err
 	}
+	from := time.Date(year, 1, 1, 0, 0, 0, 0, istanbul)
+	if in.Metered, err = s.metered(ctx, sc, plants, store.TimeRange{From: from, To: from.AddDate(1, 0, 0)}); err != nil {
+		return Year{}, err
+	}
 	if len(plants) == 0 {
 		return BuildYear(in), nil
 	}
@@ -108,7 +112,6 @@ func (s *Service) Year(ctx context.Context, sc store.Scope, year int) (Year, err
 	for i, p := range plants {
 		ids[i] = p.ID
 	}
-	from := time.Date(year, 1, 1, 0, 0, 0, 0, istanbul)
 	buckets, err := s.d.Analytics.ProductionDaily(ctx, sc, ids, store.TimeRange{From: from, To: from.AddDate(1, 0, 0)})
 	if err != nil {
 		return Year{}, err
@@ -145,11 +148,11 @@ func (s *Service) Summary(ctx context.Context, sc store.Scope, year int, month *
 	if err != nil {
 		return Summary{}, err
 	}
-	out := Summary{Period: Period{Year: year}, Figures: y.Total, WithData: y.ConsumptionMonths, Of: 12}
+	out := Summary{Period: Period{Year: year}, Figures: y.Total, WithData: y.BillMonths, Of: 12}
 	if month != nil {
 		out.Period.Month = *month
 		out.Figures, out.Of, out.WithData = y.Months[*month-1], 1, 0
-		if out.Figures.ConsumptionKwh != nil {
+		if out.Figures.ConsumptionKwh != nil && !out.Figures.Measured {
 			out.WithData = 1
 		}
 	}
@@ -218,15 +221,62 @@ func (s *Service) plants(ctx context.Context, sc store.Scope) ([]model.PowerPlan
 }
 
 func (s *Service) analyzerCount(ctx context.Context, sc store.Scope) (int, error) {
-	n := 0
+	list, err := s.analyzers(ctx, sc)
+	return len(list), err
+}
+
+func (s *Service) analyzers(ctx context.Context, sc store.Scope) ([]model.Analyzer, error) {
+	var out []model.Analyzer
 	for offset := int32(0); ; offset += pageSize {
 		page, err := s.d.Analyzers.List(ctx, sc, store.AnalyzerFilter{Page: store.Page{Limit: pageSize, Offset: offset}})
 		if err != nil {
-			return 0, err
+			return nil, err
 		}
-		n += len(page)
+		out = append(out, page...)
 		if len(page) < pageSize {
-			return n, nil
+			return out, nil
 		}
 	}
+}
+
+// metered sums the building analyzers' measured import and export per
+// Istanbul month. A plant's netting meter is left out: the plant's own
+// production already counts.
+func (s *Service) metered(ctx context.Context, sc store.Scope, plants []model.PowerPlant, r store.TimeRange) (map[int]Metered, error) {
+	netting := map[uuid.UUID]bool{}
+	for _, p := range plants {
+		if p.NettingAnalyzerID != nil {
+			netting[*p.NettingAnalyzerID] = true
+		}
+	}
+	list, err := s.analyzers(ctx, sc)
+	if err != nil {
+		return nil, err
+	}
+	var ids []uuid.UUID
+	for _, a := range list {
+		if a.BuildingID != nil && !netting[a.ID] {
+			ids = append(ids, a.ID)
+		}
+	}
+	out := map[int]Metered{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	buckets, err := s.d.Analytics.ConsumptionMonthly(ctx, sc, ids, r)
+	if err != nil {
+		return nil, err
+	}
+	for _, b := range buckets {
+		m := int(b.Bucket.In(istanbul).Month())
+		mt := out[m]
+		if b.ActiveConsumption != nil {
+			mt.ImportKwh = add(mt.ImportKwh, *b.ActiveConsumption)
+		}
+		if b.ActiveGeneration != nil {
+			mt.ExportKwh = add(mt.ExportKwh, *b.ActiveGeneration)
+		}
+		out[m] = mt
+	}
+	return out, nil
 }

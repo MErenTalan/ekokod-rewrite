@@ -169,8 +169,10 @@ type FinancialMonthlyRequest struct {
 }
 
 // FinancialMonth is one month (0 = the year row); null means no data.
+// Measured: the kWh come from meter readings because the month has no bill.
 type FinancialMonth struct {
 	Month           int           `json:"month" required:"true"`
+	Measured        bool          `json:"measured" required:"true"`
 	ConsumptionKwh  *Decimal      `json:"consumption_kwh"`
 	Cost            []MoneyAmount `json:"cost" required:"true"`
 	ProductionKwh   *Decimal      `json:"production_kwh"`
@@ -185,6 +187,7 @@ type FinancialMonth struct {
 // FinancialCoverage is R258's with_data/of for the year row.
 type FinancialCoverage struct {
 	ConsumptionMonths int `json:"consumption_months" required:"true"`
+	BillMonths        int `json:"bill_months" required:"true"`
 	ProductionMonths  int `json:"production_months" required:"true"`
 	Of                int `json:"of" required:"true"`
 }

@@ -19,7 +19,14 @@ export const MonthWithoutInvoices: Story = {
       month: 7,
       of: 1,
       with_data: 0,
-      figures: { month: 7, cost: [], revenue: [], net: [], revenue_partial: false },
+      figures: {
+        month: 7,
+        measured: false,
+        cost: [],
+        revenue: [],
+        net: [],
+        revenue_partial: false,
+      },
     },
   },
 };

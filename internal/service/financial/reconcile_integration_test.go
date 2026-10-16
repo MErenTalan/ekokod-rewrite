@@ -37,7 +37,7 @@ func TestFinancialReconcilesFixture(t *testing.T) {
 			_, err := bills.Create(ctx, sc, model.Bill{CompanyID: tenant.Company.ID, BuildingID: &building.ID, Scope: model.BillScopeBuilding,
 				PeriodKey: fmt.Sprintf("2026-%02d", m), PeriodStart: time.Date(2026, time.Month(m), 1, 0, 0, 0, 0, ist),
 				PeriodEnd: time.Date(2026, time.Month(m)+1, 1, 0, 0, 0, 0, ist), DaysInPeriod: 30, Currency: model.CurrencyTRY,
-				Status: model.BillStatusIssued, GenerationUsage: model.GenerationUsageNone, NetConsumption: dec(b.net), TotalCost: dec(b.cost),
+				Status: model.BillStatusIssued, GenerationUsage: model.GenerationUsageNone, ActiveImport: dec(b.net), NetConsumption: dec(b.net), TotalCost: dec(b.cost),
 				ComputedAt: time.Now(), IndexStart: []byte(`{}`), IndexEnd: []byte(`{}`)}, nil, nil)
 			require.NoError(t, err)
 		}
@@ -73,11 +73,18 @@ func TestFinancialReconcilesFixture(t *testing.T) {
 		require.NoError(t, err)
 	}
 
+	// April has no bill: its consumption comes from the meter.
+	a := tenant.Analyzers[0]
+	require.NotNil(t, a.BuildingID)
+	testfixtures.InsertReadings(t, ctx, pool, tenant.Company.ID, testfixtures.HourlyReadings(a.ID,
+		time.Date(2026, 4, 5, 0, 0, 0, 0, ist), time.Date(2026, 4, 8, 0, 0, 0, 0, ist), testfixtures.Constant("2")))
+
 	svc := financial.New(financial.Deps{Bills: bills, Plants: postgres.NewPlantRepository(pool), Analytics: postgres.NewAnalyticsRepository(pool),
 		Solar: solar, Analyzers: postgres.NewAnalyzerRepository(pool), Buildings: postgres.NewBuildingRepository(pool),
 		Tariffs: postgres.NewTariffRepository(pool), Clock: clock.NewFake(time.Date(2026, 4, 2, 12, 0, 0, 0, ist))})
 	y, err := svc.Year(ctx, sc, 2026)
 	require.NoError(t, err)
+	apr := y.Months[3]
 
 	for m, want := range map[int]struct{ cons, cost, prod, revenue, net string }{
 		1: {"1500", "4600.00", "1200", "2400.00", "2200.00"},
@@ -92,17 +99,22 @@ func TestFinancialReconcilesFixture(t *testing.T) {
 		require.Equal(t, want.net, amount(t, row.Net, model.CurrencyTRY), "month %d net", m)
 	}
 	require.True(t, y.Months[2].RevenuePartial, "p2 has no tariff")
-	requireDec(t, "3600", y.Total.ConsumptionKwh, "the year")
+	requireDec(t, apr.ConsumptionKwh.Add(dec("3600")).String(), y.Total.ConsumptionKwh, "the year")
 	require.Equal(t, "11150.00", amount(t, y.Total.Cost, model.CurrencyTRY))
 	requireDec(t, "-300", y.Months[0].OffsetKwh, "January offset")
 	requireDec(t, "300", y.Months[0].GridPurchaseKwh, "January purchase")
 	requireDec(t, "0", y.Months[0].GridSaleKwh, "January sale")
-	require.Nil(t, y.Months[3].ConsumptionKwh, "April has no bills")
-	require.Nil(t, y.Months[3].OffsetKwh)
+	require.True(t, apr.Measured, "April has no bills")
+	require.NotNil(t, apr.ConsumptionKwh)
+	require.True(t, apr.ConsumptionKwh.IsPositive(), "the meter's import")
+	require.Empty(t, apr.Cost)
+	require.Nil(t, apr.OffsetKwh, "no production in April")
+	require.Nil(t, y.Months[4].ConsumptionKwh, "May: neither bill nor reading")
 	requireDec(t, "1600", y.Total.ProductionKwh, "the year's production")
 	require.Equal(t, "3150.00", amount(t, y.Total.Revenue, model.CurrencyTRY))
 	require.Equal(t, "8000.00", amount(t, y.Total.Net, model.CurrencyTRY), "year net = Σ months")
-	require.Equal(t, 3, y.ConsumptionMonths)
+	require.Equal(t, 4, y.ConsumptionMonths)
+	require.Equal(t, 3, y.BillMonths)
 
 	_, err = svc.Year(ctx, tenant.Scope, 2026)
 	require.ErrorIs(t, err, store.ErrNotFound, "financial analysis is company-level")
