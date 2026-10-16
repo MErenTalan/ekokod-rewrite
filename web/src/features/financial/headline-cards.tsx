@@ -43,13 +43,16 @@ export function HeadlineCards({ summary }: { summary: FinancialSummary }) {
       </div>
       <p className="text-foreground-muted type-small">
         {summary.of === 1 && summary.with_data === 0
-          ? t('headline.coverageMonth')
+          ? t(f.measured ? 'headline.measuredMonth' : 'headline.coverageMonth')
           : t('headline.coverage', {
               of: summary.of,
               withData: summary.with_data,
               suffix: coverageSuffix(summary.with_data),
             })}
       </p>
+      {summary.of !== 1 && f.measured ? (
+        <p className="text-foreground-muted type-small">{t('headline.measuredYear')}</p>
+      ) : null}
       {f.revenue_partial ? (
         <p className="text-warning type-small">{t('headline.partial')}</p>
       ) : null}

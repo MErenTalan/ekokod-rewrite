@@ -3334,6 +3334,7 @@ export interface components {
             t3?: components["schemas"]["Decimal"];
         };
         FinancialCoverage: {
+            bill_months: number;
             consumption_months: number;
             of: number;
             production_months: number;
@@ -3343,6 +3344,7 @@ export interface components {
             cost: components["schemas"]["MoneyAmount"][];
             grid_purchase_kwh?: components["schemas"]["Decimal"];
             grid_sale_kwh?: components["schemas"]["Decimal"];
+            measured: boolean;
             month: number;
             net: components["schemas"]["MoneyAmount"][];
             offset_kwh?: components["schemas"]["Decimal"];

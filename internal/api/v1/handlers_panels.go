@@ -143,7 +143,7 @@ func moneyList(list []financial.Money) []dto.MoneyAmount {
 }
 
 func financialMonthDTO(m financial.Month) dto.FinancialMonth {
-	return dto.FinancialMonth{Month: m.Month, ConsumptionKwh: dto.DP(m.ConsumptionKwh), Cost: moneyList(m.Cost),
+	return dto.FinancialMonth{Month: m.Month, Measured: m.Measured, ConsumptionKwh: dto.DP(m.ConsumptionKwh), Cost: moneyList(m.Cost),
 		ProductionKwh: dto.DP(m.ProductionKwh), Revenue: moneyList(m.Revenue), RevenuePartial: m.RevenuePartial,
 		OffsetKwh: dto.DP(m.OffsetKwh), GridPurchaseKwh: dto.DP(m.GridPurchaseKwh), GridSaleKwh: dto.DP(m.GridSaleKwh), Net: moneyList(m.Net)}
 }
@@ -155,7 +155,7 @@ func (h *Handlers) financialMonthly(w http.ResponseWriter, r *http.Request) {
 			return nil, err
 		}
 		out := dto.FinancialMonthly{Items: make([]dto.FinancialMonth, 12), Total: financialMonthDTO(y.Total),
-			Coverage: dto.FinancialCoverage{ConsumptionMonths: y.ConsumptionMonths, ProductionMonths: y.ProductionMonths, Of: 12}}
+			Coverage: dto.FinancialCoverage{ConsumptionMonths: y.ConsumptionMonths, BillMonths: y.BillMonths, ProductionMonths: y.ProductionMonths, Of: 12}}
 		for i, m := range y.Months {
 			out.Items[i] = financialMonthDTO(m)
 		}

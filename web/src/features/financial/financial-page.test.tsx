@@ -35,7 +35,7 @@ describe('FinancialPage', () => {
         <FinancialPage />
       </SessionProvider>,
     );
-    expect(await r.findByText("12 ayın 9'u veri içeriyor")).toBeVisible();
+    expect(await r.findByText("12 ayın 9'u fatura içeriyor")).toBeVisible();
     expect(r.getByRole('table', { name: 'Aylık finansal tablo' })).toBeVisible();
     const year = String(new Date().getFullYear());
     await waitFor(() =>

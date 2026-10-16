@@ -2,6 +2,7 @@ import type { FinancialMonth, FinancialMonthly, FinancialSummary } from '@/lib/a
 
 const empty = (month: number): FinancialMonth => ({
   month,
+  measured: false,
   cost: [],
   revenue: [],
   net: [],
@@ -11,6 +12,7 @@ const empty = (month: number): FinancialMonth => ({
 const filled: Record<number, FinancialMonth> = {
   1: {
     month: 1,
+    measured: false,
     consumption_kwh: '1500',
     cost: [{ currency: 'TRY', amount: '4600.00' }],
     production_kwh: '1200',
@@ -23,6 +25,7 @@ const filled: Record<number, FinancialMonth> = {
   },
   2: {
     month: 2,
+    measured: false,
     consumption_kwh: '1200',
     cost: [
       { currency: 'TRY', amount: '3750.00' },
@@ -39,8 +42,22 @@ const filled: Record<number, FinancialMonth> = {
       { currency: 'EUR', amount: '120.00' },
     ],
   },
+  4: {
+    month: 4,
+    measured: true,
+    consumption_kwh: '420',
+    cost: [],
+    production_kwh: '510',
+    revenue: [],
+    revenue_partial: true,
+    offset_kwh: '90',
+    grid_purchase_kwh: '0',
+    grid_sale_kwh: '90',
+    net: [],
+  },
   3: {
     month: 3,
+    measured: false,
     consumption_kwh: '900',
     cost: [{ currency: 'TRY', amount: '2800.00' }],
     revenue: [],
@@ -53,6 +70,7 @@ export const monthly: FinancialMonthly = {
   items: Array.from({ length: 12 }, (_, i) => filled[i + 1] ?? empty(i + 1)),
   total: {
     month: 0,
+    measured: true,
     consumption_kwh: '3600',
     cost: [
       { currency: 'TRY', amount: '11150.00' },
@@ -69,7 +87,7 @@ export const monthly: FinancialMonthly = {
       { currency: 'EUR', amount: '120.00' },
     ],
   },
-  coverage: { consumption_months: 3, production_months: 2, of: 12 },
+  coverage: { consumption_months: 4, bill_months: 3, production_months: 3, of: 12 },
 };
 
 export const summary: FinancialSummary = {

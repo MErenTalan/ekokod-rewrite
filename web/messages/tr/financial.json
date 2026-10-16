@@ -1,6 +1,6 @@
 {
   "title": "Finansal Analiz",
-  "subtitle": "Şirketin bina faturaları ve santral üretimi üzerinden maliyet, gelir ve net durum",
+  "subtitle": "Şirketin bina faturaları, sayaç ölçümleri ve santral üretimi üzerinden maliyet, gelir ve net durum",
   "year": "Yıl",
   "month": "Ay",
   "wholeYear": "Tüm yıl",
@@ -27,9 +27,11 @@
     "production": "Üretim",
     "revenue": "Üretim geliri",
     "net": "Net maliyet",
-    "coverage": "{of} ayın {withData}''{suffix} veri içeriyor",
+    "coverage": "{of} ayın {withData}''{suffix} fatura içeriyor",
     "coverageMonth": "Bu ay için fatura yok",
-    "partial": "Bazı santrallerin satış tarifesi yok; gelir eksik."
+    "partial": "Üretimin bir kısmının satış fiyatı yok; gelir eksik.",
+    "measuredMonth": "Bu ay için fatura yok; tüketim ve üretim sayaç ölçümünden.",
+    "measuredYear": "Faturasız aylarda tüketim ve üretim sayaç ölçümünden."
   },
   "offset": {
     "title": "Mahsuplaşma (hesaplanan)",
@@ -53,7 +55,7 @@
   },
   "chart": {
     "title": "Aylık tüketim ve üretim",
-    "description": "Bina faturalarındaki tüketim ve santral üretimi, kWh",
+    "description": "Faturalardaki (fatura yoksa sayaçtaki) tüketim ve üretim, kWh",
     "consumption": "Tüketim",
     "production": "Üretim",
     "month": "Ay",
@@ -70,7 +72,8 @@
     "offset": "Fark (kWh)",
     "net": "Net",
     "total": "Yıl toplamı",
-    "partialMark": "eksik"
+    "partialMark": "eksik",
+    "measuredMark": "ölçüm"
   },
   "noAccess": "Finansal analiz şirket düzeyindedir",
   "noAccessHint": "Bu ekran şirket yöneticileri ve şirket okuyucuları içindir."

@@ -3400,6 +3400,9 @@
       },
       "FinancialCoverage": {
         "properties": {
+          "bill_months": {
+            "type": "integer"
+          },
           "consumption_months": {
             "type": "integer"
           },
@@ -3412,6 +3415,7 @@
         },
         "required": [
           "consumption_months",
+          "bill_months",
           "production_months",
           "of"
         ],
@@ -3433,6 +3437,9 @@
           },
           "grid_sale_kwh": {
             "$ref": "#/components/schemas/Decimal"
+          },
+          "measured": {
+            "type": "boolean"
           },
           "month": {
             "type": "integer"
@@ -3461,6 +3468,7 @@
         },
         "required": [
           "month",
+          "measured",
           "cost",
           "revenue",
           "revenue_partial",

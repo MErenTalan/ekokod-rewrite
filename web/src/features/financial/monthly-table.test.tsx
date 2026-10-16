@@ -14,7 +14,10 @@ describe('MonthlyTable', () => {
     expect(rows).toHaveLength(1 + 12 + 1);
     expect(within(rows[13]).getByText('Yıl toplamı')).toBeVisible();
     expect(within(rows[13]).getByText('3.600')).toBeVisible();
-    expect(within(rows[4]).getAllByText('veri yok').length).toBeGreaterThan(0);
+    expect(within(rows[5]).getAllByText('veri yok').length).toBeGreaterThan(0);
+    expect(within(rows[4]).getByText('ölçüm')).toBeVisible();
+    expect(within(rows[4]).getByText('420')).toBeVisible();
+    expect(within(rows[1]).queryByText('ölçüm')).toBeNull();
   });
 
   it('prints each currency on its own line and marks partial revenue', () => {
