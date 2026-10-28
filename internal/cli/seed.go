@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/auth"
+	"github.com/MErenTalan/ekokod-rewrite/internal/storage"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/crypto"
@@ -242,7 +243,8 @@ func newSeedDemoCmd() *cobra.Command {
 				return err
 			}
 			deps := seed.DemoDeps{Pool: pool, Hasher: auth.Hasher{Pepper: cfg.Security.PasswordPepper, Cost: cfg.Security.BcryptCost},
-				Cipher: cipher, Billing: billing, Log: log}
+				Cipher: cipher, Billing: billing, Log: log,
+				Storage: storage.Store{Root: cfg.Storage.Root, Max: cfg.Storage.UploadMax, Allowed: cfg.Storage.AllowedTypes}}
 			res, err := seed.Demo(ctx, deps, os.Getenv(demoPasswordEnv), time.Now())
 			if err != nil {
 				return fmt.Errorf("seed demo: %w", err)

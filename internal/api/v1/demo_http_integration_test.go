@@ -11,6 +11,7 @@ import (
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/crypto"
 	"github.com/MErenTalan/ekokod-rewrite/internal/seed"
+	"github.com/MErenTalan/ekokod-rewrite/internal/storage"
 )
 
 func (h *harness) seedDemo() {
@@ -20,7 +21,8 @@ func (h *harness) seedDemo() {
 	log := slog.New(slog.DiscardHandler)
 	billing, err := seed.NewDemoBilling(h.pool, log)
 	require.NoError(h.t, err)
-	_, err = seed.Demo(h.t.Context(), seed.DemoDeps{Pool: h.pool, Hasher: h.hasher, Cipher: cipher, Billing: billing, Log: log},
+	_, err = seed.Demo(h.t.Context(), seed.DemoDeps{Pool: h.pool, Hasher: h.hasher, Cipher: cipher, Billing: billing, Log: log,
+		Storage: storage.Store{Root: h.cfg.Storage.Root, Max: h.cfg.Storage.UploadMax, Allowed: h.cfg.Storage.AllowedTypes}},
 		testPassword, h.clock.Now())
 	require.NoError(h.t, err)
 }

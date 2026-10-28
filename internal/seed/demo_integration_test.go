@@ -14,8 +14,10 @@ import (
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/auth"
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
+	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/crypto"
 	"github.com/MErenTalan/ekokod-rewrite/internal/seed"
+	"github.com/MErenTalan/ekokod-rewrite/internal/storage"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
@@ -33,7 +35,8 @@ func TestSeedDemoIdempotentAndExtends(t *testing.T) {
 		log := slog.New(slog.DiscardHandler)
 		billing, err := seed.NewDemoBilling(pool, log)
 		require.NoError(t, err)
-		return seed.DemoDeps{Pool: pool, Hasher: hasher, Cipher: cipher, Billing: billing, Log: log}
+		return seed.DemoDeps{Pool: pool, Hasher: hasher, Cipher: cipher, Billing: billing, Log: log,
+			Storage: storage.Store{Root: t.TempDir(), Max: 1 << 20, Allowed: config.DefaultUploadTypes()}}
 	}
 	pool := testfixtures.NewIsolatedDB(t)
 	n, err := seed.ExtendDemo(ctx, deps(pool), at)

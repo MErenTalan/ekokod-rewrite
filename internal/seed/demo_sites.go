@@ -16,6 +16,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/isolar"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/crypto"
 	billingsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/billing"
+	"github.com/MErenTalan/ekokod-rewrite/internal/storage"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/admin"
@@ -27,6 +28,7 @@ type DemoDeps struct {
 	Hasher  auth.Hasher
 	Cipher  *crypto.Cipher // integration secrets and the SMTP password
 	Billing *billingsvc.Service
+	Storage storage.Store // ISO 50001 documents
 	Log     *slog.Logger
 }
 

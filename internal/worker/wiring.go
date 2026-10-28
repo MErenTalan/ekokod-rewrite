@@ -69,6 +69,7 @@ import (
 	forecastsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/forecast"
 	reportsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/report"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/solar"
+	"github.com/MErenTalan/ekokod-rewrite/internal/storage"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/admin"
 	platformredis "github.com/MErenTalan/ekokod-rewrite/internal/store/redis"
@@ -539,7 +540,8 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 			Ingestion:       ingestSvc,
 			AnalyzerRefresh: ingestSvc,
 			Demo: seed.DemoJob{Deps: seed.DemoDeps{Pool: pool, Cipher: cipher, Billing: billingService, Log: log,
-				Hasher: auth.Hasher{Pepper: cfg.Security.PasswordPepper, Cost: cfg.Security.BcryptCost}}, Clock: clock.System()},
+				Hasher:  auth.Hasher{Pepper: cfg.Security.PasswordPepper, Cost: cfg.Security.BcryptCost},
+				Storage: storage.Store{Root: cfg.Storage.Root, Max: cfg.Storage.UploadMax, Allowed: cfg.Storage.AllowedTypes}}, Clock: clock.System()},
 			Backfill:           backfiller,
 			Prices:             syncer,
 			ConsumptionRefresh: consumptionRefresher,

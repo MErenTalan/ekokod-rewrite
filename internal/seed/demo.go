@@ -50,6 +50,9 @@ func Demo(ctx context.Context, d DemoDeps, password string, now time.Time) (Demo
 	if d.Billing == nil {
 		return res, errors.New("seed demo: DemoDeps.Billing is required")
 	}
+	if d.Storage.Root == "" {
+		return res, errors.New("seed demo: DemoDeps.Storage.Root is required")
+	}
 	switch _, err := postgres.NewCompanyRepository(d.Pool).Get(ctx, store.SystemScope(DemoCompanyID), DemoCompanyID); {
 	case errors.Is(err, store.ErrNotFound):
 		if password == "" {
@@ -78,7 +81,10 @@ func Demo(ctx context.Context, d DemoDeps, password string, now time.Time) (Demo
 	if err != nil {
 		return res, err
 	}
-	return res, ensureDemoMoney(ctx, d, b, now)
+	if err := ensureDemoMoney(ctx, d, b, now); err != nil {
+		return res, err
+	}
+	return res, ensureDemoContent(ctx, d, b, now)
 }
 
 // ExtendDemo appends hourly readings and production up to now when the demo

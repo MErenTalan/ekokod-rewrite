@@ -12,6 +12,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/auth"
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/crypto"
+	"github.com/MErenTalan/ekokod-rewrite/internal/storage"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/admin"
@@ -30,7 +31,8 @@ func demoDeps(t *testing.T) DemoDeps {
 	require.NoError(t, err)
 	billing, err := NewDemoBilling(pool, discardLog)
 	require.NoError(t, err)
-	return DemoDeps{Pool: pool, Hasher: auth.Hasher{Cost: 4}, Cipher: cipher, Billing: billing, Log: discardLog}
+	files := storage.Store{Root: t.TempDir(), Max: 10 << 20, Allowed: []string{"application/pdf"}}
+	return DemoDeps{Pool: pool, Hasher: auth.Hasher{Cost: 4}, Cipher: cipher, Billing: billing, Storage: files, Log: discardLog}
 }
 
 func countRows(t *testing.T, pool *pgxpool.Pool, q string, args ...any) int {
@@ -173,4 +175,68 @@ func TestDemoMoneyBills(t *testing.T) {
 	require.NoError(t, ensureDemoMoney(ctx, d, b, demoNow))
 	require.Equal(t, before, countRows(t, d.Pool, `select count(*) from bills where company_id = $1`, DemoCompanyID), "a rerun creates nothing")
 	require.Equal(t, 3, countRows(t, d.Pool, `select count(*) from tariffs where company_id = $1`, DemoCompanyID))
+}
+
+func TestDemoContentFillsEveryScreen(t *testing.T) {
+	t.Parallel()
+	d, b, ctx := demoDeps(t), DemoBaseline(), t.Context()
+	_, _, err := loadEmissionFactors(ctx, admin.NewCatalogueRepository(d.Pool), discardLog)
+	require.NoError(t, err)
+	require.NoError(t, ensureDemoSites(ctx, d, b, demoNow))
+	require.NoError(t, ensureDemoPeople(ctx, d, b, "Guvenli!Sifre-42", demoNow))
+	_, err = ensureDemoSeries(ctx, d, b, demoNow)
+	require.NoError(t, err)
+	require.NoError(t, ensureDemoContent(ctx, d, b, demoNow))
+
+	id := DemoCompanyID
+	counts := map[string]string{
+		"alarms":     `select count(*) from alarms where company_id = $1 and deleted_at is null`,
+		"events":     `select count(*) from alarm_events e join alarms a on a.id = e.alarm_id where a.company_id = $1`,
+		"messages":   `select count(*) from operational_messages where company_id = $1`,
+		"job_runs":   `select count(*) from job_runs where company_id = $1`,
+		"anomalies":  `select count(*) from consumption_anomalies x join analyzers a on a.id = x.analyzer_id where a.company_id = $1`,
+		"resolved":   `select count(*) from consumption_anomalies x join analyzers a on a.id = x.analyzer_id where a.company_id = $1 and x.resolved_at is not null`,
+		"reports":    `select count(*) from reports where company_id = $1 and status = 'completed'`,
+		"iso":        `select count(*) from iso50001_projects where company_id = $1`,
+		"notes":      `select count(*) from iso50001_notes n join iso50001_projects p on p.id = n.project_id where p.company_id = $1`,
+		"files":      `select count(*) from stored_files where company_id = $1 and deleted_at is null`,
+		"activities": `select count(*) from carbon_activities where company_id = $1`,
+		"carbon":     `select count(*) from carbon_reports where company_id = $1`,
+		"forecasts":  `select count(*) from forecasts f join analyzers a on a.id = f.analyzer_id where a.company_id = $1`,
+	}
+	got := map[string]int{}
+	for k, q := range counts {
+		got[k] = countRows(t, d.Pool, q, id)
+	}
+	require.Equal(t, 5, got["alarms"])
+	require.GreaterOrEqual(t, got["events"], 35)
+	require.GreaterOrEqual(t, got["messages"], 30)
+	require.GreaterOrEqual(t, got["job_runs"], 24)
+	require.Equal(t, 6, got["anomalies"])
+	require.Equal(t, 2, got["resolved"])
+	require.Equal(t, 3*3+1, got["reports"])
+	require.Equal(t, 1, got["iso"])
+	require.Equal(t, 4, got["notes"])
+	require.Equal(t, 3, got["files"])
+	require.GreaterOrEqual(t, got["activities"], 60)
+	require.Equal(t, 1, got["carbon"])
+	ahead := `select count(*) from forecasts where analyzer_id = $1 and ts >= $2`
+	for _, a := range b.analyzers {
+		require.Positive(t, countRows(t, d.Pool, ahead, a.id, demoNow.Add(7*24*time.Hour-2*time.Hour)), "%s forecast reaches a week ahead", a.number)
+	}
+	rows, err := d.Pool.Query(ctx, `select owner_type, stored_path from stored_files where company_id = $1`, id)
+	require.NoError(t, err)
+	for rows.Next() {
+		var area, path string
+		require.NoError(t, rows.Scan(&area, &path))
+		f, err := d.Storage.Open(id, area, path)
+		require.NoError(t, err, "the file is on disk")
+		require.NoError(t, f.Close())
+	}
+	require.NoError(t, rows.Err())
+
+	require.NoError(t, ensureDemoContent(ctx, d, b, demoNow))
+	for k, q := range counts {
+		require.Equal(t, got[k], countRows(t, d.Pool, q, id), "a rerun adds no %s", k)
+	}
 }
