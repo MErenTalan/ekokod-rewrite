@@ -185,3 +185,34 @@ var purgeStatements = []string{
 	`delete from buildings where company_id = @company and not id = any(@buildings)`,
 	`delete from users where company_id = @company and id <> @user`,
 }
+
+// Restore clears deleted_at on the demo company and its kept rows, so the
+// generator can write them back through the scoped repositories (R546). It
+// does nothing for a company that is absent or not tagged demo.
+func (r *DemoRepository) Restore(ctx context.Context, companyID uuid.UUID, keep DemoKeep) error {
+	args := pgx.NamedArgs{"company": companyID, "buildings": keep.Buildings, "analyzers": keep.Analyzers,
+		"plants": keep.Plants, "user": keep.User}
+	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		var isDemo bool
+		switch err := tx.QueryRow(ctx, `select is_demo from companies where id = @company for update`, args).Scan(&isDemo); {
+		case errors.Is(err, pgx.ErrNoRows):
+			return nil
+		case err != nil:
+			return fmt.Errorf("demo restore: lock company: %w", err)
+		case !isDemo:
+			return nil
+		}
+		for _, st := range []string{
+			`update companies set deleted_at = null where id = @company`,
+			`update buildings set deleted_at = null where company_id = @company and id = any(@buildings)`,
+			`update analyzers set deleted_at = null where company_id = @company and id = any(@analyzers)`,
+			`update power_plants set deleted_at = null where company_id = @company and id = any(@plants)`,
+			`update users set deleted_at = null where company_id = @company and id = @user`,
+		} {
+			if _, err := tx.Exec(ctx, st, args); err != nil {
+				return fmt.Errorf("demo restore: %s: %w", st, err)
+			}
+		}
+		return nil
+	})
+}

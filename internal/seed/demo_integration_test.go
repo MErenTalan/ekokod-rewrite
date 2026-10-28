@@ -4,14 +4,17 @@ package seed_test
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/auth"
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
+	"github.com/MErenTalan/ekokod-rewrite/internal/platform/crypto"
 	"github.com/MErenTalan/ekokod-rewrite/internal/seed"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
@@ -24,28 +27,33 @@ func TestSeedDemoIdempotentAndExtends(t *testing.T) {
 	hasher := auth.Hasher{Pepper: []byte("pepper-0123456789abcdef-0123456789"), Cost: bcrypt.MinCost}
 	at := time.Date(2026, 9, 17, 10, 20, 0, 0, time.UTC)
 
+	cipher, err := crypto.NewCipher([]byte("0123456789abcdef0123456789abcdef"))
+	require.NoError(t, err)
+	deps := func(pool *pgxpool.Pool) seed.DemoDeps {
+		return seed.DemoDeps{Pool: pool, Hasher: hasher, Cipher: cipher, Log: slog.New(slog.DiscardHandler)}
+	}
 	pool := testfixtures.NewIsolatedDB(t)
-	n, err := seed.ExtendDemo(ctx, pool, at)
+	n, err := seed.ExtendDemo(ctx, deps(pool), at)
 	require.NoError(t, err)
 	require.Zero(t, n, "no demo company: nothing to extend")
-	_, err = seed.Demo(ctx, pool, hasher, "", at)
+	_, err = seed.Demo(ctx, deps(pool), "", at)
 	require.Error(t, err, "creating the demo user needs a password")
-	_, err = seed.Demo(ctx, pool, hasher, "demo1234", at)
+	_, err = seed.Demo(ctx, deps(pool), "demo1234", at)
 	require.ErrorIs(t, err, seed.ErrWeakPassword)
 
-	res, err := seed.Demo(ctx, pool, hasher, "Guvenli!Sifre-42", at)
+	res, err := seed.Demo(ctx, deps(pool), "Guvenli!Sifre-42", at)
 	require.NoError(t, err)
 	require.True(t, res.Created)
-	require.Equal(t, 2*(180*24+1), res.Readings)
-	res, err = seed.Demo(ctx, pool, hasher, "", at)
+	require.Equal(t, len(seed.DemoAnalyzerIDs)*(400*24+1), res.Readings)
+	res, err = seed.Demo(ctx, deps(pool), "", at)
 	require.NoError(t, err)
 	require.False(t, res.Created)
 	require.Zero(t, res.Readings, "a second run in the same hour adds nothing")
 
 	later := at.Add(3 * time.Hour)
-	n, err = seed.ExtendDemo(ctx, pool, later)
+	n, err = seed.ExtendDemo(ctx, deps(pool), later)
 	require.NoError(t, err)
-	require.Equal(t, 6, n)
+	require.Equal(t, 3*len(seed.DemoAnalyzerIDs), n)
 
 	sc := store.SystemScope(seed.DemoCompanyID)
 	readings := postgres.NewReadingRepository(pool)
@@ -58,7 +66,7 @@ func TestSeedDemoIdempotentAndExtends(t *testing.T) {
 	}
 
 	fresh := testfixtures.NewIsolatedDB(t)
-	_, err = seed.Demo(ctx, fresh, hasher, "Guvenli!Sifre-42", later)
+	_, err = seed.Demo(ctx, deps(fresh), "Guvenli!Sifre-42", later)
 	require.NoError(t, err)
 	regenerated, err := postgres.NewReadingRepository(fresh).Range(ctx, sc, seed.DemoAnalyzerIDs[0], window, model.ReadingKindLoadProfile)
 	require.NoError(t, err)

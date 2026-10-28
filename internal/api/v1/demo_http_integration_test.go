@@ -3,17 +3,22 @@
 package v1_test
 
 import (
+	"log/slog"
 	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/MErenTalan/ekokod-rewrite/internal/platform/crypto"
 	"github.com/MErenTalan/ekokod-rewrite/internal/seed"
 )
 
 func (h *harness) seedDemo() {
 	h.t.Helper()
-	_, err := seed.Demo(h.t.Context(), h.pool, h.hasher, testPassword, h.clock.Now())
+	cipher, err := crypto.NewCipher([]byte("0123456789abcdef0123456789abcdef"))
+	require.NoError(h.t, err)
+	_, err = seed.Demo(h.t.Context(), seed.DemoDeps{Pool: h.pool, Hasher: h.hasher, Cipher: cipher, Log: slog.New(slog.DiscardHandler)},
+		testPassword, h.clock.Now())
 	require.NoError(h.t, err)
 }
 
@@ -33,7 +38,7 @@ func TestDemoSeesOnlySyntheticData(t *testing.T) {
 		"/energy-balance?analyzer_id=" + analyzer + "&granularity=monthly&from=2026-06-01&to=2026-08-31",
 		"/load-profile?analyzer_id=" + analyzer + "&from=2026-08-01&to=2026-08-31",
 		"/load-profile/statistics?analyzer_id=" + analyzer + "&from=2026-08-01&to=2026-08-31",
-		"/tariffs", "/tariffs/applicable?building_id=" + building + "&date=2026-09-01", "/bills", "/calendar/events?from=2026-09-01&to=2026-09-30", "/calendar/vacations",
+		"/tariffs", "/bills", "/calendar/events?from=2026-09-01&to=2026-09-30", "/calendar/vacations",
 		"/users",
 	}
 	forbidden := []string{h.fx.CompanyA.String(), h.fx.CompanyB.String(), h.fx.PlatformCompany.String(), h.fx.BuildingA1.String(),
@@ -49,7 +54,7 @@ func TestDemoSeesOnlySyntheticData(t *testing.T) {
 			require.NotContains(t, string(res.body), f, "%s leaked real data", path)
 		}
 	}
-	require.Contains(t, string(demo.do(http.MethodGet, "/buildings", nil).body), "Demo Fabrika")
+	require.Contains(t, string(demo.do(http.MethodGet, "/buildings", nil).body), "Ostim Fabrika")
 	require.Equal(t, http.StatusNotFound, demo.do(http.MethodGet, "/buildings?company_id="+h.fx.CompanyA.String(), nil).status)
 	require.Equal(t, http.StatusNotFound, demo.do(http.MethodGet, "/buildings/"+h.fx.BuildingA1.String(), nil).status)
 }

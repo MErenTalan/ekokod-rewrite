@@ -37,6 +37,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/MErenTalan/ekokod-rewrite/internal/auth"
 	"github.com/MErenTalan/ekokod-rewrite/internal/credentials"
 	"github.com/MErenTalan/ekokod-rewrite/internal/demo"
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
@@ -534,10 +535,11 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		credentialsDeps: credDeps,
 		ingestDeps:      ingestDeps,
 		handlers: &job.Handlers{
-			Log:                log,
-			Ingestion:          ingestSvc,
-			AnalyzerRefresh:    ingestSvc,
-			Demo:               seed.DemoJob{Pool: pool, Clock: clock.System()},
+			Log:             log,
+			Ingestion:       ingestSvc,
+			AnalyzerRefresh: ingestSvc,
+			Demo: seed.DemoJob{Deps: seed.DemoDeps{Pool: pool, Cipher: cipher, Log: log,
+				Hasher: auth.Hasher{Pepper: cfg.Security.PasswordPepper, Cost: cfg.Security.BcryptCost}}, Clock: clock.System()},
 			Backfill:           backfiller,
 			Prices:             syncer,
 			ConsumptionRefresh: consumptionRefresher,
