@@ -59,6 +59,7 @@ func (g *Guarded) token() Token {
 		ExpiresAt: g.now().Add(24 * time.Hour)}
 }
 
+// Plants lists DemoPlants for a demo company.
 func (g *Guarded) Plants(ctx context.Context, creds integration.Credentials) ([]Plant, error) {
 	if demo, err := g.demo(ctx, creds); err != nil || demo {
 		return DemoPlants, err
@@ -66,6 +67,7 @@ func (g *Guarded) Plants(ctx context.Context, creds integration.Credentials) ([]
 	return g.inner.Plants(ctx, creds)
 }
 
+// Devices is empty for a demo company.
 func (g *Guarded) Devices(ctx context.Context, creds integration.Credentials, psID string) ([]Device, error) {
 	if demo, err := g.demo(ctx, creds); err != nil || demo {
 		return nil, err
@@ -73,6 +75,7 @@ func (g *Guarded) Devices(ctx context.Context, creds integration.Credentials, ps
 	return g.inner.Devices(ctx, creds, psID)
 }
 
+// DeviceMinuteSeries is empty for a demo company.
 func (g *Guarded) DeviceMinuteSeries(ctx context.Context, creds integration.Credentials, psKeys []string, from, to time.Time) ([]YieldSample, error) {
 	if demo, err := g.demo(ctx, creds); err != nil || demo {
 		return nil, err
@@ -80,6 +83,7 @@ func (g *Guarded) DeviceMinuteSeries(ctx context.Context, creds integration.Cred
 	return g.inner.DeviceMinuteSeries(ctx, creds, psKeys, from, to)
 }
 
+// PlantMinuteSeries is empty for a demo company.
 func (g *Guarded) PlantMinuteSeries(ctx context.Context, creds integration.Credentials, psID string, from, to time.Time) ([]YieldSample, error) {
 	if demo, err := g.demo(ctx, creds); err != nil || demo {
 		return nil, err
@@ -87,6 +91,7 @@ func (g *Guarded) PlantMinuteSeries(ctx context.Context, creds integration.Crede
 	return g.inner.PlantMinuteSeries(ctx, creds, psID, from, to)
 }
 
+// PlantDailySeries is empty for a demo company.
 func (g *Guarded) PlantDailySeries(ctx context.Context, creds integration.Credentials, psID string, from, to time.Time) ([]DailyYield, error) {
 	if demo, err := g.demo(ctx, creds); err != nil || demo {
 		return nil, err
@@ -94,6 +99,7 @@ func (g *Guarded) PlantDailySeries(ctx context.Context, creds integration.Creden
 	return g.inner.PlantDailySeries(ctx, creds, psID, from, to)
 }
 
+// DeviceRealtime is empty for a demo company.
 func (g *Guarded) DeviceRealtime(ctx context.Context, creds integration.Credentials, deviceType int32, psKeys []string) ([]DeviceSnapshot, error) {
 	if demo, err := g.demo(ctx, creds); err != nil || demo {
 		return nil, err
@@ -101,6 +107,7 @@ func (g *Guarded) DeviceRealtime(ctx context.Context, creds integration.Credenti
 	return g.inner.DeviceRealtime(ctx, creds, deviceType, psKeys)
 }
 
+// Faults is empty for a demo company.
 func (g *Guarded) Faults(ctx context.Context, creds integration.Credentials, from, to time.Time) ([]Fault, error) {
 	if demo, err := g.demo(ctx, creds); err != nil || demo {
 		return nil, err
@@ -121,6 +128,7 @@ func (g *Guarded) AuthorizeURL(creds integration.Credentials, redirectURI string
 	return g.inner.AuthorizeURL(creds, redirectURI)
 }
 
+// ExchangeCode returns a fake token for a demo company.
 func (g *Guarded) ExchangeCode(ctx context.Context, creds integration.Credentials, code, redirectURI string) (Token, error) {
 	if demo, err := g.demo(ctx, creds); err != nil || demo {
 		return g.token(), err
@@ -128,6 +136,7 @@ func (g *Guarded) ExchangeCode(ctx context.Context, creds integration.Credential
 	return g.inner.ExchangeCode(ctx, creds, code, redirectURI)
 }
 
+// Refresh returns a fake token for a demo company.
 func (g *Guarded) Refresh(ctx context.Context, creds integration.Credentials) (Token, error) {
 	if demo, err := g.demo(ctx, creds); err != nil || demo {
 		return g.token(), err
@@ -135,6 +144,7 @@ func (g *Guarded) Refresh(ctx context.Context, creds integration.Credentials) (T
 	return g.inner.Refresh(ctx, creds)
 }
 
+// Verify succeeds for a demo company.
 func (g *Guarded) Verify(ctx context.Context, creds integration.Credentials) error {
 	if demo, err := g.demo(ctx, creds); err != nil || demo {
 		return err
