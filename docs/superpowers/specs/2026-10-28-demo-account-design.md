@@ -95,7 +95,8 @@ current: last month's bill appears when a month turns, alarm events are "2 hours
 current hour.
 
 A reset (`demo.reset` task, cron `0 * * * *` Europe/Istanbul; also `ekokod seed demo --reset` for an
-immediate one before a video) runs in **one transaction**:
+immediate one before a video) purges in **one transaction** and then re-runs the generator (the repositories
+cannot share a transaction; a few seconds of partial data at HH:00 is accepted, and a lock keeps resets single):
 
 1. Kept rows (time series and the rows they hang on) are restored, not deleted: the company row, the baseline
    buildings, analyzers, power plants and plant devices are updated back to baseline values (clearing
