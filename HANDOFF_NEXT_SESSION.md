@@ -2,8 +2,8 @@
 
 > **STATUS (2026-10-29):** branch `feat/f29-demo-account` (worktree `/home/personal/ekokod-f29-demo`, from
 > `main` @8415257). Spec `docs/superpowers/specs/2026-10-28-demo-account-design.md`, plan + rulings R540–R553
-> `docs/superpowers/plans/2026-10-28-f29-demo-account.md`; the session's further rulings are in the final
-> message of the F29 session (ledger `.superpowers/sdd/2026-10-28-f29-demo-account/progress.md`, git-ignored).
+> `docs/superpowers/plans/2026-10-28-f29-demo-account.md`; the rulings made while executing are in that
+> plan's "Execution record" section.
 > Migration **00027** (`companies.is_demo`). **Not merged, not pushed, not deployed** — the owner's call.
 > The final review was a **self-review** (no subagent tool, by the owner's working rule).
 

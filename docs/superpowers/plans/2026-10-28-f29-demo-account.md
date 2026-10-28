@@ -254,3 +254,71 @@ Content:
 - [ ] Whole-phase self-review (tenancy and containment first): grep for any new outbound path (`http.`, `smtp`, `Dial`) reachable with a demo company id.
 - [ ] Server script `/home/personal/deploy-demo.sh` (outside the repo, like the other deploy scripts): after a `deploy-main.sh` deploy, generates a password, runs `docker compose -p ekokod exec -T api ekokod seed demo` with `EKOKOD_DEMO_PASSWORD`, writes `/root/ekokod-new-demo.txt` (600) with URL, e-mail and password. Running it is the owner's call.
 - [ ] Rewrite `HANDOFF_NEXT_SESSION.md`, update memory, give the owner the Turkish summary including how to read the login (`ssh.exe root@ekokod.com cat /root/ekokod-new-demo.txt`).
+
+## Execution record (2026-10-28/29, from the git-ignored ledger)
+
+Rulings made while executing, each with its cost if wrong:
+
+- Task 2: Ruling: DELETE /users/{demo user} by the demo login answers 409 cannot_modify_self (existing guard runs before R542's role guard) — still refused — cost if wrong: none, only the status differs
+- Task 2: Ruling: seed.Demo now tags the company is_demo (R540) — T2's HTTP tests need the tag before T5 rewrites the generator — cost if wrong: none
+- Task 2: Ruling: route gating gets demo via auth.WithDemo in router.go for every non-SelfService RoleGated route instead of editing ~80 role sets — one place, R150 self-service writes stay closed — cost if wrong: a CA route that must exclude demo needs SelfService or an explicit opt-out
+- Task 2: Ruling: profile lock caption reuses the existing 'Demo hesabı paylaşımlıdır; profil ve şifre değiştirilemez.' instead of the plan's new string — same meaning, already translated — cost if wrong: one string
+- Task 3: Ruling: integration.DemoPoints dropped — a demo DiscoverMeteringPoints returns no points, so sync never upserts/overwrites the seeded analyzers — cost if wrong: none
+- Task 3: Ruling: guards take a plain func(ctx, uuid) (bool, error) instead of demo.Check so mail/integration never import store (cycle risk); isolar.GuardDemo also takes now() for fake token expiry — cost if wrong: none
+- Task 3: Ruling: apiwire guards only the default-built adapters/clients; Options overrides are test seams and stay unwrapped; mail is wrapped always — cost if wrong: a test fake bypasses the guard (tests only)
+- Task 4: Ruling: DemoKeep has no Devices list — devices of kept plants are kept, others go with their plant (device ids come from sync upserts, not the generator) — cost if wrong: a visitor-made device on a kept plant survives a reset (no UI creates one)
+- Task 4: Ruling: purge SQL uses pgx.NamedArgs so each statement binds only what it references; DemoTables gains kinds 'series' and 'record' (audit_log) — cost if wrong: none
+- Task 5: Ruling: RED not observed before implementation (tests only failed to compile) — replaced by two mutation proofs: Restore removed → TestEnsureDemoSitesConverges fails (pkey conflict); netting disabled → TestDemoSeriesFillsWindow fails after tightening the export assertion to a weekend-noon export step — cost if wrong: none, both assertions proven.
+- Task 5: Ruling: TestDemoPeopleCannotLogIn not added in seed — Task 2's TestLoginRefusesVisitorUsersOfDemoCompany covers every non-demo user of a demo company; seed test asserts 5 live users and the demo role — cost if wrong: none.
+- Task 5: Ruling: credentials only for definitions the platform already has (OSOS Baskent / GridBox when a platform admin created them; iSolar EU + PM5340 from the catalogue); the demo never creates a definition — cost if wrong: the Integrations tab shows 2 credentials on a server without OSOS/GridBox definitions.
+- Task 5: Ruling: "last sync −20 m" is set on the iSolar plant only (SetSyncState); meter credentials have no sync column — cost if wrong: none visible.
+- Task 5: Ruling: a demo-specific demoMeter generator (export register, rooftop netting, per-analyzer curves, holidays) instead of widening fillHourly's readingProfile — e2e fixtures stay byte-identical — cost if wrong: two generators to maintain.
+- Task 5: Ruling: forward-only fill (no backward fill): R550's new analyzer ids start empty — cost if wrong: none.
+- Task 5: Ruling: compressor inductive share 26–34 % only Jun–Aug (10–16 % otherwise) instead of the plan's constant 28–36 % — the spec says "occasionally over the reactive limit" — cost if wrong: reactive penalty shows only in summer bills.
+- Task 5: Ruling: plant views refresh over whole Istanbul months padded by a day — the monthly bucket refuses a smaller window — cost if wrong: each hourly extension recomputes the current month of the plant views (few plants).
+- Task 5: Ruling: admin.DemoRepository.Restore undeletes the kept rows (repositories never see deleted rows); the generator then overwrites them through the scoped repos — cost if wrong: none.
+- Task 5: Ruling: /tariffs/applicable dropped from TestDemoSeesOnlySyntheticData until Task 6 re-adds tariffs — cost if wrong: Task 6 must restore it.
+- Task 5: Ruling: an old pre-F29 demo makes demo.extend fail hourly (new analyzers absent) until `seed demo` runs; the deploy script runs it right after deploy — cost if wrong: one failing job per hour until then.
+- Task 6: Ruling: demo readings carry cumulative T1/T2/T3 import registers (06–17 / 17–22 / 22–06) — the engine refuses a multi-time tariff without band registers, and real OSOS meters report them — cost if wrong: none.
+- Task 6: Ruling: aggregate refreshes run in Istanbul-midnight-aligned windows of ≤31 days (plant views: one padded month per window) — a single 400-day refresh hit the statement timeout under load and would on the server's first seed — cost if wrong: a few more refresh statements.
+- Task 6: Ruling: Gebze's distribution price 2.2850 and the factory's "Sayaç okuma bedeli" 125 TL extra charge are my values (the plan named none) — cost if wrong: cosmetic.
+- Task 6: Ruling: the icmal import mirrors the factory's 12 engine-computed building bills (rows + a stable analysis) — cost if wrong: cosmetic.
+- Task 6: Ruling: /tariffs/applicable restored in TestDemoSeesOnlySyntheticData (closes the Task 5 ruling).
+- Task 7: Ruling: all three demo documents are ISO 50001 files (5.2, 6.3, 9.1) — EKOCM has no document routes (Q-F9), its documents page is an EmptyState by design — cost if wrong: one empty EKOCM page in the demo.
+- Task 7: Ruling: the PDFs are rendered at seed time with fpdf + Go fonts, not committed binaries — cost if wrong: none.
+- Task 7: Ruling: "Fatura tutarı > 450000 TL" became invoice_increase 15% and "günlük tüketim" became reactive_limit ActiveConsumptionMax 900 kWh / 24 h — the alarm types are percent- and register-based, there is no absolute bill threshold — cost if wrong: alarm names differ from the plan.
+- Task 7: Ruling: no acknowledge concept exists, so the 40 events are a delivered/failed mix (2 failed) — cost if wrong: none.
+- Task 7: Ruling: reports reuse seed's reportService(pool, now) instead of a DemoDeps.Reports field — cost if wrong: none.
+- Task 7: Ruling: forecasts share one generated_at (today's Istanbul midnight, or the stored run's when rows exist) so LatestRun shows one run with a fresh "generated" date — a constant 2025 date would show in the UI's model line — cost if wrong: a seed rerun across midnight without a reset keeps the older run date.
+- Task 7: Ruling: automated carbon rows are monthly for closed months and daily for this month, written directly (carbon.Accrue iterates every company) — cost if wrong: on the 1st, the real daily accrual adds last month's final day once until the next hourly reset.
+- Task 7: Ruling: anomalies are 4 open + 2 resolved "accepted" on DEMO-1001/1002 with the R60 detail; the ISO project's savings target lives in a note (no target field) — cost if wrong: cosmetic.
+- Task 7: Ruling: Demo() refuses an empty DemoDeps.Storage.Root — files would otherwise land in the working directory — cost if wrong: none.
+- Task 8: Ruling: ResetDemo uses the existing lock.Locker (Acquire under a 1 s deadline = try-lock) instead of a new TryLock interface; ResetResult gains Found/Skipped — cost if wrong: none.
+- Task 8: Ruling: files are removed by deleting <root>/<area>/<demo company> in every area (storage.Store.RemoveCompany), not by Purge's stored_path list — this also drops soft-deleted uploads and generated bill/report PDFs whose rows the purge removed — cost if wrong: none; another company's directory is never touched (mutation-proved).
+- Task 8: Ruling: demo.extend takes the same demo:reset lock and stands aside during a reset; demo.reset has MaxRetry 0 (the next hour replaces a failed reset) — cost if wrong: a manual reset that collides with the :15 extend prints "skipped" and must be rerun.
+- Task 8: Ruling: TestResetKeepsDemoSessions folded into TestResetRemovesVisitorRows (same session setup) — saves one full demo seed in the suite — cost if wrong: none.
+- Task 8: Ruling: `--password` exists as R553 says, but its help points to EKOKOD_DEMO_PASSWORD, which the deploy script uses (argv is visible in the process list) — cost if wrong: none.
+- Task 9: Ruling: the banner keys live in the shell namespace (shell.demo.banner.*) — no new namespace file for three strings — cost if wrong: a key rename.
+- Task 9: Ruling: the profile lock caption already existed since F6b (settings.account.demoReadOnly); reused it and widened the copy to "profil, şifre ve oturumlar" instead of adding settings.profile.demoLocked — cost if wrong: none.
+- Task 9: Ruling: DemoBanner draws its own warning surface with role="status" instead of <Alert tone="warning"> (which is role="alert" and would interrupt a screen reader on every page) — cost if wrong: none.
+- Task 9: Ruling: resets_at is the next full hour, matching the default EKOKOD_SCHEDULE_DEMO_RESET; a custom schedule makes the banner time approximate — cost if wrong: a misleading time only on a non-default schedule.
+- Task 9: Ruling: dto.Company gains is_demo for every reader of the company DTO, not only the platform list — one shared DTO, the flag is not sensitive — cost if wrong: none.
+- Task 9: Ruling: the e2e spec lives at web/tests/e2e/demo.spec.ts (the repo's e2e dir), not web/e2e/; auth.spec's demo row now expects the company-admin navigation (R541 made demo's permissions identical) and dashboard.spec's demo building is "Ostim Fabrika" — both stale since Tasks 3/5 — cost if wrong: none.
+- Task 10: Ruling: demo writes company-scope bills (108 → 120) — the EKORM dashboard reads /bills/latest?scope=company and the real dispatcher writes them — cost if wrong: 12 extra demo rows.
+- Task 10: Ruling: one GHG report per demo building — EKOCM lists reports for the selected building only — cost if wrong: two extra demo reports.
+- Task 10: Ruling: added carbon.mains.equivalence (tr "Eşdeğerlik", en "Equivalence") — platform equivalence factors broke every company's emission-factors page, not only the demo's — cost if wrong: none.
+- Task 10: Ruling: dashboard YoY pairs last year by calendar month (was by index) — pre-existing bug the demo's mid-year history exposed; affects every customer — cost if wrong: none, test pins it.
+- Task 10: Ruling: demo analyzers' customer_name = their own name — the UI labels analyzers by customer_name, so six identical titles were indistinguishable — cost if wrong: the analyzers tab's "Müşteri adı" column shows meter names.
+- Task 10: Ruling: demo office tariff = EPDK 2025 commercial LV 2.8731 with overuse 3.4547 — without an overuse price every office/company bill was flagged "İncelenmeli" — cost if wrong: office bills price differently than before (they were never issued).
+- Task 10: Ruling: Soğuk oda reports a zero export register (Gebze's netting tariff covers the building) — a nil register flagged every Gebze/company bill, marked every Gebze consumption row "Eksik veri" and blanked the renewable table — cost if wrong: Financial Analysis now counts Gebze's billed export as unpriced production ("gelir eksik" note, small double count with the plant's own production) — an F27 model gap left for the user.
+- Task 10: Ruling: settings.spec demo row → company admin's tabs — R541 gives the demo company_admin permissions; the row still pinned the old read-only demo — cost if wrong: none.
+- Task 10: Ruling: the smoke ran on the e2e stack (scripts/e2e-api.sh: fresh DB, migrate, seed, seed demo, api + next start) with a throwaway Playwright spec instead of a hand-built scratch DB + next dev — same steps, production build, repeatable — cost if wrong: none.
+- Task 10: Ruling: deploy-demo.sh runs `seed demo` in a one-off worker container (`run --rm --no-deps`) instead of `exec api` — the 400-day first seed stays out of the live api's 1 GB limit — and keeps the existing password unless `--rotate` (re-setting the same one fails R146's reuse check; rotating locks out prospects holding the old one) — cost if wrong: one flag to remember.
+- Task 10: Ruling: deploy-demo.sh also runs `seed demo --reset` once — an older pre-F29 demo has no is_demo tag, so its leftovers would otherwise wait for the next HH:00 — cost if wrong: ~20 s.
+
+Deferred minors:
+
+- Final: minor (deferred): AI Analysis anomaly tab defaults to today + the previous hour, which is "the future" between 00:00 and 01:00 Istanbul (predict.spec:28 fails in that window).
+- Final: minor (deferred): Financial Analysis counts a netted building's billed export as unpriced production on top of the plant's own production (F27 model; visible on demo Gebze as "gelir eksik").
+
+- Final review: self-review (no subagent tool) — containment: every SMTP sender (api 1, worker 3) and every meter/iSolar adapter (api + worker) is wrapped; SMTP routes are platform-admin only (WithDemo adds demo only where CA is); password-reset mail uses the user's own company SMTP (no platform fallback); public/contact forms go only to ekokod's fixed inbox; ML and weather are not integration settings. No Critical/Important finding.
