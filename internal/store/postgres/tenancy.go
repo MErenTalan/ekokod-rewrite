@@ -56,6 +56,7 @@ func companyFromRow(row sqlcgen.Company) (model.Company, error) {
 		ContactName:    row.ContactName,
 		ContactPhone:   row.ContactPhone,
 		Sector:         row.Sector,
+		IsDemo:         row.IsDemo,
 		CreatedAt:      row.CreatedAt.Time,
 		UpdatedAt:      row.UpdatedAt.Time,
 		DeletedAt:      tsPtr(row.DeletedAt),
