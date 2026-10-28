@@ -487,8 +487,8 @@ var demoActivities = []struct {
 }
 
 // ensureDemoCarbon declares each building's activities, writes the factory's
-// manual records, the meter-derived records and one GHG report over the last
-// 12 closed months.
+// manual records, the meter-derived records and a GHG report per building over
+// the last 12 closed months.
 func ensureDemoCarbon(ctx context.Context, d DemoDeps, b demoBaseline, now time.Time) error {
 	sc := store.SystemScope(b.company)
 	repo := postgres.NewCarbonRepository(d.Pool)
@@ -517,13 +517,19 @@ func ensureDemoCarbon(ctx context.Context, d DemoDeps, b demoBaseline, now time.
 	if err := ensureDemoAutomatedCarbon(ctx, d, b, grid, thisMonth, now); err != nil {
 		return err
 	}
-	have, err := repo.ListReports(ctx, sc, nil, store.Page{Limit: 1})
-	if err != nil || len(have) > 0 {
-		return err
-	}
-	if _, err := svc.CreateReport(ctx, sc, carbonsvc.ReportInput{BuildingID: b.buildings[0].id, Type: "ghg",
-		From: thisMonth.AddDate(-1, 0, 0), To: thisMonth.AddDate(0, 0, -1), Name: ptr("GHG Protocol — son 12 ay")}); err != nil {
-		return fmt.Errorf("seed demo carbon report: %w", err)
+	// EKOCM lists reports per building, so each building gets its own.
+	for _, x := range b.buildings {
+		have, err := repo.ListReports(ctx, sc, &x.id, store.Page{Limit: 1})
+		if err != nil {
+			return err
+		}
+		if len(have) > 0 {
+			continue
+		}
+		if _, err := svc.CreateReport(ctx, sc, carbonsvc.ReportInput{BuildingID: x.id, Type: "ghg",
+			From: thisMonth.AddDate(-1, 0, 0), To: thisMonth.AddDate(0, 0, -1), Name: ptr("GHG Protocol — son 12 ay")}); err != nil {
+			return fmt.Errorf("seed demo carbon report %s: %w", x.name, err)
+		}
 	}
 	return nil
 }

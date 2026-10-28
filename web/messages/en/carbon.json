@@ -26,7 +26,8 @@
     "electricity": "Electricity",
     "externalEnergy": "External energy sources",
     "products": "Products and services",
-    "waste": "Waste"
+    "waste": "Waste",
+    "equivalence": "Equivalence"
   },
   "subs": {
     "spaceHeating": "Space heating",

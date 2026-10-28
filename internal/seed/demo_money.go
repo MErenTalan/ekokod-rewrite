@@ -46,6 +46,7 @@ type demoTariff struct {
 	group                   model.DistributionUserGroup
 	term                    model.TariffTerm
 	single, t1, t2, t3      string // TL/kWh; empty = unused
+	overuse                 string // high-tier TL/kWh above the daily threshold; empty = untiered
 	distribution, btv       string
 	contractedKw, powerUnit string
 	generation              model.GenerationUsage
@@ -59,7 +60,7 @@ var demoTariffs = []demoTariff{
 		term: model.TariffTermBinomial, t1: "3.1250", t2: "4.6875", t3: "1.9531", distribution: "1.0834", btv: "1",
 		contractedKw: "400", powerUnit: "32.10", generation: model.GenerationUsageNone},
 	{name: "AG Ticarethane Tek Terimli Tek Zamanlı", voltage: model.VoltageLevelLV, group: model.UserGroupCommercial,
-		term: model.TariffTermMonomial, single: "3.4547", distribution: "2.4794", btv: "5", generation: model.GenerationUsageNone},
+		term: model.TariffTermMonomial, single: "2.8731", overuse: "3.4547", distribution: "2.4794", btv: "5", generation: model.GenerationUsageNone},
 	{name: "AG Sanayi Tek Zamanlı — Mahsuplaşmalı", voltage: model.VoltageLevelLV, group: model.UserGroupIndustrial,
 		term: model.TariffTermMonomial, single: "3.2010", distribution: "2.2850", btv: "1",
 		generation: model.GenerationUsageSubtractFromConsumption, generationPrice: "2.0000"},
@@ -96,6 +97,10 @@ func ensureDemoMoney(ctx context.Context, d DemoDeps, b demoBaseline, now time.T
 				return fmt.Errorf("seed demo bill %s %s: %w", x.name, period, err)
 			}
 		}
+		// The EKORM dashboard reads the company bill, as the dispatcher writes it.
+		if _, err := d.Billing.Generate(ctx, sc, billingsvc.GenerateRequest{Scope: model.BillScopeCompany, SubjectID: b.company, PeriodKey: period}); err != nil {
+			return fmt.Errorf("seed demo company bill %s: %w", period, err)
+		}
 	}
 	return ensureDemoIcmal(ctx, d, b, thisMonth, now)
 }
@@ -121,7 +126,7 @@ func ensureDemoTariffs(ctx context.Context, d DemoDeps, b demoBaseline, now time
 		t := model.Tariff{CompanyID: b.company, BuildingID: &x.id, Name: ptr(spec.name), EffectiveFrom: demoTariffStart,
 			Currency: model.CurrencyTRY, EnergyType: model.EnergyTypeGrid, VoltageLevel: spec.voltage, UserGroup: spec.group,
 			PriceType: model.PriceTypeSingleTime, Term: spec.term, SupplyCompany: model.SupplyCompanyIncumbent,
-			SingleTimePrice: price(spec.single), T1Price: price(spec.t1), T2Price: price(spec.t2), T3Price: price(spec.t3),
+			SingleTimePrice: price(spec.single), OverusePrice: price(spec.overuse), T1Price: price(spec.t1), T2Price: price(spec.t2), T3Price: price(spec.t3),
 			DistributionCost: decimal.RequireFromString(spec.distribution), ReactivePowerPrice: decimal.RequireFromString("3.4937"),
 			ContractedPowerKw: price(spec.contractedKw), PowerUnitPrice: price(spec.powerUnit), GenerationUsage: spec.generation,
 			GenerationPricePerKwh: price(spec.generationPrice), VatRate: decimal.NewFromInt(20),

@@ -182,7 +182,7 @@ func ensureDemoSites(ctx context.Context, d DemoDeps, b demoBaseline, now time.T
 	for _, x := range b.analyzers {
 		building, lat, lon := b.buildings[x.building], dec(x.latitude), dec(x.longitude)
 		row := model.Analyzer{ID: x.id, CompanyID: b.company, BuildingID: &building.id, Provider: model.IntegrationProviderOSOS,
-			ProviderSubtype: "Baskent", InstallationNumber: x.number, CustomerName: ptr("Demo Enerji A.Ş."), Address: ptr(building.address),
+			ProviderSubtype: "Baskent", InstallationNumber: x.number, CustomerName: ptr(x.name), Address: ptr(building.address),
 			Province: ptr(building.province), District: ptr(building.district), InstalledPowerKw: ptr(dec(x.powerKw)),
 			MeterNumber: ptr("7" + x.number[5:] + "0042"), MeterModel: ptr("Makel C510"), MeterMultiplier: decimal.NewFromInt(1),
 			MeteringPointName: ptr(x.name), Latitude: &lat, Longitude: &lon, IsActive: true, CreatedAt: now, UpdatedAt: now}

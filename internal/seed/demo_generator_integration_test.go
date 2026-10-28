@@ -62,6 +62,9 @@ func TestEnsureDemoSitesConverges(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, company.IsDemo)
 	require.Equal(t, "Demo Enerji A.Ş.", company.Name)
+	// The UI labels an analyzer by its customer name, so each needs its own.
+	require.Equal(t, len(b.analyzers), countRows(t, d.Pool,
+		`select count(distinct customer_name) from analyzers where company_id = $1`, DemoCompanyID))
 
 	buildings := postgres.NewBuildingRepository(d.Pool)
 	office := b.buildings[1]
@@ -157,7 +160,12 @@ func TestDemoMoneyBills(t *testing.T) {
 		and period_key between '2025-10' and '2026-09'`
 	require.Equal(t, 3*12, countRows(t, d.Pool, live, DemoCompanyID, "building"))
 	require.Equal(t, 6*12, countRows(t, d.Pool, live, DemoCompanyID, "analyzer"))
+	require.Equal(t, 12, countRows(t, d.Pool, live, DemoCompanyID, "company"), "the EKORM dashboard reads the company bill")
 	require.Zero(t, countRows(t, d.Pool, `select count(*) from bills where company_id = $1 and total_cost <= 0`, DemoCompanyID))
+	var flagged string
+	require.NoError(t, d.Pool.QueryRow(ctx, `select coalesce(string_agg(distinct scope || ':' || period_key || ':' || flag_reason, ' '), '')
+		from bills where company_id = $1 and status = 'flagged'`, DemoCompanyID).Scan(&flagged))
+	require.Empty(t, flagged, "a flagged bill shows the visitor an İncelenmeli badge")
 	reactive := `select count(*) from bill_lines l join bills b on b.id = l.bill_id
 		where b.analyzer_id = $1 and b.scope = 'analyzer' and l.code = 'reactive_inductive' and l.amount > 0`
 	require.Positive(t, countRows(t, d.Pool, reactive, b.analyzers[2].id), "the compressor pays a reactive penalty in summer")
@@ -219,7 +227,11 @@ func TestDemoContentFillsEveryScreen(t *testing.T) {
 	require.Equal(t, 4, got["notes"])
 	require.Equal(t, 3, got["files"])
 	require.GreaterOrEqual(t, got["activities"], 60)
-	require.Equal(t, 1, got["carbon"])
+	require.Equal(t, 3, got["carbon"])
+	for _, x := range b.buildings {
+		require.Equal(t, 1, countRows(t, d.Pool, `select count(*) from carbon_reports where building_id = $1`, x.id),
+			"EKOCM lists reports per building; %s has one", x.name)
+	}
 	ahead := `select count(*) from forecasts where analyzer_id = $1 and ts >= $2`
 	for _, a := range b.analyzers {
 		require.Positive(t, countRows(t, d.Pool, ahead, a.id, demoNow.Add(7*24*time.Hour-2*time.Hour)), "%s forecast reaches a week ahead", a.number)

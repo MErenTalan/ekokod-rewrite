@@ -50,7 +50,7 @@ func TestResetRestoresDeletedBaseline(t *testing.T) {
 	}
 	billsQ := `select count(*) from bills where company_id = $1`
 	bills := countRows(t, d.Pool, billsQ, DemoCompanyID)
-	require.Equal(t, 108, bills)
+	require.Equal(t, 120, bills)
 
 	buildings, analyzers := postgres.NewBuildingRepository(d.Pool), postgres.NewAnalyzerRepository(d.Pool)
 	visitorBuilding, err := buildings.Create(ctx, sc, model.Building{CompanyID: DemoCompanyID, Name: "Ziyaretçi binası", BillCutoffDay: 1})

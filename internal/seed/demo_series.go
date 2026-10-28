@@ -71,6 +71,12 @@ func ensureDemoReadings(ctx context.Context, d DemoDeps, b demoBaseline, end, no
 	sc := store.SystemScope(b.company)
 	analyzers, readings := postgres.NewAnalyzerRepository(d.Pool), postgres.NewReadingRepository(d.Pool)
 	total, earliest := 0, end
+	netted := map[int]bool{}
+	for _, p := range b.plants {
+		if p.netting >= 0 {
+			netted[b.analyzers[p.netting].building] = true
+		}
+	}
 	for i, a := range b.analyzers {
 		row, err := analyzers.Get(ctx, sc, a.id)
 		if err != nil {
@@ -83,6 +89,9 @@ func ensureDemoReadings(ctx context.Context, d DemoDeps, b demoBaseline, end, no
 			bands: [3]decimal.Decimal{t1, t2, active.Sub(t1).Sub(t2)}}
 		if a.solarPlant >= 0 {
 			m.export = ptr(decimal.NewFromInt(12000))
+		} else if netted[a.building] {
+			// The netting tariff covers the whole building; a missing export register flags its bills.
+			m.export = ptr(decimal.Zero)
 		}
 		if row.LastReadingAt != nil {
 			last, err := readings.Range(ctx, sc, a.id, store.TimeRange{From: *row.LastReadingAt, To: row.LastReadingAt.Add(time.Second)},

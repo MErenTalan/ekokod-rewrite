@@ -72,6 +72,21 @@ describe('ConsumptionPanelView', () => {
     expect(withYoy.getAllByText(/Önceki yıl/).length).toBeGreaterThan(0);
   });
 
+  // F29 smoke: last year's data began in September and was drawn under January.
+  it('pairs last year by calendar month when last year starts mid-year', async () => {
+    const month = (m: string, active: number) => ({ ...row(0, active), period_start: `${m}-01T00:00:00+03:00` });
+    const r = renderWithProviders(view({
+      rows: [month('2026-01', 100), month('2026-02', 200), month('2026-03', 300)],
+      previousYear: [month('2025-03', 777)],
+      granularity: 'monthly',
+    }));
+    await r.user.click(r.getAllByRole('button', { name: 'Veri tablosunu göster' })[1]);
+    const cells = [...r.getByRole('table', { name: 'Yıllık karşılaştırma' }).querySelectorAll('tbody tr')]
+      .map((tr) => [...tr.querySelectorAll('td, th')].map((c) => c.textContent));
+    expect(cells[0][2]).not.toContain('777');
+    expect(cells[2][2]).toContain('777');
+  });
+
   it('applies the draft filters only when asked', async () => {
     const onApply = vi.fn();
     const r = renderWithProviders(view({ onApply }));
