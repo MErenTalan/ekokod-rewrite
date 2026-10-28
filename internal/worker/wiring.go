@@ -528,6 +528,10 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		Mail: mail.GuardDemo(mail.NewSMTPSender(mailDialTimeout, nil), demoCheck), Creds: credService, ISolar: isolarClient,
 		Clock: clock.System(), Enqueuer: jobClient, Inspector: inspector, MaxRetry: cfg.Worker.MaxRetries,
 	})
+	demoJob := seed.DemoJob{Deps: seed.DemoDeps{Pool: pool, Cipher: cipher, Billing: billingService, Log: log,
+		Hasher:  auth.Hasher{Pepper: cfg.Security.PasswordPepper, Cost: cfg.Security.BcryptCost},
+		Storage: storage.Store{Root: cfg.Storage.Root, Max: cfg.Storage.UploadMax, Allowed: cfg.Storage.AllowedTypes}},
+		Lock: redisLock, Clock: clock.System()}
 
 	return graph{
 		cipher:          cipher,
@@ -536,12 +540,11 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		credentialsDeps: credDeps,
 		ingestDeps:      ingestDeps,
 		handlers: &job.Handlers{
-			Log:             log,
-			Ingestion:       ingestSvc,
-			AnalyzerRefresh: ingestSvc,
-			Demo: seed.DemoJob{Deps: seed.DemoDeps{Pool: pool, Cipher: cipher, Billing: billingService, Log: log,
-				Hasher:  auth.Hasher{Pepper: cfg.Security.PasswordPepper, Cost: cfg.Security.BcryptCost},
-				Storage: storage.Store{Root: cfg.Storage.Root, Max: cfg.Storage.UploadMax, Allowed: cfg.Storage.AllowedTypes}}, Clock: clock.System()},
+			Log:                log,
+			Ingestion:          ingestSvc,
+			AnalyzerRefresh:    ingestSvc,
+			Demo:               demoJob,
+			DemoReset:          demoJob,
 			Backfill:           backfiller,
 			Prices:             syncer,
 			ConsumptionRefresh: consumptionRefresher,

@@ -1,6 +1,9 @@
 package cli
 
 import (
+	"context"
+	"io"
+	"log/slog"
 	"time"
 
 	"fmt"
@@ -11,8 +14,10 @@ import (
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/crypto"
+	"github.com/MErenTalan/ekokod-rewrite/internal/platform/lock"
 	"github.com/MErenTalan/ekokod-rewrite/internal/seed"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
+	storeredis "github.com/MErenTalan/ekokod-rewrite/internal/store/redis"
 	"github.com/spf13/cobra"
 )
 
@@ -219,9 +224,13 @@ func dbURLDisplay(cfg *config.Config) string {
 const demoPasswordEnv = "EKOKOD_DEMO_PASSWORD"
 
 func newSeedDemoCmd() *cobra.Command {
-	return &cobra.Command{
+	var (
+		reset    bool
+		password string
+	)
+	cmd := &cobra.Command{
 		Use:   "demo",
-		Short: "Create the synthetic demo company or extend its readings to now",
+		Short: "Create the synthetic demo company, extend it to now, or reset it to its baseline",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg, err := config.FromEnv()
 			if err != nil {
@@ -245,12 +254,50 @@ func newSeedDemoCmd() *cobra.Command {
 			deps := seed.DemoDeps{Pool: pool, Hasher: auth.Hasher{Pepper: cfg.Security.PasswordPepper, Cost: cfg.Security.BcryptCost},
 				Cipher: cipher, Billing: billing, Log: log,
 				Storage: storage.Store{Root: cfg.Storage.Root, Max: cfg.Storage.UploadMax, Allowed: cfg.Storage.AllowedTypes}}
-			res, err := seed.Demo(ctx, deps, os.Getenv(demoPasswordEnv), time.Now())
+			if password == "" {
+				password = os.Getenv(demoPasswordEnv)
+			}
+			out := cmd.OutOrStdout()
+			if reset {
+				done, err := resetDemo(ctx, cfg, deps, log, out)
+				if err != nil || (done && password == "") {
+					return err
+				}
+			}
+			res, err := seed.Demo(ctx, deps, password, time.Now())
 			if err != nil {
 				return fmt.Errorf("seed demo: %w", err)
 			}
-			_, err = fmt.Fprintf(cmd.OutOrStdout(), "demo company ready (created=%t, readings added=%d)\n", res.Created, res.Readings)
+			_, err = fmt.Fprintf(out, "demo company ready (created=%t, readings added=%d, password set=%t)\n", res.Created, res.Readings, password != "")
 			return err
 		},
 	}
+	cmd.Flags().BoolVar(&reset, "reset", false, "return the demo company to its baseline now, as the hourly reset does")
+	cmd.Flags().StringVar(&password, "password", "", "set the demo user's password (policy-checked); "+demoPasswordEnv+
+		" does the same without showing it in the process list")
+	return cmd
+}
+
+// resetDemo runs one reset under the worker's Redis lock; done is false when
+// there is no demo company yet.
+func resetDemo(ctx context.Context, cfg *config.Config, deps seed.DemoDeps, log *slog.Logger, out io.Writer) (bool, error) {
+	client, err := storeredis.New(ctx, cfg.Redis, log)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = client.Close() }()
+	res, err := seed.ResetDemo(ctx, deps, lock.NewRedis(client), time.Now())
+	if err != nil {
+		return false, fmt.Errorf("seed demo --reset: %w", err)
+	}
+	switch {
+	case !res.Found:
+		_, err = fmt.Fprintln(out, "no demo company to reset")
+		return false, err
+	case res.Skipped:
+		_, err = fmt.Fprintln(out, "demo reset skipped: another reset is running")
+		return true, err
+	}
+	_, err = fmt.Fprintf(out, "demo reset done (files removed=%d, readings added=%d)\n", len(res.Purged.Files), res.Readings)
+	return true, err
 }

@@ -146,6 +146,8 @@ type Schedule struct {
 	ReportsYearly  string
 	// Demo extends the synthetic demo company's readings (R186).
 	Demo string
+	// DemoReset returns the demo company to its baseline (R553).
+	DemoReset string
 	// ISolarSync and ISolarAlarms are the iSolar ticks (R288).
 	ISolarSync   string
 	ISolarAlarms string

@@ -10,8 +10,10 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/auth"
+	"github.com/MErenTalan/ekokod-rewrite/internal/platform/lock"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
+	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/admin"
 )
 
 // The synthetic demo company (R138, R186). Every id is fixed; the analyzers
@@ -137,14 +139,114 @@ func mulberry32(seed uint32) uint32 {
 	return t ^ (t >> 14)
 }
 
-// DemoJob adapts ExtendDemo to job.DemoExtender.
+// DemoJob adapts ExtendDemo and ResetDemo to job.DemoExtender and
+// job.DemoResetter.
 type DemoJob struct {
 	Deps  DemoDeps
+	Lock  lock.Locker
 	Clock interface{ Now() time.Time }
 }
 
-// ExtendDemo implements job.DemoExtender.
+// ExtendDemo implements job.DemoExtender; it stands aside while a reset runs.
 func (j DemoJob) ExtendDemo(ctx context.Context) error {
-	_, err := ExtendDemo(ctx, j.Deps, j.Clock.Now())
+	lease, err := tryLock(ctx, j.Lock, DemoResetLock, demoResetTTL)
+	if lease == nil || err != nil {
+		return err
+	}
+	defer func() { _ = lease.Release(context.WithoutCancel(ctx)) }()
+	_, err = ExtendDemo(ctx, j.Deps, j.Clock.Now())
 	return err
+}
+
+// ResetDemo implements job.DemoResetter.
+func (j DemoJob) ResetDemo(ctx context.Context) error {
+	started := time.Now()
+	res, err := ResetDemo(ctx, j.Deps, j.Lock, j.Clock.Now())
+	if err == nil && !res.Skipped && j.Deps.Log != nil {
+		j.Deps.Log.InfoContext(ctx, "demo reset", "readings", res.Readings, "took", time.Since(started).Round(time.Millisecond))
+	}
+	return err
+}
+
+// DemoResetLock is the lock key a reset holds.
+const DemoResetLock = "demo:reset"
+
+// ResetResult reports what a reset did.
+type ResetResult struct {
+	Found    bool // a demo company exists
+	Skipped  bool // another reset holds the lock
+	Purged   admin.PurgeResult
+	Readings int
+}
+
+// demoResetTTL outlives the slowest reset seen (about a minute) by far, and
+// still frees the lock well before the next hourly run.
+const demoResetTTL = 10 * time.Minute
+
+// ResetDemo returns the demo company to its baseline: everything a visitor
+// changed or added is purged, the emptied aggregate buckets are recomputed,
+// the company's files are removed and the generator runs again (R547, R548).
+// A running reset or a missing demo company makes it a no-op.
+func ResetDemo(ctx context.Context, d DemoDeps, locker lock.Locker, now time.Time) (ResetResult, error) {
+	var res ResetResult
+	var exists bool
+	if err := d.Pool.QueryRow(ctx, `select exists (select 1 from companies where id = $1 and is_demo)`, DemoCompanyID).Scan(&exists); err != nil || !exists {
+		return res, err
+	}
+	res.Found = true
+	lease, err := tryLock(ctx, locker, DemoResetLock, demoResetTTL)
+	if lease == nil || err != nil {
+		res.Skipped = err == nil
+		return res, err
+	}
+	defer func() { _ = lease.Release(context.WithoutCancel(ctx)) }()
+	if res.Purged, err = admin.NewDemoRepository(d.Pool).Purge(ctx, DemoCompanyID, DemoBaseline().Keep()); err != nil {
+		return res, fmt.Errorf("demo reset: %w", err)
+	}
+	if err := refreshPurged(ctx, d, res.Purged); err != nil {
+		return res, err
+	}
+	if err := d.Storage.RemoveCompany(DemoCompanyID); err != nil {
+		return res, fmt.Errorf("demo reset: %w", err)
+	}
+	gen, err := Demo(ctx, d, "", now)
+	res.Readings = gen.Readings
+	return res, err
+}
+
+// tryLock takes the lease without queueing behind a holder: a nil lease and a
+// nil error mean someone else holds it.
+func tryLock(ctx context.Context, locker lock.Locker, key string, ttl time.Duration) (lock.Lease, error) {
+	try, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	lease, err := locker.Acquire(try, key, ttl)
+	if errors.Is(err, lock.ErrNotAcquired) && ctx.Err() == nil {
+		return nil, nil
+	}
+	return lease, err
+}
+
+// refreshPurged recomputes only the buckets the purge emptied: visitor meters'
+// readings and visitor plants' production (R548).
+func refreshPurged(ctx context.Context, d DemoDeps, p admin.PurgeResult) error {
+	aggregates := admin.NewAggregateRepository(d.Pool)
+	if r := p.ReadingRange; r != nil {
+		for _, view := range []store.AggregateView{store.ViewConsumptionHourly, store.ViewConsumptionDaily} {
+			err := refreshDays(r.From, istanbulDay(r.To).AddDate(0, 0, 1), func(w store.TimeRange) error {
+				return aggregates.Refresh(ctx, view, w)
+			})
+			if err != nil {
+				return fmt.Errorf("demo reset refresh %s: %w", view, err)
+			}
+		}
+	}
+	if r := p.PlantRange; r != nil {
+		first := istanbulDay(r.From)
+		for m := first.AddDate(0, 0, 1-first.Day()); !m.After(r.To); m = m.AddDate(0, 1, 0) {
+			if err := aggregates.RefreshPlantProduction(ctx, store.TimeRange{From: m.AddDate(0, 0, -1), To: m.AddDate(0, 1, 1)}); err != nil {
+				return fmt.Errorf("demo reset refresh plant views: %w", err)
+			}
+		}
+	}
+	return nil
 }

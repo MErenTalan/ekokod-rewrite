@@ -463,6 +463,7 @@ func Load(lookup func(string) (string, bool)) (*Config, error) {
 		ReportsMonthly: l.cronExpr("EKOKOD_SCHEDULE_REPORTS_MONTHLY", "0 6 2 * *"),
 		ReportsYearly:  l.cronExpr("EKOKOD_SCHEDULE_REPORTS_YEARLY", "0 7 3 1 *"),
 		Demo:           l.cronExpr("EKOKOD_SCHEDULE_DEMO", "15 * * * *"),
+		DemoReset:      l.cronExpr("EKOKOD_SCHEDULE_DEMO_RESET", "0 * * * *"),
 		ISolarSync:     l.cronExpr("EKOKOD_SCHEDULE_ISOLAR_SYNC", "*/15 * * * *"),
 		ISolarAlarms:   l.cronExpr("EKOKOD_SCHEDULE_ISOLAR_ALARMS", "10 * * * *"),
 	}

@@ -84,14 +84,15 @@ func TestSchedulerEntriesIncludeIngestionAndPrices(t *testing.T) {
 		Timezone: time.UTC,
 		Schedule: config.Schedule{Ingestion: "0 3 * * *", EPIAS: "0 14 * * *", Billing: "0 6 * * *",
 			Demo: "15 * * * *", Alarms: "0 * * * *", ReportsMonthly: "0 6 2 * *", ReportsYearly: "0 7 3 1 *",
-			ISolarSync: "*/15 * * * *", ISolarAlarms: "10 * * * *", Carbon: "30 4 * * *", Forecast: "0 4 * * *"},
+			ISolarSync: "*/15 * * * *", ISolarAlarms: "10 * * * *", Carbon: "30 4 * * *", Forecast: "0 4 * * *",
+			DemoReset: "0 * * * *"},
 		Worker: config.Worker{MaxRetries: 5},
 	}
 	s := &Scheduler{cfg: cfg, log: slog.New(slog.DiscardHandler)}
 
 	entries, err := s.entries()
 	require.NoError(t, err)
-	require.Len(t, entries, 12)
+	require.Len(t, entries, 13)
 
 	require.Equal(t, "@every 1h", entries[0].Cron)
 	require.Equal(t, job.TypeNoop, entries[0].Task.Type())

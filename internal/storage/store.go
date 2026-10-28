@@ -104,6 +104,30 @@ func (s Store) Save(ctx context.Context, company uuid.UUID, area, name string, r
 	return Saved{Path: rel, ContentType: contentType, Size: written, Checksum: hex.EncodeToString(hash.Sum(nil))}, nil
 }
 
+// RemoveCompany deletes a company's directory in every area, so a demo reset
+// also drops files whose rows were already deleted (R547).
+func (s Store) RemoveCompany(company uuid.UUID) error {
+	if s.Root == "" || company == uuid.Nil {
+		return errors.New("storage: remove company needs a root and a company")
+	}
+	areas, err := os.ReadDir(s.Root)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("storage: %w", err)
+	}
+	for _, a := range areas {
+		if !a.IsDir() {
+			continue
+		}
+		if err := os.RemoveAll(s.dir(company, a.Name())); err != nil {
+			return fmt.Errorf("storage: %w", err)
+		}
+	}
+	return nil
+}
+
 func (s Store) allowed(contentType string) bool {
 	for _, a := range s.Allowed {
 		if a == contentType {

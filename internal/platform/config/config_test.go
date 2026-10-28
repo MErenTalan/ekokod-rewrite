@@ -385,6 +385,23 @@ func TestSessionLifetimeDefaultsAndOrdering(t *testing.T) {
 	require.ErrorContains(t, err, "EKOKOD_REFRESH_TOKEN_REMEMBER_TTL")
 }
 
+// R553: the demo resets at the top of every hour unless told otherwise.
+func TestDemoResetSchedule(t *testing.T) {
+	cfg, err := config.Load(lookupFrom(valid()))
+	require.NoError(t, err)
+	require.Equal(t, "0 * * * *", cfg.Schedule.DemoReset)
+
+	env := valid()
+	env["EKOKOD_SCHEDULE_DEMO_RESET"] = "30 * * * *"
+	cfg, err = config.Load(lookupFrom(env))
+	require.NoError(t, err)
+	require.Equal(t, "30 * * * *", cfg.Schedule.DemoReset)
+
+	env["EKOKOD_SCHEDULE_DEMO_RESET"] = "not a cron"
+	_, err = config.Load(lookupFrom(env))
+	require.ErrorContains(t, err, "EKOKOD_SCHEDULE_DEMO_RESET")
+}
+
 // R288: the two iSolar ticks default to every 15 minutes and hourly at :10.
 func TestISolarScheduleDefaults(t *testing.T) {
 	cfg, err := config.Load(lookupFrom(valid()))
