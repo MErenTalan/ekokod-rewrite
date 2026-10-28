@@ -11,7 +11,8 @@ const EXPECTED: [keyof typeof USERS, string[]][] = [
   ['companyReadonly', ['Hesap', 'Şirket', 'Binalar', 'Güneş Santralleri', 'Analizörler', 'Kullanıcılar']],
   ['buildingAdmin', ['Hesap', 'Analizörler']],
   ['buildingReadonly', ['Hesap', 'Analizörler']],
-  ['demo', ['Hesap']],
+  // R541: the demo login works like a company admin.
+  ['demo', ['Hesap', 'Şirket', 'Binalar', 'Güneş Santralleri', 'Analizörler', 'Kullanıcılar']],
 ];
 
 test.describe('settings', () => {
