@@ -46,6 +46,9 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (Issued, error) {
 	if err != nil {
 		return Issued{}, err
 	}
+	if company.IsDemo && user.Role != model.UserRoleDemo {
+		return Issued{}, ErrInvalidCredentials // R543: the demo login is the only way in
+	}
 	issued, err := s.newSession(ctx, user, company, in.Client, in.Remember, in.UserAgent, in.IP)
 	if err != nil {
 		return Issued{}, err

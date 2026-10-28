@@ -14,6 +14,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
+	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/admin"
 )
 
 // The synthetic demo company (R138, R186). Every id is fixed.
@@ -60,6 +61,10 @@ func Demo(ctx context.Context, pool *pgxpool.Pool, hasher auth.Hasher, password 
 		res.Created = true
 	} else if err != nil {
 		return res, err
+	}
+	// R540: the tag is what every guard reads; an older demo row gets it too.
+	if err := admin.NewTenantRepository(pool).SetDemo(ctx, DemoCompanyID, true); err != nil {
+		return res, fmt.Errorf("seed demo tag: %w", err)
 	}
 	n, err := extendDemo(ctx, pool, now)
 	res.Readings = n

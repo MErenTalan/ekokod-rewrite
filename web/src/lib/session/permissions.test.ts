@@ -8,16 +8,17 @@ describe('permission fixture', () => {
   it('gives analyzer editing to admin and company admin only', () => {
     expect(fixture.admin).toContain('settings.analyzers.edit');
     expect(fixture.company_admin).toContain('settings.analyzers.edit');
-    for (const role of ['company_readonly_admin', 'building_admin', 'building_readonly_admin', 'demo'] as const) {
+    expect(fixture.demo).toContain('settings.analyzers.edit'); // R541
+    for (const role of ['company_readonly_admin', 'building_admin', 'building_readonly_admin'] as const) {
       expect(fixture[role]).not.toContain('settings.analyzers.edit');
     }
   });
 
   it('gives the anomaly check to the three writing roles', () => {
-    for (const role of ['admin', 'company_admin', 'building_admin'] as const) {
+    for (const role of ['admin', 'company_admin', 'building_admin', 'demo'] as const) {
       expect(fixture[role]).toContain('anomaly.check');
     }
-    for (const role of ['company_readonly_admin', 'building_readonly_admin', 'demo'] as const) {
+    for (const role of ['company_readonly_admin', 'building_readonly_admin'] as const) {
       expect(fixture[role]).not.toContain('anomaly.check');
     }
   });

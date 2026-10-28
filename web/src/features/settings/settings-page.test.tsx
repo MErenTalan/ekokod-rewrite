@@ -81,14 +81,14 @@ describe('SettingsPage', () => {
     expect(mockRouter.replace).not.toHaveBeenCalled();
   });
 
-  it('gives the demo account one read-only tab and asks for no sessions', async () => {
+  it('gives the demo account the company admin tabs, a locked profile and no sessions', async () => {
     api = mockApi(ROUTES);
     const r = renderWithProviders(
       <SessionProvider me={me('demo')}>
         <SettingsPage />
       </SessionProvider>,
     );
-    expect(r.getAllByRole('tab')).toHaveLength(1);
+    expect(r.getAllByRole('tab')).toHaveLength(6);
     expect(r.getByText('Demo hesabı paylaşımlıdır; profil ve şifre değiştirilemez.')).toBeInTheDocument();
     await waitFor(() => expect(api.calls.every((c) => !c.url.includes('/auth/sessions'))).toBe(true));
   });

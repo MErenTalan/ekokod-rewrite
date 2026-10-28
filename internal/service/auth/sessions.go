@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	perr "github.com/MErenTalan/ekokod-rewrite/internal/platform/errors"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
 )
@@ -29,12 +30,18 @@ func (s *Service) Logout(ctx context.Context, p Principal) error {
 
 // LogoutAll revokes every session of the caller.
 func (s *Service) LogoutAll(ctx context.Context, p Principal) error {
+	if p.User.Role == model.UserRoleDemo {
+		return perr.Forbidden // R542: other prospects share these sessions
+	}
 	_, err := s.d.Sessions.RevokeAllForUserWithReason(ctx, accountScope(p.User.CompanyID), p.User.ID, "logout_all", nil, s.d.Clock.Now())
 	return err
 }
 
 // Sessions lists the caller's active sessions, newest first.
 func (s *Service) Sessions(ctx context.Context, p Principal) ([]SessionView, error) {
+	if p.User.Role == model.UserRoleDemo {
+		return nil, perr.Forbidden // R542
+	}
 	now := s.d.Clock.Now()
 	var out []SessionView
 	for offset := int32(0); ; offset += sessionPageSize {
@@ -59,6 +66,9 @@ func (s *Service) Sessions(ctx context.Context, p Principal) ([]SessionView, err
 
 // RevokeSession revokes one of the caller's own sessions; any other id is not found.
 func (s *Service) RevokeSession(ctx context.Context, p Principal, id uuid.UUID) error {
+	if p.User.Role == model.UserRoleDemo {
+		return perr.Forbidden // R542
+	}
 	sc := accountScope(p.User.CompanyID)
 	sess, err := s.d.Sessions.Get(ctx, sc, id)
 	if err != nil {
