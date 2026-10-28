@@ -43,7 +43,7 @@ test.describe('dashboard', () => {
 
   test('the demo user sees only the synthetic company', async ({ page }) => {
     await login(page, USERS.demo.email);
-    await expect(page.getByRole('checkbox', { name: 'Demo Fabrika' })).toBeVisible();
+    await expect(page.getByRole('checkbox', { name: 'Ostim Fabrika' })).toBeVisible();
     await expect(page.getByRole('checkbox', { name: /A1 Fabrika|A2 Depo|B1 Ofis/ })).toHaveCount(0);
   });
 });

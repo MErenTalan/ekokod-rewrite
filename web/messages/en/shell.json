@@ -109,5 +109,12 @@
       "description": "Welcome, {name}. Pick the module you want to work in; you can switch between modules at any time without signing in again.",
       "open": "Open {name}"
     }
+  },
+  "demo": {
+    "banner": {
+      "title": "Demo account",
+      "body": "The data in this account is sample data. Your changes are not kept; the account returns to its initial state every hour on the hour.",
+      "next": "Next reset: {time}"
+    }
   }
 }

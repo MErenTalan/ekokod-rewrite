@@ -89,7 +89,7 @@ describe('SettingsPage', () => {
       </SessionProvider>,
     );
     expect(r.getAllByRole('tab')).toHaveLength(6);
-    expect(r.getByText('Demo hesabı paylaşımlıdır; profil ve şifre değiştirilemez.')).toBeInTheDocument();
+    expect(r.getByText('Demo hesabı paylaşımlıdır; profil, şifre ve oturumlar değiştirilemez.')).toBeInTheDocument();
     await waitFor(() => expect(api.calls.every((c) => !c.url.includes('/auth/sessions'))).toBe(true));
   });
 });

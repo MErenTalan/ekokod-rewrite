@@ -62,7 +62,7 @@ func tenancyRoutes() []Route {
 func companyDTO(c model.Company) dto.Company {
 	return dto.Company{
 		ID: c.ID, Name: c.Name, Address: c.Address, TotalAreaM2: dto.DP(c.TotalAreaM2), PersonnelCount: c.PersonnelCount,
-		ContactName: c.ContactName, ContactPhone: c.ContactPhone, Sector: c.Sector,
+		ContactName: c.ContactName, ContactPhone: c.ContactPhone, Sector: c.Sector, IsDemo: c.IsDemo,
 		CreatedAt: dto.T(c.CreatedAt), UpdatedAt: dto.T(c.UpdatedAt),
 	}
 }

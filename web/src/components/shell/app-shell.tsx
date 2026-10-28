@@ -12,6 +12,7 @@ import { MODULE_IDS, MODULES, shellModule, type ModuleId } from '@/modules/regis
 
 import { Drawer } from '../ui/drawer';
 import { CompanySwitcher } from './company-switcher';
+import { DemoBanner } from './demo-banner';
 import { ModuleSwitcher } from './module-switcher';
 import { navFor } from './nav';
 import { Sidebar } from './sidebar';
@@ -83,7 +84,10 @@ export function AppShell({ children, module, user, notificationCount }: AppShell
           </aside>
         ) : null}
         <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 px-4 py-6 lg:px-6">
-          <div className={cn('mx-auto flex w-full flex-col gap-6', prefs.container === 'boxed' ? 'max-w-7xl' : 'max-w-[1600px]')}>{children}</div>
+          <div className={cn('mx-auto flex w-full flex-col gap-6', prefs.container === 'boxed' ? 'max-w-7xl' : 'max-w-[1600px]')}>
+            <DemoBanner resetsAt={session?.me.demo?.resets_at} />
+            {children}
+          </div>
         </main>
       </div>
       {drawerOpen ? (

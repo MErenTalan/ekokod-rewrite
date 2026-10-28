@@ -3151,6 +3151,7 @@ export interface components {
             /** Format: date-time */
             created_at: string;
             id: components["schemas"]["UuidUUID"];
+            is_demo: boolean;
             name: string;
             personnel_count?: null | number;
             sector?: null | string;
@@ -3175,6 +3176,7 @@ export interface components {
             /** Format: date-time */
             created_at: string;
             id: components["schemas"]["UuidUUID"];
+            is_demo: boolean;
             name: string;
             personnel_count?: null | number;
             sector?: null | string;
@@ -3263,6 +3265,10 @@ export interface components {
         Date: string;
         /** @example 1234.567890 */
         Decimal: string;
+        DemoInfo: {
+            /** Format: date-time */
+            resets_at: string;
+        };
         EmissionFactorConversion: {
             label: string;
             multiplier: components["schemas"]["Decimal"];
@@ -3854,6 +3860,7 @@ export interface components {
         };
         Me: {
             company: components["schemas"]["CompanyRef"];
+            demo?: components["schemas"]["DemoInfo"];
             email: string;
             id: components["schemas"]["UuidUUID"];
             locale: components["schemas"]["Locale"];

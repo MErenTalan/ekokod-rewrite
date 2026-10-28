@@ -5,9 +5,9 @@ import type { Company } from '@/lib/api/types';
 import { CompanyListView } from './company-list';
 
 const companies: Company[] = [
-  { id: 'c-own', name: 'Ekokod Platform', sector: 'Hizmet', created_at: '', updated_at: '' },
-  { id: 'c-a', name: 'Anadolu Tekstil A.Ş.', sector: 'Üretim', created_at: '', updated_at: '' },
-  { id: 'c-b', name: 'Boğaziçi Gıda Ltd. Şti.', sector: 'Gıda', created_at: '', updated_at: '' },
+  { id: 'c-own', name: 'Ekokod Platform', sector: 'Hizmet', is_demo: false, created_at: '', updated_at: '' },
+  { id: 'c-a', name: 'Anadolu Tekstil A.Ş.', sector: 'Üretim', is_demo: false, created_at: '', updated_at: '' },
+  { id: 'c-b', name: 'Boğaziçi Gıda Ltd. Şti.', sector: 'Gıda', is_demo: false, created_at: '', updated_at: '' },
 ];
 
 const meta = {

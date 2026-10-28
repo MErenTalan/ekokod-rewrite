@@ -1,7 +1,7 @@
 # ekokod API reference
 
 Generated from the OpenAPI document (`ekokod tool openapi`) by `make api-docs`; do not edit.
-Version 1 · 183 operations · 268 schemas. Authentication: a session cookie (`ekokod_at`) or a mobile bearer token; operations marked *public* need neither.
+Version 1 · 183 operations · 269 schemas. Authentication: a session cookie (`ekokod_at`) or a mobile bearer token; operations marked *public* need neither.
 Errors 400, 401, 403, 429 and 500 apply to every operation and use the `Error` schema.
 
 ## alarms
@@ -3108,6 +3108,7 @@ Responses: 204, 404, 409, 422
 | `contact_phone` | string? |  |
 | `created_at` | string (date-time) | yes |
 | `id` | `UuidUUID` | yes |
+| `is_demo` | boolean | yes |
 | `name` | string | yes |
 | `personnel_count` | integer? |  |
 | `sector` | string? |  |
@@ -3136,6 +3137,7 @@ Responses: 204, 404, 409, 422
 | `contact_phone` | string? |  |
 | `created_at` | string (date-time) | yes |
 | `id` | `UuidUUID` | yes |
+| `is_demo` | boolean | yes |
 | `name` | string | yes |
 | `personnel_count` | integer? |  |
 | `sector` | string? |  |
@@ -3256,6 +3258,12 @@ string (date)
 
 string
 
+### <a id="schema-demoinfo"></a>`DemoInfo`
+
+| field | type | required |
+|---|---|---|
+| `resets_at` | string (date-time) | yes |
+
 ### <a id="schema-emissionfactorconversion"></a>`EmissionFactorConversion`
 
 | field | type | required |
@@ -3352,6 +3360,7 @@ string
 
 | field | type | required |
 |---|---|---|
+| `bill_months` | integer | yes |
 | `consumption_months` | integer | yes |
 | `of` | integer | yes |
 | `production_months` | integer | yes |
@@ -3364,6 +3373,7 @@ string
 | `cost` | [`MoneyAmount`](#schema-moneyamount)[] | yes |
 | `grid_purchase_kwh` | [`Decimal`](#schema-decimal) |  |
 | `grid_sale_kwh` | [`Decimal`](#schema-decimal) |  |
+| `measured` | boolean | yes |
 | `month` | integer | yes |
 | `net` | [`MoneyAmount`](#schema-moneyamount)[] | yes |
 | `offset_kwh` | [`Decimal`](#schema-decimal) |  |
@@ -3939,6 +3949,7 @@ string: tr \| en
 | field | type | required |
 |---|---|---|
 | `company` | [`CompanyRef`](#schema-companyref) | yes |
+| `demo` | [`DemoInfo`](#schema-demoinfo) |  |
 | `email` | string | yes |
 | `id` | `UuidUUID` | yes |
 | `locale` | [`Locale`](#schema-locale) | yes |

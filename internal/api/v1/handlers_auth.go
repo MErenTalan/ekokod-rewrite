@@ -77,17 +77,23 @@ func (h *Handlers) clientIP(r *http.Request) *netip.Addr {
 	return &ip
 }
 
-func meOf(p authsvc.Principal) dto.Me {
+// meOf builds the principal's view; a demo session also learns when the
+// hourly reset (EKOKOD_SCHEDULE_DEMO_RESET, top of the hour) lands (R552).
+func meOf(p authsvc.Principal, now time.Time) dto.Me {
 	perms := auth.PermissionsFor(p.User.Role)
 	out := make([]dto.Permission, len(perms))
 	for i, perm := range perms {
 		out[i] = dto.Permission(perm)
 	}
-	return dto.Me{
+	me := dto.Me{
 		ID: p.User.ID, Name: p.User.Name, Email: p.User.Email, Phone: p.User.Phone, Role: dto.Role(p.User.Role),
 		Locale: dto.Locale(p.User.Locale), UIPreferences: p.User.UIPreferences,
 		Company: dto.CompanyRef{ID: p.Company.ID, Name: p.Company.Name}, Permissions: out, SessionID: p.SessionID,
 	}
+	if p.Company.IsDemo {
+		me.Demo = &dto.DemoInfo{ResetsAt: dto.T(now.Truncate(time.Hour).Add(time.Hour))}
+	}
+	return me
 }
 
 func principal(r *http.Request) authsvc.Principal {
@@ -110,7 +116,7 @@ func (h *Handlers) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.setCookies(w, issued)
-	kit.WriteJSON(w, http.StatusOK, meOf(issued.Principal))
+	kit.WriteJSON(w, http.StatusOK, meOf(issued.Principal, h.Clock.Now()))
 }
 
 func (h *Handlers) setCookies(w http.ResponseWriter, issued authsvc.Issued) {
@@ -164,7 +170,7 @@ func (h *Handlers) me(w http.ResponseWriter, r *http.Request) {
 		kit.WriteError(w, r, err)
 		return
 	}
-	kit.WriteJSON(w, http.StatusOK, meOf(principal(r)))
+	kit.WriteJSON(w, http.StatusOK, meOf(principal(r), h.Clock.Now()))
 }
 
 func (h *Handlers) forgotPassword(w http.ResponseWriter, r *http.Request) {
@@ -258,13 +264,13 @@ func (h *Handlers) updateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p.User = user
-	kit.WriteJSON(w, http.StatusOK, meOf(p))
+	kit.WriteJSON(w, http.StatusOK, meOf(p, h.Clock.Now()))
 }
 
 func (h *Handlers) mobileTokens(issued authsvc.Issued) dto.MobileTokens {
 	return dto.MobileTokens{
 		AccessToken: issued.AccessToken, RefreshToken: issued.RefreshToken, TokenType: "Bearer",
-		ExpiresIn: int64(issued.AccessExpires.Sub(h.Clock.Now()) / time.Second), User: meOf(issued.Principal),
+		ExpiresIn: int64(issued.AccessExpires.Sub(h.Clock.Now()) / time.Second), User: meOf(issued.Principal, h.Clock.Now()),
 	}
 }
 

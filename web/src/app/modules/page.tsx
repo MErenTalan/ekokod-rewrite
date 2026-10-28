@@ -21,5 +21,5 @@ export default async function ModulesPage() {
   if (!session.me) redirect(authRedirectFor(session.code ?? 'session_revoked', CHOOSER_PATH) ?? LOGIN_PATH);
   const available = modulesFor(session.me);
   if (available.length === 1) redirect(MODULES[available[0]].home);
-  return <ModuleChooser name={session.me.name} modules={available} />;
+  return <ModuleChooser name={session.me.name} modules={available} demoResetsAt={session.me.demo?.resets_at} />;
 }

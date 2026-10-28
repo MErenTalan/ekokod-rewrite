@@ -69,6 +69,16 @@ export function formatDateTime(iso: string, locale: Locale): string {
   }).format(toDate(iso));
 }
 
+/** A clock time, `HH:mm` on a 24-hour clock in Europe/Istanbul for both locales. */
+export function formatTime(iso: string, locale: Locale): string {
+  return new Intl.DateTimeFormat(DATE_LOCALE[locale], {
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+    timeZone: 'Europe/Istanbul',
+  }).format(toDate(iso));
+}
+
 export function formatMonth(iso: string, locale: Locale): string {
   return new Intl.DateTimeFormat(DATE_LOCALE[locale], {
     month: 'long',

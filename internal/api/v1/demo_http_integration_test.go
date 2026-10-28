@@ -6,12 +6,14 @@ import (
 	"log/slog"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/crypto"
 	"github.com/MErenTalan/ekokod-rewrite/internal/seed"
 	"github.com/MErenTalan/ekokod-rewrite/internal/storage"
+	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/admin"
 )
 
 func (h *harness) seedDemo() {
@@ -119,4 +121,50 @@ func TestLoginRefusesVisitorUsersOfDemoCompany(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, got.status, string(got.body))
 	require.Contains(t, string(got.body), "invalid_credentials")
 	h.as(seed.E2ECompanyAdminEmail) // a normal company's admin still logs in
+}
+
+// TestMeCarriesDemoResetTime is R552: a demo session learns when the next
+// hourly reset lands; any other company gets demo null. The platform admin's
+// company list marks the demo company.
+func TestMeCarriesDemoResetTime(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	ctx := t.Context()
+	istanbul, err := time.LoadLocation("Europe/Istanbul")
+	require.NoError(t, err)
+	require.NoError(t, admin.NewTenantRepository(h.pool).SetDemo(ctx, h.fx.CompanyB, true))
+	hash, err := h.hasher.Hash(testPassword)
+	require.NoError(t, err)
+	_, err = h.pool.Exec(ctx, `insert into users (company_id, name, email, password_hash, role, is_active)
+		values ($1, 'Demo', 'demo-me@b.e2e.ekokod.test', $2, 'demo', true)`, h.fx.CompanyB, hash)
+	require.NoError(t, err)
+	h.clock.Set(time.Date(2026, 10, 28, 14, 20, 0, 0, istanbul))
+
+	var me struct {
+		Demo *struct {
+			ResetsAt time.Time `json:"resets_at"`
+		} `json:"demo"`
+	}
+	h.as("demo-me@b.e2e.ekokod.test").do(http.MethodGet, "/auth/me", nil).json(t, &me)
+	require.NotNil(t, me.Demo)
+	require.True(t, me.Demo.ResetsAt.Equal(time.Date(2026, 10, 28, 15, 0, 0, 0, istanbul)), me.Demo.ResetsAt.String())
+
+	var normal map[string]any
+	h.as(seed.E2ECompanyAdminEmail).do(http.MethodGet, "/auth/me", nil).json(t, &normal)
+	require.Contains(t, normal, "demo")
+	require.Nil(t, normal["demo"])
+
+	var companies struct {
+		Items []struct {
+			ID     string `json:"id"`
+			IsDemo bool   `json:"is_demo"`
+		} `json:"items"`
+	}
+	h.as(seed.E2EAdminEmail).do(http.MethodGet, "/companies?limit=100", nil).json(t, &companies)
+	marked := map[string]bool{}
+	for _, c := range companies.Items {
+		marked[c.ID] = c.IsDemo
+	}
+	require.True(t, marked[h.fx.CompanyB.String()])
+	require.False(t, marked[h.fx.CompanyA.String()])
 }
