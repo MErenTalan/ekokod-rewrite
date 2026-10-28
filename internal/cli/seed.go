@@ -236,8 +236,13 @@ func newSeedDemoCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			log := newCommandLogger(cfg, os.Stderr)
+			billing, err := seed.NewDemoBilling(pool, log)
+			if err != nil {
+				return err
+			}
 			deps := seed.DemoDeps{Pool: pool, Hasher: auth.Hasher{Pepper: cfg.Security.PasswordPepper, Cost: cfg.Security.BcryptCost},
-				Cipher: cipher, Log: newCommandLogger(cfg, os.Stderr)}
+				Cipher: cipher, Billing: billing, Log: log}
 			res, err := seed.Demo(ctx, deps, os.Getenv(demoPasswordEnv), time.Now())
 			if err != nil {
 				return fmt.Errorf("seed demo: %w", err)

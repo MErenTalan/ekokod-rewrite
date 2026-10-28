@@ -15,6 +15,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/isolar"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/crypto"
+	billingsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/billing"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/admin"
@@ -22,10 +23,11 @@ import (
 
 // DemoDeps is what the demo generator writes with.
 type DemoDeps struct {
-	Pool   *pgxpool.Pool
-	Hasher auth.Hasher
-	Cipher *crypto.Cipher // integration secrets and the SMTP password
-	Log    *slog.Logger
+	Pool    *pgxpool.Pool
+	Hasher  auth.Hasher
+	Cipher  *crypto.Cipher // integration secrets and the SMTP password
+	Billing *billingsvc.Service
+	Log     *slog.Logger
 }
 
 type demoBuilding struct {

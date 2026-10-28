@@ -538,7 +538,7 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 			Log:             log,
 			Ingestion:       ingestSvc,
 			AnalyzerRefresh: ingestSvc,
-			Demo: seed.DemoJob{Deps: seed.DemoDeps{Pool: pool, Cipher: cipher, Log: log,
+			Demo: seed.DemoJob{Deps: seed.DemoDeps{Pool: pool, Cipher: cipher, Billing: billingService, Log: log,
 				Hasher: auth.Hasher{Pepper: cfg.Security.PasswordPepper, Cost: cfg.Security.BcryptCost}}, Clock: clock.System()},
 			Backfill:           backfiller,
 			Prices:             syncer,

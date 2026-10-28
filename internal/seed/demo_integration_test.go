@@ -30,7 +30,10 @@ func TestSeedDemoIdempotentAndExtends(t *testing.T) {
 	cipher, err := crypto.NewCipher([]byte("0123456789abcdef0123456789abcdef"))
 	require.NoError(t, err)
 	deps := func(pool *pgxpool.Pool) seed.DemoDeps {
-		return seed.DemoDeps{Pool: pool, Hasher: hasher, Cipher: cipher, Log: slog.New(slog.DiscardHandler)}
+		log := slog.New(slog.DiscardHandler)
+		billing, err := seed.NewDemoBilling(pool, log)
+		require.NoError(t, err)
+		return seed.DemoDeps{Pool: pool, Hasher: hasher, Cipher: cipher, Billing: billing, Log: log}
 	}
 	pool := testfixtures.NewIsolatedDB(t)
 	n, err := seed.ExtendDemo(ctx, deps(pool), at)

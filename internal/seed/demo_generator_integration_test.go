@@ -28,7 +28,9 @@ func demoDeps(t *testing.T) DemoDeps {
 	require.NoError(t, err)
 	cipher, err := crypto.NewCipher([]byte("0123456789abcdef0123456789abcdef"))
 	require.NoError(t, err)
-	return DemoDeps{Pool: pool, Hasher: auth.Hasher{Cost: 4}, Cipher: cipher, Log: discardLog}
+	billing, err := NewDemoBilling(pool, discardLog)
+	require.NoError(t, err)
+	return DemoDeps{Pool: pool, Hasher: auth.Hasher{Cost: 4}, Cipher: cipher, Billing: billing, Log: discardLog}
 }
 
 func countRows(t *testing.T, pool *pgxpool.Pool, q string, args ...any) int {
@@ -138,4 +140,37 @@ func TestEnsureDemoPeopleConverges(t *testing.T) {
 	konya, err := postgres.NewPlantRepository(d.Pool).Get(ctx, sc, b.plants[1].id)
 	require.NoError(t, err)
 	require.NotNil(t, konya.IsolarCredentialID, "the Konya plant is linked to the seeded iSolar credential")
+}
+
+func TestDemoMoneyBills(t *testing.T) {
+	t.Parallel()
+	d, b, ctx := demoDeps(t), DemoBaseline(), t.Context()
+	require.NoError(t, ensureDemoSites(ctx, d, b, demoNow))
+	require.NoError(t, ensureDemoPeople(ctx, d, b, "Guvenli!Sifre-42", demoNow))
+	_, err := ensureDemoSeries(ctx, d, b, demoNow)
+	require.NoError(t, err)
+	require.NoError(t, ensureDemoMoney(ctx, d, b, demoNow))
+
+	live := `select count(*) from bills where company_id = $1 and scope = $2 and status <> 'superseded' and total_cost > 0
+		and period_key between '2025-10' and '2026-09'`
+	require.Equal(t, 3*12, countRows(t, d.Pool, live, DemoCompanyID, "building"))
+	require.Equal(t, 6*12, countRows(t, d.Pool, live, DemoCompanyID, "analyzer"))
+	require.Zero(t, countRows(t, d.Pool, `select count(*) from bills where company_id = $1 and total_cost <= 0`, DemoCompanyID))
+	reactive := `select count(*) from bill_lines l join bills b on b.id = l.bill_id
+		where b.analyzer_id = $1 and b.scope = 'analyzer' and l.code = 'reactive_inductive' and l.amount > 0`
+	require.Positive(t, countRows(t, d.Pool, reactive, b.analyzers[2].id), "the compressor pays a reactive penalty in summer")
+	sale := `select count(*) from bill_lines l join bills b on b.id = l.bill_id
+		where b.building_id = $1 and l.code = 'generation_sale'`
+	require.Positive(t, countRows(t, d.Pool, sale, b.buildings[2].id), "Gebze nets its rooftop export")
+	require.Equal(t, 3, countRows(t, d.Pool, `select count(*) from tariffs where company_id = $1 and deleted_at is null`, DemoCompanyID))
+	require.Equal(t, 1, countRows(t, d.Pool, `select count(*) from tariff_templates where company_id = $1`, DemoCompanyID))
+	require.Equal(t, 1, countRows(t, d.Pool, `select count(*) from tariff_bulk_assignments where company_id = $1`, DemoCompanyID))
+	require.Equal(t, 12, countRows(t, d.Pool, `select count(*) from icmal_rows r join icmal_imports i on i.id = r.import_id
+		where i.company_id = $1`, DemoCompanyID))
+	require.Equal(t, 2, countRows(t, d.Pool, `select count(*) from solar_tariffs where company_id = $1`, DemoCompanyID))
+
+	before := countRows(t, d.Pool, `select count(*) from bills where company_id = $1`, DemoCompanyID)
+	require.NoError(t, ensureDemoMoney(ctx, d, b, demoNow))
+	require.Equal(t, before, countRows(t, d.Pool, `select count(*) from bills where company_id = $1`, DemoCompanyID), "a rerun creates nothing")
+	require.Equal(t, 3, countRows(t, d.Pool, `select count(*) from tariffs where company_id = $1`, DemoCompanyID))
 }

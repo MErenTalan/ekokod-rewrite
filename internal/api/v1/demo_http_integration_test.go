@@ -17,7 +17,10 @@ func (h *harness) seedDemo() {
 	h.t.Helper()
 	cipher, err := crypto.NewCipher([]byte("0123456789abcdef0123456789abcdef"))
 	require.NoError(h.t, err)
-	_, err = seed.Demo(h.t.Context(), seed.DemoDeps{Pool: h.pool, Hasher: h.hasher, Cipher: cipher, Log: slog.New(slog.DiscardHandler)},
+	log := slog.New(slog.DiscardHandler)
+	billing, err := seed.NewDemoBilling(h.pool, log)
+	require.NoError(h.t, err)
+	_, err = seed.Demo(h.t.Context(), seed.DemoDeps{Pool: h.pool, Hasher: h.hasher, Cipher: cipher, Billing: billing, Log: log},
 		testPassword, h.clock.Now())
 	require.NoError(h.t, err)
 }
@@ -38,7 +41,7 @@ func TestDemoSeesOnlySyntheticData(t *testing.T) {
 		"/energy-balance?analyzer_id=" + analyzer + "&granularity=monthly&from=2026-06-01&to=2026-08-31",
 		"/load-profile?analyzer_id=" + analyzer + "&from=2026-08-01&to=2026-08-31",
 		"/load-profile/statistics?analyzer_id=" + analyzer + "&from=2026-08-01&to=2026-08-31",
-		"/tariffs", "/bills", "/calendar/events?from=2026-09-01&to=2026-09-30", "/calendar/vacations",
+		"/tariffs", "/tariffs/applicable?building_id=" + building + "&date=2026-09-01", "/bills", "/calendar/events?from=2026-09-01&to=2026-09-30", "/calendar/vacations",
 		"/users",
 	}
 	forbidden := []string{h.fx.CompanyA.String(), h.fx.CompanyB.String(), h.fx.PlatformCompany.String(), h.fx.BuildingA1.String(),

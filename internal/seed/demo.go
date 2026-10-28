@@ -47,6 +47,9 @@ type DemoResult struct {
 // readings and production up to the current hour.
 func Demo(ctx context.Context, d DemoDeps, password string, now time.Time) (DemoResult, error) {
 	var res DemoResult
+	if d.Billing == nil {
+		return res, errors.New("seed demo: DemoDeps.Billing is required")
+	}
 	switch _, err := postgres.NewCompanyRepository(d.Pool).Get(ctx, store.SystemScope(DemoCompanyID), DemoCompanyID); {
 	case errors.Is(err, store.ErrNotFound):
 		if password == "" {
@@ -72,7 +75,10 @@ func Demo(ctx context.Context, d DemoDeps, password string, now time.Time) (Demo
 	}
 	n, err := ensureDemoSeries(ctx, d, b, now)
 	res.Readings = n
-	return res, err
+	if err != nil {
+		return res, err
+	}
+	return res, ensureDemoMoney(ctx, d, b, now)
 }
 
 // ExtendDemo appends hourly readings and production up to now when the demo

@@ -26,7 +26,10 @@ func ensureDemoSeries(ctx context.Context, d DemoDeps, b demoBaseline, now time.
 	aggregates := admin.NewAggregateRepository(d.Pool)
 	if written > 0 {
 		for _, view := range []store.AggregateView{store.ViewConsumptionHourly, store.ViewConsumptionDaily} {
-			if err := aggregates.Refresh(ctx, view, store.TimeRange{From: from.Add(-48 * time.Hour), To: end.Add(time.Hour)}); err != nil {
+			err := refreshDays(from.Add(-48*time.Hour), end.Add(time.Hour), func(w store.TimeRange) error {
+				return aggregates.Refresh(ctx, view, w)
+			})
+			if err != nil {
 				return written, fmt.Errorf("seed demo refresh %s: %w", view, err)
 			}
 		}
@@ -35,15 +38,33 @@ func ensureDemoSeries(ctx context.Context, d DemoDeps, b demoBaseline, now time.
 	if err != nil || plantFrom == nil {
 		return written, err
 	}
-	// The monthly plant view refuses a window smaller than one bucket, so the
-	// window is whole months, padded by a day (as recompute does).
-	first, last := istanbulDay(*plantFrom), istanbulDay(end)
-	winFrom := time.Date(first.Year(), first.Month(), 0, 0, 0, 0, 0, istanbul)
-	winTo := time.Date(last.Year(), last.Month()+1, 2, 0, 0, 0, 0, istanbul)
-	if err := aggregates.RefreshPlantProduction(ctx, store.TimeRange{From: winFrom, To: winTo}); err != nil {
-		return written, fmt.Errorf("seed demo refresh plant views: %w", err)
+	// The monthly plant view refuses a window smaller than one bucket, so each
+	// window is one whole month, padded by a day (as recompute does).
+	last := istanbulDay(end)
+	for m := istanbulDay(*plantFrom).AddDate(0, 0, 1-istanbulDay(*plantFrom).Day()); !m.After(last); m = m.AddDate(0, 1, 0) {
+		if err := aggregates.RefreshPlantProduction(ctx, store.TimeRange{From: m.AddDate(0, 0, -1), To: m.AddDate(0, 1, 1)}); err != nil {
+			return written, fmt.Errorf("seed demo refresh plant views: %w", err)
+		}
 	}
 	return written, nil
+}
+
+// refreshDays calls fn over [from, to) in windows of at most 31 days that
+// start on Istanbul midnights, so no daily bucket straddles two windows and no
+// single refresh outlives the statement timeout. A tail under two days joins
+// the window before it.
+func refreshDays(from, to time.Time, fn func(store.TimeRange) error) error {
+	for start := istanbulDay(from); start.Before(to); {
+		stop := start.AddDate(0, 0, 31)
+		if to.Sub(stop) < 48*time.Hour {
+			stop = to
+		}
+		if err := fn(store.TimeRange{From: start, To: stop}); err != nil {
+			return err
+		}
+		start = stop
+	}
+	return nil
 }
 
 func ensureDemoReadings(ctx context.Context, d DemoDeps, b demoBaseline, end, now time.Time) (int, time.Time, error) {
@@ -56,8 +77,10 @@ func ensureDemoReadings(ctx context.Context, d DemoDeps, b demoBaseline, end, no
 			return total, earliest, fmt.Errorf("seed demo readings %s: %w", a.number, err)
 		}
 		start := end.Add(-demoHistory)
-		m := demoMeter{active: decimal.NewFromInt(250000 + int64(i)*37000), inductive: decimal.NewFromInt(30000),
-			capacitive: decimal.NewFromInt(4000)}
+		active := decimal.NewFromInt(250000 + int64(i)*37000)
+		t1, t2 := active.Mul(decimal.RequireFromString("0.55")), active.Mul(decimal.RequireFromString("0.2"))
+		m := demoMeter{active: active, inductive: decimal.NewFromInt(30000), capacitive: decimal.NewFromInt(4000),
+			bands: [3]decimal.Decimal{t1, t2, active.Sub(t1).Sub(t2)}}
 		if a.solarPlant >= 0 {
 			m.export = ptr(decimal.NewFromInt(12000))
 		}
@@ -67,9 +90,11 @@ func ensureDemoReadings(ctx context.Context, d DemoDeps, b demoBaseline, end, no
 			if err != nil {
 				return total, earliest, err
 			}
-			if len(last) == 1 && last[0].ActiveImport != nil && last[0].ReactiveInductiveImport != nil && last[0].ReactiveCapacitiveImport != nil {
-				m = demoMeter{active: *last[0].ActiveImport, inductive: *last[0].ReactiveInductiveImport,
-					capacitive: *last[0].ReactiveCapacitiveImport, export: last[0].ActiveExport}
+			if r := last; len(r) == 1 && r[0].ActiveImport != nil && r[0].ReactiveInductiveImport != nil && r[0].ReactiveCapacitiveImport != nil &&
+				r[0].T1Import != nil && r[0].T2Import != nil && r[0].T3Import != nil {
+				m = demoMeter{active: *r[0].ActiveImport, inductive: *r[0].ReactiveInductiveImport,
+					capacitive: *r[0].ReactiveCapacitiveImport, export: r[0].ActiveExport,
+					bands: [3]decimal.Decimal{*r[0].T1Import, *r[0].T2Import, *r[0].T3Import}}
 				m.advance(b, i, *row.LastReadingAt)
 				start = row.LastReadingAt.Add(time.Hour)
 			}
@@ -146,17 +171,21 @@ func istanbulDay(t time.Time) time.Time {
 }
 
 // demoMeter holds one analyzer's cumulative registers; export is nil for a
-// meter without generation behind it.
+// meter without generation behind it. bands are T1 (06–17), T2 (17–22) and
+// T3 (22–06) import, which a multi-time tariff bills from.
 type demoMeter struct {
 	active, inductive, capacitive decimal.Decimal
+	bands                         [3]decimal.Decimal
 	export                        *decimal.Decimal
 }
 
 func (m demoMeter) reading(a demoAnalyzer, ts, now time.Time) model.MeterReading {
 	active, inductive, capacitive := m.active, m.inductive, m.capacitive
+	t1, t2, t3 := m.bands[0], m.bands[1], m.bands[2]
 	r := model.MeterReading{AnalyzerID: a.id, Ts: ts, Kind: model.ReadingKindLoadProfile, ActiveImport: &active,
-		ReactiveInductiveImport: &inductive, ReactiveCapacitiveImport: &capacitive, MultiplierApplied: decimal.NewFromInt(1),
-		SourceProvider: model.IntegrationProviderOSOS, IngestedAt: now}
+		ReactiveInductiveImport: &inductive, ReactiveCapacitiveImport: &capacitive, T1Import: &t1, T2Import: &t2, T3Import: &t3,
+		MultiplierApplied: decimal.NewFromInt(1),
+		SourceProvider:    model.IntegrationProviderOSOS, IngestedAt: now}
 	if m.export != nil {
 		export := *m.export
 		r.ActiveExport = &export
@@ -185,6 +214,13 @@ func (m *demoMeter) advance(b demoBaseline, i int, ts time.Time) {
 	}
 	inductive := float64(shares[0]) + float64(shares[1]-shares[0])*unit(mulberry32(seed+1))
 	m.active = m.active.Add(step)
+	band := 2
+	if h := ts.In(istanbul).Hour(); h >= 6 && h < 17 {
+		band = 0
+	} else if h >= 17 && h < 22 {
+		band = 1
+	}
+	m.bands[band] = m.bands[band].Add(step)
 	m.inductive = m.inductive.Add(step.Mul(decimal.NewFromFloat(inductive / 1000)).Round(3))
 	m.capacitive = m.capacitive.Add(step.Mul(decimal.NewFromFloat(0.01 + 0.03*unit(mulberry32(seed+2)))).Round(3))
 }
