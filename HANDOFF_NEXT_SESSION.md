@@ -46,7 +46,7 @@
 ### Gates (2026-10-29)
 Every touched Go package with `-tags=integration` (sequential chunks), `internal/arch`, `make lint` 0 issues,
 `check-generate`, `check-api-docs`, web lint + typecheck, vitest 308 files / 1306 tests, `next build`,
-e2e 22 specs in two foreground chunks (see the session's final message for the one time-of-day failure),
+e2e 186/186 in foreground chunks (predict.spec:28 passes only outside 00:00–01:00, see deferred minors),
 plus a throwaway Playwright sweep of every EKORM/EKOCM page as the demo user before and after a reset.
 
 ---
