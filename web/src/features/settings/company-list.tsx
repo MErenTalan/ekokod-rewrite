@@ -52,7 +52,17 @@ export function CompanyListView({
 
   const columns = useMemo<ColumnDef<Company, unknown>[]>(
     () => [
-      { accessorKey: 'name', header: t('name'), enableHiding: false },
+      {
+        accessorKey: 'name',
+        header: t('name'),
+        enableHiding: false,
+        cell: ({ row }) => (
+          <span className="flex flex-wrap items-center gap-2">
+            {row.original.name}
+            {row.original.is_demo ? <StatusBadge status="warning" label={t('demoChip')} /> : null}
+          </span>
+        ),
+      },
       { id: 'sector', header: t('sector'), accessorFn: (row) => row.sector ?? '—' },
       {
         id: 'active',

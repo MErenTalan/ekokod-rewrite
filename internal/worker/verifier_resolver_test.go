@@ -1,9 +1,12 @@
 package worker
 
 import (
+	"context"
 	"errors"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration"
@@ -26,14 +29,14 @@ func TestVerifierResolverRoutesProviders(t *testing.T) {
 	registry, err := integration.NewRegistry(ososAdapter)
 	require.NoError(t, err)
 
-	isolarClient := isolar.New(pool, isolar.Options{})
+	isolarClient := isolar.GuardDemo(isolar.New(pool, isolar.Options{}), func(context.Context, uuid.UUID) (bool, error) { return false, nil }, time.Now)
 
 	resolver := verifierResolver{registry: registry, isolar: isolarClient}
 
 	t.Run("isolar routes to the isolar client, not the registry", func(t *testing.T) {
 		v, err := resolver.Verifier(integration.ProviderISolar)
 		require.NoError(t, err)
-		require.Same(t, isolarClient, v, "ProviderISolar must resolve to the *isolar.Client, not registry.Source")
+		require.Same(t, isolarClient, v, "ProviderISolar must resolve to the guarded iSolar client, not registry.Source")
 	})
 
 	t.Run("a registered meter provider routes to the registry's adapter", func(t *testing.T) {

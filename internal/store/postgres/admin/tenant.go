@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
@@ -57,9 +58,21 @@ func (r *TenantRepository) ListCompanies(ctx context.Context, f store.CompanyFil
 		out = append(out, model.Company{
 			ID: row.ID, Name: row.Name, Address: row.Address, TotalAreaM2: area,
 			PersonnelCount: row.PersonnelCount, ContactName: row.ContactName, ContactPhone: row.ContactPhone,
-			Sector: row.Sector, CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time,
+			Sector: row.Sector, IsDemo: row.IsDemo, CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time,
 			DeletedAt: adminTSPtr(row.DeletedAt),
 		})
 	}
 	return out, nil
+}
+
+// SetDemo tags or untags a live company as the demo company (R540).
+func (r *TenantRepository) SetDemo(ctx context.Context, companyID uuid.UUID, on bool) error {
+	n, err := r.q.AdminCompanySetDemo(ctx, sqlcgen.AdminCompanySetDemoParams{ID: companyID, IsDemo: on})
+	if err != nil {
+		return pgerr.Translate(r.pool, "admin set demo", err)
+	}
+	if n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
 }

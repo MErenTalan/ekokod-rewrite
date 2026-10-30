@@ -7,8 +7,8 @@ import { renderWithProviders } from '@/test/render';
 import { CompanyListView } from './company-list';
 
 const companies: Company[] = [
-  { id: 'c-own', name: 'Ekokod Platform', sector: 'Hizmet', created_at: '', updated_at: '' },
-  { id: 'c-a', name: 'Anadolu Tekstil', sector: 'Üretim', created_at: '', updated_at: '' },
+  { id: 'c-own', name: 'Ekokod Platform', sector: 'Hizmet', is_demo: false, created_at: '', updated_at: '' },
+  { id: 'c-a', name: 'Anadolu Tekstil', sector: 'Üretim', is_demo: false, created_at: '', updated_at: '' },
 ];
 
 const view = (overrides: Partial<React.ComponentProps<typeof CompanyListView>> = {}) => (
@@ -25,6 +25,12 @@ const view = (overrides: Partial<React.ComponentProps<typeof CompanyListView>> =
 );
 
 describe('CompanyListView', () => {
+  it('marks the demo company', () => {
+    const r = renderWithProviders(view({ companies: [...companies, { id: 'c-demo', name: 'Örnek Enerji A.Ş.', is_demo: true, created_at: '', updated_at: '' }] }));
+    expect(r.getByRole('row', { name: /Örnek Enerji/ })).toHaveTextContent('Demo');
+    expect(r.getByRole('row', { name: /Anadolu Tekstil/ })).not.toHaveTextContent('Demo');
+  });
+
   it('cannot delete the admin own company', () => {
     const r = renderWithProviders(view());
     const own = r.getByRole('row', { name: /Ekokod Platform/ });

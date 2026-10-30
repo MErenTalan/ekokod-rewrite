@@ -126,3 +126,30 @@ func TestCleanName(t *testing.T) {
 	require.Equal(t, "dosya", storage.CleanName("  "))
 	require.Len(t, []rune(storage.CleanName(strings.Repeat("ğ", 300)+".pdf")), 200)
 }
+
+// R547: a demo reset drops one company's files in every area, nobody else's.
+func TestRemoveCompanyClearsEveryArea(t *testing.T) {
+	s := store(t, 1<<20)
+	demo, other := uuid.New(), uuid.New()
+	ctx := context.Background()
+	mine, err := s.Save(ctx, demo, "iso50001", "a.pdf", bytes.NewReader(pdf))
+	require.NoError(t, err)
+	theirs, err := s.Save(ctx, other, "iso50001", "b.pdf", bytes.NewReader(pdf))
+	require.NoError(t, err)
+	bill := filepath.Join(s.Root, "bills", demo.String(), "x.pdf")
+	require.NoError(t, os.MkdirAll(filepath.Dir(bill), 0o700))
+	require.NoError(t, os.WriteFile(bill, pdf, 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(s.Root, "stray.txt"), pdf, 0o600))
+
+	require.NoError(t, s.RemoveCompany(demo))
+
+	_, err = s.Open(demo, "iso50001", mine.Path)
+	require.Error(t, err)
+	_, err = os.Stat(bill)
+	require.ErrorIs(t, err, os.ErrNotExist)
+	f, err := s.Open(other, "iso50001", theirs.Path)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+	require.Error(t, s.RemoveCompany(uuid.Nil))
+	require.NoError(t, storage.Store{Root: filepath.Join(s.Root, "missing")}.RemoveCompany(demo), "no root yet, nothing to remove")
+}

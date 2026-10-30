@@ -22,6 +22,12 @@ describe('FactorTable', () => {
     expect(r.getByText('Platform: 0,469')).toBeVisible();
   });
 
+  // The platform's renewable-panel equivalence rows share this table (F29 smoke).
+  it('names the equivalence category', () => {
+    const { r } = render({ rows: [factor({ id: 'f-eq', key: 'equiv_tree_co2_kg_per_year', main_category: 'equivalence' })] });
+    expect(r.getByText('Eşdeğerlik')).toBeVisible();
+  });
+
   it('opens the override for a row and asks to reset', async () => {
     const { r, props } = render();
     await r.user.click(r.getByRole('button', { name: 'Şebeke elektriği faktörünü değiştir' }));

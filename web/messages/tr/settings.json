@@ -29,7 +29,7 @@
     "logoutAll": "Tüm oturumları kapat",
     "thisDevice": "Bu cihaz",
     "unknownDevice": "Bilinmeyen cihaz",
-    "demoReadOnly": "Demo hesabı paylaşımlıdır; profil ve şifre değiştirilemez.",
+    "demoReadOnly": "Demo hesabı paylaşımlıdır; profil, şifre ve oturumlar değiştirilemez.",
     "saved": "Bilgileriniz kaydedildi",
     "passwordChanged": "Şifreniz değiştirildi",
     "sessionRevoked": "Oturum kapatıldı"
@@ -152,7 +152,8 @@
     "deleted": "Şirket silindi",
     "empty": "Şirket yok",
     "emptyHint": "Yeni bir müşteri şirketi ekleyin.",
-    "scopeColumn": "Etkin şirket"
+    "scopeColumn": "Etkin şirket",
+    "demoChip": "Demo"
   },
   "buildings": {
     "title": "Binalar",

@@ -2675,6 +2675,9 @@
           "id": {
             "$ref": "#/components/schemas/UuidUUID"
           },
+          "is_demo": {
+            "type": "boolean"
+          },
           "name": {
             "type": "string"
           },
@@ -2701,6 +2704,7 @@
         "required": [
           "id",
           "name",
+          "is_demo",
           "created_at",
           "updated_at"
         ],
@@ -2783,6 +2787,9 @@
           "id": {
             "$ref": "#/components/schemas/UuidUUID"
           },
+          "is_demo": {
+            "type": "boolean"
+          },
           "name": {
             "type": "string"
           },
@@ -2809,6 +2816,7 @@
         "required": [
           "id",
           "name",
+          "is_demo",
           "created_at",
           "updated_at",
           "analyzer_counts"
@@ -3102,6 +3110,18 @@
         ],
         "pattern": "^-?[0-9]+(\\.[0-9]+)?$",
         "type": "string"
+      },
+      "DemoInfo": {
+        "properties": {
+          "resets_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "resets_at"
+        ],
+        "type": "object"
       },
       "EmissionFactorConversion": {
         "properties": {
@@ -5532,6 +5552,9 @@
         "properties": {
           "company": {
             "$ref": "#/components/schemas/CompanyRef"
+          },
+          "demo": {
+            "$ref": "#/components/schemas/DemoInfo"
           },
           "email": {
             "type": "string"

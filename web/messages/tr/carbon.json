@@ -26,7 +26,8 @@
     "electricity": "Elektrik",
     "externalEnergy": "Harici Enerji Kaynakları",
     "products": "Ürün ve Hizmetler",
-    "waste": "Atık"
+    "waste": "Atık",
+    "equivalence": "Eşdeğerlik"
   },
   "subs": {
     "spaceHeating": "Ortam Isıtması",

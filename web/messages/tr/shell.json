@@ -109,5 +109,12 @@
       "description": "Hoş geldiniz, {name}. Çalışmak istediğiniz modülü seçin; aynı oturumla modüller arasında istediğiniz zaman geçebilirsiniz.",
       "open": "{name} modülünü aç"
     }
+  },
+  "demo": {
+    "banner": {
+      "title": "Demo hesabı",
+      "body": "Bu hesaptaki veriler örnektir. Yaptığınız değişiklikler kalıcı değildir; hesap her saat başı ilk haline döner.",
+      "next": "Sonraki sıfırlama: {time}"
+    }
   }
 }

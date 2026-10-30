@@ -37,7 +37,9 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/MErenTalan/ekokod-rewrite/internal/auth"
 	"github.com/MErenTalan/ekokod-rewrite/internal/credentials"
+	"github.com/MErenTalan/ekokod-rewrite/internal/demo"
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/ingest"
 	"github.com/MErenTalan/ekokod-rewrite/internal/ingest/backfill"
@@ -67,6 +69,7 @@ import (
 	forecastsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/forecast"
 	reportsvc "github.com/MErenTalan/ekokod-rewrite/internal/service/report"
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/solar"
+	"github.com/MErenTalan/ekokod-rewrite/internal/storage"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/admin"
 	platformredis "github.com/MErenTalan/ekokod-rewrite/internal/store/redis"
@@ -162,7 +165,7 @@ type graph struct {
 // directly; *isolar.Client.Verify has the same Verifier shape too.
 type verifierResolver struct {
 	registry *integration.Registry
-	isolar   *isolar.Client
+	isolar   *isolar.Guarded
 }
 
 func (v verifierResolver) Verifier(p integration.Provider) (credentials.Verifier, error) {
@@ -325,18 +328,20 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 	integrationRepo := postgres.NewIntegrationRepository(pool, cipher)
 	adminIngestionRepo := admin.NewIngestionRepository(pool)
 
+	// R544/R545: one cached demo check guards every outbound path.
+	demoCheck := demo.NewChecker(demo.FromCompanies(postgres.NewCompanyRepository(pool)), time.Minute, time.Now).IsDemo
 	registry, err := integration.NewRegistry(
-		osos.New(httpxPool, osos.Options{}),
-		gridbox.New(httpxPool, gridbox.Options{}),
-		aril.New(httpxPool, aril.Options{}),
-		pm5340.New(httpxPool, pm5340.Options{}),
+		integration.GuardDemo(osos.New(httpxPool, osos.Options{}), demoCheck),
+		integration.GuardDemo(gridbox.New(httpxPool, gridbox.Options{}), demoCheck),
+		integration.GuardDemo(aril.New(httpxPool, aril.Options{}), demoCheck),
+		integration.GuardDemo(pm5340.New(httpxPool, pm5340.Options{}), demoCheck),
 	)
 	if err != nil {
 		closeAll()
 		return graph{}, fmt.Errorf("worker: build meter-adapter registry: %w", err)
 	}
 
-	isolarClient := isolar.New(httpxPool, isolar.Options{})
+	isolarClient := isolar.GuardDemo(isolar.New(httpxPool, isolar.Options{}), demoCheck, time.Now)
 	verifiers := verifierResolver{registry: registry, isolar: isolarClient}
 
 	// StateKey is derived from cfg.Security.JWTSigningKey, never from
@@ -487,7 +492,7 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		WithEvaluate(alarms.EvaluateDeps{Readings: readingRepo, Bills: billRepo}).
 		WithRun(alarms.RunDeps{Ops: opsRepo, Enqueue: alarms.EnqueueNotify(jobClient, cfg.Worker.MaxRetries)}).
 		WithNotify(alarms.NotifyDeps{SMTP: postgres.NewSMTPRepository(pool, cipher),
-			Mail: mail.NewSMTPSender(mailDialTimeout, nil), Ops: opsRepo}).
+			Mail: mail.GuardDemo(mail.NewSMTPSender(mailDialTimeout, nil), demoCheck), Ops: opsRepo}).
 		WithDispatch(alarms.DispatchDeps{
 			Companies: admin.NewAlarmRepository(pool), Journal: admin.NewJournalRepository(pool),
 			Enqueue: alarms.EnqueueEvaluate(jobClient, cfg.Worker.MaxRetries),
@@ -520,9 +525,13 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		Plants: postgres.NewPlantRepository(pool), Production: postgres.NewProductionRepository(pool),
 		Totals: postgres.NewProductionTotalsRepository(pool), Faults: postgres.NewFaultRepository(pool), Ops: opsRepo,
 		AdminSolar: admin.NewSolarRepository(pool), SMTP: postgres.NewSMTPRepository(pool, cipher),
-		Mail: mail.NewSMTPSender(mailDialTimeout, nil), Creds: credService, ISolar: isolarClient,
+		Mail: mail.GuardDemo(mail.NewSMTPSender(mailDialTimeout, nil), demoCheck), Creds: credService, ISolar: isolarClient,
 		Clock: clock.System(), Enqueuer: jobClient, Inspector: inspector, MaxRetry: cfg.Worker.MaxRetries,
 	})
+	demoJob := seed.DemoJob{Deps: seed.DemoDeps{Pool: pool, Cipher: cipher, Billing: billingService, Log: log,
+		Hasher:  auth.Hasher{Pepper: cfg.Security.PasswordPepper, Cost: cfg.Security.BcryptCost},
+		Storage: storage.Store{Root: cfg.Storage.Root, Max: cfg.Storage.UploadMax, Allowed: cfg.Storage.AllowedTypes}},
+		Lock: redisLock, Clock: clock.System()}
 
 	return graph{
 		cipher:          cipher,
@@ -534,7 +543,8 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 			Log:                log,
 			Ingestion:          ingestSvc,
 			AnalyzerRefresh:    ingestSvc,
-			Demo:               seed.DemoJob{Pool: pool, Clock: clock.System()},
+			Demo:               demoJob,
+			DemoReset:          demoJob,
 			Backfill:           backfiller,
 			Prices:             syncer,
 			ConsumptionRefresh: consumptionRefresher,
@@ -552,7 +562,7 @@ func build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 			ReportGenerate: reportsvc.Generator{Service: reportService, Reports: reportRepo, Companies: companyRepo,
 				Ops: opsRepo, Files: reportFiles, Clock: clock.System()},
 			ReportDeliver: reportsvc.Deliverer{Reports: reportRepo, Files: reportFiles, SMTP: postgres.NewSMTPRepository(pool, cipher),
-				Mail: mail.NewSMTPSender(mailDialTimeout, nil), Ops: opsRepo, Clock: clock.System()},
+				Mail: mail.GuardDemo(mail.NewSMTPSender(mailDialTimeout, nil), demoCheck), Ops: opsRepo, Clock: clock.System()},
 			Solar: solarService,
 			Carbon: carbonsvc.New(carbonsvc.Deps{Carbon: postgres.NewCarbonRepository(pool), Buildings: buildingRepo,
 				Analyzers: analyzerRepo, Analytics: postgres.NewAnalyticsRepository(pool), Ops: opsRepo,

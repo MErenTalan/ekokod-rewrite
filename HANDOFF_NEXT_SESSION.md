@@ -1,4 +1,57 @@
-# Handoff — ekokod rewrite: F26 (prosumer netting, R531 + R532), merged and deployed
+# Handoff — ekokod rewrite: F29 (demo account), done on its branch, not merged
+
+> **STATUS (2026-10-29):** branch `feat/f29-demo-account` (worktree `/home/personal/ekokod-f29-demo`, from
+> `main` @8415257). Spec `docs/superpowers/specs/2026-10-28-demo-account-design.md`, plan + rulings R540–R553
+> `docs/superpowers/plans/2026-10-28-f29-demo-account.md`; the rulings made while executing are in that
+> plan's "Execution record" section.
+> Migration **00027** (`companies.is_demo`). **Not merged, not pushed, not deployed** — the owner's call.
+> The final review was a **self-review** (no subagent tool, by the owner's working rule).
+
+### What F29 does
+- One shared login `demo@ekokod.com.tr` for videos and prospects; role `demo` = company admin's permissions
+  (R541), but its profile, password and sessions are locked (R542); users a visitor creates cannot log in (R543).
+- Containment: `mail.GuardDemo` drops every mail of a demo company (R544); every meter adapter and the
+  iSolar client answer from the seed for a demo company (R545) — api and worker wiring.
+- Synthetic company "Demo Enerji A.Ş.": 3 buildings, 6 analyzers, 2 plants, 400 days of hourly readings,
+  12 months of engine-computed bills (analyzer, building and company scope; none flagged), tariffs, icmal,
+  alarms + events, job history, anomalies, forecasts, reports, ISO 50001 project with PDFs, EKOCM
+  selections/records/GHG reports per building.
+- Hourly reset at HH:00 Istanbul (`demo.reset`, `EKOKOD_SCHEDULE_DEMO_RESET`, default `0 * * * *`): purge
+  of everything not baseline in one transaction, bounded aggregate refresh, files removed, baseline
+  regenerated (~20 s). Banner on every page with the next reset time (`/auth/me` → `demo.resets_at`).
+- CLI: `ekokod seed demo` (create/extend; password via `EKOKOD_DEMO_PASSWORD`), `ekokod seed demo --reset`
+  (reset now, e.g. before a video).
+- Pre-existing bugs the demo smoke exposed and F29 fixed for everyone: the dashboard's year-over-year bars
+  paired last year by position (now by month); `carbon.mains.equivalence` was missing (emission-factors page).
+
+### Owner to do (in this order)
+1. Merge `feat/f29-demo-account` into `main`, run `bash /home/personal/deploy-main.sh` (migration 26 → 27).
+2. `bash /home/personal/deploy-demo.sh` — seeds the demo in a one-off worker container, writes the login to
+   `/root/ekokod-new-demo.txt` (600). Later runs keep the password; `--rotate` makes a new one.
+3. Read the login: `ssh.exe root@ekokod.com cat /root/ekokod-new-demo.txt`.
+4. Prospects reach the panel only after the IP allowlist is lifted (owner: after the security tests).
+- Reset before a video: on the server `cd /opt/ekokod-new && docker compose -p ekokod run --rm --no-deps -T worker seed demo --reset`.
+
+### Deferred minors (owner decides)
+- Bills page opens without a month; the dashboard's first visit asks for a building (both by design today).
+- Solar plants page: "Hava durumu hizmeti yapılandırılmamış" unless the server configures weather.
+- Financial Analysis on the demo's Gebze months shows "gelir eksik": R533 counts billed export as unpriced
+  production, on top of the netted plant's own production (small double count) — an F27 model question.
+- AI Analysis anomaly tab defaults to today + the previous hour, i.e. "the future" between 00:00 and 01:00
+  (predict.spec:28 fails only in that hour).
+- E-mail enumeration (spec "Known and deferred"): a visitor creating a user with an address a real account
+  already uses gets "e-posta başka bir kullanıcıya ait" — as any company admin does today. Worth closing in
+  the owner's security pass, before the allowlist comes down.
+
+### Gates (2026-10-29)
+Every touched Go package with `-tags=integration` (sequential chunks), `internal/arch`, `make lint` 0 issues,
+`check-generate`, `check-api-docs`, web lint + typecheck, vitest 308 files / 1306 tests, `next build`,
+e2e 186/186 in foreground chunks (predict.spec:28 passes only outside 00:00–01:00, see deferred minors),
+plus a throwaway Playwright sweep of every EKORM/EKOCM page as the demo user before and after a reset.
+
+---
+
+## Previous: F26 (prosumer netting, R531 + R532), merged and deployed
 
 > **STATUS (2026-10-15):** rulings in `docs/superpowers/plans/2026-10-15-f26-hourly-netting.md`. R531 (hourly netting,
 > distribution on the whole import, informational sale line) was deployed as b383988; R532 (branch
@@ -76,23 +129,23 @@
 ## Paste this as the first message of the next session (only when there is new input)
 
 > Bu, bcem-energy'nin (yeni adıyla ekokod) Go ile yeniden yazım projesi. Spesifikasyon `docs/rewrite/`
-> içinde. F0–F21 `main`'de (`/home/personal/ekokod-f17-ekocm` worktree'si `main`'i tutuyor). **F21 (gerçek
-> veriyle özellik denetimi ve düzeltmeler) merge edildi ve new.ekokod.com'a deploy edildi (`de2dfeb`).**
+> içinde. F0–F27 `main`'de (`/home/personal/ekokod-f17-ekocm` worktree'si `main`'i tutuyor, @8415257).
+> **F29 (demo hesabı) `feat/f29-demo-account` dalında bitti** (`/home/personal/ekokod-f29-demo`), henüz
+> merge/deploy edilmedi.
 >
-> Önce `/home/personal/ekokod-f17-ekocm/HANDOFF_NEXT_SESSION.md` ve
-> `docs/superpowers/plans/2026-10-02-f21-audit-fixes.md`'yi oku. Sonra şu yeni girdiyle çalış:
-> **<buraya ne getirdiğini yaz — örn. "sunucuda geçmiş veriyi çektim, şunu gördüm: …">**.
+> Önce `/home/personal/ekokod-f29-demo/HANDOFF_NEXT_SESSION.md` ve
+> `docs/superpowers/plans/2026-10-28-f29-demo-account.md`'yi oku. Sonra şu yeni girdiyle çalış:
+> **<buraya ne getirdiğini yaz — örn. "F29'u merge edip deploy ettim, demo hesabında şunu gördüm: …">**.
 >
 > **Çalışma düzeni (kesin):** paralel agent YOK, subagent YOK, Workflow YOK. İşi bu oturumda kendin
-> yürüt (`superpowers:executing-plans` + TDD). Her task sonunda diff'i oku, guard'ı kendi mutasyonunla
-> kırmızıya düşür. Push, merge, `main`, Docker restart ve başka projelerin container/port/süreçleri YOK.
+> yürüt (`superpowers:executing-plans` + TDD). Push, merge, `main`, Docker restart ve başka projelerin
+> container/port/süreçleri YOK. new.ekokod.com'da yazma/deploy işlerini ben betikle çalıştırırım.
 >
 > **Ortam:** her komutun başına `export PATH="/home/personal/.local/go/bin:/home/personal/.local/node/bin:/home/personal/go/bin:$PATH" GOFLAGS=-p=2 GOMEMLIMIT=2GiB`.
-> Docker: `sg docker -c /yol/betik.sh` (betik dosyası yaz). **Asla `make test` / `go test ./...`.**
-> Integration: `EKOKOD_TEST_PG_DSN='postgres://ekokod:ekokod@localhost:55432/postgres?sslmode=disable' EKOKOD_TEST_REDIS_URL=redis://localhost:56379/0 TESTCONTAINERS_HOST_OVERRIDE=127.0.0.1 go test <paket> -tags=integration -count=1 -parallel 4`.
-> Web: `pnpm test --maxWorkers=2`; `next build` için `NODE_OPTIONS=--max-old-space-size=4096`, ardından `pnpm check:module-chunks`;
-> Playwright ön planda, parçalar halinde (araç zaman aşımı 10 dk), `sg docker` içinde
-> `PLAYWRIGHT_BROWSERS_PATH=/home/personal/.cache/ms-playwright E2E_API_PORT=18082 PW_PROJECT=e2e pnpm exec playwright test --project=e2e --workers=1 <dosyalar>`.
+> **Asla `make test` / `go test ./...`.** Integration:
+> `EKOKOD_TEST_PG_DSN='postgres://ekokod:ekokod@localhost:55432/postgres?sslmode=disable' EKOKOD_TEST_REDIS_URL=redis://localhost:56379/0 TESTCONTAINERS_HOST_OVERRIDE=127.0.0.1 go test <paket> -tags=integration -count=1 -parallel 4`.
+> Web: `pnpm exec vitest run`, `pnpm build`; Playwright ön planda, parçalar halinde:
+> `E2E_STORAGE_ROOT=<scratch> pnpm test:e2e --workers=2 <dosyalar>` (araç zaman aşımı 10 dk).
 
 ---
 

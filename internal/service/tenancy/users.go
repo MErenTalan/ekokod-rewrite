@@ -25,6 +25,9 @@ var assignable = map[model.UserRole]auth.RoleSet{
 		model.UserRoleBuildingAdmin, model.UserRoleBuildingReadonlyAdmin),
 	model.UserRoleCompanyAdmin: auth.Roles(model.UserRoleCompanyAdmin, model.UserRoleCompanyReadonlyAdmin,
 		model.UserRoleBuildingAdmin, model.UserRoleBuildingReadonlyAdmin),
+	// R541/R542: the demo login manages users like a CA but never a demo-role user.
+	model.UserRoleDemo: auth.Roles(model.UserRoleCompanyAdmin, model.UserRoleCompanyReadonlyAdmin,
+		model.UserRoleBuildingAdmin, model.UserRoleBuildingReadonlyAdmin),
 }
 
 // AssignableRoles lists the roles actor may give (R174).

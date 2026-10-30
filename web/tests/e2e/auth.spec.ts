@@ -36,7 +36,8 @@ const ROLES = [
   { role: 'company_readonly_admin', user: USERS.companyReadonly, nav: CORE, switcher: false },
   { role: 'building_admin', user: USERS.buildingAdmin, nav: withAI(WITHOUT_RESTRICTED), switcher: false },
   { role: 'building_readonly_admin', user: USERS.buildingReadonly, nav: WITHOUT_RESTRICTED, switcher: false },
-  { role: 'demo', user: USERS.demo, nav: WITHOUT_RESTRICTED, switcher: false },
+  // F29 R541: the demo login works like a company admin.
+  { role: 'demo', user: USERS.demo, nav: withAI(CORE), switcher: false },
 ] as const;
 
 test.describe('each of the six roles logs in and sees exactly its navigation', () => {

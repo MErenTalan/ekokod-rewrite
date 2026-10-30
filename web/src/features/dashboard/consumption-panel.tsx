@@ -15,6 +15,7 @@ import { Switch } from '@/components/ui/switch';
 import type { DateRange } from '@/components/ui/date-range-picker';
 import type { Locale } from '@/i18n/locale';
 import type { ConsumptionRow } from '@/lib/api/types';
+import { istanbulToday } from '@/lib/dates';
 import { formatNumber } from '@/lib/format';
 
 import { formatPeriod } from '@/lib/format-period';
@@ -88,10 +89,13 @@ export function ConsumptionPanelView({
 
   const yoy = useMemo<Datum[] | null>(() => {
     if (!previousYear) return null;
-    return rows.map((row, i) => ({
+    // Pair by calendar month, not position: last year's data can start mid-year.
+    const monthOfYear = (iso: string) => istanbulToday(new Date(iso)).slice(5, 7);
+    const previous = new Map(previousYear.map((row) => [monthOfYear(row.period_start), row.active_import ?? null]));
+    return rows.map((row) => ({
       x: formatPeriod(row.period_start, granularity, locale),
       current: row.active_import ?? null,
-      previous: previousYear[i]?.active_import ?? null,
+      previous: previous.get(monthOfYear(row.period_start)) ?? null,
     }));
   }, [rows, previousYear, granularity, locale]);
 

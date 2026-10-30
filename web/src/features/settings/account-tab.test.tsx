@@ -96,7 +96,7 @@ describe('AccountTabView', () => {
 
   it('is read-only for the shared demo account', () => {
     const r = renderWithProviders(view({ readOnly: true, profile: { ...profile, role: 'demo' } }));
-    expect(r.getByText('Demo hesabı paylaşımlıdır; profil ve şifre değiştirilemez.')).toBeInTheDocument();
+    expect(r.getByText('Demo hesabı paylaşımlıdır; profil, şifre ve oturumlar değiştirilemez.')).toBeInTheDocument();
     expect(r.getByLabelText(/Ad soyad/)).toBeDisabled();
     expect(r.queryByRole('button', { name: 'Kaydet' })).toBeNull();
     // R150: the shared account can change neither its password nor its sessions.

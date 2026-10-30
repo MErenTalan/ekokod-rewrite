@@ -8,6 +8,7 @@ import { CompanyTabView } from './company-tab';
 const company: CompanyDetail = {
   id: 'c-1',
   name: 'Anadolu Tekstil',
+  is_demo: false,
   address: 'Ostim OSB, Ankara',
   sector: 'Üretim',
   total_area_m2: '5000.00',

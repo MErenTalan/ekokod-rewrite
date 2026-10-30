@@ -21,6 +21,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/api/v1/mw"
 	"github.com/MErenTalan/ekokod-rewrite/internal/auth"
 	"github.com/MErenTalan/ekokod-rewrite/internal/credentials"
+	"github.com/MErenTalan/ekokod-rewrite/internal/demo"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/aril"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/gridbox"
@@ -104,6 +105,9 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 	if opts.Mail == nil {
 		opts.Mail = mail.NewSMTPSender(15*time.Second, nil)
 	}
+	// R544/R545: one cached demo check guards every outbound path.
+	demoCheck := demo.NewChecker(demo.FromCompanies(postgres.NewCompanyRepository(pool)), time.Minute, opts.Clock.Now).IsDemo
+	opts.Mail = mail.GuardDemo(opts.Mail, demoCheck)
 	redisClient, err := platformredis.New(ctx, cfg.Redis, log)
 	if err != nil {
 		return Built{}, fmt.Errorf("apiwire: connect redis: %w", err)
@@ -255,7 +259,7 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 		closeAll()
 		return Built{}, err
 	}
-	credentialService, err := buildCredentials(cfg, pool, cipher, redisClient, enqueuer, opts)
+	credentialService, err := buildCredentials(cfg, pool, cipher, redisClient, enqueuer, opts, demoCheck)
 	if err != nil {
 		closeAll()
 		return Built{}, err
@@ -268,7 +272,7 @@ func Build(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slo
 			closeAll()
 			return Built{}, fmt.Errorf("apiwire: build iSolar pool: %w", err)
 		}
-		solarAdapter = isolar.New(httpxPool, isolar.Options{})
+		solarAdapter = isolar.GuardDemo(isolar.New(httpxPool, isolar.Options{}), demoCheck, opts.Clock.Now)
 	}
 	// F9: the API reads plant data and links plants; only the worker syncs on a schedule.
 	solarService := solar.New(solar.Deps{
@@ -408,7 +412,7 @@ var istanbul = func() *time.Location {
 // registry, iSolar from its own client.
 type providerVerifiers struct {
 	registry *integration.Registry
-	isolar   *isolar.Client
+	isolar   *isolar.Guarded
 }
 
 func (v providerVerifiers) Verifier(p integration.Provider) (credentials.Verifier, error) {
@@ -418,7 +422,8 @@ func (v providerVerifiers) Verifier(p integration.Provider) (credentials.Verifie
 	return v.registry.Source(p)
 }
 
-func buildCredentials(cfg *config.Config, pool *pgxpool.Pool, cipher *crypto.Cipher, rc *goredis.Client, enq Enqueuer, opts Options) (*credentials.Service, error) {
+func buildCredentials(cfg *config.Config, pool *pgxpool.Pool, cipher *crypto.Cipher, rc *goredis.Client, enq Enqueuer, opts Options,
+	demoCheck func(context.Context, uuid.UUID) (bool, error)) (*credentials.Service, error) {
 	redisLock := lock.NewRedis(rc)
 	verifiers, isolarTokens := opts.Verifiers, opts.ISolar
 	if verifiers == nil || isolarTokens == nil {
@@ -427,13 +432,15 @@ func buildCredentials(cfg *config.Config, pool *pgxpool.Pool, cipher *crypto.Cip
 			return nil, fmt.Errorf("apiwire: build httpx pool: %w", err)
 		}
 		registry, err := integration.NewRegistry(
-			osos.New(httpxPool, osos.Options{}), gridbox.New(httpxPool, gridbox.Options{}),
-			aril.New(httpxPool, aril.Options{}), pm5340.New(httpxPool, pm5340.Options{}),
+			integration.GuardDemo(osos.New(httpxPool, osos.Options{}), demoCheck),
+			integration.GuardDemo(gridbox.New(httpxPool, gridbox.Options{}), demoCheck),
+			integration.GuardDemo(aril.New(httpxPool, aril.Options{}), demoCheck),
+			integration.GuardDemo(pm5340.New(httpxPool, pm5340.Options{}), demoCheck),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("apiwire: build provider registry: %w", err)
 		}
-		client := isolar.New(httpxPool, isolar.Options{})
+		client := isolar.GuardDemo(isolar.New(httpxPool, isolar.Options{}), demoCheck, opts.Clock.Now)
 		if verifiers == nil {
 			verifiers = providerVerifiers{registry: registry, isolar: client}
 		}

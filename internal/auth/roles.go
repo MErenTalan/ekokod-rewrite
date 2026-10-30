@@ -51,9 +51,24 @@ var (
 	WriteRoles = Roles(model.UserRoleAdmin, model.UserRoleCompanyAdmin, model.UserRoleBuildingAdmin)
 )
 
-// IsReadOnly reports the roles every mutation is refused for (01 §2).
+// IsReadOnly reports the roles every mutation is refused for (01 §2). The
+// demo login writes since R541; its company is reset hourly instead.
 func IsReadOnly(r model.UserRole) bool {
-	return r == model.UserRoleCompanyReadonlyAdmin || r == model.UserRoleBuildingReadonlyAdmin || r == model.UserRoleDemo
+	return r == model.UserRoleCompanyReadonlyAdmin || r == model.UserRoleBuildingReadonlyAdmin
+}
+
+// WithDemo adds the demo role to a set that admits a company admin (R541).
+func WithDemo(s RoleSet) RoleSet {
+	if s.Has(model.UserRoleCompanyAdmin) {
+		return s | roleBit(model.UserRoleDemo)
+	}
+	return s
+}
+
+func init() {
+	for p, roles := range permissionTable {
+		permissionTable[p] = WithDemo(roles)
+	}
 }
 
 var (

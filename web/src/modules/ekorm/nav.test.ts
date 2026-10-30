@@ -49,7 +49,7 @@ describe('navFor', () => {
     ['company_readonly_admin', READ_ONLY(ALL)],
     ['building_admin', WITHOUT_RESTRICTED],
     ['building_readonly_admin', READ_ONLY(WITHOUT_RESTRICTED)],
-    ['demo', READ_ONLY(WITHOUT_RESTRICTED)],
+    ['demo', ALL], // R541
   ] as const)('%s sees exactly its navigation', (role, want) => {
     expect(leafIds(navFor(fixture[role]))).toEqual(want);
   });

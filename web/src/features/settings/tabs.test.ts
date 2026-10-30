@@ -33,7 +33,8 @@ describe('settings tabs', () => {
     ]);
     expect(visibleTabs(canFor('building_admin'))).toEqual(['account', 'analyzers']);
     expect(visibleTabs(canFor('building_readonly_admin'))).toEqual(['account', 'analyzers']);
-    expect(visibleTabs(canFor('demo'))).toEqual(['account']);
+    // R541: the shared demo login sees a company admin's tabs.
+    expect(visibleTabs(canFor('demo'))).toEqual(['account', 'company', 'buildings', 'plants', 'analyzers', 'users']);
   });
 
   it('falls back to the account tab for anything the role may not open', () => {

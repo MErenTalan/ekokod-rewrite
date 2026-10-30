@@ -9,6 +9,7 @@ import (
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/api/v1/kit"
 	"github.com/MErenTalan/ekokod-rewrite/internal/api/v1/mw"
+	"github.com/MErenTalan/ekokod-rewrite/internal/auth"
 	"github.com/MErenTalan/ekokod-rewrite/internal/credentials"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
 	perr "github.com/MErenTalan/ekokod-rewrite/internal/platform/errors"
@@ -118,7 +119,11 @@ func NewRouterForTable(routes []Route, h *Handlers, m Middleware, log *slog.Logg
 		if rt.Access != Public {
 			chain = append(chain, m.Authn, m.PrincipalLimit)
 			if rt.Access == RoleGated {
-				chain = append(chain, mw.RequireRoles(rt.Roles))
+				roles := rt.Roles
+				if !rt.SelfService {
+					roles = auth.WithDemo(roles) // R541; R150's own-account writes stay closed
+				}
+				chain = append(chain, mw.RequireRoles(roles))
 			}
 			chain = append(chain, m.Scope)
 			if rt.Mutating() {

@@ -27,8 +27,9 @@ func TestPermissionsMatrix(t *testing.T) {
 		model.UserRoleBuildingReadonlyAdmin: {
 			"alarms.read", "bills.read", "carbon.read", "forecast.read", "iso50001.read", "messages.read", "nav.core", "renewable.read", "reports.read", "settings.analyzers", "tariffs.read",
 		},
+		// R541: the shared demo login holds a company admin's permissions.
 		model.UserRoleDemo: {
-			"alarms.read", "bills.read", "carbon.read", "forecast.read", "iso50001.read", "messages.read", "nav.core", "renewable.read", "reports.read", "tariffs.read",
+			"alarms.edit", "alarms.evaluate", "alarms.read", "analyzers.refresh", "anomaly.check", "bills.compute", "bills.read", "calendar.edit", "carbon.edit", "carbon.read", "financial.read", "forecast.read", "forecast.run", "integrations.credentials", "iso50001.edit", "iso50001.read", "jobs.runs.read", "messages.read", "nav.core", "nav.financial", "nav.solar_plants", "plants.manage", "plants.read", "renewable.read", "reports.email", "reports.generate", "reports.read", "settings.analyzers", "settings.analyzers.edit", "settings.buildings", "settings.company", "settings.company.edit", "settings.plants", "settings.users", "solar_tariffs.read", "tariffs.bulk.read", "tariffs.edit", "tariffs.icmal", "tariffs.read", "tariffs.templates.read", "write",
 		},
 	}
 	for _, role := range model.UserRoles() {
@@ -47,8 +48,13 @@ func TestRoleSets(t *testing.T) {
 	}
 	require.True(t, auth.WriteRoles.Has(model.UserRoleBuildingAdmin))
 	require.False(t, auth.WriteRoles.Has(model.UserRoleCompanyReadonlyAdmin))
-	require.True(t, auth.IsReadOnly(model.UserRoleDemo))
+	require.False(t, auth.IsReadOnly(model.UserRoleDemo), "R541")
 	require.True(t, auth.IsReadOnly(model.UserRoleBuildingReadonlyAdmin))
 	require.False(t, auth.IsReadOnly(model.UserRoleCompanyAdmin))
 	require.Equal(t, []model.UserRole{model.UserRoleAdmin, model.UserRoleCompanyAdmin}, s.List())
+}
+
+func TestDemoHoldsCompanyAdminPermissions(t *testing.T) {
+	require.Equal(t, auth.PermissionsFor(model.UserRoleCompanyAdmin), auth.PermissionsFor(model.UserRoleDemo))
+	require.False(t, auth.IsReadOnly(model.UserRoleDemo))
 }

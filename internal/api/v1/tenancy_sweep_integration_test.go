@@ -253,7 +253,8 @@ func TestBuildingAdminCannotReachOtherBuildingsAnyEndpoint(t *testing.T) {
 func TestReadOnlyRolesForbiddenOnEveryMutationHTTP(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	emails := []string{seed.E2ECompanyReadonlyEmail, seed.E2EBuildingReadonlyEmail, h.demoUser()}
+	// The demo login writes since R541; its sweep is TestDemoMutatesLikeCompanyAdminHTTP.
+	emails := []string{seed.E2ECompanyReadonlyEmail, seed.E2EBuildingReadonlyEmail}
 	clients := map[string]*client{}
 	for _, email := range emails {
 		clients[email] = h.as(email)
@@ -276,7 +277,7 @@ func TestReadOnlyRolesForbiddenOnEveryMutationHTTP(t *testing.T) {
 			checked++
 		}
 	}
-	require.GreaterOrEqual(t, checked, 3*35)
+	require.GreaterOrEqual(t, checked, 2*35)
 	require.Equal(t, before, audited(), "a refused mutation writes no audit row")
 }
 

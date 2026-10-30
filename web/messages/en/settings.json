@@ -29,7 +29,7 @@
     "logoutAll": "Sign out everywhere",
     "thisDevice": "This device",
     "unknownDevice": "Unknown device",
-    "demoReadOnly": "The demo account is shared, so its profile and password cannot be changed.",
+    "demoReadOnly": "The demo account is shared, so its profile, password and sessions cannot be changed.",
     "saved": "Your details were saved",
     "passwordChanged": "Your password was changed",
     "sessionRevoked": "The session was ended"
@@ -152,7 +152,8 @@
     "deleted": "The company was deleted",
     "empty": "No company",
     "emptyHint": "Add a new customer company.",
-    "scopeColumn": "Active company"
+    "scopeColumn": "Active company",
+    "demoChip": "Demo"
   },
   "buildings": {
     "title": "Buildings",

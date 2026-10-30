@@ -322,6 +322,10 @@ func TestAuthorizationMatrix(t *testing.T) {
 				require.True(t, ok, "%s: unknown role abbreviation %q", key, abbr)
 				allowed[role] = true
 			}
+			// R541: the demo login reaches every CA route except R150's self-service writes.
+			if allowed[model.UserRoleCompanyAdmin] && !selfServiceMutations[key] {
+				allowed[model.UserRoleDemo] = true
+			}
 		}
 		for _, role := range model.UserRoles() {
 			t.Run(key+"/"+string(role), func(t *testing.T) {
@@ -353,7 +357,7 @@ func TestReadOnlyRolesForbiddenOnEveryMutation(t *testing.T) {
 			continue
 		}
 		keys = append(keys, key)
-		readOnly := []model.UserRole{model.UserRoleCompanyReadonlyAdmin, model.UserRoleBuildingReadonlyAdmin, model.UserRoleDemo}
+		readOnly := []model.UserRole{model.UserRoleCompanyReadonlyAdmin, model.UserRoleBuildingReadonlyAdmin}
 		for _, role := range readOnly {
 			t.Run(key+"/"+string(role), func(t *testing.T) {
 				got := call(router, rt, role)

@@ -40,3 +40,25 @@ func TestAdminListCompaniesSeesEveryTenant(t *testing.T) {
 	require.Len(t, named, 1)
 	require.Equal(t, b.Company.ID, named[0].ID)
 }
+
+func TestSetDemoFlag(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	a := testfixtures.NewTenant(t, ctx, pool, 1)
+	companies := postgres.NewCompanyRepository(pool)
+
+	got, err := companies.Get(ctx, a.AdminScope, a.Company.ID)
+	require.NoError(t, err)
+	require.False(t, got.IsDemo)
+
+	require.NoError(t, admin.NewTenantRepository(pool).SetDemo(ctx, a.Company.ID, true))
+	got, err = companies.Get(ctx, a.AdminScope, a.Company.ID)
+	require.NoError(t, err)
+	require.True(t, got.IsDemo)
+
+	listed, err := admin.NewTenantRepository(pool).ListCompanies(ctx, store.CompanyFilter{NameContains: a.Company.Name})
+	require.NoError(t, err)
+	require.Len(t, listed, 1)
+	require.True(t, listed[0].IsDemo)
+}

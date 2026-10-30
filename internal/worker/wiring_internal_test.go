@@ -15,6 +15,7 @@ import (
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/ingest/generation"
+	"github.com/MErenTalan/ekokod-rewrite/internal/integration"
 	"github.com/MErenTalan/ekokod-rewrite/internal/job"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/config"
@@ -321,4 +322,17 @@ func TestWorkerRegistersSolarHandlers(t *testing.T) {
 		_, pattern := mux.Handler(asynq.NewTask(typ, nil))
 		require.Equal(t, typ, pattern)
 	}
+}
+
+// TestBuildGraphGuardsEveryAdapter is R545: every meter adapter the worker
+// can resolve is demo-guarded, so no demo credential reaches a provider.
+func TestBuildGraphGuardsEveryAdapter(t *testing.T) {
+	pool := testfixtures.NewIsolatedDB(t)
+	g := buildGraph(t, pool, testfixtures.RedisConfig(t))
+	for _, p := range []integration.Provider{integration.ProviderOSOS, integration.ProviderGridBox, integration.ProviderARIL, integration.ProviderPM5340} {
+		a, err := g.verifiers.registry.Source(p)
+		require.NoError(t, err)
+		require.True(t, integration.IsGuarded(a), "%s adapter is not demo-guarded", p)
+	}
+	require.NotNil(t, g.verifiers.isolar)
 }

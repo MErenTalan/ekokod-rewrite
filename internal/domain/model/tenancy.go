@@ -27,6 +27,8 @@ type Company struct {
 	ContactName    *string
 	ContactPhone   *string
 	Sector         *string
+	// IsDemo marks the shared, hourly-reset demo company (R540).
+	IsDemo bool
 
 	CreatedAt time.Time
 	UpdatedAt time.Time

@@ -3,17 +3,29 @@
 package v1_test
 
 import (
+	"log/slog"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/MErenTalan/ekokod-rewrite/internal/platform/crypto"
 	"github.com/MErenTalan/ekokod-rewrite/internal/seed"
+	"github.com/MErenTalan/ekokod-rewrite/internal/storage"
+	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres/admin"
 )
 
 func (h *harness) seedDemo() {
 	h.t.Helper()
-	_, err := seed.Demo(h.t.Context(), h.pool, h.hasher, testPassword, h.clock.Now())
+	cipher, err := crypto.NewCipher([]byte("0123456789abcdef0123456789abcdef"))
+	require.NoError(h.t, err)
+	log := slog.New(slog.DiscardHandler)
+	billing, err := seed.NewDemoBilling(h.pool, log)
+	require.NoError(h.t, err)
+	_, err = seed.Demo(h.t.Context(), seed.DemoDeps{Pool: h.pool, Hasher: h.hasher, Cipher: cipher, Billing: billing, Log: log,
+		Storage: storage.Store{Root: h.cfg.Storage.Root, Max: h.cfg.Storage.UploadMax, Allowed: h.cfg.Storage.AllowedTypes}},
+		testPassword, h.clock.Now())
 	require.NoError(h.t, err)
 }
 
@@ -34,6 +46,7 @@ func TestDemoSeesOnlySyntheticData(t *testing.T) {
 		"/load-profile?analyzer_id=" + analyzer + "&from=2026-08-01&to=2026-08-31",
 		"/load-profile/statistics?analyzer_id=" + analyzer + "&from=2026-08-01&to=2026-08-31",
 		"/tariffs", "/tariffs/applicable?building_id=" + building + "&date=2026-09-01", "/bills", "/calendar/events?from=2026-09-01&to=2026-09-30", "/calendar/vacations",
+		"/users",
 	}
 	forbidden := []string{h.fx.CompanyA.String(), h.fx.CompanyB.String(), h.fx.PlatformCompany.String(), h.fx.BuildingA1.String(),
 		h.fx.BuildingA2.String(), h.fx.BuildingB1.String(), h.fx.AnalyzerA1.String(), h.fx.AnalyzerA2.String(), h.fx.AnalyzerB1.String(),
@@ -48,28 +61,110 @@ func TestDemoSeesOnlySyntheticData(t *testing.T) {
 			require.NotContains(t, string(res.body), f, "%s leaked real data", path)
 		}
 	}
-	require.Contains(t, string(demo.do(http.MethodGet, "/buildings", nil).body), "Demo Fabrika")
+	require.Contains(t, string(demo.do(http.MethodGet, "/buildings", nil).body), "Ostim Fabrika")
 	require.Equal(t, http.StatusNotFound, demo.do(http.MethodGet, "/buildings?company_id="+h.fx.CompanyA.String(), nil).status)
 	require.Equal(t, http.StatusNotFound, demo.do(http.MethodGet, "/buildings/"+h.fx.BuildingA1.String(), nil).status)
-	require.Equal(t, http.StatusForbidden, demo.do(http.MethodGet, "/users", nil).status)
 }
 
-func TestDemoMutationsForbidden(t *testing.T) {
+// TestDemoMutatesLikeCompanyAdminHTTP is R541–R543: a company admin's writes
+// work, the shared login's own account cannot be changed or locked.
+func TestDemoMutatesLikeCompanyAdminHTTP(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	h.seedDemo()
 	demo := h.as(seed.DemoEmail)
+	analyzer := seed.DemoAnalyzerIDs[0].String()
 	for _, tc := range []struct {
 		method, path string
 		body         any
+		want         int
 	}{
-		{http.MethodPost, "/buildings", map[string]any{"name": "x"}},
-		{http.MethodPatch, "/profile", map[string]any{"name": "x"}},
-		{http.MethodPost, "/analyzers/" + seed.DemoAnalyzerIDs[0].String() + "/refresh", map[string]any{"mode": "hourly"}},
-		{http.MethodPut, "/calendar/vacations", map[string]any{"weekend_days": []int{0}}},
-		{http.MethodPost, "/bills/compute", map[string]any{"scope": "company", "period": "2026-08"}},
-		{http.MethodPost, "/auth/change-password", map[string]any{"current_password": testPassword, "new_password": "Baska!Sifre-99x"}},
+		{http.MethodPost, "/tariffs", validTariff(seed.DemoBuildingID), http.StatusCreated},
+		{http.MethodPost, "/alarms", map[string]any{
+			"name": "İletişim", "type": "data_communication", "is_enabled": true, "analyzer_ids": []string{analyzer},
+			"channels": []map[string]string{{"channel": "email", "target": "ops@example.com"}},
+			"settings": map[string]any{"communication_threshold_hours": 6},
+		}, http.StatusCreated},
+		{http.MethodPatch, "/companies/" + seed.DemoCompanyID.String(), map[string]any{"sector": "Üretim"}, http.StatusOK},
+		{http.MethodPost, "/users", map[string]any{"name": "Selin Koç", "email": "selin@demo-enerji.example",
+			"role": "building_admin", "password": "Guclu!Parola-91"}, http.StatusCreated},
+		{http.MethodPatch, "/profile", map[string]any{"name": "x"}, http.StatusForbidden},
+		{http.MethodPost, "/auth/change-password", map[string]any{"current_password": testPassword, "new_password": "Baska!Sifre-99x"}, http.StatusForbidden},
+		{http.MethodGet, "/auth/sessions", nil, http.StatusForbidden},
+		{http.MethodPatch, "/users/" + seed.DemoUserID.String(), map[string]any{"is_active": false}, http.StatusForbidden},
+		{http.MethodDelete, "/users/" + seed.DemoUserID.String(), nil, http.StatusConflict}, // cannot_modify_self comes first
 	} {
-		require.Equal(t, http.StatusForbidden, demo.do(tc.method, tc.path, tc.body).status, tc.path)
+		res := demo.do(tc.method, tc.path, tc.body)
+		require.Equal(t, tc.want, res.status, "%s %s: %s", tc.method, tc.path, string(res.body))
 	}
+	var me struct {
+		SessionID string `json:"session_id"`
+	}
+	demo.do(http.MethodGet, "/auth/me", nil).json(t, &me)
+	require.Equal(t, http.StatusForbidden, demo.do(http.MethodDelete, "/auth/sessions/"+me.SessionID, nil).status)
+	require.Equal(t, http.StatusForbidden, demo.do(http.MethodPost, "/auth/logout-all", nil).status)
+	require.Equal(t, http.StatusOK, demo.do(http.MethodGet, "/auth/me", nil).status, "the shared session survives")
+}
+
+// TestLoginRefusesVisitorUsersOfDemoCompany is R543.
+func TestLoginRefusesVisitorUsersOfDemoCompany(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.seedDemo()
+	demo := h.as(seed.DemoEmail)
+	res := demo.do(http.MethodPost, "/users", map[string]any{"name": "Selin Koç", "email": "selin@demo-enerji.example",
+		"role": "company_admin", "password": "Guclu!Parola-91"})
+	require.Equal(t, http.StatusCreated, res.status, string(res.body))
+
+	visitor := h.client(uaChrome)
+	got := visitor.do(http.MethodPost, "/auth/login", map[string]any{"email": "selin@demo-enerji.example", "password": "Guclu!Parola-91"})
+	require.Equal(t, http.StatusUnauthorized, got.status, string(got.body))
+	require.Contains(t, string(got.body), "invalid_credentials")
+	h.as(seed.E2ECompanyAdminEmail) // a normal company's admin still logs in
+}
+
+// TestMeCarriesDemoResetTime is R552: a demo session learns when the next
+// hourly reset lands; any other company gets demo null. The platform admin's
+// company list marks the demo company.
+func TestMeCarriesDemoResetTime(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	ctx := t.Context()
+	istanbul, err := time.LoadLocation("Europe/Istanbul")
+	require.NoError(t, err)
+	require.NoError(t, admin.NewTenantRepository(h.pool).SetDemo(ctx, h.fx.CompanyB, true))
+	hash, err := h.hasher.Hash(testPassword)
+	require.NoError(t, err)
+	_, err = h.pool.Exec(ctx, `insert into users (company_id, name, email, password_hash, role, is_active)
+		values ($1, 'Demo', 'demo-me@b.e2e.ekokod.test', $2, 'demo', true)`, h.fx.CompanyB, hash)
+	require.NoError(t, err)
+	h.clock.Set(time.Date(2026, 10, 28, 14, 20, 0, 0, istanbul))
+
+	var me struct {
+		Demo *struct {
+			ResetsAt time.Time `json:"resets_at"`
+		} `json:"demo"`
+	}
+	h.as("demo-me@b.e2e.ekokod.test").do(http.MethodGet, "/auth/me", nil).json(t, &me)
+	require.NotNil(t, me.Demo)
+	require.True(t, me.Demo.ResetsAt.Equal(time.Date(2026, 10, 28, 15, 0, 0, 0, istanbul)), me.Demo.ResetsAt.String())
+
+	var normal map[string]any
+	h.as(seed.E2ECompanyAdminEmail).do(http.MethodGet, "/auth/me", nil).json(t, &normal)
+	require.Contains(t, normal, "demo")
+	require.Nil(t, normal["demo"])
+
+	var companies struct {
+		Items []struct {
+			ID     string `json:"id"`
+			IsDemo bool   `json:"is_demo"`
+		} `json:"items"`
+	}
+	h.as(seed.E2EAdminEmail).do(http.MethodGet, "/companies?limit=100", nil).json(t, &companies)
+	marked := map[string]bool{}
+	for _, c := range companies.Items {
+		marked[c.ID] = c.IsDemo
+	}
+	require.True(t, marked[h.fx.CompanyB.String()])
+	require.False(t, marked[h.fx.CompanyA.String()])
 }

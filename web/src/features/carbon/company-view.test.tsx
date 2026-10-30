@@ -5,7 +5,7 @@ import { renderWithProviders } from '@/test/render';
 import { CompanyView } from './company-view';
 
 const company = {
-  id: 'c-1', name: 'Anadolu Tekstil', address: 'Organize Sanayi 3. Cad. No 7, Bursa', sector: 'Tekstil', personnel_count: 240,
+  id: 'c-1', name: 'Anadolu Tekstil', is_demo: false, address: 'Organize Sanayi 3. Cad. No 7, Bursa', sector: 'Tekstil', personnel_count: 240,
   total_area_m2: '18500', contact_name: 'Ayşe Kaya', contact_phone: null, created_at: '2026-01-01T00:00:00+03:00', updated_at: '2026-01-01T00:00:00+03:00',
 };
 

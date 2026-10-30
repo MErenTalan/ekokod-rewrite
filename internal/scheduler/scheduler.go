@@ -99,6 +99,10 @@ func (s *Scheduler) entries() ([]Entry, error) {
 	if err != nil {
 		return nil, err
 	}
+	demoReset, err := job.NewDemoResetTask(retryOpts)
+	if err != nil {
+		return nil, err
+	}
 	return []Entry{
 		{Cron: "@every 1h", Task: noop},
 		{Cron: s.cfg.Schedule.Ingestion, Task: syncDispatch},
@@ -112,6 +116,7 @@ func (s *Scheduler) entries() ([]Entry, error) {
 		{Cron: s.cfg.Schedule.ISolarAlarms, Task: solarAlarms},
 		{Cron: s.cfg.Schedule.Carbon, Task: carbonAccrual},
 		{Cron: s.cfg.Schedule.Forecast, Task: forecastRun},
+		{Cron: s.cfg.Schedule.DemoReset, Task: demoReset},
 	}, nil
 }
 

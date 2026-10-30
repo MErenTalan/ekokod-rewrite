@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatBytes, formatCurrency, formatDate, formatMonth, formatNumber, formatQuantity, unitSymbol } from './format';
+import { formatBytes, formatCurrency, formatDate, formatMonth, formatNumber, formatQuantity, formatTime, unitSymbol } from './format';
 
 describe('format', () => {
   it('formats with Turkish separators', () => {
@@ -48,5 +48,10 @@ describe('format', () => {
     expect(formatBytes(512)).toBe('512 B');
     expect(formatBytes(1_500_000)).toBe('1,5 MB');
     expect(formatBytes(1_000_000)).toBe('1 MB');
+  });
+
+  it('a clock time is 24-hour Istanbul time in both locales', () => {
+    expect(formatTime('2026-10-28T12:00:00Z', 'tr')).toBe('15:00');
+    expect(formatTime('2026-10-28T21:05:00Z', 'en')).toBe('00:05');
   });
 });

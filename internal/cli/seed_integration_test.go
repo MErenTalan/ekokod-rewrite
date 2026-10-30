@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/cli"
+	"github.com/MErenTalan/ekokod-rewrite/internal/seed"
 	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
 )
 
@@ -71,4 +72,40 @@ func TestCLISeedLoadsRealDatasets(t *testing.T) {
 	require.Contains(t, second.String(), "emission factors: 186 rows (196 conversions)")
 	require.Contains(t, second.String(), "integration definitions: 4 rows")
 	require.Contains(t, second.String(), "national tariff schedule: 17 rows")
+}
+
+// R553: `seed demo --reset` reports a missing demo company, and --password
+// reaches the policy check before anything is written.
+func TestCLISeedDemoReset(t *testing.T) {
+	pool := testfixtures.NewIsolatedDB(t)
+	for k, v := range map[string]string{
+		"EKOKOD_ENV":                       "development",
+		"EKOKOD_PUBLIC_URL":                "http://localhost:3000",
+		"EKOKOD_DB_URL":                    pool.Config().ConnString(),
+		"EKOKOD_REDIS_URL":                 testfixtures.SharedRedisConfig(t).URL,
+		"EKOKOD_ENCRYPTION_KEY":            "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
+		"EKOKOD_JWT_SIGNING_KEY":           "jwt-signing-key-at-least-32-chars-long!!",
+		"EKOKOD_PASSWORD_PEPPER":           "password-pepper-at-least-32-chars-long!!",
+		"EKOKOD_DEVICE_FINGERPRINT_SECRET": "device-fingerprint-secret-32-chars-min!!",
+		"EKOKOD_STORAGE_ROOT":              t.TempDir(),
+		"EKOKOD_EPIAS_USERNAME":            "u",
+		"EKOKOD_EPIAS_PASSWORD":            "p",
+		"EKOKOD_ML_API_KEY":                "k",
+		"EKOKOD_CORS_ORIGINS":              "http://localhost:3000",
+		"EKOKOD_DEMO_PASSWORD":             "",
+	} {
+		t.Setenv(k, v)
+	}
+	ctx := context.Background()
+
+	var out bytes.Buffer
+	err := cli.Execute(ctx, []string{"seed", "demo", "--reset"}, &out)
+	require.ErrorContains(t, err, "a password is required")
+	require.Contains(t, out.String(), "no demo company to reset")
+
+	err = cli.Execute(ctx, []string{"seed", "demo", "--reset", "--password", "demo1234"}, &bytes.Buffer{})
+	require.ErrorIs(t, err, seed.ErrWeakPassword)
+	var companies int
+	require.NoError(t, pool.QueryRow(ctx, `select count(*) from companies`).Scan(&companies))
+	require.Zero(t, companies, "a weak password writes nothing")
 }

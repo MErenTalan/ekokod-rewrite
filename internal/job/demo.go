@@ -16,9 +16,29 @@ func NewDemoExtendTask(o TaskOptions) (*asynq.Task, error) {
 	return asynq.NewTask(TypeDemoExtend, nil, opts...), nil
 }
 
+// TypeDemoReset returns the demo company to its baseline (R553).
+const TypeDemoReset = "demo.reset"
+
+// NewDemoResetTask builds the scheduled tick. No retries: a failed reset is
+// replaced by the next hour's, and a retry could land on a visitor mid-tour.
+func NewDemoResetTask(_ TaskOptions) (*asynq.Task, error) {
+	opts := []asynq.Option{asynq.Timeout(15 * time.Minute), asynq.Unique(50 * time.Minute), asynq.MaxRetry(0)}
+	return asynq.NewTask(TypeDemoReset, nil, opts...), nil
+}
+
 // DemoExtender extends the demo readings; a missing demo company is a no-op.
 type DemoExtender interface {
 	ExtendDemo(ctx context.Context) error
+}
+
+// DemoResetter returns the demo company to its baseline; a missing demo
+// company or a reset already running is a no-op.
+type DemoResetter interface {
+	ResetDemo(ctx context.Context) error
+}
+
+func (h *Handlers) handleDemoReset(ctx context.Context, _ *asynq.Task) error {
+	return h.DemoReset.ResetDemo(ctx)
 }
 
 func (h *Handlers) handleDemoExtend(ctx context.Context, _ *asynq.Task) error {

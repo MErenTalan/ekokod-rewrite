@@ -7,11 +7,13 @@ package sqlcgen
 
 import (
 	"context"
+
+	"github.com/google/uuid"
 )
 
 const adminCompanyList = `-- name: AdminCompanyList :many
 
-select id, name, address, total_area_m2, personnel_count, contact_name, contact_phone, sector, created_at, updated_at, deleted_at from companies
+select id, name, address, total_area_m2, personnel_count, contact_name, contact_phone, sector, created_at, updated_at, deleted_at, is_demo from companies
 where ($1::boolean or deleted_at is null)
   and ($2::text = '' or name ilike '%' || $2::text || '%')
   and ($3::text is null or sector = $3)
@@ -55,6 +57,7 @@ func (q *Queries) AdminCompanyList(ctx context.Context, arg AdminCompanyListPara
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.IsDemo,
 		); err != nil {
 			return nil, err
 		}
@@ -64,4 +67,21 @@ func (q *Queries) AdminCompanyList(ctx context.Context, arg AdminCompanyListPara
 		return nil, err
 	}
 	return items, nil
+}
+
+const adminCompanySetDemo = `-- name: AdminCompanySetDemo :execrows
+update companies set is_demo = $1 where id = $2 and deleted_at is null
+`
+
+type AdminCompanySetDemoParams struct {
+	IsDemo bool
+	ID     uuid.UUID
+}
+
+func (q *Queries) AdminCompanySetDemo(ctx context.Context, arg AdminCompanySetDemoParams) (int64, error) {
+	result, err := q.db.Exec(ctx, adminCompanySetDemo, arg.IsDemo, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

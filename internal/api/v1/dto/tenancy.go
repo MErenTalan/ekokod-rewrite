@@ -16,6 +16,7 @@ type Company struct {
 	ContactName    *string   `json:"contact_name"`
 	ContactPhone   *string   `json:"contact_phone"`
 	Sector         *string   `json:"sector"`
+	IsDemo         bool      `json:"is_demo" required:"true"`
 	CreatedAt      time.Time `json:"created_at" required:"true"`
 	UpdatedAt      time.Time `json:"updated_at" required:"true"`
 }

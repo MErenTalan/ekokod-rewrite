@@ -4,6 +4,7 @@ import { ArrowRight, Leaf, LogOut } from 'lucide-react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 
+import { DemoBanner } from '@/components/shell/demo-banner';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
 import { useLogout } from '@/lib/session/use-logout';
@@ -11,7 +12,7 @@ import { useLogout } from '@/lib/session/use-logout';
 import { MODULES, type ModuleId } from './registry';
 
 /** R495: the post-login landing — one card per module the user may open, one shared session behind all of them. */
-export function ModuleChooser({ name, modules }: { name: string; modules: ModuleId[] }) {
+export function ModuleChooser({ name, modules, demoResetsAt }: { name: string; modules: ModuleId[]; demoResetsAt?: string | null }) {
   const t = useTranslations('shell');
   const app = useTranslations('app');
   const logout = useLogout();
@@ -25,6 +26,7 @@ export function ModuleChooser({ name, modules }: { name: string; modules: Module
         </Button>
       </header>
       <main id="main-content" className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-10">
+        <DemoBanner resetsAt={demoResetsAt} />
         <div className="flex flex-col gap-2">
           <h1 className="type-h1">{t('modules.chooser.title')}</h1>
           <p className="text-foreground-muted type-body">{t('modules.chooser.description', { name })}</p>

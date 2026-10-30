@@ -73,6 +73,13 @@ type Me struct {
 	Company       CompanyRef   `json:"company" required:"true"`
 	Permissions   []Permission `json:"permissions" required:"true"`
 	SessionID     uuid.UUID    `json:"session_id" required:"true"`
+	// Demo is set only for the shared demo company (R552).
+	Demo *DemoInfo `json:"demo"`
+}
+
+// DemoInfo tells a demo session when its data returns to the baseline.
+type DemoInfo struct {
+	ResetsAt time.Time `json:"resets_at" required:"true"`
 }
 
 // MobileTokens is the mobile login and refresh response (05 §18).

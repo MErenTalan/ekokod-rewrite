@@ -19,7 +19,7 @@ insert into companies
 values ($1, $2, $3, $4,
         $5, $6, $7,
         $8, coalesce($9::timestamptz, now()), coalesce($9::timestamptz, now()))
-returning id, name, address, total_area_m2, personnel_count, contact_name, contact_phone, sector, created_at, updated_at, deleted_at
+returning id, name, address, total_area_m2, personnel_count, contact_name, contact_phone, sector, created_at, updated_at, deleted_at, is_demo
 `
 
 type CompanyCreateParams struct {
@@ -61,13 +61,14 @@ func (q *Queries) CompanyCreate(ctx context.Context, arg CompanyCreateParams) (C
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.IsDemo,
 	)
 	return i, err
 }
 
 const companyGet = `-- name: CompanyGet :one
 
-select id, name, address, total_area_m2, personnel_count, contact_name, contact_phone, sector, created_at, updated_at, deleted_at from companies
+select id, name, address, total_area_m2, personnel_count, contact_name, contact_phone, sector, created_at, updated_at, deleted_at, is_demo from companies
 where id = $1
   and id = $2
   and deleted_at is null
@@ -98,12 +99,13 @@ func (q *Queries) CompanyGet(ctx context.Context, arg CompanyGetParams) (Company
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.IsDemo,
 	)
 	return i, err
 }
 
 const companyList = `-- name: CompanyList :many
-select id, name, address, total_area_m2, personnel_count, contact_name, contact_phone, sector, created_at, updated_at, deleted_at from companies
+select id, name, address, total_area_m2, personnel_count, contact_name, contact_phone, sector, created_at, updated_at, deleted_at, is_demo from companies
 where id = $1
   and ($2::boolean or deleted_at is null)
   and ($3::text = '' or name ilike '%' || $3::text || '%')
@@ -149,6 +151,7 @@ func (q *Queries) CompanyList(ctx context.Context, arg CompanyListParams) ([]Com
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.IsDemo,
 		); err != nil {
 			return nil, err
 		}
@@ -195,7 +198,7 @@ set name = $1,
 where id = $9
   and id = $10
   and deleted_at is null
-returning id, name, address, total_area_m2, personnel_count, contact_name, contact_phone, sector, created_at, updated_at, deleted_at
+returning id, name, address, total_area_m2, personnel_count, contact_name, contact_phone, sector, created_at, updated_at, deleted_at, is_demo
 `
 
 type CompanyUpdateParams struct {
@@ -237,6 +240,7 @@ func (q *Queries) CompanyUpdate(ctx context.Context, arg CompanyUpdateParams) (C
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.IsDemo,
 	)
 	return i, err
 }
