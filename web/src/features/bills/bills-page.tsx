@@ -9,12 +9,15 @@ import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { MonthPicker } from '@/components/ui/month-picker';
 import { downloadFile } from '@/lib/api/download';
-import { useApiMutation } from '@/lib/api/mutation';
+import { useApiMutation, useFailureToast } from '@/lib/api/mutation';
+import { fieldErrors } from '@/lib/api/problem';
+import type { BillPreview, Translator } from '@/lib/api/types';
 import { $api } from '@/lib/api/query';
 import { useScopeParams, useSelection } from '@/lib/selection/selection-store';
 import { useSession } from '@/lib/session/session-provider';
 
 import { useJob } from '../jobs/use-job';
+import { CustomPeriodCardView, type PreviewRequest, type SaveRequest } from './custom-period-card';
 import { DashboardTableView } from './dashboard-table';
 import { GenerateCardView, type GenerateRequest } from './generate-card';
 import { messageKeyForErrorCode } from './generation-status';
@@ -74,6 +77,50 @@ export function BillsPage() {
     );
   };
 
+  // F30: preview any window (a GET, so not the save-convention mutation) and save it as a period.
+  const forms = useTranslations('forms') as unknown as Translator;
+  const failureToast = useFailureToast();
+  const [preview, setPreview] = useState<BillPreview | undefined>(undefined);
+  const [previewErrors, setPreviewErrors] = useState<Record<string, string>>({});
+  const previewBill = $api.useMutation('get', '/api/v1/bills/preview');
+  const runPreview = (r: PreviewRequest) => {
+    setPreviewErrors({});
+    previewBill.mutate(
+      { params: { query: { ...scope, scope: r.scope, subject_id: r.subjectId, from: r.from, to: r.to } } },
+      {
+        onSuccess: (data) => setPreview(data),
+        onError: (error) => {
+          setPreview(undefined);
+          const fields = fieldErrors(error, forms);
+          setPreviewErrors(fields);
+          if (Object.keys(fields).length === 0) failureToast(error);
+        },
+      },
+    );
+  };
+  const periods = $api.useQuery(
+    'get',
+    '/api/v1/buildings/{id}/bill-periods',
+    { params: { path: { id: buildingId ?? '' }, query: scope } },
+    { enabled: canCompute && !!buildingId },
+  );
+  const savePeriod = useApiMutation('put', '/api/v1/buildings/{id}/bill-periods/{period}', {
+    success: t('custom.saved'), invalidate: ['/api/v1/buildings', '/api/v1/bills'],
+  });
+  const deletePeriod = useApiMutation('delete', '/api/v1/buildings/{id}/bill-periods/{period}', {
+    success: t('custom.deleted'), invalidate: ['/api/v1/buildings', '/api/v1/bills'],
+  });
+  const runSave = (r: SaveRequest) => {
+    if (!buildingId) return;
+    savePeriod.mutate({
+      params: { path: { id: buildingId, period: r.periodKey }, query: scope }, body: { from: r.from, to: r.to },
+    });
+  };
+  const runDelete = (key: string, done: () => void) => {
+    if (!buildingId) return;
+    deletePeriod.mutate({ params: { path: { id: buildingId, period: key }, query: scope } }, { onSuccess: done });
+  };
+
   const download = (path: string, query: Record<string, string | undefined>, name: string) =>
     void downloadFile(path, { ...scope, ...query }, name);
 
@@ -108,13 +155,14 @@ export function BillsPage() {
         <MonthPicker label={t('monthSelection')} value={month} onValueChange={setMonth} />
       </div>
 
+      {/* The building invoice of §7.10 and the custom period (F30) need a
+          building, so the screen carries the same picker the consumption screens do. */}
+      {canCompute ? <ScopePicker activeOnly={activeOnly} onActiveOnlyChange={setActiveOnly} /> : null}
+
       {month === null ? (
         <EmptyState title={t('noMonth')} description={t('noMonthDescription')} />
       ) : (
         <>
-          {/* The building invoice of §7.10 needs a building, so the screen
-              carries the same picker the consumption screens do. */}
-          {canCompute ? <ScopePicker activeOnly={activeOnly} onActiveOnlyChange={setActiveOnly} /> : null}
           {canCompute ? (
             <GenerateCardView
               analyzers={analyzers.data?.items ?? []}
@@ -166,6 +214,22 @@ export function BillsPage() {
           )}
         </>
       )}
+
+      {canCompute ? (
+        <CustomPeriodCardView
+          key={buildingId ?? 'none'}
+          analyzers={analyzers.data?.items ?? []}
+          buildingId={buildingId ?? null}
+          savedPeriods={periods.data ?? []}
+          preview={preview}
+          errors={{ ...previewErrors, ...savePeriod.fieldErrors }}
+          previewing={previewBill.isPending}
+          saving={savePeriod.isPending || deletePeriod.isPending}
+          onPreview={runPreview}
+          onSave={runSave}
+          onDelete={runDelete}
+        />
+      ) : null}
     </div>
   );
 }

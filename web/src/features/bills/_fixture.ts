@@ -1,4 +1,4 @@
-import type { Analyzer, BillDashboard } from '@/lib/api/types';
+import type { Analyzer, BillDashboard, BillPeriod, BillPreview } from '@/lib/api/types';
 
 /** Story and test data for the bills screen; never fetched (R196). */
 export const demoDashboard: BillDashboard = {
@@ -86,3 +86,21 @@ export const demoAnalyzers: Analyzer[] = [
     updated_at: '2026-01-01T00:00:00Z',
   } as Analyzer,
 ];
+
+/** Fuga-shaped saved window: the utility read the meter at 16:00 (F30). */
+export const demoSavedPeriod: BillPeriod = {
+  building_id: 'b-1', period_key: '2026-07',
+  period_start: '2026-07-17T13:00:00Z', period_end: '2026-08-18T13:00:00Z', updated_at: '2026-11-09T10:00:00Z',
+};
+
+export const demoPreview = {
+  bill: {
+    id: '00000000-0000-0000-0000-000000000000', scope: 'building', period_key: '2026-07',
+    period_start: '2026-07-17T13:00:00Z', period_end: '2026-08-18T13:00:00Z', days_in_period: 32,
+    active_import: '20283.24', net_consumption: '20283.24', inductive_kvarh: '0', capacitive_kvarh: '0',
+    energy_cost: '72886.45', distribution_cost: '50290.26', power_cost: '0', reactive_penalty: '0', vat_cost: '25000',
+    total_cost: '150000.00', currency: 'TRY', reactive_penalty_applied: false, ptf_yekdem_used: true, status: 'draft',
+    missing_days: ['2026-08-07', '2026-08-08'], has_pdf: false, computed_at: '2026-11-09T10:00:00Z',
+  },
+  lines: [{ code: 'energy', label: 'Enerji bedeli', quantity: '20283.24', unit: 'kWh', unit_price: '3.593417', amount: '72886.45' }],
+} as unknown as BillPreview;

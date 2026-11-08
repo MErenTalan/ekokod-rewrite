@@ -30,6 +30,9 @@ export type ReactiveStatus = S['ReactiveStatus'];
 export type ReactiveAnalyzer = S['ReactiveAnalyzer'];
 
 export type Bill = S['Bill'];
+export type BillLine = S['BillLine'];
+export type BillPreview = S['BillPreview'];
+export type BillPeriod = S['BillPeriod'];
 export type BillDashboard = S['BillDashboard'];
 export type BillDashboardBuilding = S['BillDashboardBuilding'];
 export type BillDashboardRow = S['BillDashboardRow'];
