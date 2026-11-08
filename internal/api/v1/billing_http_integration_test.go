@@ -330,3 +330,42 @@ func TestSupersededBillPDFStaysDownloadable(t *testing.T) {
 		}
 	}
 }
+
+// R555–R559 over the wire: save, list, conflict, delete, preview validation.
+func TestBillPeriodsOverTheWire(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	ba := h.as(seed.E2EBuildingAdminEmail)
+	base := "/buildings/" + h.fx.BuildingA1.String() + "/bill-periods"
+	body := map[string]any{"from": "2026-07-17T16:00:00+03:00", "to": "2026-08-18T16:00:00+03:00"}
+
+	res := ba.do(http.MethodPut, base+"/2026-07", body)
+	require.Equal(t, http.StatusOK, res.status, string(res.body))
+	var changed dto.BillPeriodChanged
+	res.json(t, &changed)
+	require.NotNil(t, changed.Period)
+	require.True(t, changed.Period.PeriodStart.Equal(time.Date(2026, 7, 17, 16, 0, 0, 0, ist)))
+	require.Contains(t, changed.JobIDs, "billing.generate:building:"+h.fx.BuildingA1.String()+":2026-07")
+
+	var list []dto.BillPeriod
+	ba.do(http.MethodGet, base, nil).json(t, &list)
+	require.Len(t, list, 1)
+	require.Equal(t, "2026-07", list[0].PeriodKey)
+
+	require.Equal(t, http.StatusNotFound, ba.do(http.MethodPut, "/buildings/"+h.fx.BuildingA2.String()+"/bill-periods/2026-07", body).status)
+	res = ba.do(http.MethodPut, base+"/2026-08", map[string]any{"from": "2026-08-10T00:00:00+03:00", "to": "2026-09-16T00:00:00+03:00"})
+	require.Equal(t, http.StatusConflict, res.status, string(res.body))
+	res = ba.do(http.MethodPut, base+"/2026-08", map[string]any{"from": "2026-08-18T16:30:00+03:00", "to": "2026-09-16T00:00:00+03:00"})
+	require.Equal(t, http.StatusUnprocessableEntity, res.status, "half-hour bound")
+	require.Equal(t, http.StatusForbidden, h.as(seed.E2EBuildingReadonlyEmail).do(http.MethodPut, base+"/2026-07", body).status)
+
+	res = ba.do(http.MethodGet, "/bills/preview?scope=building&subject_id="+h.fx.BuildingA1.String()+
+		"&from=2026-07-17T16:30:00%2B03:00&to=2026-08-18T16:00:00%2B03:00", nil)
+	require.Equal(t, http.StatusUnprocessableEntity, res.status, string(res.body))
+
+	res = ba.do(http.MethodDelete, base+"/2026-07", nil)
+	require.Equal(t, http.StatusOK, res.status, string(res.body))
+	ba.do(http.MethodGet, base, nil).json(t, &list)
+	require.Empty(t, list)
+	require.Equal(t, http.StatusNotFound, ba.do(http.MethodDelete, base+"/2026-07", nil).status)
+}

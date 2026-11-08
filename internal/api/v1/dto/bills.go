@@ -201,3 +201,49 @@ type BillDashboard struct {
 	Plants    BillDashboardPlants     `json:"plants" required:"true"`
 	Netting   []BillDashboardNetting  `json:"netting" required:"true"`
 }
+
+// BillPreviewRequest is GET /bills/preview: an unsaved bill over any
+// hour-aligned window of at most 62 days (R559).
+type BillPreviewRequest struct {
+	Scope     string     `query:"scope" json:"-" validate:"required,oneof=analyzer building" required:"true" enum:"analyzer,building"`
+	SubjectID uuid.UUID  `query:"subject_id" json:"-" validate:"required" required:"true"`
+	From      *time.Time `query:"from" json:"-" validate:"required" required:"true"`
+	To        *time.Time `query:"to" json:"-" validate:"required" required:"true"`
+}
+
+// BillPreview is an unsaved bill (id is the nil uuid) and the building's
+// saved window for the same period key, if any.
+type BillPreview struct {
+	Bill        Bill        `json:"bill" required:"true"`
+	Lines       []BillLine  `json:"lines" required:"true"`
+	SavedPeriod *BillPeriod `json:"saved_period"`
+}
+
+// BillPeriod is a building's saved bill window for one period key (R555).
+type BillPeriod struct {
+	BuildingID  uuid.UUID `json:"building_id" required:"true"`
+	PeriodKey   string    `json:"period_key" required:"true"`
+	PeriodStart time.Time `json:"period_start" required:"true"`
+	PeriodEnd   time.Time `json:"period_end" required:"true"`
+	UpdatedAt   time.Time `json:"updated_at" required:"true"`
+}
+
+// BillPeriodPath names one building's period key.
+type BillPeriodPath struct {
+	BuildingID uuid.UUID `path:"id" json:"-"`
+	Period     string    `path:"period" json:"-" validate:"required,datetime=2006-01" pattern:"^[0-9]{4}-[0-9]{2}$"`
+}
+
+// BillPeriodSaveRequest is PUT /buildings/{id}/bill-periods/{period}.
+type BillPeriodSaveRequest struct {
+	BillPeriodPath
+	From time.Time `json:"from" validate:"required" required:"true"`
+	To   time.Time `json:"to" validate:"required" required:"true"`
+}
+
+// BillPeriodChanged is the saved window (nil after a delete) and the
+// recomputations enqueued for it (R557).
+type BillPeriodChanged struct {
+	Period *BillPeriod `json:"period"`
+	JobIDs []string    `json:"job_ids" required:"true"`
+}

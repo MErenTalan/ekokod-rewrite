@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -58,6 +59,20 @@ func billingRoutes() []Route {
 			Access: RoleGated, Roles: all, Summary: "The whole dashboard as one XLSX or PDF.",
 			Request: dto.BillDashboardExportRequest{}, Status: http.StatusOK, RawContentType: "application/octet-stream",
 			Handler: (*Handlers).billDashboardExport},
+		{Method: http.MethodGet, Pattern: "/bills/preview", OperationID: "bills.preview", Tag: "bills", Access: RoleGated, Roles: all,
+			Summary: "An unsaved bill over any hour-aligned window (R559).", Request: dto.BillPreviewRequest{},
+			Response: dto.BillPreview{}, Status: http.StatusOK, Handler: (*Handlers).previewBill},
+		{Method: http.MethodGet, Pattern: "/buildings/{id}/bill-periods", OperationID: "bill_periods.list", Tag: "bills", Access: RoleGated,
+			Roles: all, Summary: "A building's saved bill windows.", Request: dto.IDPath{}, Response: []dto.BillPeriod{},
+			Status: http.StatusOK, Handler: (*Handlers).listBillPeriods},
+		{Method: http.MethodPut, Pattern: "/buildings/{id}/bill-periods/{period}", OperationID: "bill_periods.save", Tag: "bills",
+			Access: RoleGated, Roles: auth.Roles(roleA, roleCA, roleBA), Entity: "bill_period",
+			Summary: "Save a period's real reading window and recompute the bills it touches (R557).", Request: dto.BillPeriodSaveRequest{},
+			Response: dto.BillPeriodChanged{}, Status: http.StatusOK, Handler: (*Handlers).saveBillPeriod},
+		{Method: http.MethodDelete, Pattern: "/buildings/{id}/bill-periods/{period}", OperationID: "bill_periods.delete", Tag: "bills",
+			Access: RoleGated, Roles: auth.Roles(roleA, roleCA, roleBA), Entity: "bill_period",
+			Summary: "Drop a saved window: the period follows the cut-off day again.", Request: dto.BillPeriodPath{},
+			Response: dto.BillPeriodChanged{}, Status: http.StatusOK, Handler: (*Handlers).deleteBillPeriod},
 		{Method: http.MethodGet, Pattern: "/bills/latest", OperationID: "bills.latest", Tag: "bills", Access: RoleGated, Roles: all,
 			Summary: "The most recent bill of a subject.", Request: dto.BillLatestRequest{}, Response: dto.Bill{}, Status: http.StatusOK,
 			Handler: (*Handlers).latestBill},
@@ -83,7 +98,7 @@ func billingErr(err error) error {
 	case errors.As(err, &ce):
 		status := map[string]int{
 			billingsvc.CodeTariffNotFound: 422, billingsvc.CodeNoConsumptionData: 422, billingsvc.CodeUnresolvedAnomaly: 409,
-			billingsvc.CodePeriodNotClosed: 409, "ptf_data_missing": 422,
+			billingsvc.CodePeriodNotClosed: 409, "ptf_data_missing": 422, billingsvc.CodePeriodConflict: 409,
 			billingsvc.CodeBillingParametersMissing: 500, billingsvc.CodeBillingParametersInvalid: 500,
 		}[ce.Code]
 		if status == 0 {
@@ -296,11 +311,7 @@ func (h *Handlers) getBill(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return nil, billingErr(err)
 		}
-		out := dto.BillDetail{Bill: billDTO(b), Lines: make([]dto.BillLine, len(lines))}
-		for i, l := range lines {
-			out.Lines[i] = dto.BillLine{Code: l.Code, Label: l.Label, Quantity: dto.DP(l.Quantity), Unit: l.Unit,
-				UnitPrice: dto.DP(l.UnitPrice), RatePct: dto.DP(l.RatePct), Amount: dto.D(l.Amount)}
-		}
+		out := dto.BillDetail{Bill: billDTO(b), Lines: billLinesDTO(lines)}
 		for _, m := range members {
 			out.MemberIDs = append(out.MemberIDs, m.AnalyzerID)
 		}
@@ -475,4 +486,106 @@ func nonNilDays(v []string) []string {
 		return []string{}
 	}
 	return v
+}
+
+func billLinesDTO(lines []model.BillLine) []dto.BillLine {
+	out := make([]dto.BillLine, len(lines))
+	for i, l := range lines {
+		out[i] = dto.BillLine{Code: l.Code, Label: l.Label, Quantity: dto.DP(l.Quantity), Unit: l.Unit,
+			UnitPrice: dto.DP(l.UnitPrice), RatePct: dto.DP(l.RatePct), Amount: dto.D(l.Amount)}
+	}
+	return out
+}
+
+func billPeriodDTO(p model.BillPeriod) *dto.BillPeriod {
+	return &dto.BillPeriod{BuildingID: p.BuildingID, PeriodKey: p.PeriodKey, PeriodStart: dto.T(p.PeriodStart),
+		PeriodEnd: dto.T(p.PeriodEnd), UpdatedAt: dto.T(p.UpdatedAt)}
+}
+
+// periodFieldErrors names the field a custom window breaks (R555), so the
+// form can mark it: hour-aligned bounds, from before to, at most 62 days.
+func periodFieldErrors(from, to time.Time) error {
+	fields := map[string]any{}
+	if !from.Truncate(time.Hour).Equal(from) {
+		fields["from"] = []string{"hour"}
+	}
+	if !to.Truncate(time.Hour).Equal(to) {
+		fields["to"] = []string{"hour"}
+	}
+	switch {
+	case len(fields) > 0:
+	case !from.Before(to):
+		fields["to"] = []string{"gtfield"}
+	case to.Sub(from) > domainbilling.MaxSavedPeriodSpan:
+		fields["to"] = []string{"max_span"}
+	default:
+		return nil
+	}
+	return perr.Validation.WithParams(fields)
+}
+
+func (h *Handlers) previewBill(w http.ResponseWriter, r *http.Request) {
+	serve(w, r, http.StatusOK, func(req dto.BillPreviewRequest) (any, error) {
+		if err := periodFieldErrors(*req.From, *req.To); err != nil {
+			return nil, err
+		}
+		res, err := h.Billing.Preview(r.Context(), mw.ScopeFrom(r), billingsvc.PreviewRequest{
+			Scope: model.BillScope(req.Scope), SubjectID: req.SubjectID, From: *req.From, To: *req.To,
+		})
+		if err != nil {
+			return nil, billingErr(err)
+		}
+		out := dto.BillPreview{Bill: billDTO(res.Bill), Lines: billLinesDTO(res.Lines)}
+		if res.Saved != nil {
+			out.SavedPeriod = billPeriodDTO(*res.Saved)
+		}
+		return out, nil
+	})
+}
+
+func (h *Handlers) listBillPeriods(w http.ResponseWriter, r *http.Request) {
+	serve(w, r, http.StatusOK, func(req dto.IDPath) (any, error) {
+		sc := mw.ScopeFrom(r)
+		if _, err := h.Billing.Building(r.Context(), sc, req.ID); err != nil {
+			return nil, billingErr(err)
+		}
+		periods, err := h.Billing.BillPeriods(r.Context(), sc, req.ID)
+		if err != nil {
+			return nil, billingErr(err)
+		}
+		out := make([]dto.BillPeriod, len(periods))
+		for i, p := range periods {
+			out[i] = *billPeriodDTO(p)
+		}
+		return out, nil
+	})
+}
+
+func (h *Handlers) saveBillPeriod(w http.ResponseWriter, r *http.Request) {
+	serve(w, r, http.StatusOK, func(req dto.BillPeriodSaveRequest) (any, error) {
+		if err := periodFieldErrors(req.From, req.To); err != nil {
+			return nil, err
+		}
+		var user *uuid.UUID
+		if id := actingUser(r); id != uuid.Nil {
+			user = &id
+		}
+		saved, ids, err := h.BillRequests.SavePeriod(r.Context(), mw.ScopeFrom(r), billingsvc.SavePeriodRequest{
+			BuildingID: req.BuildingID, PeriodKey: req.Period, From: req.From, To: req.To, UserID: user,
+		})
+		if err != nil {
+			return nil, billingErr(err)
+		}
+		return dto.BillPeriodChanged{Period: billPeriodDTO(saved), JobIDs: ids}, nil
+	})
+}
+
+func (h *Handlers) deleteBillPeriod(w http.ResponseWriter, r *http.Request) {
+	serve(w, r, http.StatusOK, func(req dto.BillPeriodPath) (any, error) {
+		ids, err := h.BillRequests.DeletePeriod(r.Context(), mw.ScopeFrom(r), req.BuildingID, req.Period)
+		if err != nil {
+			return nil, billingErr(err)
+		}
+		return dto.BillPeriodChanged{JobIDs: ids}, nil
+	})
 }

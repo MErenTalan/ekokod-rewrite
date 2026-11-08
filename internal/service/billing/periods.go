@@ -236,3 +236,13 @@ func (s *Service) regenerations(ctx context.Context, sc store.Scope, building mo
 	}
 	return out, nil
 }
+
+// Building is a visible building (the bill-periods routes' 404 check).
+func (s *Service) Building(ctx context.Context, sc store.Scope, id uuid.UUID) (model.Building, error) {
+	return s.deps.Buildings.Get(ctx, sc, id)
+}
+
+// BillPeriods lists a building's saved windows.
+func (s *Service) BillPeriods(ctx context.Context, sc store.Scope, buildingID uuid.UUID) ([]model.BillPeriod, error) {
+	return s.deps.Bills.BillPeriods(ctx, sc, buildingID, nil)
+}

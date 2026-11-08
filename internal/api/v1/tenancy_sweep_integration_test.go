@@ -150,6 +150,7 @@ func validBodies(h *harness) map[string]any {
 			"settings":     map[string]any{"communication_threshold_hours": 6},
 		},
 		"iso50001.notes.update": map[string]any{"clause_id": "5.1", "body": "Sweep"},
+		"bill_periods.save":     map[string]any{"from": "2026-08-18T16:00:00+03:00", "to": "2026-09-16T16:00:00+03:00"},
 	}
 }
 
@@ -176,7 +177,7 @@ func TestBuildingAdminCannotReachOtherBuildingsAnyEndpoint(t *testing.T) {
 		candidates, ok := ids[family]
 		require.True(t, ok, "%s %s has no foreign id mapping: add one to foreign()", rt.Method, rt.Pattern)
 		for _, id := range candidates {
-			path := strings.Replace(rt.Pattern, "{id}", id, 1)
+			path := strings.Replace(strings.Replace(rt.Pattern, "{id}", id, 1), "{period}", "2026-08", 1)
 			var body any
 			if rt.Mutating() {
 				body = bodies[rt.OperationID]
