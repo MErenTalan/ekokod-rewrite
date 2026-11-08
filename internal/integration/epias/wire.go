@@ -74,6 +74,7 @@ func (e unitCostEnvelope) rows() ([]json.RawMessage, bool) {
 type unitCostItem struct {
 	Period   *string     `json:"period"`
 	Date     *string     `json:"date"`
+	Version  *string     `json:"version"` // R563: one row per published revision
 	UnitCost json.Number `json:"unitCost"`
 }
 

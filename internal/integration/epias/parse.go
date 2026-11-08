@@ -159,9 +159,15 @@ func parseUnitCostResponse(body []byte) ([]unitCostRow, int, error) {
 		return nil, 0, &integration.Error{Kind: integration.ErrMalformedPayload, Provider: integration.ProviderEPIAS, Op: "unit-cost"}
 	}
 
-	rows := make([]unitCostRow, 0, len(raw))
+	// R563: a month comes once per published version; the latest version
+	// wins, and the same month twice without distinct versions is malformed.
 	type key struct{ y, m int16 }
-	seen := make(map[key]bool, len(raw))
+	type pick struct {
+		row     unitCostRow
+		version *time.Time
+	}
+	picked := make(map[key]pick, len(raw))
+	var order []key
 	dropped := 0
 
 	for _, r := range raw {
@@ -180,12 +186,30 @@ func parseUnitCostResponse(body []byte) ([]unitCostRow, int, error) {
 			dropped++
 			continue
 		}
-		k := key{year, month}
-		if seen[k] {
-			return nil, 0, &integration.Error{Kind: integration.ErrMalformedPayload, Provider: integration.ProviderEPIAS, Op: "unit-cost"}
+		var version *time.Time
+		if item.Version != nil {
+			v, err := normalize.ISO8601(*item.Version)
+			if err != nil {
+				dropped++
+				continue
+			}
+			version = &v
 		}
-		seen[k] = true
-		rows = append(rows, unitCostRow{Year: year, Month: month, Value: value})
+		k := key{year, month}
+		cur, seen := picked[k]
+		switch {
+		case !seen:
+			order = append(order, k)
+		case cur.version == nil || version == nil || cur.version.Equal(*version):
+			return nil, 0, &integration.Error{Kind: integration.ErrMalformedPayload, Provider: integration.ProviderEPIAS, Op: "unit-cost"}
+		case version.Before(*cur.version):
+			continue
+		}
+		picked[k] = pick{row: unitCostRow{Year: year, Month: month, Value: value}, version: version}
+	}
+	rows := make([]unitCostRow, 0, len(order))
+	for _, k := range order {
+		rows = append(rows, picked[k].row)
 	}
 	return rows, dropped, nil
 }

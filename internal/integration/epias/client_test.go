@@ -509,6 +509,30 @@ func TestEPIASYekdemUnitCost(t *testing.T) {
 	require.Equal(t, "190.5678", byMonth[2])
 }
 
+// TestEPIASYekdemKeepsLatestVersion (R563): the live unit-cost call returns
+// every published version of a month (live shape, 2026-11-09); the latest
+// version wins, whatever the row order.
+func TestEPIASYekdemKeepsLatestVersion(t *testing.T) {
+	srv := fake.NewTLSServer(t,
+		casRoute(casSuccess("TGT-30-yekdemver-cas01")),
+		yekRoute(fake.JSON(http.StatusOK, fake.Fixture(t, "epias", "epias_yekdem_versions.json"))),
+	)
+	pool, _ := epiasTestPool(t, srv, nil)
+	c, err := epias.New(pool, epiasTestOptions(srv, clock.NewFake(fixtureNow), nil))
+	require.NoError(t, err)
+
+	from := time.Date(2026, 6, 1, 0, 0, 0, 0, normalize.Istanbul).UTC()
+	to := time.Date(2026, 8, 1, 0, 0, 0, 0, normalize.Istanbul).UTC()
+	values, err := c.YekdemUnitCost(context.Background(), from, to)
+	require.NoError(t, err)
+	byMonth := map[int16]string{}
+	for _, v := range values {
+		byMonth[v.Month] = v.Value.String()
+	}
+	require.Equal(t, map[int16]string{6: "1089.738", 7: "490.435", 8: "395.303", 9: "444.994"}, byMonth)
+	require.Zero(t, c.YekdemDropped())
+}
+
 // TestEPIASYekdemDroppedRowsAreCounted (M2, fix round 1): a YEKDEM row
 // that fails to resolve a (year, month) — here, one with neither `period`
 // nor `date` — is silently dropped from the result (unlike an MCP row,
