@@ -94,7 +94,29 @@ func newRecomputeCmd() *cobra.Command {
 			})
 		}}
 
-	cmd.AddCommand(consumption, bills, reports, carbon, forecasts)
+	var pricesFrom, pricesTo string
+	prices := &cobra.Command{Use: "prices", Short: "Backfill EPİAŞ PTF and YEKDEM over a date range (R564)",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			f, t, err := dayRange(pricesFrom, pricesTo)
+			if err != nil {
+				return err
+			}
+			month := func(ts time.Time) time.Time { return time.Date(ts.Year(), ts.Month(), 1, 0, 0, 0, 0, istanbulLoc) }
+			p := job.SyncPricesPayload{
+				Window:       &job.Window{From: f.UTC(), To: t.UTC()},
+				YekdemWindow: &job.Window{From: month(f).UTC(), To: month(t).AddDate(0, 1, 0).UTC()},
+			}
+			return withGraph(cmd, report, func(ctx context.Context, _ *pgxpool.Pool, h *job.Handlers) (recompute.Summary, error) {
+				if err := h.Prices.SyncPrices(ctx, p); err != nil {
+					return recompute.Summary{Failed: 1, Failures: []recompute.Failure{{Error: err.Error()}}}, nil
+				}
+				return recompute.Summary{Processed: 1}, nil
+			})
+		}}
+	prices.Flags().StringVar(&pricesFrom, "from", "", "first day, YYYY-MM-DD (required)")
+	prices.Flags().StringVar(&pricesTo, "to", "", "day after the last, YYYY-MM-DD (default: now)")
+
+	cmd.AddCommand(consumption, bills, reports, carbon, forecasts, prices)
 	return cmd
 }
 

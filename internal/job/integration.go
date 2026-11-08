@@ -83,7 +83,12 @@ type BackfillPayload struct {
 // SyncPricesPayload asks for an EPİAŞ price sync. A nil Window means "the
 // job's own default window" (typically "today and tomorrow" — decided by
 // the handler, not this payload).
-type SyncPricesPayload struct{ Window *Window }
+type SyncPricesPayload struct {
+	Window *Window
+	// YekdemWindow backfills YEKDEM over these months (operator recompute,
+	// R564); nil keeps R39's trailing window.
+	YekdemWindow *Window `json:",omitempty"`
+}
 
 // ConsumptionRefreshPayload is R17's payload shape, declared ahead of its
 // handler so the wire format was stable. Its constructor

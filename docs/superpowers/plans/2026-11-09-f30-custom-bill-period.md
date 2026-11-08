@@ -34,6 +34,8 @@ the month at ~15:30–16:15, so a fixed cut-off day cannot follow them. Findings
 7. **Invoice text** (R560) in PDF + UI; golden PDF sample.
 8. Phase end: package gates, internal/arch, e2e of the bills page, handoff.
 
+| R564 | `ekokod recompute prices --from YYYY-MM-DD [--to]` backfills PTF over the days and YEKDEM over the covered months (`SyncPricesPayload.YekdemWindow`); the scheduled run keeps R39's trailing window. | Jul 2026 YEKDEM never fetched |
+
 ## PTF check against the MEPAŞ bills (2026-11-09, live EPİAŞ data)
 Implied (PTF+YEKDEM): 3285.26 (07-17→08-18), 3450.72 (08-18→09-16). Hourly-arithmetic PTF over the period + latest
 YEKDEM: 3235.5 (−1.5 %) and 3307.0 (−4.2 %); consumption-weighted (our R108): −6.5 % / −9.2 %; previous-month and

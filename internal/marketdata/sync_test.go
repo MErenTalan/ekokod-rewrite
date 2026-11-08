@@ -201,3 +201,28 @@ func TestSyncPricesDedupesDuplicateYekdemMonthBeforeUpsert(t *testing.T) {
 	require.Equal(t, int16(3), rows[0].Month)
 	require.True(t, first.Equal(rows[0].Value), "the FIRST occurrence for a duplicated (Year, Month) must win (dedupYekdem's documented rule), got %s", rows[0].Value)
 }
+
+// TestSyncPricesExplicitYekdemWindow (R564): an operator backfill asks EPİAŞ
+// for YEKDEM over its own months; without one, R39's trailing window stays.
+func TestSyncPricesExplicitYekdemWindow(t *testing.T) {
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, normalize.Istanbul)
+	var asked [][2]time.Time
+	src := &duplicatingSource{
+		hourly: func(time.Time, time.Time) ([]model.MarketPrice, []integration.Warning, error) { return nil, nil, nil },
+		yekdem: func(f, t time.Time) ([]model.YekdemMonthly, error) {
+			asked = append(asked, [2]time.Time{f, t})
+			return nil, nil
+		},
+	}
+	syncer := marketdata.New(src, &recordingMarket{}, &stubJournal{}, clock.NewFake(now), nil)
+	day := job.Window{From: now.Add(-time.Hour), To: now}
+	yek := job.Window{From: time.Date(2026, 6, 1, 0, 0, 0, 0, normalize.Istanbul).UTC(), To: time.Date(2026, 11, 1, 0, 0, 0, 0, normalize.Istanbul).UTC()}
+
+	require.NoError(t, syncer.SyncPrices(context.Background(), job.SyncPricesPayload{Window: &day, YekdemWindow: &yek}))
+	require.NotEmpty(t, asked)
+	require.True(t, asked[0][0].Equal(yek.From), "first YEKDEM chunk starts at the backfill's first month: %s", asked[0][0])
+
+	asked = nil
+	require.NoError(t, syncer.SyncPrices(context.Background(), job.SyncPricesPayload{Window: &day}))
+	require.True(t, asked[0][0].Equal(time.Date(2026, 8, 1, 0, 0, 0, 0, normalize.Istanbul).UTC()), "R39: month − 3 by default")
+}

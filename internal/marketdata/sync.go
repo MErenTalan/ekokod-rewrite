@@ -109,6 +109,9 @@ type yekdemDropReporter interface {
 func (s *Syncer) SyncPrices(ctx context.Context, p job.SyncPricesPayload) error {
 	from, to := s.resolveWindow(p.Window)
 	yekFrom, yekTo := s.resolveYekdemWindow()
+	if p.YekdemWindow != nil { // R564: an explicit operator backfill
+		yekFrom, yekTo = p.YekdemWindow.From, p.YekdemWindow.To
+	}
 
 	scope, err := json.Marshal(syncScope{PTFFrom: from, PTFTo: to, YekdemFrom: yekFrom, YekdemTo: yekTo})
 	if err != nil {
