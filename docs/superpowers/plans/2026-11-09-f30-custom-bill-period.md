@@ -21,7 +21,7 @@ the month at ~15:30–16:15, so a fixed cut-off day cannot follow them. Findings
 | R559 | Preview = computeSubject over an explicit window, nothing persisted (no anomalies recorded, `Open: true`), returns the bill shape + lines + missing days + `boundary_warnings` (bound before the first / after the last reading of a member). Max span 62 days, To ≤ now. | |
 | R560 | Invoice shows the energy line even when PTF is missing (`energy` amount 0 + flag text "PTF/YEKDEM verisi yok") and a "birim fiyat" summary: energy unit + distribution unit = all-in unit (Turkish: "Elektrik enerji bedeli", "Dağıtım bedeli", "Toplam birim fiyat"). | manager's "tarife bedeli yok" |
 | R561 | Days in period for hour bounds = calendar-date difference (unchanged `DaysInPeriod`). | tier threshold |
-| R562 | Tariff flag `reactive_first_violation_waiver` (default true); false = never deduct the first violation even when params waive it (owner: off for Fuga, data starts mid-year). Tariff form checkbox. | Sep 2026 reactive 4864.21 deducted |
+| R562 | Tariff flag `reactive_waiver_disabled` (default false); true = never deduct the first violation even when params waive it (owner: off for Fuga, data starts mid-year). Tariff form checkbox. | Sep 2026 reactive 4864.21 deducted |
 | R563 | EPİAŞ unit-cost now returns several `version`s per `period` and RFC3339 periods (live 2026-11-09) → parse RFC3339, keep the latest version per month; today's parser fails the whole run as malformed. | no YEKDEM ever stored |
 | R564 | `ekokod recompute prices --from YYYY-MM-DD [--to]` backfills PTF over the days and YEKDEM over the covered months (`SyncPricesPayload.YekdemWindow`); the scheduled run keeps R39's trailing window. | Jul 2026 YEKDEM never fetched |
 
