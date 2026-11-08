@@ -23,6 +23,7 @@ the month at ~15:30–16:15, so a fixed cut-off day cannot follow them. Findings
 | R561 | Days in period for hour bounds = calendar-date difference (unchanged `DaysInPeriod`). | tier threshold |
 | R562 | Tariff flag `reactive_first_violation_waiver` (default true); false = never deduct the first violation even when params waive it (owner: off for Fuga, data starts mid-year). Tariff form checkbox. | Sep 2026 reactive 4864.21 deducted |
 | R563 | EPİAŞ unit-cost now returns several `version`s per `period` and RFC3339 periods (live 2026-11-09) → parse RFC3339, keep the latest version per month; today's parser fails the whole run as malformed. | no YEKDEM ever stored |
+| R564 | `ekokod recompute prices --from YYYY-MM-DD [--to]` backfills PTF over the days and YEKDEM over the covered months (`SyncPricesPayload.YekdemWindow`); the scheduled run keeps R39's trailing window. | Jul 2026 YEKDEM never fetched |
 
 ## Tasks
 1. **Domain** `billing.ResolvePeriod(key, cutoff, prev, cur, next *SavedPeriod, loc)` + `ValidateSavedPeriod` (hour-aligned, span, order). Tests: Fuga keys (2026-07 saved 07-17 16:00→08-18 16:00, 2026-08 unsaved → 08-18 16:00→09-16 00:00 cut-off end), conflict, month-end cut-off.
@@ -33,8 +34,6 @@ the month at ~15:30–16:15, so a fixed cut-off day cannot follow them. Findings
 6. **Web** bills page "Özel dönem" card: scope picker, from/to date + optional time, Önizle → invoice-line-table + warnings; "Bu dönemi kaydet" with key select; bill header shows hours when not midnight. Form-error rule (field marked, toast, dialog closes only on success).
 7. **Invoice text** (R560) in PDF + UI; golden PDF sample.
 8. Phase end: package gates, internal/arch, e2e of the bills page, handoff.
-
-| R564 | `ekokod recompute prices --from YYYY-MM-DD [--to]` backfills PTF over the days and YEKDEM over the covered months (`SyncPricesPayload.YekdemWindow`); the scheduled run keeps R39's trailing window. | Jul 2026 YEKDEM never fetched |
 
 ## PTF check against the MEPAŞ bills (2026-11-09, live EPİAŞ data)
 Implied (PTF+YEKDEM): 3285.26 (07-17→08-18), 3450.72 (08-18→09-16). Hourly-arithmetic PTF over the period + latest
