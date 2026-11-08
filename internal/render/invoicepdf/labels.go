@@ -38,9 +38,11 @@ var labels = map[string]map[string]string{
 		"limit": "Sınır", "no_limit": "Sınır uygulanmadı",
 
 		"lines": "Fatura kalemleri", "item": "Kalem", "quantity": "Miktar", "unit_price": "Birim fiyat", "amount": "Tutar",
-		"vat_base": "KDV matrahı", "unit:period": "dönem",
-		"sale_note": "mahsup sonrası şebekeye verilen fazla üretim; ödenecek tutara dahil değildir.",
-		"footnote":  "Tutarlar yuvarlanmamış miktar ve birim fiyattan hesaplanır; kayıtlı 4/6 haneli değerlerden yeniden hesaplamada kuruş farkı olabilir.",
+		"vat_base": "KDV matrahı", "unit:period": "dönem", "no_ptf": "PTF yok",
+		"unit_summary": "Birim fiyat", "energy_unit": "Elektrik enerji bedeli", "distribution_unit": "Dağıtım bedeli",
+		"total_unit": "Toplam birim fiyat",
+		"sale_note":  "mahsup sonrası şebekeye verilen fazla üretim; ödenecek tutara dahil değildir.",
+		"footnote":   "Tutarlar yuvarlanmamış miktar ve birim fiyattan hesaplanır; kayıtlı 4/6 haneli değerlerden yeniden hesaplamada kuruş farkı olabilir.",
 
 		"reactive": "Reaktif", "inductive": "Endüktif", "capacitive": "Kapasitif", "reactive_price": "Reaktif birim fiyat",
 		"st:charged": "Ceza uygulandı", "st:waived": "İlk ihlal — tenzil edildi", "st:within": "Sınır içinde", "st:exempt": "Muaf",
@@ -95,9 +97,11 @@ var labels = map[string]map[string]string{
 		"limit": "Limit", "no_limit": "No limit applied",
 
 		"lines": "Invoice lines", "item": "Item", "quantity": "Quantity", "unit_price": "Unit price", "amount": "Amount",
-		"vat_base": "VAT base", "unit:period": "period",
-		"sale_note": "excess generation fed to the grid after netting; not part of the amount due.",
-		"footnote":  "Amounts are computed from unrounded quantities and prices; re-deriving them from the stored 4/6-decimal values can differ by a kuruş.",
+		"vat_base": "VAT base", "unit:period": "period", "no_ptf": "No PTF",
+		"unit_summary": "Unit price", "energy_unit": "Energy", "distribution_unit": "Distribution",
+		"total_unit": "All-in unit price",
+		"sale_note":  "excess generation fed to the grid after netting; not part of the amount due.",
+		"footnote":   "Amounts are computed from unrounded quantities and prices; re-deriving them from the stored 4/6-decimal values can differ by a kuruş.",
 
 		"reactive": "Reactive", "inductive": "Inductive", "capacitive": "Capacitive", "reactive_price": "Reactive unit price",
 		"st:charged": "Penalty charged", "st:waived": "First violation — waived", "st:within": "Within limits", "st:exempt": "Exempt",

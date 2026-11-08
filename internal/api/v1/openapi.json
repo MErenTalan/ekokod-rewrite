@@ -1471,6 +1471,9 @@
           "total_cost": {
             "$ref": "#/components/schemas/Decimal"
           },
+          "unit_prices": {
+            "$ref": "#/components/schemas/BillUnitPrices"
+          },
           "vat_cost": {
             "$ref": "#/components/schemas/Decimal"
           }
@@ -1500,6 +1503,7 @@
           "has_pdf",
           "computed_at",
           "lines",
+          "unit_prices",
           "member_analyzer_ids"
         ],
         "type": "object"
@@ -1665,12 +1669,30 @@
           },
           "saved_period": {
             "$ref": "#/components/schemas/BillPeriod"
+          },
+          "unit_prices": {
+            "$ref": "#/components/schemas/BillUnitPrices"
           }
         },
         "required": [
           "bill",
-          "lines"
+          "lines",
+          "unit_prices"
         ],
+        "type": "object"
+      },
+      "BillUnitPrices": {
+        "properties": {
+          "distribution": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "energy": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "total": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
         "type": "object"
       },
       "Building": {

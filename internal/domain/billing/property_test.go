@@ -241,13 +241,18 @@ func oracleCompute(in billing.Input) oracleOut {
 			prices = []*decimal.Decimal{in.Pricing.T1, in.Pricing.T2, in.Pricing.T3}
 		}
 		for i, code := range []string{"energy_t1", "energy_t2", "energy_t3"} {
-			if prices[i] != nil {
+			switch {
+			case prices[i] != nil:
 				energyCost = energyCost.Add(charge(code, round(b[i].Mul(*prices[i]))))
+			case t.UsePtfYekdem: // R560: unpriced line
+				charge(code, zero)
 			}
 		}
 	case t.UsePtfYekdem:
 		if in.Pricing.EnergyUnitPrice != nil {
 			energyCost = charge("energy", round(net.Mul(*in.Pricing.EnergyUnitPrice)))
+		} else {
+			charge("energy", zero) // R560: unpriced line
 		}
 	default:
 		groupThreshold, groupOK := p.TieringGroups[t.UserGroup]

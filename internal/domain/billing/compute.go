@@ -155,6 +155,9 @@ func Compute(in Input) (Invoice, error) {
 	energyRaw := decimal.Zero
 	energyLine := func(code string, qty decimal.Decimal, price *decimal.Decimal) {
 		if price == nil {
+			if t.UsePtfYekdem { // R560: the line stays on the bill, unpriced, beside the ptf_data_missing flag
+				add(Line{Code: code, Quantity: &qty, Unit: UnitKwh, Amount: decimal.Zero})
+			}
 			return
 		}
 		energyRaw = energyRaw.Add(qty.Mul(*price))

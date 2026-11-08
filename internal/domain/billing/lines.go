@@ -73,3 +73,38 @@ func indexJSON(m map[string]*decimal.Decimal) json.RawMessage {
 	raw, _ := json.Marshal(out) // a map of strings cannot fail to marshal
 	return raw
 }
+
+// UnitPrices is the per-kWh summary printed under the charge lines (R560):
+// the utility bills quote energy + distribution as one all-in unit price.
+type UnitPrices struct {
+	Energy, Distribution, Total *decimal.Decimal
+}
+
+// SummariseUnitPrices weighs the energy lines' prices by their kWh. A nil
+// field is a price the bill does not know (an unpriced PTF line, no line).
+func SummariseUnitPrices(lines []model.BillLine) UnitPrices {
+	var out UnitPrices
+	cost, kwh, unpriced := decimal.Zero, decimal.Zero, false
+	for _, l := range lines {
+		switch {
+		case l.Code == model.BillLineDistribution && l.UnitPrice != nil:
+			p := *l.UnitPrice
+			out.Distribution = &p
+		case strings.HasPrefix(l.Code, model.BillLineEnergy) && l.Quantity != nil:
+			if l.UnitPrice == nil {
+				unpriced = true
+				continue
+			}
+			cost, kwh = cost.Add(l.Quantity.Mul(*l.UnitPrice)), kwh.Add(*l.Quantity)
+		}
+	}
+	if !unpriced && kwh.IsPositive() {
+		e := cost.DivRound(kwh, 6)
+		out.Energy = &e
+	}
+	if out.Energy != nil && out.Distribution != nil {
+		t := out.Energy.Add(*out.Distribution)
+		out.Total = &t
+	}
+	return out
+}

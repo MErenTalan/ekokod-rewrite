@@ -102,5 +102,10 @@ export const demoPreview = {
     total_cost: '150000.00', currency: 'TRY', reactive_penalty_applied: false, ptf_yekdem_used: true, status: 'draft',
     missing_days: ['2026-08-07', '2026-08-08'], has_pdf: false, computed_at: '2026-11-09T10:00:00Z',
   },
-  lines: [{ code: 'energy', label: 'Enerji bedeli', quantity: '20283.24', unit: 'kWh', unit_price: '3.593417', amount: '72886.45' }],
+  lines: [
+    { code: 'energy', label: 'energy', quantity: '20283.24', unit: 'kWh', unit_price: '3.593417', amount: '72886.45' },
+    { code: 'distribution', label: 'distribution', quantity: '20283.24', unit: 'kWh', unit_price: '2.4794', amount: '50290.26' },
+    { code: 'tax:BTV', label: 'tax:BTV', unit: '%', rate_pct: '5', amount: '3644.32' },
+  ],
+  unit_prices: { energy: '3.593417', distribution: '2.4794', total: '6.072817' },
 } as unknown as BillPreview;

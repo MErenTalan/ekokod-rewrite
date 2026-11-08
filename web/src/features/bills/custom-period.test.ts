@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatBound, keyOptions, shiftMonth, splitInstant, toInstant } from './custom-period';
+import { formatBound, keyOptions, lineLabel, shiftMonth, splitInstant, toInstant } from './custom-period';
 
 describe('custom bill period', () => {
   it('sends Istanbul instants, midnight when no hour is picked', () => {
@@ -21,5 +21,14 @@ describe('custom bill period', () => {
 
   it('splits a saved bound back into the form fields', () => {
     expect(splitInstant('2026-08-18T13:00:00Z')).toEqual({ date: '2026-08-18', hour: '16:00' });
+  });
+});
+
+describe('lineLabel', () => {
+  const t = (k: string) => ({ energy: 'Enerji bedeli', tax: 'Vergi/fon', extra: 'Ek bedel' })[k] ?? k;
+  it('names a coded line and keeps the operator-given name of a tax or extra charge', () => {
+    expect(lineLabel('energy', t)).toBe('Enerji bedeli');
+    expect(lineLabel('tax:BTV', t)).toBe('Vergi/fon: BTV');
+    expect(lineLabel('extra:Kapasite: yıllık', t)).toBe('Ek bedel: Kapasite: yıllık');
   });
 });

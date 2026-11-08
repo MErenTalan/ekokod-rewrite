@@ -15,8 +15,10 @@ import {
 import { formatCurrency, formatNumber } from '@/lib/format';
 import type { Analyzer, BillPeriod, BillPreview } from '@/lib/api/types';
 
-import { formatBound, HOURS, keyOptions, splitInstant, toInstant } from './custom-period';
+import { formatBound, HOURS, keyOptions, lineLabel, splitInstant, toInstant } from './custom-period';
 import { dayRanges } from './missing-days';
+
+const unit = (v: string | null | undefined) => (v ? formatNumber(v, { minFractionDigits: 6, maxFractionDigits: 6 }) : '—');
 
 export type PreviewRequest = { scope: 'analyzer' | 'building'; subjectId: string; from: string; to: string };
 export type SaveRequest = { periodKey: string; from: string; to: string };
@@ -47,6 +49,7 @@ export function CustomPeriodCardView({
   onPreview, onSave, onDelete,
 }: CustomPeriodCardViewProps) {
   const t = useTranslations('bills.custom');
+  const codes = useTranslations('bills.lineCodes') as unknown as (key: string) => string;
   const [subject, setSubject] = useState<string>(buildingId ? `building:${buildingId}` : '');
   const [fromDate, setFromDate] = useState<string | null>(null);
   const [fromHour, setFromHour] = useState('00:00');
@@ -157,11 +160,13 @@ export function CustomPeriodCardView({
               <TableBody>
                 {(preview?.lines ?? []).map((l) => (
                   <TableRow key={l.code + l.label}>
-                    <TableCell>{l.label}</TableCell>
+                    <TableCell>{lineLabel(l.code, codes)}</TableCell>
                     <TableCell numeric>
                       {l.rate_pct ? `%${formatNumber(l.rate_pct)}` : l.quantity ? `${formatNumber(l.quantity, { maxFractionDigits: 3 })} ${l.unit ?? ''}` : '—'}
                     </TableCell>
-                    <TableCell numeric>{l.unit_price ? formatNumber(l.unit_price, { maxFractionDigits: 6 }) : '—'}</TableCell>
+                    <TableCell numeric>
+                      {l.unit_price ? formatNumber(l.unit_price, { maxFractionDigits: 6 }) : l.code.startsWith('energy') && l.quantity ? t('noPtf') : '—'}
+                    </TableCell>
                     <TableCell numeric>{formatCurrency(l.amount)}</TableCell>
                   </TableRow>
                 ))}
@@ -176,6 +181,14 @@ export function CustomPeriodCardView({
               </TableFooter>
             </Table>
           </TableContainer>
+          {preview?.unit_prices.energy || preview?.unit_prices.distribution ? (
+            <p className="text-foreground-muted type-caption">
+              {t('unitSummary', {
+                energy: unit(preview.unit_prices.energy), distribution: unit(preview.unit_prices.distribution),
+                total: unit(preview.unit_prices.total),
+              })}
+            </p>
+          ) : null}
         </div>
       ) : null}
 

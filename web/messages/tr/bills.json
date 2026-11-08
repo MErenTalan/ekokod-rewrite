@@ -125,6 +125,28 @@
     "deleteDescription": "Bu ayın faturası yeniden kesim günü kuralıyla hesaplanır; komşu aylar da gerekirse yeniden hesaplanır.",
     "saved": "Fatura dönemi kaydedildi, faturalar yeniden hesaplanıyor",
     "deleted": "Fatura dönemi silindi, faturalar yeniden hesaplanıyor",
-    "conflict": "Bu aralık komşu ayın kayıtlı dönemiyle çakışıyor"
+    "conflict": "Bu aralık komşu ayın kayıtlı dönemiyle çakışıyor",
+    "noPtf": "PTF yok",
+    "unitSummary": "Birim fiyat: Elektrik enerji bedeli {energy} + Dağıtım bedeli {distribution} = Toplam birim fiyat {total} TL/kWh"
+  },
+  "lineCodes": {
+    "energy": "Enerji bedeli",
+    "energy_low_tier": "Enerji bedeli (düşük kademe)",
+    "energy_high_tier": "Enerji bedeli (yüksek kademe)",
+    "energy_t1": "Enerji bedeli T1 (gündüz)",
+    "energy_t2": "Enerji bedeli T2 (puant)",
+    "energy_t3": "Enerji bedeli T3 (gece)",
+    "distribution": "Dağıtım bedeli",
+    "green_energy": "Yeşil enerji bedeli",
+    "power": "Güç bedeli",
+    "demand_overrun": "Güç aşım bedeli",
+    "reactive_inductive": "Reaktif bedel (endüktif)",
+    "reactive_capacitive": "Reaktif bedel (kapasitif)",
+    "reactive_waiver": "Reaktif bedel tenzili (yılın ilk ihlali)",
+    "vat": "KDV",
+    "generation_credit": "Üretim mahsubu",
+    "generation_sale": "Üretim satış bedeli (bilgi)",
+    "extra": "Ek bedel",
+    "tax": "Vergi/fon"
   }
 }

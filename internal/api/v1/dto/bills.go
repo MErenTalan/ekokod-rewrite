@@ -51,11 +51,20 @@ type BillLine struct {
 	Amount    Decimal  `json:"amount" required:"true"`
 }
 
+// BillUnitPrices is energy + distribution = the all-in TL/kWh a utility bill
+// quotes (R560); null where the bill does not know the price.
+type BillUnitPrices struct {
+	Energy       *Decimal `json:"energy"`
+	Distribution *Decimal `json:"distribution"`
+	Total        *Decimal `json:"total"`
+}
+
 // BillDetail is GET /bills/{id}.
 type BillDetail struct {
 	Bill
-	Lines     []BillLine  `json:"lines" required:"true"`
-	MemberIDs []uuid.UUID `json:"member_analyzer_ids" required:"true"`
+	Lines      []BillLine     `json:"lines" required:"true"`
+	UnitPrices BillUnitPrices `json:"unit_prices" required:"true"`
+	MemberIDs  []uuid.UUID    `json:"member_analyzer_ids" required:"true"`
 }
 
 // BillListRequest is GET /bills.
@@ -214,9 +223,10 @@ type BillPreviewRequest struct {
 // BillPreview is an unsaved bill (id is the nil uuid) and the building's
 // saved window for the same period key, if any.
 type BillPreview struct {
-	Bill        Bill        `json:"bill" required:"true"`
-	Lines       []BillLine  `json:"lines" required:"true"`
-	SavedPeriod *BillPeriod `json:"saved_period"`
+	Bill        Bill           `json:"bill" required:"true"`
+	Lines       []BillLine     `json:"lines" required:"true"`
+	UnitPrices  BillUnitPrices `json:"unit_prices" required:"true"`
+	SavedPeriod *BillPeriod    `json:"saved_period"`
 }
 
 // BillPeriod is a building's saved bill window for one period key (R555).

@@ -21,6 +21,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/seed"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
 	"github.com/MErenTalan/ekokod-rewrite/internal/store/postgres"
+	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
 )
 
 func validTariff(building uuid.UUID) map[string]any {
@@ -367,6 +368,20 @@ func TestBillPeriodsOverTheWire(t *testing.T) {
 	res = ba.do(http.MethodGet, "/bills/preview?scope=building&subject_id="+h.fx.BuildingA1.String()+
 		"&from=2026-07-17T16:30:00%2B03:00&to=2026-08-18T16:00:00%2B03:00", nil)
 	require.Equal(t, http.StatusUnprocessableEntity, res.status, string(res.body))
+
+	require.Equal(t, http.StatusCreated, h.as(seed.E2ECompanyAdminEmail).do(http.MethodPost, "/tariffs", validTariff(h.fx.BuildingA1)).status)
+	h.clock.Set(time.Date(2026, 9, 17, 10, 0, 0, 0, time.UTC))
+	testfixtures.InsertReadings(t, t.Context(), h.pool, h.fx.CompanyA, testfixtures.HourlyReadings(h.fx.AnalyzerA1,
+		time.Date(2026, 7, 17, 0, 0, 0, 0, ist), time.Date(2026, 8, 19, 0, 0, 0, 0, ist), testfixtures.Constant("10")))
+	res = ba.do(http.MethodGet, "/bills/preview?scope=building&subject_id="+h.fx.BuildingA1.String()+
+		"&from=2026-07-17T16:00:00%2B03:00&to=2026-08-18T16:00:00%2B03:00", nil)
+	require.Equal(t, http.StatusOK, res.status, string(res.body))
+	var pv dto.BillPreview
+	res.json(t, &pv)
+	require.Equal(t, "2026-07", pv.Bill.PeriodKey)
+	require.True(t, pv.Bill.PeriodStart.Equal(time.Date(2026, 7, 17, 13, 0, 0, 0, time.UTC)), "the hour bound is kept")
+	require.NotNil(t, pv.UnitPrices.Distribution, "R560 summary is returned")
+	require.NotNil(t, pv.SavedPeriod, "the saved 2026-07 window is shown beside the preview")
 
 	res = ba.do(http.MethodDelete, base+"/2026-07", nil)
 	require.Equal(t, http.StatusOK, res.status, string(res.body))

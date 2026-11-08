@@ -125,6 +125,28 @@
     "deleteDescription": "This month's bill is recomputed with the cut-off day rule; neighbouring months are recomputed if needed.",
     "saved": "Bill period saved, bills are being recomputed",
     "deleted": "Bill period deleted, bills are being recomputed",
-    "conflict": "This range overlaps a neighbouring month's saved period"
+    "conflict": "This range overlaps a neighbouring month's saved period",
+    "noPtf": "No PTF",
+    "unitSummary": "Unit price: energy {energy} + distribution {distribution} = all-in {total} TL/kWh"
+  },
+  "lineCodes": {
+    "energy": "Energy",
+    "energy_low_tier": "Energy (low tier)",
+    "energy_high_tier": "Energy (high tier)",
+    "energy_t1": "Energy T1 (day)",
+    "energy_t2": "Energy T2 (peak)",
+    "energy_t3": "Energy T3 (night)",
+    "distribution": "Distribution",
+    "green_energy": "Green energy",
+    "power": "Power",
+    "demand_overrun": "Demand overrun",
+    "reactive_inductive": "Reactive (inductive)",
+    "reactive_capacitive": "Reactive (capacitive)",
+    "reactive_waiver": "Reactive waived (first violation of the year)",
+    "vat": "VAT",
+    "generation_credit": "Generation credit",
+    "generation_sale": "Generation sale (info)",
+    "extra": "Extra charge",
+    "tax": "Tax/fund"
   }
 }

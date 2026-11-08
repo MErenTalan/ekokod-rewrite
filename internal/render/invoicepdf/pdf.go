@@ -18,6 +18,7 @@ import (
 	"golang.org/x/image/font/gofont/gomedium"
 	"golang.org/x/image/font/gofont/goregular"
 
+	"github.com/MErenTalan/ekokod-rewrite/internal/domain/billing"
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/render"
 )
@@ -113,10 +114,18 @@ func (v *invoice) optNum(x *decimal.Decimal, places int32) string {
 	return v.num(*x, places)
 }
 
-func (v *invoice) date(t time.Time) string { return t.In(istanbul).Format("02.01.2006") }
+// Bound is a period bound in Istanbul, with its hour when the utility read
+// the meter mid-day (F30): "17.07.2026" or "17.07.2026 16:00".
+func Bound(t time.Time) string {
+	local := t.In(istanbul)
+	if local.Hour() == 0 && local.Minute() == 0 {
+		return local.Format("02.01.2006")
+	}
+	return local.Format("02.01.2006 15:04")
+}
 
 func (v *invoice) periodLine() string {
-	return monthLabel(v.loc, v.b.PeriodKey) + sep + v.date(v.b.PeriodStart) + " – " + v.date(v.b.PeriodEnd) +
+	return monthLabel(v.loc, v.b.PeriodKey) + sep + Bound(v.b.PeriodStart) + " – " + Bound(v.b.PeriodEnd) +
 		sep + fmt.Sprint(v.b.DaysInPeriod) + " " + label(v.loc, "days")
 }
 
@@ -353,6 +362,8 @@ func (v *invoice) lineCells(l model.BillLine) []string {
 		price = pct(v.loc, *l.RatePct, 2)
 	case l.UnitPrice != nil:
 		price = v.num(*l.UnitPrice, 6)
+	case strings.HasPrefix(l.Code, model.BillLineEnergy) && l.Quantity != nil:
+		price = label(v.loc, "no_ptf") // R560: unpriced PTF line
 	}
 	return []string{lineLabel(v.loc, l.Code), qty, price, v.money(l.Amount)}
 }
@@ -372,6 +383,7 @@ func (v *invoice) lines() {
 		t.add(v.lineCells(l))
 	}
 	t.end()
+	v.unitSummary()
 
 	sum := func(name, amount string, bold bool) {
 		v.ensure(6)
@@ -418,6 +430,38 @@ func (v *invoice) lines() {
 	v.f.SetX(margin)
 	v.f.MultiCell(contentW, 3.4, label(v.loc, "footnote"), "", "L", false)
 	v.f.SetY(v.f.GetY() + 2)
+}
+
+// UnitSummaryText is energy + distribution = the all-in unit price the
+// utility's bill quotes (R560); unknown prices print as a dash, and a bill
+// with neither prints nothing.
+func UnitSummaryText(locale string, lines []model.BillLine) string {
+	u := billing.SummariseUnitPrices(lines)
+	if u.Energy == nil && u.Distribution == nil {
+		return ""
+	}
+	n := func(x *decimal.Decimal) string {
+		if x == nil {
+			return "—"
+		}
+		return render.FormatDecimal(*x, 6, locale)
+	}
+	return label(locale, "unit_summary") + ": " + label(locale, "energy_unit") + " " + n(u.Energy) +
+		" + " + label(locale, "distribution_unit") + " " + n(u.Distribution) +
+		" = " + label(locale, "total_unit") + " " + n(u.Total) + " TL/kWh"
+}
+
+func (v *invoice) unitSummary() {
+	text := UnitSummaryText(v.loc, v.d.Lines)
+	if text == "" {
+		return
+	}
+	v.ensure(7)
+	v.f.SetY(v.f.GetY() + 1)
+	v.font("", 7.5)
+	v.color(muted)
+	v.f.SetX(margin)
+	v.f.MultiCell(contentW, 4, text, "", "L", false)
 }
 
 // saleNote prints the hourly excess generation sale, outside the amount due (R531).

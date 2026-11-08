@@ -311,7 +311,7 @@ func (h *Handlers) getBill(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return nil, billingErr(err)
 		}
-		out := dto.BillDetail{Bill: billDTO(b), Lines: billLinesDTO(lines)}
+		out := dto.BillDetail{Bill: billDTO(b), Lines: billLinesDTO(lines), UnitPrices: unitPricesDTO(lines)}
 		for _, m := range members {
 			out.MemberIDs = append(out.MemberIDs, m.AnalyzerID)
 		}
@@ -497,6 +497,11 @@ func billLinesDTO(lines []model.BillLine) []dto.BillLine {
 	return out
 }
 
+func unitPricesDTO(lines []model.BillLine) dto.BillUnitPrices {
+	u := domainbilling.SummariseUnitPrices(lines)
+	return dto.BillUnitPrices{Energy: dto.DP(u.Energy), Distribution: dto.DP(u.Distribution), Total: dto.DP(u.Total)}
+}
+
 func billPeriodDTO(p model.BillPeriod) *dto.BillPeriod {
 	return &dto.BillPeriod{BuildingID: p.BuildingID, PeriodKey: p.PeriodKey, PeriodStart: dto.T(p.PeriodStart),
 		PeriodEnd: dto.T(p.PeriodEnd), UpdatedAt: dto.T(p.UpdatedAt)}
@@ -535,7 +540,7 @@ func (h *Handlers) previewBill(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return nil, billingErr(err)
 		}
-		out := dto.BillPreview{Bill: billDTO(res.Bill), Lines: billLinesDTO(res.Lines)}
+		out := dto.BillPreview{Bill: billDTO(res.Bill), Lines: billLinesDTO(res.Lines), UnitPrices: unitPricesDTO(res.Lines)}
 		if res.Saved != nil {
 			out.SavedPeriod = billPeriodDTO(*res.Saved)
 		}

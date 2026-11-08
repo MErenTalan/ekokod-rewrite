@@ -257,4 +257,33 @@ func TestWriteSamples(t *testing.T) {
 	f.Bill.InductiveThreshold, f.Bill.CapacitiveThreshold = nil, nil
 	write("flagged.pdf", f)
 	write("prosumer.pdf", prosumer())
+
+	// F30: the utility's 16:00 reading window, energy + distribution = the all-in unit price.
+	h := document(model.BillScopeBuilding)
+	kwh := "kWh"
+	h.Bill.PeriodStart, h.Bill.PeriodEnd = time.Date(2026, 8, 18, 13, 0, 0, 0, time.UTC), time.Date(2026, 9, 16, 13, 0, 0, 0, time.UTC)
+	h.Lines = append([]model.BillLine{
+		{Code: model.BillLineEnergy, Quantity: dp("17240.84"), Unit: &kwh, UnitPrice: dp("3.774401"), Amount: decimal.RequireFromString("65074.06")},
+		{Code: model.BillLineDistribution, Quantity: dp("17240.84"), Unit: &kwh, UnitPrice: dp("2.4794"), Amount: decimal.RequireFromString("42746.94")},
+	}, h.Lines[1:]...)
+	write("reading-hours.pdf", h)
+}
+
+func TestBoundShowsTheReadingHourOnlyWhenItMatters(t *testing.T) {
+	require.Equal(t, "17.07.2026", invoicepdf.Bound(time.Date(2026, 7, 16, 21, 0, 0, 0, time.UTC)))
+	require.Equal(t, "17.07.2026 16:00", invoicepdf.Bound(time.Date(2026, 7, 17, 13, 0, 0, 0, time.UTC)))
+}
+
+func TestUnitSummaryTextAddsEnergyAndDistribution(t *testing.T) {
+	kwh := "kWh"
+	lines := []model.BillLine{
+		{Code: model.BillLineEnergy, Quantity: dp("17240.84"), Unit: &kwh, UnitPrice: dp("3.774401")},
+		{Code: model.BillLineDistribution, Quantity: dp("17240.84"), Unit: &kwh, UnitPrice: dp("2.4794")},
+	}
+	require.Equal(t, "Birim fiyat: Elektrik enerji bedeli 3,774401 + Dağıtım bedeli 2,479400 = Toplam birim fiyat 6,253801 TL/kWh",
+		invoicepdf.UnitSummaryText("tr", lines))
+	lines[0].UnitPrice = nil
+	require.Equal(t, "Birim fiyat: Elektrik enerji bedeli — + Dağıtım bedeli 2,479400 = Toplam birim fiyat — TL/kWh",
+		invoicepdf.UnitSummaryText("tr", lines), "R560: unpriced PTF energy")
+	require.Empty(t, invoicepdf.UnitSummaryText("tr", []model.BillLine{{Code: model.BillLineVat}}))
 }

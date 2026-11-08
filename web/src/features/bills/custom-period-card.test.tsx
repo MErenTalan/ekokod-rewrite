@@ -4,7 +4,9 @@ import { waitFor, within } from '@testing-library/react';
 import { expectNoAxeViolations } from '@/test/axe';
 import { renderWithProviders } from '@/test/render';
 
-import { demoAnalyzers, demoPreview as preview, demoSavedPeriod as saved } from './_fixture';
+import type { BillPreview } from '@/lib/api/types';
+
+import { demoAnalyzers, demoPreview, demoPreview as preview, demoSavedPeriod as saved } from './_fixture';
 import { CustomPeriodCardView } from './custom-period-card';
 
 const view = (over: Partial<Parameters<typeof CustomPeriodCardView>[0]> = {}) => {
@@ -64,7 +66,20 @@ describe('CustomPeriodCardView', () => {
     const r = view({ preview });
     expect(r.getByText(/2026-07 · 17.07.2026 16:00 – 18.08.2026 16:00 · 32 gün/)).toBeInTheDocument();
     expect(r.getByText('Enerji bedeli')).toBeInTheDocument();
+    expect(r.getByText('Vergi/fon: BTV')).toBeInTheDocument();
+    expect(r.getByText(/Birim fiyat: Elektrik enerji bedeli 3,593417 \+ Dağıtım bedeli 2,479400 = Toplam birim fiyat 6,072817 TL\/kWh/)).toBeInTheDocument();
     expect(r.getByText(/Verisi olmayan günler/)).toHaveTextContent('07.08.2026 – 08.08.2026');
+  });
+
+  it('keeps an unpriced PTF energy line and dashes the unknown unit prices (R560)', () => {
+    const unpriced = {
+      ...demoPreview,
+      lines: [{ code: 'energy', label: 'energy', quantity: '100', unit: 'kWh', amount: '0' }, demoPreview.lines[1]],
+      unit_prices: { distribution: '2.4794' },
+    } as BillPreview;
+    const r = view({ preview: unpriced });
+    expect(r.getByText('PTF yok')).toBeInTheDocument();
+    expect(r.getByText(/Elektrik enerji bedeli — \+ Dağıtım bedeli 2,479400 = Toplam birim fiyat —/)).toBeInTheDocument();
   });
 
   it('marks the field the API names', () => {

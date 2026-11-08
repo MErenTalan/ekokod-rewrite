@@ -2909,6 +2909,7 @@ export interface components {
             status: "draft" | "issued" | "flagged" | "superseded";
             tariff_id?: components["schemas"]["UuidUUID"];
             total_cost: components["schemas"]["Decimal"];
+            unit_prices: components["schemas"]["BillUnitPrices"];
             vat_cost: components["schemas"]["Decimal"];
         };
         BillHour: {
@@ -2957,6 +2958,12 @@ export interface components {
             bill: components["schemas"]["Bill"];
             lines: components["schemas"]["BillLine"][];
             saved_period?: components["schemas"]["BillPeriod"];
+            unit_prices: components["schemas"]["BillUnitPrices"];
+        };
+        BillUnitPrices: {
+            distribution?: components["schemas"]["Decimal"];
+            energy?: components["schemas"]["Decimal"];
+            total?: components["schemas"]["Decimal"];
         };
         Building: {
             active_analyzer_count?: null | number;

@@ -496,7 +496,17 @@ func TestPTFMultiTimeUsesBandPrices(t *testing.T) {
 	a := amounts(inv)
 	require.Equal(t, "2000.00", a[model.BillLineEnergyT1])
 	require.Equal(t, "900.00", a[model.BillLineEnergyT2])
-	require.NotContains(t, a, model.BillLineEnergyT3, "nil band price → no line")
+	require.Equal(t, "0.00", a[model.BillLineEnergyT3], "R560: a nil PTF band price keeps an unpriced line")
+}
+
+func TestPTFMissingKeepsUnpricedEnergyLine(t *testing.T) {
+	in := ptfInput(t)
+	in.Pricing.EnergyUnitPrice, in.Pricing.Complete = nil, false
+	inv := compute(t, in)
+	require.Equal(t, map[string]string{"energy": "0.00", "distribution": "800.00", "vat": "160.00"}, amounts(inv))
+	require.Nil(t, inv.Lines[0].UnitPrice)
+	require.Equal(t, "1000", inv.Lines[0].Quantity.String())
+	require.Equal(t, []billing.Flag{billing.FlagPTFDataMissing}, inv.Flags)
 }
 
 func TestPTFNilCoefficientProducesNoLine(t *testing.T) {

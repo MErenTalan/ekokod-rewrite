@@ -48,3 +48,12 @@ export function splitInstant(iso: string): { date: string; hour: string } {
   const p = istanbulParts(iso);
   return { date: `${p.year}-${p.month}-${p.day}`, hour: `${p.hour}:${p.minute}` };
 }
+
+type LineTranslator = (key: string) => string;
+
+/** A line code in the operator's language; 'extra:Kapasite' → 'Ek bedel: Kapasite' (codes are labels, R560). */
+export function lineLabel(code: string, t: LineTranslator): string {
+  const [prefix, name] = code.split(/:(.*)/s);
+  if (name !== undefined && (prefix === 'extra' || prefix === 'tax')) return `${t(prefix)}: ${name}`;
+  return t(code);
+}
