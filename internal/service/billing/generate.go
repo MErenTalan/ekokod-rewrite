@@ -104,7 +104,7 @@ func (s *Service) Generate(ctx context.Context, sc store.Scope, req GenerateRequ
 	if req.Scope == model.BillScopeCompany {
 		subj, err = s.computeCompany(ctx, sc, req.PeriodKey)
 	} else {
-		subj, err = s.computeSubject(ctx, sc, *building, members, req.PeriodKey, req.Scope, req.SubjectID)
+		subj, err = s.computeSubject(ctx, sc, *building, members, req.PeriodKey, req.Scope, req.SubjectID, subjectOpts{})
 		if req.Scope == model.BillScopeAnalyzer {
 			subj.analyzer = &members[0]
 		}
@@ -193,7 +193,7 @@ func (s *Service) repairHourlyDetail(ctx context.Context, sc store.Scope, live m
 	if err != nil || len(have) > 0 {
 		return err
 	}
-	subj, err := s.computeSubject(ctx, sc, *building, members, req.PeriodKey, req.Scope, req.SubjectID)
+	subj, err := s.computeSubject(ctx, sc, *building, members, req.PeriodKey, req.Scope, req.SubjectID, subjectOpts{})
 	if err != nil {
 		return err
 	}
@@ -228,7 +228,7 @@ func (s *Service) computeCompany(ctx context.Context, sc store.Scope, key string
 		if len(analyzers) == 0 {
 			continue
 		}
-		subj, err := s.computeSubject(ctx, sc, b, analyzers, key, model.BillScopeBuilding, b.ID)
+		subj, err := s.computeSubject(ctx, sc, b, analyzers, key, model.BillScopeBuilding, b.ID, subjectOpts{})
 		var ce *ComputeError
 		if errors.As(err, &ce) {
 			ce.Detail["building_id"] = b.ID.String()
@@ -254,10 +254,10 @@ func (s *Service) computeCompany(ctx context.Context, sc store.Scope, key string
 
 // computeSubject prices one analyzer or building for key (steps 2–8);
 // billScope and subjectID name whose bill history decides R529's waiver.
-func (s *Service) computeSubject(ctx context.Context, sc store.Scope, building model.Building, analyzers []model.Analyzer, key string, billScope model.BillScope, subjectID uuid.UUID) (subject, error) {
-	window, err := domain.Period(key, int(building.BillCutoffDay), s.loc)
+func (s *Service) computeSubject(ctx context.Context, sc store.Scope, building model.Building, analyzers []model.Analyzer, key string, billScope model.BillScope, subjectID uuid.UUID, opt subjectOpts) (subject, error) {
+	window, err := s.windowFor(ctx, sc, building, key, opt)
 	if err != nil {
-		return subject{}, fmt.Errorf("%w: %w", ErrInvalidRequest, err)
+		return subject{}, err
 	}
 	now := s.deps.Clock.Now()
 	if !now.After(window.From) {
@@ -287,9 +287,14 @@ func (s *Service) computeSubject(ctx context.Context, sc store.Scope, building m
 	}
 
 	rows := map[uuid.UUID]consumption.Row{}
-	if !now.Before(window.To.Add(consumption.SettleDelayMonthly)) {
+	if opt.preview || !now.Before(window.To.Add(consumption.SettleDelayMonthly)) {
 		for _, chunk := range chunks(ids, maxChunk) {
-			got, err := s.deps.Consumption.PeriodConsumptionAndRecord(ctx, sc, consumption.PeriodRequest{AnalyzerIDs: chunk, Windows: []energy.Window{window}})
+			req := consumption.PeriodRequest{AnalyzerIDs: chunk, Windows: []energy.Window{window}}
+			read := s.deps.Consumption.PeriodConsumptionAndRecord
+			if opt.preview { // R559: a preview records nothing
+				req.Open, read = true, s.deps.Consumption.PeriodConsumption
+			}
+			got, err := read(ctx, sc, req)
 			if err != nil {
 				return subject{}, err
 			}
@@ -369,13 +374,56 @@ func (s *Service) computeSubject(ctx context.Context, sc store.Scope, building m
 	return subject{invoice: inv, members: ids, building: &building, missingDays: missingDays}, nil
 }
 
+// subjectOpts: a preview prices an explicit window and records nothing (R559).
+type subjectOpts struct {
+	window  *energy.Window
+	preview bool
+}
+
+// windowFor is opt's explicit window, else key's resolved window (R556).
+func (s *Service) windowFor(ctx context.Context, sc store.Scope, building model.Building, key string, opt subjectOpts) (energy.Window, error) {
+	if opt.window != nil {
+		return *opt.window, nil
+	}
+	saved, err := s.savedWindows(ctx, sc, building.ID, key)
+	if err != nil {
+		return energy.Window{}, err
+	}
+	prev, next := domain.ShiftKey(key, -1), domain.ShiftKey(key, 1)
+	w, err := domain.ResolvePeriod(key, int(building.BillCutoffDay), saved[prev], saved[key], saved[next], s.loc)
+	switch {
+	case errors.Is(err, domain.ErrPeriodConflict):
+		return energy.Window{}, computeErr(CodePeriodConflict, "period_key", key)
+	case err != nil:
+		return energy.Window{}, fmt.Errorf("%w: %w", ErrInvalidRequest, err)
+	}
+	return w, nil
+}
+
+// savedWindows maps key and its neighbours to the building's saved windows.
+func (s *Service) savedWindows(ctx context.Context, sc store.Scope, buildingID uuid.UUID, key string) (map[string]*energy.Window, error) {
+	periods, err := s.deps.Bills.BillPeriods(ctx, sc, buildingID, []string{domain.ShiftKey(key, -1), key, domain.ShiftKey(key, 1)})
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]*energy.Window, len(periods))
+	for _, p := range periods {
+		out[p.PeriodKey] = &energy.Window{From: p.PeriodStart.In(s.loc), To: p.PeriodEnd.In(s.loc)}
+	}
+	return out, nil
+}
+
 // partialRows bills the span from the first to the last day every analyzer
 // can difference; days not covered (future ones included) are returned as
 // missing, in order.
 func (s *Service) partialRows(ctx context.Context, sc store.Scope, ids []uuid.UUID, window energy.Window, now time.Time) (energy.Window, []string, map[uuid.UUID]consumption.Row, error) {
 	var days []energy.Window
 	for d := window.From.In(s.loc); d.Before(window.To); d = d.AddDate(0, 0, 1) {
-		days = append(days, energy.Window{From: d, To: d.AddDate(0, 0, 1)})
+		end := d.AddDate(0, 0, 1)
+		if end.After(window.To) { // R558: an hour-bound period ends inside its last day
+			end = window.To
+		}
+		days = append(days, energy.Window{From: d, To: end})
 	}
 	index := make(map[int64]int, len(days))
 	var probe []energy.Window

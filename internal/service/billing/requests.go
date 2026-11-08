@@ -145,3 +145,39 @@ func (q Requests) HourlyXLSX(ctx context.Context, sc store.Scope, id uuid.UUID, 
 	out, err := hourlyxlsx.Render(b, rows, locale)
 	return out, b, err
 }
+
+// SavePeriod stores a building's window for a key and enqueues the forced
+// recomputation of every bill the change touches (R557).
+func (q Requests) SavePeriod(ctx context.Context, sc store.Scope, req SavePeriodRequest) (model.BillPeriod, []string, error) {
+	saved, regen, err := q.Service.SavePeriod(ctx, sc, req)
+	if err != nil {
+		return model.BillPeriod{}, nil, err
+	}
+	ids, err := q.enqueueRegenerations(ctx, sc, regen)
+	return saved, ids, err
+}
+
+// DeletePeriod drops a saved window and enqueues the same recomputation.
+func (q Requests) DeletePeriod(ctx context.Context, sc store.Scope, buildingID uuid.UUID, key string) ([]string, error) {
+	regen, err := q.Service.DeletePeriod(ctx, sc, buildingID, key)
+	if err != nil {
+		return nil, err
+	}
+	return q.enqueueRegenerations(ctx, sc, regen)
+}
+
+func (q Requests) enqueueRegenerations(ctx context.Context, sc store.Scope, regen []Regeneration) ([]string, error) {
+	ids := make([]string, 0, len(regen))
+	for _, r := range regen {
+		p := job.BillingGeneratePayload{CompanyID: sc.CompanyID, Scope: r.Scope, SubjectID: r.SubjectID, PeriodKey: r.PeriodKey, Force: true}
+		task, err := job.NewBillingGenerateTask(p, job.TaskOptions{MaxRetry: q.MaxRetry})
+		if err != nil {
+			return nil, err
+		}
+		if err := job.EnqueueReplacingFinished(ctx, q.Enqueuer, q.Tasks, task, job.BillingGenerateTaskID(p)); err != nil {
+			return nil, err
+		}
+		ids = append(ids, job.BillingGenerateTaskID(p))
+	}
+	return ids, nil
+}
