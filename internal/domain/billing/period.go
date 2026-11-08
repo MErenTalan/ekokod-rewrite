@@ -26,7 +26,7 @@ func Period(periodKey string, cutoffDay int, loc *time.Location) (energy.Window,
 	return energy.Window{From: from, To: at(next.Year(), next.Month())}, nil
 }
 
-// ErrPeriodConflict: a saved neighbour leaves no room for the key (R556, R557).
+// ErrPeriodConflict means a saved neighbour leaves no room for the key (R556, R557).
 var ErrPeriodConflict = errors.New("billing: period conflicts with a saved neighbour")
 
 // MaxSavedPeriodSpan bounds a saved or previewed window (R555).

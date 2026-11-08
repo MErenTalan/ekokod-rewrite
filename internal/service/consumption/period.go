@@ -2,6 +2,7 @@ package consumption
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -18,7 +19,7 @@ const MaxPeriodWindows = 13
 type PeriodRequest struct {
 	AnalyzerIDs []uuid.UUID
 	// Windows are sorted and contiguous (Windows[i].To == Windows[i+1].From),
-	// 1..MaxPeriodWindows of them, every bound an Istanbul midnight.
+	// 1..MaxPeriodWindows of them, every bound on the hour (R558).
 	Windows []energy.Window
 	// Open also derives windows that have not settled yet (partial bills);
 	// PeriodConsumptionAndRecord refuses it so no gap is ever recorded for one.
@@ -96,8 +97,11 @@ func validatePeriodRequest(sc store.Scope, req PeriodRequest) error {
 // validPeriodWindow rejects a reversed, empty, over-span window or one whose
 // bounds are not Istanbul midnights (cut-off periods run day to day).
 func validPeriodWindow(w energy.Window) error {
-	if !w.Valid() || !isDayStart(w.From) || !isDayStart(w.To) || w.To.Sub(w.From) > MaxRequestSpan {
+	if !w.Valid() || !isHourStart(w.From) || !isHourStart(w.To) || w.To.Sub(w.From) > MaxRequestSpan {
 		return ErrInvalidRequest
 	}
 	return nil
 }
+
+// isHourStart: custom bill periods end at a meter's reading hour (R558).
+func isHourStart(ts time.Time) bool { return ts.Truncate(time.Hour).Equal(ts) }

@@ -1016,6 +1016,137 @@ func (q *Queries) BillMemberList(ctx context.Context, arg BillMemberListParams) 
 	return items, nil
 }
 
+const billPeriodDelete = `-- name: BillPeriodDelete :execrows
+delete from bill_periods
+where company_id = $1 and building_id = $2 and period_key = $3
+  and ($4::boolean or building_id = any($5::uuid[]))
+`
+
+type BillPeriodDeleteParams struct {
+	CompanyID    uuid.UUID
+	BuildingID   uuid.UUID
+	PeriodKey    string
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
+}
+
+func (q *Queries) BillPeriodDelete(ctx context.Context, arg BillPeriodDeleteParams) (int64, error) {
+	result, err := q.db.Exec(ctx, billPeriodDelete,
+		arg.CompanyID,
+		arg.BuildingID,
+		arg.PeriodKey,
+		arg.AllBuildings,
+		arg.BuildingIds,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const billPeriodList = `-- name: BillPeriodList :many
+select bp.company_id, bp.building_id, bp.period_key, bp.period_start, bp.period_end, bp.created_by, bp.created_at, bp.updated_at from bill_periods bp
+join buildings b on b.id = bp.building_id and b.deleted_at is null
+where bp.company_id = $1 and bp.building_id = $2
+  and ($3::boolean or bp.building_id = any($4::uuid[]))
+  and (cardinality($5::text[]) = 0 or bp.period_key = any($5::text[]))
+order by bp.period_key
+`
+
+type BillPeriodListParams struct {
+	CompanyID    uuid.UUID
+	BuildingID   uuid.UUID
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
+	Keys         []string
+}
+
+// R556: the saved windows of one building for the given keys.
+func (q *Queries) BillPeriodList(ctx context.Context, arg BillPeriodListParams) ([]BillPeriod, error) {
+	rows, err := q.db.Query(ctx, billPeriodList,
+		arg.CompanyID,
+		arg.BuildingID,
+		arg.AllBuildings,
+		arg.BuildingIds,
+		arg.Keys,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BillPeriod
+	for rows.Next() {
+		var i BillPeriod
+		if err := rows.Scan(
+			&i.CompanyID,
+			&i.BuildingID,
+			&i.PeriodKey,
+			&i.PeriodStart,
+			&i.PeriodEnd,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const billPeriodUpsert = `-- name: BillPeriodUpsert :one
+insert into bill_periods (company_id, building_id, period_key, period_start, period_end, created_by)
+select $1, b.id, $2, $3, $4,
+  -- a platform admin acting for the company is not its user: no author then
+  (select u.id from users u where u.id = $5 and u.company_id = $1)
+from buildings b
+where b.id = $6 and b.company_id = $1 and b.deleted_at is null
+  and ($7::boolean or b.id = any($8::uuid[]))
+on conflict (building_id, period_key) do update
+  set period_start = excluded.period_start, period_end = excluded.period_end,
+      created_by = excluded.created_by, updated_at = now()
+returning company_id, building_id, period_key, period_start, period_end, created_by, created_at, updated_at
+`
+
+type BillPeriodUpsertParams struct {
+	CompanyID    uuid.UUID
+	PeriodKey    string
+	PeriodStart  pgtype.Timestamptz
+	PeriodEnd    pgtype.Timestamptz
+	CreatedBy    *uuid.UUID
+	BuildingID   uuid.UUID
+	AllBuildings bool
+	BuildingIds  []uuid.UUID
+}
+
+func (q *Queries) BillPeriodUpsert(ctx context.Context, arg BillPeriodUpsertParams) (BillPeriod, error) {
+	row := q.db.QueryRow(ctx, billPeriodUpsert,
+		arg.CompanyID,
+		arg.PeriodKey,
+		arg.PeriodStart,
+		arg.PeriodEnd,
+		arg.CreatedBy,
+		arg.BuildingID,
+		arg.AllBuildings,
+		arg.BuildingIds,
+	)
+	var i BillPeriod
+	err := row.Scan(
+		&i.CompanyID,
+		&i.BuildingID,
+		&i.PeriodKey,
+		&i.PeriodStart,
+		&i.PeriodEnd,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const billReactiveViolationBefore = `-- name: BillReactiveViolationBefore :one
 select exists (
   select 1 from bills

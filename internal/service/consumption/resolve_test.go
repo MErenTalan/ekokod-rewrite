@@ -506,7 +506,8 @@ func TestPeriodThatIsNotABucketRejectedEvenWithRealBoundaryReadings(t *testing.T
 	scope := store.Scope{CompanyID: uuid.New(), AllBuildings: true}
 	analyzerID := uuid.New()
 	h := resolveT0
-	period := energy.Window{From: h, To: h.Add(2 * time.Hour)} // not a bucket at any level
+	// R558: an hour-aligned span is now a valid custom bill period; 90 minutes is not.
+	period := energy.Window{From: h, To: h.Add(90 * time.Minute)} // not a bucket at any level
 
 	// A reading strictly between h and the proposed reset (h+1h) supplies
 	// the "prior" R91 needs, so a re-derivation that silently treated this

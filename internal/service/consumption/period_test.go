@@ -63,10 +63,12 @@ func TestPeriodRequestValidation(t *testing.T) {
 		{"no windows", periodScope(), []uuid.UUID{a}, nil, false},
 		{"zero-width window", periodScope(), []uuid.UUID{a}, []energy.Window{win(d(1, 15), d(1, 15))}, false},
 		{"reversed window", periodScope(), []uuid.UUID{a}, []energy.Window{win(d(2, 15), d(1, 15))}, false},
-		{"sub-day window", periodScope(), []uuid.UUID{a}, []energy.Window{win(d(1, 15), d(1, 15).Add(time.Hour))}, false},
+		{"one-hour window (R558)", periodScope(), []uuid.UUID{a}, []energy.Window{win(d(1, 15), d(1, 15).Add(time.Hour))}, true},
+		{"sub-hour window", periodScope(), []uuid.UUID{a}, []energy.Window{win(d(1, 15), d(1, 15).Add(30*time.Minute))}, false},
 		{"window of exactly one day", periodScope(), []uuid.UUID{a}, []energy.Window{win(d(1, 15), d(1, 16))}, true},
-		{"from not an Istanbul midnight", periodScope(), []uuid.UUID{a}, []energy.Window{win(time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC), d(2, 15))}, false},
-		{"seam not an Istanbul midnight", periodScope(), []uuid.UUID{a}, []energy.Window{win(d(1, 15), d(2, 15).Add(time.Hour)), win(d(2, 15).Add(time.Hour), d(3, 15))}, false},
+		{"from on an hour, not a midnight (R558)", periodScope(), []uuid.UUID{a}, []energy.Window{win(d(1, 15).Add(16*time.Hour), d(2, 15))}, true},
+		{"from not on the hour", periodScope(), []uuid.UUID{a}, []energy.Window{win(d(1, 15).Add(16*time.Hour+15*time.Minute), d(2, 15))}, false},
+		{"seam not on the hour", periodScope(), []uuid.UUID{a}, []energy.Window{win(d(1, 15), d(2, 15).Add(time.Minute)), win(d(2, 15).Add(time.Minute), d(3, 15))}, false},
 		{"gap between windows", periodScope(), []uuid.UUID{a}, []energy.Window{win(d(1, 15), d(2, 15)), win(d(2, 16), d(3, 15))}, false},
 		{"overlapping windows", periodScope(), []uuid.UUID{a}, []energy.Window{win(d(1, 15), d(2, 15)), win(d(2, 14), d(3, 15))}, false},
 		{"unsorted windows", periodScope(), []uuid.UUID{a}, []energy.Window{good[1], good[0]}, false},
@@ -95,6 +97,32 @@ func TestPeriodRequestValidation(t *testing.T) {
 			require.ErrorIs(t, err, consumption.ErrInvalidRequest)
 		})
 	}
+}
+
+// TestPeriodConsumptionHourBounds (R558): a 15:30-read utility period billed
+// from 16:00 to 15:00 resolves each bound to the load_profile reading at or
+// just before it, never the month-start billing snapshot.
+func TestPeriodConsumptionHourBounds(t *testing.T) {
+	loc := istanbulLoc(t)
+	at := func(m time.Month, d, h int) time.Time { return time.Date(2026, m, d, h, 0, 0, 0, loc) }
+	id := uuid.New()
+	act := func(v string) map[string]string { return map[string]string{"active_import": v} }
+	readings := fakeReadings{byKind: map[model.ReadingKind][]model.MeterReading{
+		model.ReadingKindLoadProfile: {
+			readingRow(id, at(7, 17, 15), model.ReadingKindLoadProfile, act("17000")),
+			readingRow(id, at(7, 17, 16), model.ReadingKindLoadProfile, act("17237.10")),
+			readingRow(id, at(8, 18, 15), model.ReadingKindLoadProfile, act("28500")),
+			readingRow(id, at(8, 18, 16), model.ReadingKindLoadProfile, act("28532.86")),
+		},
+		model.ReadingKindBilling: {readingRow(id, at(8, 1, 0), model.ReadingKindBilling, act("22000"))},
+	}}
+	b := newBillingAt(t, readings, at(9, 1, 0))
+	rows, err := b.PeriodConsumption(context.Background(), periodScope(), consumption.PeriodRequest{
+		AnalyzerIDs: []uuid.UUID{id}, Windows: []energy.Window{win(at(7, 17, 16), at(8, 18, 16))},
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "11295.76", rows[0].Values[energy.ActiveImport].String(), "MEPAŞ Jul 17 → Aug 18 consumption")
 }
 
 // TestPeriodConsumptionCutoff15Telescopes: the Jan 15 seam resolves once

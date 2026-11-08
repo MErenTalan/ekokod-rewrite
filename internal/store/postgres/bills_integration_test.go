@@ -521,3 +521,45 @@ func TestBillReactiveViolationBeforeLooksAtEarlierLiveBillsOfTheYear(t *testing.
 	require.True(t, violated(model.BillScopeAnalyzer, analyzer, "2026-03"))
 	require.False(t, violated(model.BillScopeBuilding, building, "2026-03"))
 }
+
+// R555: saved bill windows upsert per (building, key), refuse other tenants'
+// buildings, reject unaligned bounds in SQL and delete back to nothing.
+func TestBillPeriodUpsertListDelete(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := testfixtures.NewIsolatedDB(t)
+	tenantA := testfixtures.NewTenant(t, ctx, pool, 252)
+	tenantB := testfixtures.NewTenant(t, ctx, pool, 253)
+	repo := postgres.NewBillRepository(pool)
+	loc, err := time.LoadLocation("Europe/Istanbul")
+	require.NoError(t, err)
+	at := func(m time.Month, d, h int) time.Time { return time.Date(2026, m, d, h, 0, 0, 0, loc) }
+	building := tenantA.Buildings[0].ID
+	foreign := tenantB.Users[model.UserRoleCompanyAdmin].ID
+	p := model.BillPeriod{BuildingID: building, PeriodKey: "2026-08", PeriodStart: at(8, 18, 16), PeriodEnd: at(9, 16, 15), CreatedBy: &foreign}
+
+	saved, err := repo.UpsertBillPeriod(ctx, tenantA.AdminScope, p)
+	require.NoError(t, err)
+	require.Nil(t, saved.CreatedBy, "another company's user is never stored as the author")
+	require.True(t, saved.PeriodStart.Equal(p.PeriodStart) && saved.PeriodEnd.Equal(p.PeriodEnd))
+
+	p.PeriodEnd = at(9, 17, 0)
+	_, err = repo.UpsertBillPeriod(ctx, tenantA.AdminScope, p)
+	require.NoError(t, err)
+	got, err := repo.BillPeriods(ctx, tenantA.AdminScope, building, []string{"2026-08", "2026-09"})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.True(t, got[0].PeriodEnd.Equal(at(9, 17, 0)), "upsert replaces the window")
+
+	_, err = repo.UpsertBillPeriod(ctx, tenantB.AdminScope, p)
+	require.ErrorIs(t, err, store.ErrNotFound, "tenant B cannot save on tenant A's building")
+
+	bad := p
+	bad.PeriodKey, bad.PeriodStart = "2026-07", at(7, 17, 16).Add(30*time.Minute)
+	_, err = repo.UpsertBillPeriod(ctx, tenantA.AdminScope, bad)
+	require.Error(t, err, "half-hour bounds are refused by the check constraint")
+
+	require.ErrorIs(t, repo.DeleteBillPeriod(ctx, tenantB.AdminScope, building, "2026-08"), store.ErrNotFound)
+	require.NoError(t, repo.DeleteBillPeriod(ctx, tenantA.AdminScope, building, "2026-08"))
+	require.ErrorIs(t, repo.DeleteBillPeriod(ctx, tenantA.AdminScope, building, "2026-08"), store.ErrNotFound)
+}

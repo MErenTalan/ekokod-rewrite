@@ -852,6 +852,10 @@ func seedScopeIsoFixtures(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 		[]model.BillLine{{Code: "energy", Label: "Energy", Amount: billDec("10.0000")}}, nil)
 	require.NoError(t, err)
 	f.billID = bill.ID
+	_, err = billRepo.UpsertBillPeriod(ctx, adminScope, model.BillPeriod{
+		BuildingID: buildingID, PeriodKey: "2026-01", PeriodStart: scopeIsoEpoch, PeriodEnd: scopeIsoEpoch.Add(24 * time.Hour),
+	})
+	require.NoError(t, err)
 	_, err = billRepo.ReplaceHourlyDetail(ctx, adminScope, bill.ID, []model.BillHourlyDetail{
 		{Ts: scopeIsoEpoch, Consumption: billDec("1.0000"), PTF: billDec("2.0000"), Yekdem: billDec("0.5000"), Kbk: billDec("1.0000"), UnitPrice: billDec("3.0000"), Cost: billDec("3.0000")},
 	})
@@ -1807,6 +1811,15 @@ func TestScopeIsolation(t *testing.T) {
 		scopeIsoAssertGetNotFound(t,
 			func(s store.Scope) ([]model.BillHourlyDetail, error) { return repo.HourlyDetail(ctx, s, bf.billID) },
 			tenantA.AdminScope, tenantB.AdminScope, "BillRepository.HourlyDetail cross-tenant")
+		periods := func(s store.Scope, building uuid.UUID) int {
+			got, err := repo.BillPeriods(ctx, s, building, nil)
+			require.NoError(t, err)
+			return len(got)
+		}
+		require.Equal(t, 1, periods(tenantB.AdminScope, bf.buildingID), "BillRepository.BillPeriods owner")
+		require.Zero(t, periods(tenantA.AdminScope, bf.buildingID), "BillRepository.BillPeriods cross-tenant")
+		require.Equal(t, 1, periods(tenantA.AdminScope, af.buildingID), "BillRepository.BillPeriods owner")
+		require.Zero(t, periods(tenantA.Scope, af.buildingID), "BillRepository.BillPeriods narrow-scope")
 		violated := func(s store.Scope, building uuid.UUID) bool {
 			v, err := repo.ReactiveViolationBefore(ctx, s, model.BillScopeBuilding, building, "2026-02")
 			require.NoError(t, err)

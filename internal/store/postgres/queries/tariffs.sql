@@ -36,7 +36,7 @@ insert into tariffs (
   use_ptf_yekdem, kbk_energy, kbk_t1, kbk_t2, kbk_t3, kbk_power_price,
   kbk_overuse_price, kbk_reactive_power, kbk_distribution_cost_tl_per_kwh,
   use_manual_yekdem, created_by, created_at, updated_at,
-  power_price_source, reactive_price_source, distribution_price_source
+  power_price_source, reactive_price_source, distribution_price_source, reactive_waiver_disabled
 )
 select
   gen_random_uuid(), sqlc.arg(company_id), sqlc.narg(building_id), sqlc.narg(name),
@@ -52,7 +52,8 @@ select
   sqlc.narg(kbk_t2), sqlc.narg(kbk_t3), sqlc.narg(kbk_power_price), sqlc.narg(kbk_overuse_price),
   sqlc.narg(kbk_reactive_power), sqlc.narg(kbk_distribution_cost_tl_per_kwh),
   sqlc.arg(use_manual_yekdem), sqlc.narg(created_by), sqlc.arg(created_at), sqlc.arg(created_at),
-  sqlc.arg(power_price_source), sqlc.arg(reactive_price_source), sqlc.arg(distribution_price_source)
+  sqlc.arg(power_price_source), sqlc.arg(reactive_price_source), sqlc.arg(distribution_price_source),
+  sqlc.arg(reactive_waiver_disabled)
 where
   -- Critical Finding 1 (task-11a fix round 1): a stored building_id is a
   -- foreign key and MUST be validated in SQL against the Scope's company,
@@ -94,7 +95,8 @@ update tariffs set
   kbk_distribution_cost_tl_per_kwh = sqlc.narg(kbk_distribution_cost_tl_per_kwh),
   use_manual_yekdem = sqlc.arg(use_manual_yekdem), updated_at = sqlc.arg(updated_at),
   power_price_source = sqlc.arg(power_price_source), reactive_price_source = sqlc.arg(reactive_price_source),
-  distribution_price_source = sqlc.arg(distribution_price_source)
+  distribution_price_source = sqlc.arg(distribution_price_source),
+  reactive_waiver_disabled = sqlc.arg(reactive_waiver_disabled)
 where tariffs.id = sqlc.arg(id) and tariffs.company_id = sqlc.arg(company_id)
   and (sqlc.arg(all_buildings)::boolean or tariffs.building_id = any(sqlc.arg(building_ids)::uuid[]))
   and tariffs.deleted_at is null

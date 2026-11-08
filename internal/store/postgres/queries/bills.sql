@@ -257,3 +257,30 @@ where exists (
     and (sqlc.arg(all_buildings)::boolean or b.building_id = any(sqlc.arg(building_ids)::uuid[]))
 )
 returning true;
+
+-- name: BillPeriodList :many
+-- R556: the saved windows of one building for the given keys.
+select bp.* from bill_periods bp
+join buildings b on b.id = bp.building_id and b.deleted_at is null
+where bp.company_id = sqlc.arg(company_id) and bp.building_id = sqlc.arg(building_id)
+  and (sqlc.arg(all_buildings)::boolean or bp.building_id = any(sqlc.arg(building_ids)::uuid[]))
+  and (cardinality(sqlc.arg(keys)::text[]) = 0 or bp.period_key = any(sqlc.arg(keys)::text[]))
+order by bp.period_key;
+
+-- name: BillPeriodUpsert :one
+insert into bill_periods (company_id, building_id, period_key, period_start, period_end, created_by)
+select sqlc.arg(company_id), b.id, sqlc.arg(period_key), sqlc.arg(period_start), sqlc.arg(period_end),
+  -- a platform admin acting for the company is not its user: no author then
+  (select u.id from users u where u.id = sqlc.narg(created_by) and u.company_id = sqlc.arg(company_id))
+from buildings b
+where b.id = sqlc.arg(building_id) and b.company_id = sqlc.arg(company_id) and b.deleted_at is null
+  and (sqlc.arg(all_buildings)::boolean or b.id = any(sqlc.arg(building_ids)::uuid[]))
+on conflict (building_id, period_key) do update
+  set period_start = excluded.period_start, period_end = excluded.period_end,
+      created_by = excluded.created_by, updated_at = now()
+returning *;
+
+-- name: BillPeriodDelete :execrows
+delete from bill_periods
+where company_id = sqlc.arg(company_id) and building_id = sqlc.arg(building_id) and period_key = sqlc.arg(period_key)
+  and (sqlc.arg(all_buildings)::boolean or building_id = any(sqlc.arg(building_ids)::uuid[]));

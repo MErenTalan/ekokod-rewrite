@@ -88,6 +88,9 @@ type Tariff struct {
 	ReactivePriceSource     PriceSource
 	DistributionPriceSource PriceSource
 
+	// ReactiveWaiverDisabled: never deduct the first reactive violation (R562).
+	ReactiveWaiverDisabled bool
+
 	CreatedBy *uuid.UUID
 	CreatedAt time.Time
 	UpdatedAt time.Time

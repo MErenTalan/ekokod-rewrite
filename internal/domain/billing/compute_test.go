@@ -287,6 +287,17 @@ func TestReactiveFirstViolationIsDeducted(t *testing.T) {
 	require.False(t, inv.ReactiveWaived)
 }
 
+// R562: a tariff can opt out of the first-violation deduction.
+func TestReactiveWaiverDisabledByTariff(t *testing.T) {
+	in := reactiveInput(t)
+	in.Params.ReactiveFirstViolationWaived = true
+	in.Tariff.ReactiveWaiverDisabled = true
+	inv := compute(t, in)
+	require.NotContains(t, amounts(inv), model.BillLineReactiveWaiver)
+	require.False(t, inv.ReactiveWaived)
+	require.Equal(t, "1000", inv.ReactivePenalty.String())
+}
+
 func TestReactiveWaiverNeedsACharge(t *testing.T) {
 	in := reactiveInput(t)
 	in.Params.ReactiveFirstViolationWaived = true

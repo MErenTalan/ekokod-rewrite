@@ -210,3 +210,15 @@ type BillHourlyDetail struct {
 	UnitPrice decimal.Decimal
 	Cost      decimal.Decimal
 }
+
+// BillPeriod is a building's saved bill window for one period key (R555).
+type BillPeriod struct {
+	CompanyID   uuid.UUID
+	BuildingID  uuid.UUID
+	PeriodKey   string
+	PeriodStart time.Time
+	PeriodEnd   time.Time
+	CreatedBy   *uuid.UUID
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}

@@ -1384,6 +1384,17 @@ type BillMember struct {
 	AnalyzerID uuid.UUID
 }
 
+type BillPeriod struct {
+	CompanyID   uuid.UUID
+	BuildingID  uuid.UUID
+	PeriodKey   string
+	PeriodStart pgtype.Timestamptz
+	PeriodEnd   pgtype.Timestamptz
+	CreatedBy   *uuid.UUID
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+}
+
 type BillingParameter struct {
 	EffectiveFrom                pgtype.Date
 	ReactivePenaltyBasis         ReactivePenaltyBasis
@@ -2177,6 +2188,7 @@ type Tariff struct {
 	PowerPriceSource            PriceSource
 	ReactivePriceSource         PriceSource
 	DistributionPriceSource     PriceSource
+	ReactiveWaiverDisabled      bool
 }
 
 type TariffBulkAssignment struct {

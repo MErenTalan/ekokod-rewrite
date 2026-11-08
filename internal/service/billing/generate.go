@@ -347,7 +347,7 @@ func (s *Service) computeSubject(ctx context.Context, sc store.Scope, building m
 		Tariff: t, Taxes: taxes, ExtraCharges: extras, Params: params,
 		Quantities: domain.AggregateQuantities(quantities), InstalledPowerKw: domain.SumInstalledPower(installed),
 	}
-	if params.ReactiveFirstViolationWaived {
+	if params.ReactiveFirstViolationWaived && !t.ReactiveWaiverDisabled {
 		if in.ReactivePriorViolation, err = s.deps.Bills.ReactiveViolationBefore(ctx, sc, billScope, subjectID, key); err != nil {
 			return subject{}, err
 		}

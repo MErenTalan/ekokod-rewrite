@@ -378,7 +378,7 @@ func oracleCompute(in billing.Input) oracleOut {
 				}
 			}
 			lineSum = lineSum.Add(reactiveSum)
-			if p.ReactiveFirstViolationWaived && !in.ReactivePriorViolation && reactiveSum.IsPositive() {
+			if p.ReactiveFirstViolationWaived && !in.Tariff.ReactiveWaiverDisabled && !in.ReactivePriorViolation && reactiveSum.IsPositive() {
 				lineSum = lineSum.Add(charge("reactive_waiver", reactiveSum.Neg()))
 			}
 		}

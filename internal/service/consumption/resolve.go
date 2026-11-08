@@ -338,11 +338,6 @@ func resetRederivationMode(period energy.Window) (windowMode, bool) {
 	return windowMode{level: energy.Monthly, explicit: true}, true
 }
 
-// isDayStart reports whether ts is an Istanbul midnight.
-func isDayStart(ts time.Time) bool {
-	return energy.Bucket(energy.Daily, ts, istanbul).From.Equal(ts)
-}
-
 // allRegistersValid reports whether every key of m is one of
 // energy.AllRegisters() — setRegisterOnReading (below) silently drops any
 // other key, which would otherwise let a typo'd register name through as if

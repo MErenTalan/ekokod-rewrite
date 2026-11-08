@@ -875,7 +875,7 @@ insert into tariffs (
   use_ptf_yekdem, kbk_energy, kbk_t1, kbk_t2, kbk_t3, kbk_power_price,
   kbk_overuse_price, kbk_reactive_power, kbk_distribution_cost_tl_per_kwh,
   use_manual_yekdem, created_by, created_at, updated_at,
-  power_price_source, reactive_price_source, distribution_price_source
+  power_price_source, reactive_price_source, distribution_price_source, reactive_waiver_disabled
 )
 select
   gen_random_uuid(), $1, $2, $3,
@@ -891,7 +891,8 @@ select
   $30, $31, $32, $33,
   $34, $35,
   $36, $37, $38, $38,
-  $39, $40, $41
+  $39, $40, $41,
+  $42
 where
   -- Critical Finding 1 (task-11a fix round 1): a stored building_id is a
   -- foreign key and MUST be validated in SQL against the Scope's company,
@@ -902,14 +903,14 @@ where
   ($2::uuid is null or exists (
     select 1 from buildings b
     where b.id = $2 and b.company_id = $1 and b.deleted_at is null
-      and ($42::boolean or b.id = any($43::uuid[]))
+      and ($43::boolean or b.id = any($44::uuid[]))
   ))
   -- Important Finding 4: created_by is a stored foreign key too, and must
   -- name a user of the same company rather than being stored as given.
   and ($37::uuid is null or exists (
     select 1 from users u where u.id = $37 and u.company_id = $1
   ))
-returning id, company_id, building_id, name, effective_from, currency, energy_type, voltage_level, user_group, price_type, term, supply_company, single_time_price, t1_price, t2_price, t3_price, overuse_price, overuse_threshold_kwh_per_day, distribution_cost, reactive_power_price, green_energy_price, green_energy_distribution_cost, contracted_power_kw, power_unit_price, generation_usage, generation_price_per_kwh, vat_rate, use_ptf_yekdem, kbk_energy, kbk_t1, kbk_t2, kbk_t3, kbk_power_price, kbk_overuse_price, kbk_reactive_power, kbk_distribution_cost_tl_per_kwh, use_manual_yekdem, created_by, created_at, updated_at, deleted_at, power_price_source, reactive_price_source, distribution_price_source
+returning id, company_id, building_id, name, effective_from, currency, energy_type, voltage_level, user_group, price_type, term, supply_company, single_time_price, t1_price, t2_price, t3_price, overuse_price, overuse_threshold_kwh_per_day, distribution_cost, reactive_power_price, green_energy_price, green_energy_distribution_cost, contracted_power_kw, power_unit_price, generation_usage, generation_price_per_kwh, vat_rate, use_ptf_yekdem, kbk_energy, kbk_t1, kbk_t2, kbk_t3, kbk_power_price, kbk_overuse_price, kbk_reactive_power, kbk_distribution_cost_tl_per_kwh, use_manual_yekdem, created_by, created_at, updated_at, deleted_at, power_price_source, reactive_price_source, distribution_price_source, reactive_waiver_disabled
 `
 
 type TariffCreateParams struct {
@@ -954,6 +955,7 @@ type TariffCreateParams struct {
 	PowerPriceSource            PriceSource
 	ReactivePriceSource         PriceSource
 	DistributionPriceSource     PriceSource
+	ReactiveWaiverDisabled      bool
 	AllBuildings                bool
 	BuildingIds                 []uuid.UUID
 }
@@ -1001,6 +1003,7 @@ func (q *Queries) TariffCreate(ctx context.Context, arg TariffCreateParams) (Tar
 		arg.PowerPriceSource,
 		arg.ReactivePriceSource,
 		arg.DistributionPriceSource,
+		arg.ReactiveWaiverDisabled,
 		arg.AllBuildings,
 		arg.BuildingIds,
 	)
@@ -1050,12 +1053,13 @@ func (q *Queries) TariffCreate(ctx context.Context, arg TariffCreateParams) (Tar
 		&i.PowerPriceSource,
 		&i.ReactivePriceSource,
 		&i.DistributionPriceSource,
+		&i.ReactiveWaiverDisabled,
 	)
 	return i, err
 }
 
 const tariffEffectiveCompanyWide = `-- name: TariffEffectiveCompanyWide :one
-select id, company_id, building_id, name, effective_from, currency, energy_type, voltage_level, user_group, price_type, term, supply_company, single_time_price, t1_price, t2_price, t3_price, overuse_price, overuse_threshold_kwh_per_day, distribution_cost, reactive_power_price, green_energy_price, green_energy_distribution_cost, contracted_power_kw, power_unit_price, generation_usage, generation_price_per_kwh, vat_rate, use_ptf_yekdem, kbk_energy, kbk_t1, kbk_t2, kbk_t3, kbk_power_price, kbk_overuse_price, kbk_reactive_power, kbk_distribution_cost_tl_per_kwh, use_manual_yekdem, created_by, created_at, updated_at, deleted_at, power_price_source, reactive_price_source, distribution_price_source from tariffs
+select id, company_id, building_id, name, effective_from, currency, energy_type, voltage_level, user_group, price_type, term, supply_company, single_time_price, t1_price, t2_price, t3_price, overuse_price, overuse_threshold_kwh_per_day, distribution_cost, reactive_power_price, green_energy_price, green_energy_distribution_cost, contracted_power_kw, power_unit_price, generation_usage, generation_price_per_kwh, vat_rate, use_ptf_yekdem, kbk_energy, kbk_t1, kbk_t2, kbk_t3, kbk_power_price, kbk_overuse_price, kbk_reactive_power, kbk_distribution_cost_tl_per_kwh, use_manual_yekdem, created_by, created_at, updated_at, deleted_at, power_price_source, reactive_price_source, distribution_price_source, reactive_waiver_disabled from tariffs
 where company_id = $1 and building_id is null
   and deleted_at is null and effective_from <= $2
 order by effective_from desc, created_at desc, id desc
@@ -1115,12 +1119,13 @@ func (q *Queries) TariffEffectiveCompanyWide(ctx context.Context, arg TariffEffe
 		&i.PowerPriceSource,
 		&i.ReactivePriceSource,
 		&i.DistributionPriceSource,
+		&i.ReactiveWaiverDisabled,
 	)
 	return i, err
 }
 
 const tariffEffectiveForBuilding = `-- name: TariffEffectiveForBuilding :one
-select id, company_id, building_id, name, effective_from, currency, energy_type, voltage_level, user_group, price_type, term, supply_company, single_time_price, t1_price, t2_price, t3_price, overuse_price, overuse_threshold_kwh_per_day, distribution_cost, reactive_power_price, green_energy_price, green_energy_distribution_cost, contracted_power_kw, power_unit_price, generation_usage, generation_price_per_kwh, vat_rate, use_ptf_yekdem, kbk_energy, kbk_t1, kbk_t2, kbk_t3, kbk_power_price, kbk_overuse_price, kbk_reactive_power, kbk_distribution_cost_tl_per_kwh, use_manual_yekdem, created_by, created_at, updated_at, deleted_at, power_price_source, reactive_price_source, distribution_price_source from tariffs
+select id, company_id, building_id, name, effective_from, currency, energy_type, voltage_level, user_group, price_type, term, supply_company, single_time_price, t1_price, t2_price, t3_price, overuse_price, overuse_threshold_kwh_per_day, distribution_cost, reactive_power_price, green_energy_price, green_energy_distribution_cost, contracted_power_kw, power_unit_price, generation_usage, generation_price_per_kwh, vat_rate, use_ptf_yekdem, kbk_energy, kbk_t1, kbk_t2, kbk_t3, kbk_power_price, kbk_overuse_price, kbk_reactive_power, kbk_distribution_cost_tl_per_kwh, use_manual_yekdem, created_by, created_at, updated_at, deleted_at, power_price_source, reactive_price_source, distribution_price_source, reactive_waiver_disabled from tariffs
 where company_id = $1 and building_id = $2
   and deleted_at is null and effective_from <= $3
 order by effective_from desc, created_at desc, id desc
@@ -1187,6 +1192,7 @@ func (q *Queries) TariffEffectiveForBuilding(ctx context.Context, arg TariffEffe
 		&i.PowerPriceSource,
 		&i.ReactivePriceSource,
 		&i.DistributionPriceSource,
+		&i.ReactiveWaiverDisabled,
 	)
 	return i, err
 }
@@ -1317,7 +1323,7 @@ func (q *Queries) TariffExtraChargeList(ctx context.Context, arg TariffExtraChar
 
 const tariffGet = `-- name: TariffGet :one
 
-select id, company_id, building_id, name, effective_from, currency, energy_type, voltage_level, user_group, price_type, term, supply_company, single_time_price, t1_price, t2_price, t3_price, overuse_price, overuse_threshold_kwh_per_day, distribution_cost, reactive_power_price, green_energy_price, green_energy_distribution_cost, contracted_power_kw, power_unit_price, generation_usage, generation_price_per_kwh, vat_rate, use_ptf_yekdem, kbk_energy, kbk_t1, kbk_t2, kbk_t3, kbk_power_price, kbk_overuse_price, kbk_reactive_power, kbk_distribution_cost_tl_per_kwh, use_manual_yekdem, created_by, created_at, updated_at, deleted_at, power_price_source, reactive_price_source, distribution_price_source from tariffs
+select id, company_id, building_id, name, effective_from, currency, energy_type, voltage_level, user_group, price_type, term, supply_company, single_time_price, t1_price, t2_price, t3_price, overuse_price, overuse_threshold_kwh_per_day, distribution_cost, reactive_power_price, green_energy_price, green_energy_distribution_cost, contracted_power_kw, power_unit_price, generation_usage, generation_price_per_kwh, vat_rate, use_ptf_yekdem, kbk_energy, kbk_t1, kbk_t2, kbk_t3, kbk_power_price, kbk_overuse_price, kbk_reactive_power, kbk_distribution_cost_tl_per_kwh, use_manual_yekdem, created_by, created_at, updated_at, deleted_at, power_price_source, reactive_price_source, distribution_price_source, reactive_waiver_disabled from tariffs
 where tariffs.id = $1 and tariffs.company_id = $2
   and ($3::boolean or tariffs.building_id = any($4::uuid[]))
   and tariffs.deleted_at is null
@@ -1390,12 +1396,13 @@ func (q *Queries) TariffGet(ctx context.Context, arg TariffGetParams) (Tariff, e
 		&i.PowerPriceSource,
 		&i.ReactivePriceSource,
 		&i.DistributionPriceSource,
+		&i.ReactiveWaiverDisabled,
 	)
 	return i, err
 }
 
 const tariffList = `-- name: TariffList :many
-select id, company_id, building_id, name, effective_from, currency, energy_type, voltage_level, user_group, price_type, term, supply_company, single_time_price, t1_price, t2_price, t3_price, overuse_price, overuse_threshold_kwh_per_day, distribution_cost, reactive_power_price, green_energy_price, green_energy_distribution_cost, contracted_power_kw, power_unit_price, generation_usage, generation_price_per_kwh, vat_rate, use_ptf_yekdem, kbk_energy, kbk_t1, kbk_t2, kbk_t3, kbk_power_price, kbk_overuse_price, kbk_reactive_power, kbk_distribution_cost_tl_per_kwh, use_manual_yekdem, created_by, created_at, updated_at, deleted_at, power_price_source, reactive_price_source, distribution_price_source from tariffs
+select id, company_id, building_id, name, effective_from, currency, energy_type, voltage_level, user_group, price_type, term, supply_company, single_time_price, t1_price, t2_price, t3_price, overuse_price, overuse_threshold_kwh_per_day, distribution_cost, reactive_power_price, green_energy_price, green_energy_distribution_cost, contracted_power_kw, power_unit_price, generation_usage, generation_price_per_kwh, vat_rate, use_ptf_yekdem, kbk_energy, kbk_t1, kbk_t2, kbk_t3, kbk_power_price, kbk_overuse_price, kbk_reactive_power, kbk_distribution_cost_tl_per_kwh, use_manual_yekdem, created_by, created_at, updated_at, deleted_at, power_price_source, reactive_price_source, distribution_price_source, reactive_waiver_disabled from tariffs
 where tariffs.company_id = $1
   and ($2::boolean or tariffs.building_id = any($3::uuid[]))
   and (cardinality($4::uuid[]) = 0 or tariffs.id = any($4::uuid[]))
@@ -1486,6 +1493,7 @@ func (q *Queries) TariffList(ctx context.Context, arg TariffListParams) ([]Tarif
 			&i.PowerPriceSource,
 			&i.ReactivePriceSource,
 			&i.DistributionPriceSource,
+			&i.ReactiveWaiverDisabled,
 		); err != nil {
 			return nil, err
 		}
@@ -1962,9 +1970,10 @@ update tariffs set
   kbk_distribution_cost_tl_per_kwh = $34,
   use_manual_yekdem = $35, updated_at = $36,
   power_price_source = $37, reactive_price_source = $38,
-  distribution_price_source = $39
-where tariffs.id = $40 and tariffs.company_id = $41
-  and ($42::boolean or tariffs.building_id = any($43::uuid[]))
+  distribution_price_source = $39,
+  reactive_waiver_disabled = $40
+where tariffs.id = $41 and tariffs.company_id = $42
+  and ($43::boolean or tariffs.building_id = any($44::uuid[]))
   and tariffs.deleted_at is null
   -- Critical Finding 1: the NEW building_id this write stores must be
   -- validated exactly as TariffCreate validates it — moving a tariff to
@@ -1972,10 +1981,10 @@ where tariffs.id = $40 and tariffs.company_id = $41
   -- creating one there.
   and ($1::uuid is null or exists (
     select 1 from buildings b
-    where b.id = $1 and b.company_id = $41 and b.deleted_at is null
-      and ($42::boolean or b.id = any($43::uuid[]))
+    where b.id = $1 and b.company_id = $42 and b.deleted_at is null
+      and ($43::boolean or b.id = any($44::uuid[]))
   ))
-returning id, company_id, building_id, name, effective_from, currency, energy_type, voltage_level, user_group, price_type, term, supply_company, single_time_price, t1_price, t2_price, t3_price, overuse_price, overuse_threshold_kwh_per_day, distribution_cost, reactive_power_price, green_energy_price, green_energy_distribution_cost, contracted_power_kw, power_unit_price, generation_usage, generation_price_per_kwh, vat_rate, use_ptf_yekdem, kbk_energy, kbk_t1, kbk_t2, kbk_t3, kbk_power_price, kbk_overuse_price, kbk_reactive_power, kbk_distribution_cost_tl_per_kwh, use_manual_yekdem, created_by, created_at, updated_at, deleted_at, power_price_source, reactive_price_source, distribution_price_source
+returning id, company_id, building_id, name, effective_from, currency, energy_type, voltage_level, user_group, price_type, term, supply_company, single_time_price, t1_price, t2_price, t3_price, overuse_price, overuse_threshold_kwh_per_day, distribution_cost, reactive_power_price, green_energy_price, green_energy_distribution_cost, contracted_power_kw, power_unit_price, generation_usage, generation_price_per_kwh, vat_rate, use_ptf_yekdem, kbk_energy, kbk_t1, kbk_t2, kbk_t3, kbk_power_price, kbk_overuse_price, kbk_reactive_power, kbk_distribution_cost_tl_per_kwh, use_manual_yekdem, created_by, created_at, updated_at, deleted_at, power_price_source, reactive_price_source, distribution_price_source, reactive_waiver_disabled
 `
 
 type TariffUpdateParams struct {
@@ -2018,6 +2027,7 @@ type TariffUpdateParams struct {
 	PowerPriceSource            PriceSource
 	ReactivePriceSource         PriceSource
 	DistributionPriceSource     PriceSource
+	ReactiveWaiverDisabled      bool
 	ID                          uuid.UUID
 	CompanyID                   uuid.UUID
 	AllBuildings                bool
@@ -2065,6 +2075,7 @@ func (q *Queries) TariffUpdate(ctx context.Context, arg TariffUpdateParams) (Tar
 		arg.PowerPriceSource,
 		arg.ReactivePriceSource,
 		arg.DistributionPriceSource,
+		arg.ReactiveWaiverDisabled,
 		arg.ID,
 		arg.CompanyID,
 		arg.AllBuildings,
@@ -2116,6 +2127,7 @@ func (q *Queries) TariffUpdate(ctx context.Context, arg TariffUpdateParams) (Tar
 		&i.PowerPriceSource,
 		&i.ReactivePriceSource,
 		&i.DistributionPriceSource,
+		&i.ReactiveWaiverDisabled,
 	)
 	return i, err
 }

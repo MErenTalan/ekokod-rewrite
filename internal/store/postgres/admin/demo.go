@@ -46,7 +46,7 @@ var DemoTables = map[string]DemoTableKind{
 	"tariff_bulk_assignments": DemoPurge, "tariff_templates": DemoPurge, "tariffs": DemoPurge,
 	"building_contacts": DemoPurge, "consumption_anomalies": DemoPurge, "plant_faults": DemoPurge,
 	"isolar_forwarded_alarms": DemoPurge, "power_plant_monthly_targets": DemoPurge,
-	"power_plant_alarm_recipients": DemoPurge,
+	"power_plant_alarm_recipients": DemoPurge, "bill_periods": DemoPurge,
 
 	"alarm_analyzers": DemoCascade, "alarm_channels": DemoCascade, "alarm_events": DemoCascade,
 	"alarm_fired_bills": DemoCascade, "bill_lines": DemoCascade, "bill_members": DemoCascade,
@@ -144,6 +144,7 @@ var purgeStatements = []string{
 		where company_id = @company`,
 	`delete from alarms where company_id = @company`,
 	`delete from bills where company_id = @company`,
+	`delete from bill_periods where company_id = @company`,
 	`delete from reports where company_id = @company`,
 	`delete from legacy_reports where company_id = @company`,
 	`delete from legacy_bills where company_id = @company`,

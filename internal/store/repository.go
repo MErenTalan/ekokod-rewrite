@@ -1093,6 +1093,14 @@ type BillRepository interface {
 	// A bill not visible to the Scope returns ErrNotFound and nothing is
 	// replaced.
 	ReplaceHourlyDetail(ctx context.Context, s Scope, billID uuid.UUID, rows []model.BillHourlyDetail) (int64, error)
+
+	// BillPeriods lists a building's saved windows for keys (all when empty), R555.
+	// A building outside the Scope yields an empty list.
+	BillPeriods(ctx context.Context, s Scope, buildingID uuid.UUID, keys []string) ([]model.BillPeriod, error)
+	// UpsertBillPeriod saves one window; a building outside the Scope is ErrNotFound.
+	UpsertBillPeriod(ctx context.Context, s Scope, p model.BillPeriod) (model.BillPeriod, error)
+	// DeleteBillPeriod removes one window; nothing saved is ErrNotFound.
+	DeleteBillPeriod(ctx context.Context, s Scope, buildingID uuid.UUID, key string) error
 }
 
 // ---------------------------------------------------------------------------

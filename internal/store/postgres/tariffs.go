@@ -165,6 +165,7 @@ func (r *TariffRepository) Create(ctx context.Context, s store.Scope, t model.Ta
 		PowerPriceSource:            tariffPriceSource(t.PowerPriceSource),
 		ReactivePriceSource:         tariffPriceSource(t.ReactivePriceSource),
 		DistributionPriceSource:     tariffPriceSource(t.DistributionPriceSource),
+		ReactiveWaiverDisabled:      t.ReactiveWaiverDisabled,
 		CreatedAt:                   tariffTimestamptz(t.CreatedAt),
 	})
 	if err != nil {
@@ -222,6 +223,7 @@ func (r *TariffRepository) Update(ctx context.Context, s store.Scope, t model.Ta
 		PowerPriceSource:            tariffPriceSource(t.PowerPriceSource),
 		ReactivePriceSource:         tariffPriceSource(t.ReactivePriceSource),
 		DistributionPriceSource:     tariffPriceSource(t.DistributionPriceSource),
+		ReactiveWaiverDisabled:      t.ReactiveWaiverDisabled,
 	})
 	if err != nil {
 		return model.Tariff{}, pgerr.Translate(r.pool, "update tariff", err)
@@ -607,6 +609,7 @@ func tariffFromRow(row sqlcgen.Tariff) (model.Tariff, error) {
 		PowerPriceSource:        model.PriceSource(row.PowerPriceSource),
 		ReactivePriceSource:     model.PriceSource(row.ReactivePriceSource),
 		DistributionPriceSource: model.PriceSource(row.DistributionPriceSource),
+		ReactiveWaiverDisabled:  row.ReactiveWaiverDisabled,
 
 		CreatedBy: row.CreatedBy,
 		CreatedAt: row.CreatedAt.Time,

@@ -269,7 +269,7 @@ func Compute(in Input) (Invoice, error) {
 			}
 		}
 	}
-	if p.ReactiveFirstViolationWaived && !in.ReactivePriorViolation && inv.ReactivePenalty.IsPositive() {
+	if p.ReactiveFirstViolationWaived && !t.ReactiveWaiverDisabled && !in.ReactivePriorViolation && inv.ReactivePenalty.IsPositive() {
 		add(Line{Code: model.BillLineReactiveWaiver, Amount: inv.ReactivePenalty.Neg()})
 		inv.ReactivePenalty, inv.ReactiveWaived = decimal.Zero, true
 	}
