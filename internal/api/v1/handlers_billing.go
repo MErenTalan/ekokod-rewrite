@@ -145,7 +145,7 @@ func tariffInput(f dto.TariffFields) tariffsvc.Input {
 		KbkOverusePrice: dp(f.KbkOverusePrice), KbkReactivePower: dp(f.KbkReactivePower),
 		KbkDistributionCostTlPerKwh: dp(f.KbkDistributionCostTlPerKwh), UseManualYekdem: f.UseManualYekdem,
 		PowerPriceSource: model.PriceSource(f.PowerPriceSource), ReactivePriceSource: model.PriceSource(f.ReactivePriceSource),
-		DistributionPriceSource: model.PriceSource(f.DistributionPriceSource),
+		DistributionPriceSource: model.PriceSource(f.DistributionPriceSource), ReactiveWaiverDisabled: f.ReactiveWaiverDisabled,
 	}
 	in := tariffsvc.Input{Tariff: t, VatRate: dp(f.VatRate)}
 	for i, tax := range f.Taxes {
@@ -175,8 +175,8 @@ func tariffDTO(d tariffsvc.Definition) dto.Tariff {
 		KbkT3: dto.DP(t.KbkT3), KbkPowerPrice: dto.DP(t.KbkPowerPrice), KbkOverusePrice: dto.DP(t.KbkOverusePrice),
 		KbkReactivePower: dto.DP(t.KbkReactivePower), KbkDistributionCostTlPerKwh: dto.DP(t.KbkDistributionCostTlPerKwh),
 		UseManualYekdem: t.UseManualYekdem, PowerPriceSource: string(t.PowerPriceSource), ReactivePriceSource: string(t.ReactivePriceSource),
-		DistributionPriceSource: string(t.DistributionPriceSource),
-		Taxes:                   []dto.TariffTax{}, ExtraCharges: []dto.TariffExtraCharge{}, ManualYekdem: []dto.TariffManualYekdem{},
+		DistributionPriceSource: string(t.DistributionPriceSource), ReactiveWaiverDisabled: t.ReactiveWaiverDisabled,
+		Taxes: []dto.TariffTax{}, ExtraCharges: []dto.TariffExtraCharge{}, ManualYekdem: []dto.TariffManualYekdem{},
 	}
 	for _, tax := range d.Taxes {
 		f.Taxes = append(f.Taxes, dto.TariffTax{Name: tax.Name, Rate: dto.DP(&tax.Rate)})

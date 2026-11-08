@@ -69,6 +69,8 @@
     "reactivePriceSource": "Reaktif fiyat kaynağı",
     "distributionPriceSource": "Dağıtım fiyatı kaynağı",
     "useManualYekdem": "Manuel YEKDEM",
+    "reactiveWaiverDisabled": "Reaktif ilk ihlal affını uygulama",
+    "reactiveWaiverDisabledHelp": "Açıkken reaktif cezası ilk ihlalde de faturaya yansır (dağıtım şirketinin geçmiş ihlal kaydı bizde yoksa).",
     "year": "Yıl",
     "month": "Ay",
     "value": "Değer (TL/MWh)",

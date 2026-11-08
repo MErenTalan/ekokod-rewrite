@@ -65,6 +65,7 @@ func TestTariffLifecycle(t *testing.T) {
 	res.json(t, &created)
 	require.Equal(t, "20", created.VatRate.String())
 	require.Equal(t, "kbk", created.PowerPriceSource, "unset price sources default to kbk (F4)")
+	require.False(t, created.ReactiveWaiverDisabled, "the first-violation waiver stays on by default (R562)")
 	require.Len(t, created.Taxes, 1)
 
 	var applicable dto.Tariff
@@ -75,8 +76,12 @@ func TestTariffLifecycle(t *testing.T) {
 
 	body := validTariff(h.fx.BuildingA1)
 	body["single_time_price"] = "4.1"
+	body["reactive_waiver_disabled"] = true
 	res = ca.do(http.MethodPatch, "/tariffs/"+created.ID.String(), body)
 	require.Equal(t, http.StatusOK, res.status, string(res.body))
+	var patched dto.Tariff
+	res.json(t, &patched)
+	require.True(t, patched.ReactiveWaiverDisabled, "R562 flag is stored and returned")
 
 	ba := h.as(seed.E2EBuildingAdminEmail)
 	require.Equal(t, http.StatusOK, ba.do(http.MethodGet, "/tariffs/"+created.ID.String(), nil).status)

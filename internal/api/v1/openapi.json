@@ -9088,6 +9088,9 @@
             ],
             "type": "string"
           },
+          "reactive_waiver_disabled": {
+            "type": "boolean"
+          },
           "single_time_price": {
             "$ref": "#/components/schemas/Decimal"
           },
@@ -9327,6 +9330,9 @@
               "fixed"
             ],
             "type": "string"
+          },
+          "reactive_waiver_disabled": {
+            "type": "boolean"
           },
           "single_time_price": {
             "$ref": "#/components/schemas/Decimal"
@@ -9729,6 +9735,9 @@
               "fixed"
             ],
             "type": "string"
+          },
+          "reactive_waiver_disabled": {
+            "type": "boolean"
           },
           "single_time_price": {
             "$ref": "#/components/schemas/Decimal"

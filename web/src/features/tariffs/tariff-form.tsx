@@ -222,6 +222,13 @@ export function TariffFormView({
           {draft.energyType === 'green_energy' ? price('greenEnergyDistributionCost', 'fields.greenEnergyDistributionCost') : null}
           {price('vatRate', 'fields.vatRate', true)}
         </div>
+        <Switch
+          label={t('fields.reactiveWaiverDisabled')}
+          description={t('fields.reactiveWaiverDisabledHelp')}
+          disabled={readOnly}
+          checked={draft.reactiveWaiverDisabled}
+          onCheckedChange={(checked) => set({ reactiveWaiverDisabled: checked })}
+        />
       </section>
 
       {draft.term === 'binomial' ? (

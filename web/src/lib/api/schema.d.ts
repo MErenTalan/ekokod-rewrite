@@ -4794,6 +4794,7 @@ export interface components {
             reactive_power_price: components["schemas"]["Decimal"];
             /** @enum {string} */
             reactive_price_source?: "kbk" | "fixed";
+            reactive_waiver_disabled?: boolean;
             single_time_price?: components["schemas"]["Decimal"];
             /** @enum {string} */
             supply_company: "incumbent" | "private";
@@ -4856,6 +4857,7 @@ export interface components {
             reactive_power_price: components["schemas"]["Decimal"];
             /** @enum {string} */
             reactive_price_source?: "kbk" | "fixed";
+            reactive_waiver_disabled?: boolean;
             single_time_price?: components["schemas"]["Decimal"];
             /** @enum {string} */
             supply_company: "incumbent" | "private";
@@ -4960,6 +4962,7 @@ export interface components {
             reactive_power_price: components["schemas"]["Decimal"];
             /** @enum {string} */
             reactive_price_source?: "kbk" | "fixed";
+            reactive_waiver_disabled?: boolean;
             single_time_price?: components["schemas"]["Decimal"];
             /** @enum {string} */
             supply_company: "incumbent" | "private";

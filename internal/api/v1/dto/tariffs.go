@@ -63,6 +63,7 @@ type TariffFields struct {
 	KbkReactivePower            *Decimal             `json:"kbk_reactive_power,omitempty"`
 	KbkDistributionCostTlPerKwh *Decimal             `json:"kbk_distribution_cost_tl_per_kwh,omitempty"`
 	UseManualYekdem             bool                 `json:"use_manual_yekdem"`
+	ReactiveWaiverDisabled      bool                 `json:"reactive_waiver_disabled"`
 	PowerPriceSource            string               `json:"power_price_source,omitempty" validate:"omitempty,oneof=kbk fixed" enum:"kbk,fixed"`
 	ReactivePriceSource         string               `json:"reactive_price_source,omitempty" validate:"omitempty,oneof=kbk fixed" enum:"kbk,fixed"`
 	DistributionPriceSource     string               `json:"distribution_price_source,omitempty" validate:"omitempty,oneof=kbk fixed" enum:"kbk,fixed"`

@@ -42,6 +42,7 @@ export type TariffDraft = {
   kbkReactivePower: string;
   kbkDistributionCostTlPerKwh: string;
   useManualYekdem: boolean;
+  reactiveWaiverDisabled: boolean;
   manualYekdem: { year: string; month: string; value: string }[];
 
   powerPriceSource: 'kbk' | 'fixed';
@@ -69,7 +70,7 @@ export function emptyDraft(): TariffDraft {
     powerUnitPrice: '', generationPricePerKwh: '', vatRate: '',
     usePtfYekdem: false, kbkEnergy: '', kbkT1: '', kbkT2: '', kbkT3: '', kbkPowerPrice: '',
     kbkOverusePrice: '', kbkReactivePower: '', kbkDistributionCostTlPerKwh: '',
-    useManualYekdem: false, manualYekdem: [],
+    useManualYekdem: false, manualYekdem: [], reactiveWaiverDisabled: false,
     powerPriceSource: 'kbk', reactivePriceSource: 'kbk', distributionPriceSource: 'kbk',
     taxes: [], extraCharges: [],
   };
@@ -118,6 +119,7 @@ export function draftFrom(t: Tariff): TariffDraft {
     kbkReactivePower: str(t.kbk_reactive_power),
     kbkDistributionCostTlPerKwh: str(t.kbk_distribution_cost_tl_per_kwh),
     useManualYekdem: t.use_manual_yekdem ?? false,
+    reactiveWaiverDisabled: t.reactive_waiver_disabled ?? false,
     manualYekdem: (t.manual_yekdem ?? []).map((y) => ({ year: String(y.year), month: String(y.month), value: str(y.value) })),
     powerPriceSource: t.power_price_source ?? base.powerPriceSource,
     reactivePriceSource: t.reactive_price_source ?? base.reactivePriceSource,
@@ -265,6 +267,7 @@ export function toTariffRequest(draft: TariffDraft): TariffFields {
     generation_usage: draft.generationUsage,
     use_ptf_yekdem: draft.usePtfYekdem,
     use_manual_yekdem: draft.useManualYekdem,
+    reactive_waiver_disabled: draft.reactiveWaiverDisabled,
     power_price_source: draft.powerPriceSource,
     reactive_price_source: draft.reactivePriceSource,
     distribution_price_source: draft.distributionPriceSource,

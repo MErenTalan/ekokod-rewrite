@@ -147,6 +147,12 @@ describe('draftFrom', () => {
     expect(back.taxes).toEqual([{ name: 'BTV', rate: '5' }]);
     expect(back.singleTimePrice).toBe('');
   });
+
+  it('round-trips the reactive waiver switch (R562)', () => {
+    const body = toTariffRequest(filled({ reactiveWaiverDisabled: true }));
+    expect(body.reactive_waiver_disabled).toBe(true);
+    expect(draftFrom({ id: 'x', created_at: '', updated_at: '', ...body } as never).reactiveWaiverDisabled).toBe(true);
+  });
 });
 
 describe('Turkish decimals', () => {

@@ -69,6 +69,8 @@
     "reactivePriceSource": "Reactive price source",
     "distributionPriceSource": "Distribution price source",
     "useManualYekdem": "Manual YEKDEM",
+    "reactiveWaiverDisabled": "Never waive the first reactive violation",
+    "reactiveWaiverDisabledHelp": "When on, the reactive penalty is billed even on the first violation (when the utility's violation history is not in our data).",
     "year": "Year",
     "month": "Month",
     "value": "Value (TL/MWh)",

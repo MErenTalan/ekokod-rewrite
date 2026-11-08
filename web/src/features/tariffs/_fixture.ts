@@ -35,6 +35,7 @@ export const demoTariff: Tariff = {
   reactive_price_source: 'kbk',
   distribution_price_source: 'kbk',
   use_manual_yekdem: false,
+  reactive_waiver_disabled: false,
   taxes: [{ name: 'BTV', rate: '5' }],
   extra_charges: [],
   manual_yekdem: [],
