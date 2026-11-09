@@ -1,7 +1,7 @@
 # ekokod API reference
 
 Generated from the OpenAPI document (`ekokod tool openapi`) by `make api-docs`; do not edit.
-Version 1 · 183 operations · 269 schemas. Authentication: a session cookie (`ekokod_at`) or a mobile bearer token; operations marked *public* need neither.
+Version 1 · 187 operations · 274 schemas. Authentication: a session cookie (`ekokod_at`) or a mobile bearer token; operations marked *public* need neither.
 Errors 400, 401, 403, 429 and 500 apply to every operation and use the `Error` schema.
 
 ## alarms
@@ -314,6 +314,20 @@ The most recent bill of a subject. `bills.latest`
 
 Responses: 200 [`Bill`](#schema-bill), 404
 
+### `GET /api/v1/bills/preview`
+
+An unsaved bill over any hour-aligned window (R559). `bills.preview`
+
+| parameter | in | required | type |
+|---|---|---|---|
+| `scope` | query | yes | string: analyzer \| building |
+| `subject_id` | query | yes | `UuidUUID` |
+| `from` | query | yes | string (date-time)? |
+| `to` | query | yes | string (date-time)? |
+| `company_id` | query |  | `UuidUUID` |
+
+Responses: 200 [`BillPreview`](#schema-billpreview), 404
+
 ### `GET /api/v1/bills/{id}`
 
 A bill with lines and members. `bills.get`
@@ -347,6 +361,43 @@ The invoice PDF, rendered on demand when not yet stored. `bills.pdf`
 | `company_id` | query |  | `UuidUUID` |
 
 Responses: 200, 404
+
+### `GET /api/v1/buildings/{id}/bill-periods`
+
+A building's saved bill windows. `bill_periods.list`
+
+| parameter | in | required | type |
+|---|---|---|---|
+| `id` | path | yes | `UuidUUID` |
+| `company_id` | query |  | `UuidUUID` |
+
+Responses: 200 [`BillPeriod`](#schema-billperiod)[], 404
+
+### `PUT /api/v1/buildings/{id}/bill-periods/{period}`
+
+Save a period's real reading window and recompute the bills it touches (R557). `bill_periods.save`
+
+| parameter | in | required | type |
+|---|---|---|---|
+| `id` | path | yes | `UuidUUID` |
+| `period` | path | yes | string |
+| `company_id` | query |  | `UuidUUID` |
+
+Body: [`BillPeriodSaveRequest`](#schema-billperiodsaverequest)
+
+Responses: 200 [`BillPeriodChanged`](#schema-billperiodchanged), 404, 409, 422
+
+### `DELETE /api/v1/buildings/{id}/bill-periods/{period}`
+
+Drop a saved window: the period follows the cut-off day again. `bill_periods.delete`
+
+| parameter | in | required | type |
+|---|---|---|---|
+| `id` | path | yes | `UuidUUID` |
+| `period` | path | yes | string |
+| `company_id` | query |  | `UuidUUID` |
+
+Responses: 200 [`BillPeriodChanged`](#schema-billperiodchanged), 404, 409, 422
 
 ## buildings
 
@@ -2707,6 +2758,7 @@ Responses: 204, 404, 409, 422
 | `status` | string: draft \| issued \| flagged \| superseded | yes |
 | `tariff_id` | `UuidUUID` |  |
 | `total_cost` | [`Decimal`](#schema-decimal) | yes |
+| `unit_prices` | [`BillUnitPrices`](#schema-billunitprices) | yes |
 | `vat_cost` | [`Decimal`](#schema-decimal) | yes |
 
 ### <a id="schema-billhour"></a>`BillHour`
@@ -2745,6 +2797,47 @@ Responses: 204, 404, 409, 422
 |---|---|---|
 | `items` | [`Bill`](#schema-bill)[] | yes |
 | `next_cursor` | string? |  |
+
+### <a id="schema-billperiod"></a>`BillPeriod`
+
+| field | type | required |
+|---|---|---|
+| `building_id` | `UuidUUID` | yes |
+| `period_end` | string (date-time) | yes |
+| `period_key` | string | yes |
+| `period_start` | string (date-time) | yes |
+| `updated_at` | string (date-time) | yes |
+
+### <a id="schema-billperiodchanged"></a>`BillPeriodChanged`
+
+| field | type | required |
+|---|---|---|
+| `job_ids` | string[] | yes |
+| `period` | [`BillPeriod`](#schema-billperiod) |  |
+
+### <a id="schema-billperiodsaverequest"></a>`BillPeriodSaveRequest`
+
+| field | type | required |
+|---|---|---|
+| `from` | string (date-time) | yes |
+| `to` | string (date-time) | yes |
+
+### <a id="schema-billpreview"></a>`BillPreview`
+
+| field | type | required |
+|---|---|---|
+| `bill` | [`Bill`](#schema-bill) | yes |
+| `lines` | [`BillLine`](#schema-billline)[] | yes |
+| `saved_period` | [`BillPeriod`](#schema-billperiod) |  |
+| `unit_prices` | [`BillUnitPrices`](#schema-billunitprices) | yes |
+
+### <a id="schema-billunitprices"></a>`BillUnitPrices`
+
+| field | type | required |
+|---|---|---|
+| `distribution` | [`Decimal`](#schema-decimal) |  |
+| `energy` | [`Decimal`](#schema-decimal) |  |
+| `total` | [`Decimal`](#schema-decimal) |  |
 
 ### <a id="schema-building"></a>`Building`
 
@@ -4974,6 +5067,7 @@ string: admin \| company_admin \| company_readonly_admin \| building_admin \| bu
 | `price_type` | string: single_time \| multi_time | yes |
 | `reactive_power_price` | [`Decimal`](#schema-decimal) | yes |
 | `reactive_price_source` | string: kbk \| fixed |  |
+| `reactive_waiver_disabled` | boolean |  |
 | `single_time_price` | [`Decimal`](#schema-decimal) |  |
 | `supply_company` | string: incumbent \| private | yes |
 | `t1_price` | [`Decimal`](#schema-decimal) |  |
@@ -5029,6 +5123,7 @@ string: admin \| company_admin \| company_readonly_admin \| building_admin \| bu
 | `price_type` | string: single_time \| multi_time | yes |
 | `reactive_power_price` | [`Decimal`](#schema-decimal) | yes |
 | `reactive_price_source` | string: kbk \| fixed |  |
+| `reactive_waiver_disabled` | boolean |  |
 | `single_time_price` | [`Decimal`](#schema-decimal) |  |
 | `supply_company` | string: incumbent \| private | yes |
 | `t1_price` | [`Decimal`](#schema-decimal) |  |
@@ -5161,6 +5256,7 @@ string: admin \| company_admin \| company_readonly_admin \| building_admin \| bu
 | `price_type` | string: single_time \| multi_time | yes |
 | `reactive_power_price` | [`Decimal`](#schema-decimal) | yes |
 | `reactive_price_source` | string: kbk \| fixed |  |
+| `reactive_waiver_disabled` | boolean |  |
 | `single_time_price` | [`Decimal`](#schema-decimal) |  |
 | `supply_company` | string: incumbent \| private | yes |
 | `t1_price` | [`Decimal`](#schema-decimal) |  |
