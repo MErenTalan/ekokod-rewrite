@@ -46,3 +46,19 @@ owner asks Uğur Bey about a special contract (manager's instruction).
 - Fuga tariff: reactive price source `fixed` 3.4937 (now `kbk` → base × 3.49); analyzer installed power (bill: "Sözleşme Gücü 30252").
 - GridBox (osos.meramedas.com.tr) unreachable from the server since 2026-11-06 (timeout; reachable from the owner's PC) → ask MEDAŞ about an IP block, then re-fetch 08-07→08-21.
 - Reactive first-violation waiver: MEPAŞ charged Sep 2026 (15.49 %); our data starts June → open.
+
+## Execution record (2026-11-09)
+All tasks done on the branch; commits f73ccfc…cab4967 on top of the domain/store/consumption/service work.
+- API: preview is `GET /bills/preview?scope&subject_id&from&to` (a GET, so read-only roles may preview);
+  bad windows answer 422 naming `from`/`to` (`hour`, `gtfield`, `max_span`) before any lookup; overlap with a
+  saved neighbour → 409 `period_conflict`. `PUT/DELETE /buildings/{id}/bill-periods/{period}` = A, CA, BA.
+- `unit_prices {energy, distribution, total}` on the bill detail and the preview, from
+  `billing.SummariseUnitPrices` (kWh-weighted energy lines + the distribution line's unit price); the PDF
+  prints the same sentence under the charge table.
+- R560 as shipped: a PTF tariff with no PTF price keeps each energy line at 0 with no unit price ("PTF yok" in
+  the PDF and the card); non-PTF tariffs unchanged. The property-test reference model mirrors it.
+- Bills page: the building picker moved above the month gate; the card works without a month.
+- The tenancy sweep now fills `{period}` and sends a valid body for `bill_periods.save`.
+- `boundary_warnings` (R559) was not added: missing days already say where the data stops.
+- Ops: `/home/personal/f30-fuga-ops.sh` (after deploy): EPİAŞ login prompted, not stored; prices backfill;
+  Fuga installed power 30252 kW + tariff reactive fixed 3.4937 + waiver off.

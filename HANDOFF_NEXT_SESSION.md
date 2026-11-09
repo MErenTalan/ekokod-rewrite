@@ -1,4 +1,48 @@
-# Handoff — ekokod rewrite: F29 (demo account), done on its branch, not merged
+# Handoff — ekokod rewrite: F30 (custom bill periods, Fuga), done on its branch, not merged
+
+> **STATUS (2026-11-09):** branch `feat/f30-custom-bill-period` (worktree `/home/personal/ekokod-f30-period`,
+> from `main` @29fc8e2). Plan + rulings R554–R564 and the execution record:
+> `docs/superpowers/plans/2026-11-09-f30-custom-bill-period.md`. Findings: memory `fuga-invoice-2026-11-09`.
+> Migration **00028** (`bill_periods`, `tariffs.reactive_waiver_disabled`). **Not merged, not pushed, not
+> deployed** — the owner's call. Self-reviewed (no subagents, by the owner's working rule).
+
+### What F30 does
+- Bills page "Özel dönem faturası": preview any building/meter bill over a date range with an optional
+  reading hour (hour-aligned), nothing saved; save the range as a period key's official window (start
+  month by default) → that key's and the affected neighbours' bills are recomputed; delete behind a
+  confirmation. API: `GET /bills/preview`, `GET/PUT/DELETE /buildings/{id}/bill-periods[/{period}]`.
+- Saved windows drive every generation of that key (R556); neighbours stay contiguous; overlap → 409.
+- Invoice: energy line kept (0, "PTF yok") when PTF is missing; "Birim fiyat: Elektrik enerji bedeli +
+  Dağıtım bedeli = Toplam birim fiyat" under the charge table (PDF, API `unit_prices`, card); the PDF period
+  line shows the reading hour when it is not midnight.
+- Tariff switch "Reaktif ilk ihlal affını uygulama" (R562); EPİAŞ YEKDEM parser keeps the latest version per
+  month (R563, the live API broke it); `ekokod recompute prices --from YYYY-MM-DD [--to]` (R564).
+
+### Owner to do (in this order)
+1. Merge `feat/f30-custom-bill-period` into `main`, run `bash /home/personal/deploy-main.sh` (migration 27 → 28).
+2. `bash /home/personal/f30-fuga-ops.sh` — asks the EPİAŞ e-mail/password (never stored), recreates api +
+   worker, backfills PTF/YEKDEM from 2026-06-01, sets Fuga's installed power 30252 kW and its tariff's
+   reactive price to fixed 3.4937 with the waiver off.
+3. On new.ekokod.com → Faturalar → Özel dönem: preview 17.07 16:00 → 18.08 16:00 and 18.08 16:00 → 16.09
+   16:00, compare with `fuga-fatura-18-08-2026.jpeg` / `fuga-fatura-16-09-2026.jpeg`, then save both.
+4. Share Fuga's login only after the invoice is verified (the manager's condition).
+
+### Open (owner)
+- **PTF method**: neither period-arithmetic nor consumption-weighted (PTF+YEKDEM)×1.0938 reproduces MEPAŞ's
+  energy unit prices (3.593417 / 3.774401; best −1.5 % / −4.2 %) → ask Uğur Bey whether Fuga has a special
+  supply contract. Until then the energy line will not match even with full data.
+- **GridBox** (osos.meramedas.com.tr) times out from the server since 2026-11-06 (last reading 11-04) while it
+  answers from the owner's PC → ask MEDAŞ about an IP block. The Aug 7–21 gap stays (owner: skip it); the
+  18.08 bound sits inside it, so the Jul–Aug and Aug–Sep previews will report missing days.
+
+### Gates (2026-11-09)
+Touched Go packages with `-tags=integration` (domain, render, api, service/billing, arch: 29 ok), lint 0
+issues, `check-generate`, `check-api-docs`, web typecheck + lint, vitest 310 files / 1322 tests, `next build`,
+e2e `bills.spec.ts` 8/8 (full e2e not rerun: only the bills page changed in the web).
+
+---
+
+## Previous: F29 (demo account), merged and deployed (main @29fc8e2, 2026-10-30)
 
 > **STATUS (2026-10-29):** branch `feat/f29-demo-account` (worktree `/home/personal/ekokod-f29-demo`, from
 > `main` @8415257). Spec `docs/superpowers/specs/2026-10-28-demo-account-design.md`, plan + rulings R540–R553
@@ -6,48 +50,6 @@
 > plan's "Execution record" section.
 > Migration **00027** (`companies.is_demo`). **Not merged, not pushed, not deployed** — the owner's call.
 > The final review was a **self-review** (no subagent tool, by the owner's working rule).
-
-### What F29 does
-- One shared login `demo@ekokod.com.tr` for videos and prospects; role `demo` = company admin's permissions
-  (R541), but its profile, password and sessions are locked (R542); users a visitor creates cannot log in (R543).
-- Containment: `mail.GuardDemo` drops every mail of a demo company (R544); every meter adapter and the
-  iSolar client answer from the seed for a demo company (R545) — api and worker wiring.
-- Synthetic company "Demo Enerji A.Ş.": 3 buildings, 6 analyzers, 2 plants, 400 days of hourly readings,
-  12 months of engine-computed bills (analyzer, building and company scope; none flagged), tariffs, icmal,
-  alarms + events, job history, anomalies, forecasts, reports, ISO 50001 project with PDFs, EKOCM
-  selections/records/GHG reports per building.
-- Hourly reset at HH:00 Istanbul (`demo.reset`, `EKOKOD_SCHEDULE_DEMO_RESET`, default `0 * * * *`): purge
-  of everything not baseline in one transaction, bounded aggregate refresh, files removed, baseline
-  regenerated (~20 s). Banner on every page with the next reset time (`/auth/me` → `demo.resets_at`).
-- CLI: `ekokod seed demo` (create/extend; password via `EKOKOD_DEMO_PASSWORD`), `ekokod seed demo --reset`
-  (reset now, e.g. before a video).
-- Pre-existing bugs the demo smoke exposed and F29 fixed for everyone: the dashboard's year-over-year bars
-  paired last year by position (now by month); `carbon.mains.equivalence` was missing (emission-factors page).
-
-### Owner to do (in this order)
-1. Merge `feat/f29-demo-account` into `main`, run `bash /home/personal/deploy-main.sh` (migration 26 → 27).
-2. `bash /home/personal/deploy-demo.sh` — seeds the demo in a one-off worker container, writes the login to
-   `/root/ekokod-new-demo.txt` (600). Later runs keep the password; `--rotate` makes a new one.
-3. Read the login: `ssh.exe root@ekokod.com cat /root/ekokod-new-demo.txt`.
-4. Prospects reach the panel only after the IP allowlist is lifted (owner: after the security tests).
-- Reset before a video: on the server `cd /opt/ekokod-new && docker compose -p ekokod run --rm --no-deps -T worker seed demo --reset`.
-
-### Deferred minors (owner decides)
-- Bills page opens without a month; the dashboard's first visit asks for a building (both by design today).
-- Solar plants page: "Hava durumu hizmeti yapılandırılmamış" unless the server configures weather.
-- Financial Analysis on the demo's Gebze months shows "gelir eksik": R533 counts billed export as unpriced
-  production, on top of the netted plant's own production (small double count) — an F27 model question.
-- AI Analysis anomaly tab defaults to today + the previous hour, i.e. "the future" between 00:00 and 01:00
-  (predict.spec:28 fails only in that hour).
-- E-mail enumeration (spec "Known and deferred"): a visitor creating a user with an address a real account
-  already uses gets "e-posta başka bir kullanıcıya ait" — as any company admin does today. Worth closing in
-  the owner's security pass, before the allowlist comes down.
-
-### Gates (2026-10-29)
-Every touched Go package with `-tags=integration` (sequential chunks), `internal/arch`, `make lint` 0 issues,
-`check-generate`, `check-api-docs`, web lint + typecheck, vitest 308 files / 1306 tests, `next build`,
-e2e 186/186 in foreground chunks (predict.spec:28 passes only outside 00:00–01:00, see deferred minors),
-plus a throwaway Playwright sweep of every EKORM/EKOCM page as the demo user before and after a reset.
 
 ---
 
