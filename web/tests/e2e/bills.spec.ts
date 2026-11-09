@@ -88,3 +88,30 @@ test('a read-only admin is offered no generation card', async ({ page }) => {
 
   await expect(page.getByRole('button', { name: 'Şirket faturası' })).toHaveCount(0);
 });
+
+test('saves a custom bill period, lists it and deletes it behind a confirmation (F30)', async ({ page }) => {
+  await login(page, USERS.buildingAdmin.email);
+  await page.goto('/ekorm/bills');
+  // No month is picked, so the custom period card's controls are the only ones of their name.
+  const card = page;
+  await expect(card.getByRole('heading', { name: 'Özel dönem faturası' })).toBeVisible({ timeout: 30_000 });
+
+  // The calendar opens on the current month: its first two days make the window.
+  const pick = async (label: string, nth: number) => {
+    await card.getByRole('button', { name: new RegExp(label) }).click();
+    await page.getByRole('grid').locator('[data-day]:not([data-outside]) button').nth(nth).click();
+  };
+  await pick('Başlangıç tarihi', 0);
+  await pick('Bitiş tarihi', 1);
+
+  await card.getByRole('button', { name: 'Bu dönemi resmi dönem olarak kaydet' }).click();
+  await expect(page.getByText('Fatura dönemi kaydedildi, faturalar yeniden hesaplanıyor')).toBeVisible();
+  await expect(card.getByRole('heading', { name: 'Kayıtlı fatura dönemleri' })).toBeVisible();
+
+  await card.getByRole('button', { name: 'Sil' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name: 'Sil' }).click();
+  await expect(page.getByText('Fatura dönemi silindi, faturalar yeniden hesaplanıyor')).toBeVisible();
+  await expect(dialog).toHaveCount(0);
+  await expect(card.getByRole('heading', { name: 'Kayıtlı fatura dönemleri' })).toHaveCount(0);
+});
