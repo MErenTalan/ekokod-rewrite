@@ -932,6 +932,23 @@ func (s *Service) Backfill(ctx context.Context, sc store.Scope, id uuid.UUID, in
 	if _, _, err := s.getCredential(ctx, sc, id); err != nil {
 		return "", err
 	}
+	// The worker drops ids outside the company; refusing here keeps the API's
+	// one answer for a foreign id (404) instead of queueing a no-op job.
+	if len(in.AnalyzerIDs) > 0 {
+		found, err := s.deps.Analyzers.List(ctx, sc, store.AnalyzerFilter{IDs: in.AnalyzerIDs, Page: store.Page{Limit: int32(len(in.AnalyzerIDs))}})
+		if err != nil {
+			return "", err
+		}
+		seen := make(map[uuid.UUID]bool, len(found))
+		for _, a := range found {
+			seen[a.ID] = true
+		}
+		for _, aid := range in.AnalyzerIDs {
+			if !seen[aid] {
+				return "", store.ErrNotFound
+			}
+		}
+	}
 	task, err := job.NewBackfillTask(
 		job.BackfillPayload{
 			CompanyID: sc.CompanyID, CredentialID: id,
