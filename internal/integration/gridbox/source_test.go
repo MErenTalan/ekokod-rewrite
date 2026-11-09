@@ -549,6 +549,33 @@ func TestGridBoxResultStatusErrorIsSurfaced(t *testing.T) {
 	require.Empty(t, res.Readings)
 }
 
+// TestGridBoxNoDataWindowIsEmpty: live GridBox (2026-11-09) answers a window
+// in which the meter sent nothing with ResultStatus 2 and "Tesisatin hic ...
+// verisi yok." — an empty window, not an outage. Treating it as an outage
+// failed every fetch spanning Fuga's 7–21 August 2026 gap.
+func TestGridBoxNoDataWindowIsEmpty(t *testing.T) {
+	from, to := istanbulDay(2026, 9, 1)
+	for _, tc := range []struct {
+		kind              model.ReadingKind
+		path, fixtureName string
+	}{
+		{model.ReadingKindLoadProfile, "/gridbox/load-profiles", "gridbox_no_data.json"},
+		{model.ReadingKindDaily, "/gridbox/endexes", "gridbox_no_endex_data.json"},
+	} {
+		t.Run(string(tc.kind), func(t *testing.T) {
+			srv := fake.NewTLSServer(t, append(gridboxBaseRoutes(t),
+				fake.Route{Method: http.MethodGet, Path: "/gridbox/last-endex", Respond: fake.JSON(200, fake.Fixture(t, "gridbox", "gridbox_last_endex.json"))},
+				fake.Route{Method: http.MethodGet, Path: tc.path, Respond: fake.JSON(200, fake.Fixture(t, "gridbox", tc.fixtureName))},
+			)...)
+			pool, _ := gridboxTestPool(t, srv)
+			res, err := gridboxNewSource(pool, 0).FetchReadings(context.Background(), gridboxTestCreds(srv, false), gridboxTestRequest(tc.kind, from, to))
+			require.NoError(t, err)
+			require.Empty(t, res.Readings)
+			require.Nil(t, res.NextCursor)
+		})
+	}
+}
+
 // TestGridBoxBillingOnlyWhenEnabled: recorded requests contain
 // isBilling=true iff creds.Settings.UseBillingIndexes is on.
 func TestGridBoxBillingOnlyWhenEnabled(t *testing.T) {

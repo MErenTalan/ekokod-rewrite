@@ -419,6 +419,9 @@ func (s *Source) call(ctx context.Context, client *httpx.Client, token, op, temp
 	if decErr != nil || env.ResultStatus == nil {
 		return nil, &integration.Error{Kind: integration.ErrMalformedPayload, Provider: integration.ProviderGridBox, Op: op, HTTPStatus: resp.Status}
 	}
+	if env.noData() && (op == "load_profiles" || op == "endexes") {
+		return json.RawMessage("[]"), nil
+	}
 	if *env.ResultStatus != 1 {
 		return nil, &integration.Error{Kind: integration.ErrUpstreamUnavailable, Provider: integration.ProviderGridBox, Op: op, HTTPStatus: resp.Status}
 	}

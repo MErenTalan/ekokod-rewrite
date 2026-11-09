@@ -1,6 +1,9 @@
 package gridbox
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strings"
+)
 
 // envelope is GridBox's response wrapper (06 §3 rule 2): every endpoint
 // except token responds { ResultStatus, ResultObject, ... }. ResultStatus
@@ -20,6 +23,16 @@ import "encoding/json"
 type envelope struct {
 	ResultStatus *int            `json:"ResultStatus"`
 	ResultObject json.RawMessage `json:"ResultObject"`
+	Message      string          `json:"Message"`
+}
+
+// noData reports GridBox's answer for a window in which the meter sent
+// nothing: ResultStatus 2 with "Tesisatin hic yuk profili verisi yok." or
+// "Tesisatin hic endeks verisi yok." (live, 2026-11-09). It is an empty
+// window, the one non-1 status that is not an outage (narrows R25).
+func (e envelope) noData() bool {
+	return e.ResultStatus != nil && *e.ResultStatus == 2 &&
+		strings.HasPrefix(e.Message, "Tesisatin hic ") && strings.Contains(e.Message, "verisi yok")
 }
 
 // tokenResponse is the token endpoint's success shape: an OAuth2
