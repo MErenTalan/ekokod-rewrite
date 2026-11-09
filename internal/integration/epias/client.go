@@ -266,6 +266,11 @@ func (c *Client) YekdemUnitCost(ctx context.Context, from, to time.Time) ([]mode
 	var order []key
 	var dropped int32
 
+	// EPİAŞ refuses a chunk starting in the future (400 SEF1116), and a
+	// month is returned by any chunk intersecting it, so stop at now.
+	if now := c.opts.Clock.Now(); to.After(now) {
+		to = now
+	}
 	for _, w := range normalize.Chunk(from, to, yekdemMaxWindow) {
 		resp, err := c.doData(ctx, func(ticket string) httpx.Request {
 			return c.unitCostRequest(ticket, w.From, w.To)

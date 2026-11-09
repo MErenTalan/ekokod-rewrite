@@ -2,6 +2,7 @@ package epias_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"sort"
 	"sync"
@@ -701,4 +702,40 @@ func TestEPIASDataCallsAreGloballySerialised(t *testing.T) {
 	for _, k := range keys {
 		require.Equal(t, "epias", k, "every httpx attempt (auth and data) must serialise under the global epias key")
 	}
+}
+
+// TestEPIASYekdemNeverAsksAboutTheFuture: EPİAŞ answers a unit-cost call
+// whose startDate is in the future with 400 SEF1116 ("startDate geçmiş
+// zaman olmalıdır", live 2026-11-09). A backfill from 2026-06-01 ran to
+// 2026-12-01, so its third 90-day chunk started on 2026-11-28 and failed
+// the whole sync; the window now stops at the clock's now.
+func TestEPIASYekdemNeverAsksAboutTheFuture(t *testing.T) {
+	now := time.Date(2026, 11, 9, 8, 0, 0, 0, time.UTC)
+	srv := fake.NewTLSServer(t,
+		casRoute(casSuccess("TGT-31-yekdemfuture-cas01")),
+		yekRoute(func(w http.ResponseWriter, r *http.Request) {
+			var body struct{ StartDate string }
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			start, err := time.Parse(time.RFC3339, body.StartDate)
+			if err != nil || !start.Before(now) {
+				fake.JSON(http.StatusBadRequest, []byte(`{"status":"400 BAD_REQUEST","errors":[{"errorCode":"(VAL)SEF1116"}]}`))(w, r)
+				return
+			}
+			fake.JSON(http.StatusOK, fake.Fixture(t, "epias", "epias_yekdem_versions.json"))(w, r)
+		}),
+	)
+	pool, _ := epiasTestPool(t, srv, nil)
+	c, err := epias.New(pool, epiasTestOptions(srv, clock.NewFake(now), nil))
+	require.NoError(t, err)
+
+	from := time.Date(2026, 6, 1, 0, 0, 0, 0, normalize.Istanbul).UTC()
+	to := time.Date(2026, 12, 1, 0, 0, 0, 0, normalize.Istanbul).UTC()
+	values, err := c.YekdemUnitCost(context.Background(), from, to)
+	require.NoError(t, err)
+	require.Len(t, values, 4)
+
+	future := time.Date(2026, 12, 1, 0, 0, 0, 0, normalize.Istanbul).UTC()
+	values, err = c.YekdemUnitCost(context.Background(), future, future.AddDate(0, 1, 0))
+	require.NoError(t, err)
+	require.Empty(t, values)
 }
