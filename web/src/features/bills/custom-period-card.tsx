@@ -100,6 +100,7 @@ export function CustomPeriodCardView({
 
   const error = (field: string) => missing[field] ?? errors[field];
   const bill = preview?.bill;
+  const flags = bill?.flag_reason?.split(',') ?? [];
 
   return (
     <Card className="p-4 flex flex-col gap-4">
@@ -146,7 +147,10 @@ export function CustomPeriodCardView({
               {t('partialDays', { days: dayRanges(bill.missing_days).join(', ') })}
             </Alert>
           ) : null}
-          {bill.flag_reason === 'ptf_data_missing' ? <Alert tone="warning" title={t('ptfMissing')} /> : null}
+          {flags.includes('ptf_data_missing') ? <Alert tone="warning" title={t('ptfMissing')} /> : null}
+          {flags.includes('hourly_consumption_missing') ? (
+            <Alert tone="warning" title={t('consumptionGapTitle')}>{t('consumptionGap')}</Alert>
+          ) : null}
           <TableContainer label={t('linesLabel')}>
             <Table>
               <TableHeader>

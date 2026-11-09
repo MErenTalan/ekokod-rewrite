@@ -115,9 +115,29 @@ func TestPriceHourlyMissingHoursOverToleranceIsIncomplete(t *testing.T) {
 	p, err := tariff.Price(ptfTariff(), w, h, true, m, seedParams(), loc)
 	require.NoError(t, err)
 	require.False(t, p.Complete)
-	require.Equal(t, tariff.ReasonOverTolerance, p.Reason)
+	require.Equal(t, tariff.ReasonConsumptionOverTolerance, p.Reason, "every hour priced: the readings are what is missing")
 	require.Equal(t, 744, p.HoursExpected)
 	require.Equal(t, 48, p.HoursMissingConsumption)
+}
+
+// TestPriceHourlyMissingPricesOverToleranceIsIncomplete: price gaps keep the
+// PTF reason even when readings are missing too.
+func TestPriceHourlyMissingPricesOverToleranceIsIncomplete(t *testing.T) {
+	loc := istanbul(t)
+	w, m, h := build(time.Date(2026, 1, 1, 0, 0, 0, 0, loc), 100, func(i int, _ time.Time) (*decimal.Decimal, *decimal.Decimal) {
+		switch {
+		case i < 3:
+			return nil, dp("1")
+		case i < 10:
+			return dp("1000"), nil
+		}
+		return dp("1000"), dp("1")
+	})
+	jan(m, "500")
+	p, err := tariff.Price(ptfTariff(), w, h, true, m, seedParams(), loc)
+	require.NoError(t, err)
+	require.False(t, p.Complete)
+	require.Equal(t, tariff.ReasonOverTolerance, p.Reason)
 }
 
 func TestPriceHourlyAtToleranceIsComplete(t *testing.T) {

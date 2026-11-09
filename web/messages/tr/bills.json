@@ -112,6 +112,8 @@
     "partialTitle": "Bu aralıkta eksik veri var",
     "partialDays": "Verisi olmayan günler faturaya dahil edilmedi: {days}",
     "ptfMissing": "PTF/YEKDEM verisi yok: enerji bedeli hesaplanamadı",
+    "consumptionGapTitle": "Saatlik tüketim verisi eksik",
+    "consumptionGap": "Fiyat verisi tam; ancak saatlerin bir kısmında okuma olmadığı için enerji birim fiyatı yalnızca verisi olan saatlerin tüketimine göre ağırlıklandırıldı. Fatura incelemeye düşer.",
     "linesLabel": "Fatura kalemleri",
     "line": "Kalem",
     "quantity": "Miktar",

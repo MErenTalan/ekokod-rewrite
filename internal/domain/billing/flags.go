@@ -22,6 +22,9 @@ const (
 	FlagInstalledPowerMissing Flag = "installed_power_missing"
 	FlagGenerationDataMissing Flag = "generation_data_missing"
 	FlagTieringPriceMissing   Flag = "tiering_price_missing"
+	// FlagHourlyConsumptionMissing: every hour is priced, but too many hours
+	// have no reading for the hourly-weighted energy price to be trusted.
+	FlagHourlyConsumptionMissing Flag = "hourly_consumption_missing"
 )
 
 func sortedFlags(set map[Flag]bool) []Flag {

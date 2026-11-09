@@ -82,6 +82,18 @@ describe('CustomPeriodCardView', () => {
     expect(r.getByText(/Elektrik enerji bedeli — \+ Dağıtım bedeli 2,479400 = Toplam birim fiyat —/)).toBeInTheDocument();
   });
 
+  it('names a reading gap as such, and missing PTF only when it is missing', () => {
+    const gap = { ...demoPreview, bill: { ...demoPreview.bill, status: 'flagged', flag_reason: 'hourly_consumption_missing' } } as BillPreview;
+    const r = view({ preview: gap });
+    expect(r.getByText(/Saatlik tüketim verisi eksik/)).toBeInTheDocument();
+    expect(r.queryByText(/PTF\/YEKDEM verisi yok/)).toBeNull();
+    r.unmount();
+
+    const both = { ...gap, bill: { ...gap.bill, flag_reason: 'installed_power_missing,ptf_data_missing' } } as BillPreview;
+    const r2 = view({ preview: both });
+    expect(r2.getByText(/PTF\/YEKDEM verisi yok/)).toBeInTheDocument();
+  });
+
   it('marks the field the API names', () => {
     const r = view({ errors: { to: 'Geçersiz değer' } });
     expect(r.getByText('Geçersiz değer')).toBeInTheDocument();

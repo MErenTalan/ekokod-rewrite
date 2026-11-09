@@ -528,6 +528,14 @@ func TestPTFIncompleteFlags(t *testing.T) {
 	require.Equal(t, []billing.Flag{billing.FlagPTFDataMissing}, compute(t, in).Flags)
 }
 
+// TestPTFConsumptionGapFlagsReadingsNotPrices: every hour priced but too many
+// hours without readings is a reading gap, not missing PTF data (Fuga, 2026-11-09).
+func TestPTFConsumptionGapFlagsReadingsNotPrices(t *testing.T) {
+	in := ptfInput(t)
+	in.Pricing.Complete, in.Pricing.Reason = false, tariff.ReasonConsumptionOverTolerance
+	require.Equal(t, []billing.Flag{billing.FlagHourlyConsumptionMissing}, compute(t, in).Flags)
+}
+
 func TestComputeRejectsNilActiveImport(t *testing.T) {
 	in := baseInput(t)
 	in.Quantities.ActiveImport = nil

@@ -49,6 +49,10 @@ const (
 	ReasonOverTolerance = "ptf_hours_over_tolerance"
 	ReasonYekdemMissing = "yekdem_missing"
 	ReasonNoPTF         = "no_ptf"
+	// ReasonConsumptionOverTolerance: the hourly method's missing hours are
+	// over the tolerance, but the price-missing ones alone are within it, so
+	// the gap is in the readings, not in EPİAŞ data.
+	ReasonConsumptionOverTolerance = "consumption_hours_over_tolerance"
 )
 
 // Pricing is the outcome of PTF+YEKDEM pricing for one period.
@@ -168,8 +172,10 @@ func Price(t model.Tariff, period energy.Window, hours []HourConsumption, hourly
 		out.Reason = ReasonYekdemMissing
 	case priced == 0:
 		out.Reason = ReasonNoPTF
-	case decimal.NewFromInt(int64(missing)).DivRound(expected, DivisionScale).GreaterThan(p.PTFMissingHourTolerance):
+	case overTolerance(out.HoursMissingPrice, expected, p.PTFMissingHourTolerance):
 		out.Reason = ReasonOverTolerance
+	case overTolerance(missing, expected, p.PTFMissingHourTolerance):
+		out.Reason = ReasonConsumptionOverTolerance
 	}
 	out.Complete = out.Reason == ""
 
@@ -206,4 +212,8 @@ func Price(t model.Tariff, period energy.Window, hours []HourConsumption, hourly
 func FixedUnitPrices(t model.Tariff) (power, reactive, distribution *decimal.Decimal) {
 	r, d := t.ReactivePowerPrice, t.DistributionCost
 	return t.PowerUnitPrice, &r, &d
+}
+
+func overTolerance(missing int, expected, tolerance decimal.Decimal) bool {
+	return decimal.NewFromInt(int64(missing)).DivRound(expected, DivisionScale).GreaterThan(tolerance)
 }

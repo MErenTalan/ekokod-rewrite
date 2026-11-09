@@ -221,7 +221,10 @@ func Compute(in Input) (Invoice, error) {
 	powerPrice, reactivePrice, distributionPrice := fixedPower, fixedReactive, fixedDistribution
 	if t.UsePtfYekdem { // R119
 		powerPrice, reactivePrice, distributionPrice = in.Pricing.PowerUnitPrice, in.Pricing.ReactiveUnitPrice, in.Pricing.DistributionUnitPrice
-		if !in.Pricing.Complete {
+		switch {
+		case in.Pricing.Reason == tariff.ReasonConsumptionOverTolerance:
+			flags[FlagHourlyConsumptionMissing] = true
+		case !in.Pricing.Complete:
 			flags[FlagPTFDataMissing] = true
 		}
 	}

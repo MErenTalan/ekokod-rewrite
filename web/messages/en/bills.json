@@ -112,6 +112,8 @@
     "partialTitle": "This range has missing data",
     "partialDays": "Days without data were left out of the bill: {days}",
     "ptfMissing": "No PTF/YEKDEM data: the energy charge could not be computed",
+    "consumptionGapTitle": "Hourly consumption data missing",
+    "consumptionGap": "Prices are complete, but some hours have no reading, so the energy unit price is weighted by the hours that have data. The bill is held for review.",
     "linesLabel": "Bill lines",
     "line": "Line",
     "quantity": "Quantity",
