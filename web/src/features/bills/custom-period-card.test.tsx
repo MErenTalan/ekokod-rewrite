@@ -82,16 +82,23 @@ describe('CustomPeriodCardView', () => {
     expect(r.getByText(/Elektrik enerji bedeli — \+ Dağıtım bedeli 2,479400 = Toplam birim fiyat —/)).toBeInTheDocument();
   });
 
-  it('names a reading gap as such, and missing PTF only when it is missing', () => {
+  it('names a reading gap, missing PTF and missing YEKDEM each as such', () => {
     const gap = { ...demoPreview, bill: { ...demoPreview.bill, status: 'flagged', flag_reason: 'hourly_consumption_missing' } } as BillPreview;
     const r = view({ preview: gap });
     expect(r.getByText(/Saatlik tüketim verisi eksik/)).toBeInTheDocument();
-    expect(r.queryByText(/PTF\/YEKDEM verisi yok/)).toBeNull();
+    expect(r.queryByText(/PTF verisi eksik/)).toBeNull();
     r.unmount();
 
     const both = { ...gap, bill: { ...gap.bill, flag_reason: 'installed_power_missing,ptf_data_missing' } } as BillPreview;
     const r2 = view({ preview: both });
-    expect(r2.getByText(/PTF\/YEKDEM verisi yok/)).toBeInTheDocument();
+    expect(r2.getByText(/PTF verisi eksik/)).toBeInTheDocument();
+    expect(r2.queryByText(/YEKDEM verisi yok/)).toBeNull();
+    r2.unmount();
+
+    const yekdem = { ...gap, bill: { ...gap.bill, flag_reason: 'yekdem_data_missing' } } as BillPreview;
+    const r3 = view({ preview: yekdem });
+    expect(r3.getByText(/YEKDEM verisi yok/)).toBeInTheDocument();
+    expect(r3.queryByText(/PTF verisi eksik/)).toBeNull();
   });
 
   it('marks the field the API names', () => {

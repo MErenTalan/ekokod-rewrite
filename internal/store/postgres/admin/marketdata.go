@@ -61,17 +61,22 @@ func (r *MarketDataRepository) UpsertHourlyPrices(ctx context.Context, prices []
 
 	ts := make([]pgtype.Timestamptz, len(prices))
 	ptf := make([]pgtype.Numeric, len(prices))
+	qty := make([]pgtype.Numeric, len(prices))
 	fetchedAt := make([]pgtype.Timestamptz, len(prices))
 	for i, p := range prices {
 		ts[i] = pgtype.Timestamptz{Time: p.Ts, Valid: true}
 		ptf[i] = pgnum.DecimalToNumeric(p.PTF)
+		if p.MatchedQuantity != nil { // nil keeps the stored value (R565)
+			qty[i] = pgnum.DecimalToNumeric(*p.MatchedQuantity)
+		}
 		fetchedAt[i] = pgtype.Timestamptz{Time: fetchedAtOrNow(p.FetchedAt), Valid: true}
 	}
 
 	n, err := r.q.AdminMarketDataUpsertHourlyPrices(ctx, sqlcgen.AdminMarketDataUpsertHourlyPricesParams{
-		Ts:        ts,
-		Ptf:       ptf,
-		FetchedAt: fetchedAt,
+		Ts:              ts,
+		Ptf:             ptf,
+		MatchedQuantity: qty,
+		FetchedAt:       fetchedAt,
 	})
 	if err != nil {
 		return 0, pgerr.Translate(r.pool, "admin market data upsert hourly prices", err)

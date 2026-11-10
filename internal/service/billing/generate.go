@@ -538,15 +538,30 @@ func (s *Service) price(ctx context.Context, sc store.Scope, t model.Tariff, ids
 	}
 	hours, _ := domain.AggregateHours(series)
 
-	market := tariff.Market{PTF: map[time.Time]decimal.Decimal{}, Yekdem: map[tariff.YearMonth]decimal.Decimal{}, ManualYekdem: map[tariff.YearMonth]decimal.Decimal{}}
-	prices, err := s.deps.Prices.HourlyRange(ctx, sc, store.TimeRange{From: window.From, To: window.To})
+	market := tariff.Market{PTF: map[time.Time]decimal.Decimal{}, Yekdem: map[tariff.YearMonth]decimal.Decimal{}, ManualYekdem: map[tariff.YearMonth]decimal.Decimal{},
+		Quantity: map[time.Time]decimal.Decimal{}, YekdemForecast: map[tariff.YearMonth]decimal.Decimal{}}
+	// R567: the SKTT method weighs whole read dates, so load both end days fully.
+	priceRange := store.TimeRange{From: dayStart(window.From, s.loc), To: dayStart(window.To, s.loc).AddDate(0, 0, 1)}
+	prices, err := s.deps.Prices.HourlyRange(ctx, sc, priceRange)
 	if err != nil {
 		return tariff.Pricing{}, err
 	}
 	for _, p := range prices {
 		market.PTF[p.Ts.UTC()] = p.PTF
+		if p.MatchedQuantity != nil {
+			market.Quantity[p.Ts.UTC()] = *p.MatchedQuantity
+		}
 	}
-	for _, ym := range monthsTouched(window, s.loc) {
+	for _, ym := range monthsTouched(energy.Window{From: priceRange.From, To: priceRange.To}, s.loc) {
+		f, err := s.deps.Prices.YekdemForecast(ctx, sc, int16(ym.Year), int16(ym.Month))
+		switch {
+		case err == nil:
+			market.YekdemForecast[ym] = f.Value
+		case !errors.Is(err, store.ErrNotFound):
+			return tariff.Pricing{}, err
+		}
+	}
+	for _, ym := range monthsTouched(energy.Window{From: priceRange.From, To: priceRange.To}, s.loc) {
 		y, err := s.deps.Prices.Yekdem(ctx, sc, int16(ym.Year), int16(ym.Month))
 		if errors.Is(err, store.ErrNotFound) {
 			continue // R109: flagged by Price, never substituted
@@ -589,4 +604,10 @@ func listAll[T any](list func(store.Page) ([]T, error)) ([]T, error) {
 			return out, nil
 		}
 	}
+}
+
+// dayStart is t's Istanbul midnight.
+func dayStart(t time.Time, loc *time.Location) time.Time {
+	lt := t.In(loc)
+	return time.Date(lt.Year(), lt.Month(), lt.Day(), 0, 0, 0, 0, loc)
 }

@@ -226,3 +226,35 @@ func TestSyncPricesExplicitYekdemWindow(t *testing.T) {
 	require.NoError(t, syncer.SyncPrices(context.Background(), job.SyncPricesPayload{Window: &day}))
 	require.True(t, asked[0][0].Equal(time.Date(2026, 8, 1, 0, 0, 0, 0, normalize.Istanbul).UTC()), "R39: month − 3 by default")
 }
+
+type quantitySource struct {
+	duplicatingSource
+	qty map[time.Time]decimal.Decimal
+}
+
+func (q *quantitySource) HourlyMatchedQuantity(context.Context, time.Time, time.Time) (map[time.Time]decimal.Decimal, error) {
+	return q.qty, nil
+}
+
+// TestSyncPricesAttachesMatchedQuantity (R565): a source that also reports
+// matched volume has it stored on the hour it belongs to.
+func TestSyncPricesAttachesMatchedQuantity(t *testing.T) {
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, normalize.Istanbul)
+	h1, h2 := now.Add(-2*time.Hour).UTC(), now.Add(-time.Hour).UTC()
+	src := &quantitySource{
+		duplicatingSource: duplicatingSource{
+			hourly: func(time.Time, time.Time) ([]model.MarketPrice, []integration.Warning, error) {
+				return []model.MarketPrice{{Ts: h1, PTF: decimal.NewFromInt(1)}, {Ts: h2, PTF: decimal.NewFromInt(2)}}, nil, nil
+			},
+			yekdem: func(time.Time, time.Time) ([]model.YekdemMonthly, error) { return nil, nil },
+		},
+		qty: map[time.Time]decimal.Decimal{h1: decimal.RequireFromString("19153.7")},
+	}
+	market := &recordingMarket{}
+	day := job.Window{From: now.Add(-3 * time.Hour), To: now}
+	require.NoError(t, marketdata.New(src, market, &stubJournal{}, clock.NewFake(now), nil).SyncPrices(context.Background(), job.SyncPricesPayload{Window: &day}))
+	require.Len(t, market.hourlyCalls, 1)
+	got := market.hourlyCalls[0]
+	require.Equal(t, "19153.7", got[0].MatchedQuantity.String())
+	require.Nil(t, got[1].MatchedQuantity)
+}

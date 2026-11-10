@@ -148,6 +148,7 @@ export function CustomPeriodCardView({
             </Alert>
           ) : null}
           {flags.includes('ptf_data_missing') ? <Alert tone="warning" title={t('ptfMissing')} /> : null}
+          {flags.includes('yekdem_data_missing') ? <Alert tone="warning" title={t('yekdemMissing')} /> : null}
           {flags.includes('hourly_consumption_missing') ? (
             <Alert tone="warning" title={t('consumptionGapTitle')}>{t('consumptionGap')}</Alert>
           ) : null}

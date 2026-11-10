@@ -92,3 +92,13 @@ type unitCostRequestBody struct {
 	StartDate string `json:"startDate"`
 	EndDate   string `json:"endDate"`
 }
+
+// quantityEnvelope is the day-ahead clearing-quantity response (R565).
+type quantityEnvelope struct {
+	Items *[]quantityItem `json:"items"`
+}
+
+type quantityItem struct {
+	Date        string      `json:"date"`
+	MatchedBids json.Number `json:"matchedBids"`
+}

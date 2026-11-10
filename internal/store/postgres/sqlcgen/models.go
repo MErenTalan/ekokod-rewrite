@@ -1867,9 +1867,10 @@ type LegacyReport struct {
 }
 
 type MarketPricesHourly struct {
-	Ts        pgtype.Timestamptz
-	Ptf       pgtype.Numeric
-	FetchedAt pgtype.Timestamptz
+	Ts              pgtype.Timestamptz
+	Ptf             pgtype.Numeric
+	FetchedAt       pgtype.Timestamptz
+	MatchedQuantity pgtype.Numeric
 }
 
 type MeterReading struct {
@@ -2260,6 +2261,14 @@ type UserPasswordHistory struct {
 	UserID       uuid.UUID
 	PasswordHash string
 	CreatedAt    pgtype.Timestamptz
+}
+
+type YekdemForecast struct {
+	Year      int16
+	Month     int16
+	Value     pgtype.Numeric
+	Source    string
+	UpdatedAt pgtype.Timestamptz
 }
 
 type YekdemMonthly struct {

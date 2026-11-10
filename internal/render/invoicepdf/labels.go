@@ -61,6 +61,7 @@ var labels = map[string]map[string]string{
 		"flag:ptf_data_missing": "PTF verisi eksik", "flag:reactive_data_missing": "Reaktif veri eksik",
 		"flag:installed_power_missing": "Kurulu güç tanımsız", "flag:generation_data_missing": "Üretim verisi eksik",
 		"flag:tiering_price_missing": "Kademe fiyatı eksik", "flag:hourly_consumption_missing": "Saatlik tüketim verisi eksik",
+		"flag:yekdem_data_missing": "YEKDEM verisi eksik",
 
 		"m01": "Ocak", "m02": "Şubat", "m03": "Mart", "m04": "Nisan", "m05": "Mayıs", "m06": "Haziran",
 		"m07": "Temmuz", "m08": "Ağustos", "m09": "Eylül", "m10": "Ekim", "m11": "Kasım", "m12": "Aralık",
@@ -120,6 +121,7 @@ var labels = map[string]map[string]string{
 		"flag:ptf_data_missing": "PTF data missing", "flag:reactive_data_missing": "Reactive data missing",
 		"flag:installed_power_missing": "Installed power missing", "flag:generation_data_missing": "Generation data missing",
 		"flag:tiering_price_missing": "Tier price missing", "flag:hourly_consumption_missing": "Hourly consumption data missing",
+		"flag:yekdem_data_missing": "YEKDEM data missing",
 
 		"m01": "January", "m02": "February", "m03": "March", "m04": "April", "m05": "May", "m06": "June",
 		"m07": "July", "m08": "August", "m09": "September", "m10": "October", "m11": "November", "m12": "December",

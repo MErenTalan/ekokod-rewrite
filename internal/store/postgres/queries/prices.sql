@@ -12,3 +12,7 @@ order by ts;
 -- name: PriceYekdem :one
 select * from yekdem_monthly
 where year = sqlc.arg(year) and month = sqlc.arg(month);
+
+-- name: PriceYekdemForecast :one
+select * from yekdem_forecast
+where year = sqlc.arg(year) and month = sqlc.arg(month);

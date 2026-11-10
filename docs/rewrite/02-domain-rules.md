@@ -483,6 +483,25 @@ line is 0 — it does not fall back to another coefficient or to 1.
 > reactive price as the raw coefficient without multiplying by the base price. All three are wrong.
 > See `10-removed-behaviours.md` item 9.
 
+### 7.2a Incumbent supplier — SKTT (Tebliğ RG 30307 md. 6) — R567
+
+A PTF tariff whose `supply_company` is `incumbent` is a *son kaynak tedarik tarifesi* and is priced
+by the Tebliğ formula, not 7.1/7.2 (proven on three MEPAŞ bills, Aug–Oct 2026, to 0.000032 TL/kWh):
+
+```
+read dates  = Istanbul date of period start … Istanbul date of period end, both included
+weight(d)   = ½ for the first and last read date, 1 between (1 if they are the same day)
+ptf_day(d)  = Σ matched_quantity_h × ptf_h / Σ matched_quantity_h over every hour of d, rounded to 0.01
+              (EPİAŞ's "ağırlıklı ortalama günlük PTF"; R565 stores the hourly matched quantity)
+PTF_d       = Σ weight × ptf_day / Σ weight          (days without a value are missing; tolerance as 7.1)
+YEKDEM_d    = Σ weight × yekdem(month of d) / Σ weight
+yekdem(m)   = manual override if enabled, else EPDK forecast (R566, `yekdem_forecast`), else published
+base_price  = (PTF_d + YEKDEM_d) / 1000; prices derived as in 7.2
+```
+
+Consumption weights nothing, so hourly readings are not needed. A month with no YEKDEM at all flags
+`yekdem_data_missing`, never `ptf_data_missing`.
+
 ### 7.3 EPİAŞ data
 
 - **PTF (MCP)** — hourly day-ahead market clearing price, TL/MWh, from the EPİAŞ transparency

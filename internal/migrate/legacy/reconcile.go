@@ -269,7 +269,7 @@ func sortedReasons(set map[Reason]bool) []Reason {
 
 // missingReasons explains a legacy bill with no comparable new bill; nil means comparable.
 func (in Inputs) missingReasons(lb admin.LegacyBillRow, nb admin.LiveBillRow, ok bool) []Reason {
-	if ok && nb.FlagReason != nil && containsFlag(*nb.FlagReason, "ptf_data_missing") {
+	if ok && nb.FlagReason != nil && (containsFlag(*nb.FlagReason, "ptf_data_missing") || containsFlag(*nb.FlagReason, "yekdem_data_missing")) {
 		return []Reason{ReasonPTFGapFlagged}
 	}
 	if ok {
@@ -334,7 +334,7 @@ func Attribute(lb admin.LegacyBillRow, nb admin.LiveBillRow) []Reason {
 		switch {
 		case str(nb.PriceType) == "multi_time" && p.IsTwoPartCalculation:
 			set[ReasonNoTieringMultiTime] = true
-		case nb.FlagReason != nil && containsFlag(*nb.FlagReason, "ptf_data_missing"):
+		case nb.FlagReason != nil && (containsFlag(*nb.FlagReason, "ptf_data_missing") || containsFlag(*nb.FlagReason, "yekdem_data_missing")):
 			set[ReasonPTFGapFlagged] = true
 		default:
 			set[Unexplained] = true

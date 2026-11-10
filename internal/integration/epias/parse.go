@@ -213,3 +213,26 @@ func parseUnitCostResponse(body []byte) ([]unitCostRow, int, error) {
 	}
 	return rows, dropped, nil
 }
+
+// parseQuantityResponse decodes a clearing-quantity body into the matched
+// volume (MWh) per UTC hour (R565). A row that does not parse is skipped:
+// its day then simply has no weighted PTF, which billing flags.
+func parseQuantityResponse(body []byte) (map[time.Time]decimal.Decimal, error) {
+	var env quantityEnvelope
+	if err := newStrictDecoder(body).Decode(&env); err != nil || env.Items == nil {
+		return nil, &integration.Error{Kind: integration.ErrMalformedPayload, Provider: integration.ProviderEPIAS, Op: "clearing-quantity"}
+	}
+	out := make(map[time.Time]decimal.Decimal, len(*env.Items))
+	for _, it := range *env.Items {
+		ts, err := normalize.ISO8601(it.Date)
+		if err != nil {
+			continue
+		}
+		q, err := normalize.JSONNumber(it.MatchedBids)
+		if err != nil {
+			continue
+		}
+		out[ts.UTC()] = q
+	}
+	return out, nil
+}

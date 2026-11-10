@@ -78,14 +78,34 @@ func (r *PriceRepository) Yekdem(ctx context.Context, s store.Scope, year, month
 	}, nil
 }
 
+// YekdemForecast implements store.PriceRepository.YekdemForecast.
+func (r *PriceRepository) YekdemForecast(ctx context.Context, s store.Scope, year, month int16) (model.YekdemForecast, error) {
+	if !s.Valid() {
+		return model.YekdemForecast{}, store.ErrInvalidScope
+	}
+	row, err := r.q.PriceYekdemForecast(ctx, sqlcgen.PriceYekdemForecastParams{Year: year, Month: month})
+	if err != nil {
+		return model.YekdemForecast{}, pgerr.Translate(r.pool, "price yekdem forecast", err)
+	}
+	value, err := numericToDecimal(row.Value)
+	if err != nil {
+		return model.YekdemForecast{}, pgerr.Translate(r.pool, "price yekdem forecast", err)
+	}
+	return model.YekdemForecast{Year: row.Year, Month: row.Month, Value: value, Source: row.Source}, nil
+}
+
 func marketPriceFromRow(row sqlcgen.MarketPricesHourly) (model.MarketPrice, error) {
 	ptf, err := numericToDecimal(row.Ptf)
 	if err != nil {
 		return model.MarketPrice{}, err
 	}
-	return model.MarketPrice{
-		Ts:        row.Ts.Time,
-		PTF:       ptf,
-		FetchedAt: row.FetchedAt.Time,
-	}, nil
+	mp := model.MarketPrice{Ts: row.Ts.Time, PTF: ptf, FetchedAt: row.FetchedAt.Time}
+	if row.MatchedQuantity.Valid {
+		q, err := numericToDecimal(row.MatchedQuantity)
+		if err != nil {
+			return model.MarketPrice{}, err
+		}
+		mp.MatchedQuantity = &q
+	}
+	return mp, nil
 }

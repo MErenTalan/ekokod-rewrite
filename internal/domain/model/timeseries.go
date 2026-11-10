@@ -262,8 +262,11 @@ type MarketPrice struct {
 	// PTF is TL/MWh, numeric(14,4) — note the unit: consumption is in kWh, so
 	// pricing divides by 1000 somewhere, and doing that in float would be the
 	// whole defect this type exists to avoid.
-	PTF       decimal.Decimal
-	FetchedAt time.Time
+	PTF decimal.Decimal
+	// MatchedQuantity is the day-ahead matched volume (MWh) of the hour,
+	// nil when not fetched (R565). It weights the daily PTF average.
+	MatchedQuantity *decimal.Decimal
+	FetchedAt       time.Time
 }
 
 // YekdemMonthly is the monthly YEKDEM component. Mirrors table
@@ -274,6 +277,14 @@ type YekdemMonthly struct {
 	// Value is TL/MWh, like MarketPrice.PTF.
 	Value     decimal.Decimal
 	FetchedAt time.Time
+}
+
+// YekdemForecast is the EPDK forecast YEKDEM unit cost for one month
+// (R566), table `yekdem_forecast`.
+type YekdemForecast struct {
+	Year, Month int16
+	Value       decimal.Decimal // TL/MWh
+	Source      string
 }
 
 // Forecast is one predicted value for one analyzer and instant, as produced by

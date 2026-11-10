@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration"
@@ -102,6 +103,13 @@ type yekdemDropReporter interface {
 	YekdemDropped() int32
 }
 
+// quantitySource is an OPTIONAL PriceSource capability (satisfied by
+// *epias.Client): the hourly matched volume that weights a day's PTF for
+// SKTT billing (R565).
+type quantitySource interface {
+	HourlyMatchedQuantity(ctx context.Context, from, to time.Time) (map[time.Time]decimal.Decimal, error)
+}
+
 // SyncPrices implements job.PriceSyncer. It never fabricates a value for a
 // period EPİAŞ has not published — a gap is reported (partial run, one
 // operational message) and left for billing to flag (F4), never
@@ -141,6 +149,18 @@ func (s *Syncer) SyncPrices(ctx context.Context, p job.SyncPricesPayload) error 
 		// deduplicated BEFORE the call — UpsertHourlyPrices refuses a
 		// batch containing two rows for the same Ts outright.
 		prices = dedupPrices(prices)
+		if qs, ok := s.Source.(quantitySource); ok && len(prices) > 0 {
+			qty, err := qs.HourlyMatchedQuantity(ctx, chunk.From, chunk.To)
+			if err != nil {
+				s.fail(ctx, run.ID, processed, skipped, err)
+				return err
+			}
+			for i := range prices {
+				if q, ok := qty[prices[i].Ts.UTC()]; ok {
+					prices[i].MatchedQuantity = &q
+				}
+			}
+		}
 
 		n, err := s.Market.UpsertHourlyPrices(ctx, prices)
 		if err != nil {

@@ -805,6 +805,8 @@ type PriceRepository interface {
 	// HourlyRange returns ErrInvalidRange for an invalid r.
 	HourlyRange(ctx context.Context, s Scope, r TimeRange) ([]model.MarketPrice, error)
 	Yekdem(ctx context.Context, s Scope, year, month int16) (model.YekdemMonthly, error)
+	// YekdemForecast returns ErrNotFound for a month EPDK has no forecast for.
+	YekdemForecast(ctx context.Context, s Scope, year, month int16) (model.YekdemForecast, error)
 }
 
 // ForecastRepository stores and reads forecast runs.

@@ -21,6 +21,11 @@ type Market struct {
 	PTF          map[time.Time]decimal.Decimal // key: UTC hour start; TL/MWh
 	Yekdem       map[YearMonth]decimal.Decimal // published; TL/MWh
 	ManualYekdem map[YearMonth]decimal.Decimal // the tariff's own entries
+	// Quantity is the day-ahead matched volume per UTC hour (R565) and
+	// YekdemForecast the EPDK forecast YEKDEM (R566); only the SKTT method
+	// reads them.
+	Quantity       map[time.Time]decimal.Decimal
+	YekdemForecast map[YearMonth]decimal.Decimal
 }
 
 // HourConsumption is one sound single-hour Billing row.
@@ -42,6 +47,9 @@ type Method string
 const (
 	MethodHourly        Method = "hourly"
 	MethodPeriodAverage Method = "period_average"
+	// MethodSKTT is the son kaynak tedarik tarifesi of the Tebliğ (RG 30307
+	// md. 6), which an incumbent supplier bills a PTF tariff with (R567).
+	MethodSKTT Method = "sktt"
 )
 
 // Incompleteness reasons (R109).
@@ -87,6 +95,10 @@ func Price(t model.Tariff, period energy.Window, hours []HourConsumption, hourly
 	}
 	if !period.Valid() || period.From.Truncate(time.Hour) != period.From || period.To.Truncate(time.Hour) != period.To {
 		return Pricing{}, ErrInvalidPeriod
+	}
+	if t.SupplyCompany == model.SupplyCompanyIncumbent {
+		out := priceSKTT(t, period, m, p, loc)
+		return finish(t, out, false, decimal.Zero, decimal.Zero), nil
 	}
 	yekdem := func(ts time.Time) *decimal.Decimal {
 		lt := ts.In(loc)
@@ -177,6 +189,11 @@ func Price(t model.Tariff, period energy.Window, hours []HourConsumption, hourly
 	case overTolerance(missing, expected, p.PTFMissingHourTolerance):
 		out.Reason = ReasonConsumptionOverTolerance
 	}
+	return finish(t, out, hourly, costSum, kwhSum), nil
+}
+
+// finish derives the unit prices from out's base price (02 §7.2, R119).
+func finish(t model.Tariff, out Pricing, hourly bool, costSum, kwhSum decimal.Decimal) Pricing {
 	out.Complete = out.Reason == ""
 
 	times := func(coefficient *decimal.Decimal) *decimal.Decimal {
@@ -204,7 +221,7 @@ func Price(t model.Tariff, period energy.Window, hours []HourConsumption, hourly
 	if t.DistributionPriceSource != model.PriceSourceFixed {
 		out.DistributionUnitPrice = t.KbkDistributionCostTlPerKwh // flat TL/kWh, not base-derived
 	}
-	return out, nil
+	return out
 }
 
 // FixedUnitPrices returns the tariff's own power, reactive and distribution

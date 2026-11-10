@@ -739,3 +739,22 @@ func TestEPIASYekdemNeverAsksAboutTheFuture(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, values)
 }
+
+// TestEPIASHourlyMatchedQuantity (R565): the clearing-quantity call (live
+// shape, 2026-11-10) yields matchedBids per UTC hour, exact decimals.
+func TestEPIASHourlyMatchedQuantity(t *testing.T) {
+	srv := fake.NewTLSServer(t,
+		casRoute(casSuccess("TGT-14-quantity-cas01")),
+		fake.Route{Method: http.MethodPost, Path: "/electricity-service/v1/markets/dam/data/clearing-quantity",
+			Respond: fake.JSON(http.StatusOK, fake.Fixture(t, "epias", "epias_clearing_quantity.json"))},
+	)
+	pool, _ := epiasTestPool(t, srv, nil)
+	c, err := epias.New(pool, epiasTestOptions(srv, clock.NewFake(fixtureNow), nil))
+	require.NoError(t, err)
+
+	from, to := oneIstanbulDay(2026, 10, 1)
+	q, err := c.HourlyMatchedQuantity(context.Background(), from, to)
+	require.NoError(t, err)
+	require.Len(t, q, 2)
+	require.Equal(t, "18610.6", q[time.Date(2026, 9, 30, 22, 0, 0, 0, time.UTC)].String())
+}

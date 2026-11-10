@@ -224,6 +224,8 @@ func Compute(in Input) (Invoice, error) {
 		switch {
 		case in.Pricing.Reason == tariff.ReasonConsumptionOverTolerance:
 			flags[FlagHourlyConsumptionMissing] = true
+		case in.Pricing.Reason == tariff.ReasonYekdemMissing:
+			flags[FlagYekdemDataMissing] = true
 		case !in.Pricing.Complete:
 			flags[FlagPTFDataMissing] = true
 		}

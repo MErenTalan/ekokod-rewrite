@@ -13,19 +13,22 @@ import (
 
 const adminMarketDataUpsertHourlyPrices = `-- name: AdminMarketDataUpsertHourlyPrices :execrows
 
-insert into market_prices_hourly (ts, ptf, fetched_at)
+insert into market_prices_hourly (ts, ptf, matched_quantity, fetched_at)
 select unnest($1::timestamptz[]),
        unnest($2::numeric[]),
-       unnest($3::timestamptz[])
+       unnest($3::numeric[]),
+       unnest($4::timestamptz[])
 on conflict (ts) do update set
     ptf = excluded.ptf,
+    matched_quantity = coalesce(excluded.matched_quantity, market_prices_hourly.matched_quantity),
     fetched_at = excluded.fetched_at
 `
 
 type AdminMarketDataUpsertHourlyPricesParams struct {
-	Ts        []pgtype.Timestamptz
-	Ptf       []pgtype.Numeric
-	FetchedAt []pgtype.Timestamptz
+	Ts              []pgtype.Timestamptz
+	Ptf             []pgtype.Numeric
+	MatchedQuantity []pgtype.Numeric
+	FetchedAt       []pgtype.Timestamptz
 }
 
 // AdminMarketDataRepository's queries (store.AdminMarketDataRepository,
@@ -33,7 +36,12 @@ type AdminMarketDataUpsertHourlyPricesParams struct {
 // carries a company_id: these writes are platform-wide by construction, so
 // there is no Scope to check here — see repository.go's admin section header.
 func (q *Queries) AdminMarketDataUpsertHourlyPrices(ctx context.Context, arg AdminMarketDataUpsertHourlyPricesParams) (int64, error) {
-	result, err := q.db.Exec(ctx, adminMarketDataUpsertHourlyPrices, arg.Ts, arg.Ptf, arg.FetchedAt)
+	result, err := q.db.Exec(ctx, adminMarketDataUpsertHourlyPrices,
+		arg.Ts,
+		arg.Ptf,
+		arg.MatchedQuantity,
+		arg.FetchedAt,
+	)
 	if err != nil {
 		return 0, err
 	}

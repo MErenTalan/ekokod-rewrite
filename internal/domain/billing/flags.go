@@ -25,6 +25,9 @@ const (
 	// FlagHourlyConsumptionMissing: every hour is priced, but too many hours
 	// have no reading for the hourly-weighted energy price to be trusted.
 	FlagHourlyConsumptionMissing Flag = "hourly_consumption_missing"
+	// FlagYekdemDataMissing: no YEKDEM (manual, EPDK forecast or published)
+	// for a month of the period; PTF itself may be complete.
+	FlagYekdemDataMissing Flag = "yekdem_data_missing"
 )
 
 func sortedFlags(set map[Flag]bool) []Flag {

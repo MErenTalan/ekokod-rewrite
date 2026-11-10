@@ -13,6 +13,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/MErenTalan/ekokod-rewrite/internal/domain/model"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration"
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/httpx"
@@ -251,6 +253,37 @@ func (c *Client) HourlyPTF(ctx context.Context, from, to time.Time) ([]model.Mar
 		warnings = append(warnings, warns...)
 	}
 	return prices, warnings, nil
+}
+
+// HourlyMatchedQuantity returns the day-ahead matched volume (MWh) per
+// published hour in [from, to), keyed by UTC hour start (R565), chunked like
+// HourlyPTF.
+func (c *Client) HourlyMatchedQuantity(ctx context.Context, from, to time.Time) (map[time.Time]decimal.Decimal, error) {
+	out := map[time.Time]decimal.Decimal{}
+	for _, w := range normalize.Chunk(from, to, ptfMaxWindow) {
+		resp, err := c.doData(ctx, func(ticket string) httpx.Request {
+			body, _ := json.Marshal(mcpRequestBody{StartDate: formatEpiasDate(w.From), EndDate: formatEpiasDate(w.To)})
+			return httpx.Request{
+				Op:          "clearing-quantity",
+				Method:      http.MethodPost,
+				Template:    c.opts.BaseURL + "/v1/markets/dam/data/clearing-quantity",
+				Header:      http.Header{"TGT": []string{ticket}},
+				Body:        body,
+				ContentType: "application/json",
+			}
+		})
+		if err != nil {
+			return nil, err
+		}
+		rows, err := parseQuantityResponse(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		for ts, q := range rows {
+			out[ts] = q
+		}
+	}
+	return out, nil
 }
 
 // YekdemUnitCost returns one model.YekdemMonthly per published (year,

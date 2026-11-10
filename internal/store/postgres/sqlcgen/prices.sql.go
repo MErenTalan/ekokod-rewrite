@@ -13,7 +13,7 @@ import (
 
 const priceHourlyRange = `-- name: PriceHourlyRange :many
 
-select ts, ptf, fetched_at from market_prices_hourly
+select ts, ptf, fetched_at, matched_quantity from market_prices_hourly
 where ts >= $1::timestamptz
   and ts < $2::timestamptz
 order by ts
@@ -37,7 +37,12 @@ func (q *Queries) PriceHourlyRange(ctx context.Context, arg PriceHourlyRangePara
 	var items []MarketPricesHourly
 	for rows.Next() {
 		var i MarketPricesHourly
-		if err := rows.Scan(&i.Ts, &i.Ptf, &i.FetchedAt); err != nil {
+		if err := rows.Scan(
+			&i.Ts,
+			&i.Ptf,
+			&i.FetchedAt,
+			&i.MatchedQuantity,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -66,6 +71,29 @@ func (q *Queries) PriceYekdem(ctx context.Context, arg PriceYekdemParams) (Yekde
 		&i.Month,
 		&i.Value,
 		&i.FetchedAt,
+	)
+	return i, err
+}
+
+const priceYekdemForecast = `-- name: PriceYekdemForecast :one
+select year, month, value, source, updated_at from yekdem_forecast
+where year = $1 and month = $2
+`
+
+type PriceYekdemForecastParams struct {
+	Year  int16
+	Month int16
+}
+
+func (q *Queries) PriceYekdemForecast(ctx context.Context, arg PriceYekdemForecastParams) (YekdemForecast, error) {
+	row := q.db.QueryRow(ctx, priceYekdemForecast, arg.Year, arg.Month)
+	var i YekdemForecast
+	err := row.Scan(
+		&i.Year,
+		&i.Month,
+		&i.Value,
+		&i.Source,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
