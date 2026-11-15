@@ -59,23 +59,24 @@ export function ReferenceView({ kind, catalogue }: { kind: ReferenceKind; catalo
           <Table aria-label={t('reference.mappingLabel')}>
             <TableHeader>
               <TableRow>
+                <TableHead>{t(kind === 'ghg' ? 'reference.scope' : 'reference.iso')}</TableHead>
                 <TableHead>{t('reference.activity')}</TableHead>
                 <TableHead>{t('reference.category')}</TableHead>
-                <TableHead>{t('reference.scope')}</TableHead>
-                <TableHead>{t('reference.iso')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {catalogue.items.flatMap((main) =>
-                main.subs.map((sub) => (
+              {/* Each page groups by its own standard: GHG by scope, ISO 14064-1 by category. */}
+              {catalogue.items
+                .flatMap((main) => main.subs.map((sub) => ({ main: main.key, sub })))
+                .map((row, order) => ({ ...row, order, group: kind === 'ghg' ? row.sub.scope : row.sub.iso_category }))
+                .sort((a, b) => a.group.localeCompare(b.group, 'en', { numeric: true }) || a.order - b.order)
+                .map(({ main, sub }) => (
                   <TableRow key={sub.key}>
+                    <TableCell className="whitespace-nowrap">{t(kind === 'ghg' ? scopeKey(sub.scope) : isoKey(sub.iso_category))}</TableCell>
                     <TableCell>{t(subKey(sub.key))}</TableCell>
-                    <TableCell>{t(mainKey(main.key))}</TableCell>
-                    <TableCell>{t(scopeKey(sub.scope))}</TableCell>
-                    <TableCell>{t(isoKey(sub.iso_category))}</TableCell>
+                    <TableCell>{t(mainKey(main))}</TableCell>
                   </TableRow>
-                )),
-              )}
+                ))}
             </TableBody>
           </Table>
         </TableContainer>

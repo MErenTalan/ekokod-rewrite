@@ -35,6 +35,8 @@ describe('site blocks', () => {
     const { getByRole, container } = renderWithProviders(<ContactDetails />);
     expect(getByRole('link', { name: '+90 506 315 41 98' })).toHaveAttribute('href', 'tel:+905063154198');
     expect(getByRole('link', { name: /Haritada aç/ }).getAttribute('href')).toMatch(/^https:\/\/www\.openstreetmap\.org\//);
+    // A marker at Konya Teknokent; a ?query= search lands on an empty result page.
+    expect(getByRole('link', { name: /Haritada aç/ }).getAttribute('href')).toMatch(/[?&]mlat=38\.\d+&mlon=32\.\d+/);
     expect(container.querySelector('iframe')).toBeNull();
   });
 

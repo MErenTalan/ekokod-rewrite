@@ -60,7 +60,9 @@ export function NotesView({ notes, editable, saving, onAdd, onUpdate, onDelete, 
             ) : null}
           </div>
         </div>
-      ) : null}
+      ) : (
+        <p className="text-foreground-muted type-small">{t('notes.readOnly')}</p>
+      )}
       <h5 className="text-foreground-muted type-small">{t('notes.existing')}</h5>
       {notes.length === 0 ? (
         <p className="text-foreground-muted type-small">{t('notes.none')}</p>

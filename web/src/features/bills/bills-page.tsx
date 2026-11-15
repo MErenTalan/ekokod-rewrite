@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { PageHeader } from '@/components/shell/page-header';
 import { ScopePicker } from '@/features/scope/scope-picker';
@@ -17,6 +17,7 @@ import { useScopeParams, useSelection } from '@/lib/selection/selection-store';
 import { useSession } from '@/lib/session/session-provider';
 
 import { useJob } from '../jobs/use-job';
+import { BillHistoryView } from './bill-history';
 import { CustomPeriodCardView, type PreviewRequest, type SaveRequest } from './custom-period-card';
 import { DashboardTableView } from './dashboard-table';
 import { GenerateCardView, type GenerateRequest } from './generate-card';
@@ -25,6 +26,7 @@ import { NettingSummaryView } from './netting-summary';
 import { PlantsSectionView } from './plants-section';
 
 const ANALYZER_LIMIT = 500;
+const HISTORY_LIMIT = 200;
 
 /** The bills screen of 01 §7.10: the month's dashboard and ad-hoc generation. */
 export function BillsPage() {
@@ -54,8 +56,22 @@ export function BillsPage() {
     'get',
     '/api/v1/analyzers',
     { params: { query: { ...scope, limit: ANALYZER_LIMIT } } },
-    { enabled: canCompute },
   );
+
+  // Legacy listed every bill without a month; the history does that and opens the newest month once.
+  const history = $api.useQuery('get', '/api/v1/bills', { params: { query: { ...scope, limit: HISTORY_LIMIT } } });
+  const buildings = $api.useQuery('get', '/api/v1/buildings', { params: { query: { ...scope, limit: ANALYZER_LIMIT } } });
+  const autoPicked = useRef(false);
+  const newestPeriod = history.data?.items[0]?.period_key;
+  useEffect(() => {
+    if (autoPicked.current || !newestPeriod) return;
+    autoPicked.current = true;
+    setMonth((m) => m ?? newestPeriod);
+  }, [newestPeriod]);
+  const pickMonth = (m: string | null) => {
+    autoPicked.current = true;
+    setMonth(m);
+  };
 
   const compute = useApiMutation('post', '/api/v1/bills/compute', { invalidate: ['/api/v1/bills'] });
   const { job, errorCode } = useJob(jobID, t('generate.title'));
@@ -152,7 +168,7 @@ export function BillsPage() {
       <PageHeader title={t('title')} description={t('subtitle')} />
 
       <div className="w-full max-w-xs">
-        <MonthPicker label={t('monthSelection')} value={month} onValueChange={setMonth} />
+        <MonthPicker label={t('monthSelection')} value={month} onValueChange={pickMonth} />
       </div>
 
       {/* The building invoice of §7.10 and the custom period (F30) need a
@@ -214,6 +230,19 @@ export function BillsPage() {
           )}
         </>
       )}
+
+      <BillHistoryView
+        bills={history.data?.items ?? []}
+        buildingNames={Object.fromEntries((buildings.data?.items ?? []).map((b) => [b.id, b.name]))}
+        analyzers={analyzers.data?.items ?? []}
+        loading={history.isPending}
+        truncated={!!history.data?.next_cursor}
+        onOpenMonth={(p) => {
+          pickMonth(p);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+        onDownloadPdf={(id) => download(`/api/v1/bills/${id}/pdf`, {}, `fatura-${id}.pdf`)}
+      />
 
       {canCompute ? (
         <CustomPeriodCardView

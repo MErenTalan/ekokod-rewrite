@@ -46,7 +46,9 @@ export function FilesView({ files, editable, uploading, error, onUpload, onDownl
           disabled={uploading}
           onFilesSelected={(list) => list[0] && onUpload(list[0])}
         />
-      ) : null}
+      ) : (
+        <p className="text-foreground-muted type-small">{t('files.readOnly')}</p>
+      )}
       {files.length === 0 ? (
         <p className="text-foreground-muted type-small">{t('files.none')}</p>
       ) : (

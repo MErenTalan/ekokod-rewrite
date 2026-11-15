@@ -16,6 +16,7 @@
   "history": "Tariff history",
   "historyEmpty": "This building has no tariff yet",
   "historyNote": "Issued invoices keep the tariff version they were priced with.",
+  "readOnly": "Company admins add and update tariffs; your account can only view them.",
   "saved": "Tariff saved",
   "deleted": "Tariff deleted",
   "deleteTitle": "Delete tariff version",

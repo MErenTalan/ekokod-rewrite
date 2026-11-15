@@ -41,5 +41,6 @@ describe('FilesView', () => {
     const viewer = render({ editable: false });
     expect(viewer.r.queryByRole('button', { name: 'Politika.pdf sil' })).toBeNull();
     expect(viewer.r.queryByLabelText(/Gerekli Dosyaları Yükle/)).toBeNull();
+    expect(viewer.r.getByText(/Hesabınız salt okunur: dosya yükleme/)).toBeVisible();
   });
 });

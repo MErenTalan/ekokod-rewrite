@@ -151,5 +151,21 @@
     "generation_sale": "Generation sale (info)",
     "extra": "Extra charge",
     "tax": "Tax/fund"
+  },
+  "history": {
+    "title": "Bill history",
+    "description": "Every computed bill, newest period first. Click a period to open that month's dashboard.",
+    "kind": "Bill type",
+    "empty": "No bills yet",
+    "emptyDescription": "Computed bills are listed here.",
+    "open": "Open {period}",
+    "download": "Download the {period} bill",
+    "truncated": "Pick a month above for older bills.",
+    "scope": {
+      "analyzer": "Meter bill",
+      "building": "Building bill",
+      "company": "Company bill"
+    },
+    "tableLabel": "Bill list"
   }
 }

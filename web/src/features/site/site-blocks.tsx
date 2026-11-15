@@ -198,7 +198,8 @@ export function NewsList() {
 
 const TAP = 'inline-flex min-h-8 items-center hover:underline pointer-coarse:min-h-11';
 
-export const MAP_URL = 'https://www.openstreetmap.org/search?query=Konya%20Teknokent%20Sel%C3%A7uklu';
+// A pinned point, not a search: OSM's geocoder finds nothing for the address text.
+export const MAP_URL = 'https://www.openstreetmap.org/?mlat=38.00177&mlon=32.50784#map=17/38.00177/32.50784';
 
 /** Address, phone, e-mail, hours and a map link (Q-H8: no third-party iframe). */
 export function ContactDetails() {

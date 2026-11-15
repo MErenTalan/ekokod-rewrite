@@ -39,7 +39,11 @@ export function TariffHistoryView({ tariffs, canEdit, onCreate, onEdit, onDelete
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <p className="text-foreground-muted type-caption">{t('historyNote')}</p>
-        {canEdit && onCreate ? <Button onClick={onCreate}>{t('newTariff')}</Button> : null}
+        {canEdit ? (
+          onCreate ? <Button onClick={onCreate}>{t('newTariff')}</Button> : null
+        ) : (
+          <p className="text-foreground-muted type-caption">{t('readOnly')}</p>
+        )}
       </div>
 
       {tariffs.length === 0 ? (

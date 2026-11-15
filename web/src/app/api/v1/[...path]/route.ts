@@ -9,6 +9,8 @@ export const dynamic = 'force-dynamic';
 const HOP_BY_HOP = new Set([
   'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade',
   'host', 'content-length',
+  // undici refuses `Expect: 100-continue` (curl sends it above 1 MB) with a 502.
+  'expect',
 ]);
 // fetch has already decoded the body.
 const RESPONSE_DROPPED = new Set([...HOP_BY_HOP, 'content-encoding', 'set-cookie']);

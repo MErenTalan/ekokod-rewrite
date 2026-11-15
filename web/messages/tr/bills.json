@@ -151,5 +151,21 @@
     "generation_sale": "Üretim satış bedeli (bilgi)",
     "extra": "Ek bedel",
     "tax": "Vergi/fon"
+  },
+  "history": {
+    "title": "Fatura geçmişi",
+    "description": "Hesaplanmış tüm faturalar, en yeni dönem önce. Döneme tıklayınca o ayın panosu açılır.",
+    "kind": "Fatura türü",
+    "empty": "Henüz fatura yok",
+    "emptyDescription": "Hesaplanan faturalar burada listelenir.",
+    "open": "{period} dönemini aç",
+    "download": "{period} faturasını indir",
+    "truncated": "Daha eski faturalar için yukarıdan ay seçin.",
+    "scope": {
+      "analyzer": "Sayaç faturası",
+      "building": "Bina faturası",
+      "company": "Şirket faturası"
+    },
+    "tableLabel": "Fatura listesi"
   }
 }

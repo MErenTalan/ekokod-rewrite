@@ -1,4 +1,4 @@
-import type { Analyzer, BillDashboard, BillPeriod, BillPreview } from '@/lib/api/types';
+import type { Analyzer, Bill, BillDashboard, BillPeriod, BillPreview } from '@/lib/api/types';
 
 /** Story and test data for the bills screen; never fetched (R196). */
 export const demoDashboard: BillDashboard = {
@@ -109,3 +109,13 @@ export const demoPreview = {
   ],
   unit_prices: { energy: '3.593417', distribution: '2.4794', total: '6.072817' },
 } as unknown as BillPreview;
+
+/** A computed bill as GET /bills lists it. */
+export const demoBill = (over: Partial<Bill> = {}): Bill => ({
+  id: 'bill-1', scope: 'analyzer', building_id: 'b-1', analyzer_id: 'a-1', period_key: '2026-08',
+  period_start: '2026-08-01T00:00:00+03:00', period_end: '2026-09-01T00:00:00+03:00', days_in_period: 31,
+  active_import: '224.123', net_consumption: '224.123', inductive_kvarh: '0', capacitive_kvarh: '0',
+  energy_cost: '0', distribution_cost: '0', power_cost: '0', reactive_penalty: '0', vat_cost: '0', total_cost: '298.9',
+  currency: 'TRY', reactive_penalty_applied: false, ptf_yekdem_used: false,
+  status: 'issued', missing_days: [], has_pdf: true, computed_at: '2026-10-16T10:00:00Z', ...over,
+});

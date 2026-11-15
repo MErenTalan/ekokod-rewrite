@@ -8,7 +8,7 @@ import { SessionProvider } from '@/lib/session/session-provider';
 import { mockApi, queryOf } from '@/test/api-mock';
 import { renderWithProviders } from '@/test/render';
 
-import { demoAnalyzers, demoDashboard } from './_fixture';
+import { demoAnalyzers, demoBill, demoDashboard } from './_fixture';
 import { BillsPage } from './bills-page';
 
 const me = (role: keyof typeof fixture): MeResponse => ({
@@ -40,7 +40,15 @@ beforeEach(() => localStorage.clear());
 afterEach(() => api.restore());
 
 describe('BillsPage', () => {
-  it('asks for a month before it fetches anything', async () => {
+  it('opens the newest billed month without a pick and lists the history to a read-only building user', async () => {
+    api = mockApi({ ...ROUTES, 'GET /api/v1/bills': { items: [demoBill({ period_key: '2026-08' })], next_cursor: null } });
+    render('building_readonly_admin');
+    expect(await screen.findByRole('cell', { name: 'Sayaç 1' })).toBeVisible();
+    expect(queryOf(api.calls, 'GET', '/api/v1/bills/dashboard').get('month')).toBe('8');
+    expect(screen.getByRole('region', { name: 'Fatura geçmişi' })).toHaveTextContent('Sayaç faturası');
+  });
+
+  it('asks for a month before it fetches anything when nothing is billed yet', async () => {
     api = mockApi(ROUTES);
     render();
     expect(await screen.findByText(/Bir ay seçin/)).toBeVisible();
@@ -87,10 +95,11 @@ describe('BillsPage', () => {
       'GET /api/v1/jobs/billing.generate%3Acompany%3Ac-own%3A2026-08': {
         id: 'billing.generate:company:c-own:2026-08', type: 'billing.generate', status: 'succeeded',
       },
-      'GET /api/v1/bills': { items: [{ ...demoDashboard.buildings[0].rows[0], id: 'bill-9' }], total: 1 },
+      'GET /api/v1/bills': { items: [demoBill({ id: 'bill-9' })], next_cursor: null },
     });
     render();
-    await pickAugust(user);
+    // The history's newest bill (2026-08) opens that month without a pick.
+    expect(await screen.findByRole('cell', { name: 'Sayaç 1' })).toBeVisible();
 
     await user.click(await screen.findByRole('button', { name: /Şirket faturası/ }));
     // R238: compute -> watch -> download; the finished invoice is offered here.

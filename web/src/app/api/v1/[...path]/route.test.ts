@@ -31,6 +31,7 @@ describe('/api/v1 proxy', () => {
         'x-forwarded-for': '203.0.113.7',
         'idempotency-key': 'k1',
         connection: 'keep-alive',
+        expect: '100-continue',
       },
       body: '{"email":"a@b.c"}',
     });
@@ -46,6 +47,7 @@ describe('/api/v1 proxy', () => {
     expect(sent.get('idempotency-key')).toBe('k1');
     expect(sent.get('connection')).toBeNull();
     expect(sent.get('host')).toBeNull();
+    expect(sent.get('expect')).toBeNull();
     expect(await new Response(init.body).text()).toBe('{"email":"a@b.c"}');
   });
 

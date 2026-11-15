@@ -16,6 +16,7 @@
   "history": "Tarife geçmişi",
   "historyEmpty": "Bu binanın henüz tarifesi yok",
   "historyNote": "Kesilmiş faturalar, kesildikleri andaki tarife sürümünü kullanmaya devam eder.",
+  "readOnly": "Tarife ekleme ve güncelleme şirket yöneticilerine açıktır; hesabınız tarifeleri yalnızca görüntüleyebilir.",
   "saved": "Tarife kaydedildi",
   "deleted": "Tarife silindi",
   "deleteTitle": "Tarife sürümünü sil",

@@ -73,7 +73,7 @@
     "untitled": "Untitled note",
     "saved": "Note saved",
     "deleted": "Note deleted",
-    "readOnly": "Authorised users can add notes."
+    "readOnly": "Your account is read-only: building and company admins can add and edit notes."
   },
   "files": {
     "title": "Evidence files",
@@ -86,6 +86,7 @@
     "deleteConfirm": "Are you sure you want to delete “{name}”?",
     "uploaded": "File uploaded",
     "deleted": "File deleted",
-    "label": "Uploaded files"
+    "label": "Uploaded files",
+    "readOnly": "Your account is read-only: building and company admins can upload files."
   }
 }

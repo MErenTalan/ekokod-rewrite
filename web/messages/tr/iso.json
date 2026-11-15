@@ -73,7 +73,7 @@
     "untitled": "Başlıksız not",
     "saved": "Not kaydedildi",
     "deleted": "Not silindi",
-    "readOnly": "Not eklemeyi yetkili kullanıcılar yapabilir."
+    "readOnly": "Hesabınız salt okunur: not ekleme ve düzenleme bina ya da şirket yöneticilerine açıktır."
   },
   "files": {
     "title": "Kanıt Dosyaları",
@@ -86,6 +86,7 @@
     "deleteConfirm": "“{name}” dosyasını silmek istediğine emin misin?",
     "uploaded": "Dosya yüklendi",
     "deleted": "Dosya silindi",
-    "label": "Yüklenen Dosyalar"
+    "label": "Yüklenen Dosyalar",
+    "readOnly": "Hesabınız salt okunur: dosya yükleme bina ya da şirket yöneticilerine açıktır."
   }
 }

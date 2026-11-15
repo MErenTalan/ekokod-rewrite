@@ -26,6 +26,7 @@ describe('TariffHistoryView', () => {
     const readOnly = renderWithProviders(<TariffHistoryView tariffs={demoTariffSummaries} canEdit={false} />);
     expect(readOnly.queryByRole('button', { name: /Düzenle/ })).toBeNull();
     expect(readOnly.queryByRole('button', { name: /Sil/ })).toBeNull();
+    expect(readOnly.getByText(/hesabınız tarifeleri yalnızca görüntüleyebilir/)).toBeVisible();
   });
 
   it('asks the row it was told to edit', async () => {

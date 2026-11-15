@@ -51,5 +51,7 @@ describe('NotesView', () => {
     expect(r.getByText('Başlıksız not')).toBeVisible();
     expect(r.queryByRole('button', { name: 'Düzenle' })).toBeNull();
     expect(r.queryByRole('button', { name: 'Notu Listeye Ekle' })).toBeNull();
+    // Without the editor the reader must be told why, not left with a silent screen.
+    expect(r.getByText(/Hesabınız salt okunur: not ekleme/)).toBeVisible();
   });
 });
