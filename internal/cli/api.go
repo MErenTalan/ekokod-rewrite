@@ -85,7 +85,7 @@ func newAPICmd() *cobra.Command {
 			server := newAPIServer(cfg.HTTP.Addr, router)
 
 			// Bind synchronously, before starting the serve goroutine or
-			// entering the shutdown select (task 9 review, Minor-3). Two
+			// entering the shutdown select. Two
 			// defects shared this one root cause: (1) if ListenAndServe's
 			// bind failure and a SIGTERM arrived at the same instant, the
 			// select below had two ready cases and Go's pseudo-random

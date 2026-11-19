@@ -10,7 +10,7 @@ import (
 )
 
 // TestMoneyFormatNeverUsesFloat: an 18-significant-digit amount formats
-// exactly, which a float64 path cannot (I-16b).
+// exactly, which a float64 path cannot.
 func TestMoneyFormatNeverUsesFloat(t *testing.T) {
 	v := decimal.RequireFromString("1234567890123456.78")
 	require.Equal(t, "1.234.567.890.123.456,78", render.FormatMoney(v, "tr"))

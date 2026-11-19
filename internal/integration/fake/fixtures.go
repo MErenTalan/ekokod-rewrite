@@ -29,8 +29,8 @@ type FixtureFile struct {
 	Body []byte
 }
 
-// fixtureExtensions are the file types TestFixturesAreSanitised scans (M5:
-// .xml/.csv/.txt fixtures are sanitised too, not just .json).
+// fixtureExtensions are the file types TestFixturesAreSanitised scans (M5:.
+// xml/.csv/.txt fixtures are sanitised too, not just .json).
 var fixtureExtensions = map[string]bool{
 	".json": true,
 	".xml":  true,

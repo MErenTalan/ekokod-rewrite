@@ -30,7 +30,7 @@ linters:
         # ALLOW-list, not deny: list-mode strict means every import of a
         # file under internal/domain is refused UNLESS it matches an entry
         # below. This mirrors internal/arch/arch_test.go's
-        # domainAllowedImports exactly (F1 final review pass B, I2) — CHANGE
+        # domainAllowedImports exactly — CHANGE
         # BOTH OR NEITHER. Before this, `deny` named 6 exact packages; the
         # review's mutation probe added an internal/domain/model import of
         # github.com/jackc/pgx/v5 and it passed both checks, because a
@@ -41,7 +41,7 @@ linters:
         domain-is-pure:
           files:
             - "**/internal/domain/**"
-            # F3 Task 1: internal/domain/energy is the tree's first package
+            # internal/domain/energy is the tree's first package
             # with its own tests, and a domain test file legitimately needs
             # "testing" and testify — neither is production arithmetic code,
             # and the equivalent Go-level guard (TestDomainHasNoIOImports's
@@ -72,7 +72,7 @@ linters:
             - time$
             - unicode$
             - unicode/utf8$
-            # F3 Task 1: a blank import that embeds the IANA zone database
+            # A blank import that embeds the IANA zone database
             # and does no I/O of its own (see arch_test.go's
             # domainAllowedImports comment on the same entry). Paired with
             # that map — change both or neither.
@@ -110,13 +110,12 @@ linters:
         # types, generic type arguments, this module's structs and
         # pgtype/database/sql value wrappers (pgtype.Float8, sql.NullFloat64).
         # A second guard, TestIntegrationTreesDoNotParseFloats, covers the
-        # same five trees (the four F2 trees plus internal/service, added by
-        # F3 Task 1) for the two routes a float can enter without ever being
+        # same five trees (the four F2 trees plus internal/service, added in
+        # F3) for the two routes a float can enter without ever being
         # a struct field: strconv.ParseFloat and a JSON decode into a float
         # or an untyped interface.
         # Change both or neither.
-        # internal/integration/fake/server.go (F2 task-4; integration commit
-        # ruling) is excluded by name, the same way
+        # internal/integration/fake/server.go is excluded by name, the same way
         # internal/integration/fake/sanitise.go is named in arch_test.go's
         # f2guardCallFloatSkip: it is the TLS test harness's self-signed
         # certificate generator, and its one math/big use is
@@ -134,7 +133,7 @@ linters:
             - "**/internal/ingest/**"
             - "**/internal/marketdata/**"
             - "**/internal/credentials/**"
-            # F3 Task 1 (R76): the new service layer computes and holds the
+            # The new service layer computes and holds the
             # same energy and money values internal/domain does, one layer
             # up. Paired with arch_test.go's floatGuardPatterns — change
             # both or neither.

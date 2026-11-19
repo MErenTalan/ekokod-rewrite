@@ -53,6 +53,6 @@ export function toPlotData(data: Datum[], keys: string[]): Record<string, unknow
 
 export const AXIS = { stroke: 'var(--color-border-strong)', tick: { fill: 'var(--color-foreground-muted)', fontSize: 12 } };
 export const GRID = { stroke: 'var(--color-border)', strokeDasharray: '3 3' };
-export const CURSOR = { fill: 'var(--color-surface-sunken)' }; // Recharts' default cursor (#ccc) ignores the theme (M-15)
-export const ACTIVE_DOT = { stroke: 'var(--color-surface)', fill: 'var(--color-brand)' }; // default activeDot fill (#fff) ignores the theme (M-15)
+export const CURSOR = { fill: 'var(--color-surface-sunken)' }; // Recharts' default cursor (#ccc) ignores the theme
+export const ACTIVE_DOT = { stroke: 'var(--color-surface)', fill: 'var(--color-brand)' }; // default activeDot fill (#fff) ignores the theme
 export const LINE_CURSOR = { stroke: 'var(--color-border-strong)' };

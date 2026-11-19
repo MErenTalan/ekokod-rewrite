@@ -24,7 +24,7 @@
 // numeric(18,6) has 18 and numeric(18,8) has 18 with eight after the point, so
 // the loss is not hypothetical. pgnum_test.go asserts this pair is exact on a
 // 29-digit value, and that test has been RUN against a float64-based
-// implementation to confirm it fails — see the Wave F integration report.
+// implementation to confirm it fails.
 //
 // Both directions go through the coefficient and exponent, which is not a
 // conversion at all but a relabelling: pgtype.Numeric is {Int *big.Int,
@@ -33,13 +33,10 @@
 // that could round. A string round-trip would also be exact, but it would
 // parse and format on every one of those 251 columns per row, for no gain.
 //
-// Before Wave F this pair lived unexported in internal/store/postgres's own
-// numeric.go, and package admin carried a verbatim copy (two, briefly, from
-// Tasks 10 and 11b converging on the same file) because it could not reach an
-// unexported function in a sibling package. The Wave F integration commit
-// moved the implementation here — one level below both postgres and admin,
-// alongside pgerr, which solved the identical problem for error translation —
-// and deleted every copy.
+// The pair lives here — one level below both postgres and admin, alongside
+// pgerr, which solves the identical problem for error translation — so
+// package admin does not need a copy of an unexported function in a sibling
+// package.
 package pgnum
 
 import (

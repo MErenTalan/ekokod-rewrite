@@ -101,8 +101,7 @@ func TestAnalyzerRepositoryCreateGetUpdateSoftDelete(t *testing.T) {
 	}
 }
 
-// TestAnalyzerRepositoryUpdateRefusesAForeignCompany is the fix-round-1 proof
-// for Important 3: Update must refuse a model value whose CompanyID names
+// TestAnalyzerRepositoryUpdateRefusesAForeignCompany: Update must refuse a model value whose CompanyID names
 // another company, exactly like Create does, and write nothing.
 //
 // The row named by a.ID, and its BuildingID, belong to mine's OWN company
@@ -137,8 +136,7 @@ func TestAnalyzerRepositoryUpdateRefusesAForeignCompany(t *testing.T) {
 	}
 }
 
-// TestAnalyzerRepositoryNarrowScopeCannotCreateOrUpdateToNilBuilding pins the
-// fix-round-1 controller ruling on the folded minor: a non-AllBuildings
+// TestAnalyzerRepositoryNarrowScopeCannotCreateOrUpdateToNilBuilding pins the rule: a non-AllBuildings
 // Scope may not create or update an analyzer to a nil BuildingID, because
 // that Scope's own BuildingFilter() can never match a NULL building_id and
 // the analyzer would move out of its own sight.
@@ -240,8 +238,7 @@ func TestAnalyzerRepositoryUpdateRefusesAForeignBuilding(t *testing.T) {
 	require.Equal(t, myAnalyzer.BuildingID, still.BuildingID, "nothing may be written by a refused Update")
 }
 
-// TestAnalyzerRepositoryCreateRefusesABuildingOutsideItsNarrowGrant is the
-// fix-round-1 proof for Important 1 (wave-f-integration-fix1-findings.md):
+// TestAnalyzerRepositoryCreateRefusesABuildingOutsideItsNarrowGrant:
 // AnalyzerCreate's embedded exists() clause (queries/analyzers.sql) must
 // refuse a building this exact Scope does not grant even when that building
 // belongs to the caller's OWN company — Buildings[1], with tenant.Scope
@@ -302,8 +299,7 @@ func TestAnalyzerRepositoryUpdateRefusesMovingToABuildingOutsideItsNarrowGrant(t
 	require.Equal(t, granted.BuildingID, still.BuildingID, "nothing may be written by a refused Update")
 }
 
-// TestAnalyzerRepositoryCreateRefusesASoftDeletedBuilding is the
-// soft-delete proof for Important 1: AnalyzerCreate's embedded exists()
+// TestAnalyzerRepositoryCreateRefusesASoftDeletedBuilding is the soft-delete proof: AnalyzerCreate's embedded exists()
 // clause requires b.deleted_at is null, independent of the building_ids
 // branch above — an AdminScope (AllBuildings) grants every building in the
 // company, so only the deleted_at check stands between this write and a

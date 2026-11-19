@@ -236,7 +236,7 @@ func (b *Backfiller) Backfill(ctx context.Context, p job.BackfillPayload) error 
 	return nil
 }
 
-// validateBackfillRange enforces the brief's three range rules. A malformed
+// validateBackfillRange enforces the three range rules. A malformed
 // range never starts a job run: nothing was attempted, so there is nothing
 // for a job_runs row to record.
 func validateBackfillRange(from, to, now time.Time) error {
@@ -255,7 +255,7 @@ func validateBackfillRange(from, to, now time.Time) error {
 	}
 }
 
-// resolveAnalyzers implements the brief's analyzer-resolution rule: a
+// resolveAnalyzers implements the analyzer-resolution rule: a
 // non-empty p.AnalyzerIDs is resolved by id, with any id not visible to sc
 // reported back in missing (never silently dropped); an empty one lists the
 // credential's own ACTIVE analyzers explicitly (Providers + IsActive,

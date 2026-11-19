@@ -14,8 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestNewAPIServerBoundsHeaderBytes guards the X-Request-Id defect noted in
-// task 9's review: middleware.RequestID (internal/api/middleware/requestid.go)
+// TestNewAPIServerBoundsHeaderBytes guards the X-Request-Id defect:
+// middleware.RequestID (internal/api/middleware/requestid.go)
 // echoes a client-supplied header verbatim, so the HTTP server must cap
 // header size explicitly rather than rely on being reminded to do so later.
 func TestNewAPIServerBoundsHeaderBytes(t *testing.T) {
@@ -23,7 +23,7 @@ func TestNewAPIServerBoundsHeaderBytes(t *testing.T) {
 	require.Greater(t, srv.MaxHeaderBytes, 0, "MaxHeaderBytes must be set explicitly")
 	// require.Equal, not an upper bound like <= 1<<20: that would admit
 	// exactly Go's own DefaultMaxHeaderBytes (1 MiB), the value this whole
-	// requirement exists to be tighter than (task 9 review, Minor-5).
+	// requirement exists to be tighter than.
 	require.Equal(t, apiMaxHeaderBytes, srv.MaxHeaderBytes,
 		"must be exactly the deliberately-chosen bound, not Go's own 1MiB default")
 	require.Positive(t, srv.ReadHeaderTimeout)
@@ -35,8 +35,7 @@ func TestNewAPIServerBoundsHeaderBytes(t *testing.T) {
 // shutdown (context.Canceled), which must exit 0, while any other error
 // (e.g. a Redis configuration failure at startup) must still be reported.
 //
-// context.DeadlineExceeded is deliberately NOT accepted (task 9 review,
-// Important-3): $GOROOT/src/net/net.go defines
+// context.DeadlineExceeded is deliberately NOT accepted: $GOROOT/src/net/net.go defines
 // (*timeoutError).Is(err) { return err == context.DeadlineExceeded }, so any
 // error chain wrapping an ordinary net dial/i-o timeout would satisfy an
 // errors.Is(err, context.DeadlineExceeded) clause. That would let a real
@@ -58,8 +57,7 @@ func TestIsCleanShutdownDistinguishesCancellationFromRealErrors(t *testing.T) {
 	require.False(t, isCleanShutdown(nil))
 }
 
-// TestNewHealthTrackerTripsAfterConsecutiveFailures pins Important-1 from
-// the task 9 review: asynq starts no healthcheck goroutine at all unless a
+// TestNewHealthTrackerTripsAfterConsecutiveFailures: asynq starts no healthcheck goroutine at all unless a
 // non-nil HealthCheckFunc is supplied, so without wiring one up, a worker
 // whose Redis broker is unreachable runs forever with no health signal and
 // no way to exit non-zero. newHealthTracker is the pure counting policy
@@ -105,8 +103,7 @@ func TestNewHealthTrackerResetsOnSuccess(t *testing.T) {
 	require.Equal(t, 2, tripped, "a fresh run of failures after a success must be able to trip again")
 }
 
-// TestNewCommandLoggerRedactsSecretLookingAttributes pins carried-forward
-// requirement 1 from task 9's brief (also task 9 review, Minor-4): every
+// TestNewCommandLoggerRedactsSecretLookingAttributes pins the rule that every
 // long-running command's logger must go through logging.New, whose
 // redacting handler is the sole thing keeping secret-looking attribute
 // values out of the logs. Before this test existed, reverting any one of

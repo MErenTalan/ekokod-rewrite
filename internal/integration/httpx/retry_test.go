@@ -146,7 +146,7 @@ func TestDefaultRateLimitWait(t *testing.T) {
 // itself right after being invoked once, which is what makes "no second
 // attempt" and "no sleep after cancel" an observation about THIS run
 // rather than a race against real wall-clock time. The resulting error
-// keeps ctx's own cancellation identity (M6): errors.Is(err,
+// keeps ctx's own cancellation identity: errors.Is(err,
 // context.Canceled) holds, and it is not classified Retryable.
 func TestContextCancellationStopsRetriesPromptly(t *testing.T) {
 	var calls int32

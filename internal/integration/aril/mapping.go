@@ -144,7 +144,7 @@ func mapSubscription(raw json.RawMessage) (integration.MeteringPoint, bool) {
 	}
 	if w.AccordPower != nil {
 		if v, jErr := normalize.JSONNumber(*w.AccordPower); jErr == nil {
-			// R30: captured here on MeteringPoint; Task 10's SyncAnalyzers
+			// R30: captured here on MeteringPoint; SyncAnalyzers
 			// does not persist it (model.Analyzer has no matching column).
 			pt.ContractedPowerKw = &v
 		}

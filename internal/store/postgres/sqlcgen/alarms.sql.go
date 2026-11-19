@@ -56,7 +56,7 @@ type AlarmAnalyzerDeleteVisibleForAlarmParams struct {
 	BuildingIds  []uuid.UUID
 }
 
-// Important Finding 2: ReplaceAnalyzers must replace ONLY the attachments
+// ReplaceAnalyzers must replace ONLY the attachments
 // visible to the Scope and leave attachments to analyzers outside it
 // untouched — a narrow Scope replacing "its" analyzer list must not be able
 // to silently detach an analyzer in a building it cannot see.
@@ -90,7 +90,7 @@ type AlarmAnalyzerInsertParams struct {
 	BuildingIds  []uuid.UUID
 }
 
-// Important Finding 1: alarm_analyzers has no company_id of its own —
+// Alarm_analyzers has no company_id of its own —
 // AlarmAnalyzerInsert re-validates both the alarm and the analyzer against
 // the Scope itself, so the isolation boundary holds even if the Go-side
 // requireVisible / AlarmCountVisibleAnalyzers pre-checks were ever skipped.
@@ -130,7 +130,7 @@ type AlarmAnalyzerListParams struct {
 	BuildingIds  []uuid.UUID
 }
 
-// Important Finding 2: Analyzers only lists ATTACHMENTS whose analyzer is
+// Analyzers only lists ATTACHMENTS whose analyzer is
 // itself visible to the Scope — a narrow Scope must never learn (via this
 // method) that an alarm is watching an analyzer in a building it cannot see.
 func (q *Queries) AlarmAnalyzerList(ctx context.Context, arg AlarmAnalyzerListParams) ([]AlarmAnalyzer, error) {
@@ -213,7 +213,7 @@ type AlarmChannelListParams struct {
 	CompanyID uuid.UUID
 }
 
-// Important Finding 1: alarm_channels has no company_id of its own — every
+// Alarm_channels has no company_id of its own — every
 // statement below re-validates alarm_id against the Scope itself.
 func (q *Queries) AlarmChannelList(ctx context.Context, arg AlarmChannelListParams) ([]AlarmChannel, error) {
 	rows, err := q.db.Query(ctx, alarmChannelList, arg.AlarmID, arg.CompanyID)
@@ -400,7 +400,7 @@ type AlarmEventCreateParams struct {
 	BuildingIds       []uuid.UUID
 }
 
-// Important Finding 1 and 2: alarm_events has no company_id of its own, and
+// alarm_events has no company_id of its own, and
 // e.AnalyzerID (when set) must itself be visible to the Scope — validated
 // here, in the write, not only by the Go-side pre-checks that run before it.
 func (q *Queries) AlarmEventCreate(ctx context.Context, arg AlarmEventCreateParams) (AlarmEvent, error) {
@@ -468,12 +468,12 @@ type AlarmEventListParams struct {
 	LimitVal     int32
 }
 
-// Important Finding 2: an event's analyzer must be visible to the Scope, and
+// An event's analyzer must be visible to the Scope, and
 // an event with NO analyzer (a company-level condition) is visible only to a
 // Scope with AllBuildings — otherwise this method would hand a narrow Scope
 // another building's analyzer id and the event's own message/detail payload.
 //
-// F1 final review pass A, Important Finding 3 (fix round): a.deleted_at is
+// a.deleted_at is
 // null was missing — a soft-deleted alarm's events stayed listable, in
 // violation of ruling 4 (a child of a soft-deleted parent must not be
 // reachable) and of AlarmVisible's own treatment of a soft-deleted alarm as
@@ -605,7 +605,7 @@ type AlarmListParams struct {
 	LimitVal       int32
 }
 
-// Important Finding 2 (task-11a fix round 1): the alarm RULE is company-wide
+// The alarm RULE is company-wide
 // (accepted), but its building-scoped children are not — the AnalyzerID
 // filter must only match an alarm through an ATTACHMENT whose analyzer is
 // itself visible to the Scope, or a narrow Scope could use this filter as an
@@ -691,7 +691,7 @@ type AlarmMarkBillFiredParams struct {
 	BuildingIds  []uuid.UUID
 }
 
-// Important Finding 1: alarm_fired_bills has no company_id of its own and
+// Alarm_fired_bills has no company_id of its own and
 // names TWO parents (alarms and bills) — both are re-validated against the
 // Scope here, not only by the Go-side requireVisible/BillVisible pre-checks.
 func (q *Queries) AlarmMarkBillFired(ctx context.Context, arg AlarmMarkBillFiredParams) (bool, error) {
@@ -724,7 +724,7 @@ type AlarmMarkIsolarForwardedParams struct {
 	CompanyID uuid.UUID
 }
 
-// Important Finding 1: isolar_forwarded_alarms has no company_id of its own
+// Isolar_forwarded_alarms has no company_id of its own
 // — re-validated against power_plants here, not only by the Go-side
 // AlarmPlantVisible pre-check.
 func (q *Queries) AlarmMarkIsolarForwarded(ctx context.Context, arg AlarmMarkIsolarForwardedParams) (bool, error) {
@@ -762,7 +762,7 @@ type AlarmMarkNotifiedParams struct {
 	BuildingIds       []uuid.UUID
 }
 
-// F1 final review pass A, Important Finding 3 (fix round): MarkNotified
+// MarkNotified
 // previously checked only alarms.company_id — no a.deleted_at guard (a
 // soft-deleted alarm's events stayed writable) and no building/analyzer
 // visibility disjunction at all (a narrow Scope could mark ANY event in the

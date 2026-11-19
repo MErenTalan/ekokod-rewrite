@@ -29,8 +29,7 @@ import (
 // touches only the expected chunks (verified with EXPLAIN)."
 //
 // GATING. This test is guarded TWO ways, deliberately:
-//   - testing.Short() — the literal mechanism task-13-brief.md's Step 1
-//     pseudocode names.
+//   - testing.Short() — the standard mechanism.
 //   - EKOKOD_PERF=1 — because `go test ./... -tags=integration -race
 //     -count=1` (make test-integration) does NOT pass -short, testing.Short()
 //     alone would leave this test running on every ordinary integration

@@ -1,24 +1,21 @@
 //go:build integration
 
-// TestScopeIsolation is Task 13b of the F1 data-model phase: the single most
-// important test in the phase (wave-g-task-notes.md §"Task 13 — performance
-// and acceptance suite"). It is named literally in the F1 acceptance block:
+// TestScopeIsolation is the single most important test of the data model.
+// It is named literally in the F1 acceptance block:
 //
 //	go test ./internal/store/postgres -tags=integration -run TestScopeIsolation -v
 //
 // It walks EVERY scoped repository constructor in package postgres and
 // proves that no READ method ever returns another company's rows.
 //
-// Two proofs, per the controller's binding ruling ("Scope choice is
-// load-bearing", wave-g-task-notes.md and HANDOFF_NEXT_SESSION.md rule 4):
+// Two proofs, because the Scope choice is load-bearing:
 //
 //   - CROSS-TENANT: every read is called with tenant A's ADMIN scope
 //     (AllBuildings: true) against tenant B's ids. Under AllBuildings there is
 //     no building-id-list branch to (wrongly) mask a broken company_id
 //     predicate, so company_id is the ONLY thing that can exclude tenant B's
-//     rows. Task 10's and Carbon's re-reviews each found a
-//     `company_id = $n or true` mutation that stayed green under a narrow
-//     Scope precisely because the building branch shadowed it.
+//     rows. A `company_id = $n or true` bug can otherwise stay green under a
+//     narrow Scope precisely because the building branch shadows it.
 //   - NARROW-SCOPE: for every repository whose table (or whose query's
 //     BuildingFilter branch) actually narrows by building — established by
 //     reading each repository's own isolation doc comment in
@@ -43,7 +40,7 @@
 // TENANT B MUST HAVE REAL DATA in every table a read touches, including
 // child tables reached only through a parent — otherwise a broken
 // `… or true` predicate stays green because the query has nothing to leak
-// (wave-f-context.md's "guards must be proven to fail"). seedScopeIsoFixtures
+// (guards must be proven to fail). seedScopeIsoFixtures
 // below seeds one representative row per table for both directions.
 //
 // OMISSION DETECTION: TestScopeIsolationCoversEveryRepository below performs
@@ -62,7 +59,7 @@
 // matching other integration tests' own pattern, purely as SETUP for the
 // platform-wide-table subtests, never as a test subject.
 //
-// FIX ROUND 1 (task-13b-fix1-findings.md). Every subtest below now pairs
+// Every subtest below pairs
 // each cross-tenant/narrow-scope ErrNotFound or exclusion assertion with a
 // POSITIVE CONTROL: the identical read, re-run under the OWNING Scope,
 // asserted to succeed and (for a List) to contain the row — a query that
@@ -166,7 +163,7 @@ var scopeIsoCtorPattern = regexp.MustCompile(`^New[A-Za-z0-9]*Repository$`)
 // scopeIsoRegisteredRepositories above, or if a registered name no longer
 // exists (a stale entry after a rename).
 //
-// Deliberate-break proof (see task-13b-report.md for the observed output):
+// Deliberate-break proof:
 // commenting out one entry from scopeIsoRegisteredRepositories makes this
 // test FAIL, naming the omitted constructor.
 func TestScopeIsolationCoversEveryRepository(t *testing.T) {
@@ -232,7 +229,7 @@ func TestScopeIsolationCoversEveryRepository(t *testing.T) {
 	require.Empty(t, stale,
 		"scopeIsoRegisteredRepositories names a constructor that no longer exists in package postgres: %v", stale)
 
-	// --- Method-level omission guard (folded Minor 1, fix round 1) --------
+	// --- Method-level omission guard ----------------------------------------
 	// Constructor-level coverage above says every REPOSITORY is exercised;
 	// this phase says every READ METHOD of every one of them is too. A
 	// subtest is matched to the interface it covers by the "repo :=
@@ -249,7 +246,7 @@ func TestScopeIsolationCoversEveryRepository(t *testing.T) {
 	for _, iface := range interfaces {
 		for _, m := range iface.methods {
 			if scopeIsoIsWriteMethod(m) {
-				continue // writes are exempt as a category (Task 9-11's own tests own write isolation)
+				continue // writes are exempt as a category (each repository's own tests cover write isolation)
 			}
 			key := iface.name + "." + m
 			if scopeIsoReadMethodExemptions[key] != "" {
@@ -274,7 +271,7 @@ func isTestGoFile(name string) bool {
 // name prefix, mechanically, rather than hand-maintaining a per-interface
 // read/write split that silently drifts as repository.go grows. Every write
 // method across all 29 non-admin interfaces (checked by hand against
-// repository.go's full method list during this fix round) starts with one
+// repository.go's full method list) starts with one
 // of these; a method matching none of them is a READ, and
 // TestScopeIsolationCoversEveryRepository's method-level phase requires it
 // to be called (or explicitly exempted in scopeIsoReadMethodExemptions).
@@ -296,8 +293,8 @@ func scopeIsoIsWriteMethod(name string) bool {
 // scopeIsoReadMethodExemptions lists a READ method (key "InterfaceName.Method")
 // TestScopeIsolation's own subtest for that interface deliberately does not
 // call, with the reason. Empty by design: every read method of every
-// non-admin interface is exercised somewhere in TestScopeIsolation as of
-// this fix round (see task-13b-report.md's coverage table) — an entry here
+// non-admin interface is exercised somewhere in TestScopeIsolation — an
+// entry here
 // is meant to be a reviewed, documented exception, never a silent gap.
 var scopeIsoReadMethodExemptions = map[string]string{}
 
@@ -462,14 +459,13 @@ var scopeIsoEpoch = time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
 // scopeIsoClosedYearEpoch is a year definitely CLOSED relative to this
 // phase's clock — unlike scopeIsoEpoch's year (2026), which is the CURRENT
 // year and therefore never materialised by refresh_continuous_aggregate
-// (Important Finding 2: consumption_yearly is materialized_only = true, and
+// (consumption_yearly is materialized_only = true, and
 // the bucket "now" is still inside is never in the materialized data — the
 // same trap TestAnalyticsConsumptionMonthlyAndYearlyRequireRefresh's own
 // closedYearEpoch avoids).
 var scopeIsoClosedYearEpoch = time.Date(2020, time.January, 1, 0, 0, 0, 0, time.UTC)
 
-// scopeIsoCompanyWideTariffFrom/On are the Important Finding 4 / HANDOFF
-// ruling 7 company-wide tariff's effective_from and the date Effective is
+// scopeIsoCompanyWideTariffFrom/On are the company-wide tariff's effective_from and the date Effective is
 // resolved at in the TariffRepository subtest. Both predate
 // testfixtures.NewTenant's own building-specific tariffs (effective_from
 // scopeIsoEpoch, 2026-01-01), so at scopeIsoCompanyWideTariffOn the
@@ -494,7 +490,7 @@ func scopeIsoContainsID[T any](items []T, id uuid.UUID, get func(T) uuid.UUID) b
 
 // scopeIsoAssertGetNotFound calls get(deniedScope) and requires
 // store.ErrNotFound, THEN calls get(ownerScope) and requires success — the
-// positive control (Important Finding 5) that keeps the ErrNotFound
+// positive control that keeps the ErrNotFound
 // assertion from passing vacuously if the underlying query always answers
 // "not found" (e.g. a mutated predicate that excludes everyone, not just
 // the other tenant).
@@ -585,24 +581,22 @@ type scopeIsoFixtures struct {
 
 	deviceID uuid.UUID
 
-	// Fix round 1 additions (task-13b-fix1-findings.md).
-
 	// alarmEventNullAnalyzerID is a company-level alarm event (AnalyzerID
-	// nil) on the SAME alarm as alarmEventID — Important Finding 1: the
+	// nil) on the SAME alarm as alarmEventID: the
 	// alarm_events -> alarms company_id predicate is the ONLY thing that
 	// protects it, since AlarmEventList's NULL-analyzer branch checks
 	// only all_buildings, never company_id directly.
 	alarmEventNullAnalyzerID uuid.UUID
 
 	// companyWideTariffID, companyBillID and unassignedAnalyzerID are
-	// Important Finding 4 / HANDOFF ruling 7 rows: building_id NULL,
+	// Rows: building_id NULL,
 	// visible only to AllBuildings.
 	companyWideTariffID  uuid.UUID
 	companyBillID        uuid.UUID
 	unassignedAnalyzerID uuid.UUID
 
 	// smtpPassword is the plaintext password seeded for THIS tenant's
-	// smtp_settings row — controller ruling (final review A fix round): it
+	// smtp_settings row — controller ruling: it
 	// must be DISTINCT per tenant, or a SMTPGet tautology that returns the
 	// physically-first smtp_settings row (company_id is the table's own
 	// primary key, so a :one tautology just returns row 1) would be
@@ -631,9 +625,9 @@ func scopeIsoInsertIntegrationDefinition(t *testing.T, ctx context.Context, pool
 
 // scopeIsoCipher builds a fresh AES-256-GCM cipher for the integration and
 // SMTP credential fixtures, exactly as integrationCipher (integrations_
-// integration_test.go) does — duplicated under this file's own prefix per
-// wave-f-context.md rule 6 (package-wide helper names must carry the owning
-// file's aggregate prefix, and "scopeIso" is this file's).
+// integration_test.go) does — duplicated under this file's own prefix
+// (package-wide helper names carry the owning file's aggregate prefix, and
+// "scopeIso" is this file's).
 func scopeIsoCipher(t *testing.T) *crypto.Cipher {
 	t.Helper()
 	key := make([]byte, 32)
@@ -647,8 +641,8 @@ func scopeIsoCipher(t *testing.T) *crypto.Cipher {
 // seedScopeIsoFixtures inserts one representative row per table into every
 // scoped repository's territory, for tenant at buildingIdx (0 or 1). It uses
 // each domain's OWN repository Create/Upsert methods wherever one exists
-// (the same repositories under test — Task 9-11's own review already proved
-// these write paths correct), so this function documents, by construction,
+// (the same repositories under test, whose own tests prove these write
+// paths), so this function documents, by construction,
 // exactly which write produces which read's data.
 func seedScopeIsoFixtures(t *testing.T, ctx context.Context, pool *pgxpool.Pool, tenant testfixtures.Tenant, buildingIdx int, cipher *crypto.Cipher) scopeIsoFixtures {
 	t.Helper()
@@ -664,14 +658,14 @@ func seedScopeIsoFixtures(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	}
 	// Every write below is issued under the tenant's OWN AdminScope: this
 	// function's job is to seed real rows, not to re-prove write isolation
-	// (Task 9-11's own tests already do that). AdminScope reaches both
+	// (each repository's own tests do that). AdminScope reaches both
 	// buildings of the tenant unconditionally.
 	adminScope := tenant.AdminScope
 	companyID := tenant.Company.ID
 
-	// --- unassigned analyzer (Important Finding 4 / HANDOFF ruling 7) ------
-	// building_id NULL: a narrow Scope may never CREATE one (that guard is
-	// Task 9's own), but AdminScope may, and this fixture proves a narrow
+	// --- unassigned analyzer ------
+	// building_id NULL: a narrow Scope may never CREATE one (the analyzer
+	// repository guards that), but AdminScope may, and this fixture proves a narrow
 	// Scope can never READ one either.
 	analyzerRepo := postgres.NewAnalyzerRepository(pool)
 	unassigned, err := analyzerRepo.Create(ctx, adminScope, model.Analyzer{
@@ -710,7 +704,7 @@ func seedScopeIsoFixtures(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 		readingsRow(f.analyzerID, scopeIsoEpoch, model.ReadingKindLoadProfile, "1000.0000", "1.000000"),
 		readingsRow(f.analyzerID, scopeIsoEpoch.Add(30*time.Minute), model.ReadingKindLoadProfile, "1010.0000", "1.000000"),
 		readingsRow(f.analyzerID, scopeIsoEpoch.Add(time.Hour), model.ReadingKindLoadProfile, "1025.0000", "1.000000"),
-		// Important Finding 2: consumption_yearly proof rows, in a year
+		// Consumption_yearly proof rows, in a year
 		// (scopeIsoClosedYearEpoch) definitely closed relative to this
 		// phase's clock — scopeIsoEpoch's own year (2026) never is, so the
 		// yearly continuous aggregate would never materialise anything for
@@ -804,7 +798,7 @@ func seedScopeIsoFixtures(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	})
 	require.NoError(t, err)
 
-	// Important Finding 4 / HANDOFF ruling 7: a company-wide tariff
+	// A company-wide tariff
 	// (building_id nil) is visible only to AllBuildings; its effective_from
 	// predates every building-specific tariff testfixtures.NewTenant seeds,
 	// so TariffRepository.Effective can fall back to it (see
@@ -861,7 +855,7 @@ func seedScopeIsoFixtures(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	})
 	require.NoError(t, err)
 
-	// Important Finding 4 / HANDOFF ruling 7: a company-level bill
+	// A company-level bill
 	// (building_id AND analyzer_id both nil) is visible only to AllBuildings.
 	companyBill, err := billRepo.Create(ctx, adminScope, billFixtureRow(companyID, nil, nil, model.BillScopeCompany, "2026-01"), nil, nil)
 	require.NoError(t, err)
@@ -922,7 +916,7 @@ func seedScopeIsoFixtures(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	require.NoError(t, err)
 	f.alarmEventID = ev.ID
 
-	// Important Finding 1: a NULL-analyzer event (a company-level condition)
+	// A NULL-analyzer event (a company-level condition)
 	// on the SAME alarm. AlarmEventList's own query only checks all_buildings
 	// for this branch, never company_id — the alarms-parent company_id
 	// predicate is the ONLY thing that can exclude it cross-tenant, which
@@ -947,7 +941,7 @@ func seedScopeIsoFixtures(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	f.credentialID = cred.ID
 
 	smtpRepo := postgres.NewSMTPRepository(pool, cipher)
-	// Controller ruling (final review A fix round): the password must be
+	// Controller ruling: the password must be
 	// DISTINCT per tenant (never the shared literal "scope-iso-pw" both
 	// tenants used to write), or a SMTPGet tautology's first-row return is
 	// invisible to a proof that only checks each tenant's OWN Get/
@@ -1109,8 +1103,7 @@ func TestScopeIsolation(t *testing.T) {
 		require.NoError(t, err)
 		sawOwn := false
 		for _, e := range list {
-			// Folded Minor 2: CompanyID is nullable (audit_log has no FKs,
-			// per wave-f-context.md ruling 10) — a platform-level entry with
+			// CompanyID is nullable (audit_log has no FKs) — a platform-level entry with
 			// a nil CompanyID must not panic this assertion.
 			if e.CompanyID == nil {
 				continue
@@ -1191,7 +1184,7 @@ func TestScopeIsolation(t *testing.T) {
 			tenantA.Scope, tenantA.AdminScope, outsideGrant.ID,
 			func(a model.Analyzer) uuid.UUID { return a.ID }, "AnalyzerRepository.List narrow-scope")
 
-		// Important Finding 4 / HANDOFF ruling 7: an unassigned analyzer
+		// An unassigned analyzer
 		// (building_id nil) is visible only to AllBuildings.
 		scopeIsoAssertGetNotFound(t,
 			func(s store.Scope) (model.Analyzer, error) { return repo.Get(ctx, s, bf.unassignedAnalyzerID) },
@@ -1448,7 +1441,7 @@ func TestScopeIsolation(t *testing.T) {
 	t.Run("AnalyticsRepository", func(t *testing.T) {
 		repo := postgres.NewAnalyticsRepository(pool)
 
-		// Important Finding 2: daily/monthly/yearly buckets are
+		// Daily/monthly/yearly buckets are
 		// Europe/Istanbul-LOCAL instants (migration 00005) — narrowRange's
 		// [00:00,02:00) UTC window never overlaps the actual bucket instant
 		// (which can start the PREVIOUS UTC day), so every window below is
@@ -1515,7 +1508,7 @@ func TestScopeIsolation(t *testing.T) {
 		require.NoError(t, err)
 		require.NotEmpty(t, ownNarrowDaily, "positive control: tenant A's own AdminScope must see Buildings[1]'s daily bucket")
 
-		// Important Finding 2: ConsumptionMonthly/Yearly had NO narrow-scope
+		// ConsumptionMonthly/Yearly had NO narrow-scope
 		// case at all before this fix.
 		narrowMonthly, err := repo.ConsumptionMonthly(ctx, tenantA.Scope, []uuid.UUID{af.analyzerID}, monthRange)
 		require.NoError(t, err)
@@ -1548,9 +1541,7 @@ func TestScopeIsolation(t *testing.T) {
 		require.Equal(t, len(fromA), len(fromB), "a platform table must return the identical rows under either tenant's Scope")
 		require.NotEmpty(t, fromA, "this assertion is vacuous if the platform seed produced no rows")
 
-		// Folded Minor 4: Yekdem itself was only ever exercised with an
-		// invalid Scope before this fix — never proven to return the SAME
-		// row under either tenant's Scope.
+		// Yekdem must return the SAME row under either tenant's Scope.
 		yekA, err := repo.Yekdem(ctx, tenantA.Scope, 2026, 1)
 		require.NoError(t, err)
 		yekB, err := repo.Yekdem(ctx, tenantB.Scope, 2026, 1)
@@ -1646,7 +1637,7 @@ func TestScopeIsolation(t *testing.T) {
 		scopeIsoAssertGetNotFound(t,
 			func(s store.Scope) ([]model.TariffExtraCharge, error) { return repo.ExtraCharges(ctx, s, bf.tariffID) },
 			tenantA.AdminScope, tenantB.AdminScope, "TariffRepository.ExtraCharges cross-tenant")
-		// Important Finding 4: tenant B's company-wide tariff must be
+		// Tenant B's company-wide tariff must be
 		// invisible even to tenant A's AdminScope — company_id, not the
 		// building branch, is what protects it here.
 		scopeIsoAssertGetNotFound(t,
@@ -1675,7 +1666,7 @@ func TestScopeIsolation(t *testing.T) {
 			func(s store.Scope) ([]model.TariffExtraCharge, error) { return repo.ExtraCharges(ctx, s, af.tariffID) },
 			tenantA.Scope, tenantA.AdminScope, "TariffRepository.ExtraCharges narrow-scope")
 
-		// Important Finding 4 / HANDOFF ruling 7: a company-wide tariff
+		// A company-wide tariff
 		// (building_id nil) is visible only to AllBuildings; Effective still
 		// resolves it for a building the narrow Scope DOES grant, when no
 		// building-specific tariff is effective yet — the documented
@@ -1754,7 +1745,7 @@ func TestScopeIsolation(t *testing.T) {
 		require.NotEmpty(t, fromA)
 		require.Equal(t, len(fromA), len(fromB))
 
-		// Important Finding 3: Effective was never exercised at all before
+		// Effective was never exercised at all before
 		// this fix — platform-wide (no company_id), so isolation is
 		// invalid-scope rejection plus identical resolution under either
 		// tenant's Scope.
@@ -1829,7 +1820,7 @@ func TestScopeIsolation(t *testing.T) {
 		require.False(t, violated(tenantA.AdminScope, bf.buildingID), "BillRepository.ReactiveViolationBefore cross-tenant")
 		require.True(t, violated(tenantA.AdminScope, af.buildingID), "BillRepository.ReactiveViolationBefore owner")
 		require.False(t, violated(tenantA.Scope, af.buildingID), "BillRepository.ReactiveViolationBefore narrow-scope")
-		// Important Finding 4: tenant B's company-level bill must be
+		// Tenant B's company-level bill must be
 		// invisible even to tenant A's AdminScope.
 		scopeIsoAssertGetNotFound(t,
 			func(s store.Scope) (model.Bill, error) { return repo.Get(ctx, s, bf.companyBillID) },
@@ -1857,7 +1848,7 @@ func TestScopeIsolation(t *testing.T) {
 			func(s store.Scope) ([]model.BillHourlyDetail, error) { return repo.HourlyDetail(ctx, s, af.billID) },
 			tenantA.Scope, tenantA.AdminScope, "BillRepository.HourlyDetail narrow-scope")
 
-		// Important Finding 4 / HANDOFF ruling 7: a company-level bill
+		// A company-level bill
 		// (building_id AND analyzer_id both nil) is visible only to
 		// AllBuildings.
 		scopeIsoAssertGetNotFound(t,
@@ -1918,7 +1909,7 @@ func TestScopeIsolation(t *testing.T) {
 			func(s store.Scope) ([]model.AlarmChannel, error) { return repo.Channels(ctx, s, bf.alarmID) },
 			tenantA.AdminScope, tenantB.AdminScope, "AlarmRepository.Channels cross-tenant")
 
-		// --- ListEvents: Important Finding 1. AlarmEventList's `alarms`
+		// --- ListEvents: AlarmEventList's `alarms`
 		// parent predicate (a.company_id = ...) is the ONLY thing protecting
 		// a NULL-analyzer event (a company-level condition) — its own branch
 		// checks only all_buildings, never company_id directly. Filtering by
@@ -2107,12 +2098,12 @@ func TestScopeIsolation(t *testing.T) {
 			tenantA.AdminScope, tenantB.AdminScope, bf.credentialID,
 			func(c model.IntegrationCredential) uuid.UUID { return c.ID }, "IntegrationRepository.ListCredentials cross-tenant")
 
-		// Important Finding 3: OpenSecret is keyed by the credential's OWN
+		// OpenSecret is keyed by the credential's OWN
 		// surrogate id (query IntegrationGetCredential: id, company_id) — a
 		// DIFFERENT query from Credential's (IntegrationGetCredentialByDefinition,
-		// keyed by definition_id). The reviewer's tautology on
-		// IntegrationGetCredential's company_id predicate stayed green
-		// because OpenSecret was never exercised here at all before this fix.
+		// keyed by definition_id). A tautology on IntegrationGetCredential's
+		// company_id predicate would stay green if OpenSecret were not
+		// exercised here.
 		secretDenied, extraDenied, err := repo.OpenSecret(ctx, tenantA.AdminScope, bf.credentialID)
 		require.ErrorIs(t, err, store.ErrNotFound)
 		require.Nil(t, secretDenied)
@@ -2129,7 +2120,6 @@ func TestScopeIsolation(t *testing.T) {
 	// with the identical fixture shape by seedScopeIsoFixtures, so a leak
 	// would be invisible unless the returned content is checked directly) --
 	//
-	// Controller ruling (final review A fix round, re-review of task-13b):
 	// smtp_settings is keyed BY company_id (its own primary key), so a
 	// tautologised SMTPGet `(company_id = $1 or true)` still returns exactly
 	// ONE row — Postgres' own row order for a `:one` with no ORDER BY, which
@@ -2157,7 +2147,7 @@ func TestScopeIsolation(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, tenantB.Company.ID, gotB.CompanyID, "tenant B's Get must never return tenant A's smtp_settings row")
 
-		// Important Finding 3: OpenPassword has no id parameter at all (one
+		// OpenPassword has no id parameter at all (one
 		// row per company, keyed by the Scope's OWN company_id) — there is
 		// no way to hand it another tenant's id, so its isolation proof is
 		// that it decrypts to exactly what THIS company's own Upsert stored,

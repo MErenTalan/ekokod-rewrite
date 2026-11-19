@@ -14,8 +14,7 @@ import (
 )
 
 // TestConcurrentMigrateUpOnDifferentDatabasesIsRaceFree is step 7 of the
-// t.Parallel readiness plan (final-review-B-report.md §"t.Parallel
-// readiness", item 7): goose v3.28.0's SetBaseFS/SetDialect/SetLogger are
+// t.Parallel readiness plan: goose v3.28.0's SetBaseFS/SetDialect/SetLogger are
 // plain package-level variables with no synchronisation of their own —
 // internal/store/postgres/migrate.go's gooseSetupOnce and gooseLogMu exist
 // specifically to make calling them safe. That guard is only proven if two

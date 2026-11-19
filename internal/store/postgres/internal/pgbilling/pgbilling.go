@@ -138,7 +138,7 @@ func Encode(p model.BillingParameters, effectiveFrom pgtype.Date) (sqlcgen.Admin
 	}, nil
 }
 
-// IstanbulDate is on's Europe/Istanbul calendar date as a SQL date (I-14).
+// IstanbulDate is on's Europe/Istanbul calendar date as a SQL date.
 func IstanbulDate(on time.Time) pgtype.Date {
 	y, m, d := on.In(istanbul).Date()
 	return pgtype.Date{Time: time.Date(y, m, d, 0, 0, 0, 0, time.UTC), Valid: true}

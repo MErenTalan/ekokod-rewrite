@@ -232,9 +232,9 @@ func TestImportRealFixtureAnalysesWithoutWritingTariffs(t *testing.T) {
 	require.Len(t, res.Unmatched, 35)
 
 	overrun := analysis(res.Analyses, "40ZTEST000000030")
-	require.Equal(t, "43.3700", overrun.PowerUnitPrice.Value.StringFixed(4), "no contract in Nov 2025: (13011.01 + 12282.39/2) / 441.6 (C-2)")
+	require.Equal(t, "43.3700", overrun.PowerUnitPrice.Value.StringFixed(4), "no contract in Nov 2025: (13011.01 + 12282.39/2) / 441.6")
 	contracted := analysis(res.Analyses, "40ZTEST000000009")
-	require.Equal(t, "43.3700", contracted.PowerUnitPrice.Value.StringFixed(4), "17348.01 / the building tariff's 400 kW (C-2)")
+	require.Equal(t, "43.3700", contracted.PowerUnitPrice.Value.StringFixed(4), "17348.01 / the building tariff's 400 kW")
 	require.NotNil(t, overrun.EnergyKbk.Value, "base prices came from stored PTF + YEKDEM")
 
 	rows, err := postgres.NewIcmalRepository(e.pool).ListRows(e.ctx, e.tenant.AdminScope, res.Import.ID, store.Page{Limit: 100})
@@ -320,7 +320,7 @@ func TestApplyImportOnCompanyWideBaseCreatesBuildingTariff(t *testing.T) {
 	defs, err := e.svc.ApplyImport(e.ctx, e.tenant.AdminScope, res.Import.ID, []tariffsvc.ApplyConfirmation{{BuildingID: b0, EtsoCode: "40ZTEST000000030", EffectiveFrom: time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)}})
 	require.NoError(t, err)
 	require.NotNil(t, defs[0].Tariff.BuildingID)
-	require.Equal(t, b0, *defs[0].Tariff.BuildingID, "I-15: the confirmed building, never company-wide")
+	require.Equal(t, b0, *defs[0].Tariff.BuildingID, "the confirmed building, never company-wide")
 	still, err := e.svc.Applicable(e.ctx, e.tenant.AdminScope, e.tenant.Buildings[1].ID, time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC))
 	require.NoError(t, err)
 	require.False(t, still.Tariff.UsePtfYekdem, "other buildings keep the company-wide tariff")

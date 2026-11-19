@@ -118,8 +118,8 @@ func TestMapInstallationEmptyOptionalFieldsAreNil(t *testing.T) {
 	require.Nil(t, pt.MeterMultiplier)
 }
 
-// TestMapInstallationToleratesUnparseableNumberAsNil: task-6-fix1-findings.md
-// folded minor — mapInstallation never errors (DiscoverMeteringPoints has no
+// TestMapInstallationToleratesUnparseableNumberAsNil: mapInstallation
+// never errors (DiscoverMeteringPoints has no
 // per-row Warnings channel to attach a field-level warning to), so a bad
 // optional numeric field becomes nil rather than failing every other
 // installation in the response.
@@ -213,19 +213,16 @@ func TestMapEnergyRowNilVsZero(t *testing.T) {
 }
 
 // TestOSOSRegisterMapping is the reading-side companion to
-// Test<P>DiscoverMapsEveryField (task-6-brief.md): one fixture row with 14
+// Test<P>DiscoverMapsEveryField: one fixture row with 14
 // distinct raw values (13 mapped registers + u_p_kW, which is deliberately
 // dropped — see wire.go), asserted register by register, with a multiplier
-// != 1 ("2.5", task-6-fix1-findings.md I1) so a bug that fails to multiply
+// != 1 so a bug that fails to multiply
 // one register, multiplies it twice, or reuses another register's raw
-// value cannot hide behind a multiplier of 1 (reviewer mutations a2/a3).
-// It also asserts every other template-required field on the same reading
-// (I2: Ts, Kind, AnalyzerID, SourceProvider, MultiplierApplied, MeterSerial
-// — reviewer mutation a4). The task brief's named mutation — mapping u_ri
-// (which belongs to ReactiveInductiveExport) to ReactiveCapacitiveExport
-// instead — must turn this test red; see task-6-report.md's "Fix round 1"
-// section for the observed failure (re-proven below this test's original
-// baseline in the fix round).
+// value cannot hide behind a multiplier of 1. It also asserts every other
+// template-required field on the same reading (Ts, Kind, AnalyzerID,
+// SourceProvider, MultiplierApplied, MeterSerial). Mapping u_ri (which
+// belongs to ReactiveInductiveExport) to ReactiveCapacitiveExport instead
+// must turn this test red.
 func TestOSOSRegisterMapping(t *testing.T) {
 	row := wireEnergyRow{
 		MeterDate:     "01/08/2026 10:00:00",
@@ -252,7 +249,7 @@ func TestOSOSRegisterMapping(t *testing.T) {
 	reading, field, ok := mapEnergyRow(mustRaw(t, row), req)
 	require.True(t, ok, "unexpected unparseable field %q", field)
 
-	// I2: every other template-required field on this same reading.
+	// Every other template-required field on this same reading.
 	require.Equal(t, time.Date(2026, 8, 1, 7, 0, 0, 0, time.UTC), reading.Ts.UTC(), "meter_date -> Ts (Istanbul local -> UTC)")
 	require.Equal(t, model.ReadingKindDaily, reading.Kind)
 	require.Equal(t, analyzerID, reading.AnalyzerID)
@@ -261,7 +258,7 @@ func TestOSOSRegisterMapping(t *testing.T) {
 	require.NotNil(t, reading.MeterSerial)
 	require.Equal(t, "SN-FIXTURE-0001", *reading.MeterSerial)
 
-	// I1: every register = raw x 2.5, applied exactly once.
+	// Every register = raw x 2.5, applied exactly once.
 	requireDecimalEqual(t, "ActiveImport (t_top_kWh)", "2.5", reading.ActiveImport)
 	requireDecimalEqual(t, "ReactiveInductiveImport (t_ri_kVarh)", "5", reading.ReactiveInductiveImport)
 	requireDecimalEqual(t, "ReactiveCapacitiveImport (t_rc_kVarh)", "7.5", reading.ReactiveCapacitiveImport)

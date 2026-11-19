@@ -1,5 +1,5 @@
 // Package lock is the CANONICAL owner of the Locker/Lease contract (F2 plan
-// ruling R2). internal/integration/httpx (Task 2) imports this package and
+// ruling R2). internal/integration/httpx imports this package and
 // aliases httpx.Locker = lock.Locker, httpx.Lease = lock.Lease — a type
 // alias, not a structurally-identical redeclaration, which is what lets
 // *Memory and *Redis satisfy httpx.Locker with no adapter anywhere: Go does
@@ -7,10 +7,9 @@
 // satisfying each other when a method's return type is itself one of those
 // named interfaces.
 //
-// Ownership sits here, not in httpx, because after the wave-scheduling move
-// this package has zero F2-task dependencies and starts in Wave A; if httpx
-// (Wave B) owned the canonical type, this package would need to import a
-// not-yet-merged httpx package to implement it.
+// Ownership sits here, not in httpx, because this package has no
+// integration dependencies; if httpx owned the canonical type, this package
+// would need to import httpx to implement it.
 package lock
 
 import (
@@ -23,8 +22,8 @@ import (
 // ctx was done.
 var ErrNotAcquired = errors.New("lock: not acquired")
 
-// ErrInvalidTTL is returned by Acquire and Consume when ttl <= 0 (fix-round-1
-// finding M1). A non-positive ttl reaching Redis's SET...PX would mean "no
+// ErrInvalidTTL is returned by Acquire and Consume when ttl <= 0. A
+// non-positive ttl reaching Redis's SET...PX would mean "no
 // expiry" (SetNX with px=0 sets no TTL at all), holding the lock/consume
 // mark forever instead of the caller's evident intent; both Memory and
 // Redis reject it up front instead.

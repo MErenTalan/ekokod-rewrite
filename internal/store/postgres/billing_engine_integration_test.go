@@ -127,7 +127,7 @@ func TestBillingParametersEPDK2022Row(t *testing.T) {
 }
 
 // TestBillingParametersDecodeBandsAndGroupsExactly: jsonb decimals decode from
-// their strings exactly (mutation: via float64 → the float guard or this test).
+// their strings exactly (a float64 detour fails the float guard or this test).
 func TestBillingParametersDecodeBandsAndGroupsExactly(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -190,7 +190,7 @@ func TestBillingParametersEffectivePicksGreatestNotAfter(t *testing.T) {
 }
 
 // TestBillingParametersEffectiveUsesIstanbulDate: 2025-12-31T21:00Z is
-// 2026-01-01 00:00 in Istanbul (I-14).
+// 2026-01-01 00:00 in Istanbul.
 func TestBillingParametersEffectiveUsesIstanbulDate(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

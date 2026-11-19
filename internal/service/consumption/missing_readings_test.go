@@ -212,7 +212,7 @@ func TestMissingReadingsFutureBucketSkipped(t *testing.T) {
 }
 
 // TestNoFalseMissingReadingsAnomalyJustAfterMidnightAtDaily is R104(1)'s own
-// fix for final review X's I-A finding: right after a Daily bucket's own
+// regression test: right after a Daily bucket's own
 // midnight — before its own 00:00 snapshot has had time to arrive from the
 // provider — the plain R98 clock-only rule already treated the bucket as
 // closed, and since its own end boundary could not yet resolve, wrote a

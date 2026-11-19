@@ -17,8 +17,8 @@ const (
 	CodeUnresolvedAnomaly        = "unresolved_anomaly"
 	CodePeriodNotClosed          = "period_not_closed"
 	CodeBillingParametersMissing = "billing_parameters_missing"
-	CodeBillingParametersInvalid = "billing_parameters_invalid" // M-6
-	CodePeriodConflict           = "period_conflict"            // R556, R557
+	CodeBillingParametersInvalid = "billing_parameters_invalid"
+	CodePeriodConflict           = "period_conflict" // R556, R557
 )
 
 // ComputeError is a data condition that keeps a bill from being computed.

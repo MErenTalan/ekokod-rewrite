@@ -18,7 +18,7 @@ const (
 	TypeBillingRenderPDF = "billing.render_pdf"
 
 	// BillingDispatchLookbackPeriods is how many closed periods each dispatch
-	// retries, so a failing or flagged period is not stuck forever (I-8).
+	// retries, so a failing or flagged period is not stuck forever.
 	BillingDispatchLookbackPeriods = 3
 )
 

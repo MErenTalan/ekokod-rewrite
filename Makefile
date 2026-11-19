@@ -14,7 +14,7 @@ SQLC_VERSION := v1.30.0
 
 .PHONY: build test test-integration test-perf lint fmt tidy tools vuln ci check-script-modes test-db-up test-db-down test-redis-up test-redis-down openapi migration-rehearsal load-test soak-test
 
-# TEST_DB_* back test-db-up/test-db-down (F4 Task 0): one long-lived
+# TEST_DB_* back test-db-up/test-db-down: one long-lived
 # TimescaleDB container integration tests can opt into sharing, instead of
 # every test binary booting its own (see internal/testfixtures/containers.go,
 # isolatedTestDSNEnv). Port 55432, NOT 5432: 5432 on this machine is owned
@@ -31,7 +31,7 @@ test: ## Run unit tests
 	go test ./... -race -coverprofile=coverage.out -covermode=atomic
 
 test-integration: ## Run integration tests (requires Docker)
-	# M6 (final review B): TESTCONTAINERS_HOST_OVERRIDE=127.0.0.1 pins the
+	# TESTCONTAINERS_HOST_OVERRIDE=127.0.0.1 pins the
 	# host testcontainers-go uses for its own readiness "wait until ready"
 	# probes (containers.go's wait strategies) to loopback instead of letting
 	# it resolve "localhost", which under Docker Desktop/WSL2 can flake as a
@@ -86,7 +86,7 @@ openapi: ## Regenerate the committed OpenAPI document from the route table
 	go run ./cmd/ekokod tool openapi > internal/api/v1/openapi.json
 	cd web && pnpm gen:api
 
-# test-perf runs Task 13's slow F1 acceptance suite: 1,000,000 synthetic
+# test-perf runs slow F1 acceptance suite: 1,000,000 synthetic
 # readings across 100 analyzers, asserting the chunk layout and EXPLAIN plan
 # TestOneMillionReadingsChunkLayout expects (~70s insert + assertions on this
 # machine). It is gated by EKOKOD_PERF=1, NOT by an extra build tag: the test
@@ -116,7 +116,7 @@ lint: ## Run gofmt check, go vet and golangci-lint
 vuln: ## Scan dependencies for known vulnerabilities
 	govulncheck ./...
 
-# F1 final review pass B, I6: scripts/gen-env-docker.sh and
+# scripts/gen-env-docker.sh and
 # scripts/offline-bundle.sh were committed as mode 100644 (not executable),
 # which broke `make env-docker`/`make up`/`make migrate`/`make seed`/
 # `make offline-bundle` — every one of them runs `./scripts/....sh` — on a
@@ -170,7 +170,7 @@ generate: ## Regenerate sqlc types from the migrations and internal/store/postgr
 
 # `git status --porcelain --untracked-files=all` rather than `git diff
 # --exit-code`: diff compares TRACKED files only and is blind to a new,
-# uncommitted one. Tasks 9-11 each add a query file, and each produces a new
+# uncommitted one. Every new query file produces a new
 # sqlcgen/<name>.sql.go — with a diff-only check, forgetting to commit one
 # leaves this green and `go build` only notices once something calls the
 # missing method. porcelain reports added, modified and untracked alike, and

@@ -46,8 +46,8 @@ func (f *fakePriceSource) YekdemUnitCost(_ context.Context, from, to time.Time) 
 }
 
 // fakePriceSourceWithYekdemDrops additionally implements the OPTIONAL
-// yekdemDropReporter capability sync.go type-asserts for (M2, fix round
-// 1: "surface the drop count in the sync run's detail"), so a test can
+// yekdemDropReporter capability sync.go type-asserts for (it surfaces the
+// drop count in the sync run's detail), so a test can
 // drive syncDetail.YekdemDropped without a real EPİAŞ payload containing
 // an unparseable row.
 type fakePriceSourceWithYekdemDrops struct {

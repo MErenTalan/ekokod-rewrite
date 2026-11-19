@@ -1,11 +1,8 @@
 // Package pgerr provides the one error translation every repository under
 // internal/store/postgres calls on every database error.
 //
-// It exists so that Tasks 9, 10 and 11 — three parallel implementers building
-// every repository in the project in the same package — do not each write
-// their own mapping from a driver error to a store sentinel. Three divergent
-// mappings (or three copies of the same one) would have been the merge
-// result; this package is the one copy.
+// It exists so that the repositories do not each write their own mapping
+// from a driver error to a store sentinel; this package is the one copy.
 //
 // It must be its own package, rather than an unexported function in package
 // postgres, because it also has to be callable from
@@ -43,11 +40,11 @@ const uniqueViolation = "23505"
 //
 // It wraps a cause that has ALREADY BEEN THROUGH secret.Wrap — never the raw
 // driver error — which is what makes this a thin wrapper around the one
-// scrubbing style rather than a second one. Task 8c fix round 1 found the
-// first version of this type built its cause as plain fmt.Errorf("%s: %w",
-// op, err), on the theory that pgx.ErrNoRows and *pgconn.PgError never print
-// a credential on their own — true in isolation, but err here is whatever a
-// caller passed in, and a caller can (and, per the review's probe, did) wrap
+// scrubbing style rather than a second one. The first version of this type
+// built its cause as plain fmt.Errorf("%s: %w", op, err), on the theory that
+// pgx.ErrNoRows and *pgconn.PgError never print a credential on their own —
+// true in isolation, but err here is whatever a caller passed in, and a
+// caller can (and did) wrap
 // pgx.ErrNoRows or a *pgconn.PgError in text that names a DSN. Every non-nil
 // outcome of Translate must be scrubbed, not just the branches that "happen
 // not to need it".

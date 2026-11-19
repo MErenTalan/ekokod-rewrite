@@ -14,10 +14,8 @@ import (
 // numeric<->decimal pair, not merely to pass against the real one. Every case
 // below was chosen because it survives the exponent/coefficient conversion and
 // does NOT survive a Float64Value round trip; the suite has been re-run
-// against a deliberately float-based NumericToDecimal/DecimalToNumeric, after
-// this file's move from internal/store/postgres/numeric_test.go at the Wave F
-// integration commit, to confirm it still fails (transcript in the Wave F
-// integration report). A conversion test written with 12.34 and 0.5 would
+// against a deliberately float-based NumericToDecimal/DecimalToNumeric to
+// confirm it fails. A conversion test written with 12.34 and 0.5 would
 // pass either way and would therefore prove nothing.
 
 // numericOf builds a pgtype.Numeric by parsing decimal TEXT through pgtype's
@@ -25,8 +23,8 @@ import (
 // test data is therefore exact by construction, and the construction side of
 // every assertion below is pgx's code rather than a reimplementation of it.
 //
-// It deliberately does NOT build the coefficient with math/big:
-// .golangci.yml's no-float-money rule denies math/big under internal/store,
+// It deliberately does NOT build the coefficient with math/big:.
+// golangci.yml's no-float-money rule denies math/big under internal/store,
 // and it is right to. Going through pgtype's parser is both allowed and a
 // better test.
 func numericOf(t *testing.T, text string) pgtype.Numeric {
@@ -57,7 +55,7 @@ var exactCases = []struct {
 	decimal string
 }{
 	{
-		// The brief's headline case: 29 significant digits against
+		// The headline case: 29 significant digits against
 		// float64's ~15-17. A float round trip returns
 		// 12345678901234567168.000000000, wrong in the 18th digit and
 		// beyond.

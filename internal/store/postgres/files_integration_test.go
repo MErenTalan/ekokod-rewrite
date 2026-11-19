@@ -42,7 +42,7 @@ func TestFileCreateGetListSoftDelete(t *testing.T) {
 
 	// Another company cannot read, list or soft-delete it: it is
 	// indistinguishable from a missing file. Asserted under tenant B's
-	// AdminScope specifically (fix round 1, Important 4/gate requirement):
+	// AdminScope specifically (/gate requirement):
 	// stored_files has no building_id at all, so company_id is the ONLY
 	// predicate that could exclude the row here.
 	_, err = repo.Get(ctx, tenantB.AdminScope, created.ID)

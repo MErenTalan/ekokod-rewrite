@@ -49,7 +49,7 @@ func newWorkerCmd() *cobra.Command {
 
 			// asynq never dials its broker eagerly and, once Start
 			// succeeds, surfaces no error at all if the broker later goes
-			// unreachable (task 9 review, Important-1): the processor just
+			// unreachable: the processor just
 			// loops on Dequeue failures forever. HealthCheckFunc is the
 			// only signal asynq offers, and asynq does not even start its
 			// healthcheck goroutine unless one is supplied

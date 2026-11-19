@@ -100,7 +100,7 @@ func TestMeterReadingsIsSpacePartitionedByAnalyzer(t *testing.T) {
 }
 
 // TestCompressionPoliciesExist covers the F1 acceptance criterion that a
-// chunk older than the threshold compresses. Task 13 proves compression
+// chunk older than the threshold compresses. The compression test proves it
 // actually runs and that queries still return correct rows from a compressed
 // chunk; this test only proves the policy was installed by the migration.
 func TestCompressionPoliciesExist(t *testing.T) {
@@ -117,8 +117,8 @@ func TestCompressionPoliciesExist(t *testing.T) {
 	}
 }
 
-// TestContinuousAggregatesExist pins the aggregate names Task 10's analytics
-// repositories and Task 13's correctness test both depend on.
+// TestContinuousAggregatesExist pins the aggregate names the analytics
+// repositories and the aggregate correctness test both depend on.
 func TestContinuousAggregatesExist(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -547,7 +547,7 @@ func pgIdent(t *testing.T, name string) string {
 // seedPlantWithDevice inserts the plant and device that plant_production's
 // foreign keys need, and returns both ids. device_id is part of that
 // hypertable's primary key, so Postgres promotes it to NOT NULL and a production
-// row without a device cannot be stored — see the task report.
+// row without a device cannot be stored.
 func seedPlantWithDevice(t *testing.T, ctx context.Context, pool *pgxpool.Pool) (plantID, deviceID uuid.UUID) {
 	t.Helper()
 	companyID, _ := seedCompanyAndBuilding(t, ctx, pool)

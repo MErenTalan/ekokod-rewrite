@@ -67,8 +67,7 @@ func SystemScope(companyID uuid.UUID) Scope {
 // whatsoever, including a uuid that belongs to a different company entirely,
 // or no company at all. Calling this to authorise STORING id as a foreign key
 // (a tariff's or bill's building_id, a report's building_id, …) is therefore
-// the bug Critical Finding 1 of the task-11a fix-round-1 review named: an
-// AllBuildings Scope could store another tenant's building id, because
+// a bug: an AllBuildings Scope could store another tenant's building id, because
 // AllowsBuilding said yes to every id it was asked about. Every stored
 // foreign-key id MUST be validated in SQL instead — company_id = the Scope's
 // company, deleted_at is null, and the Scope's building branch — inside the

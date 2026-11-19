@@ -109,7 +109,7 @@ func TestCombineCompanyMergesLinesByCodeAndRate(t *testing.T) {
 	energy := line(t, c, model.BillLineEnergy)
 	require.Equal(t, "2400.00", energy.Amount.StringFixed(2))
 	require.Equal(t, "900", energy.Quantity.String())
-	require.Nil(t, energy.UnitPrice, "M-7: differing unit prices merge to nil")
+	require.Nil(t, energy.UnitPrice, "differing unit prices merge to nil")
 	require.Equal(t, "0.5", line(t, c, model.BillLineDistribution).UnitPrice.String(), "equal unit prices survive")
 	btv := 0
 	for _, l := range c.Lines {

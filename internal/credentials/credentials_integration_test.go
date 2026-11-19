@@ -450,7 +450,7 @@ func TestPM5340ConfigureCreatesItsAnalyzer(t *testing.T) {
 		require.ErrorIs(t, err, credentials.ErrInvalidSettings)
 	})
 
-	// M5 (final-review-A): a URL carrying userinfo must be refused outright
+	// A URL carrying userinfo must be refused outright
 	// — pm5340_url is stored in plaintext, never sealed, and the write-only
 	// View returns it verbatim, so a credential embedded in the URL itself
 	// would leak straight back out through View.PM5340URL.
@@ -597,10 +597,9 @@ func TestVerifyRedactsAuthFailureAndRecordsSuccess(t *testing.T) {
 	require.NotNil(t, updated.LastVerifiedAt)
 }
 
-// TestVerifyPreservesErrorChain is fix round 2's M proof (dropped last
-// round): Verify's redacted error must still let a caller errors.Is
-// against the verifier's own sentinel (integration.ErrAuth) — fix round
-// 1's Verify returned errors.New(redactedText(...)), a brand-new error
+// TestVerifyPreservesErrorChain: Verify's redacted error must still let a
+// caller errors.Is against the verifier's own sentinel (integration.ErrAuth)
+// — an earlier Verify returned errors.New(redactedText(...)), a brand-new error
 // with no Unwrap, which threw the chain away entirely even though the
 // redacted TEXT it produced was already correct (that text-only guarantee
 // is TestVerifyRedactsAuthFailureAndRecordsSuccess, above, which never
@@ -649,7 +648,7 @@ func TestISolarCallbackStoresTokensForTheStatesCompany(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Folded minor (fix round 1): tenant B gets its OWN isolar credential
+	// Tenant B gets its OWN isolar credential
 	// FIRST, with its own refresh token, so "tenant B's list is unchanged"
 	// below is a meaningful cross-tenant proof — not just "tenant B has
 	// nothing at all so of course nothing changed".
@@ -814,8 +813,7 @@ func TestISolarAccessTokenRefreshesOnceUnderConcurrency(t *testing.T) {
 }
 
 // ============================================================================
-// Fix round 1 (opus review of 0ec2398..9ce1bbc) — I1-I5 and the folded
-// "invalid key accepted" minor. See task-14-fix1-findings.md.
+// Concurrency, locking, key validation and tenant scoping.
 // ============================================================================
 
 // TestConfigureRefusesWhenCredentialAlreadyExists is I2/R45: a second
@@ -910,8 +908,8 @@ func TestVerifyPreservesRefreshedTokenExpiry(t *testing.T) {
 	require.EqualValues(t, 1, h.isolarFake.RefreshCalls(), "Verify's own refresh must be the ONLY Refresh call")
 }
 
-// TestUpdateExtraBlocksWhileISolarTokenLockIsHeld is I3's deterministic
-// mutation proof. Update's read-merge-write of an isolar credential's
+// TestUpdateExtraBlocksWhileISolarTokenLockIsHeld is a deterministic lock
+// test. Update's read-merge-write of an isolar credential's
 // Extra must serialise under the SAME lock key
 // ("isolar:token:<company>") as ISolarAccessToken's refresh and
 // ISolarCallback's persistIsolarToken — otherwise a concurrent Update can
@@ -980,8 +978,8 @@ func TestUpdateExtraBlocksWhileISolarTokenLockIsHeld(t *testing.T) {
 // entered once that call has started. Every other UpsertCredential call —
 // including Configure's own, made while setting up the test fixture,
 // before arming — passes straight through to the embedded, real
-// repository. It exists for TestUpdateHoldsIsolarLockAcrossUpsertWrite
-// (I3, fix round 2): a fake Locker cannot tell the difference between
+// repository. It exists for TestUpdateHoldsIsolarLockAcrossUpsertWrite:
+// a fake Locker cannot tell the difference between
 // "released before the write" and "released after the write" the way a
 // real timing race would, but a repository that can pause UpsertCredential
 // mid-flight lets the test force exactly that window open and prove
@@ -1008,9 +1006,9 @@ func (r *blockingUpsertRepo) UpsertCredential(ctx context.Context, s store.Scope
 	return r.IntegrationRepository.UpsertCredential(ctx, s, c, secretPlain, extra)
 }
 
-// TestUpdateHoldsIsolarLockAcrossUpsertWrite is I3's fix-round-2 proof.
+// TestUpdateHoldsIsolarLockAcrossUpsertWrite:
 // TestUpdateExtraBlocksWhileISolarTokenLockIsHeld (above) only proves
-// Update's Extra READ-MERGE runs under isolarTokenLockKey — fix round 1's
+// Update's Extra READ-MERGE runs under isolarTokenLockKey — an earlier
 // bug was releasing the lease right after that merge, LEAVING THE ACTUAL
 // UpsertCredential WRITE UNLOCKED, so that older test stayed green under
 // the very regression this one targets. Here, UpsertCredential itself is
@@ -1269,8 +1267,7 @@ func TestPM5340UpdateChangesInstallationNumberOnSingleAnalyzer(t *testing.T) {
 	require.Equal(t, list[0].ID, list2[0].ID)
 }
 
-// TestConfigureAndUpdateRejectInvalidExtraKeyNames is the folded minor's
-// mutation proof ("invalid key accepted"): an Input.Extra key not matching
+// TestConfigureAndUpdateRejectInvalidExtraKeyNames: an Input.Extra key not matching
 // ^[a-z][a-z0-9_]{0,63}$ must be refused with ErrInvalidExtraKey, on BOTH
 // Configure and Update, and must never reach OpenSecret's stored blob.
 func TestConfigureAndUpdateRejectInvalidExtraKeyNames(t *testing.T) {
@@ -1315,8 +1312,8 @@ func TestConfigureAndUpdateRejectInvalidExtraKeyNames(t *testing.T) {
 	require.ElementsMatch(t, []string{"app_id", "app_key"}, updated.ExtraKeys)
 }
 
-// TestUpdateDeleteVerifyDiscoverAreScopedToTenant is the folded minor's
-// cross-tenant coverage for Update/Delete/Verify/Discover: tenant B's
+// TestUpdateDeleteVerifyDiscoverAreScopedToTenant is the cross-tenant
+// coverage for Update/Delete/Verify/Discover: tenant B's
 // AdminScope against tenant A's credential id gets store.ErrNotFound for
 // every one of them, with tenant A's own scope (a positive control) still
 // succeeding on the SAME credential afterward.
@@ -1366,8 +1363,7 @@ func TestUpdateDeleteVerifyDiscoverAreScopedToTenant(t *testing.T) {
 	require.NoError(t, h.svc.Delete(ctx, tenantA.AdminScope, view.ID))
 }
 
-// TestISolarMethodsAreScopedToTenant is the folded minor's cross-tenant
-// coverage for ISolarAuthorizeURL and ISolarAccessToken: tenant B's
+// TestISolarMethodsAreScopedToTenant is the cross-tenant coverage for ISolarAuthorizeURL and ISolarAccessToken: tenant B's
 // AdminScope against tenant A's isolar credential id gets
 // store.ErrNotFound, with tenant A's own scope succeeding as a positive
 // control.

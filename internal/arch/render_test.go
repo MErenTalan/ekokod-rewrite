@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// renderForbidden: renderers take domain values only (Task 9).
+// renderForbidden: renderers take domain values only.
 var renderForbidden = []string{
 	modulePath + "/internal/store",
 	modulePath + "/internal/service",

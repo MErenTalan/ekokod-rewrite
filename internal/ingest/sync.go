@@ -38,10 +38,10 @@ func (s *Service) SyncAnalyzers(ctx context.Context, p job.SyncAnalyzersPayload)
 	if err != nil {
 		errText := err.Error()
 		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 0, &errText, nil)
-		return classifyStoreErr(err) // M14
+		return classifyStoreErr(err)
 	}
 
-	// X-M3, final review B: see fetch.go's identical gate — an
+	// See fetch.go's identical gate — an
 	// operator-deactivated credential must stop ingestion here, before any
 	// network call, non-retryably (ErrConfig -> job.ClassifyForRetry ->
 	// asynq.SkipRetry) and with a clear operational message.
@@ -226,7 +226,7 @@ func preserveIfNil[T any](existing, incoming *T) *T {
 // untouched: R27 sets it only at creation, and a sync must never silently
 // flip an operator's own activation decision.
 //
-// M6: EVERY pointer field below is preserveIfNil'd, not unconditionally
+// EVERY pointer field below is preserveIfNil'd, not unconditionally
 // overwritten (round 1's bug) — a provider whose discovery response omits
 // a field this cycle (a nil pt.<Field>) must never erase a stored value an
 // operator screen may since have edited. MeterMultiplier (the one

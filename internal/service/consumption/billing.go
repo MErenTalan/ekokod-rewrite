@@ -28,16 +28,14 @@ type BillingDeps struct {
 	Clock     clock.Clock
 	Log       *slog.Logger
 
-	// Locker serialises Task 8's ConsumptionAndRecord check-then-create per
+	// Locker serialises ConsumptionAndRecord check-then-create per
 	// (analyzer, period_start): consumption_anomalies' own partial
 	// index claims no database-level uniqueness, so this lock is what
 	// actually prevents two concurrent runs from creating two rows for the
 	// same period. Required only by ConsumptionAndRecord; left nil, this
-	// type still constructs and Consumption still works exactly as Task 7
-	// built it.
+	// type still constructs and Consumption still works.
 	Locker lock.Locker
-	// Analyzers resolves the analyzer's own provider when Task 8's
-	// ResolveAnomaly (ResolveByRegisteringReset) writes an operator-entered
+	// Analyzers resolves the analyzer's own provider when ResolveAnomaly (ResolveByRegisteringReset) writes an operator-entered
 	// reset reading. Required only by ResolveAnomaly.
 	Analyzers store.AnalyzerRepository
 	// Users validates that ResolveAnomaly's resolvedBy is a real user of
@@ -54,7 +52,7 @@ type BillingDeps struct {
 // field of any AnalyticsRepository type to poison in a guard test.
 //
 // Anomalies, Ops and Clock are unused by Consumption itself (this file):
-// they exist on this type because Task 8's ConsumptionAndRecord,
+// they exist on this type because ConsumptionAndRecord,
 // ListAnomalies and ResolveAnomaly — added later, on this same type — need
 // them, and R61 requires ONE Billing type rather than a second one that
 // would have to duplicate Consumption.
@@ -87,7 +85,7 @@ func NewBilling(d BillingDeps) (*Billing, error) {
 // or still-accruing period is neither billed as a number nor marked
 // Partial, it is simply absent from the result until it closes (an
 // invoice-grade figure is complete or absent, never partial). Writing the
-// anomaly row and the operator message is Task 8's ConsumptionAndRecord
+// anomaly row and the operator message is ConsumptionAndRecord
 // wrapper, on the same type.
 func (b *Billing) Consumption(ctx context.Context, sc store.Scope, req SeriesRequest) ([]Row, error) {
 	rows, _, err := b.consumptionWithGaps(ctx, sc, req)
@@ -153,7 +151,7 @@ func (b *Billing) consumptionOverWindows(ctx context.Context, sc store.Scope, an
 		}
 	}
 	// A resolved manual_override/accepted anomaly must be reflected by
-	// Consumption itself, not only by Task 8's ConsumptionAndRecord wrapper
+	// Consumption itself, not only by the ConsumptionAndRecord wrapper
 	// — applyResolvedAnomalies (anomalies.go) post-processes rows in place.
 	if err := b.applyResolvedAnomalies(ctx, sc, rows); err != nil {
 		return nil, nil, err
@@ -220,9 +218,8 @@ func (b *Billing) consumptionForAnalyzer(ctx context.Context, sc store.Scope, an
 			rows = append(rows, row)
 			continue
 		}
-		// 02 §3.1: no row, never a zero row. Task 7's plain Consumption
-		// never writes missing_readings — that is Task 8's
-		// ConsumptionAndRecord, only for a specifically requested billing
+		// 02 §3.1: no row, never a zero row. Plain Consumption
+		// never writes missing_readings — that is ConsumptionAndRecord, only for a specifically requested billing
 		// period, and only when the analyzer has readings at all (above).
 		if !anyReadings {
 			continue

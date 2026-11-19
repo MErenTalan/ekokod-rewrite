@@ -45,7 +45,7 @@ func decodeRow(raw json.RawMessage) (pm5340Row, error) {
 // ok is false when the row cannot be mapped at all (an absent or
 // unparseable meterDate) or when one register's value fails to parse;
 // field names the offending field for the caller's WarnUnparseableRow
-// detail ("<field> at row <n>", per the task brief verbatim).
+// detail ("<field> at row <n>", per the PM5340 API notes verbatim).
 func mapRow(row pm5340Row, raw json.RawMessage, req integration.FetchRequest) (reading model.MeterReading, field string, ok bool) {
 	if row.MeterDate == nil {
 		return model.MeterReading{}, "meterDate", false
@@ -72,7 +72,7 @@ func mapRow(row pm5340Row, raw json.RawMessage, req integration.FetchRequest) (r
 		return model.MeterReading{}, field, false
 	}
 	// currentGeneration deliberately has NO req.Multiplier applied: the
-	// task-9 brief's mapping list ("activeImport_kWh, inductive_kvarh,
+	// the PM5340 API notes mapping list ("activeImport_kWh, inductive_kvarh,
 	// capacitive_kvarh, dmdKwPeak_kW, each x req.Multiplier") names only
 	// those four registers for multiplication; currentGeneration's own
 	// sentence ("currentGeneration (kW) -> IntervalGenerationKwh =
@@ -155,7 +155,7 @@ func decimalPtrEqual(a, b *decimal.Decimal) bool {
 }
 
 // unparseableRowWarning builds the exact "<field> at row <n>" detail the
-// task-9 brief specifies for a WarnUnparseableRow.
+// the PM5340 API notes specify for a WarnUnparseableRow.
 func unparseableRowWarning(field string, row int) integration.Warning {
 	return integration.Warning{Code: integration.WarnUnparseableRow, Detail: fmt.Sprintf("%s at row %d", field, row)}
 }
@@ -163,7 +163,7 @@ func unparseableRowWarning(field string, row int) integration.Warning {
 // duplicateTimestampWarning marks a later row at the same timestamp whose
 // register values disagree with an earlier one already collected. There is
 // no dedicated Warning code for this case among package integration's
-// closed Warn* set (owned by Task 1); WarnUnparseableRow is reused since it
+// closed Warn* set; WarnUnparseableRow is reused since it
 // is, like this case, a per-row data-quality note carrying a "<...> at row
 // <n>" detail, not a claim that persistence should treat the row as
 // unusable. See the task report's "Spec gaps and interpretation choices".
@@ -172,7 +172,7 @@ func duplicateTimestampWarning(row int) integration.Warning {
 }
 
 // generationNilWarning marks a row whose currentGeneration was JSON null,
-// per the task-9 brief ("nil stays nil, plus WarnGenerationIntervalNil").
+// per the PM5340 API notes ("nil stays nil, plus WarnGenerationIntervalNil").
 func generationNilWarning(row int) integration.Warning {
 	return integration.Warning{Code: integration.WarnGenerationIntervalNil, Detail: fmt.Sprintf("currentGeneration at row %d", row)}
 }

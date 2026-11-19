@@ -10,8 +10,7 @@ import (
 
 // TestDerivationSuspectRegistersOrder proves SuspectRegisters returns
 // suspect registers in AllRegisters order, regardless of the order they
-// were inserted into the Suspect map (map iteration order is random, so a
-// mutation that ranges over d.Suspect directly instead of allRegisters
+// were inserted into the Suspect map (map iteration order is random, so a bug that ranges over d.Suspect directly instead of allRegisters
 // would still often pass — inserting the registers in reverse-of-canonical
 // order gives this test the best chance of catching it).
 func TestDerivationSuspectRegistersOrder(t *testing.T) {

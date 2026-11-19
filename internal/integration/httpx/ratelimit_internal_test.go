@@ -16,7 +16,7 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// TestWaitForTokenCancelsReservationWhenAbandoned (M11): after a wait is
+// TestWaitForTokenCancelsReservationWhenAbandoned: after a wait is
 // abandoned (the injected Sleep returns an error, modelling ctx
 // cancellation mid-wait), the reservation it was waiting on must be given
 // back rather than left permanently consumed. Proven by comparing the

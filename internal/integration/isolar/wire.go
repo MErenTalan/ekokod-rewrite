@@ -65,7 +65,7 @@ func (f flexNumber) Int64() (int64, error) { return json.Number(f).Int64() }
 // time.Time happens in the mapping code in plants.go, series.go and
 // alarms.go, never here.
 //
-// PROVENANCE (fix round 1, R40/R41 — task-13-fix1-findings.md):
+// PROVENANCE (R40/R41):
 // 06-integrations.md §6 gives the operation names, the point-id catalogue
 // and the top-level envelope shape ({result_code, result_msg, result_data},
 // "1" = success), but NOT the field names inside result_data. R41 makes the

@@ -70,7 +70,7 @@ type ReportGetParams struct {
 
 // Generated building reports (migration 00010). Query names are prefixed
 // Report…
-// Folded minor (fix round 1): a report of a soft-deleted building must not
+// A report of a soft-deleted building must not
 // stay readable through the report's own row.
 func (q *Queries) ReportGet(ctx context.Context, arg ReportGetParams) (Report, error) {
 	row := q.db.QueryRow(ctx, reportGet,
@@ -279,7 +279,7 @@ type ReportUpsertParams struct {
 	BuildingIds    []uuid.UUID
 }
 
-// Critical Finding 1 (task-11a fix round 1): building_id is NOT NULL on
+// Building_id is NOT NULL on
 // reports, and is a stored foreign key — Scope.AllowsBuilding is an
 // in-memory grant check that cannot know which company owns a building, so
 // an AllBuildings Scope's Go-side pre-check alone could store ANOTHER

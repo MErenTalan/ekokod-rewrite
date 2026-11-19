@@ -36,8 +36,8 @@ import (
 // not), hourly_values is fetched for that same covered range before
 // returning (Ruling R34 — see FetchReadings' doc comment). This comment
 // previously (incorrectly) implied hourly calls were counted into the same
-// budget and deferred entirely past a truncated call; task-6-fix1-findings.md
-// I8 corrected both the behaviour and this comment.
+// budget and deferred entirely past a truncated call; both the behaviour
+// and this comment were corrected.
 const defaultPageBudget = 10
 
 // Options configures a Source.
@@ -110,9 +110,9 @@ func (s *Source) client(creds integration.Credentials) *httpx.Client {
 }
 
 // missingEndpointErr and wrapConfigErr both classify OSOS's config/credential
-// errors as ErrConfig (R48/I5), never ErrMalformedPayload (adapter-patterns.md
-// item 9, task-6-fix1-findings.md folded minor "missing endpoint key /
-// placeholder -> *integration.Error with a deliberate Kind"). Endpoints is a
+// errors as ErrConfig (R48), never ErrMalformedPayload (adapter-patterns.md
+// item 9: "missing endpoint key / placeholder -> *integration.Error with a
+// deliberate Kind"). Endpoints is a
 // field of Credentials (06 §1): a template this adapter cannot even build a
 // request from means the credential is incomplete for this call —
 // ErrMalformedPayload would instead wrongly claim "the call went out and
@@ -152,7 +152,7 @@ func (s *Source) authenticate(ctx context.Context, cl *httpx.Client, creds integ
 		return "", missingEndpointErr("authentication")
 	}
 
-	// R32 (controller ruling, Task 2 review): authentication is a
+	// R32: authentication is a
 	// non-idempotent login POST and must not be retried in-client.
 	resp, err := cl.Do(ctx, httpx.Request{
 		Op:       "authentication",
@@ -227,7 +227,7 @@ func (s *Source) DiscoverMeteringPoints(ctx context.Context, creds integration.C
 	points := make([]integration.MeteringPoint, 0, len(list))
 	for _, row := range list {
 		if row.InstalationNumber == "" {
-			// Minor (task-6-fix1-findings.md): a row with no installation
+			// Minor: a row with no installation
 			// number can never become an identifiable MeteringPoint —
 			// skipped, not turned into a malformed-payload failure for
 			// every other installation in the response.
@@ -238,7 +238,7 @@ func (s *Source) DiscoverMeteringPoints(ctx context.Context, creds integration.C
 	return points, nil
 }
 
-// dataTypeParam is 06 §2 / task-6-brief.md's energy_values dataType
+// dataTypeParam is 06 §2 and the OSOS API notes energy_values dataType
 // parameter: load_profile -> 1, daily -> 2, reset -> 3. FetchReadings is
 // only ever called with a kind Kinds() advertises, so the default case is
 // defensive, not a reachable path.
@@ -332,7 +332,7 @@ func (s *Source) fetchEnergyValues(ctx context.Context, cl *httpx.Client, token 
 	var body energyResponse
 	// body.Energy == nil covers both a missing "energy" key and an explicit
 	// JSON null — including an error envelope like {"message":"invalid
-	// token"} — none of which is a silent empty success (I6). A present
+	// token"} — none of which is a silent empty success. A present
 	// "energy":[] decodes to a non-nil pointer to a zero-length slice and
 	// stays a genuine empty result.
 	if err := json.Unmarshal(resp.Body, &body); err != nil || body.Energy == nil {
@@ -371,7 +371,7 @@ func (s *Source) fetchHourlyValues(ctx context.Context, cl *httpx.Client, token 
 
 	var body hourlyResponse
 	// body.Items == nil covers both a missing "items" key and an explicit
-	// JSON null (I6); a present "items":{} stays a genuine empty result.
+	// JSON null; a present "items":{} stays a genuine empty result.
 	if err := json.Unmarshal(resp.Body, &body); err != nil || body.Items == nil {
 		return nil, &integration.Error{Kind: integration.ErrMalformedPayload, Provider: integration.ProviderOSOS, Op: "hourly_values", HTTPStatus: resp.Status}
 	}
@@ -389,7 +389,7 @@ func (s *Source) fetchHourlyValues(ctx context.Context, cl *httpx.Client, token 
 // intersecting the window, kept in FetchResult.HourlyValues and never
 // mixed into Readings (removed-behaviour 23).
 //
-// Ruling R34 (Page-budget / NextCursor, task-6-fix1-findings.md I8): when
+// Ruling R34 (page budget / NextCursor): when
 // more energy_values chunks exist than s.pageBudget allows, NextCursor is
 // set to the end of the last fully covered chunk (chunks are contiguous —
 // see windowChunks — so that is exactly allChunks[pageBudget].From, the

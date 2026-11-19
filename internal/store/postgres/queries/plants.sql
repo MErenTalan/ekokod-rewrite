@@ -152,13 +152,13 @@ order by d.device_sn;
 -- name: PlantDeviceUpsert :one
 -- UpsertDevice, keyed on (plant_id, device_sn): ONE atomic
 -- `insert … on conflict (plant_id, device_sn) do update`, now that the SQL
--- call scanner (Task 8c fix round 1, a4746e7) recognises an ON CONFLICT
+-- call scanner recognises an ON CONFLICT
 -- target for what it is instead of reading it as a call to a function named
 -- conflict(). Two concurrent UpsertDevice calls racing to create the SAME
 -- new device now converge on one row, because the whole statement is a
 -- single INSERT and Postgres itself serialises the two around the unique
 -- index rather than this package checking-then-acting across two round
--- trips (the fix-round-1 finding this replaces).
+-- trips.
 --
 -- Isolation: the insert/update only runs when plant_id's parent is visible
 -- to the Scope, checked via exists(...) IN THIS SAME STATEMENT — including

@@ -4,5 +4,5 @@
 // data are arguments.
 package tariff
 
-// DivisionScale is the scale of every division in the billing domain (M-3).
+// DivisionScale is the scale of every division in the billing domain.
 const DivisionScale int32 = 20

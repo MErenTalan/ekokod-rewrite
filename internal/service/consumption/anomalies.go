@@ -1,4 +1,4 @@
-// Package consumption — this file is Task 8's suspect-period write path:
+// Package consumption — this file is suspect-period write path:
 // ConsumptionAndRecord (the only method on Billing that writes), the
 // anomaly detail/operator-message shape (R60), and ListAnomalies.
 package consumption

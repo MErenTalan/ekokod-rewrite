@@ -163,7 +163,7 @@ func (s *Service) persist(ctx context.Context, sc store.Scope, req GenerateReque
 }
 
 // notify appends the operator messages for a flagged bill and for a
-// multi-analyzer binomial building bill without a coincident peak (M-12).
+// multi-analyzer binomial building bill without a coincident peak.
 func (s *Service) notify(ctx context.Context, sc store.Scope, b model.Bill, subj subject) error {
 	msg := func(status, text string) error {
 		related := "bill"
@@ -184,7 +184,7 @@ func (s *Service) notify(ctx context.Context, sc store.Scope, b model.Bill, subj
 	return nil
 }
 
-// repairHourlyDetail re-writes a live PTF bill's missing hourly rows (M-9).
+// repairHourlyDetail re-writes a live PTF bill's missing hourly rows.
 func (s *Service) repairHourlyDetail(ctx context.Context, sc store.Scope, live model.Bill, building *model.Building, members []model.Analyzer, req GenerateRequest) error {
 	if req.Scope == model.BillScopeCompany || !live.PtfYekdemUsed || live.PtfHoursMatched == nil || *live.PtfHoursMatched == 0 {
 		return nil
@@ -209,7 +209,7 @@ func (s *Service) repairHourlyDetail(ctx context.Context, sc store.Scope, live m
 }
 
 // computeCompany computes every building in memory with its own tariff and
-// window and combines them (R115); analyzer-less buildings are skipped (I-9).
+// window and combines them (R115); analyzer-less buildings are skipped.
 func (s *Service) computeCompany(ctx context.Context, sc store.Scope, key string) (subject, error) {
 	buildings, err := listAll(func(p store.Page) ([]model.Building, error) {
 		return s.deps.Buildings.List(ctx, sc, store.BuildingFilter{Page: p})
@@ -486,7 +486,7 @@ func billable(r consumption.Row) bool {
 	return r.Values[energy.ActiveImport] != nil || len(r.Suspect) > 0
 }
 
-// blockingAnomalies pages every unresolved anomaly that overlaps window (I-5).
+// blockingAnomalies pages every unresolved anomaly that overlaps window.
 // A partial bill already lists its missing days, so missing_readings does not block it.
 func (s *Service) blockingAnomalies(ctx context.Context, sc store.Scope, ids []uuid.UUID, window energy.Window, partial bool) ([]string, error) {
 	var out []string

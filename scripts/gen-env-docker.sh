@@ -86,8 +86,7 @@ def write_atomic(path, content):
     # Same directory as the destination, so the final os.replace is an
     # atomic rename rather than a cross-filesystem copy that could be
     # interrupted mid-write. The random suffix mktemp-style name is
-    # covered by .gitignore's `.env.*` (task-11 review round 2, finding
-    # 10) even in the case this process is killed before the replace.
+    # covered by .gitignore's `.env.*` even in the case this process is killed before the replace.
     directory = os.path.dirname(os.path.abspath(path)) or "."
     fd, tmp_path = tempfile.mkstemp(prefix=os.path.basename(path) + ".", dir=directory)
     try:
@@ -145,7 +144,7 @@ elif env_docker_lines is not None:
         postgres_password = match.group(1)
         source = "recovered from existing .env.docker's EKOKOD_DB_URL"
     else:
-        # Fail closed and loudly (task-11 review round 3, finding A).
+        # Fail closed and loudly.
         # Name the file and the variable; never the DSN or any part of
         # it — it is by definition a value this script could not parse,
         # and this codebase has already had three separate findings

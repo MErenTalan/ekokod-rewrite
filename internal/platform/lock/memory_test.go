@@ -158,7 +158,7 @@ func TestMemoryAcquireRejectsNonPositiveTTL(t *testing.T) {
 }
 
 // TestMemoryConsumeRejectsNonPositiveTTL is TestMemoryAcquireRejectsNonPositiveTTL's
-// Consume counterpart (M1).
+// Consume counterpart.
 func TestMemoryConsumeRejectsNonPositiveTTL(t *testing.T) {
 	m := lock.NewMemory(nil)
 

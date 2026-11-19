@@ -408,7 +408,7 @@ func TestNegativeCreditRoundsHalfUpOnAbsoluteValue(t *testing.T) {
 }
 
 // icmalRow builds a fixed-price invoice whose unit prices are the supplier's
-// amount / quantity, so line amounts reproduce the supplier's (I-2).
+// amount / quantity, so line amounts reproduce the supplier's.
 func icmalRow(t *testing.T, kwh, energy, distribution string) billing.Input {
 	in := baseInput(t)
 	unit := func(amount, qty string) *decimal.Decimal {

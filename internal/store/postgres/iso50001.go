@@ -68,7 +68,7 @@ func (r *ISO50001Repository) EnsureProject(ctx context.Context, s store.Scope, b
 
 // --- iso50001_clause_dates ------------------------------------------------
 
-// ClauseDates — Isolation (fix round 1, Important 3): ONE parent-driven
+// ClauseDates — Isolation: ONE parent-driven
 // statement (ISO50001ListClauseDates, LEFT JOIN from iso50001_projects), not
 // a separate Go-level pre-check query followed by a second read: zero rows
 // means the project itself is not visible (ErrNotFound); one or more rows
@@ -126,7 +126,7 @@ func iso50001DateString(t *time.Time) *string {
 	return &s
 }
 
-// ReplaceClauseDates — Isolation (fix round 1, Important 2): the parent
+// ReplaceClauseDates — Isolation: the parent
 // project is locked FOR SHARE inside this transaction
 // (ISO50001ProjectVisibleForShare) before the delete+insert, and
 // ISO50001DeleteClauseDates/ISO50001InsertClauseDates ALSO carry the
@@ -179,7 +179,7 @@ func iso50001NoteFromRow(row sqlcgen.Iso50001Note) model.ISO50001Note {
 // iso50001NoteListRowToModel converts one non-sentinel ISO50001ListNotesRow
 // (the caller has already checked row.ID != nil) to a model.ISO50001Note.
 // Every column here is a pointer/nullable pgtype ONLY because it comes
-// through a LEFT JOIN from iso50001_projects (fix round 1, Important 3); the
+// through a LEFT JOIN from iso50001_projects; the
 // underlying iso50001_notes columns are NOT NULL, so every dereference below
 // is safe once row.ID is known non-nil.
 func iso50001NoteListRowToModel(row sqlcgen.ISO50001ListNotesRow) model.ISO50001Note {
@@ -200,7 +200,7 @@ func iso50001NoteListRowToModel(row sqlcgen.ISO50001ListNotesRow) model.ISO50001
 	return n
 }
 
-// Notes — Isolation (fix round 1, Important 3): ONE parent-driven statement
+// Notes — Isolation: ONE parent-driven statement
 // (ISO50001ListNotes, LEFT JOIN from iso50001_projects with the optional
 // clause_id filter embedded in the JOIN's own ON clause, not the WHERE): zero
 // rows means the project itself is not visible (ErrNotFound); one or more

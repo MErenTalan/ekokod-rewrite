@@ -13,12 +13,9 @@ import (
 // never construct a bare JSON- or text-format slog handler directly — because
 // logging.New wraps the handler in a redacting one
 // (internal/platform/logging/redact.go) that is the sole thing keeping
-// secret-looking attribute values out of the logs. This is carried-forward
-// requirement 1 from task 9's brief: it exists only because an earlier
-// reviewer found the redacting handler was the sole thing keeping secrets out
-// of the logs, and before this function existed, reverting any one call site
-// to a bare handler compiled and passed the whole suite silently (task 9
-// review, Minor-4). Centralising the construction here means there is
+// secret-looking attribute values out of the logs. Before this function
+// existed, reverting any one call site
+// to a bare handler compiled and passed the whole suite silently. Centralising the construction here means there is
 // exactly one place to get this right for this package, but
 // TestNewCommandLoggerRedactsSecretLookingAttributes only pins this
 // function's own behaviour — it does not stop a call site from being

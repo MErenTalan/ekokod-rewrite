@@ -41,12 +41,9 @@ func genTS(s string) time.Time {
 // deliberately has no `provider` column in its SET list, since
 // (provider, provider_subtype, installation_number) is the natural key
 // GetByInstallation resolves and Update never touches identity columns.
-// The brief's Step 2 text says "switched … via Analyzers.Update"; this is a
-// resolvable test-fixture detail, not a change to the Accumulator's
-// algorithm or interfaces, so rather than stopping with NEEDS_CONTEXT this
-// creates a NEW pm5340 analyzer through Analyzers.Create instead — the same
-// observable state (a pm5340 analyzer visible to the tenant's scope) the
-// brief's setup wants.
+// So instead of switching an analyzer's provider via Analyzers.Update, this
+// creates a NEW pm5340 analyzer through Analyzers.Create — the same
+// observable state (a pm5340 analyzer visible to the tenant's scope).
 func genTestNewPM5340Analyzer(t *testing.T, ctx context.Context, analyzers *postgres.AnalyzerRepository, sc store.Scope, companyID, buildingID uuid.UUID, installation string) model.Analyzer {
 	t.Helper()
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -61,7 +58,7 @@ func genTestNewPM5340Analyzer(t *testing.T, ctx context.Context, analyzers *post
 }
 
 // genTestReading builds a load_profile PM5340 row: IntervalGenerationKwh set
-// (or nil for ""), ActiveExport always nil — exactly how Task 10's pipeline
+// (or nil for ""), ActiveExport always nil — exactly how pipeline
 // persists a freshly-fetched row, before any hook has touched it.
 func genTestReading(analyzerID uuid.UUID, tsStr, intervalKwh string) model.MeterReading {
 	r := model.MeterReading{
@@ -303,8 +300,7 @@ func TestGenerationDuplicateFetchIsStable(t *testing.T) {
 	// with a narrow `to` (matching only the duplicated rows themselves,
 	// which the real ingestion pipeline always passes) that bug is inert,
 	// because every row up to a narrow `to` is one this very call just
-	// nulled. Task 11's mutation-proof step applies exactly this mutation
-	// and records the FAIL this wider `to` produces.
+	// nulled; with that bug in place, this wider `to` makes the test FAIL.
 	dup := []model.MeterReading{
 		genTestReading(analyzer.ID, "2026-09-01T10:00:00Z", "1"),
 		genTestReading(analyzer.ID, "2026-09-01T10:15:00Z", "1"),
@@ -510,9 +506,8 @@ func TestGenerationIsScoped(t *testing.T) {
 }
 
 // TestGenerationBackfillBeforeOperatorAnchorDerivesBackward is R52's
-// operator/meter-set half, against a real store (the reviewer's I3 probe,
-// TestProbeBackfillBeforeInitialAnchor, showed rows before the anchor were
-// silently left NULL; this proves the fix for a REAL meter-set anchor,
+// operator/meter-set half, against a real store (rows before the anchor
+// used to be silently left NULL; this proves the fix for a REAL meter-set anchor,
 // which must never be moved).
 //
 // Setup: an operator anchor of 100 at 10:00 (a real device reading, not the
@@ -588,8 +583,7 @@ func TestGenerationBackfillBeforeOperatorAnchorDerivesBackward(t *testing.T) {
 // forward-derived to 1 and 2.
 //
 // A backfill then discovers two rows BEFORE 09:45 — 09:00 (0.5 kWh) and
-// 09:30 (0.75 kWh) — reaching past the initial anchor the way the
-// reviewer's I3 probe did. By hand: the anchor moves to
+// 09:30 (0.75 kWh) — reaching past the initial anchor. By hand: the anchor moves to
 // 09:00 − 15m = 08:45, value 0; a full forward recompute from there gives
 //
 //	09:00: 0 + 0.5  = 0.5

@@ -27,7 +27,7 @@ func maxDemandKindAllowed(kinds []Kind, k Kind) bool {
 // MaxDemandKindsFor is R101's amendment to R65: the max-demand kinds allowed
 // depend on the requesting Level, so a day's or month's stamped peak can no
 // longer leak into a single finer hour or day the way an unqualified
-// MaxDemandKinds allowlist let it (final review A M-2). Hourly allows
+// MaxDemandKinds allowlist let it. Hourly allows
 // load_profile only — nothing coarser has a meaningful per-hour peak. Daily
 // adds daily-kind rows (a day's own stamped peak). Monthly and Yearly add
 // billing-kind rows too (MaxDemandKinds' original set) — a billing row's

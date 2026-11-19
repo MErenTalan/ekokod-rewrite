@@ -1,6 +1,6 @@
 //go:build integration
 
-// Package job_test holds Task 17's end-to-end ingestion acceptance suite:
+// Package job_test holds end-to-end ingestion acceptance suite:
 // every F2 acceptance criterion, exercised through a REAL asynq worker
 // (job.NewServer/job.Register/job.Client), a real Redis broker and a real
 // (isolated-clone) TimescaleDB, with every provider call going through
@@ -141,7 +141,7 @@ func (acceptNoISolar) Refresh(context.Context, integration.Credentials) (isolar.
 // tenant, a real worker.Built (Handlers.Ingestion/Backfill/Prices), a real
 // asynq server processing built.Handlers on a real Redis broker, a real
 // job.Client to enqueue with, and a *credentials.Service this test drives
-// Configure through (never raw SQL — the brief's own rule). credSvc is
+// Configure through (never raw SQL — the rule). credSvc is
 // built directly in this file rather than reached through worker.Build
 // (which does not expose the *credentials.Service it constructs — only
 // Built.Handlers and Built.Close), using its own IntegrationRepository over
@@ -318,8 +318,8 @@ func acceptConfigure(t *testing.T, e *acceptEnv, in credentials.Input) uuid.UUID
 }
 
 // acceptAnalyzer creates one active analyzer directly through the real
-// AnalyzerRepository (a repository call, like Task 10's own
-// ingestTestNewActiveAnalyzer helper — not raw SQL; the brief's "never raw
+// AnalyzerRepository (a repository call, like own
+// ingestTestNewActiveAnalyzer helper — not raw SQL; the "never raw
 // SQL" rule is stated specifically for the CREDENTIAL, which this suite
 // always configures through credentials.Service.Configure).
 func acceptAnalyzer(t *testing.T, e *acceptEnv, provider model.IntegrationProvider, subtype, installation string, multiplier decimal.Decimal) model.Analyzer {
@@ -354,7 +354,7 @@ func acceptEnqueueFetch(t *testing.T, e *acceptEnv, credentialID, analyzerID uui
 	return info
 }
 
-// acceptJobRunRow is one job_runs row, read directly (the brief's Step 2
+// acceptJobRunRow is one job_runs row, read directly (the Step 2
 // setup explicitly says "wait for completion with require.Eventually
 // polling job_runs").
 type acceptJobRunRow struct {
@@ -367,7 +367,7 @@ type acceptJobRunRow struct {
 // scopeKey=scopeVal (analyzer_id for fetch_readings, credential_id for
 // sync_analyzers/backfill), bound 60s, tick 200ms — never time.Sleep — and
 // returns once at least wantAtLeast FINISHED (status != "running") rows
-// exist, newest first. Per the brief: before believing a failure, check
+// exist, newest first. Per the spec: before believing a failure, check
 // for the container-readiness trap; that check is done by the caller
 // (every failing require.Eventually in this file's tests names the
 // symptom directly, so a `wait until ready`/55006 substring is visible in
@@ -408,7 +408,7 @@ func acceptWaitRuns(t *testing.T, e *acceptEnv, jobType, scopeKey string, scopeV
 // test (PM5340 interrupted-fetch) whose second attempt only runs after
 // asynq's own RetryDelayFunc backoff (job/retry.go: 30s base, jittered,
 // doubling) — a real wall-clock wait this suite cannot shorten without
-// changing job.RetryDelay, which is Task 1's owned behaviour, not a T17
+// changing job.RetryDelay, which is owned behaviour, not a T17
 // wiring gap.
 func acceptWaitRunsLong(t *testing.T, e *acceptEnv, jobType, scopeKey string, scopeVal uuid.UUID, wantAtLeast int) []acceptJobRunRow {
 	t.Helper()
@@ -703,14 +703,14 @@ func TestIngestionEndToEndSameWindowTwiceProducesNoDuplicates(t *testing.T) {
 // fetches nothing is not itself a partial success — status is "failed"
 // here, 0 rows); asynq retries the whole task once more; attempt 2's
 // request succeeds and persists exactly one row, with none lost or
-// duplicated by the interruption. Task 10's own already-merged
+// duplicated by the interruption. The ingest package's own
 // TestIngestionInterruptedFetchResumesFromCursor
 // (internal/ingest/ingest_integration_test.go) is what proves the
 // multi-chunk cursor-resume mechanics in detail, against a fake adapter it
 // has full control over — this test's job is proving the SAME task-level
 // contract holds through the real PM5340 adapter and a real asynq retry.
 //
-// I1 (final review B): a single-phase version of this test — enqueue once,
+// A single-phase version of this test — enqueue once,
 // fail 3 times, retry, succeed — CANNOT catch a broken resume, because
 // attempt 1 never has a stored cursor to ignore in the first place: with no
 // prior cursor, resolveFetchWindow's ONLY path is the "no cursor yet"
@@ -816,7 +816,7 @@ func TestIngestionEndToEndInterruptedFetchResumesFromCursor(t *testing.T) {
 	require.Equal(t, "failed", runs[1].Status, "phase 2's first attempt exhausted its retries before persisting anything")
 	require.EqualValues(t, 0, runs[1].Processed)
 
-	// I1: the actual resume assertion. The retried attempt's own (only)
+	// The actual resume assertion. The retried attempt's own (only)
 	// request must carry start == phase1Cursor — proving the SECOND fetch
 	// resumed exactly where the FIRST left off, rather than merely
 	// succeeding eventually. Mutating resolveFetchWindow to ignore
@@ -852,7 +852,7 @@ func TestIngestionEndToEndInterruptedFetchResumesFromCursor(t *testing.T) {
 // tasks for already-ACTIVE analyzers of this subtype, not "analyzers
 // synced" — ingest/sync.go's second loop) stay zero. Pre-creating all
 // three ACTIVE makes SyncAnalyzers's discovery phase UPDATE (never
-// re-activate) each one, matching Task 10's own
+// re-activate) each one, matching own
 // TestIngestionOneAnalyzerFailureDoesNotAbortTheRun "part A" setup.
 //
 // OSOS.Kinds() advertises three kinds (load_profile, daily, reset), and
@@ -973,7 +973,7 @@ func TestIngestionGridBoxOffsetlessTimestampStoredAsUTCInstant(t *testing.T) {
 // ---------------------------------------------------------------------------
 // Test 5 (F2 acceptance criterion 8): ARIL rows produce NULL, not 0, in the
 // T1/T2/T3 registers — ARIL's owner_consumptions mapping never populates
-// them at all (06 §4 / task-8-brief.md; ARIL has no time-of-use registers),
+// them at all (06 §4; ARIL has no time-of-use registers),
 // so any successful ARIL fetch proves this by construction.
 // ---------------------------------------------------------------------------
 
@@ -1229,7 +1229,7 @@ func TestIngestionSecretsNeverReachRunsCursorsMessagesOrLogs(t *testing.T) {
 // epias.sync_prices task twice converges rather than duplicating
 // market_prices_hourly/yekdem_monthly.
 //
-// M3 (final review B): config.External now carries EPIASCASURL/
+// config.External now carries EPIASCASURL/
 // EPIASBaseURL (internal/platform/config), and worker.Build's own
 // epias.New wiring (internal/worker/wiring.go) passes them through — so
 // this test drives built.Handlers.Prices UNMODIFIED, through the exact

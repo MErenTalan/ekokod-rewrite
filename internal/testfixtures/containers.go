@@ -94,7 +94,7 @@ const (
 	// isolatedTemplate, NewIsolatedDB, NewEmptyDB) into a long-lived,
 	// externally managed Postgres/TimescaleDB server — e.g. the one
 	// `make test-db-up` starts — instead of every test binary booting and
-	// owning its own container (F4 Task 0).
+	// owning its own container.
 	//
 	// Set to a superuser DSN reachable from every test process that wants to
 	// share it. Unset — the default, and what CI runs today — every call
@@ -107,7 +107,7 @@ const (
 
 // isolatedConnBoundArgs raises the shared isolatedRoot container's
 // max_connections and timescaledb.max_background_workers past the image's
-// defaults (final-review-B-report.md §"t.Parallel readiness", item 3).
+// defaults.
 //
 // Each database NewIsolatedDB clones costs up to config.DB.MaxConns=4 pool
 // connections (see NewPool), one TimescaleDB per-database scheduler backend
@@ -189,7 +189,7 @@ func postgresWaitStrategy() testcontainers.CustomizeRequestOption {
 // scheduler's advisory-lock tests need, since those touch no table at all.
 // Everything else wants StartPostgres.
 //
-// F4 TASK 0 DECISION (does not read isolatedTestDSNEnv, unlike
+// DECISION (does not read isolatedTestDSNEnv, unlike
 // isolatedRoot): this function, StartPostgres and NewMigratedPool keep
 // booting their OWN dedicated container regardless of the shared-server env
 // var. internal/scheduler's elector_integration_test.go and
@@ -420,7 +420,7 @@ var isolatedProcessTag = func() string {
 // elapses BETWEEN a failed attempt and the next terminate, never instead of
 // the ~5s the failed attempt itself already cost.
 //
-// Raised from 3 (final-review-B-report.md §"t.Parallel readiness", item 1):
+// Raised from 3:
 // the template is now protected (see isolatedTemplate) so the template side
 // of this race is closed structurally, but a CLONE — which stays
 // connectable for the pool's own lifetime — can still pick up its own
@@ -448,8 +448,8 @@ func isolatedRetryJitteredDelay(attempt int) time.Duration {
 // cloneMu serialises every call to cloneIsolatedDB. CREATE DATABASE …
 // TEMPLATE takes a lock tied to the template it reads, so concurrent clones
 // of the SAME template under high `-parallel` fan-out contend on that lock
-// rather than genuinely running in parallel — final-review-B-report.md
-// measured serialising at ~120ms per clone, which is cheaper than the lock
+// rather than genuinely running in parallel — serialising was measured at
+// ~120ms per clone, which is cheaper than the lock
 // contention it removes. Cheap enough, and rare enough (NewEmptyDB's plain
 // `CREATE DATABASE` with no TEMPLATE clause never touches this lock, but
 // shares the mutex anyway for one simple, load-bearing invariant: at most
@@ -500,7 +500,7 @@ var (
 // server under isolatedTestDSNEnv — and every call clones it with
 // `CREATE DATABASE … TEMPLATE …`, which this package measured at roughly
 // 7x faster than a full migration run — about 120ms against about 850ms on
-// the machine this was measured on (see the report for Task 8c). That is
+// the machine this was measured on. That is
 // safe for THIS schema specifically because a test against a real clone
 // proved three TimescaleDB-specific behaviours survive it: a hypertable
 // insert still creates chunks, refresh_continuous_aggregate still
@@ -539,7 +539,7 @@ func NewIsolatedDB(t *testing.T) *pgxpool.Pool {
 // caller that needs to run its OWN migrate up/down/round-trip against a
 // virgin schema rather than observe one that is already migrated.
 //
-// This is I7b (final-review-B-report.md §"t.Parallel readiness", item 2):
+// This is I7b:
 // StartPostgresUnmigrated boots a fresh CONTAINER per call, which is right
 // for a genuine container-level test (there are none among the migration
 // tests today) but wasteful for the common case — "run `up`, assert
@@ -589,7 +589,7 @@ func NewEmptyDB(t *testing.T) string {
 // advisory lock, isolatedProcessSalt in clone/empty names) exists because
 // of that sharing.
 //
-// Otherwise this boots its own container, exactly as before F4 Task 0. It
+// Otherwise this boots its own container. It
 // deliberately does NOT call t.Cleanup(container.Terminate), unlike
 // StartPostgresUnmigrated: that Cleanup runs at the end of whichever TEST
 // happened to be first to call NewIsolatedDB, not at the end of the test
@@ -762,7 +762,7 @@ func ensureIsolatedTemplate(ctx context.Context, rootDSN, name string) error {
 	// catch anything that raced into the gap between those two statements —
 	// belt AND suspenders, because this is the one-time setup every later
 	// clone's safety depends on. See isolatedTemplateNamePrefix's original
-	// note (I7a) for why ALLOW_CONNECTIONS false removes the 55006 race
+	// note for why ALLOW_CONNECTIONS false removes the 55006 race
 	// entirely rather than merely narrowing it.
 	terminateSQL := `select pg_terminate_backend(pid) from pg_stat_activity where datname = $1 and pid <> pg_backend_pid()`
 	if _, err := root.Exec(ctx, terminateSQL, tempName); err != nil {
@@ -903,8 +903,7 @@ func dropIsolatedDB(t *testing.T, rootDSN, name string) {
 // polling for the other backend to go away and only reports 55006 after
 // roughly five seconds — call it once per NewIsolatedDB call and every
 // call pays that five seconds. Terminating unconditionally first, then
-// calling action, measured under 150ms consistently (see the Task 8c
-// report); the retry loop below exists only for the rare case where a
+// calling action, measured under 150ms consistently; the retry loop below exists only for the rare case where a
 // replacement backend reconnects in the gap between the terminate and the
 // action, not as the primary path — and for cloneIsolatedDB specifically,
 // isolatedTemplate having already made the template non-connectable means

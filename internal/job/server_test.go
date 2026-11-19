@@ -8,8 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestShutdownTimeoutIsBoundedByMaxShutdownGrace pins Important-2 from the
-// task 9 review: EKOKOD_JOB_TIMEOUT (cfg.Worker.Timeout) bounds how long a
+// TestShutdownTimeoutIsBoundedByMaxShutdownGrace: EKOKOD_JOB_TIMEOUT (cfg.Worker.Timeout) bounds how long a
 // single task may run, not how long the process may take to exit on
 // shutdown. Passing it straight through as asynq's ShutdownTimeout (as the
 // original implementation did) means a worker configured with the 30

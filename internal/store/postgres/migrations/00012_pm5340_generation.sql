@@ -1,8 +1,6 @@
 -- +goose Up
 -- PM5340's interval energy (06 §5, R1) and the generation anchor table it is
--- reconciled against. Transcribed from
--- .superpowers/sdd/2026-09-15-f2-integration-layer/task-5-brief.md, which is
--- authoritative for these two objects' shape.
+-- reconciled against.
 --
 -- interval_generation_kwh is added to meter_readings — the one column every
 -- other provider leaves NULL — rather than to a side table, because it is a

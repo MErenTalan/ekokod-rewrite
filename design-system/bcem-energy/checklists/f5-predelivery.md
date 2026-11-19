@@ -1,13 +1,10 @@
 # F5 pre-delivery checklist (07-design-system.md §11)
 
-Run on `phase/f5-design-system` (F5 Task 8), 2026-09-17. Each item names the evidence that proves it. Guards were
-proven red by mutation in their task (ledger: `.superpowers/sdd/2026-09-17-f5-design-system/inline-ledger.md` in the
-main checkout).
+Run on 2026-09-17. Each item names the evidence that proves it.
 
-- [x] **`ui-ux-pro-max` was invoked and its master design system read.**
-  `design-system/bcem-energy/MASTER.md` header `**Generated:** 2026-09-17 09:41:38` (skill run with
-  `--design-system --density 8 --motion 4 --variance 5 -p "BCEM Energy" --persist`); `OVERRIDES.md` resolves every
-  conflict with 07 (D1). Read before T1 and before every component task.
+- [x] **The master design system and its overrides were read.**
+  `design-system/bcem-energy/MASTER.md` (generated 2026-09-17) and `OVERRIDES.md`, which resolves every
+  conflict with 07.
 - [x] **Zero raw hex values in components — tokens only.**
   `pnpm lint` (ESLint `no-restricted-syntax`: colour literals, palette classes, energy text colours,
   `outline-none|outline-hidden|outline-0|[outline:none]`, `dark:`), `src/styles/raw-color-lint.test.ts` (17 cases),

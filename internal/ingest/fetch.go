@@ -118,7 +118,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 	if err != nil {
 		errText := err.Error()
 		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 1, &errText, nil)
-		return classifyStoreErr(err) // M14
+		return classifyStoreErr(err)
 	}
 
 	if !analyzer.IsActive || analyzer.DeletedAt != nil {
@@ -131,7 +131,7 @@ func (s *Service) FetchReadings(ctx context.Context, p job.FetchReadingsPayload)
 	if err != nil {
 		errText := err.Error()
 		s.finishRun(ctx, sc, run.ID, "failed", 0, 0, 1, &errText, nil)
-		return classifyStoreErr(err) // M14
+		return classifyStoreErr(err)
 	}
 
 	// An operator-deactivated credential must stop
@@ -535,7 +535,7 @@ func (s *Service) maybeEnqueueConsumptionRefresh(ctx context.Context, sc store.S
 		mustJSON(map[string]string{"error": err.Error()}))
 }
 
-// resolveFetchWindow implements the brief's step 4: an explicit p.Window
+// resolveFetchWindow implements the step 4: an explicit p.Window
 // wins outright; otherwise From resumes from the stored cursor, or —
 // ErrNotFound, or a cursor row with no LastTs yet (RecordFailure can create
 // one before any success) — falls back to R18's 30-day lookback. To is

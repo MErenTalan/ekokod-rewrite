@@ -1,0 +1,10 @@
+# Paths that exist only in the private repo; clean-publish.sh removes them.
+scripts/private
+docs/superpowers
+.superpowers
+docs/rewrite/master_prompt.md
+HANDOFF_NEXT_SESSION.md
+SENDEN-GEREKENLER.md
+CLAUDE.md
+.claude
+AGENTS.md

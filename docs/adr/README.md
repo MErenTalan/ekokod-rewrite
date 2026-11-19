@@ -1,6 +1,6 @@
 # Architecture decision records
 
-Short records of the decisions a maintainer needs to know about. Each one gives the context, the decision and its consequences. The binding rulings behind them are in `docs/rewrite/` and in the phase plans under `docs/superpowers/plans/`.
+Short records of the decisions a maintainer needs to know about. Each one gives the context, the decision and its consequences. The binding rulings behind them are in `docs/rewrite/` and in the decision log, `docs/decisions.md`.
 
 - [0001 — A modular Go monolith with one binary](0001-modular-go-monolith.md)
 - [0002 — PostgreSQL with TimescaleDB for everything, including readings](0002-postgres-timescaledb.md)

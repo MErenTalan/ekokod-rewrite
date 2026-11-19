@@ -19,7 +19,7 @@ import (
 )
 
 // carbonDec is this file's fixture-literal decimal parser, prefixed per the
-// package-wide test-helper naming rule (wave-f-context.md rule 6).
+// package-wide test-helper naming rule.
 func carbonDec(s string) decimal.Decimal { return decimal.RequireFromString(s) }
 
 // --- emission_factors: nullable company_id -------------------------------
@@ -110,7 +110,7 @@ func TestCarbonUpsertFactorRefusesAnotherCompanysID(t *testing.T) {
 	require.NoError(t, err)
 	for _, f := range list {
 		require.NotEqual(t, "brand-new-key-for-b", f.Key, "the refused write must not have gone through under any key")
-		require.NotEqual(t, ownA.ID, f.ID, "tenant A's own factor must never appear in tenant B's ListFactors (fix round 1, Important 4)")
+		require.NotEqual(t, ownA.ID, f.ID, "tenant A's own factor must never appear in tenant B's ListFactors")
 	}
 
 	// Factor(): tenant B (even under AdminScope) cannot read tenant A's own
@@ -190,7 +190,7 @@ func TestCarbonConversionsIsolation(t *testing.T) {
 	require.True(t, conversions[0].Multiplier.Equal(carbonDec("0.55000000")))
 
 	// Tenant B cannot read tenant A's factor's conversions — including under
-	// tenant B's OWN AdminScope (fix round 1, Important 4: the
+	// tenant B's OWN AdminScope (the
 	// company_id-only tautology (f.company_id is null or f.company_id = $2
 	// or true) must fail this call specifically, since AdminScope has no
 	// building-list branch to (wrongly) mask it).
@@ -237,8 +237,8 @@ func TestCarbonConversionsIsolation(t *testing.T) {
 }
 
 // TestCarbonReplaceConversionsSQLScopingSurvivesGoCheckBypass proves
-// ReplaceConversions' isolation does not depend on any Go-level check (fix
-// round 1, Important 2): CarbonDeleteConversions and CarbonInsertConversions
+// ReplaceConversions' isolation does not depend on any Go-level check:
+// CarbonDeleteConversions and CarbonInsertConversions
 // — the exact two statements ReplaceConversions calls — are invoked HERE
 // DIRECTLY through sqlcgen, entirely bypassing ReplaceConversions' own
 // Scope.Valid() check, its FOR SHARE lock, and the repository method itself.
@@ -408,8 +408,7 @@ func TestCarbonCreateActivityRefusesInvisibleBuildingAndWrongCompany(t *testing.
 	_, err = repo.CreateActivity(ctx, tenantA.Scope, carbonActivityFixture(tenantB.Company.ID, tenantA.Buildings[0].ID))
 	require.ErrorIs(t, err, store.ErrNotFound)
 
-	// UpdateActivity has the identical Go-level check (fix round 1,
-	// Important 4: previously untested): a foreign CompanyID is refused
+	// UpdateActivity has the identical Go-level check: a foreign CompanyID is refused
 	// before any database call, even naming a real, own-company activity id.
 	created, err := repo.CreateActivity(ctx, tenantA.Scope, carbonActivityFixture(tenantA.Company.ID, tenantA.Buildings[0].ID))
 	require.NoError(t, err)
@@ -548,7 +547,7 @@ func TestCarbonAdminScopeCannotStoreAnotherTenantsForeignKeys(t *testing.T) {
 }
 
 // TestCarbonActivityFactorIDMustBeOwnedOrPlatform is the mandatory isolation
-// test for R1 (fix round 1, Important 1): carbon_activities.factor_id is a
+// test for R1: carbon_activities.factor_id is a
 // stored FK that CreateActivity, UpdateActivity and UpsertAutomatedActivity
 // must all validate atomically with the write — a platform factor or the
 // caller's own is allowed, another company's factor id is refused.
@@ -619,8 +618,7 @@ func TestCarbonActivityFactorIDMustBeOwnedOrPlatform(t *testing.T) {
 	require.Equal(t, ownFactor.ID, *updated2.FactorID)
 }
 
-// TestCarbonCrossTenantAdminScopeReadAndMutationIsolation is the fix round 1,
-// Important 4 test: every carbon_activities/carbon_reports/
+// TestCarbonCrossTenantAdminScopeReadAndMutationIsolation: every carbon_activities/carbon_reports/
 // carbon_selected_activities method that had NO second-tenant test at all
 // (tautology on the company_id predicate would have passed every existing
 // TestCarbon* test) now has one, called with the OTHER tenant's AdminScope —
@@ -691,7 +689,7 @@ func TestCarbonCrossTenantAdminScopeReadAndMutationIsolation(t *testing.T) {
 	require.Empty(t, selectedB)
 }
 
-// --- F10a Task 2: reset, report read, overlap (R304, R312, R318, R319) ------
+// --- reset, report read, overlap (R304, R312, R318, R319) ------------------
 
 func TestCarbonDeleteCompanyFactorsKeepsPlatformOthersAndActivitySnapshots(t *testing.T) {
 	t.Parallel()

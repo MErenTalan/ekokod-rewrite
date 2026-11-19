@@ -86,8 +86,8 @@ func TestConsumptionRefreshTaskIDCollapsesWithinTheSameHour(t *testing.T) {
 }
 
 // TestConsumptionRefreshTaskIDCeilsExactHourToOnLiteral proves hourCeil does
-// NOT over-ceil a To that already sits exactly on an hour boundary — the
-// mutation that unconditionally does floor.Add(time.Hour) (dropping the
+// NOT over-ceil a To that already sits exactly on an hour boundary — a bug
+// that unconditionally does floor.Add(time.Hour) (dropping the
 // floor.Equal(t.UTC()) guard) must turn case "to exactly on the hour" red
 // here, by asserting the literal formatted id string rather than mere
 // equality-with-itself.
@@ -111,9 +111,9 @@ func TestConsumptionRefreshTaskIDCeilsExactHourToOnLiteral(t *testing.T) {
 // TestConsumptionRefreshTaskIDTruncatesNowToTheMinute proves R100(2)'s
 // debounce slot floors now down to the minute: two enqueues in the same
 // wall-clock minute (differing only in seconds) compute the SAME id, while
-// one a minute later computes a DIFFERENT one. The mutation that uses now
-// verbatim (no Truncate) would make this test's first assertion fail, since
-// :05 and :45 within the same minute would otherwise still differ.
+// one a minute later computes a DIFFERENT one. A bug that uses now
+// verbatim (no Truncate) would make this test's first assertion fail, since:
+// 05 and :45 within the same minute would otherwise still differ.
 func TestConsumptionRefreshTaskIDTruncatesNowToTheMinute(t *testing.T) {
 	nowA := time.Date(2026, 3, 14, 10, 5, 5, 0, time.UTC)
 	nowB := time.Date(2026, 3, 14, 10, 5, 45, 0, time.UTC)

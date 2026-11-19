@@ -11,7 +11,7 @@ import (
 )
 
 // redisKeyPrefix namespaces every Acquire/Release key in the shared Redis
-// keyspace. redisConsumePrefix is a SEPARATE namespace for Consume (M2): it
+// keyspace. redisConsumePrefix is a SEPARATE namespace for Consume: it
 // must not share redisKeyPrefix with Acquire/Release, or Consume("x") and
 // Acquire("x") would collide on the same Redis key — Consume marking "x" as
 // used would make Acquire("x") block (and a held Acquire("x") lease would

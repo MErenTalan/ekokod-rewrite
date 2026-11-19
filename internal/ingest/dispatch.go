@@ -37,7 +37,7 @@ func (s *Service) Dispatch(ctx context.Context) error {
 	var processed, skipped, failed int32
 	for _, ref := range refs {
 		// iSolar is not a meter provider — its plants are synced through
-		// F2 Task 13's own path, never integration.sync_analyzers.
+		// their own path, never integration.sync_analyzers.
 		if ref.Provider == model.IntegrationProviderISolar {
 			continue
 		}

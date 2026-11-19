@@ -133,8 +133,8 @@ func TestF2ProviderHourlyValuesIsAHypertable(t *testing.T) {
 	require.Equal(t, 30*24*time.Hour, chunkInterval(t, interval))
 }
 
-// TestF2IntervalColumnSurvivesCompressedChunk is the F2 Task 5 acceptance
-// test from task-5-brief.md step 1: interval_generation_kwh survives
+// TestF2IntervalColumnSurvivesCompressedChunk is the F2 acceptance test for
+// PM5340 generation: interval_generation_kwh survives
 // compression exactly, and 00012/00013's add-column/drop-column pair
 // genuinely round-trips — `migrate down 2` (00013 then 00012) followed by
 // `migrate up` (replaying both) leaves the base row intact and the column

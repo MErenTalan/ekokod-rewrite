@@ -52,11 +52,10 @@ type wireInstallation struct {
 }
 
 // energyResponse is GET energy_values' response body (06 §2 "Fetch energy
-// values"; field list per task-6-brief.md, citing legacy
+// values"; field list per the OSOS API notes, citing legacy
 // osos/refresh/route.ts:314-331).
 //
-// Energy is *[]json.RawMessage, not []wireEnergyRow, for two reasons
-// (task-6-fix1-findings.md I6, I7):
+// Energy is *[]json.RawMessage, not []wireEnergyRow, for two reasons:
 //   - the pointer distinguishes a missing/null "energy" key (nil —
 //     ErrMalformedPayload) from a present-but-empty "[]" (non-nil,
 //     zero-length — a genuine empty result), exactly as discoverResponse

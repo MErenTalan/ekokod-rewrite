@@ -37,8 +37,8 @@ var knownAggregateViews = func() map[store.AggregateView]bool {
 //
 // Unlike every other repository in this package, AggregateRepository does not
 // hold a *sqlcgen.Queries: refresh_continuous_aggregate is a stored
-// PROCEDURE invoked with CALL, not a query, and its first argument is cast to
-// ::regclass rather than a plain column type sqlc can infer — the same shape
+// PROCEDURE invoked with CALL, not a query, and its first argument is cast to:
+// :regclass rather than a plain column type sqlc can infer — the same shape
 // migrations_timeseries_integration_test.go and
 // analytics_integration_test.go already use pool.Exec for directly, rather
 // than through a generated query.

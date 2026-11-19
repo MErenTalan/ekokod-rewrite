@@ -213,8 +213,7 @@ func TestProductionRangeAndLatestPlantNotVisibleReturnsNotFound(t *testing.T) {
 }
 
 // TestProductionRangeAndLatestNeverReturnForeignDataEvenWhenForeignPlantHasProduction
-// is the guard-failure-provable form of the test above (Important finding 1,
-// task-10 fix round 1): the test above never seeds real production for
+// is the guard-failure-provable form of the test above: the test above never seeds real production for
 // tenant B's plant, so tautologising ProductionRange/ProductionLatest's own
 // scope predicate would STILL return zero rows and that test would still
 // pass. Here tenant B's plant actually HAS production in the queried window.

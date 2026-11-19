@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// This file is F4 Task 0's requirement-6 proof, deliberately in package
+// This file is requirement-6 proof, deliberately in package
 // testfixtures (white-box, like isolated_db_internal_integration_test.go):
 // requirement 6b calls ensureIsolatedTemplate directly, which is
 // unexported.

@@ -7,7 +7,7 @@ import (
 )
 
 // isSuspectRegister is the ONE place that answers "is reg one of r's suspect
-// registers" (Task 9). soundValue and soundIndex below both call
+// registers". soundValue and soundIndex below both call
 // it rather than each re-deriving the same map lookup, so the rule — a
 // register listed in Row.Suspect must never surface as a number or a zero in
 // any output — cannot drift between the callers that need it.

@@ -1,12 +1,7 @@
 # 09 — Implementation Plan
 
-> **For agentic workers:** This is a **master plan**. It defines sixteen phases (F0–F15), each of
-> which is a subsystem large enough to need its own task-level plan.
->
-> **At the start of every phase**, produce a task-level plan for that phase using the
-> `superpowers:writing-plans` skill, then execute it with `superpowers:subagent-driven-development`
-> or `superpowers:executing-plans`. Do not attempt a phase without first decomposing it into
-> bite-sized, individually testable tasks.
+This is the master plan. It defines sixteen phases (F0–F15), each of which is a subsystem large
+enough to need its own task-level breakdown before work starts.
 
 **Goal:** Rebuild BCEM Energy — a multi-tenant energy management platform for the Turkish
 electricity market — from zero on Go + PostgreSQL/TimescaleDB + Next.js, with complete feature
@@ -47,7 +42,7 @@ Every task's requirements implicitly include this section.
   configuration.
 - **Turkish is the default locale**, English fully supported. Every UI string exists in both
   catalogues; a missing key fails CI.
-- **All UI work invokes the `ui-ux-pro-max` skill first.** See `docs/07-design-system.md` §0.
+- **All UI work follows the design system.** See `docs/07-design-system.md` §0.
 - **Every phase ends green:** `make lint test build` passes and the acceptance criteria are
   demonstrated with real command output.
 - **Commit frequently**, one logical change per commit, conventional-commit messages.
@@ -341,10 +336,9 @@ bcem tool compare-invoice --fixture testdata/real-invoices/<file>.json
 
 ### Scope
 
-> **Start by invoking the `ui-ux-pro-max` skill** and persisting the master design system, exactly
-> as specified in `docs/07-design-system.md` §0. Read the persisted `MASTER.md` before writing any
-> component. This is not optional and is not a formality — the visual direction comes from the
-> skill, not from your defaults.
+> **Start from the design system.** Persist the master design system as specified in
+> `docs/07-design-system.md` §0 and read `MASTER.md` and `OVERRIDES.md` before writing any
+> component. The visual direction comes from the design system, not from library defaults.
 
 - Design tokens as CSS custom properties for light and dark, per `07-design-system.md` §2, wired
   into the Tailwind theme. **No raw hex in any component.**
@@ -363,7 +357,7 @@ bcem tool compare-invoice --fixture testdata/real-invoices/<file>.json
 
 ### Acceptance criteria
 
-- [ ] `design-system/bcem-energy/MASTER.md` exists and was produced by the skill.
+- [ ] `design-system/bcem-energy/MASTER.md` and `OVERRIDES.md` exist.
 - [ ] Zero raw hex values in `components/` — enforced by a lint rule.
 - [ ] Contrast check passes for every token pair in both themes.
 - [ ] Every component renders correctly in light and dark, and in Turkish and English.
@@ -848,24 +842,31 @@ make backup && ./scripts/test-restore.sh
 **Per phase**
 
 1. Read the relevant specification documents in full before planning.
-2. Produce a task-level plan with `superpowers:writing-plans`.
-3. Execute it with `superpowers:subagent-driven-development` or
-   `superpowers:executing-plans`.
-4. Write the test first. Watch it fail. Implement. Watch it pass. Commit.
-5. Run the phase's verification commands and **show the output**.
-6. Report completion only when every acceptance checkbox is genuinely ticked.
+2. Break the phase down into small, individually testable tasks.
+3. Write the test first. Watch it fail. Implement. Watch it pass. Commit.
+4. Run the phase's verification commands and keep the output.
+5. Call the phase complete only when every acceptance checkbox is genuinely ticked.
 
 **Per UI phase**
 
-Invoke `ui-ux-pro-max`, read the persisted master design system, then build. Complete the
-pre-delivery checklist in `07-design-system.md` §11 before calling the phase done.
+Read the master design system and its overrides, then build. Complete the pre-delivery checklist
+in `07-design-system.md` §11 before calling the phase done.
 
 **When something is wrong**
 
-If a specification is unclear, contradictory or appears mistaken, stop and say so with the specific
-passage and the problem. Do not improvise around it. If a phase turns out larger than described,
-say so before starting rather than half-finishing it.
+If a specification is unclear, contradictory or appears mistaken, raise it with the specific
+passage and the problem, and record the decision in `docs/decisions.md`. Do not improvise around
+it. If a phase turns out larger than described, re-plan it before starting rather than
+half-finishing it.
 
 **Definition of done, for the whole project**
 
-Every item in `master_prompt.md` §"What done looks like" is satisfied and demonstrated.
+- Every page and feature in `01-project-context.md` exists and works against real data.
+- Every calculation in `02-domain-rules.md` passes its golden-file tests.
+- All integrations ingest data reliably, resumably and idempotently.
+- Scheduled work runs inside the Go service under a leader lock — no OS cron, no HTTP self-calls.
+- No table or row grows without bound; time series live in hypertables with rollups.
+- The migration in `08-migration.md` runs against a production dump and produces a reconciliation
+  report showing consumption and billing figures within tolerance of the legacy system.
+- `docker compose up` brings the whole stack online, and the offline bundle installs on a host
+  with no internet access.

@@ -16,10 +16,10 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
 )
 
-// redacted is the single helper the brief names: every text that reaches
+// redacted is the single helper the spec names: every text that reaches
 // job_runs.error, ingestion_cursors.last_error or an operational message
 // passes through this — never err.Error() directly — so a credential
-// fragment embedded in an upstream error (Task 2 already keeps a URL, query
+// fragment embedded in an upstream error (httpx already keeps a URL, query
 // string or body out of it, but not necessarily a password a provider
 // echoed back in a message body) can never reach an operator-facing column.
 func redacted(creds integration.Credentials, err error) string {
@@ -30,7 +30,7 @@ func redacted(creds integration.Credentials, err error) string {
 }
 
 // redactedCause is the error FetchReadings/SyncAnalyzers return to the job
-// layer (I3) once a failure has already gone through redacted() for
+// layer once a failure has already gone through redacted() for
 // job_runs.error/ingestion_cursors.last_error/an operational message:
 // Error() renders that SAME already-redacted text — never cause's own,
 // possibly credential-bearing, text — while Unwrap() still reaches cause,
@@ -61,8 +61,8 @@ func wrapRedacted(text string, cause error) error {
 	return &redactedCause{text: text, cause: cause}
 }
 
-// sortedWarningCodes returns warnings' keys in a fixed, deterministic order
-// (M5): warnings is a map, and FetchReadings iterates it to emit one
+// sortedWarningCodes returns warnings' keys in a fixed, deterministic order:
+// warnings is a map, and FetchReadings iterates it to emit one
 // operational message per distinct adapter warning code — without a sort,
 // two runs with the same warnings would emit their messages in a different,
 // unpredictable order every time.
@@ -105,8 +105,7 @@ func fetchRunStatus(failedPages int32, anyPersisted bool) string {
 	}
 }
 
-// fetchRunScope is job_runs.scope for integration.fetch_readings, per the
-// brief: {"analyzer_id", "kind", "window"}.
+// fetchRunScope is job_runs.scope for integration.fetch_readings, per the spec: {"analyzer_id", "kind", "window"}.
 type fetchRunScope struct {
 	AnalyzerID uuid.UUID         `json:"analyzer_id"`
 	Kind       model.ReadingKind `json:"kind"`
@@ -135,7 +134,7 @@ func newSyncRunScope(credentialID uuid.UUID) json.RawMessage {
 	return mustJSON(syncRunScope{CredentialID: credentialID})
 }
 
-// fetchRunDetail is job_runs.detail for FetchReadings (the brief's
+// fetchRunDetail is job_runs.detail for FetchReadings (the
 // "rejections_by_reason, warnings_by_code, affected_from, affected_to,
 // anomalies_created").
 type fetchRunDetail struct {
@@ -221,7 +220,7 @@ func ptrTime(t time.Time) *time.Time { return &t }
 
 func ptrBool(b bool) *bool { return &b }
 
-// classifyStoreErr is M14: internal/job cannot import internal/store (the
+// classifyStoreErr: internal/job cannot import internal/store (the
 // architecture guard TestTheJobPackageDoesNotImportTheStore), so
 // job.ClassifyForRetry has no way to recognise store.ErrNotFound (a
 // deleted analyzer or credential) or store.ErrInvalidScope as non-

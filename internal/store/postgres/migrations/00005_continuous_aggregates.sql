@@ -66,7 +66,7 @@
 -- read. A multi-million-row scan behind an innocuous dashboard query is a worse
 -- outcome than composing the figure explicitly.
 --
--- CONSTRAINT ON TASK 10 AND ANYTHING THAT READS THESE VIEWS: month-to-date and
+-- CONSTRAINT ON ANYTHING THAT READS THESE VIEWS: month-to-date and
 -- year-to-date MUST be composed — the closed buckets from consumption_monthly or
 -- consumption_yearly, PLUS the open period taken from consumption_daily or from
 -- meter_readings. The open month and the open year are not in those views and

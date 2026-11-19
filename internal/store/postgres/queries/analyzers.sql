@@ -50,14 +50,14 @@ limit sqlc.arg(page_limit) offset sqlc.arg(page_offset);
 -- coalesce(sqlc.narg(at)::timestamptz, now()): a caller that leaves CreatedAt at its zero
 -- value gets the database's own now() rather than writing 0001-01-01.
 --
--- CONTROLLER RULING (fix round 1, second dispatch): a stored foreign key
+-- RULE: a stored foreign key
 -- must be validated IN SQL, inside the write statement — never by a
--- Go-level check alone. A sibling task's AdminScope write stored another
+-- Go-level check alone. An AdminScope write once stored another
 -- tenant's building id because its Go-level check used
 -- Scope.AllowsBuilding(), which returns true for ANY id under AllBuildings
 -- with no company_id check at all. The WHERE clause below embeds BOTH the
 -- building_id FK check (company_id, the Scope's building branch, and
--- deleted_at) AND the folded-minor rule that a nil building_id may only be
+-- deleted_at) AND the rule that a nil building_id may only be
 -- written under an AllBuildings Scope, so this insert cannot write a
 -- building_id this exact Scope could not itself see.
 insert into analyzers
@@ -96,9 +96,8 @@ returning *;
 -- the Scope, exactly like every other scoped method; the embedded exists(...)
 -- clause below additionally validates sqlc.arg(building_id), the NEW value
 -- this statement is about to WRITE, the same way AnalyzerCreate does — see
--- its comment. Before this fix round, only the row's current value was
--- checked in SQL, and the new value was validated solely by a Go-level
--- pre-check the SQL itself did not enforce.
+-- its comment; a Go-level pre-check alone, which the SQL itself would not
+-- enforce, is not enough.
 update analyzers
 set building_id = sqlc.arg(building_id),
     customer_name = sqlc.arg(customer_name),

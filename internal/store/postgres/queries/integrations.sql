@@ -1,5 +1,5 @@
 -- Integration catalogue and credential repository queries (migration 00008).
--- Owned by Task 11b.
+--
 --
 -- integration_definitions is platform-wide (no company_id at all): reads are
 -- scoped (Scope is validated, in Go, before the query runs) but the query
@@ -52,8 +52,7 @@ where exists (
 -- On conflict, a nil secret/extra parameter means "leave it as it was", not
 -- "wipe it": UpsertCredential is also how a caller updates username/settings
 -- alone, without re-supplying the secret, so `coalesce(excluded.x, x)` keeps
--- the stored ciphertext when the incoming value is NULL (fix round 1, folded
--- minor).
+-- the stored ciphertext when the incoming value is NULL.
 on conflict (company_id, definition_id) do update set
     username = excluded.username,
     secret_enc = coalesce(excluded.secret_enc, integration_credentials.secret_enc),

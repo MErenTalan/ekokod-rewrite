@@ -313,8 +313,7 @@ func TestCalendarVacationsRangeOverlapAndInvalidRange(t *testing.T) {
 	require.ErrorIs(t, err, store.ErrInvalidRange)
 }
 
-// TestCalendarVacationsIstanbulDayBoundary is F1 final review pass A,
-// Important Finding 2's proof, reproduced as a test: Vacations converted a
+// TestCalendarVacationsIstanbulDayBoundary: Vacations used to convert a
 // TimeRange's instants to `date` bounds via .UTC() instead of Europe/
 // Istanbul, so a query for the Istanbul calendar day 2026-03-01 — the
 // half-open instant window [2026-02-28T21:00Z, 2026-03-01T21:00Z), since
@@ -322,7 +321,7 @@ func TestCalendarVacationsRangeOverlapAndInvalidRange(t *testing.T) {
 // vacation (2026-02-28's) and excluded the RIGHT one (2026-03-01's).
 //
 // Pre-fix this test fails: got contains feb28's id (wrongly included) and
-// is missing mar1's id (wrongly excluded) — exactly the report's proof.
+// is missing mar1's id (wrongly excluded).
 func TestCalendarVacationsIstanbulDayBoundary(t *testing.T) {
 	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)

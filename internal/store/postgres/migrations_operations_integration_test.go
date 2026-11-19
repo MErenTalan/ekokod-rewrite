@@ -18,7 +18,7 @@ import (
 //
 // This is the two-named-table half; TestNoPlaintextSecretColumns below is
 // the schema-wide half that replaced this function's old blocklist tail
-// check (F1 final review pass B, I4).
+// check.
 func TestIntegrationCredentialSecretsAreBytea(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -44,8 +44,7 @@ func TestIntegrationCredentialSecretsAreBytea(t *testing.T) {
 // client_secret/access_token/refresh_token), api_key/apikey, passwd, tgt
 // (EPİAŞ's ticket-granting-ticket, coming in F2), private_key.
 //
-// F1 final review pass B, I4 (ledger Task 5's deferred minor, re-rated
-// Important): the guard this replaces was
+// The guard this replaces was
 // `table_name in ('integration_credentials','smtp_settings') and column_name
 // in ('password','secret','api_key','token')` — two named tables and four
 // exact names. It could not see a plaintext credential column on any OTHER
@@ -55,7 +54,7 @@ func TestIntegrationCredentialSecretsAreBytea(t *testing.T) {
 // 'api_key' or 'token'. F2 adds OAuth token exchange/refresh for iSolar and
 // an EPİAŞ TGT cache within weeks (F2 plan, migrations 00012-00013) — this
 // widens to catch a plaintext column in either one before it merges, not
-// after a reviewer happens to notice.
+// after someone happens to notice.
 var plaintextSecretColumnPattern = regexp.MustCompile(`(?i)secret|token|password|passwd|api_?key|tgt|private_key`)
 
 // secretColumnKey identifies one column by (table, column) for
@@ -165,8 +164,7 @@ func TestOperationalMessagesUsesBigserial(t *testing.T) {
 	require.Equal(t, "bigint", dataType, "operational_messages.id must be bigserial (bigint identity)")
 }
 
-// TestJobRunsJSONBColumns pins job_runs.scope and .detail to jsonb, as the
-// brief calls out explicitly.
+// TestJobRunsJSONBColumns pins job_runs.scope and .detail to jsonb.
 func TestJobRunsJSONBColumns(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

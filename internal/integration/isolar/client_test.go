@@ -56,7 +56,7 @@ func isolarTestPool(t *testing.T, srv *fake.Server) *httpx.Pool {
 }
 
 // isolarTestPoolWithLocker is isolarTestPool plus a Locker — used only by
-// TestISolarSerializeKeyCoversAuthAndData (I6).
+// TestISolarSerializeKeyCoversAuthAndData.
 func isolarTestPoolWithLocker(t *testing.T, srv *fake.Server, locker lock.Locker) *httpx.Pool {
 	t.Helper()
 	pool, err := httpx.NewPool(httpx.PoolOptions{PinnedCerts: srv.Pins, Sleep: (&recordingSleep{}).fn, Locker: locker})
@@ -134,18 +134,16 @@ var (
 	fixtureTo   = time.Date(2026, time.January, 1, 1, 0, 0, 0, normalize.Istanbul)
 )
 
-// TestISolarEndpointKeysMatchSeedDefinition is R40's anti-drift proof (I1):
+// TestISolarEndpointKeysMatchSeedDefinition is R40's anti-drift proof:
 // it reads internal/seed/data/integration_definitions.json's isolar/EU row
 // directly (the actual embedded seed data, not a copy) and asserts every
 // key this package's op/endpoint constants use (duplicated above as
 // isolarOp*/isolarEndpoint* — see their doc comment) is present in it. A
 // key renamed in the seed WITHOUT this test package's constants being
-// updated to match fails here, not silently in production. MUTATION PROOF
-// (task's fix-round-1 requirement): renaming one seed-derived fixture key
+// updated to match fails here, not silently in production. Regression check: renaming one seed-derived fixture key
 // (e.g. isolarOpGetFaultAlarmInfo above to "get_fault_alarm_infoX") makes
 // this test fail with "seed isolar/EU endpoints must carry key
-// \"get_fault_alarm_infoX\"" — see task-13-report.md's Fix round 1 section
-// for the observed failure output.
+// \"get_fault_alarm_infoX\"".
 func TestISolarEndpointKeysMatchSeedDefinition(t *testing.T) {
 	defs, err := seed.IntegrationDefinitions()
 	require.NoError(t, err)
@@ -181,7 +179,7 @@ func TestISolarEndpointKeysMatchSeedDefinition(t *testing.T) {
 // for every case except "pagination" (iSolar's minute-series calls do not
 // themselves paginate — R42 splits by TIME, not by page — see series.go);
 // "pagination" instead exercises Devices, whose getDeviceListByPsId call
-// follows rowCount across pages (task brief: "(plus pagination on
+// follows rowCount across pages (the iSolar API notes: "(plus pagination on
 // Devices)").
 func TestISolarFixtureMatrix(t *testing.T) {
 	for _, tc := range []struct {
@@ -261,7 +259,7 @@ func TestISolarFixtureMatrix(t *testing.T) {
 		{
 			name: "pagination",
 			routes: func(t *testing.T) []fake.Route {
-				// I1: the fixture-matrix guard requires this case's own
+				// The fixture-matrix guard requires this case's own
 				// table entry to reference isolar_pagination.json directly
 				// (not merely through a helper's own body), so the file's
 				// name is read here and passed in.
@@ -294,7 +292,7 @@ func TestISolarFixtureMatrix(t *testing.T) {
 			}
 
 			if tc.name == "pagination" {
-				// I7: pagination must be proven by counting recorded
+				// Pagination must be proven by counting recorded
 				// requests and asserting their OWN page params, not merely
 				// that the merged result has the right length (which a
 				// hard-coded page=1 sent twice could also produce if the
@@ -379,8 +377,8 @@ func requireDecimalPtrEqual(t *testing.T, a, b *decimal.Decimal) {
 	}
 }
 
-// TestISolarUnitsAreNormalised: 1500 Wh -> 1.5 kWh; 2400 W -> 2.4 kW (task
-// brief, verbatim).
+// TestISolarUnitsAreNormalised: 1500 Wh -> 1.5 kWh; 2400 W -> 2.4 kW (the
+// iSolar API notes, verbatim).
 func TestISolarUnitsAreNormalised(t *testing.T) {
 	srv := fake.NewTLSServer(t, deviceMinuteRoute(fake.JSON(http.StatusOK, fake.Fixture(t, "isolar", "isolar_device_minute.json"))))
 	c := isolar.New(isolarTestPool(t, srv), isolar.Options{Clock: clock.NewFake(fixtureFrom)})
@@ -406,13 +404,10 @@ func TestISolarUnitsAreNormalised(t *testing.T) {
 	require.True(t, checked, "the 1500Wh/2400W row must be present")
 }
 
-// TestISolarPointsNilNeverZero: adapter-patterns.md item 3 / fix-round-1 I5
-// — null, "" and "-" all parse to nil, never a fabricated zero; a genuine
-// "0" stays a real zero decimal, distinguishable from nil. MUTATION PROOF
-// (task's fix-round-1 requirement): changing normalize.OptionalNumber's
+// TestISolarPointsNilNeverZero: adapter-patterns.md item 3 — null, "" and "-" all parse to nil, never a fabricated zero; a genuine
+// "0" stays a real zero decimal, distinguishable from nil. Regression check: changing normalize.OptionalNumber's
 // null-handling to return &zero instead of nil makes this test's nil
-// assertions fail — see task-13-report.md's Fix round 1 section for the
-// observed failure output.
+// assertions fail.
 func TestISolarPointsNilNeverZero(t *testing.T) {
 	body := []byte(`{"result_code":"1","result_msg":"success","result_data":{"FX1001":[
 		{"time_stamp":"20260101000500","p1":null,"p24":"-"},
@@ -505,7 +500,7 @@ func TestISolarConfigErrorsAreErrConfig(t *testing.T) {
 }
 
 // TestISolarPlantsAndFaultsMapEveryField exercises Plants and Faults, whose
-// task-brief tests are not individually named (unlike DeviceMinuteSeries's
+// tests are not individually named (unlike DeviceMinuteSeries's
 // fixture matrix). Field mapping is checked here so both calls are still
 // proven correct end to end.
 func TestISolarPlantsAndFaultsMapEveryField(t *testing.T) {
@@ -654,7 +649,7 @@ func TestISolarErrorsCarryNoCredential(t *testing.T) {
 	}
 }
 
-// --- fix round 1: recording-Locker SerializeKey coverage (I6) --------------
+// --- recording-Locker SerializeKey coverage --------------
 
 // recordingLocker is a minimal lock.Locker that records every key Acquire
 // was called with and always succeeds immediately — enough to prove WHICH
@@ -688,11 +683,10 @@ func (recordingLease) Release(context.Context) error { return nil }
 // 15 end to end: EVERY httpx.Client this package builds — an auth call
 // (ExchangeCode, which goes through token.go/auth.go) AND a data call
 // (DeviceMinuteSeries) — acquires the SAME SerializeKey,
-// "isolar:<company id>". MUTATION PROOF (task's fix-round-1 requirement):
+// "isolar:<company id>". Regression check:
 // removing SerializeKey from httpClient (or hard-coding it without the
 // company id) makes this test fail with either zero recorded keys or a key
-// that does not equal wantKey — see task-13-report.md's Fix round 1
-// section for the observed failure output.
+// that does not equal wantKey.
 func TestISolarSerializeKeyCoversAuthAndData(t *testing.T) {
 	srv := fake.NewTLSServer(t,
 		fake.Route{Method: http.MethodPost, Path: "/openapi/apiManage/token", Respond: fake.JSON(http.StatusOK, fake.Fixture(t, "isolar", "isolar_token.json"))},

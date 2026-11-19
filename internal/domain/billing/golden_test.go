@@ -92,7 +92,7 @@ func evaluate(t *testing.T, g goldenFile) goldenExpected {
 }
 
 // TestGolden locks every §F4 acceptance shape. Inputs live in the JSON files;
-// -update rebuilds them from goldenSeeds and must be hand-checked (Task 4 rule).
+// -update rebuilds them from goldenSeeds and must be hand-checked.
 func TestGolden(t *testing.T) {
 	seeds := goldenSeeds(t)
 	dir := filepath.Join("testdata", "golden")

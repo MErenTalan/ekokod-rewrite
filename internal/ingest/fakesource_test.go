@@ -167,9 +167,8 @@ func (r *ingestTestFailingUpdateAnalyzerRepo) Update(context.Context, store.Scop
 }
 
 // fakeAdapter is the in-memory integration.Adapter every ingest test drives
-// instead of a real provider (Global Constraints: F2's pipeline tests are
-// never allowed to reach a real endpoint, and Tasks 6-9/12/13's real
-// adapters are not merged into this worktree at all).
+// instead of a real provider (the pipeline tests never reach a real
+// endpoint).
 //
 // It is scripted with setSteps/appendSteps: each call to FetchReadings pops
 // the next fetchStep. Once the script is exhausted, FetchReadings returns a

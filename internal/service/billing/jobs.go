@@ -49,7 +49,7 @@ type Dispatcher struct {
 
 // Dispatch enqueues generate for each billable building's last closed periods
 // and a company generate per lookback key (the minimum key across its
-// buildings), then a render for every live bill still missing its PDF (M-9).
+// buildings), then a render for every live bill still missing its PDF.
 func (d Dispatcher) Dispatch(ctx context.Context) error {
 	buildings, err := d.Billable.BillableBuildings(ctx)
 	if err != nil {
@@ -106,7 +106,7 @@ func (d Dispatcher) Dispatch(ctx context.Context) error {
 }
 
 // LookbackKeys are the newest-first job.BillingDispatchLookbackPeriods closed
-// period keys for a cut-off day (I-8).
+// period keys for a cut-off day.
 func LookbackKeys(cutoffDay int, now time.Time) []string {
 	latest := domain.LatestClosedPeriodKey(cutoffDay, now, consumption.SettleDelayMonthly, istanbul)
 	month, err := time.Parse("2006-01", latest)
@@ -139,7 +139,7 @@ type JobGenerator struct {
 
 // Generate runs one bill with a job_runs record. A ComputeError fails the run
 // and skips retries (the data will not fix itself in the retry window);
-// RecomputeFlagged is always on so a flagged bill is retried (I-8).
+// RecomputeFlagged is always on so a flagged bill is retried.
 func (g JobGenerator) Generate(ctx context.Context, p job.BillingGeneratePayload) error {
 	sc := store.SystemScope(p.CompanyID)
 	scopeJSON, _ := json.Marshal(p)

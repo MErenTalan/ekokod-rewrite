@@ -1,7 +1,7 @@
 // Package epias is the EPİAŞ transparency-platform client: day-ahead PTF
 // (MCP) and YEKDEM unit-cost, both read-only. It is a pure client per 06
-// §1 rule 2 — it never touches the store; internal/marketdata (Task 12's
-// other half) is what persists what this package fetches.
+// §1 rule 2 — it never touches the store; internal/marketdata is what
+// persists what this package fetches.
 package epias
 
 import (
@@ -22,7 +22,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/platform/clock"
 )
 
-// Defaults (task-12 brief / Provider defaults table).
+// Defaults (the EPİAŞ API notes / Provider defaults table).
 const (
 	defaultCASURL    = "https://giris.epias.com.tr/cas/v1/tickets"
 	defaultBaseURL   = "https://seffaflik.epias.com.tr/electricity-service"
@@ -91,8 +91,7 @@ type Client struct {
 	ticketAt time.Time
 
 	// yekdemDropped is the count of YEKDEM rows dropped as unparseable in
-	// the most recent YekdemUnitCost call — M2 (task-12-fix1-findings.md,
-	// fix round 1). See YekdemDropped's and parseUnitCostResponse's doc
+	// the most recent YekdemUnitCost call. See YekdemDropped's and parseUnitCostResponse's doc
 	// comments for why this exists instead of a Warning return.
 	yekdemDropped atomic.Int32
 }
@@ -103,7 +102,7 @@ type Client struct {
 //
 // This is an OPTIONAL capability, not part of the marketdata.PriceSource
 // interface: YekdemUnitCost's own return signature is pinned by the
-// task-12 brief as `([]model.YekdemMonthly, error)`, with no
+// the EPİAŞ API notes as `([]model.YekdemMonthly, error)`, with no
 // []integration.Warning slot (unlike HourlyPTF's), so a bad YEKDEM row
 // cannot be reported that way without breaking that pinned contract.
 // marketdata.Syncer type-asserts its PriceSource for this method and,
@@ -177,7 +176,7 @@ func formatEpiasDate(t time.Time) string {
 
 // doData obtains a ticket, sends one data request via dataClient, and — on
 // exactly one ErrAuth response — invalidates the cached ticket and retries
-// exactly once with a freshly obtained one (task-12 brief: "A data call
+// exactly once with a freshly obtained one (the EPİAŞ API notes: "A data call
 // returning 401 invalidates the cache and retries once with a new
 // ticket").
 func (c *Client) doData(ctx context.Context, build func(ticket string) httpx.Request) (httpx.Response, error) {
@@ -326,7 +325,7 @@ func (c *Client) YekdemUnitCost(ctx context.Context, from, to time.Time) ([]mode
 		}
 	}
 	// Stored even on a zero-drop call, so a stale nonzero count from an
-	// earlier call never leaks into a later, clean one (M2).
+	// earlier call never leaks into a later, clean one.
 	c.yekdemDropped.Store(dropped)
 
 	out := make([]model.YekdemMonthly, 0, len(order))

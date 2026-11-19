@@ -116,7 +116,7 @@ func TestARILDiscoverBestEffortOptionalFields(t *testing.T) {
 // TestARILTimeOfUseRegistersAreNull is the F2 acceptance criterion "ARIL
 // rows produce NULL, not 0, in the T1/T2/T3 registers" (removed-behaviour
 // 21). mapRegisters never touches T1/T2/T3 Import/Export at all — the
-// mutation task-8-brief.md names ("set T1Import: decimalPtr(\"0\") in
+// case the ARIL API notes name ("set T1Import: decimalPtr(\"0\") in
 // mapping.go") is proven live in TestARILTimeOfUseRegistersAreNullMutation
 // (skipped by default; see its doc).
 func TestARILTimeOfUseRegistersAreNull(t *testing.T) {
@@ -165,7 +165,7 @@ func TestARILRegisterMappingWithDecimalMultiplier(t *testing.T) {
 }
 
 // TestARILRequestsWithoutMultiplierAndMultipliesOnce is the F2 acceptance
-// criterion named by task-8-brief.md: TSum "12.5" x 40 -> 500, applied
+// criterion named by the ARIL API notes: TSum "12.5" x 40 -> 500, applied
 // exactly once (never doubled, and never left at the raw value because
 // WithoutMultiplier suppressed it server-side too).
 func TestARILRequestsWithoutMultiplierAndMultipliesOnce(t *testing.T) {
@@ -213,7 +213,7 @@ func TestARILNilNeverZero(t *testing.T) {
 }
 
 // TestARILProfileDateIsIstanbulLocal is the F2 acceptance criterion named
-// by task-8-brief.md: the 14-digit ProfileDate is parsed as Europe/Istanbul
+// by the ARIL API notes: the 14-digit ProfileDate is parsed as Europe/Istanbul
 // local time, not UTC.
 func TestARILProfileDateIsIstanbulLocal(t *testing.T) {
 	// 2026-09-01 10:00:00 Istanbul (+03:00, no DST) = 07:00:00 UTC.

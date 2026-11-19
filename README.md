@@ -25,7 +25,7 @@ It is a Go rewrite of the legacy bcem-energy system.
 - **Decisions**: [`docs/adr/`](docs/adr/README.md).
 - **Reviews**: [`docs/security-review.md`](docs/security-review.md),
   [`docs/performance.md`](docs/performance.md), [`docs/accessibility.md`](docs/accessibility.md).
-- **Phase plans and rulings**: `docs/superpowers/plans/`.
+- **Decision log** (rulings `R1`… cited in code comments): [`docs/decisions.md`](docs/decisions.md).
 
 ## Development
 

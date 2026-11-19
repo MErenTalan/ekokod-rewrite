@@ -28,7 +28,7 @@ const sMTPGet = `-- name: SMTPGet :one
 select company_id, host, port, secure, username, password_enc, from_address, updated_at from smtp_settings where company_id = $1
 `
 
-// SMTP settings repository queries (migration 00008). Owned by Task 11c.
+// SMTP settings repository queries (migration 00008).
 //
 // smtp_settings' primary key IS company_id -- one row per company, no id
 // column at all, and company_id is NOT NULL (`primary key references

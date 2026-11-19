@@ -145,7 +145,7 @@ func TestDownMigrationLeavesExtensionsInstalled(t *testing.T) {
 // into the unauthenticated /health/ready body that the web health page then
 // renders.
 //
-// CHANGED in task 8a. This test used to assert errors.Unwrap(err) == nil,
+// CHANGED. This test used to assert errors.Unwrap(err) == nil,
 // treating an unwrappable error as "the observable proof that the value went
 // through the scrubber". That proxy was crude, but it was doing real work:
 // nothing else in the package produced an unwrappable error, so it was a

@@ -2,32 +2,15 @@
 
 ## 0. The rule that governs this document
 
-**All UI work goes through the `ui-ux-pro-max` skill.** Do not invent a visual language, do not
-accept a component library's defaults, and do not carry over the legacy admin-template look.
+**All UI work follows the design system in `design-system/bcem-energy/`.** Do not invent a visual
+language, do not accept a component library's defaults, and do not carry over the legacy
+admin-template look.
 
-Before writing UI code in any phase that touches the interface, run:
+`design-system/bcem-energy/MASTER.md` is the generated baseline and `OVERRIDES.md` resolves every
+place where it disagrees with this document. Page-level overrides live in
+`design-system/bcem-energy/pages/`. Read the master, then the overrides, before building each page.
 
-```bash
-# once per project, at the start of Phase F5 — persist the master
-python "<skill>/scripts/search.py" "energy monitoring sustainability analytics dashboard" \
-  --design-system --density 8 --motion 4 --variance 5 \
-  -p "BCEM Energy" --persist --output-dir "<project-root>"
-
-# per page, when a screen needs its own treatment
-python "<skill>/scripts/search.py" "<page intent>" --design-system --page "<page-name>" \
-  -p "BCEM Energy" --output-dir "<project-root>"
-
-# focused concerns
-python "<skill>/scripts/search.py" "<query>" --domain ux|color|typography|chart|icons
-python "<skill>/scripts/search.py" "<query>" --stack nextjs
-```
-
-The persisted `design-system/bcem-energy/MASTER.md` becomes the source of truth. Page-level
-overrides live in `design-system/bcem-energy/pages/`. Re-read the master before building each page.
-Never overwrite it with `--force` without asking.
-
-The direction below is the **starting point** produced by that skill for this product. It is a
-brief, not a substitute for running the skill.
+The direction below is the **starting point** for this product.
 
 ---
 
@@ -173,7 +156,7 @@ legible on a dark ground.
 
 ## 3. Typography
 
-**Pairing: Corporate Trust** — chosen over the skill's `Fira Code + Fira Sans` default because this
+**Pairing: Corporate Trust** — chosen over the baseline's `Fira Code + Fira Sans` default because this
 product is read in Turkish, with long labels and dense tables, where a monospace heading is a
 liability rather than a signal.
 
@@ -419,7 +402,7 @@ Same tokens, different rhythm.
 
 Run this before any UI phase is called complete.
 
-- [ ] `ui-ux-pro-max` was invoked and its master design system read
+- [ ] The master design system and its overrides were read
 - [ ] Zero raw hex values in components — tokens only
 - [ ] Light and dark both verified, contrast checked automatically
 - [ ] Turkish **and** English verified; no truncation or overflow in either

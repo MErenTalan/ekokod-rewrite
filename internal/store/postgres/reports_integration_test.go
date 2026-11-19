@@ -118,7 +118,7 @@ func TestReportUpsertRejectsCrossTenantBuildingEvenWithAdminScope(t *testing.T) 
 	require.Equal(t, tenantB.Buildings[0].ID, created.BuildingID)
 }
 
-// TestReportPageLimitsClampNegativeOffset is the folded-minor probe: OFFSET
+// TestReportPageLimitsClampNegativeOffset: OFFSET
 // must not be negative.
 func TestReportPageLimitsClampNegativeOffset(t *testing.T) {
 	t.Parallel()

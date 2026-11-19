@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestErrorsNeverContainTheDSNPassword locks in the fix for the leak
-// described in the review of task 5: pgx's own conninfo parser splits DSN
+// TestErrorsNeverContainTheDSNPassword locks in the fix for a DSN leak:
+// pgx's own conninfo parser splits DSN
 // userinfo from host at the *first* unescaped "@", while net/url (correctly,
 // per RFC 3986) splits at the *last* one. A password containing an unescaped
 // "@" therefore gets split differently by the two parsers, and a fragment of

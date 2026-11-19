@@ -21,7 +21,7 @@ import (
 //
 // TWO BUILDINGS AND A SCOPE COVERING ONLY THE FIRST IS THE POINT. With one
 // building, a repository that ignored its Scope entirely would return the same
-// rows as one that honoured it, and Task 13's scope-isolation test would pass
+// rows as one that honoured it, and scope-isolation test would pass
 // against a completely unscoped implementation. Buildings[1] exists so that
 // "the scope leaked" has an observable consequence. Nothing here may be
 // reduced to a single building for tidiness.
@@ -359,7 +359,7 @@ func NewTenant(t *testing.T, ctx context.Context, pool *pgxpool.Pool, seed int64
 
 	// Guard the invariants the fixture promises, so that a future edit that
 	// quietly drops the second building fails HERE with an explanation rather
-	// than in Task 13 as an unexplained pass.
+	// than in the scope isolation suite as an unexplained pass.
 	require.GreaterOrEqual(t, len(tenant.Buildings), 2,
 		"a tenant needs at least two buildings or scope isolation is untestable")
 	require.GreaterOrEqual(t, len(tenant.Analyzers), 2*len(tenant.Buildings),

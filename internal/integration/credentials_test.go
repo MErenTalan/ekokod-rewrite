@@ -54,7 +54,7 @@ func TestCredentialsNeverFormatSecrets(t *testing.T) {
 	js, err := json.Marshal(c)
 	require.NoError(t, err)
 
-	// I1: the same secret, reached through an unexported field of a
+	// The same secret, reached through an unexported field of a
 	// wrapper struct fmt cannot call Interface() on — see the type doc
 	// comments above. These prove the pointer-indirection fix, not merely
 	// Secret's own Format method (already proven below).
@@ -80,7 +80,7 @@ func TestCredentialsNeverFormatSecrets(t *testing.T) {
 		// by calling GoString() directly instead of going through fmt.
 		"GoString()": c.Secret.GoString(),
 
-		// I1 unexported-holder cases, both types, every verb the brief names.
+		// Unexported-holder cases, both types, every fmt verb.
 		"unexported holder Secret %v":       fmt.Sprintf("%v", secretHolder),
 		"unexported holder Secret %+v":      fmt.Sprintf("%+v", secretHolder),
 		"unexported holder Secret %#v":      fmt.Sprintf("%#v", secretHolder),
@@ -100,7 +100,7 @@ func TestCredentialsNeverFormatSecrets(t *testing.T) {
 }
 
 // TestCredentialsFragmentsDedupedAndSortedLongestFirst proves Fragments
-// (M2) sorts longest-first and dedupes: a redactor that walks the list in
+// sorts longest-first and dedupes: a redactor that walks the list in
 // the wrong order can replace a short secret that happens to be a prefix of
 // a longer one, leaving the longer secret's suffix exposed — e.g. Secret
 // "pw" and an Extra token "pw-tok" redacting "pw" first would turn

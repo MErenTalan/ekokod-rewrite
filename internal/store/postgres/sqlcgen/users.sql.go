@@ -408,7 +408,7 @@ type UserVisibleParams struct {
 // The User-prefixed parent-visibility lookup UserRepository.PasswordHistory
 // uses. Session-prefixed SessionUserVisible (queries/sessions.sql) exists
 // for SessionRepository's own use and is a different query in the same
-// shape — ruling 5 in wave-f-context.md is that a parent-visibility lookup
+// shape — the rule is that a parent-visibility lookup
 // lives under its OWN repository's prefix, not borrowed across one.
 func (q *Queries) UserVisible(ctx context.Context, arg UserVisibleParams) (bool, error) {
 	row := q.db.QueryRow(ctx, userVisible, arg.ID, arg.CompanyID)

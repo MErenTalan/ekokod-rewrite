@@ -165,7 +165,6 @@ type CalendarGetEventParams struct {
 }
 
 // Calendar, weekend-day and vacation repository queries (migration 00008).
-// Owned by Task 11c.
 //
 // calendar_events, company_weekend_days and company_vacations all carry
 // company_id directly and have no building_id at all (like stored_files), so

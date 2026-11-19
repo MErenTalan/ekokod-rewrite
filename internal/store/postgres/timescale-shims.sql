@@ -28,7 +28,7 @@ create function last(value numeric, ordering timestamptz) returns numeric as $$ 
 -- jsonb_array_elements is an ordinary Postgres built-in (not TimescaleDB),
 -- but TestEveryFunctionSQLcMustTypeIsDeclared's nativeFunctions list in
 -- sqlcgen_numeric_test.go is closed and that file must not be edited to add
--- to it, so it is declared here instead. Task 11b uses it as the bulk-insert
+-- to it, so it is declared here instead. The carbon repository uses it as the bulk-insert
 -- idiom for a parallel-column child collection, since sqlc's catalogue has no
 -- multi-array unnest() overload (see carbon.sql's CarbonInsertConversions):
 -- one jsonb array parameter, unpacked with jsonb_array_elements and read back

@@ -41,7 +41,7 @@ func rowsWithIntervals(lits ...string) []model.MeterReading {
 	return rows
 }
 
-// TestAccumulateSkipsNilAndIsExact is the brief's Step 1 fixture verbatim.
+// TestAccumulateSkipsNilAndIsExact is the Step 1 fixture verbatim.
 func TestAccumulateSkipsNilAndIsExact(t *testing.T) {
 	rows := rowsWithIntervals("0.25", "", "0.50", "0.125") // "" = nil
 	got := generation.Accumulate(decimal.RequireFromString("100"), rows)

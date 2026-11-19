@@ -41,8 +41,8 @@ func entryIDs(t *testing.T, insp *asynq.Inspector) []string {
 // reused across terms) would compile fine and would leave every term after
 // the first with no cron actually running in Redis, while IsLeader() still
 // reports true cluster-wide - a silent, total loss of scheduled work with no
-// error surfaced anywhere (the reviewer noted the Start() error path doesn't
-// even attempt to shut anything down).
+// error surfaced anywhere (the Start() error path used to not even attempt
+// to shut anything down).
 //
 // This test forces exactly that lose/regain cycle on a single Scheduler.Run
 // call - by killing the Postgres backend holding the advisory lock directly,

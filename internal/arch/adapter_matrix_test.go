@@ -164,7 +164,7 @@ func f2matrixContains(names []string, want string) bool {
 // TestAllSixAdaptersHaveTheFixtureMatrix is the structural half of the F2
 // acceptance criterion "every adapter has recorded fixtures covering …". It
 // fails if an adapter's test file lacks a subtest for any fake.RequiredCases
-// entry, its testdata lacks the fixture file, or (I1) that case's own table
+// entry, its testdata lacks the fixture file, or that case's own table
 // entry never actually references the fixture filename it is required to
 // serve — a case whose composite literal is silent about
 // "<provider>_<case>.json" could be reusing a DIFFERENT fixture (or none at
@@ -192,7 +192,7 @@ func TestAllSixAdaptersHaveTheFixtureMatrix(t *testing.T) {
 
 				require.True(t, f2matrixContains(tc.literals, fixtureName),
 					"%s/%s: case %q never references %q inside its own table entry — the file exists on disk but this "+
-						"case does not prove it is the one served (I1)", provider, testFunc, required, fixtureName)
+						"case does not prove it is the one served", provider, testFunc, required, fixtureName)
 			}
 		})
 	}
@@ -201,7 +201,7 @@ func TestAllSixAdaptersHaveTheFixtureMatrix(t *testing.T) {
 // TestBillingPathDoesNotImportEPIAS pins removed-behaviour 24 ahead of F4:
 // billing computes its own tariff-priced totals and never reaches into the
 // EPİAŞ spot-price client (internal/marketdata reads market_prices_hourly
-// instead — see task-12-brief.md §"Billing never calls this client"). It
+// instead). It
 // walks every ./internal/... package whose import path contains "billing"
 // and asserts none of them imports internal/integration/epias directly
 // (loadPackages' packages.NeedImports mode is single-hop, matching every
@@ -209,10 +209,10 @@ func TestAllSixAdaptersHaveTheFixtureMatrix(t *testing.T) {
 // above is the same shape).
 //
 // It passes VACUOUSLY today: no ./internal/... package path contains
-// "billing" yet (billing is F4's phase). That is deliberate and is exactly
-// what task-12-brief.md's own description of this guard says ("exists
-// vacuously until F4 creates internal/domain/billing/internal/service/billing").
-// The F1 Task 9 lesson ("a guard over an empty set proves nothing") does
+// "billing" yet (billing is F4's phase). That is deliberate: the guard
+// exists vacuously until F4 creates internal/domain/billing and
+// internal/service/billing.
+// The usual lesson ("a guard over an empty set proves nothing") does
 // not apply here the same way it did there: TestFixturesAreSanitised guards
 // a set this task itself populates (so an empty set would hide the guard
 // never running), whereas this guard's whole point is to fire the day F4
@@ -237,8 +237,8 @@ func TestBillingPathDoesNotImportEPIAS(t *testing.T) {
 }
 
 // f2matrixPathContainsBilling reports whether pkgPath names a package
-// somewhere under a path segment "billing" (e.g.
-// .../internal/domain/billing, .../internal/service/billing/report) —
+// somewhere under a path segment "billing" (e.g..
+// ../internal/domain/billing, .../internal/service/billing/report) —
 // substring match is intentional here (unlike underPackage's exact-segment
 // match used elsewhere in this file) because F4's eventual billing
 // packages are not yet named precisely enough to pin a single path, and a

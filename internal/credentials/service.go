@@ -47,7 +47,7 @@ var ErrInvalidState = errors.New("credentials: invalid oauth state")
 var ErrInvalidSettings = errors.New("credentials: invalid settings")
 
 // ErrInvalidExtraKey is returned when an Input.Extra key does not match
-// extraKeyPattern (fix round 1, folded minor "invalid key accepted"). Extra
+// extraKeyPattern. Extra
 // key names end up as map keys the rest of this package (and isolar.Client,
 // which reads creds.Extra["access_token"]/["refresh_token"] by exact name)
 // trusts implicitly; an unvalidated name is how an operator-facing field
@@ -135,7 +135,7 @@ const minStateKeyLen = 32
 // read-merge-write of an isolar credential's Extra blob (or a read of its
 // currently-fresh access token) serialises under: ISolarAccessToken's
 // refresh, ISolarCallback's persistIsolarToken, and Update's own Extra
-// merge for an isolar credential (I3) — same key everywhere so all three
+// merge for an isolar credential — same key everywhere so all three
 // exclude each other. Companies never share a lock: two different isolar
 // credentials belonging to the SAME company would still (harmlessly)
 // serialise through this key, since the key only names sc.CompanyID; that
@@ -235,14 +235,14 @@ type BackfillInput struct {
 
 // Verifier proves one set of credentials can authenticate against its
 // provider. Satisfied by *integration.Registry's adapters (their Verify
-// method — 06 §1's MeterDataSource) and, for isolar, a shim Task 16 builds
-// over *isolar.Client.Verify.
+// method — 06 §1's MeterDataSource) and, for isolar, a shim the worker
+// builds over *isolar.Client.Verify.
 type Verifier interface {
 	Verify(ctx context.Context, creds integration.Credentials) error
 }
 
-// VerifierResolver looks up the Verifier for a provider. Task 16 builds the
-// production implementation over *integration.Registry plus the isolar
+// VerifierResolver looks up the Verifier for a provider. The worker builds
+// the production implementation over *integration.Registry plus the isolar
 // shim; this package only ever consumes the interface.
 type VerifierResolver interface {
 	Verifier(p integration.Provider) (Verifier, error)
@@ -251,7 +251,7 @@ type VerifierResolver interface {
 // ISolarTokens is the slice of *isolar.Client this package drives the OAuth
 // flow through. credentials imports internal/integration/isolar for
 // isolar.Token ONLY — never for the client's own concrete type or its other
-// methods (Plants/Devices/Faults/*Series belong to Task 13's ingest side).
+// methods (Plants/Devices/Faults/*Series belong to the ingest side).
 type ISolarTokens interface {
 	AuthorizeURL(creds integration.Credentials, redirectURI string) (string, error)
 	ExchangeCode(ctx context.Context, creds integration.Credentials, code, redirectURI string) (isolar.Token, error)
@@ -278,7 +278,7 @@ type Deps struct {
 
 	Clock clock.Clock
 	// StateKey is HMAC(JWTSigningKey, "isolar-oauth-state/v1"), derived by
-	// Task 16.
+	// the caller.
 	StateKey []byte
 	// RedirectURI is EKOKOD_ISOLAR_REDIRECT_URL or
 	// PublicURL+"/integrations/isolar/callback".
@@ -373,8 +373,7 @@ func redactedText(creds integration.Credentials, err error) string {
 	return secret.Redact(err.Error(), creds.Fragments())
 }
 
-// redactedVerifyError wraps a verifier's error for Verify (fix round 2, M
-// dropped last round): Error() renders the secret-redacted text (03 §7 —
+// redactedVerifyError wraps a verifier's error for Verify: Error() renders the secret-redacted text (03 §7 —
 // a credential must never reach an operator-facing error), but Unwrap()
 // returns the ORIGINAL, unredacted verifier error, so the error CHAIN is
 // preserved — a caller can still errors.Is(err, integration.ErrAuth) (or
@@ -404,7 +403,7 @@ func zeroBytes(b []byte) {
 	}
 }
 
-// zeroExtraPlain clears every plaintext value in m to "" (fix round 1: its
+// zeroExtraPlain clears every plaintext value in m to "" (its
 // earlier doc comment claimed it "zeros" the plaintext, which was never
 // true for a map[string]string — Go strings are immutable, so
 // []byte(v) copies v's bytes into a NEW slice; zeroing that copy, as the
@@ -423,8 +422,7 @@ func zeroExtraPlain(m map[string]string) {
 	}
 }
 
-// validatePM5340URL is R28: scheme http/https and a non-empty host. M5
-// (final-review-A): userinfo (http://user:pass@host) is refused outright —
+// validatePM5340URL is R28: scheme http/https and a non-empty host. M5: userinfo (http://user:pass@host) is refused outright —
 // pm5340_url is stored in plaintext (never sealed, unlike Secret/Extra) and
 // returned verbatim by the write-only View (view.go), so a credential
 // embedded in it would be stored unsealed and handed straight back to any
@@ -497,7 +495,7 @@ func (s *Service) Configure(ctx context.Context, sc store.Scope, in Input) (View
 		return View{}, err
 	}
 
-	// R45 (fix round 1, I2): a credential already exists for this
+	// R45: a credential already exists for this
 	// (company, definition) — integration_credentials(company_id,
 	// definition_id) is unique, so UpsertCredential below would silently
 	// REPLACE it: wipe its sealed Extra (any OAuth tokens it carries) and
@@ -630,10 +628,10 @@ func (s *Service) Update(ctx context.Context, sc store.Scope, id uuid.UUID, in I
 		}
 
 		if def.Provider == model.IntegrationProviderISolar {
-			// I3 (fix round 2): the lease MUST stay held across
+			// The lease MUST stay held across
 			// UpsertCredential's write below, not just across
 			// mergeExtraNow's read-merge here — releasing right after
-			// mergeExtraNow (fix round 1's mistake) left the window
+			// mergeExtraNow (an earlier mistake) left the window
 			// between release and UpsertCredential completely unlocked,
 			// so a concurrent ISolarAccessToken refresh (or
 			// ISolarCallback) could read-merge-write in that gap and have
@@ -721,7 +719,7 @@ func (s *Service) upsertManualAnalyzers(ctx context.Context, sc store.Scope, def
 
 // upsertPM5340Analyzer ensures the credential has exactly ONE active
 // analyzer, with installationNumber. It is idempotent AND handles a
-// CHANGED installation number (I5, fix round 1): the credential's one
+// CHANGED installation number: the credential's one
 // analyzer is identified by (company, provider, subtype) — NOT by
 // (provider, subtype, installationNumber). The original draft looked it up
 // by the incoming installationNumber via GetByInstallation, which is the
@@ -864,7 +862,7 @@ func (s *Service) Verify(ctx context.Context, sc store.Scope, id uuid.UUID) (Vie
 		return View{}, &redactedVerifyError{text: redactedText(creds, verifyErr), err: verifyErr}
 	}
 
-	// I1 (fix round 1): re-read the credential now, AFTER Open, instead of
+	// Re-read the credential now, AFTER Open, instead of
 	// trusting creds.TokenExpiresAt. For an isolar credential, Open's call
 	// into ISolarAccessToken may have just refreshed the token and already
 	// persisted the NEW token_expires_at via persistIsolarToken's own

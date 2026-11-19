@@ -218,7 +218,7 @@ func (r *BillRepository) Supersede(ctx context.Context, s store.Scope, replacing
 	if err != nil {
 		return model.Bill{}, pgerr.Translate(r.pool, "mark bill superseded", err)
 	}
-	// Folded minor (fix round 1): the replacement must keep the replaced
+	// The replacement must keep the replaced
 	// bill's (scope, subject, period) — Supersede is a recomputation of ONE
 	// bill's history, not a way to attach an unrelated bill's row where
 	// another one used to be.
@@ -428,7 +428,7 @@ func (r *BillRepository) requireVisible(ctx context.Context, s store.Scope, bill
 // the Scope's company and one of its visible buildings. The whole write is
 // refused if any is not.
 //
-// F1 final review pass A, Important Finding 1 (fix round): this used to be
+// This used to be
 // the ONLY guard on bills.analyzer_id and bill_members.analyzer_id — run on
 // r.pool, before r.pool.Begin, unlocked. BillCreate and BillMemberInsert
 // (queries/bills.sql) now re-validate both ids in SQL, inside the same
@@ -469,7 +469,7 @@ func (r *BillRepository) requireAnalyzersVisible(ctx context.Context, s store.Sc
 // business rule above, but it cannot tell whether a non-nil buildingID
 // belongs to this Scope's company at all (Scope.AllowsBuilding's own doc
 // comment explains why — an AllBuildings Scope answers true for ANY id).
-// Critical Finding 1 (task-11a fix round 1): BillCreate validates the stored
+// BillCreate validates the stored
 // building_id (and tariff_id) itself, in SQL, against the Scope's company,
 // deleted_at and building branch — see queries/bills.sql — so the write is
 // refused even if this Go-side check were skipped entirely.
@@ -520,7 +520,7 @@ func billInsert(ctx context.Context, q *sqlcgen.Queries, pool *pgxpool.Pool, s s
 
 // billInsertLinesAndMembers writes lines and members under billID.
 //
-// Important Finding 1: BillLineInsert and BillMemberInsert both re-validate
+// BillLineInsert and BillMemberInsert both re-validate
 // billID against the Scope themselves (queries/bills.sql), so this join
 // through bills holds even if the caller's own requireVisible /
 // requireAnalyzersVisible pre-checks were ever skipped — that is why s is

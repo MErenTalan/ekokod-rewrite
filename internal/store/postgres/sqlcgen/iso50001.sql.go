@@ -99,8 +99,7 @@ type ISO50001DeleteClauseDatesParams struct {
 // company_id/building predicate directly, joined through
 // iso50001_projects/buildings, rather than trusting the caller
 // (ReplaceClauseDates) to have already verified visibility via the FOR
-// SHARE lock alone (fix round 1, Important 2 — same shape as
-// carbon.sql's CarbonDeleteConversions/CarbonInsertConversions).
+// SHARE lock alone.
 func (q *Queries) ISO50001DeleteClauseDates(ctx context.Context, arg ISO50001DeleteClauseDatesParams) error {
 	_, err := q.db.Exec(ctx, iSO50001DeleteClauseDates,
 		arg.ProjectID,
@@ -202,7 +201,7 @@ type ISO50001GetProjectParams struct {
 	BuildingIds  []uuid.UUID
 }
 
-// ISO 50001 repository queries (migration 00007). Owned by Task 11b.
+// ISO 50001 repository queries (migration 00007).
 //
 // iso50001_clause_dates and iso50001_notes have no company_id: every query
 // against them carries the scope check IN THE SAME STATEMENT, through a join
@@ -295,7 +294,7 @@ type ISO50001ListClauseDatesRow struct {
 }
 
 // ISO50001ListClauseDates is the SINGLE parent-driven statement ClauseDates()
-// runs (fix round 1, Important 3): it starts from iso50001_projects, not
+// runs: it starts from iso50001_projects, not
 // iso50001_clause_dates, and LEFT JOINs the (parentless, company_id-free)
 // child table, so a visible project with zero clause dates still returns
 // exactly one row (clause_id/start_date/end_date all null — the sentinel
@@ -361,8 +360,8 @@ type ISO50001ListNotesRow struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
-// ISO50001ListNotes is the SINGLE parent-driven statement Notes() runs (fix
-// round 1, Important 3): the optional clause_id filter is in the LEFT
+// ISO50001ListNotes is the SINGLE parent-driven statement Notes() runs: the
+// optional clause_id filter is in the LEFT
 // JOIN's own ON clause, not the WHERE clause, so "project visible, no notes
 // match the filter" still returns the project's sentinel row (all n.*
 // columns null) rather than being filtered away entirely — zero rows means

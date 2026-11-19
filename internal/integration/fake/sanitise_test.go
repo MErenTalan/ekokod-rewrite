@@ -9,7 +9,7 @@ import (
 )
 
 // TestFixturesAreSanitised walks every adapter's testdata. It passes
-// vacuously on an empty tree today; Task 17's matrix guard proves the tree
+// vacuously on an empty tree; the fixture-matrix guard proves the tree
 // is populated. The rule set itself is proven by TestSanitiserRejects.
 func TestFixturesAreSanitised(t *testing.T) {
 	files := fake.FixtureFiles(t) // glob internal/integration/*/testdata/**/*.{json,xml,csv,txt}
@@ -20,16 +20,14 @@ func TestFixturesAreSanitised(t *testing.T) {
 	}
 }
 
-// TestSanitiserRejects is the brief's original table plus every evasion the
-// fix-round-1 review (task-4-fix1-findings.md, I1-I3) demonstrated getting
-// past the previous implementation: numbers and object keys never scanned
-// (I1), the OSOS/ARIL field names and Turkish spellings missing from the
-// PII key set plus out-of-range coordinates (I2), and everyday formatting
-// (spaced IBAN/phone, bare hostnames, URL userinfo) evading the shape rules
-// (I3).
+// TestSanitiserRejects is the original sanitisation table plus every
+// evasion that got past the previous implementation: numbers and object keys never scanned,
+// the OSOS/ARIL field names and Turkish spellings missing from the
+// PII key set plus out-of-range coordinates, and everyday formatting
+// (spaced IBAN/phone, bare hostnames, URL userinfo) evading the shape rules.
 func TestSanitiserRejects(t *testing.T) {
 	for name, body := range map[string]string{
-		// --- brief's original acceptance cases ---
+		// --- original acceptance cases ---
 		"real token":     `{"access_token":"a1b2c3d4e5"}`,
 		"jwt":            `{"x":"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.sig"}`,
 		"real name":      `{"customerName":"Acme Tekstil A.Ş."}`,
@@ -40,13 +38,13 @@ func TestSanitiserRejects(t *testing.T) {
 		"iban":           `{"iban":"TR330006100519786457841326"}`,
 		"password field": `{"Password":"hunter2"}`,
 
-		// --- I1: numbers and object keys never scanned ---
+		// --- Numbers and object keys never scanned ---
 		"tckn as bare JSON number":           `{"tckn":12345678901}`,
 		"installation number as JSON number": `{"instalationNumber":40012345}`,
 		"ps_id as JSON number":               `{"ps_id":1234567}`,
 		"tckn and email smuggled as keys":    `{"12345678901":{"ali@firma.com.tr":"x"}}`,
 
-		// --- I2: PII key set misses spec field names / Turkish spellings,
+		// --- PII key set misses spec field names / Turkish spellings,
 		// coordinates not range-checked ---
 		"customerAdress not Fixture-prefixed": `{"customerAdress":"Gerçek Adres 123"}`, //nolint:misspell // OSOS field spelling + Turkish word, not a typo
 		"il not Fixture-prefixed":             `{"il":"Ankara"}`,
@@ -62,7 +60,7 @@ func TestSanitiserRejects(t *testing.T) {
 		"adres not Fixture-prefixed":          `{"adres":"Gerçek Sokak No:5"}`, //nolint:misspell // "adres" is the OSOS field name under test, not a typo
 		"neighborhood not Fixture-prefixed":   `{"neighborhood":"Real Neighborhood"}`,
 
-		// --- I3: everyday formatting evades shape rules ---
+		// --- Everyday formatting evades shape rules ---
 		"spaced IBAN":               `{"iban":"TR33 0006 1005 1978 6457 8413 26"}`,
 		"spaced local mobile":       `{"contact":"0532 123 45 67"}`,
 		"formatted mobile with +90": `{"contact":"+90 (532) 123-45-67"}`,
@@ -75,7 +73,7 @@ func TestSanitiserRejects(t *testing.T) {
 		`{"customerName":"Fixture Customer 1","instalationNumber":"FX0000001","access_token":"FIXTURE-TOKEN-1","url":"https://127.0.0.1/x"}`)))
 }
 
-// TestSanitiserWholeKeyProvinceMatch is fix-round-2's R1 controller ruling:
+// TestSanitiserWholeKeyProvinceMatch:
 // the OSOS province key `il` must be matched as a WHOLE key (`^il$`,
 // case-insensitive), never a suffix — the old unanchored `il$` stem matched
 // any key ENDING in "il", so a compliant `{"email":"..."}` fixture was
@@ -94,15 +92,15 @@ func TestSanitiserWholeKeyProvinceMatch(t *testing.T) {
 	require.NotEmpty(t, fake.Violations("probe.json", []byte(`{"il":"Ankara"}`)), "il")
 }
 
-// TestSanitiserWordTokenisedKeyMatching is fix-round-3's controller ruling
-// test table in full: PII key matching decides on whole WORDS
+// TestSanitiserWordTokenisedKeyMatching is the word-tokenisation table in
+// full: PII key matching decides on whole WORDS
 // (tokeniseKey/isNameLikePII/piiWords in sanitise.go), never substrings and
 // never a single exact whole-key anchor — both of which earlier rounds
 // tried, and each had a false result in the opposite direction:
 //
-//   - fix-round-1's unanchored `il$` SUBSTRING stem rejected any key ending
+//   - the first, unanchored `il$` SUBSTRING stem rejected any key ending
 //     in "il", including the compliant "email"/"mail"/"contactEmail".
-//   - fix-round-2's `^il$`/`^sayimnoktanim$` EXACT WHOLE-KEY anchors fixed
+//   - the next, `^il$`/`^sayimnoktanim$` EXACT WHOLE-KEY anchors fixed
 //     that, but an exact whole-key anchor stops matching the instant the
 //     key is spelled with an extra separator/case/suffix: `ilAdi`,
 //     `il_adi`, `musteriIl`, `adresIl` (never equal "il"), and
@@ -149,8 +147,7 @@ func TestSanitiserWordTokenisedKeyMatching(t *testing.T) {
 	}
 }
 
-// TestSanitiserAcronymBoundaryTokenisation is fix-round-4's controller
-// ruling: tokeniseKey's lower→upper boundary rule alone never fires
+// TestSanitiserAcronymBoundaryTokenisation: tokeniseKey's lower→upper boundary rule alone never fires
 // inside a run of consecutive uppercase letters, so a leading acronym
 // fuses with the word that follows it instead of tokenising separately —
 // "XMLCustomerID" tokenised to the single fused word "xmlcustomer" plus
@@ -199,15 +196,15 @@ func TestSanitiserAllowsNonPIIProtocolKeys(t *testing.T) {
 		`{"tesisatTurTanim":"Sanayi","tarifeTipi":"TT","tarifeTuru":"Tek Terimli"}`)))
 }
 
-// TestSanitiserRejectsPhoneNumber proves the phone rule from the brief's
-// table, which TestSanitiserRejects above (copied verbatim from the brief)
-// does not itself exercise.
+// TestSanitiserRejectsPhoneNumber proves the phone rule from the
+// sanitisation table, which TestSanitiserRejects above does not itself
+// exercise.
 func TestSanitiserRejectsPhoneNumber(t *testing.T) {
 	require.NotEmpty(t, fake.Violations("probe.json", []byte(`{"contact":"+90 532 1234567"}`)))
 }
 
 // TestSanitiserAllowsFXUnderscoreForm proves the second allowed FX shape
-// from the brief's table (underscores, not just digits) is not itself
+// from the sanitisation table (underscores, not just digits) is not itself
 // rejected.
 func TestSanitiserAllowsFXUnderscoreForm(t *testing.T) {
 	require.Empty(t, fake.Violations("ok.json", []byte(`{"ps_id":"FX1001_14_1_1"}`)))
@@ -226,7 +223,7 @@ func TestSanitiserAllowsI4FalsePositiveFixture(t *testing.T) {
 }
 
 // TestSanitiserAllowsValidCoordinates proves the coordinate range check
-// (I2) does not reject values inside the allowed fixture bounds.
+// does not reject values inside the allowed fixture bounds.
 func TestSanitiserAllowsValidCoordinates(t *testing.T) {
 	require.Empty(t, fake.Violations("ok.json", []byte(`{"koordinatX":39.5,"koordinatY":32.5}`)))
 }

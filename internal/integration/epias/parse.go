@@ -48,7 +48,7 @@ func newStrictDecoder(body []byte) *json.Decoder {
 // with per-row warnings for a row that fails to parse (adapter-patterns
 // #7) and ErrMalformedPayload for a response whose top-level shape is
 // neither known shape (adapter-patterns #6), or that contains two rows for
-// the same Date (06 §7 / task-12 brief: "Duplicate `date` within one
+// the same Date (06 §7 and the EPİAŞ API notes: "Duplicate `date` within one
 // response → ErrMalformedPayload" — a malformed import must not silently
 // pick a winner).
 func parseMCPResponse(body []byte) ([]mcpRow, []integration.Warning, error) {
@@ -131,12 +131,12 @@ func resolveYearMonth(period, date *string) (year, month int16, ok bool) {
 // parseUnitCostResponse decodes one YEKDEM unit-cost HTTP response body
 // into rows, plus the count of rows dropped because they failed to parse.
 //
-// M2 (task-12-fix1-findings.md, fix round 1): unlike parseMCPResponse, a
+// Unlike parseMCPResponse, a
 // bad individual row here cannot be reported through a
 // []integration.Warning the way an MCP row's can — YekdemUnitCost's own
-// signature (task-12 brief: "func (c *Client) YekdemUnitCost(ctx
+// signature (the EPİAŞ API notes: "func (c *Client) YekdemUnitCost(ctx
 // context.Context, from, to time.Time) ([]model.YekdemMonthly, error)") is
-// pinned by the brief with no Warnings slot, and that exact signature is
+// pinned by the EPİAŞ API notes with no Warnings slot, and that exact signature is
 // also what marketdata.PriceSource's interface requires — changing it
 // would break that pinned contract. So the drop count returned here does
 // NOT leave parseUnitCostResponse as a Warning; instead Client.YekdemUnitCost

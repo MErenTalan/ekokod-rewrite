@@ -1,0 +1,13 @@
+# Regexes matched against "path:line:text" scan output; matching lines are not hits.
+^internal/api/v1/mw/audit\.go:[0-9]+:.*records the mutation
+^internal/api/v1/security_cases_test\.go:[0-9]+:.*every mutation
+brief network blip
+a reviewer sees
+code-review-visible
+report no high or critical findings
+^web/[^:]+:[0-9]+:.*(retries a mutation|save-convention mutation|useApiMutation)
+generated with missing data
+^web/src/features/messages/[^:]+:[0-9]+:.*task-1
+so a reviewer$
+one a reviewer checks
+regenerated with `Bucket

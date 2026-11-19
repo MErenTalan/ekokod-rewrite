@@ -13,7 +13,7 @@ import (
 
 // TestProviderNumberTable is the table half of R10 (06 §2 "numbers …
 // sometimes with thousands separators"). Every row comes verbatim from the
-// task brief / plan's R10 ruling.
+// R10.
 func TestProviderNumberTable(t *testing.T) {
 	for _, tc := range []struct {
 		raw  string
@@ -54,7 +54,7 @@ func TestProviderNumberEmptyIsErrEmpty(t *testing.T) {
 // through strconv.ParseFloat (or json.Unmarshal into float64/any), this
 // value would be corrupted by float64's ~15-17 significant digit limit.
 //
-// Mutation proof (see task-3-report.md): replacing ProviderNumber's final
+// Replacing ProviderNumber's final
 // `return decimal.NewFromString(normalised)` with
 // `f, _ := strconv.ParseFloat(normalised, 64); return
 // decimal.NewFromFloat(f), nil` makes this test FAIL — observed output:

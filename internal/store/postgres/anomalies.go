@@ -126,8 +126,8 @@ func (r *AnomalyRepository) Create(ctx context.Context, s store.Scope, a model.C
 		return model.ConsumptionAnomaly{}, translated
 	}
 	// AnomalyCreate's source is `select a.id from analyzers a where …`: an
-	// invisible analyzer makes the source empty and pgx.ErrNoRows is what a
-	// :one query with an empty result reports — Translate already turned
+	// invisible analyzer makes the source empty and pgx.ErrNoRows is what a:
+	// one query with an empty result reports — Translate already turned
 	// that into store.ErrNotFound above.
 	return anomalyFromRow(row), nil
 }

@@ -1,4 +1,4 @@
--- Carbon repository queries (migration 00007). Owned by Task 11b.
+-- Carbon repository queries (migration 00007).
 --
 -- emission_factors' natural key is (coalesce(company_id, zero uuid), key) --
 -- the unique index from migration 00007. CarbonUpsertFactor and, in
@@ -35,7 +35,7 @@ limit sqlc.arg(limit_val)::int offset sqlc.arg(offset_val)::int;
 -- LOCK QUERY ITSELF: a platform factor or another company's factor matches
 -- zero rows here, so the caller never reaches delete/insert at all — the
 -- refusal does not depend on a Go-level equality check on a returned value
--- (fix round 1, Important 2).
+--.
 -- name: CarbonFactorOwnerForShare :one
 select id from emission_factors
 where id = sqlc.arg(id)::uuid and company_id = sqlc.arg(company_id)::uuid
@@ -96,7 +96,7 @@ do update set
 returning *;
 
 -- CarbonListConversions is the SINGLE parent-driven statement Conversions()
--- runs (fix round 1, Important 3): it starts from emission_factors, not
+-- runs: it starts from emission_factors, not
 -- emission_factor_conversions, and LEFT JOINs the (parentless, company_id-
 -- free) child table, so a visible factor with zero conversions still
 -- returns exactly one row (unit/multiplier/label all null — the sentinel
@@ -118,7 +118,7 @@ order by c.unit;
 -- company_id predicate directly, joined through emission_factors, rather
 -- than trusting the caller (ReplaceConversions) to have already verified
 -- ownership in Go: even if that Go-level check were bypassed, neither
--- statement can touch a row it does not own (fix round 1, Important 2).
+-- statement can touch a row it does not own.
 -- name: CarbonDeleteConversions :exec
 delete from emission_factor_conversions c
 using emission_factors f
@@ -234,7 +234,7 @@ and (
           and u.deleted_at is null
     )
 )
--- factor_id is a stored FK (fix round 1, Important 1, R1): null (no
+-- factor_id is a stored FK (R1): null (no
 -- factor — a manual activity), a platform factor, or one of the caller's
 -- own is allowed; another company's factor id is refused, atomically with
 -- the write.
@@ -280,7 +280,7 @@ where carbon_activities.id = sqlc.arg(id)::uuid
         and b.deleted_at is null
         and (sqlc.arg(all_buildings)::boolean or b.id = any(sqlc.arg(building_ids)::uuid[]))
   )
-  -- factor_id is a stored FK (fix round 1, Important 1, R1): see
+  -- factor_id is a stored FK (R1): see
   -- CarbonCreateActivity's identical clause.
   and (
       sqlc.narg(factor_id)::uuid is null
@@ -337,7 +337,7 @@ and (
           and u.deleted_at is null
     )
 )
--- factor_id is a stored FK (fix round 1, Important 1, R1): see
+-- factor_id is a stored FK (R1): see
 -- CarbonCreateActivity's identical clause.
 and (
     sqlc.narg(factor_id)::uuid is null

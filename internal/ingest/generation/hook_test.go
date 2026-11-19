@@ -77,8 +77,8 @@ func requireHookActiveExport(t *testing.T, rows map[time.Time]model.MeterReading
 // two Range calls on its own — exactly the behaviour this test exists to
 // prove only Accumulator's real lock provides. A losing CAS must return
 // immediately, unblocked, so the test's own harness can never be mistaken
-// for R52's lock (this was caught during implementation: the mutation
-// proof below still passed with the real lock's Acquire/Release deleted,
+// for R52's lock (this was caught during implementation: the check below
+// still passed with the real lock's Acquire/Release deleted,
 // because sync.Once.Do was silently doing the serialising itself).
 type hookFakeReadings struct {
 	mu   sync.Mutex
@@ -191,7 +191,7 @@ var _ store.GenerationRepository = (*hookFakeAnchors)(nil)
 // Nth time (armOnCall) Acquire is called on it — used by the two
 // serialisation tests below to detect "the second goroutine has reached
 // (and, if the first still holds the lease, is now blocked inside) its own
-// Acquire call" DETERMINISTICALLY (M4, final review B), replacing a fixed
+// Acquire call" DETERMINISTICALLY, replacing a fixed
 // time.Sleep whose "long enough" margin depends on machine/Docker load
 // rather than on the behaviour under test. Acquire itself is untouched —
 // this only observes calls to it, so it changes nothing about who actually
@@ -225,8 +225,7 @@ func (l *hookAcquireSignal) Acquire(ctx context.Context, key string, ttl time.Du
 // own Range read (inside recomputeForward) is suspended AFTER it has
 // already taken a snapshot, and BEFORE goroutine B inserts a new row and
 // runs its own full AfterPersist cycle to completion — the exact "an older
-// window persisting after a newer window has read its rows" shape the
-// reviewer's I3 finding describes (final-review-A-report.md).
+// window persisting after a newer window has read its rows" race.
 //
 // Setup: an operator anchor of 0 at 10:00. Rows 10:15 (1 kWh) and 10:45
 // (1 kWh) exist before either goroutine starts; 10:30 does not exist yet.
@@ -259,8 +258,8 @@ func (l *hookAcquireSignal) Acquire(ctx context.Context, key string, ttl time.Du
 // insert and is not the paused one). A then resumes holding its STALE
 // two-row snapshot (missing 10:30, captured before B's insert) and writes
 // Accumulate(0, [10:15=1, 10:45=1]) = [1, 2] — A's write of 2 at 10:45
-// clobbers B's correct 3. See task-fix-Y-report.md for the recorded output
-// of this exact scenario with withAnalyzerLock's Acquire call disabled.
+// clobbers B's correct 3 — which is what happens with withAnalyzerLock's
+// Acquire call disabled.
 //
 // WITH the lock (this test, the real production code path): B's own
 // Acquire blocks until A's afterPersistLocked returns and releases —
@@ -292,7 +291,7 @@ func TestAfterPersistIsSerialisedPerAnalyzer(t *testing.T) {
 		<-resumeCh
 	}
 
-	// M4: signal fires on the SECOND Acquire call ever made through this
+	// Signal fires on the SECOND Acquire call ever made through this
 	// locker — A's own (first, uncontended) Acquire happens before A even
 	// reaches pauseCh, so the second call is unambiguously B's.
 	signal := newHookAcquireSignal(lock.NewMemory(nil), 2)
@@ -319,7 +318,7 @@ func TestAfterPersistIsSerialisedPerAnalyzer(t *testing.T) {
 			hookTS("2026-09-01T10:30:00Z"), hookTS("2026-09-01T10:30:00Z"))
 	}()
 
-	// M4: wait for B to actually CALL Acquire (locked: it then blocks there,
+	// Wait for B to actually CALL Acquire (locked: it then blocks there,
 	// since A still holds the lease) instead of sleeping a fixed, load-
 	// dependent margin. If B finishes first without ever calling Acquire,
 	// the lock was not reached at all — fail immediately rather than rely
@@ -343,11 +342,11 @@ func TestAfterPersistIsSerialisedPerAnalyzer(t *testing.T) {
 }
 
 // TestAfterPersistPreAnchorDerivationIsSerialisedPerAnalyzer is M4's
-// (final review B) second gap: TestAfterPersistIsSerialisedPerAnalyzer
+// second gap: TestAfterPersistIsSerialisedPerAnalyzer
 // above only pauses inside recomputeForward's OWN Range call, so it cannot
 // tell a lock that covers the whole call (current code) apart from one
-// narrowed to cover only recomputeForward (the reviewer's named mutation:
-// "anchor read and deriveBeforeAnchor outside the lock") — both shapes
+// narrowed to cover only recomputeForward ("anchor read and
+// deriveBeforeAnchor outside the lock") — both shapes
 // serialise the one Range call this test's sibling pauses. This test
 // instead pauses inside deriveBeforeAnchor's OWN Range call (the "older
 // rows" probe, reached only when a call's `from` is at-or-before the
@@ -373,8 +372,7 @@ func TestAfterPersistIsSerialisedPerAnalyzer(t *testing.T) {
 // rows: X=1, Y=2.
 //
 // Hand-derived, serial-equivalent, correct final result (identical
-// regardless of execution order — see the two full traces in this task's
-// final-fix-B-report.md):
+// regardless of execution order):
 //
 //	X (08:00): 0 + 1 = 1
 //	Y (08:45): 1 + 1 = 2
@@ -390,7 +388,7 @@ func TestAfterPersistIsSerialisedPerAnalyzer(t *testing.T) {
 // from there corrects Y back to 2. Final state: X=1, Y=2, anchor=(0,07:45)
 // — correct.
 //
-// WITHOUT the lock covering deriveBeforeAnchor (mutation: only
+// WITHOUT the lock covering deriveBeforeAnchor (regression: only
 // recomputeForward is wrapped in withAnalyzerLock): B is never blocked from
 // running its ENTIRE cycle (deriveBeforeAnchor AND recomputeForward) while A
 // is merely paused, unprotected. B correctly computes X=1, Y=2,

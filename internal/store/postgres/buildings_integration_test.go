@@ -95,8 +95,7 @@ func TestBuildingRepositoryCreateGetUpdateSoftDelete(t *testing.T) {
 	}
 }
 
-// TestBuildingRepositoryUpdateRefusesAForeignCompany is the fix-round-1 proof
-// for Important 3: Update must refuse a model value whose CompanyID names
+// TestBuildingRepositoryUpdateRefusesAForeignCompany: Update must refuse a model value whose CompanyID names
 // another company, exactly like Create does, and write nothing.
 //
 // The row named by b.ID belongs to mine's OWN company throughout —
@@ -126,8 +125,7 @@ func TestBuildingRepositoryUpdateRefusesAForeignCompany(t *testing.T) {
 	require.Equal(t, myBuilding.Name, still.Name, "nothing may be written by a refused Update")
 }
 
-// TestBuildingRepositoryCreateRequiresAnAllBuildingsScope pins the
-// fix-round-1 controller ruling on the folded minor: a narrow Scope cannot
+// TestBuildingRepositoryCreateRequiresAnAllBuildingsScope pins the rule: a narrow Scope cannot
 // create a building outside its own grant, because it has no way to grant
 // itself a new building id.
 func TestBuildingRepositoryCreateRequiresAnAllBuildingsScope(t *testing.T) {
@@ -151,8 +149,8 @@ func TestBuildingRepositoryCreateRequiresAnAllBuildingsScope(t *testing.T) {
 	require.NoError(t, err, "an AllBuildings scope must still be able to create")
 }
 
-// TestBuildingRepositoryContactsExcludeASoftDeletedParent pins
-// wave-f-context rule 4 for BuildingContactsList's LEFT JOIN shape: a child
+// TestBuildingRepositoryContactsExcludeASoftDeletedParent pins the
+// soft-delete rule for BuildingContactsList's LEFT JOIN shape: a child
 // of a soft-deleted parent must not be readable through the parent-scoped
 // query either.
 func TestBuildingRepositoryContactsExcludeASoftDeletedParent(t *testing.T) {
@@ -174,8 +172,7 @@ func TestBuildingRepositoryContactsExcludeASoftDeletedParent(t *testing.T) {
 		"a soft-deleted building's contacts must not stay reachable through the join")
 }
 
-// TestBuildingRepositoryReplaceContactsRefusesANarrowScopeOutsideItsGrant
-// pins the folded minor: a narrow Scope (Buildings[0] only) may not replace
+// TestBuildingRepositoryReplaceContactsRefusesANarrowScopeOutsideItsGrant pins the rule: a narrow Scope (Buildings[0] only) may not replace
 // the contacts of Buildings[1], even inside its own company.
 func TestBuildingRepositoryReplaceContactsRefusesANarrowScopeOutsideItsGrant(t *testing.T) {
 	t.Parallel()

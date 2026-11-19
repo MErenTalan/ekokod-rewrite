@@ -86,7 +86,7 @@ func epiasTestOptions(srv *fake.Server, c clock.Clock, locker httpx.Locker) epia
 }
 
 // casSuccess responds 201 Created with the ticket in the Location header,
-// the shape task-12's brief documents as primary.
+// the shape the EPİAŞ API notes document as primary.
 func casSuccess(ticket string) fake.Responder {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Location", "https://giris.epias.com.tr/cas/v1/tickets/"+ticket)
@@ -202,7 +202,7 @@ func TestEPIASFixtureMatrix(t *testing.T) {
 		{
 			name: "auth_failure",
 			routes: func(t *testing.T) []fake.Route {
-				// I1: the fixture-matrix guard requires the "auth_failure"
+				// The fixture-matrix guard requires the "auth_failure"
 				// case to actually read epias_auth_failure.json, not merely
 				// have it exist on disk — CAS answers 401 with this
 				// recorded error body, matching the shape it fails in
@@ -377,9 +377,8 @@ func TestEPIASTicketIsCachedAndRefreshedOnce(t *testing.T) {
 // TestEPIASTicketRefreshIsSingleFlightAcrossGoroutines proves the
 // double-checked-locking design in ticket.go's getTicket: two goroutines
 // racing on a cold cache, both needing a fresh ticket, cause exactly one
-// CAS call when Options.Locker actually serialises them. This is the test
-// Step 5(c) of the task brief re-runs after deleting the re-check under the
-// lock, to prove it currently guards something real.
+// CAS call when Options.Locker actually serialises them. Deleting the
+// re-check under the lock makes it fail, so it guards something real.
 func TestEPIASTicketRefreshIsSingleFlightAcrossGoroutines(t *testing.T) {
 	srv := fake.NewTLSServer(t,
 		casRoute(casSuccess("TGT-9-concurrent-cas01")),
@@ -464,7 +463,7 @@ func TestEPIASPricesAreExactDecimals(t *testing.T) {
 }
 
 // TestEPIASParsesItemsShape exercises the "items[]" response shape — the
-// primary shape per the brief, exercised via its own dedicated fixture
+// primary shape per the EPİAŞ API notes, exercised via its own dedicated fixture
 // (epias_items_shape.json) distinct from epias_success.json, which uses
 // the "body.dayAheadMCPList[]" fallback shape — so both known shapes have
 // real fixture+test coverage.
@@ -534,7 +533,7 @@ func TestEPIASYekdemKeepsLatestVersion(t *testing.T) {
 	require.Zero(t, c.YekdemDropped())
 }
 
-// TestEPIASYekdemDroppedRowsAreCounted (M2, fix round 1): a YEKDEM row
+// TestEPIASYekdemDroppedRowsAreCounted: a YEKDEM row
 // that fails to resolve a (year, month) — here, one with neither `period`
 // nor `date` — is silently dropped from the result (unlike an MCP row,
 // which gets a Warning), but the drop is not lost: YekdemDropped()

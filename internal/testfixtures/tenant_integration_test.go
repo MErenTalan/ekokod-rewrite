@@ -14,7 +14,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
 )
 
-// The fixture factory is itself load-bearing: Tasks 9-13 prove tenant
+// The fixture factory is itself load-bearing: the repository tests prove tenant
 // isolation with it, so a fixture that quietly produced one building, or two
 // tenants that collided, would make those proofs vacuous. These tests pin the
 // properties the factory promises.
@@ -66,7 +66,7 @@ func TestNewTenantIsDeterministic(t *testing.T) {
 }
 
 // TestTenantShapeMakesScopeLeaksObservable is the reason the fixture looks the
-// way it does. Every assertion here is something Task 13's isolation test
+// way it does. Every assertion here is something isolation test
 // silently relies on.
 func TestTenantShapeMakesScopeLeaksObservable(t *testing.T) {
 	t.Parallel()

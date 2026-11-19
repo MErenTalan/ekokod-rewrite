@@ -69,7 +69,7 @@ func (f credentialOpenerFunc) Open(ctx context.Context, s store.Scope, credentia
 }
 
 // fixedCredentialOpener always returns creds, regardless of the requested
-// credentialID. IsActive is forced true (X-M3, final review B introduced
+// credentialID. IsActive is forced true ( introduced
 // the field; every existing caller here builds creds without ever meaning
 // to exercise the new inactive-credential gate) — the one test that
 // specifically wants an INACTIVE credential builds its own CredentialOpener
@@ -104,13 +104,13 @@ func (m sourceMap) Source(p integration.Provider) (integration.Adapter, error) {
 var _ ingest.SourceResolver = (sourceMap)(nil)
 
 // backfillRealEnqueuer wraps a real *job.Client over a real (isolated)
-// Redis (M5, final review B): every Enqueue call this file's tests make
+// Redis: every Enqueue call this file's tests make
 // goes through asynq's own deterministic-TaskID uniqueness in Redis, not a
 // payload-keyed proxy. The payload-keyed fake this replaced could not
 // catch a regression that drops ForceRunID from the real TaskID derivation
 // (job's own integFetchReadingsTaskID) while leaving the JSON payload
 // itself unchanged — the payload is ALL a payload-keyed fake can see, so
-// such a mutation is invisible to it; asynq's own Redis-backed uniqueness
+// such a change is invisible to it; asynq's own Redis-backed uniqueness
 // depends on the real TaskID (which DOES fold in ForceRunID), so it is not.
 type backfillRealEnqueuer struct {
 	client *job.Client
@@ -239,7 +239,7 @@ func backfillTestSetInactive(t *testing.T, ctx context.Context, analyzers *postg
 
 // ---------------------------------------------------------------------------
 
-// TestBackfillEnqueuesEveryWindowOnce is the brief's acceptance fixture: 45
+// TestBackfillEnqueuesEveryWindowOnce is the acceptance fixture: 45
 // days x 2 analyzers x 1 kind at a 30-day max gives 4 tasks with distinct
 // deterministic TaskIDs (here: 4 distinct recordingEnqueuer keys — see its
 // doc for why that is the same equivalence relation as the real TaskID).
@@ -519,7 +519,7 @@ func TestBackfillMissingAnalyzerIDsRunPartialAndOnlyEnqueueVisible(t *testing.T)
 	require.True(t, named[crossCompanyID], "the other company's analyzer id must be named in job_runs.detail.failures")
 }
 
-// TestBackfillRejectsInvertedAndFutureRanges proves the brief's three range
+// TestBackfillRejectsInvertedAndFutureRanges proves the three range
 // rules — From < To, To <= now, span <= 5 years — return
 // integration.ErrMalformedPayload and never even open the credential or
 // start a job run: a malformed request never attempted anything.

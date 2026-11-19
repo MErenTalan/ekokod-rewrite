@@ -201,8 +201,7 @@ func TestAlarmMarkBillFiredJoinsThroughAlarmsAndBills(t *testing.T) {
 	require.False(t, claimedAgain)
 }
 
-// TestAlarmAnalyzersAndEventsHideBuildingOutsideNarrowScope is Important
-// Finding 2's probe: the alarm RULE is company-wide (accepted), but its
+// TestAlarmAnalyzersAndEventsHideBuildingOutsideNarrowScope is a regression test: the alarm RULE is company-wide (accepted), but its
 // building-scoped children are not. A narrow Scope on Buildings[0] must
 // never learn — through Analyzers, ListEvents, or a AnalyzerID List filter —
 // that the SAME alarm also watches an analyzer under Buildings[1].
@@ -269,8 +268,7 @@ func TestAlarmAnalyzersAndEventsHideBuildingOutsideNarrowScope(t *testing.T) {
 	require.Len(t, byVisible, 1)
 }
 
-// TestAlarmMarkNotifiedRespectsNarrowScopeAndSoftDelete is F1 final review
-// pass A, Important Finding 3's probe. Pre-fix, MarkNotified checked only
+// TestAlarmMarkNotifiedRespectsNarrowScopeAndSoftDelete is a regression test. Pre-fix, MarkNotified checked only
 // alarms.company_id: a narrow Scope could mark notified an event on an
 // analyzer outside its buildings, or a NULL-analyzer (company-level) event
 // it could never list, and a soft-deleted alarm's events stayed both
@@ -331,8 +329,7 @@ func TestAlarmMarkNotifiedRespectsNarrowScopeAndSoftDelete(t *testing.T) {
 	require.ErrorIs(t, err, store.ErrNotFound, "a soft-deleted alarm's event must not be markable notified, even under AdminScope")
 }
 
-// TestAlarmReplaceAnalyzersLeavesInvisibleAttachmentsUntouched is Important
-// Finding 2's probe on the write side: ReplaceAnalyzers must replace ONLY
+// TestAlarmReplaceAnalyzersLeavesInvisibleAttachmentsUntouched is a regression test on the write side: ReplaceAnalyzers must replace ONLY
 // the attachments visible to the Scope, not silently detach one outside it.
 func TestAlarmReplaceAnalyzersLeavesInvisibleAttachmentsUntouched(t *testing.T) {
 	t.Parallel()
@@ -362,7 +359,7 @@ func TestAlarmReplaceAnalyzersLeavesInvisibleAttachmentsUntouched(t *testing.T) 
 		"a narrow Scope's ReplaceAnalyzers must not have detached the hidden-building analyzer")
 }
 
-// TestAlarmUpdateRejectsForeignCompanyID is Important Finding 3's probe.
+// TestAlarmUpdateRejectsForeignCompanyID is a regression test.
 func TestAlarmUpdateRejectsForeignCompanyID(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -380,8 +377,7 @@ func TestAlarmUpdateRejectsForeignCompanyID(t *testing.T) {
 	require.ErrorIs(t, err, store.ErrNotFound)
 }
 
-// TestAlarmCrossTenantUpdateAndSoftDelete is Important Finding 7's missing
-// test: cross-tenant Update and SoftDelete for alarms.
+// TestAlarmCrossTenantUpdateAndSoftDelete is a regression test: cross-tenant Update and SoftDelete for alarms.
 func TestAlarmCrossTenantUpdateAndSoftDelete(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -406,8 +402,7 @@ func TestAlarmCrossTenantUpdateAndSoftDelete(t *testing.T) {
 	require.Nil(t, got.DeletedAt)
 }
 
-// TestAlarmMarkBillFiredRejectsInvisibleAlarm is Important Finding 7's
-// missing test: MarkBillFired with an invisible ALARM (as opposed to the
+// TestAlarmMarkBillFiredRejectsInvisibleAlarm is a regression test: MarkBillFired with an invisible ALARM (as opposed to the
 // existing invisible-BILL case).
 func TestAlarmMarkBillFiredRejectsInvisibleAlarm(t *testing.T) {
 	t.Parallel()
@@ -428,7 +423,7 @@ func TestAlarmMarkBillFiredRejectsInvisibleAlarm(t *testing.T) {
 	require.ErrorIs(t, err, store.ErrNotFound, "tenant A cannot claim firing for tenant B's alarm even against its OWN bill")
 }
 
-// TestAlarmPageLimitsClampNegativeOffset is the folded-minor probe: OFFSET
+// TestAlarmPageLimitsClampNegativeOffset: OFFSET
 // must not be negative.
 func TestAlarmPageLimitsClampNegativeOffset(t *testing.T) {
 	t.Parallel()

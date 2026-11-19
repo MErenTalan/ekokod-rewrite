@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-  # F1 final review pass B, I5: the Makefile's test-perf comment and the F1
+  # The Makefile's test-perf comment and the F1
   # plan both claimed "CI runs this on a schedule, not per push" while no
   # schedule trigger existed anywhere in this file — the 1M-row chunk-layout
   # and EXPLAIN acceptance test (internal/store/postgres,
@@ -39,7 +39,7 @@ jobs:
       - name: shellcheck
         run: shellcheck scripts/*.sh
 
-      # I6: shellcheck above parses script CONTENTS; it has never looked at
+      # Shellcheck above parses script CONTENTS; it has never looked at
       # file MODES, which is how scripts/gen-env-docker.sh and
       # scripts/offline-bundle.sh were committed non-executable (100644)
       # without CI noticing.
@@ -102,7 +102,7 @@ jobs:
   integration:
     name: Integration tests
     runs-on: ubuntu-latest
-    # M6 (final review B): pins testcontainers-go's own readiness probes to
+    # Pins testcontainers-go's own readiness probes to
     # loopback (see Makefile's test-integration target for the full
     # rationale) — a GitHub-hosted runner's Docker daemon is a single-tenant
     # VM, so this env is a defensive match with the Makefile target rather

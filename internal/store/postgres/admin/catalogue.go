@@ -69,8 +69,7 @@ func catalogueDecimalString(d *decimal.Decimal) *string {
 // unique (effective_from, user_group, voltage_level, term), and returns the
 // number of rows written. A batch carrying two entries that share that
 // natural key is refused whole, before any database round trip, with
-// store.ErrConflict naming the key (fix round 1, folded minor — same ruling
-// as Task 10's BulkInsert duplicate-key refusal): the `on conflict` clause
+// store.ErrConflict naming the key (the same rule as BulkInsert's duplicate-key refusal): the `on conflict` clause
 // would otherwise let the database pick an unspecified winner between them.
 func (r *CatalogueRepository) UpsertNationalTariffSchedule(ctx context.Context, entries []model.NationalTariffScheduleEntry) (int64, error) {
 	if len(entries) == 0 {

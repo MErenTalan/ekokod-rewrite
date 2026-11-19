@@ -71,7 +71,7 @@ var errEvaluateUnavailable = perr.New(perr.Unavailable.Code, perr.Unavailable.HT
 
 // DryRun is R223: evaluate now and return the verdicts, writing nothing — no
 // event, no bill claim, no notification. notify=true runs the real firing
-// path, which Task 9 supplies.
+// path.
 func (s *Service) DryRun(ctx context.Context, sc store.Scope, id uuid.UUID, notify bool) (Evaluation, error) {
 	rule, err := s.Get(ctx, sc, id) // R213 first
 	if err != nil {

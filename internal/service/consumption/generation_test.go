@@ -100,8 +100,7 @@ func TestGenerationRowsBlanksASuspectExportRegistersIndex(t *testing.T) {
 	require.Nil(t, out[0].Indexes[energy.ActiveExport], "active_export is suspect: its closing index must never render as 50")
 }
 
-// TestGenerationRowsDoesNotAliasInputValuesMap is guard (c) from the task
-// brief: GenerationRows must never share the input row's Values (or Indexes)
+// TestGenerationRowsDoesNotAliasInputValuesMap: GenerationRows must never share the input row's Values (or Indexes)
 // map. Mutating the returned map must not change the input row's own map.
 func TestGenerationRowsDoesNotAliasInputValuesMap(t *testing.T) {
 	in := generationRow()

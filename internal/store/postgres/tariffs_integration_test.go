@@ -179,8 +179,7 @@ func TestTariffEffectiveFallsBackToCompanyWideTariff(t *testing.T) {
 //
 // Deliberate-break proof (reverted after running): removing the
 // `if !visible { return ... ErrNotFound }` branch in TariffRepository.
-// Effective made this test fail with "expected: not found, actual: <nil>"
-// — see the task report.
+// Effective made this test fail with "expected: not found, actual: <nil>".
 func TestTariffEffectiveRequiresVisibleBuilding(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -419,8 +418,7 @@ func TestIcmalInsertRowsRefusesWholeBatchForInvisibleBuilding(t *testing.T) {
 	require.Empty(t, rows, "the whole batch must be refused, including the row with a visible building")
 }
 
-// TestTariffCreateRejectsCrossTenantBuildingEvenWithAdminScope is Critical
-// Finding 1's probe: Scope.AllowsBuilding is an in-memory grant check that
+// TestTariffCreateRejectsCrossTenantBuildingEvenWithAdminScope is a regression test: Scope.AllowsBuilding is an in-memory grant check that
 // returns true for ANY id when AllBuildings is set — it cannot know which
 // company owns a building — so tenant A's AdminScope must not be able to
 // store tenant B's building id as a tariff's building_id. The guard must be
@@ -446,8 +444,7 @@ func TestTariffCreateRejectsCrossTenantBuildingEvenWithAdminScope(t *testing.T) 
 	require.Equal(t, ownBuilding, *created.BuildingID)
 }
 
-// TestTariffUpdateRejectsMovingToCrossTenantBuilding is Critical Finding 1's
-// probe applied to Update: moving an EXISTING tariff to another tenant's
+// TestTariffUpdateRejectsMovingToCrossTenantBuilding is a regression test applied to Update: moving an EXISTING tariff to another tenant's
 // building is the same stored-foreign-key bug as creating one there.
 func TestTariffUpdateRejectsMovingToCrossTenantBuilding(t *testing.T) {
 	t.Parallel()
@@ -473,8 +470,7 @@ func TestTariffUpdateRejectsMovingToCrossTenantBuilding(t *testing.T) {
 	require.Equal(t, own, *got.BuildingID)
 }
 
-// TestTariffCreateRejectsCreatedByOutsideCompany is Important Finding 4's
-// probe: created_by is a stored foreign key too and must name a user of the
+// TestTariffCreateRejectsCreatedByOutsideCompany is a regression test: created_by is a stored foreign key too and must name a user of the
 // same company, never taken as given.
 func TestTariffCreateRejectsCreatedByOutsideCompany(t *testing.T) {
 	t.Parallel()
@@ -498,7 +494,7 @@ func TestTariffCreateRejectsCreatedByOutsideCompany(t *testing.T) {
 	require.Equal(t, ownUser, *created.CreatedBy)
 }
 
-// TestTariffUpdateRejectsForeignCompanyID is Important Finding 3's probe:
+// TestTariffUpdateRejectsForeignCompanyID is a regression test:
 // Update must reject a model.Tariff naming another company exactly as
 // Create does, instead of silently ignoring the field.
 func TestTariffUpdateRejectsForeignCompanyID(t *testing.T) {
@@ -519,8 +515,7 @@ func TestTariffUpdateRejectsForeignCompanyID(t *testing.T) {
 	require.ErrorIs(t, err, store.ErrNotFound)
 }
 
-// TestTariffCrossTenantUpdateAndSoftDelete is Important Finding 7's missing
-// test: cross-tenant Update and SoftDelete for tariffs.
+// TestTariffCrossTenantUpdateAndSoftDelete is a regression test: cross-tenant Update and SoftDelete for tariffs.
 func TestTariffCrossTenantUpdateAndSoftDelete(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -549,7 +544,7 @@ func TestTariffCrossTenantUpdateAndSoftDelete(t *testing.T) {
 
 func ptrTariffTestString(s string) *string { return &s }
 
-// TestTariffEffectiveIstanbulDayBoundary pins Important Finding 5: the
+// TestTariffEffectiveIstanbulDayBoundary: the
 // SAME instant, given as 2026-03-01T00:30+03:00 and as its equal UTC instant
 // 2026-02-28T21:30Z, must resolve to the IDENTICAL tariff — the day boundary
 // is Europe/Istanbul, never the caller's incidental time.Time Location.
@@ -589,8 +584,7 @@ func TestTariffEffectiveIstanbulDayBoundary(t *testing.T) {
 	require.NotEqual(t, feb.ID, fromLocal.ID)
 }
 
-// TestTariffEffectiveTieBreaksDeterministically pins Important Finding 5's
-// second half: the schema has no unique index on (building_id,
+// TestTariffEffectiveTieBreaksDeterministically: the schema has no unique index on (building_id,
 // effective_from), so two tariffs CAN share one, and Effective must always
 // pick the SAME one — the most recently created — not whichever a query
 // planner happens to return first.
@@ -618,7 +612,7 @@ func TestTariffEffectiveTieBreaksDeterministically(t *testing.T) {
 	}
 }
 
-// TestTariffOfSoftDeletedBuildingIsNotReadable is the folded-minor probe:
+// TestTariffOfSoftDeletedBuildingIsNotReadable:
 // bills/tariffs of a soft-deleted building must not stay readable through
 // their own row.
 func TestTariffOfSoftDeletedBuildingIsNotReadable(t *testing.T) {
@@ -642,8 +636,7 @@ func TestTariffOfSoftDeletedBuildingIsNotReadable(t *testing.T) {
 	}
 }
 
-// TestIcmalImportCrossTenantGetListUpdate is Important Finding 7's missing
-// test: GetImport/ListImports/UpdateImportResult cross-tenant.
+// TestIcmalImportCrossTenantGetListUpdate is a regression test: GetImport/ListImports/UpdateImportResult cross-tenant.
 func TestIcmalImportCrossTenantGetListUpdate(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -677,8 +670,7 @@ func TestIcmalImportCrossTenantGetListUpdate(t *testing.T) {
 	require.Equal(t, "analysed", updated.Status)
 }
 
-// TestNationalTariffEffectiveRejectsInvalidScope is Important Finding 7's
-// missing test: NationalTariff.Effective with an invalid Scope.
+// TestNationalTariffEffectiveRejectsInvalidScope is a regression test: NationalTariff.Effective with an invalid Scope.
 func TestNationalTariffEffectiveRejectsInvalidScope(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -689,7 +681,7 @@ func TestNationalTariffEffectiveRejectsInvalidScope(t *testing.T) {
 	require.ErrorIs(t, err, store.ErrInvalidScope)
 }
 
-// TestTariffPageLimitsClampNegativeOffset is the folded-minor probe: OFFSET
+// TestTariffPageLimitsClampNegativeOffset: OFFSET
 // must not be negative, so a caller-supplied negative one is clamped to 0
 // rather than passed through to Postgres (which rejects it outright).
 func TestTariffPageLimitsClampNegativeOffset(t *testing.T) {
@@ -703,8 +695,7 @@ func TestTariffPageLimitsClampNegativeOffset(t *testing.T) {
 	require.NoError(t, err, "a negative Offset must be clamped to 0, not rejected by Postgres or the repository")
 }
 
-// TestTariffTemplateRepositoryCRUDAndIsolation is Important Finding 7's
-// missing test: TariffTemplateRepository had NO tests at all.
+// TestTariffTemplateRepositoryCRUDAndIsolation is a regression test: TariffTemplateRepository had NO tests at all.
 func TestTariffTemplateRepositoryCRUDAndIsolation(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -769,8 +760,8 @@ func TestTariffTemplateRepositoryCRUDAndIsolation(t *testing.T) {
 
 // tariffFixtureDate builds a UTC midnight time.Time for the `date`-column
 // tests above. Renamed from the package-wide-collision-prone `date`
-// (Important Finding 6, task-11a fix round 1: any bare helper name in a
-// *_test.go file must carry its file's aggregate prefix).
+// (any bare helper name in a *_test.go file must carry its file's aggregate
+// prefix).
 func tariffFixtureDate(year int, month time.Month, day int) time.Time {
 	return time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
 }

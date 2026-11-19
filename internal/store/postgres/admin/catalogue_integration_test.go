@@ -157,12 +157,10 @@ func TestAdminUpsertIntegrationDefinitionsIsIdempotent(t *testing.T) {
 	require.Equal(t, 1, count)
 }
 
-// TestAdminUpsertNationalTariffScheduleRefusesInBatchDuplicateKey is the
-// folded-minor test (fix round 1): a batch carrying two entries that share
+// TestAdminUpsertNationalTariffScheduleRefusesInBatchDuplicateKey: a batch carrying two entries that share
 // the table's natural key (effective_from, user_group, voltage_level, term)
 // is refused WHOLE, before any database round trip, with an
-// ErrConflict-matching error naming the key — matching Task 10's BulkInsert
-// duplicate-key ruling.
+// ErrConflict-matching error naming the key — matching BulkInsert's duplicate-key rule.
 func TestAdminUpsertNationalTariffScheduleRefusesInBatchDuplicateKey(t *testing.T) {
 	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)
@@ -190,8 +188,7 @@ func TestAdminUpsertNationalTariffScheduleRefusesInBatchDuplicateKey(t *testing.
 	require.Zero(t, count, "the refused batch must not have written anything, not even one of the two")
 }
 
-// TestAdminReplacePlatformConversionsSmallerReplaceRemovesExactly is the
-// folded-minor test (fix round 1): replacing a platform factor's
+// TestAdminReplacePlatformConversionsSmallerReplaceRemovesExactly: replacing a platform factor's
 // conversions with a SMALLER set removes exactly the rows no longer
 // present, not just adds/updates the new ones.
 func TestAdminReplacePlatformConversionsSmallerReplaceRemovesExactly(t *testing.T) {

@@ -44,7 +44,7 @@ func TestMissingHoursUsesIstanbulDays(t *testing.T) {
 }
 
 // TestMissingHoursPre2016DSTDays pins R6 against Go's own tzdata (verified
-// live via `go run`, see task-12-report.md): 2015-03-29 is a 23-hour
+// live via `go run`): 2015-03-29 is a 23-hour
 // spring-forward day, 2015-10-25 is an ORDINARY 24-hour day (Turkey's
 // government postponed that year's scheduled fall-back by decree), and
 // 2015-11-08 is the actual, delayed 25-hour fall-back day. All three are

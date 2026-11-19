@@ -14,7 +14,7 @@ import (
 // opGetDevicePointMinuteDataList / opGetPowerStationPointMinuteDataList are
 // integration_definitions.json's isolar row keys (R40) for the two
 // minute-series calls. "Minute series result_data is keyed by ps_key/ps_id"
-// (task brief): the device call's result_data is a map keyed by ps_key, one
+// (the iSolar API notes): the device call's result_data is a map keyed by ps_key, one
 // entry per requested device; the plant call's is a map keyed by ps_id,
 // always exactly one entry (the single plant asked for).
 const (

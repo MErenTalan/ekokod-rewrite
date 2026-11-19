@@ -62,8 +62,8 @@ import (
 // ReasonNegativeDelta always carries a negative Delta and ReasonMeterReset
 // always carries a nil Delta; Emitted matches start.TS.Before(end.TS).
 //
-// Mutations this generator catches on its own, with no fixed anchor:
-// removing the whole R90 end-instant block (a narrower flag-only mutation
+// Bugs this generator catches on its own, with no fixed anchor:
+// removing the whole R90 end-instant block (a narrower flag-only change
 // inside that block is oracle-equivalent and is NOT caught here — see
 // reset_test.go's unit tests for that), dropping R92's start-instant
 // check, narrowing either gate to load_profile only, loosening either
@@ -394,8 +394,8 @@ func deterministicNegativeAndStartPriorEdgeCases(t *testing.T) {
 			// passes silently) forces Derive into deriveRegister's
 			// len(windowResets)==0 plain-difference branch instead of the
 			// outer Derive-level fast path (which calls the separate,
-			// unmutated Difference function directly and would not
-			// exercise this mutation at all).
+			// unchanged Difference function directly and would not
+			// exercise this bug at all).
 			name:       "plain-difference-negative-delta",
 			start:      &energy.Reading{TS: t0, Kind: energy.KindLoadProfile, Values: map[energy.Register]*decimal.Decimal{energy.ActiveImport: decPtr(900)}},
 			end:        &energy.Reading{TS: t0.Add(time.Hour), Kind: energy.KindLoadProfile, Values: map[energy.Register]*decimal.Decimal{energy.ActiveImport: decPtr(12)}},

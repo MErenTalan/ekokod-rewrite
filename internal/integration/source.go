@@ -140,7 +140,7 @@ const (
 )
 
 // ResolvedMultiplier records which multiplier an adapter actually applied
-// and how it was decided. ProviderResolved (R51/I2) is true only when the
+// and how it was decided. ProviderResolved (R51) is true only when the
 // VALUE came from the provider itself this call (MultiplierFromLastEndex,
 // MultiplierFromLoadProfile) — never for MultiplierFromRequest (an echo of
 // what the pipeline already had) or MultiplierFallbackOne (a guess). The
@@ -150,7 +150,7 @@ const (
 // stored multiplier, or two kinds that disagree on whether the provider
 // currently supplies one (e.g. GridBox's load_profile vs. daily/reset/
 // current_index/billing) would ping-pong the stored value back and forth
-// on every dispatch (I2).
+// on every dispatch.
 type ResolvedMultiplier struct {
 	Value            decimal.Decimal
 	Source           MultiplierSource
@@ -186,7 +186,7 @@ type FetchResult struct {
 	// HourlyValues carries OSOS's provider-differenced consumption
 	// cross-check series (06 §2, R2). It is populated only by the OSOS
 	// adapter and is never mixed into Readings: it is a cross-check value,
-	// not a meter index, and the pipeline (Task 10) is what turns it into a
+	// not a meter index, and the pipeline is what turns it into a
 	// model.ProviderHourlyValue for storage.
 	HourlyValues []HourlyValue
 }
@@ -194,7 +194,7 @@ type FetchResult struct {
 // HourlyValue is provider-differenced consumption for one hour: a
 // cross-check against the metered readings, not a register index. Declared
 // here (rather than as a store type) so this package has no dependency on
-// internal/store — Task 5 owns the store-side model.ProviderHourlyValue that
+// internal/store — the store owns the store-side model.ProviderHourlyValue that
 // the pipeline converts this into.
 type HourlyValue struct {
 	Ts                time.Time // hour start, UTC

@@ -179,7 +179,7 @@ func TestPM5340FixtureMatrix(t *testing.T) {
 			},
 			check: func(t *testing.T, res integration.FetchResult) {
 				require.Len(t, res.Readings, 2)
-				// I1: assert the served rate_limited fixture's own values,
+				// Assert the served rate_limited fixture's own values,
 				// not the success fixture's, so the case actually proves
 				// pm5340_rate_limited.json (not pm5340_success.json) was
 				// read after the 429.
@@ -232,7 +232,7 @@ func TestPM5340FixtureMatrix(t *testing.T) {
 			require.NoError(t, err)
 			tc.check(t, res)
 
-			// I1: pagination must actually make two requests carrying the
+			// Pagination must actually make two requests carrying the
 			// cursor param, not just return the right count via dedupe.
 			if tc.name == "pagination" {
 				reqs := srv.Requests()
@@ -267,11 +267,11 @@ func TestPM5340FixtureMatrixRateLimitedRecordsSleep(t *testing.T) {
 	require.Len(t, srv.Requests(), 2)
 }
 
-// ---- Named behaviour tests (task-9 brief) ----
+// ---- Named behaviour tests ----
 
 // TestPM5340NeverDerivesCumulativeExport: every reading has ActiveExport ==
 // nil, and IntervalGenerationKwh == currentGeneration x 0.25 (removed-
-// behaviour 22). See mapping.go's mapRow: the mutation this test must catch
+// behaviour 22). See mapping.go's mapRow: the bug this test must catch
 // is accumulating currentGeneration into ActiveExport in the adapter.
 func TestPM5340NeverDerivesCumulativeExport(t *testing.T) {
 	srv := fake.NewTLSServer(t, fake.Route{

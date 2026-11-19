@@ -79,7 +79,7 @@ const (
 
 // nativeFunctions are functions sqlc's own catalogue already types, so calling
 // one in a view body or a query needs no shim declaration. It is deliberately
-// generous about ordinary Postgres built-ins that Tasks 9-11 are likely to
+// generous about ordinary Postgres built-ins that a repository is likely to
 // reach for: a name wrongly listed here is a missed mistype, but a name merely
 // absent is a loud, one-line fix, so the cost of the two mistakes is not
 // symmetric and this list should only ever gain names that Postgres really does
@@ -277,8 +277,8 @@ func generatedFields(t *testing.T) []generatedField {
 	return out
 }
 
-// TestGeneratedNumericColumnsAreNumeric is the guard the shim file and the
-// ::numeric casts in 00005 exist to satisfy.
+// TestGeneratedNumericColumnsAreNumeric is the guard the shim file and the:
+// :numeric casts in 00005 exist to satisfy.
 func TestGeneratedNumericColumnsAreNumeric(t *testing.T) {
 	t.Parallel()
 
@@ -590,8 +590,7 @@ func stripComments(sql string) (out string, truncated bool) {
 // two-character-content literal that closes at that quote. An EXTENDED
 // literal — one whose opening quote is immediately preceded by `E` or `e`,
 // as in `E'it\'s'` — additionally treats `\` as an escape character, so
-// `\'` inside it is an escaped quote, not the closing one. Task 8c fix round
-// 2's finding: the first version of this scanner applied ONLY the ”-escape
+// `\'` inside it is an escaped quote, not the closing one. The first version of this scanner applied ONLY the ”-escape
 // rule to every '...' literal, so in `E'it\'s'` it read the `\'` as the real
 // close, then re-entered string state at the literal `'` after `s` and
 // swallowed the rest of the file as "still inside a string" — hiding every
@@ -820,7 +819,7 @@ var sqlcPseudoFunctions = map[string]bool{
 // $tag$...$tag$ literal — see skipNonCode's EOF discussion and
 // stripComments' truncated. Every caller in this file treats it as a
 // failure: a call written after the unterminated span would otherwise be
-// silently invisible, exactly the hole Task 8c fix round 2 closed for
+// silently invisible, exactly the hole that existed for
 // `E'it\'s'`.
 func functionCalls(sql string) (out []funcCall, truncated bool) {
 	for i := 0; i < len(sql); {
@@ -1133,7 +1132,7 @@ func TestFunctionCallsRecognisesEveryCallSpelling(t *testing.T) {
 			calls: []funcCall{{name: "any", arity: 1}},
 		},
 		{
-			// Task 8c fix round 1: the qualifier check used to skip
+			// The qualifier check used to skip
 			// `sqlc.` + ANY name, which an undeclared
 			// `sqlc.wobble_undeclared(id)` would have exploited outright.
 			name:  "an undeclared name under the sqlc qualifier is NOT skipped",
@@ -1146,7 +1145,7 @@ func TestFunctionCallsRecognisesEveryCallSpelling(t *testing.T) {
 			calls: nil,
 		},
 		{
-			// Task 8c fix round 1, evasion 1: a review found the OLD
+			// Evasion 1: the OLD
 			// stripComments — a blockCommentRe pass followed by a
 			// commentRe pass — treated the "/*" inside this LINE comment
 			// as a real block-comment opener, and then, being non-greedy,
@@ -1158,7 +1157,7 @@ func TestFunctionCallsRecognisesEveryCallSpelling(t *testing.T) {
 			calls: []funcCall{{name: "wobble_undeclared", arity: 1}},
 		},
 		{
-			// Task 8c fix round 1, evasion 2: the same blockCommentRe pass
+			// Evasion 2: the same blockCommentRe pass
 			// cannot tell a '/*'...'*/' pair of STRING LITERALS from a real
 			// block comment, and deletes whatever real code — including a
 			// call — sits between them.
@@ -1168,7 +1167,7 @@ func TestFunctionCallsRecognisesEveryCallSpelling(t *testing.T) {
 			calls: []funcCall{{name: "wobble_undeclared", arity: 1}},
 		},
 		{
-			// Task 8c fix round 1, evasion 3: a scanner with no '...'
+			// Evasion 3: a scanner with no '...'
 			// string-tracking misreads a lone '"' inside a string literal
 			// as the START of a quoted identifier, scans for the next '"'
 			// it can find (there may be none), and — in the old
@@ -1181,8 +1180,7 @@ func TestFunctionCallsRecognisesEveryCallSpelling(t *testing.T) {
 		{
 			// Dollar-quoted strings are the one literal form the ORIGINAL
 			// (round 0) scanner never had to face, since none of this
-			// schema's migrations or query files used one — but the fix
-			// round's lexer must still treat $tag$...$tag$ (and the bare
+			// schema's migrations or query files used one — but the fix's lexer must still treat $tag$...$tag$ (and the bare
 			// $$...$$ form) as a literal, not as call-bearing code, or as
 			// two independent, unmatched positional parameters.
 			name:  "a dollar-quoted string is not scanned for calls, and $1/$2 are not mistaken for one",
@@ -1190,7 +1188,7 @@ func TestFunctionCallsRecognisesEveryCallSpelling(t *testing.T) {
 			calls: nil,
 		},
 		{
-			// Task 8c fix round 2, finding 1: the OLD '...' state applied the
+			// The OLD '...' state applied the
 			// ''-doubling escape to every literal, including an EXTENDED
 			// (E'...') one, so it read the \' here as the real closing quote,
 			// then re-entered string state at the '  after "s" and swallowed
@@ -1273,7 +1271,7 @@ func TestFunctionCallsRecognisesEveryCallSpelling(t *testing.T) {
 			"/* outer /* inner */ text_that_looks_like_a_call(x) */ select locf(ts) from consumption_hourly"))
 	})
 
-	// Task 8c fix round 2, finding 1 (EOF discussion): calls collected
+	// EOF: calls collected
 	// BEFORE an unterminated literal or comment are never lost — they were
 	// already appended while scanning left to right — but a call written
 	// AFTER one is invisible to the scan. That must surface as a reported
@@ -1295,7 +1293,7 @@ func TestFunctionCallsRecognisesEveryCallSpelling(t *testing.T) {
 		require.True(t, truncated, "an unterminated $tag$...$tag$ literal must be reported")
 	})
 
-	// Task 8c fix round 2, finding 2: ordinary DML and DDL syntax that is
+	// Ordinary DML and DDL syntax that is
 	// shaped exactly like a call — an identifier (or reserved keyword)
 	// directly followed by "(" — must not be reported as one. Each case
 	// pairs the false-positive shape (must NOT be reported, checked against

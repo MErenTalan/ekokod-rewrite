@@ -163,7 +163,6 @@ select id, provider, subtype, endpoints, created_at, updated_at from integration
 `
 
 // Integration catalogue and credential repository queries (migration 00008).
-// Owned by Task 11b.
 //
 // integration_definitions is platform-wide (no company_id at all): reads are
 // scoped (Scope is validated, in Go, before the query runs) but the query
@@ -276,8 +275,7 @@ type IntegrationUpsertCredentialParams struct {
 // On conflict, a nil secret/extra parameter means "leave it as it was", not
 // "wipe it": UpsertCredential is also how a caller updates username/settings
 // alone, without re-supplying the secret, so `coalesce(excluded.x, x)` keeps
-// the stored ciphertext when the incoming value is NULL (fix round 1, folded
-// minor).
+// the stored ciphertext when the incoming value is NULL.
 func (q *Queries) IntegrationUpsertCredential(ctx context.Context, arg IntegrationUpsertCredentialParams) (IntegrationCredential, error) {
 	row := q.db.QueryRow(ctx, integrationUpsertCredential,
 		arg.ID,

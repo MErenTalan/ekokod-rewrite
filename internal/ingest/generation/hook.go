@@ -33,7 +33,7 @@ const initialAnchorOffset = 15 * time.Minute
 const rangeSliceWindow = 7 * 24 * time.Hour
 
 // writeBatchSize caps how many recomputed rows accumulate before a
-// BulkInsert flush (brief: "batches of ≤ 5000").
+// BulkInsert flush (spec: "batches of ≤ 5000").
 const writeBatchSize = 5000
 
 // generationLockKeyPrefix names the per-analyzer distributed lease R52
@@ -51,7 +51,7 @@ const generationLockKeyPrefix = "generation:"
 const generationLockTTL = 20 * time.Minute
 
 // releaseLeaseTimeout bounds Release's own detached context below — the
-// same folded-minor pattern internal/credentials/service.go's releaseLease
+// same pattern internal/credentials/service.go's releaseLease
 // uses (context.WithoutCancel, not the caller's ctx, which may already be
 // cancelled or past its deadline by the time Release runs: R52 "released
 // with a non-cancelled ctx").
@@ -60,9 +60,8 @@ const releaseLeaseTimeout = 5 * time.Second
 // Accumulator reconciles PM5340's interval generation into active_export.
 // It implements ingest.PostPersistHook for provider pm5340.
 //
-// Controller note (mid-task-11, Task 10 review fix round): AfterPersist's
-// `from`/`to` will change from the chunk window to the exact persisted
-// [minTs, maxTs] of the page just written — no signature change. Accumulator
+// AfterPersist's `from`/`to` is the exact persisted [minTs, maxTs] of the
+// page just written, not the chunk window. Accumulator
 // does not need to know which one it is receiving: see AfterPersist's doc.
 type Accumulator struct {
 	readings        store.ReadingRepository
@@ -75,8 +74,8 @@ type Accumulator struct {
 // New builds an Accumulator. locker is the distributed lease AfterPersist
 // and Recompute serialise every call behind, per analyzer (R52) — the
 // worker wires the shared Redis lock; tests wire lock.NewMemory.
-// futureTolerance bounds how far past "now" a forward recompute reaches
-// (M12); zero defaults to ingest.DefaultFutureTolerance, the same default
+// futureTolerance bounds how far past "now" a forward recompute reaches;
+// zero defaults to ingest.DefaultFutureTolerance, the same default
 // ingest.Service itself falls back to when its own Options.FutureTolerance
 // is left zero — this package has never had its own separate default.
 func New(readings store.ReadingRepository, anchors store.GenerationRepository, c clock.Clock, locker lock.Locker, futureTolerance time.Duration) *Accumulator {
@@ -130,7 +129,7 @@ func (a *Accumulator) withAnalyzerLock(ctx context.Context, analyzerID uuid.UUID
 //
 // This method does not depend on exactly what `from`/`to` name — the chunk
 // window or the exact persisted [minTs, maxTs] of the page just written (the
-// latter is Task 10's post-review contract; see the package doc note below)
+// latter is post-review contract; see the package doc note below)
 // — and never assumes a row exists at or immediately before `from`. `from`
 // is only ever used as a LOWER bound: the base is the last already-derived
 // row strictly BEFORE from (read fresh from the store, not assumed from the
@@ -401,9 +400,7 @@ func (a *Accumulator) createInitialAnchor(ctx context.Context, s store.Scope, an
 // arrives at the database numerically equal to baseTs — which would
 // re-include the base row itself in the very first Range read and double
 // -count its own IntervalGenerationKwh. This was caught by
-// TestGenerationAccumulatesAcrossAGap during implementation (see the task
-// report's mutation-proof section) before it reached the mutation-proof
-// step: the base row's own interval value was being added a second time.
+// TestGenerationAccumulatesAcrossAGap during implementation: the base row's own interval value was being added a second time.
 func (a *Accumulator) recomputeForward(ctx context.Context, s store.Scope, analyzerID uuid.UUID, baseVal decimal.Decimal, baseTs, now time.Time) error {
 	upper := now.Add(a.futureTolerance)
 	windowFrom := baseTs.Add(time.Microsecond)

@@ -8,8 +8,8 @@
 // This package is PURE (06 §1 rule 2): it imports nothing under
 // internal/store, internal/ingest, internal/credentials or
 // internal/marketdata, and nothing from github.com/jackc/pgx. Concrete
-// providers (internal/integration/osos, .../gridbox, .../aril, .../pm5340,
-// .../isolar, .../epias) and the ingestion pipeline (internal/ingest)
+// providers (internal/integration/osos, .../gridbox, .../aril, .../pm5340,.
+// ../isolar, .../epias) and the ingestion pipeline (internal/ingest)
 // depend on this package; it never depends back on them. This is enforced
 // by internal/arch's TestAdaptersDoNotImportTheStore.
 package integration

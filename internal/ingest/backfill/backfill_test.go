@@ -23,7 +23,7 @@ func backfillTestTs(s string) time.Time {
 
 // TestWindowsWrapsNormalizeChunk proves ONLY that Windows' job.Window
 // conversion is faithful to normalize.Chunk's own boundaries and count — the
-// gap/overlap/DST-alignment property itself is Task 3's own
+// gap/overlap/DST-alignment property itself is own
 // TestChunkCoversRangeWithoutGapOrOverlap / TestChunkAlignsToIstanbulMidnight
 // (S7), not re-proven here.
 func TestWindowsWrapsNormalizeChunk(t *testing.T) {

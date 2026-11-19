@@ -15,14 +15,12 @@ import (
 // `emission_fac` array (constants.ts, lines 925-5608 of
 // bcem-energy/src/app/components/carbon-footprint/constants.ts as it stood
 // when this file was converted). Counted by parsing the TS array into JSON
-// with a throwaway Node script (kept out of the repository per the task
-// brief) and taking len() of the result; cross-checked by counting
+// with a throwaway Node script (kept out of the repository) and taking len() of the result; cross-checked by counting
 // `key:` occurrences in that line range and by confirming every one of the
 // 182 keys is unique, which this test also asserts (F9 adds four R293
 // equivalence rows on top). This is the REAL count:
 // the spec (docs/rewrite/04-data-model.md §13) describes the catalogue as
-// "thousands of entries", which this survey does not confirm — see the
-// task-12a report.
+// "thousands of entries", which this survey does not confirm.
 const wantEmissionFactorCount = 186
 
 // wantEquivalenceCount rows are F9's renewable equivalences (R293): reference
@@ -72,8 +70,8 @@ func TestEmissionFactorsDecodeAndValidate(t *testing.T) {
 
 	// iso_category is filled from the legacy `category` field on every
 	// entry (an explicit per-entry ISO 14064 category, category_1..
-	// category_6 — see the task-12a report for why this is used directly
-	// rather than derived from the coarser GHG scope). All 182 legacy entries
+	// category_6 — used directly rather than derived from the coarser GHG
+	// scope). All 182 legacy entries
 	// carry it; only F9's equivalence rows (R293) have none.
 	require.Equal(t, wantEmissionFactorCount-wantEquivalenceCount, isoFilled, "iso_category filled count")
 	require.Equal(t, wantEquivalenceCount, isoNull, "iso_category NULL count: the equivalence rows only")
@@ -228,8 +226,7 @@ func TestNationalTariffScheduleShipsLegacyCalculatorTable(t *testing.T) {
 // parser against internal/seed/testdata/national_tariff_schedule_fixture.json
 // — small, obviously-synthetic rows — because the shipped production file is
 // empty and cannot exercise multi-row validation (duplicate natural keys,
-// enum checks against real values, decimal precision) on its own. Task 12b's
-// loader tests read this fixture directly; this test proves the fixture
+// enum checks against real values, decimal precision) on its own. The loader tests read this fixture directly; this test proves the fixture
 // itself is well-formed and that this package's parser handles real rows, not
 // only the empty case.
 func TestNationalTariffScheduleFixtureDecodesAndValidates(t *testing.T) {

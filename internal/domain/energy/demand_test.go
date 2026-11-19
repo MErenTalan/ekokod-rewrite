@@ -71,7 +71,7 @@ func TestMaxDemandWindowIsHalfOpen(t *testing.T) {
 // MaxDemand returns is an independent copy, not the winning reading's own
 // MaxDemandKw pointer. Mutating the returned value's pointee must not affect
 // the input reading — if MaxDemand ever returned &rs[i].MaxDemandKw's target
-// directly (aliasing), this mutation would corrupt the input and this test
+// directly (aliasing), that write would corrupt the input and this test
 // would fail.
 func TestMaxDemandDoesNotAliasTheInputReadingsPointer(t *testing.T) {
 	rs := []energy.Reading{demandAt(t0, "12.5")}

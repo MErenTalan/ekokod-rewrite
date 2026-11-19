@@ -15,7 +15,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration"
 )
 
-// Plan-stated defaults (Task 2 brief's ClientConfig field docs).
+// Defaults (see the ClientConfig field docs).
 const (
 	defaultRequestTimeout       = 30 * time.Second
 	defaultMaxAttempts          = 3
@@ -25,7 +25,7 @@ const (
 	defaultMaxBodyBytes   int64 = 50 * 1024 * 1024 // 50 MiB
 
 	// serializeLeaseTTL is the fixed TTL ClientConfig.SerializeKey's lease
-	// is held for, per the brief ("TTL 60s").
+	// is held for (60s).
 	serializeLeaseTTL = 60 * time.Second
 )
 
@@ -73,7 +73,7 @@ type Param struct {
 	// Expand escapes it into the request URL like any other value — no
 	// httpx error ever echoes a request URL, query string, body or header
 	// value back, secret or not (classify.go), so Secret is documentation
-	// for callers/reviewers rather than something this package branches
+	// for callers and readers rather than something this package branches
 	// on.
 	Secret bool
 }
@@ -172,7 +172,7 @@ func (c *Client) doWithRetry(ctx context.Context, req Request, u *url.URL) (Resp
 	var lastErr error
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		if waitErr := waitForToken(ctx, c.limiter, c.pool.now, c.pool.sleep); waitErr != nil {
-			// M6: a limiter wait abandoned to context cancellation keeps
+			// A limiter wait abandoned to context cancellation keeps
 			// that identity; a genuine limiter failure (not ctx-caused)
 			// is M7's *integration.Error, never the raw internal text.
 			if ctx.Err() != nil {
@@ -213,7 +213,7 @@ func (c *Client) doWithRetry(ctx context.Context, req Request, u *url.URL) (Resp
 }
 
 // attemptWithLock wraps attempt with the optional SerializeKey lease,
-// scoped to exactly this one attempt (I3/R6). The lease is acquired after
+// scoped to exactly this one attempt (R6). The lease is acquired after
 // the limiter wait above and released immediately after the round trip
 // returns — before doWithRetry's caller ever reaches a backoff sleep — so
 // nothing is ever held across a sleep, and a slow or hung attempt cannot
@@ -225,7 +225,7 @@ func (c *Client) attemptWithLock(ctx context.Context, req Request, u *url.URL) a
 
 	lease, lockErr := c.pool.locker.Acquire(ctx, c.cfg.SerializeKey, serializeLeaseTTL)
 	if lockErr != nil {
-		// M6/M7: same split as the limiter above — a lock-acquire failure
+		// Same split as the limiter above — a lock-acquire failure
 		// caused by ctx cancellation keeps that identity; any other
 		// failure (lock backend unreachable, etc.) becomes a bare
 		// *integration.Error with no SerializeKey name, lock-backend
@@ -239,7 +239,7 @@ func (c *Client) attemptWithLock(ctx context.Context, req Request, u *url.URL) a
 	result := c.attempt(ctx, req, u)
 
 	// Release with a context that has already been detached from ctx's
-	// own cancellation (I3): the caller's ctx may itself be the reason
+	// own cancellation: the caller's ctx may itself be the reason
 	// this attempt failed (e.g. RequestTimeout, or the caller giving up
 	// entirely) — releasing must still succeed so the lease is not held
 	// for its full TTL just because the request that held it briefly
@@ -253,7 +253,7 @@ func (c *Client) attemptWithLock(ctx context.Context, req Request, u *url.URL) a
 }
 
 // ctxCancelledError reports ctx's own cancellation as the reason Do
-// stopped, preserving errors.Is(err, ctx.Err()) (M6). It never wraps any
+// stopped, preserving errors.Is(err, ctx.Err()). It never wraps any
 // other error text (so no attempt-classified failure's status, and no
 // limiter/lock internal text, ever piggybacks on this path), and — since
 // it does not wrap either integration sentinel — integration.Retryable
@@ -395,7 +395,7 @@ func (c *Client) buildRequest(ctx context.Context, req Request, u *url.URL) *htt
 	return httpReq.WithContext(ctx)
 }
 
-// drainCap bounds the deferred best-effort drain below (M10): a body that
+// drainCap bounds the deferred best-effort drain below: a body that
 // is still not fully consumed after the primary capped read is drained by
 // AT MOST this many further bytes before Close, never unbounded — an
 // unbounded io.Copy(io.Discard, body) here would let a provider (or an

@@ -40,7 +40,7 @@ var _ store.ReadingRepository = (*ReadingRepository)(nil)
 // declaration order) and the CopyFrom column list: the two must agree, and
 // naming them once here is what keeps them from drifting apart.
 //
-// interval_generation_kwh (migration 00012, F2 Task 5) is appended rather
+// interval_generation_kwh (migration 00012) is appended rather
 // than inserted among the other registers, so every existing offset above it
 // stays untouched.
 var meterReadingsStagingColumns = []string{
@@ -582,7 +582,7 @@ func timeseriesIsNotFound(err error) bool { return errors.Is(err, store.ErrNotFo
 // uses it to refuse the whole batch loudly, before the staging table exists,
 // rather than let `on conflict … do update` silently pick whichever of the
 // two rows Postgres processes last as the stored value for a billing-grade
-// register (controller ruling, task-10 fix round 1).
+// register.
 func readingDuplicateKey(rows []model.MeterReading) (model.MeterReading, bool) {
 	type key struct {
 		analyzerID uuid.UUID

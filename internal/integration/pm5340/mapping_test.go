@@ -31,7 +31,7 @@ func testReq(multiplier string) integration.FetchRequest {
 // template-required field asserted by name on at least one reading) applied
 // to PM5340's own reading mapping (06 §5): there is no discovery call to
 // assert a metering-point mapping table against — PM5340 has none, per the
-// task-9 brief's ruling — so this is that requirement's PM5340-shaped
+// the PM5340 API notes ruling — so this is that requirement's PM5340-shaped
 // equivalent, and doubles as Test<P>DiscoverMapsEveryField from the shared
 // adapter template.
 func TestMapRowMapsEveryField(t *testing.T) {
@@ -140,7 +140,7 @@ func TestMapRowRejectsMissingOrUnparseableMeterDate(t *testing.T) {
 }
 
 // TestMapRowRejectsUnparseableRegister names the offending field, per the
-// task-9 brief's "<field> at row <n>" detail format.
+// the PM5340 API notes "<field> at row <n>" detail format.
 func TestMapRowRejectsUnparseableRegister(t *testing.T) {
 	raw := json.RawMessage(`{"meterDate": "2026-01-05T08:00:00+03:00", "activeImport_kWh": "N/A"}`)
 	var row pm5340Row
@@ -151,7 +151,7 @@ func TestMapRowRejectsUnparseableRegister(t *testing.T) {
 	require.Equal(t, "activeImport_kWh", field)
 }
 
-// TestPM5340AcceptsBothDateFormats is the task-9 brief's named behaviour
+// TestPM5340AcceptsBothDateFormats is the PM5340 API notes named behaviour
 // test: meterDate parses whether it is ISO 8601 (with an explicit offset)
 // or "DD/MM/YYYY HH:mm[:ss]" (Europe/Istanbul local, removed-behaviour 20).
 func TestPM5340AcceptsBothDateFormats(t *testing.T) {

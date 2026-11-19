@@ -243,7 +243,7 @@ func (r *CalendarRepository) ReplaceWeekendDays(ctx context.Context, s store.Sco
 // overlapping r when set. ErrInvalidRange for a non-nil invalid r, before any
 // database call.
 //
-// F1 final review pass A, Important Finding 2 (fix round): the range's
+// The range's
 // instants are converted to `date` bounds in Europe/Istanbul, not UTC —
 // 02-domain-rules §1 fixes day boundaries to Istanbul, and this was the one
 // date path in the package that still took .UTC() directly instead of going

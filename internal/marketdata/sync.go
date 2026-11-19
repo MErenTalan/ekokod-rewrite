@@ -19,7 +19,7 @@ import (
 )
 
 // ptfChunkMax is the size Syncer re-chunks the resolved window to before
-// each HourlyPTF call and UpsertHourlyPrices write (task-12 brief: "per
+// each HourlyPTF call and UpsertHourlyPrices write (the spec: "per
 // normalize.Chunk(window, 30*24h) chunk (S7; processed += rows)"). This is
 // a SEPARATE chunking pass from epias.Client's own internal 30-day
 // chunking of a single HourlyPTF call — the two happen to use the same
@@ -79,7 +79,7 @@ type syncDetail struct {
 	MissingDays  int `json:"missing_days"`
 	MissingHours int `json:"missing_hours"`
 	// YekdemDropped is the count of YEKDEM rows the source silently
-	// dropped as unparseable (M2, fix round 1) — 0 unless Source
+	// dropped as unparseable — 0 unless Source
 	// implements the optional yekdemDropReporter capability, since
 	// PriceSource.YekdemUnitCost's own return has no Warnings slot to
 	// carry this through directly. See yekdemDropReporter's doc comment.
@@ -90,8 +90,8 @@ type syncDetail struct {
 // implement — satisfied by *epias.Client — to report how many YEKDEM rows
 // its most recent YekdemUnitCost call silently dropped as unparseable.
 //
-// M2 (task-12-fix1-findings.md, fix round 1): YekdemUnitCost's signature
-// (`([]model.YekdemMonthly, error)`, pinned by the task-12 brief) has no
+// YekdemUnitCost's signature
+// (`([]model.YekdemMonthly, error)`, pinned by the spec) has no
 // []integration.Warning slot the way HourlyPTF's does, so a dropped YEKDEM
 // row cannot ride a Warning without breaking that pinned interface. This
 // package therefore type-asserts for this narrower, optional capability
@@ -180,7 +180,7 @@ func (s *Syncer) SyncPrices(ctx context.Context, p job.SyncPricesPayload) error 
 		s.fail(ctx, run.ID, processed, skipped, err)
 		return err
 	}
-	// M2: see yekdemDropReporter's doc comment — Source may optionally
+	// See yekdemDropReporter's doc comment — Source may optionally
 	// report how many YEKDEM rows it silently dropped as unparseable;
 	// when it does, that count rides in syncDetail.YekdemDropped below,
 	// not a Warning (YekdemUnitCost's signature has no Warnings slot).
@@ -244,8 +244,7 @@ func (s *Syncer) logError(msg string, err error) {
 	s.Log.Error("marketdata: "+msg, "error", err)
 }
 
-// appendMissingHoursMessage appends the one operator-facing warning the
-// task-12 brief names (in Turkish since R510), Metadata carrying the
+// appendMissingHoursMessage appends the one operator-facing warning the spec names (in Turkish since R510), Metadata carrying the
 // per-day breakdown.
 func (s *Syncer) appendMissingHoursMessage(ctx context.Context, missing map[string][]time.Time) error {
 	metadata, err := json.Marshal(map[string]any{"days": missing})
@@ -263,7 +262,7 @@ func (s *Syncer) appendMissingHoursMessage(ctx context.Context, missing map[stri
 	return err
 }
 
-// resolveWindow implements the task-12 brief's default: p.Window, or
+// resolveWindow implements the spec default: p.Window, or
 // [Istanbul today − 7 days 00:00, Istanbul tomorrow + 1 day 00:00).
 func (s *Syncer) resolveWindow(w *job.Window) (time.Time, time.Time) {
 	if w != nil {
@@ -276,10 +275,10 @@ func (s *Syncer) resolveWindow(w *job.Window) (time.Time, time.Time) {
 	return from.UTC(), to.UTC()
 }
 
-// resolveYekdemWindow implements the task-12 brief's YEKDEM window: the
+// resolveYekdemWindow implements the spec YEKDEM window: the
 // first day of (this run's month − 3) to the first day of next month.
 //
-// Ruling R39 (task-12-fix1-findings.md, fix round 1): an explicit PTF
+// Ruling R39: an explicit PTF
 // backfill window (p.Window) does NOT backfill YEKDEM. YEKDEM ALWAYS uses
 // this trailing [now.month-3, now.month+1) cadence, computed from the
 // CURRENT run's clock, regardless of what p.Window a caller passed for

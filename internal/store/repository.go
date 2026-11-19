@@ -99,10 +99,10 @@ import (
 //     row being written is your own. (audit_log is the exception: it has no
 //     foreign keys by design, and records ids as given.)
 //
-// Tasks 9-11 pin each of these with an isolation test: tenant A's Scope, tenant
+// Every repository pins each of these with an isolation test: tenant A's Scope, tenant
 // B's ids, ErrNotFound or nothing back.
 //
-// Method-name conventions, so that Tasks 9-11 never have to invent one:
+// Method-name conventions, so that no repository has to invent one:
 //
 //	Get       — one row by id, ErrNotFound if it is absent OR out of scope.
 //	List      — many rows, filtered; an empty result is not an error.
@@ -363,8 +363,8 @@ type AuditRepository interface {
 // different things at different layers — this one is what the CALLER asks for,
 // that one is what the SCOPE permits — and the query applies both. Go keeps
 // the names apart (a method name and a package-level type never collide), and
-// renaming either would mean disagreeing with a signature Tasks 9-13 are
-// already written against.
+// renaming either would mean disagreeing with a signature the repositories
+// are already written against.
 type BuildingFilter struct {
 	// IDs further narrows within the scope. It never widens: a building not
 	// permitted by the Scope stays invisible however this is set.

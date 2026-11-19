@@ -234,8 +234,8 @@ func TestForecastGapsAnalyzerNotVisibleReturnsNotFound(t *testing.T) {
 
 // TestForecastRangeAndLatestRunNeverReturnForeignDataEvenWhenForeignAnalyzerHasForecasts
 // is the guard-failure-provable form of
-// TestForecastRangeAndLatestRunAnalyzerNotVisibleReturnsNotFound (Important
-// finding 1, task-10 fix round 1): that test never seeds a real forecast for
+// TestForecastRangeAndLatestRunAnalyzerNotVisibleReturnsNotFound: that test
+// never seeds a real forecast for
 // the foreign/narrow-scope analyzer, so tautologising ForecastRange/
 // ForecastLatestRun's own scope predicate would STILL return zero rows and
 // that test would still pass. Here both analyzers actually HAVE a forecast

@@ -3,8 +3,8 @@
 The evidence behind each item of 09 §F15's security review, and every residual risk accepted with it.
 Re-run the commands before each release; update the dates and results here.
 
-Reviewed: 2026-09-24, branch `phase/f15-hardening` (F15a, plan
-`docs/superpowers/plans/2026-09-24-f15a-security-hardening.md`, rulings R450–R456).
+Reviewed: 2026-09-24, branch `phase/f15-hardening` (F15a, rulings R450–R456 in
+`docs/decisions.md`).
 
 ## 1. Dependency audit
 
@@ -83,7 +83,7 @@ Every mutating route writes an audit entry: `TestEveryMutationAudited` (runs ove
 ## 8. Supported browsers
 
 Chrome and Edge 123+, Firefox 120+, Safari and iOS Safari 17.5+ — the floor F5 set for the design
-system (F5 handoff, M-18), recorded in `web/package.json` `browserslist`. Older browsers are not tested.
+system, recorded in `web/package.json` `browserslist`. Older browsers are not tested.
 
 ## Residual risks (accepted)
 

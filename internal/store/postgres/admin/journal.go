@@ -55,8 +55,7 @@ func adminOperationalMessageFromRow(row sqlcgen.OperationalMessage) model.Operat
 // 'running' state. A run whose CompanyID is non-nil is refused with
 // ErrNotFound, before any database call. A caller-supplied run.Status is
 // IGNORED, not merely defaulted: per the contract, a job run always starts
-// 'running' — only FinishPlatformRun may set a terminal status (fix round 1,
-// folded minor; mirrors OpsRepository.StartRun).
+// 'running' — only FinishPlatformRun may set a terminal status (mirrors OpsRepository.StartRun).
 func (r *JournalRepository) StartPlatformRun(ctx context.Context, run model.JobRun) (model.JobRun, error) {
 	if run.CompanyID != nil {
 		return model.JobRun{}, store.ErrNotFound

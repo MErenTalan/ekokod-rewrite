@@ -156,7 +156,7 @@ func TestSMTPPasswordSealingBindsToItsOwnRow(t *testing.T) {
 	require.Error(t, err, "a ciphertext copied onto another company's row must not decrypt")
 }
 
-// TestSMTPUpsertNilPasswordKeepsStoredPassword proves the fix round 1
+// TestSMTPUpsertNilPasswordKeepsStoredPassword proves the fix 1
 // controller ruling: Upsert-ing an existing row with a nil password leaves
 // password_enc untouched (host/other fields still update). Before the fix,
 // Upsert sealed the nil password unconditionally, so OpenPassword returned

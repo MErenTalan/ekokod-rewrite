@@ -24,7 +24,7 @@ var exportRegisters = []energy.Register{
 // are import-side (reactive-over-active-import) and have no meaning on a
 // generation row. Everything else (AnalyzerID, Window, MaxDemandKw, Source,
 // Suspect, Partial, Resolution) is copied from the input row. No new fetch:
-// the caller already has the rows from Task 7's Analytics.Consumption or
+// the caller already has the rows from Analytics.Consumption or
 // Billing.Consumption. The returned Values and Indexes maps are new maps —
 // never the input row's own maps — so a caller mutating a returned row can
 // never corrupt rows. A suspect export register's Values entry comes back

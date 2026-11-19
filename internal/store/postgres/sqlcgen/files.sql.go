@@ -94,7 +94,7 @@ type FileGetParams struct {
 	CompanyID uuid.UUID
 }
 
-// File metadata repository queries (migration 00008). Owned by Task 11b.
+// File metadata repository queries (migration 00008).
 //
 // stored_files carries company_id directly and has no building_id at all
 // (like power_plants), so Scope narrows it to company_id only — there is no

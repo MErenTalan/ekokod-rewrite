@@ -149,7 +149,7 @@ func TestValidateSanityJump(t *testing.T) {
 }
 
 // TestValidateSanityJumpScalesWithElapsedGap proves R13's elapsedIntervals
-// scaling (C1, mutation: drop the ×elapsedIntervals factor): a 4-hour gap
+// scaling (regression: drop the ×elapsedIntervals factor): a 4-hour gap
 // (4 typical hourly intervals) since the effective previous reading must
 // widen the allowance to 4× the single-interval limit, so an otherwise
 // implausible-looking delta that is really just four ordinary intervals'
@@ -174,8 +174,8 @@ func TestValidateSanityJumpScalesWithElapsedGap(t *testing.T) {
 	require.Len(t, valid, 1)
 }
 
-// TestValidateSanityJumpFloorAtOne proves R13's max(..., 1) floor (C1,
-// mutation: drop the floor): a register whose typical delta is tiny
+// TestValidateSanityJumpFloorAtOne proves R13's max(..., 1) floor
+// (regression: drop the floor): a register whose typical delta is tiny
 // (0.001) produces a raw limit (10 * 0.001 * 1 == 0.01) far below 1 — the
 // floor is what stops that raw limit from rejecting a perfectly ordinary
 // reading whose own delta (0.5) is nowhere near implausible in absolute
@@ -195,7 +195,7 @@ func TestValidateSanityJumpFloorAtOne(t *testing.T) {
 }
 
 // TestValidateSanityJumpMedianExcludesIdlePeriods proves R13's "median over
-// POSITIVE deltas only" (C1, mutation: include zero/negative deltas in the
+// POSITIVE deltas only" (regression: include zero/negative deltas in the
 // median): a register that is mostly idle (40 zero-delta hours) but
 // genuinely steps by 5 every so often (24 such steps, meeting the 24-sample
 // minimum on its own) must have its threshold sized from THOSE 24 steps
@@ -220,7 +220,7 @@ func TestValidateSanityJumpMedianExcludesIdlePeriods(t *testing.T) {
 }
 
 // TestValidateSanityJumpNeverRejectsADecrease proves R13's "only an INCREASE
-// is a sanity jump" (C1, mutation: Abs() the tested delta): a huge DECREASE
+// is a sanity jump" (regression: Abs() the tested delta): a huge DECREASE
 // (50000 -> 5) is never a RejectSanityJump — a decrease is R14's concern
 // (DetectNegativeDeltas / an unresolved consumption_anomalies row, proved
 // separately by TestIngestionNegativeIndexDeltaCreatesUnresolvedAnomaly),
@@ -339,7 +339,7 @@ func TestValidateSanityJumpAllowsAnOrdinaryWorkingDay(t *testing.T) {
 }
 
 // TestValidateSanityJumpStreakPersistsAcrossPages proves R13's "at most
-// three consecutive rejections per analyzer PER RUN" (C1, mutation: reset
+// three consecutive rejections per analyzer PER RUN" (regression: reset
 // the streak per page/call instead of sharing Options.SanityStreak): two
 // SEPARATE Validate calls (simulating two fetch pages of the same run)
 // sharing one *ingest.SanityStreak must not each get their own "three

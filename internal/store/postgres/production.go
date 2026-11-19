@@ -25,8 +25,7 @@ import (
 // it as nullable: the column is part of the primary key, and PostgreSQL does
 // not allow a nullable column inside a primary key. A plant-level sample
 // with no device breakdown is therefore unstorable today — a known schema
-// constraint (04-data-model.md §4.5, recorded in Task 2's and Task 10's
-// reports) rather than something this repository papers over. Every row
+// constraint (04-data-model.md §4.5) rather than something this repository papers over. Every row
 // BulkInsert writes must therefore name a real device of its plant, and the
 // isolation check below enforces exactly that.
 type ProductionRepository struct {

@@ -11,9 +11,9 @@ import (
 // 7200 when absent" (isolarClient.ts:293,342).
 const defaultExpiresInSeconds = 7200
 
-// Token is the OAuth pair ExchangeCode and Refresh return. Task 14's
-// credential service consumes this type directly, so its shape is fixed by
-// this task's brief and must not change without coordinating there.
+// Token is the OAuth pair ExchangeCode and Refresh return. The credential
+// service consumes this type directly, so its shape must not change without
+// changing the credential service with it.
 type Token struct {
 	AccessToken integration.Secret
 
@@ -25,8 +25,8 @@ type Token struct {
 	// falls back to the OLD refresh_token it already has; this package
 	// exposes the zero value instead of performing that fallback itself,
 	// since it is stateless per-call — creds.Extra["refresh_token"] is
-	// this call's own input, not a place to write back to). Task 14 MUST
-	// NOT store token.RefreshToken over its existing value when IsZero()
+	// this call's own input, not a place to write back to). The credential
+	// service MUST NOT store token.RefreshToken over its existing value when IsZero()
 	// is true: it must keep the prior refresh token, exactly as
 	// isolarClient.ts's refreshAccessToken does.
 	RefreshToken integration.Secret

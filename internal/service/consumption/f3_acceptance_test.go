@@ -1,6 +1,6 @@
 //go:build integration
 
-// This file is Task 13's acceptance suite for 09-implementation-plan.md
+// This file is acceptance suite for 09-implementation-plan.md
 // §F3: one test per acceptance criterion, named after it, with a comment
 // quoting the criterion verbatim. It lives in-package, next to the code
 // it exercises, not in a separate internal/acceptance package.
@@ -17,8 +17,7 @@
 // real-database tests.
 //
 // The golden-file criterion ("Golden-file tests for consumption derivation
-// against hand-computed fixtures...") is NOT re-asserted here: Task
-// 4's TestGolden (internal/domain/energy/golden_test.go, run over
+// against hand-computed fixtures...") is NOT re-asserted here: TestGolden (internal/domain/energy/golden_test.go, run over
 // internal/domain/energy/testdata/golden/*.json) already fails loudly on
 // any of the six cases regressing, every time `go test ./internal/domain/energy
 // -run TestGolden` runs — see the phase verification block. A second,
@@ -27,10 +26,8 @@
 //
 // TestF3NegativeDeltaProducesNullSuspectAndMessage, below, is the
 // negative-delta -> NULL + suspect + operator message criterion: it needs
-// Task 8's Billing.ConsumptionAndRecord (the write-and-record wrapper that
-// owns consumption_anomalies and OperationalMessage), which is now on this
-// branch (Task 8 merged into phase/f3-consumption-engine ahead of this
-// dispatch).
+// Billing.ConsumptionAndRecord (the write-and-record wrapper that
+// owns consumption_anomalies and OperationalMessage).
 package consumption_test
 
 import (
@@ -56,9 +53,8 @@ import (
 
 // f3NewBilling builds a *consumption.Billing wired to REAL repositories
 // (readingRepo, analyticsRepo unused here) plus the panicking no-op
-// AnomalyRepository/OpsRepository fakes: Task 7's plain Consumption (what
-// this file exercises) must never reach either — that is Task 8's
-// ConsumptionAndRecord, on the same type, not merged onto this branch yet.
+// AnomalyRepository/OpsRepository fakes: plain Consumption (what
+// this file exercises) must never reach either — that is ConsumptionAndRecord, on the same type, not merged onto this branch yet.
 func f3NewBilling(t *testing.T, readingRepo store.ReadingRepository, now time.Time) *consumption.Billing {
 	t.Helper()
 	b, err := consumption.NewBilling(consumption.BillingDeps{

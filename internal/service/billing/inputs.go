@@ -13,7 +13,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/service/consumption"
 )
 
-// maxChunk is the analyzer batch the consumption service accepts (I-7).
+// maxChunk is the analyzer batch the consumption service accepts.
 const maxChunk = consumption.MaxAnalyzersPerRequest
 
 // quantitiesFromRow maps one member's Billing row onto invoice quantities.
@@ -57,7 +57,7 @@ func soundHours(rows []consumption.Row) []tariff.HourConsumption {
 	return out
 }
 
-// overlaps reports whether an anomaly period overlaps w (I-5).
+// overlaps reports whether an anomaly period overlaps w.
 func overlaps(a model.ConsumptionAnomaly, w energy.Window) bool {
 	return a.PeriodEnd.After(w.From) && a.PeriodStart.Before(w.To)
 }

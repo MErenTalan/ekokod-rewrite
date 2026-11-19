@@ -112,7 +112,7 @@ type CarbonCreateActivityParams struct {
 	BuildingIds          []uuid.UUID
 }
 
-// factor_id is a stored FK (fix round 1, Important 1, R1): null (no
+// factor_id is a stored FK (R1): null (no
 // factor — a manual activity), a platform factor, or one of the caller's
 // own is allowed; another company's factor id is refused, atomically with
 // the write.
@@ -292,7 +292,7 @@ type CarbonDeleteConversionsParams struct {
 // company_id predicate directly, joined through emission_factors, rather
 // than trusting the caller (ReplaceConversions) to have already verified
 // ownership in Go: even if that Go-level check were bypassed, neither
-// statement can touch a row it does not own (fix round 1, Important 2).
+// statement can touch a row it does not own.
 func (q *Queries) CarbonDeleteConversions(ctx context.Context, arg CarbonDeleteConversionsParams) error {
 	_, err := q.db.Exec(ctx, carbonDeleteConversions, arg.FactorID, arg.CompanyID)
 	return err
@@ -330,7 +330,7 @@ type CarbonFactorOwnerForShareParams struct {
 // LOCK QUERY ITSELF: a platform factor or another company's factor matches
 // zero rows here, so the caller never reaches delete/insert at all — the
 // refusal does not depend on a Go-level equality check on a returned value
-// (fix round 1, Important 2).
+// .
 func (q *Queries) CarbonFactorOwnerForShare(ctx context.Context, arg CarbonFactorOwnerForShareParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, carbonFactorOwnerForShare, arg.ID, arg.CompanyID)
 	var id uuid.UUID
@@ -403,7 +403,7 @@ type CarbonGetFactorParams struct {
 	CompanyID *uuid.UUID
 }
 
-// Carbon repository queries (migration 00007). Owned by Task 11b.
+// Carbon repository queries (migration 00007).
 //
 // emission_factors' natural key is (coalesce(company_id, zero uuid), key) --
 // the unique index from migration 00007. CarbonUpsertFactor and, in
@@ -656,7 +656,7 @@ type CarbonListConversionsRow struct {
 }
 
 // CarbonListConversions is the SINGLE parent-driven statement Conversions()
-// runs (fix round 1, Important 3): it starts from emission_factors, not
+// runs: it starts from emission_factors, not
 // emission_factor_conversions, and LEFT JOINs the (parentless, company_id-
 // free) child table, so a visible factor with zero conversions still
 // returns exactly one row (unit/multiplier/label all null — the sentinel
@@ -954,7 +954,7 @@ where carbon_activities.id = $18::uuid
         and b.deleted_at is null
         and ($20::boolean or b.id = any($21::uuid[]))
   )
-  -- factor_id is a stored FK (fix round 1, Important 1, R1): see
+  -- factor_id is a stored FK (R1): see
   -- CarbonCreateActivity's identical clause.
   and (
       $8::uuid is null
@@ -1136,7 +1136,7 @@ type CarbonUpsertAutomatedActivityParams struct {
 // Keyed on the partial unique index (building_id, activity_type,
 // period_start) where is_automated. is_automated is hard-coded true: this
 // path exists only for the derived-from-meter-data recomputation.
-// factor_id is a stored FK (fix round 1, Important 1, R1): see
+// factor_id is a stored FK (R1): see
 // CarbonCreateActivity's identical clause.
 func (q *Queries) CarbonUpsertAutomatedActivity(ctx context.Context, arg CarbonUpsertAutomatedActivityParams) (CarbonActivity, error) {
 	row := q.db.QueryRow(ctx, carbonUpsertAutomatedActivity,

@@ -42,7 +42,7 @@ func classifyStatus(status int) error {
 // password in the auth URL itself (removed-behaviour 17). err is
 // deliberately never wrapped (no %w, no err.Error() appended) into the
 // returned error: only the classification below is allowed to survive.
-// Task brief Step 5(a)'s mutation — replacing the returned
+// Replacing the returned
 // *integration.Error with something that wraps err via %w — is exactly the
 // change TestHTTPErrorsNeverContainSubstitutedSecrets' network-failure case
 // exists to catch.
@@ -52,7 +52,7 @@ func classifyStatus(status int) error {
 // retried in-client: retrying a handshake against a certificate that will
 // never verify only burns the retry budget on a deterministic outcome.
 func classifyTransportError(provider integration.Provider, op string, err error) (result error, retry bool) {
-	// Refusing to dial a pinned host over plain HTTP (M13) is a
+	// Refusing to dial a pinned host over plain HTTP is a
 	// deterministic configuration error, exactly like a certificate that
 	// will never verify: retrying burns the retry budget on an outcome
 	// that cannot change.
@@ -88,7 +88,7 @@ func isTLSVerificationFailure(err error) bool {
 }
 
 // maxRetryAfterSeconds bounds a parsed Retry-After value BEFORE it is
-// multiplied into a time.Duration (M9): a duration is int64 nanoseconds, so
+// multiplied into a time.Duration: a duration is int64 nanoseconds, so
 // a provider-supplied seconds count anywhere near math.MaxInt64/1e9 would
 // overflow that multiplication and silently wrap into an unrelated
 // (possibly negative) duration. math.MaxInt32 seconds is about 68 years —

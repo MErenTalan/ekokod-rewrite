@@ -101,7 +101,7 @@ func (s *Service) ISolarCallback(ctx context.Context, code, state string) error 
 		return err
 	}
 
-	// I3 (fix round 1): persistIsolarToken is a read-merge-write of the
+	// persistIsolarToken is a read-merge-write of the
 	// SAME Extra blob ISolarAccessToken's refresh (and Update, for an
 	// isolar credential) also read-merge-write, under the same
 	// isolarTokenLockKey — without this lock here, this callback racing
@@ -141,9 +141,9 @@ func (s *Service) ISolarAccessToken(ctx context.Context, sc store.Scope, id uuid
 // and the VERY FIRST thing it does once it holds it is re-read the
 // credential and re-check freshness — because by the time it got the
 // lock, another goroutine may have already refreshed it. Skipping that
-// re-read (Step 5(b)'s mutation) is exactly what lets N concurrent callers
+// re-read is exactly what lets N concurrent callers
 // each call Refresh once — iSolarCloud invalidates the previous refresh
-// token on every refresh (Task 13, 06 §6), so a second call with the
+// token on every refresh (06 §6), so a second call with the
 // now-stale refresh_token would fail outright.
 func (s *Service) isolarAccessToken(ctx context.Context, sc store.Scope, id uuid.UUID, cred model.IntegrationCredential, def model.IntegrationDefinition) (integration.Secret, error) {
 	if def.Provider != model.IntegrationProviderISolar {
@@ -230,7 +230,7 @@ const (
 // persistIsolarToken merges tok into cred's stored Extra and stamps
 // token_expires_at (RecordVerification). A ZERO tok.RefreshToken
 // (IsZero() == true) means the provider issued no new refresh token this
-// call (Task 13's isolar.Token doc: "a null refresh_token is legacy's 'no
+// call (isolar.Token doc: "a null refresh_token is legacy's 'no
 // new refresh token' case") — the stored one is left exactly as it was,
 // NEVER overwritten with a zero value: iSolarCloud invalidates the
 // previous refresh token on every successful refresh, so losing track of

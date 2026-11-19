@@ -1,5 +1,5 @@
-// Task 12b: the loader. This file consumes the datasets, Go types and
-// validation Task 12a already produced (datasets.go) and writes them through
+// The loader. This file consumes the datasets, Go types and
+// validation in datasets.go and writes them through
 // store.AdminCatalogueRepository — the ONLY unscoped write surface for
 // platform reference data (repository.go's AdminCatalogueRepository doc).
 // It performs no parsing or validation of its own beyond what upserting
@@ -24,9 +24,9 @@ import (
 // count here is what the underlying admin upsert reports as WRITTEN
 // (inserted-or-updated: the admin package's `on conflict … do update`
 // queries count both, per Postgres's own command-tag semantics for that
-// statement shape) — Task 12a's admin methods do not distinguish an insert
+// statement shape) — admin methods do not distinguish an insert
 // from a convergence update, so "processed" is the count this Result
-// reports, per the brief's "counts (inserted/updated/unchanged if the admin
+// reports, per the "counts (inserted/updated/unchanged if the admin
 // methods expose it, else processed)".
 type Result struct {
 	// EmissionFactors is the number of platform emission_factors rows

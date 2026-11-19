@@ -114,7 +114,7 @@ func TestIntegrationPayloadsRoundTrip(t *testing.T) {
 }
 
 // TestDecodeRefusesUnknownFields proves every Decode<Name> — all four
-// decoders the brief lists, not just two of them (M5) — rejects a payload
+// decoders the spec lists, not just two of them — rejects a payload
 // carrying a field it does not know about, rather than silently discarding
 // it — a payload a newer worker wrote and an older one must not
 // half-understand.
@@ -157,7 +157,7 @@ func TestDecodeRefusesUnknownFields(t *testing.T) {
 }
 
 // TestDecodeRefusesTrailingData proves integDecode rejects bytes left over
-// after the one JSON object it decodes (M5): asynq's Task.Payload is a bare
+// after the one JSON object it decodes: asynq's Task.Payload is a bare
 // byte slice, not a framed single value, so a stray second JSON value (or
 // any trailing garbage) appended after the object must be noticed rather
 // than silently ignored.
@@ -176,7 +176,7 @@ func TestDecodeRefusesTrailingData(t *testing.T) {
 
 // TestIntegMaxRetryOptionsAlwaysExplicit proves TaskOptions.MaxRetry is
 // always passed to asynq as an explicit asynq.MaxRetry option, including
-// zero (I5): a TaskOptions{} — "no retries", a legitimate configuration per
+// zero: a TaskOptions{} — "no retries", a legitimate configuration per
 // Global Constraints — must produce asynq.MaxRetry(0), never silently fall
 // back to asynq's own built-in default of 25 by omitting the option.
 func TestIntegMaxRetryOptionsAlwaysExplicit(t *testing.T) {
@@ -200,9 +200,7 @@ func TestIntegMaxRetryOptionsAlwaysExplicit(t *testing.T) {
 // company/credential boundaries by analyzer+kind+window alone), and
 // DIFFERENT when analyzer, kind, From or To differs.
 //
-// Fix round 1 / I1: dropping Window.To from the formula must fail this
-// test — proved and recorded in task-15-report.md's "Fix round 1" section,
-// not left as a standing mutation here.
+// Dropping Window.To from the formula must fail this test.
 func TestFetchTaskWithWindowHasDeterministicTaskID(t *testing.T) {
 	analyzer := uuid.New()
 	otherAnalyzer := uuid.New()
@@ -356,8 +354,8 @@ type integFakePriceSyncer struct{}
 func (integFakePriceSyncer) SyncPrices(context.Context, SyncPricesPayload) error { return nil }
 
 // TestIntegrationHandlersSkipRetryOnDecodeFailure proves every
-// integHandle* adapter wraps a payload decode failure with asynq.SkipRetry
-// (M6): a payload that cannot be decoded will fail identically on every
+// integHandle* adapter wraps a payload decode failure with asynq.SkipRetry:
+// a payload that cannot be decoded will fail identically on every
 // retry, so asynq must not spend its retry budget re-attempting it.
 func TestIntegrationHandlersSkipRetryOnDecodeFailure(t *testing.T) {
 	mux := asynq.NewServeMux()

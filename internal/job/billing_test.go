@@ -17,7 +17,7 @@ func TestBillingGenerateTaskIDIsDeterministicAndHasNoRetention(t *testing.T) {
 	require.Equal(t, BillingGenerateTaskID(p), BillingGenerateTaskID(p))
 	forced := p
 	forced.Force = true
-	require.Equal(t, BillingGenerateTaskID(p), BillingGenerateTaskID(forced), "M-10: force keeps the TaskID")
+	require.Equal(t, BillingGenerateTaskID(p), BillingGenerateTaskID(forced), "force keeps the TaskID")
 	other := p
 	other.PeriodKey = "2025-12"
 	require.NotEqual(t, BillingGenerateTaskID(p), BillingGenerateTaskID(other))

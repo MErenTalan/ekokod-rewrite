@@ -164,16 +164,16 @@ type BillCreateParams struct {
 	BuildingIds             []uuid.UUID
 }
 
-// Critical Finding 1 (task-11a fix round 1): building_id is a stored foreign
+// Building_id is a stored foreign
 // key and MUST be validated in SQL — Scope.AllowsBuilding cannot know which
 // company owns a building, so the Go-side billBuildingWritable pre-check is
-// not sufficient on its own. Important Finding 4: tariff_id is a stored
+// not sufficient on its own. Tariff_id is a stored
 // foreign key too (bills.tariff_id references tariffs), validated the same
 // way TariffVisible validates a tariff for this Scope, INCLUDING the
 // company-wide (building_id is null) case — a narrow Scope may reference the
 // company-wide tariff Effective can already resolve for it.
 //
-// F1 final review pass A, Important Finding 1 (fix round): bills.analyzer_id
+// bills.analyzer_id
 // is a stored foreign key too, and was previously validated ONLY by the
 // Go-side requireAnalyzersVisible pre-check, run on r.pool before
 // r.pool.Begin — unlocked, outside the transaction, and (per binding ruling
@@ -435,7 +435,7 @@ type BillGetParams struct {
 
 // Bills, bill lines, bill members and bill hourly detail (migration 00009).
 // Query names are prefixed Bill…
-// Folded minor (fix round 1): a bill of a soft-deleted building must not
+// A bill of a soft-deleted building must not
 // stay readable through the bill's own row — Get/List both exclude it.
 func (q *Queries) BillGet(ctx context.Context, arg BillGetParams) (Bill, error) {
 	row := q.db.QueryRow(ctx, billGet,
@@ -568,11 +568,9 @@ type BillHourlyDetailInsertParams struct {
 // :one RETURNING true, not :exec: see AlarmAnalyzerInsert's comment in
 // queries/alarms.sql -- an :exec insert whose WHERE EXISTS excludes every
 // row still reports "no error", which a caller checking only err would read
-// as success. Task 11a fix round 2: this was the one sibling
-// (AlarmAnalyzerInsert/AlarmChannelInsert/BillMemberInsert were already
-// converted in fix round 1) left as :exec, so a bill belonging to another
-// tenant's company still looked like a successful insert while storing zero
-// rows.
+// as success. As :exec, a bill belonging to another tenant's company would
+// look like a successful insert while storing zero rows (the same reason
+// AlarmAnalyzerInsert/AlarmChannelInsert/BillMemberInsert are not :exec).
 func (q *Queries) BillHourlyDetailInsert(ctx context.Context, arg BillHourlyDetailInsertParams) (bool, error) {
 	row := q.db.QueryRow(ctx, billHourlyDetailInsert,
 		arg.BillID,
@@ -669,7 +667,7 @@ type BillLineInsertParams struct {
 	BuildingIds  []uuid.UUID
 }
 
-// Important Finding 1: bill_lines has no company_id of its own — join
+// Bill_lines has no company_id of its own — join
 // through bills. BillLineInsert re-validates bill_id against the Scope
 // itself, so the isolation boundary holds even if the Go-side requireVisible
 // pre-check (in BillRepository.requireVisible, run before the transaction
@@ -911,7 +909,7 @@ type BillMarkSupersededRow struct {
 	PeriodKey string
 }
 
-// Supersede's replacement-vs-original check (folded minor, fix round 1):
+// Supersede's replacement-vs-original check:
 // returning the marked bill's own scope, subject and period lets the Go
 // caller refuse a Supersede whose replacement names a different one, instead
 // of silently letting one bill's history point at another's.
@@ -956,7 +954,7 @@ type BillMemberInsertParams struct {
 // row still reports "no error", which a caller checking only err would read
 // as success.
 //
-// F1 final review pass A, Important Finding 1 (fix round): the member's OWN
+// The member's OWN
 // analyzer_id is a stored foreign key (bill_members.analyzer_id references
 // analyzers) and was previously validated only by the bill-level Go
 // pre-check; this exists clause re-checks it here, atomically, the same way
@@ -1234,7 +1232,7 @@ type BillUpdateStatusParams struct {
 	BuildingIds  []uuid.UUID
 }
 
-// Folded minor: a superseded bill is a closed record — UpdateStatus must not
+// A superseded bill is a closed record — UpdateStatus must not
 // be able to move it to draft/issued/flagged after the fact, only Supersede
 // may act on it again (by inserting a new replacement).
 func (q *Queries) BillUpdateStatus(ctx context.Context, arg BillUpdateStatusParams) (Bill, error) {

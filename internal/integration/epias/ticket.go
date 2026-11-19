@@ -12,7 +12,7 @@ import (
 )
 
 // ticketLockKey is the fixed cross-process lock name Options.Locker
-// serialises TGT acquisition under (task-12 brief: 'holds Locker
+// serialises TGT acquisition under (the EPİAŞ API notes: 'holds Locker
 // "epias:tgt"').
 const ticketLockKey = "epias:tgt"
 
@@ -65,7 +65,7 @@ func extractTicket(resp httpx.Response) (string, bool) {
 
 // fetchTicket performs one CAS round trip and returns the ticket. A
 // non-201 response, or a 201 with no extractable ticket, is ErrAuth
-// (task-12 brief: "A 401, or a 201 with no TGT, is ErrAuth" — httpx's own
+// (the EPİAŞ API notes: "A 401, or a 201 with no TGT, is ErrAuth" — httpx's own
 // classify.go already turns a 401 into ErrAuth before this method ever
 // sees it, since Do only ever returns a *integration.Error for a
 // non-2xx status; the explicit status check below therefore only ever

@@ -47,8 +47,8 @@ func (e *scrubbed) Unwrap() error { return e.cause }
 // its connection string, which is exactly when the underlying error is most
 // likely to contain one. Two connection-string shapes pgx accepts do this
 // (libpq keyword/value form, and a password carried as a URL query
-// parameter), as does any pool whose credential came from PGPASSWORD or a
-// .pgpass file. "I do not know what to redact" therefore means "show
+// parameter), as does any pool whose credential came from PGPASSWORD or a.
+// pgpass file. "I do not know what to redact" therefore means "show
 // nothing", never "show everything", and the decision lives here at the one
 // choke point rather than in each caller, so no future call site can
 // reintroduce it.

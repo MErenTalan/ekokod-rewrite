@@ -24,8 +24,7 @@ var tariffIstanbulLocation = func() *time.Location {
 // This file holds the small set of pgtype <-> time.Time conversions every
 // file in this package reuses. It is named for the concern, not for the file
 // that first needed it: tariffs.go, bills.go, reports.go and alarms.go all
-// call into it, and no sibling Wave F task (9, 10) defines a pgtime.go of its
-// own to collide with (wave-f-task-notes.md, Important Finding 6).
+// call into it.
 //
 // The `tariff` prefix on every exported-within-package name is kept even
 // though the functions no longer live in tariffs.go: renaming them package-
@@ -44,10 +43,9 @@ var tariffIstanbulLocation = func() *time.Location {
 // equal UTC instant 2026-02-28T21:30Z must resolve to the identical `date`
 // row (2026-03-01) — the calendar day a person in Istanbul was living through
 // when the instant occurred. Converting in t's own Location (or in UTC, which
-// is what the pre-fix-round-1 version of this function did) makes an
+// is what an earlier version of this function did) makes an
 // otherwise-identical write or query resolve to a different tariff/report
-// row depending on the caller's incidental Location, which is the bug
-// Important Finding 5 named.
+// row depending on the caller's incidental Location.
 func tariffDateToTime(d pgtype.Date) time.Time {
 	if !d.Valid {
 		return time.Time{}
@@ -79,8 +77,7 @@ func tariffTimePtrToDate(t *time.Time) pgtype.Date {
 }
 
 // tariffTimeToExclusiveEndDate takes the Istanbul `date` that ends a
-// half-open instant window [from, to) — F1 final review pass A, Important
-// Finding 2. A half-open window's `to` instant is itself NOT included, so if
+// half-open instant window [from, to). A half-open window's `to` instant is itself NOT included, so if
 // `to` falls exactly on an Istanbul midnight, the Istanbul day it starts is
 // excluded and the exclusive-end date is that same calendar day (a `<
 // to_date` SQL predicate already excludes it). Otherwise `to` falls partway
@@ -90,7 +87,7 @@ func tariffTimePtrToDate(t *time.Time) pgtype.Date {
 //
 // Used wherever a TimeRange (instants) is turned into a pair of `date`
 // column bounds for an overlap query — see CalendarRepository.Vacations,
-// which is what Important Finding 2 named: the pre-fix version took
+// whose earlier version took
 // timeRange.To.UTC() instead of the Istanbul day, wrong at every Istanbul
 // day boundary that does not also fall on a UTC day boundary.
 func tariffTimeToExclusiveEndDate(to time.Time) pgtype.Date {

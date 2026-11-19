@@ -159,7 +159,7 @@ func (r *AnalyzerRepository) List(ctx context.Context, s store.Scope, f store.An
 
 // Create implements store.AnalyzerRepository.Create.
 //
-// Wave F integration: a Go-level buildingVisible pre-check used to run here,
+// A Go-level buildingVisible pre-check used to run here,
 // non-transactionally, before the insert. It is gone — AnalyzerCreate's own
 // WHERE clause (queries/analyzers.sql) embeds the identical check (the
 // building_id FK against company_id/building_ids/deleted_at, plus the
@@ -219,7 +219,7 @@ func (r *AnalyzerRepository) Create(ctx context.Context, s store.Scope, a model.
 
 // Update implements store.AnalyzerRepository.Update.
 //
-// Wave F integration: the same Go-level buildingVisible pre-check removed
+// The same Go-level buildingVisible pre-check removed
 // from Create is gone here too — AnalyzerUpdate's WHERE clause embeds two
 // building_id checks in one statement (see queries/analyzers.sql): the row's
 // CURRENT building_id gates ordinary row visibility, and an embedded

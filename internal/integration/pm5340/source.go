@@ -105,7 +105,7 @@ func wrapDo(err error, op string) error {
 	return configError(op)
 }
 
-// Verify probes verifyTemplate (06 §5 / task-9 brief S5): the ONLY param is
+// Verify probes verifyTemplate (06 §5 and the PM5340 API notes): the ONLY param is
 // {limit}="1", and — unlike FetchReadings' template — there is no
 // &sort=asc, &start=, &end= or &cursor= at all, so a Verify call can never
 // be confused with a real fetch by an operator reading recorded requests
@@ -126,14 +126,14 @@ func (s *Source) Verify(ctx context.Context, creds integration.Credentials) erro
 }
 
 // DiscoverMeteringPoints always returns (nil, nil): PM5340 has no discovery
-// API (spec silent — task-9 brief's ruling). The credential service (Task
+// API (spec silent — the PM5340 API notes ruling). The credential service (Task
 // 14) creates the single analyzer from the configured installation number
 // instead of discovering it here.
 func (s *Source) DiscoverMeteringPoints(_ context.Context, _ integration.Credentials) ([]integration.MeteringPoint, error) {
 	return nil, nil
 }
 
-// FetchReadings follows fetchTemplate (06 §5 / task-9 brief S5) — the
+// FetchReadings follows fetchTemplate (06 §5 and the PM5340 API notes) — the
 // four-parameter template {limit, sort=asc (literal), start, end}, plus
 // &cursor={cursor} once a cursorNext has been returned — across as many
 // pages as Options.PageBudget allows, mapping every row through mapRow and

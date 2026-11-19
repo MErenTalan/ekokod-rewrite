@@ -16,8 +16,8 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
 )
 
-// TestNewRejectsShortStateKey is the "New enforces a minimum StateKey
-// length (32 bytes)" folded minor: a StateKey shorter than 32 bytes must be
+// TestNewRejectsShortStateKey: New enforces a minimum StateKey length (32
+// bytes): a StateKey shorter than 32 bytes must be
 // refused up front, not silently accepted into a weaker-than-intended HMAC.
 func TestNewRejectsShortStateKey(t *testing.T) {
 	deps := credentials.Deps{

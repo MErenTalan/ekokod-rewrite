@@ -30,8 +30,8 @@ func istanbulLoc(t *testing.T) *time.Location {
 // at all, so there is nothing to poison and no fallback path to
 // accidentally take. fakeAnalytics{rows: nil} deliberately returns NO rows
 // — the one condition under which a "fall back to Readings when the
-// aggregate is empty" mutation would actually have somewhere to fall back
-// TO, which is what makes this fixture prove the mutation's absence rather
+// aggregate is empty" bug would actually have somewhere to fall back
+// TO, which is what makes this fixture prove the bug's absence rather
 // than merely fail to exercise it.
 //
 // This behavioural probe alone is vacuous against a
@@ -99,7 +99,7 @@ func TestAnalyticsQueriesTheWidenedBucketRange(t *testing.T) {
 // TestAnalyticsRatiosComeFromConsumptionValuesNotClosingIndexes proves the
 // bucket's consumption values (100/30/6) and its
 // closing indexes (99999/...) are deliberately set to wildly different
-// numbers, so a mutation that computed the ratio from Indexes instead of
+// numbers, so a bug that computed the ratio from Indexes instead of
 // Values would produce an obviously different, wrong ratio.
 func TestAnalyticsRatiosComeFromConsumptionValuesNotClosingIndexes(t *testing.T) {
 	analyzerID := uuid.New()

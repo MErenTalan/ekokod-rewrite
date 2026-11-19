@@ -74,8 +74,8 @@ func TestCursorGetWithNoCursorYetReturnsNotFound(t *testing.T) {
 }
 
 // TestCursorListEmptyIDsReturnsNothingAndNonEmptyNarrows proves
-// CursorRepository.List's analyzerIDs is a REQUIRED POSITIONAL parameter
-// (controller ruling, task-10 fix round 1): nil or an empty slice means NO
+// CursorRepository.List's analyzerIDs is a REQUIRED POSITIONAL parameter:
+// nil or an empty slice means NO
 // ROWS, fail-closed, identical to Scope.BuildingIDs — never "every analyzer
 // visible to the Scope". A non-empty list still narrows further, and ids
 // outside the Scope still contribute no rows (covered separately by
@@ -109,8 +109,8 @@ func TestCursorListEmptyIDsReturnsNothingAndNonEmptyNarrows(t *testing.T) {
 	require.Len(t, both, 2)
 }
 
-// TestCursorRecordSuccessLastTsNeverMovesBackwards proves the folded-minor
-// fix to CursorRecordSuccess (`greatest(ingestion_cursors.last_ts,
+// TestCursorRecordSuccessLastTsNeverMovesBackwards proves the fix to
+// CursorRecordSuccess (`greatest(ingestion_cursors.last_ts,
 // excluded.last_ts)`): an out-of-order success call, whose lastTs is BEHIND
 // what is already stored, must not regress the high-water mark.
 func TestCursorRecordSuccessLastTsNeverMovesBackwards(t *testing.T) {
@@ -186,8 +186,7 @@ func TestCursorGetIsIsolatedToVisibleAnalyzers(t *testing.T) {
 	require.NotNil(t, got.LastTs)
 }
 
-// TestCursorListIDsOutsideScopeContributeNoRows is List's isolation proof
-// (F1 final review pass B, I3): a positive control (tenant B lists its own
+// TestCursorListIDsOutsideScopeContributeNoRows is List's isolation proof: a positive control (tenant B lists its own
 // cursor) and a cross-tenant assertion called with tenant A's AdminScope,
 // not the narrow Scope — under a narrow Scope the building predicate alone
 // already excludes tenant B's analyzer, so a tautologised company_id
@@ -215,7 +214,7 @@ func TestCursorListIDsOutsideScopeContributeNoRows(t *testing.T) {
 }
 
 // TestCursorRecordSuccessAndFailureRefuseInvisibleAnalyzer is the write
-// isolation proof for both cursor writes (I3). The cross-tenant assertion is
+// isolation proof for both cursor writes. The cross-tenant assertion is
 // called with tenant A's AdminScope, not the narrow Scope: under a narrow
 // Scope the building predicate alone already excludes tenant B's analyzer,
 // so a tautologised company_id predicate in CursorRecordSuccess /

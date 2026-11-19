@@ -19,8 +19,7 @@ type Summary struct {
 	Suspect     int // rows carrying at least one suspect register
 }
 
-// Summarise totals rows the caller already fetched from EITHER path (Task 7's
-// Analytics.Consumption or Billing.Consumption). A register reported only by
+// Summarise totals rows the caller already fetched from EITHER path (Analytics.Consumption or Billing.Consumption). A register reported only by
 // suspect rows has a nil total (never a zero standing in for "no data"):
 // a row "carries" a register for Totals/Averages only when its Values entry
 // is non-nil AND the register is not present in that row's Suspect map.

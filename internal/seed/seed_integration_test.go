@@ -1,6 +1,6 @@
 //go:build integration
 
-// Task 12b's loader tests. Task 12a's datasets_test.go already proves the
+// loader tests. datasets_test.go already proves the
 // embedded data decodes and validates (no database, runs on every
 // `go test`); everything here proves the LOADER's own contract — writing
 // those values through store.AdminCatalogueRepository idempotently — and so
@@ -53,7 +53,7 @@ func seedTableCounts(t *testing.T, ctx context.Context, pool *pgxpool.Pool) map[
 }
 
 // TestSeedRunTwiceProducesTheSameRowCounts is the F1 acceptance criterion
-// (task-12 brief): the offline bundle re-runs seed on every upgrade, so a
+// (the spec): the offline bundle re-runs seed on every upgrade, so a
 // second run that duplicated rows would corrupt the factor catalogue every
 // release.
 func TestSeedRunTwiceProducesTheSameRowCounts(t *testing.T) {
@@ -73,7 +73,7 @@ func TestSeedRunTwiceProducesTheSameRowCounts(t *testing.T) {
 	require.Equal(t, first.Total(), second.Total())
 	require.Equal(t, first, second, "every per-dataset count must be identical between runs")
 
-	// Pin the shipped counts directly (task-12a report: 182 factors + F9's
+	// Pin the shipped counts directly (182 factors + F9's
 	// four equivalences, 196
 	// conversions, 4 integration definitions, F12's 17 schedule rows (R350)), so a future
 	// change to the embedded data that silently drops rows is caught here
@@ -253,8 +253,8 @@ func TestSeedReplacesConversionsExactly(t *testing.T) {
 // testdata/national_tariff_schedule_fixture.json and never called this
 // package's loadNationalTariffSchedule or toModelNationalTariffSchedule, so
 // the loader's real 14-field mapping never ran against non-empty data (the
-// shipped dataset is `[]`). Fix round 1 (task-12b-fix1-findings.md, Important
-// 1) replaced it with TestLoadNationalTariffScheduleFixtureMapsEveryField in
+// shipped dataset is `[]`). It was replaced by
+// TestLoadNationalTariffScheduleFixtureMapsEveryField in
 // the white-box seed_national_tariff_fixture_test.go (package seed, not
 // seed_test), which reads the fixture, parses it with the unexported
 // parseNationalTariffSchedule, and drives it through the real

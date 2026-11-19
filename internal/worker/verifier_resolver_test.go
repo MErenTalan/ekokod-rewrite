@@ -15,10 +15,9 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/osos"
 )
 
-// TestVerifierResolverRoutesProviders is the fix-round-1 I2 test: it pins
-// verifierResolver.Verifier's three branches, which stayed green even with
-// the isolar branch disabled entirely (the reviewer's proof (d), reproduced
-// below). It needs no database or redis — httpx.NewPool, osos.New and
+// TestVerifierResolverRoutesProviders pins verifierResolver.Verifier's three
+// branches, which the earlier tests left green even with the isolar branch
+// disabled entirely. It needs no database or redis — httpx.NewPool, osos.New and
 // isolar.New all construct without dialing anything, so this is a true
 // unit test, unlike the rest of this package's graph tests.
 func TestVerifierResolverRoutesProviders(t *testing.T) {

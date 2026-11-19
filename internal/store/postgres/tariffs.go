@@ -48,10 +48,8 @@ func tariffPageLimits(p store.Page) (limit, offset int32) {
 
 // The date/timestamptz <-> time.Time conversion pairs used across this
 // package (tariffDateToTime, tariffTimeToDate, tariffNullTimestamptz, …) live
-// in pgtime.go now, not here — see Important Finding 6 of the task-11a
-// fix-round-1 review: no sibling Wave F task defines that file, so this
-// package-wide concern gets its own file instead of staying "the tariffs.go
-// helpers every other file imports".
+// in pgtime.go, not here: a package-wide concern gets its own file instead
+// of staying "the tariffs.go helpers every other file imports".
 
 // ---------------------------------------------------------------------------
 // TariffRepository
@@ -179,7 +177,7 @@ func (r *TariffRepository) Update(ctx context.Context, s store.Scope, t model.Ta
 	if !s.Valid() {
 		return model.Tariff{}, store.ErrInvalidScope
 	}
-	// Important Finding 3: Update must reject a foreign CompanyID exactly as
+	// Update must reject a foreign CompanyID exactly as
 	// Create does — uuid.Nil means "unset, use the Scope's company", anything
 	// else must match it — instead of silently ignoring the field.
 	if t.CompanyID != uuid.Nil && t.CompanyID != s.CompanyID {
@@ -340,7 +338,7 @@ func (r *TariffRepository) ReplaceTaxes(ctx context.Context, s store.Scope, tari
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := r.q.WithTx(tx)
 
-	// Important Finding 1: TariffTaxDeleteForTariff and TariffTaxInsert both
+	// TariffTaxDeleteForTariff and TariffTaxInsert both
 	// re-validate tariffID against the Scope themselves (queries/tariffs.sql)
 	// — this requireVisible call above is a fast pre-check, not the guard.
 	if err := q.TariffTaxDeleteForTariff(ctx, sqlcgen.TariffTaxDeleteForTariffParams{
@@ -724,7 +722,7 @@ func (r *TariffTemplateRepository) Update(ctx context.Context, s store.Scope, t 
 	if !s.Valid() {
 		return model.TariffTemplate{}, store.ErrInvalidScope
 	}
-	// Important Finding 3: same CompanyID check as Create's.
+	// Same CompanyID check as Create's.
 	if t.CompanyID != uuid.Nil && t.CompanyID != s.CompanyID {
 		return model.TariffTemplate{}, store.ErrNotFound
 	}
@@ -915,7 +913,7 @@ func solarTariffFromRow(row sqlcgen.SolarTariff) (model.SolarTariff, error) {
 //
 // national_tariff_schedule is platform-wide (no company_id): the Scope is
 // validated but narrows nothing. Writes go only through
-// AdminCatalogueRepository.UpsertNationalTariffSchedule (Task 11b).
+// AdminCatalogueRepository.UpsertNationalTariffSchedule.
 type NationalTariffRepository struct {
 	q    *sqlcgen.Queries
 	pool *pgxpool.Pool
@@ -1145,7 +1143,7 @@ func (r *IcmalRepository) UpdateImportResult(ctx context.Context, s store.Scope,
 // to the Scope; if any is not, the whole call is refused with ErrNotFound
 // and nothing is written.
 //
-// Important Finding 1: the IcmalImportVisible/IcmalVisibleBuildingCount
+// The IcmalImportVisible/IcmalVisibleBuildingCount
 // checks above are a fast pre-check outside the transaction, not the guard
 // itself — IcmalRowInsert re-validates both import_id and building_id
 // against the Scope inside the statement (queries/tariffs.sql), so the

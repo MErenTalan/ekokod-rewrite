@@ -13,7 +13,7 @@ import (
 )
 
 // errPlainHTTPToPinnedHost is returned by RoundTrip when a request targets
-// a pinned host over plain http:// (M13). A pinned host's protection lives
+// a pinned host over plain http://. A pinned host's protection lives
 // entirely in the dedicated transport's TLSClientConfig; a plain-HTTP
 // request to that same host never reaches TLS at all, so it would carry
 // its credentials in the clear and bypass the pin completely if allowed
@@ -33,7 +33,7 @@ type pinnedRoundTripper struct {
 	// perHost is one *http.Transport per pinned host, each trusting only
 	// its own pin — never a pool built from every pin together, which
 	// would let host A's presented certificate verify against host B's
-	// pin (Step 5(b)'s mutation).
+	// pin.
 	perHost map[string]http.RoundTripper
 	shared  http.RoundTripper
 	// pinnedHosts is the same key set as perHost, kept separately only so
@@ -46,7 +46,7 @@ type pinnedRoundTripper struct {
 // normalizeHost lowercases host and strips one trailing '.' (a
 // syntactically legal but semantically identical FQDN form), so a
 // PinnedCerts key and an incoming request's Hostname() agree even when
-// configured or requested with different case or a trailing dot (M13).
+// configured or requested with different case or a trailing dot.
 func normalizeHost(host string) string {
 	return strings.TrimSuffix(strings.ToLower(host), ".")
 }
@@ -98,7 +98,7 @@ func newPinnedRoundTripper(pins map[string]string, dialContext dialContextFunc) 
 	return &pinnedRoundTripper{perHost: perHost, shared: shared, pinnedHosts: pinnedHosts}, nil
 }
 
-// baseTransport clones http.DefaultTransport (M12) so every transport this
+// baseTransport clones http.DefaultTransport so every transport this
 // package builds keeps the standard library's own tuned connection-pool
 // and timeout behaviour (IdleConnTimeout, TLSHandshakeTimeout,
 // ExpectContinueTimeout, ForceAttemptHTTP2, MaxIdleConns...) instead of a
@@ -122,7 +122,7 @@ func baseTransport(dialContext dialContextFunc) *http.Transport {
 // transport when one is configured, the shared system-root transport
 // otherwise. A host never falls back to a DIFFERENT host's pinned
 // transport. A pinned host reached over plain http:// is refused outright
-// (M13) rather than silently handled as an accidental plaintext
+// rather than silently handled as an accidental plaintext
 // connection that bypasses the pin entirely.
 func (p *pinnedRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	host := normalizeHost(req.URL.Hostname())

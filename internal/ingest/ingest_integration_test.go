@@ -83,7 +83,7 @@ func ingestTestNewService(t *testing.T, repos ingestTestRepos, creds integration
 
 // ingestTestFailingAnalyzerRepo wraps a real store.AnalyzerRepository and
 // forces Create to fail for one specific installation number — the "one
-// analyzer failing does not abort the run" fixture (brief's option (b)).
+// analyzer failing does not abort the run" fixture (option (b)).
 type ingestTestFailingAnalyzerRepo struct {
 	store.AnalyzerRepository
 	failInstallation string
@@ -381,7 +381,7 @@ func TestIngestionOneAnalyzerFailureDoesNotAbortTheRun(t *testing.T) {
 		src.setStepsFor(c.ID, fetchStep{result: integration.FetchResult{Readings: rowsC}})
 		src.setStepsFor(b.ID, fetchStep{err: &integration.Error{Kind: integration.ErrUpstreamUnavailable, Provider: integration.ProviderOSOS, Op: "load_profiles"}})
 
-		// M2: A and C use CURSOR-DRIVEN fetches (Window nil) — an explicit
+		// A and C use CURSOR-DRIVEN fetches (Window nil) — an explicit
 		// window with no prior cursor no longer sets the live cursor, and
 		// this test's own assertions below (curA/curC.LastTs) need it set.
 		// B keeps its explicit window: it fails inside the adapter call,
@@ -641,11 +641,11 @@ func TestIngestionFailureMessageContainsNoSecret(t *testing.T) {
 	err := svc.FetchReadings(ctx, job.FetchReadingsPayload{CompanyID: tn.Company.ID, CredentialID: creds.CredentialID, AnalyzerID: analyzer.ID, Kind: model.ReadingKindLoadProfile, Window: window})
 	require.Error(t, err)
 
-	// I3: the error returned to the JOB LAYER (not just the stored
+	// The error returned to the JOB LAYER (not just the stored
 	// records checked below) must also be redacted, yet still classify —
 	// job.ClassifyForRetry needs errors.Is to keep working through it.
-	require.NotContains(t, err.Error(), secretValue, "I3: the error returned to the job layer must be redacted")
-	require.ErrorIs(t, err, integration.ErrAuth, "I3: the redacted wrapper must still unwrap to the classified cause")
+	require.NotContains(t, err.Error(), secretValue, "the error returned to the job layer must be redacted")
+	require.ErrorIs(t, err, integration.ErrAuth, "the redacted wrapper must still unwrap to the classified cause")
 
 	run := ingestTestRunsForAnalyzer(t, ctx, repos.ops, tn.Scope, job.TypeIntegrationFetchReadings, analyzer.ID)
 	require.Len(t, run, 1)
@@ -692,7 +692,7 @@ func TestIngestionUsesSystemScopeAndCannotTouchAnotherTenant(t *testing.T) {
 		Kind: model.ReadingKindLoadProfile, Window: window,
 	})
 	require.ErrorIs(t, err, store.ErrNotFound)
-	// M14: store.ErrNotFound (a deleted/out-of-scope analyzer) must be
+	// store.ErrNotFound (a deleted/out-of-scope analyzer) must be
 	// SkipRetry — asynq must not burn 5 retries over ~30 minutes on a task
 	// that can never succeed.
 	require.ErrorIs(t, err, asynq.SkipRetry)
@@ -732,11 +732,11 @@ func TestIngestionCredentialNotFoundIsSkipRetry(t *testing.T) {
 
 	ferr := svc.FetchReadings(ctx, job.FetchReadingsPayload{CompanyID: tn.Company.ID, CredentialID: uuid.New(), AnalyzerID: analyzer.ID, Kind: model.ReadingKindLoadProfile})
 	require.ErrorIs(t, ferr, store.ErrNotFound)
-	require.ErrorIs(t, ferr, asynq.SkipRetry, "M14: a deleted credential must be SkipRetry, not retried 5x")
+	require.ErrorIs(t, ferr, asynq.SkipRetry, "a deleted credential must be SkipRetry, not retried 5x")
 
 	serr := svc.SyncAnalyzers(ctx, job.SyncAnalyzersPayload{CompanyID: tn.Company.ID, CredentialID: uuid.New()})
 	require.ErrorIs(t, serr, store.ErrNotFound)
-	require.ErrorIs(t, serr, asynq.SkipRetry, "M14: a deleted credential must be SkipRetry for SyncAnalyzers too")
+	require.ErrorIs(t, serr, asynq.SkipRetry, "a deleted credential must be SkipRetry for SyncAnalyzers too")
 }
 
 // TestIngestionMultiplierChangeIsAppliedAndReported.
@@ -995,7 +995,7 @@ func TestIngestionHooksRunBeforeCursorAdvance(t *testing.T) {
 	require.Len(t, ingestTestAllReadings(t, ctx, repos.readings, tn.Scope, analyzer.ID, model.ReadingKindLoadProfile), 4)
 }
 
-// TestIngestionExplicitWindowNeverAdvancesCursorPastAGap is I1: an explicit
+// TestIngestionExplicitWindowNeverAdvancesCursorPastAGap: an explicit
 // p.Window fetch may move the live cursor forward only when it is
 // contiguous with what the cursor already covers. A window that starts
 // AFTER the cursor — a gap the cursor has not covered yet — must leave the
@@ -1055,7 +1055,7 @@ func TestIngestionExplicitWindowNeverAdvancesCursorPastAGap(t *testing.T) {
 
 	cur2, err := repos.cursors.Get(ctx, tn.Scope, analyzer.ID, model.ReadingKindLoadProfile)
 	require.NoError(t, err)
-	require.True(t, cur2.LastTs.Equal(day1LastTs), "I1: an explicit window past a gap must never advance the cursor")
+	require.True(t, cur2.LastTs.Equal(day1LastTs), "an explicit window past a gap must never advance the cursor")
 
 	rows := ingestTestAllReadings(t, ctx, repos.readings, tn.Scope, analyzer.ID, model.ReadingKindLoadProfile)
 	require.Len(t, rows, 8, "both windows' rows are stored even though only day 1's moved the cursor")
@@ -1073,7 +1073,7 @@ func TestIngestionExplicitWindowNeverAdvancesCursorPastAGap(t *testing.T) {
 	require.True(t, reqs[startIdx].From.Equal(day1LastTs), "the next cursor-driven run must still request the gap, not resume past it")
 }
 
-// TestIngestionExplicitWindowWithNoCursorNeverSetsLiveCursor is M2: an
+// TestIngestionExplicitWindowWithNoCursorNeverSetsLiveCursor: an
 // explicit p.Window fetch (e.g. a backfill window) that runs before any
 // cursor exists for this analyzer/kind must persist its rows but leave the
 // live cursor untouched — round 1 let it set the cursor
@@ -1141,7 +1141,7 @@ func TestIngestionExplicitWindowWithNoCursorNeverSetsLiveCursor(t *testing.T) {
 		"the first cursor-driven run must use its full InitialLookback (%s), not resume from the earlier explicit window (got %s)", wantFrom, reqs[startIdx].From)
 }
 
-// TestIngestionRowsStampedWithAnotherAnalyzerAreRejected is I2: a page an
+// TestIngestionRowsStampedWithAnotherAnalyzerAreRejected: a page an
 // adapter returns for one analyzer's request is trusted to carry that
 // analyzer's own rows only after an attribution check — a row stamped with
 // a DIFFERENT, real analyzer's ID (same company, same provider) must never
@@ -1173,12 +1173,12 @@ func TestIngestionRowsStampedWithAnotherAnalyzerAreRejected(t *testing.T) {
 	mixed := append(append([]model.MeterReading{}, correctRows...), wrongRows...)
 	src.setSteps(fetchStep{result: integration.FetchResult{Readings: mixed}})
 
-	// M2: a CURSOR-DRIVEN fetch (Window nil), not an explicit window — an
+	// A CURSOR-DRIVEN fetch (Window nil), not an explicit window — an
 	// explicit window with no prior cursor no longer sets the live cursor
 	// at all (see TestIngestionExplicitWindowWithNoCursorNeverSetsLiveCursor),
 	// and this test's own assertion below is specifically about what the
 	// cursor ends up AT, which needs the cursor to be set in the first
-	// place; the attribution behaviour under test (I2) is identical either
+	// place; the attribution behaviour under test is identical either
 	// way.
 	require.NoError(t, svc.FetchReadings(ctx, job.FetchReadingsPayload{
 		CompanyID: tn.Company.ID, CredentialID: creds.CredentialID, AnalyzerID: target.ID,
@@ -1188,13 +1188,13 @@ func TestIngestionRowsStampedWithAnotherAnalyzerAreRejected(t *testing.T) {
 	require.Len(t, ingestTestAllReadings(t, ctx, repos.readings, tn.Scope, target.ID, model.ReadingKindLoadProfile), 2,
 		"only the correctly-stamped rows are persisted for the fetched analyzer")
 	require.Empty(t, ingestTestAllReadings(t, ctx, repos.readings, tn.Scope, impostor.ID, model.ReadingKindLoadProfile),
-		"I2: nothing is EVER written for the impostor analyzer — a row stamped with its ID is rejected outright")
+		"nothing is EVER written for the impostor analyzer — a row stamped with its ID is rejected outright")
 
 	cur, err := repos.cursors.Get(ctx, tn.Scope, target.ID, model.ReadingKindLoadProfile)
 	require.NoError(t, err)
 	require.NotNil(t, cur.LastTs)
 	require.True(t, cur.LastTs.Equal(ingestTestIstanbulMidnight.Add(15*time.Minute)),
-		"I2: the cursor reflects only the correctly-attributed rows, not the wrong-analyzer rows' later timestamps")
+		"the cursor reflects only the correctly-attributed rows, not the wrong-analyzer rows' later timestamps")
 
 	run := ingestTestRunsForAnalyzer(t, ctx, repos.ops, tn.Scope, job.TypeIntegrationFetchReadings, target.ID)
 	require.Len(t, run, 1)
@@ -1205,7 +1205,7 @@ func TestIngestionRowsStampedWithAnotherAnalyzerAreRejected(t *testing.T) {
 	require.EqualValues(t, 2, detail.RejectionsByReason[string(ingest.RejectWrongAnalyzer)])
 }
 
-// TestSyncAnalyzersFailureMessageContainsNoSecret is I4: SyncAnalyzers'
+// TestSyncAnalyzersFailureMessageContainsNoSecret: SyncAnalyzers'
 // redaction had no test coverage at all — this covers all three of its
 // failure surfaces (Verify, DiscoverMeteringPoints, and a per-point
 // failed_points reason), matching what
@@ -1295,7 +1295,7 @@ func TestSyncAnalyzersFailureMessageContainsNoSecret(t *testing.T) {
 		runs := ingestTestSyncRunsForCredential(t, ctx, repos.ops, tn.Scope, creds.CredentialID)
 		require.Len(t, runs, 1)
 		require.Contains(t, string(runs[0].Detail), "LEAK-1")
-		require.NotContains(t, string(runs[0].Detail), secretValue, "I4: a failed_points reason must be redacted")
+		require.NotContains(t, string(runs[0].Detail), secretValue, "a failed_points reason must be redacted")
 	})
 }
 
@@ -1339,7 +1339,7 @@ func TestSyncMultiplierChangeIsAppliedAndReported(t *testing.T) {
 	require.True(t, found, "I5/R27: sync must report the multiplier change, same as the fetch path")
 }
 
-// TestSyncPreservesDescriptiveFieldsWhenProviderOmitsThem is M6:
+// TestSyncPreservesDescriptiveFieldsWhenProviderOmitsThem:
 // applyMeteringPointFields (sync.go) must preserve a stored descriptive
 // field when a later discovery call's MeteringPoint reports nil for it —
 // "the provider omitted it this time", never "clear it". Round 1
@@ -1388,13 +1388,13 @@ func TestSyncPreservesDescriptiveFieldsWhenProviderOmitsThem(t *testing.T) {
 
 	after, err := repos.analyzers.GetByInstallation(ctx, tn.Scope, model.IntegrationProviderOSOS, "SyncPreserveSub", "PRESERVE-1")
 	require.NoError(t, err)
-	require.NotNil(t, after.CustomerName, "M6: a nil CustomerName from the provider must preserve the stored value, not erase it")
+	require.NotNil(t, after.CustomerName, "a nil CustomerName from the provider must preserve the stored value, not erase it")
 	require.Equal(t, "FIXTURE Customer Old", *after.CustomerName)
 	require.NotNil(t, after.Address)
 	require.Equal(t, "FIXTURE Address New", *after.Address, "a field the point DOES report is still applied")
 }
 
-// TestIngestionMultiplierUpdateFailureDoesNotReportOrMutate is M1: a failed
+// TestIngestionMultiplierUpdateFailureDoesNotReportOrMutate: a failed
 // Analyzers.Update on a resolved multiplier change must not be reported as
 // "meter multiplier changed" (it did not happen), must not leave the
 // in-memory analyzer mutated for the rest of the run, and must not fail the
@@ -1434,22 +1434,22 @@ func TestIngestionMultiplierUpdateFailureDoesNotReportOrMutate(t *testing.T) {
 	}})
 
 	require.NoError(t, svc.FetchReadings(ctx, job.FetchReadingsPayload{CompanyID: tn.Company.ID, CredentialID: creds.CredentialID, AnalyzerID: analyzer.ID, Kind: model.ReadingKindLoadProfile, Window: window}),
-		"M1: a failed multiplier update must not fail the whole run")
+		"a failed multiplier update must not fail the whole run")
 
 	require.Len(t, ingestTestAllReadings(t, ctx, repos.readings, tn.Scope, analyzer.ID, model.ReadingKindLoadProfile), 1)
 
 	stillOld, gerr := repos.analyzers.Get(ctx, tn.Scope, analyzer.ID)
 	require.NoError(t, gerr)
-	require.False(t, stillOld.MeterMultiplier.Equal(newMultiplier), "M1: a failed Update must never be silently treated as if it changed the multiplier")
+	require.False(t, stillOld.MeterMultiplier.Equal(newMultiplier), "a failed Update must never be silently treated as if it changed the multiplier")
 
 	messages, merr := repos.ops.ListMessages(ctx, tn.Scope, store.MessageFilter{})
 	require.NoError(t, merr)
 	for _, m := range messages {
-		require.NotContains(t, m.Message, "sayaç çarpanı", "M1: no multiplier message on a failed update")
+		require.NotContains(t, m.Message, "sayaç çarpanı", "no multiplier message on a failed update")
 	}
 }
 
-// TestIngestionHookReceivesActualPersistedPageRange is M2: PostPersistHook
+// TestIngestionHookReceivesActualPersistedPageRange: PostPersistHook
 // must receive [minTs, maxTs] of the rows actually persisted THAT PAGE, not
 // the chunk's outer [From, To) — two pages of one chunk, scripted with
 // disjoint ranges, must produce two DIFFERENT hook calls.
@@ -1499,7 +1499,7 @@ func TestIngestionHookReceivesActualPersistedPageRange(t *testing.T) {
 	require.True(t, calls[1].To.Equal(page2From.Add(15*time.Minute)), "hook call 2: page 2's own max")
 }
 
-// TestIngestionWarningMessagesEmittedInSortedCodeOrder is M5: distinct
+// TestIngestionWarningMessagesEmittedInSortedCodeOrder: distinct
 // adapter warning codes must become operational messages in a fixed,
 // deterministic (sorted) order — acc.warnings is a Go map, so without a
 // sort the emission order would vary from run to run.
@@ -1537,11 +1537,11 @@ func TestIngestionWarningMessagesEmittedInSortedCodeOrder(t *testing.T) {
 		}
 	}
 	require.Len(t, byCode, 3)
-	require.True(t, byCode["aaa_code"].ID < byCode["mmm_code"].ID, "M5: warning messages must be emitted in sorted code order")
-	require.True(t, byCode["mmm_code"].ID < byCode["zzz_code"].ID, "M5: warning messages must be emitted in sorted code order")
+	require.True(t, byCode["aaa_code"].ID < byCode["mmm_code"].ID, "warning messages must be emitted in sorted code order")
+	require.True(t, byCode["mmm_code"].ID < byCode["zzz_code"].ID, "warning messages must be emitted in sorted code order")
 }
 
-// TestFetchReadingsRefusesInactiveCredential is X-M3 (final review B): a
+// TestFetchReadingsRefusesInactiveCredential: a
 // credential an operator has deactivated (integration.Credentials.IsActive
 // == false, populated from model.IntegrationCredential.IsActive by
 // internal/credentials's buildCredentials) must stop FetchReadings before

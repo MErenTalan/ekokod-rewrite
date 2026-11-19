@@ -180,7 +180,7 @@ func TestReactiveGenerationExemptionUsesKnownExportLowerBound(t *testing.T) {
 	in.ActiveExportKnownSum = d("0.5")
 	r := reactive.Evaluate(in)
 	require.False(t, r.Exempt)
-	require.Contains(t, r.Missing, reactive.MissingActiveExport, "I-18: partial export cannot decide the exemption")
+	require.Contains(t, r.Missing, reactive.MissingActiveExport, "partial export cannot decide the exemption")
 
 	in.ActiveExportPartial = false
 	require.NotContains(t, reactive.Evaluate(in).Missing, reactive.MissingActiveExport, "no member reports export at all")

@@ -3,12 +3,12 @@
 // UserCode/Password login exchanges an aril-service-token good for every
 // subsequent POST, and every response is an {ErrorCode, <list-or-object>}
 // envelope (06 §4 does not name the envelope's own fields — this adapter
-// follows task-8-brief.md's own "ErrorCode" vocabulary; see wire.go).
+// follows the ARIL API notes' "ErrorCode" vocabulary; see wire.go).
 //
 // ARIL never resolves its own meter multiplier the way GridBox does: 06 §4
 // reports Multiplier once, on the subscription (discovery) row, and every
 // FetchReadings call carries req.Multiplier — the pipeline's already-
-// resolved copy of Analyzer.MeterMultiplier (Task 1's R3 field) — which
+// resolved copy of Analyzer.MeterMultiplier (the R3 field) — which
 // this package applies exactly once, per register, via normalize.Multiply.
 // owner_consumptions is asked NOT to apply its own multiplier
 // (WithoutMultiplier: true) so client-side multiplication is the only one
@@ -19,7 +19,7 @@
 // normalize/window.go's own doc names exactly those three as the providers
 // for which a Window is "also the pagination unit" — 06 §4 documents no
 // per-call window-size limit for owner_consumptions, current_endexes or
-// end_of_month_endexes, and task-8-brief.md's MaxWindow (30 days) is
+// end_of_month_endexes, and the ARIL API notes' MaxWindow (30 days) is
 // already the pipeline's own cap on how wide a single FetchRequest's
 // [From, To) is. This adapter therefore makes exactly ONE provider call per
 // data endpoint per FetchReadings invocation, covering the given window
@@ -27,9 +27,9 @@
 // and FetchResult.NextCursor is always nil (the call, by construction,
 // always fully covers what it was asked for). This is the "justify a local
 // splitter" branch of Ruling R36 and adapter review pattern 11: no
-// splitting happens at all, because nothing in 06 or the brief requires
+// splitting happens at all, because nothing in 06 or the ARIL API notes require
 // it. ARIL's one genuine pagination mechanism is analyzers_list's own
-// PageNumber paging (task-8-brief.md item 2, "which is the pagination
+// PageNumber paging (the ARIL API notes, "which is the pagination
 // case"), implemented in DiscoverMeteringPoints below and bounded by
 // Options.PageBudget exactly like every other adapter's page budget.
 package aril
@@ -54,14 +54,14 @@ import (
 )
 
 const (
-	// maxWindow is task-8-brief.md's "MaxWindow 30 days": Planner.MaxWindow's
+	// maxWindow is the ARIL API notes' "MaxWindow 30 days": Planner.MaxWindow's
 	// answer for every kind.
 	maxWindow = 30 * 24 * time.Hour
 
 	defaultPageBudget = 10
 
 	// subscriptionPageSize is analyzers_list's fixed PageSize (06 §4 /
-	// task-8-brief.md item 2: "PostNumber, PageSize: 1000").
+	// the ARIL API notes: "PostNumber, PageSize: 1000").
 	subscriptionPageSize = 1000
 
 	// requestEvery/requestBurst/requestTimeout implement the Provider
@@ -71,7 +71,7 @@ const (
 	requestTimeout = 30 * time.Second
 
 	// istanbulDateTimeLayout is owner_consumptions'/current_endexes'
-	// StartDate/EndDate wire format (task-8-brief.md item 3: "YYYY-MM-DD
+	// StartDate/EndDate wire format (the ARIL API notes: "YYYY-MM-DD
 	// HH:mm:ss Istanbul").
 	istanbulDateTimeLayout = "2006-01-02 15:04:05"
 )
@@ -110,7 +110,7 @@ var _ integration.Adapter = (*Source)(nil)
 // Provider reports integration.ProviderARIL.
 func (s *Source) Provider() integration.Provider { return integration.ProviderARIL }
 
-// Kinds is task-8-brief.md's "Kinds -> [load_profile, current_index,
+// Kinds is the ARIL API notes' "Kinds -> [load_profile, current_index,
 // billing]", always — ARIL has no per-credential toggle the way GridBox's
 // billing kind does.
 func (s *Source) Kinds(integration.Credentials) []model.ReadingKind {
@@ -121,7 +121,7 @@ func (s *Source) Kinds(integration.Credentials) []model.ReadingKind {
 	}
 }
 
-// MaxWindow is 30 days for every kind (task-8-brief.md).
+// MaxWindow is 30 days for every kind.
 func (s *Source) MaxWindow(model.ReadingKind) time.Duration { return maxWindow }
 
 // configError reports a deliberately-classified configuration problem: a
@@ -196,7 +196,7 @@ func (s *Source) authClient(creds integration.Credentials) *httpx.Client {
 // assert its fields directly, with no Pool/Source needed — mirrors
 // GridBox's own dataClientConfig, gridbox/source.go).
 //
-// Fix round 1 (I1): provider-defaults.md's `aril` row marks "Serialise per
+// provider-defaults.md's `aril` row marks "Serialise per
 // company: yes" for the whole provider, not only the authentication
 // exchange — the original round gave authClient a SerializeKey but left
 // dataClient (every analyzers_list/owner_consumptions/current_endexes/
@@ -264,7 +264,7 @@ func (s *Source) authenticate(ctx context.Context, creds integration.Credentials
 		return "", &integration.Error{Kind: integration.ErrMalformedPayload, Provider: integration.ProviderARIL, Op: "authentication", HTTPStatus: resp.Status}
 	}
 	if token == "" {
-		// 06 §4 / task-8-brief.md item 1: "A 401 or an empty token is
+		// 06 §4 and the ARIL API notes: "A 401 or an empty token is
 		// ErrAuth." A 401 is already ErrAuth via httpx's own status
 		// classification (Do never reaches here for one); this covers a
 		// 200 whose decoded token is the empty string.
@@ -286,8 +286,8 @@ func (s *Source) Verify(ctx context.Context, creds integration.Credentials) erro
 }
 
 // DiscoverMeteringPoints pages analyzers_list (06 §4 "Discover" /
-// task-8-brief.md item 2): pages advance until a page has fewer than
-// subscriptionPageSize rows or Options.PageBudget is hit — task-8-brief.md
+// the ARIL API notes): pages advance until a page has fewer than
+// subscriptionPageSize rows or Options.PageBudget is hit — the ARIL API notes
 // item 2's own words, "which is the pagination case", is why this is the
 // call the fixture matrix's "pagination" subtest exercises (see
 // source_test.go), not FetchReadings (which never internally paginates —
@@ -331,7 +331,7 @@ func (s *Source) DiscoverMeteringPoints(ctx context.Context, creds integration.C
 			return nil, &integration.Error{Kind: integration.ErrMalformedPayload, Provider: integration.ProviderARIL, Op: "analyzers_list", HTTPStatus: resp.Status}
 		}
 		if code, ok := errorCode(sr.ErrorCode); ok && code != 0 {
-			// task-8-brief.md item 6 / removed-behaviour 27: an ErrorCode
+			// the ARIL API notes / removed-behaviour 27: an ErrorCode
 			// on a data call is a real upstream failure, never an empty
 			// result.
 			return nil, &integration.Error{Kind: integration.ErrUpstreamUnavailable, Provider: integration.ProviderARIL, Op: "analyzers_list", HTTPStatus: resp.Status}
@@ -350,7 +350,7 @@ func (s *Source) DiscoverMeteringPoints(ctx context.Context, creds integration.C
 			return points, nil
 		}
 	}
-	// M8: the loop exhausted Options.PageBudget while the LAST page fetched
+	// The loop exhausted Options.PageBudget while the LAST page fetched
 	// was still full (subscriptionPageSize rows) — the provider-shape
 	// signal that more pages likely exist. Round 1 silently returned the
 	// partial `points` here; align with iSolar's R44 (isolar/client.go's
@@ -360,7 +360,7 @@ func (s *Source) DiscoverMeteringPoints(ctx context.Context, creds integration.C
 	return nil, &integration.Error{Kind: integration.ErrMalformedPayload, Provider: integration.ProviderARIL, Op: "analyzers_list"}
 }
 
-// FetchReadings dispatches to the endpoint task-8-brief.md's items 3-5 name
+// FetchReadings dispatches to the endpoint the ARIL API notes name
 // for req.Kind.
 func (s *Source) FetchReadings(ctx context.Context, creds integration.Credentials, req integration.FetchRequest) (integration.FetchResult, error) {
 	switch req.Kind {
@@ -375,13 +375,13 @@ func (s *Source) FetchReadings(ctx context.Context, creds integration.Credential
 	}
 }
 
-// fetchLoadProfile is task-8-brief.md item 3: POST owner_consumptions and
+// fetchLoadProfile follows the ARIL API notes: POST owner_consumptions and
 // map every LoadProfiles[] row.
 //
 // WithoutMultiplier: true is always sent — this is the ONE place that
 // assumption lives (Ruling R9). The plan notes ARIL's WithoutMultiplier
 // semantics are unverified against a real response and must be checked in
-// F14; this adapter implements exactly what task-8-brief.md states
+// F14; this adapter implements exactly what the ARIL API notes state
 // (WithoutMultiplier: true, multiply client-side with req.Multiplier
 // exactly once) and isolates the assumption here so F14 has one place to
 // revisit if the real service does not honour it the way this expects.
@@ -471,7 +471,7 @@ type endexRowWithRaw struct {
 }
 
 // callEndexes issues one POST to op (current_endexes or
-// end_of_month_endexes: task-8-brief.md items 4-5), decodes its ResultList
+// end_of_month_endexes: the ARIL API notes), decodes its ResultList
 // and returns each row already unmarshalled with its original bytes. A
 // single structurally-malformed row is isolated as a WarnUnparseableRow
 // (adapter review pattern 7), never failing the whole call.
@@ -525,7 +525,7 @@ func (s *Source) callEndexes(ctx context.Context, token string, creds integratio
 	return rows, warnings, nil
 }
 
-// fetchCurrentIndex is task-8-brief.md item 4: POST current_endexes with
+// fetchCurrentIndex follows the ARIL API notes: POST current_endexes with
 // EndexDirection: 0 and map every row, including its own MaxDemand.
 func (s *Source) fetchCurrentIndex(ctx context.Context, creds integration.Credentials, req integration.FetchRequest) (integration.FetchResult, error) {
 	if err := fetchConfigError(creds, req, []string{"authentication", "current_endexes"}); err != nil {
@@ -605,7 +605,7 @@ func maxDemandDate(row endexRow) (time.Time, error) {
 	return parseProfileDate(row.ProfileDate)
 }
 
-// fetchBilling is task-8-brief.md item 5, fixed per R49 (C1): POST
+// fetchBilling follows the ARIL API notes, fixed per R49: POST
 // end_of_month_endexes for the request window, then — a second call within
 // this same FetchReadings — POST current_endexes for the WHOLE
 // Istanbul-local calendar month(s) the in-window end_of_month_endexes
@@ -785,7 +785,7 @@ func dedupeByTimestamp(readings []model.MeterReading) ([]model.MeterReading, []i
 }
 
 // formatIstanbulDateTime renders t as ARIL's StartDate/EndDate placeholder,
-// "YYYY-MM-DD HH:mm:ss" Europe/Istanbul local (task-8-brief.md item 3).
+// "YYYY-MM-DD HH:mm:ss" Europe/Istanbul local (the ARIL API notes).
 func formatIstanbulDateTime(t time.Time) string {
 	return t.In(normalize.Istanbul).Format(istanbulDateTimeLayout)
 }

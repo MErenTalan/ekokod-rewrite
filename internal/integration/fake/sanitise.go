@@ -13,12 +13,10 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// Rule patterns are derived from the F2 Task 4 brief's sanitisation table
-// (provenance/rationale there) plus the fix-round-1 findings
-// (.superpowers/sdd/2026-09-15-f2-integration-layer/task-4-fix1-findings.md,
-// ruling R31): the guard must be STRICTER than the brief's literal patterns
-// on real leaks and must NOT flag non-secret protocol fields. Where the two
-// disagree, R31 (and the findings below) win.
+// Rule patterns start from the fixture sanitisation table (R31): the guard
+// must be STRICTER than the table's literal patterns on real leaks and must
+// NOT flag non-secret protocol fields. Where the two disagree, R31 and the
+// notes below win.
 var (
 	fxFormPattern = regexp.MustCompile(`^FX[0-9_]+$`)
 
@@ -26,7 +24,7 @@ var (
 	tcknPattern = regexp.MustCompile(`\b[1-9]\d{10}\b`)
 	ibanPattern = regexp.MustCompile(`TR\d{24}`)
 	// phoneNormalisedPattern is matched against the WHOLE normalised value
-	// (normaliseStripPattern below), never a substring (I4/I3): the brief's
+	// (normaliseStripPattern below), never a substring: the table's
 	// original `\+?90\s?\d{3}` matched inside plain decimal strings like
 	// "1890433.5" (the digits "90433" appear mid-number). Anchoring to the
 	// full value and requiring the mobile "5xxxxxxxxx" shape after an
@@ -39,21 +37,21 @@ var (
 	// bareHostnamePattern finds domain-shaped tokens even with no scheme
 	// (I3: "gateway.isolarcloud.eu/openapi" has no "https://"). The final
 	// label must be 2+ letters, so it never matches a dotted-decimal IP
-	// like 127.0.0.1 or a plain decimal number like "1890433.5" (I4).
+	// like 127.0.0.1 or a plain decimal number like "1890433.5".
 	bareHostnamePattern = regexp.MustCompile(`\b(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}\b`)
 	// normaliseStripPattern removes the separators a real IBAN/phone is
-	// commonly typed or copy-pasted with (I3): spaces, dashes, dots and
+	// commonly typed or copy-pasted with: spaces, dashes, dots and
 	// parentheses.
 	normaliseStripPattern = regexp.MustCompile(`[\s\-.()]`)
 
-	// secretKeyPattern matches only credential-shaped keys (I4/R31): a bare
+	// secretKeyPattern matches only credential-shaped keys (R31): a bare
 	// "code" or "key" substring is deliberately EXCLUDED so protocol fields
 	// like result_code/currencyCode do not false-positive. ps_key/device_sn
 	// etc. are handled as exact installationKeys entries below instead, so
 	// dropping the bare "key" substring here does not miss them.
 	//
 	// "auth" is checked separately (authKeyPattern/authorKeyPattern) because
-	// Go's RE2 engine does not support the negative lookahead the brief's
+	// Go's RE2 engine does not support the negative lookahead the table's
 	// literal `auth(?!or)` needs to match "auth"/"authToken" while not
 	// matching "author"/"authorName"; isSecretKey below implements the same
 	// exclusion without lookahead.
@@ -61,23 +59,23 @@ var (
 	authKeyPattern   = regexp.MustCompile(`(?i)auth`)
 	authorKeyPattern = regexp.MustCompile(`(?i)author`)
 
-	// piiWords is the PII key WORD set (fix-round-3 controller ruling): a
+	// piiWords is the PII key WORD set: a
 	// key is name/address-shaped PII if tokeniseKey(key) produces a word
 	// that is a member of this set — never by substring match. Built from
 	// 06-integrations.md's OSOS (customerAdress, il, ilce, koyMahallesi,
 	// caddesiSokagi → province/district/neighbourhood/street; muhatapNo,
 	// sayimNokTanim) and ARIL (Title, Address) field tables, plus the
-	// round-1/round-2 Turkish-spelling stems (I2, R1).
+	// earlier Turkish-spelling stems.
 	//
-	// fix-round-2 R1 found that substring/suffix stems (`il$`) and later a
+	// Substring/suffix stems (`il$`) and later a
 	// single exact-whole-key anchor (`^sayimnoktanim$`) both fail: a suffix
 	// stem catches unrelated keys that happen to END in the stem
-	// ("email"/"mail" end in "il"; the pre-fix-round-2 bug), while an exact
+	// ("email"/"mail" end in "il"), while an exact
 	// whole-key anchor stops matching the instant the key is spelled with
 	// ANY extra separator or suffix — `SAYIM_NOK_TANIM` (underscores) and
 	// `sayimNoktaTanimi` (the "-ta"/"-i" suffix forms) both lower to a
 	// string that is not byte-identical to "sayimnoktanim", so the anchor
-	// wrongly let them through (fix-round-3's regression). Word
+	// wrongly let them through. Word
 	// tokenisation (tokeniseKey below) fixes both failure modes at once:
 	// "email"/"mail" never produce an "il" WORD (there is no camelCase/
 	// separator boundary before "il" in either), so they are not caught by
@@ -142,12 +140,12 @@ var (
 	// coordXKeyPattern / coordYKeyPattern identify OSOS's koordinatX/
 	// koordinatY (mapped to latitude/longitude per 06-integrations.md
 	// §2 "Flow" step 2) and their canonical English names, each
-	// range-checked (I2) against the allowed fixture bounds.
+	// range-checked against the allowed fixture bounds.
 	coordXKeyPattern = regexp.MustCompile(`(?i)^koordinatx$|^latitude$|^lat$`)
 	coordYKeyPattern = regexp.MustCompile(`(?i)^koordinaty$|^longitude$|^lon$|^lng$`)
 
-	// coordLatMin/Max and coordLonMin/Max are the allowed fixture bounds
-	// (I2), as exact decimals — no float64 anywhere in this package (see
+	// coordLatMin/Max and coordLonMin/Max are the allowed fixture bounds,
+	// as exact decimals — no float64 anywhere in this package (see
 	// coordinateViolations).
 	coordLatMin = decimal.RequireFromString("39.0")
 	coordLatMax = decimal.RequireFromString("39.999999")
@@ -162,11 +160,11 @@ var (
 	}
 )
 
-// tokeniseKey splits key into lowercase, Turkish-folded WORDS (fix-round-3
-// controller ruling, extended by fix-round-4's acronym rule) on:
+// tokeniseKey splits key into lowercase, Turkish-folded WORDS (with the
+// acronym rule) on:
 //   - camelCase/PascalCase boundaries (a lowercase letter immediately
 //     followed by an uppercase letter);
-//   - acronym boundaries (fix-round-4): an uppercase letter that is
+//   - acronym boundaries: an uppercase letter that is
 //     immediately followed by a lowercase letter, when the letter BEFORE
 //     it is also uppercase — the standard rule for splitting a leading
 //     acronym run off the word that follows it. Without this rule the
@@ -257,7 +255,7 @@ func foldWord(s string) string {
 
 // hasSayimTanimCombo reports whether words (already tokenised/folded)
 // contain the "sayim nokta tanim(i)" counting-point-description
-// combination (fix-round-3 controller ruling): a "sayim"/"sayimnok" word
+// combination: a "sayim"/"sayimnok" word
 // together with a "tanim"/"tanimi" word — however many words separate
 // them, and regardless of case/separator spelling — OR a single fused
 // word that itself starts with "sayimnok" and contains "tanim" (the
@@ -281,7 +279,7 @@ func hasSayimTanimCombo(words []string) bool {
 }
 
 // isNameLikePII reports whether key is name/company/address-shaped PII
-// per the fix-round-3 word-tokenised ruling: true if tokeniseKey(key)
+// by whole words: true if tokeniseKey(key)
 // yields any word in piiWords, or the sayim/tanim combination
 // (hasSayimTanimCombo) — decided on whole words, never substrings, so a
 // word ENDING in a PII stem (e.g. "il" inside "email"/"mail") never
@@ -309,8 +307,7 @@ func isNameLikePII(key string) bool {
 // shape rules (JWT/TCKN/IBAN/phone/e-mail/host) run over the raw text.
 // Key-conditioned rules (install/secret/name placeholders) are JSON-only in
 // this round: a robust, cheap XML element/attribute-name extractor was
-// judged not worth its own risk of false negatives/positives for this
-// round. See the Task 4 report, "what M5 covers".
+// judged not worth its own risk of false negatives/positives.
 func Violations(path string, body []byte) []string {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".json":
@@ -387,9 +384,9 @@ func checkStringValue(key, value string) []string {
 	return violations
 }
 
-// isSecretKey reports whether key is credential-shaped (I4/R31): the
+// isSecretKey reports whether key is credential-shaped (R31): the
 // generic secretKeyPattern, or "auth" without "author" — the RE2-compatible
-// equivalent of the brief's `auth(?!or)`.
+// equivalent of the table's `auth(?!or)`.
 func isSecretKey(key string) bool {
 	if secretKeyPattern.MatchString(key) {
 		return true
@@ -401,9 +398,8 @@ func isSecretKey(key string) bool {
 // canonical latitude/longitude names) against the allowed fixture bounds
 // (I2: "koordinatX/Y out of the allowed range ... reject out-of-range").
 //
-// fix-round-2 (controller, merge-with-Task-1 finding): uses
-// github.com/shopspring/decimal, never strconv.ParseFloat/float64 — Task 1's
-// merged arch guard (TestIntegrationTreesDoNotParseFloats / depguard's
+// Uses github.com/shopspring/decimal, never strconv.ParseFloat/float64 —
+// the arch guard (TestIntegrationTreesDoNotParseFloats / depguard's
 // no-float-money rule) forbids float parsing anywhere under
 // internal/integration/..., non-test files included, so this exact-decimal
 // comparison replaces the prior float64 bounds check with the same accepted/
@@ -440,7 +436,7 @@ func shapeViolations(label, text string) []string {
 	}
 
 	var violations []string
-	// I3: normalise a COPY before the IBAN/TCKN/phone checks so everyday
+	// Normalise a COPY before the IBAN/TCKN/phone checks so everyday
 	// formatting (spaces, dashes, dots, parentheses) cannot evade them; the
 	// JWT/e-mail/URL checks below intentionally use the original text,
 	// since normalising would corrupt those shapes.
@@ -475,7 +471,7 @@ func shapeViolations(label, text string) []string {
 			violations = append(violations, fmt.Sprintf("%s: URL contains userinfo", label))
 		}
 	}
-	// I3: bare hostnames (no "http(s)://" scheme) such as
+	// Bare hostnames (no "http(s)://" scheme) such as
 	// "gateway.isolarcloud.eu/openapi". E-mail matches are stripped first
 	// so a compliant "...@example.com" address's own domain is not
 	// re-flagged here: the bare/URL host allow-list is 127.0.0.1 and

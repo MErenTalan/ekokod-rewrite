@@ -6,8 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestTemplateNameForFingerprintChangesWithFingerprint is F4 Task 0's
-// requirement 6c, at the level this package owns: the shared
+// TestTemplateNameForFingerprintChangesWithFingerprint is requirement 6c, at the level this package owns: the shared
 // isolated-database template's name is isolatedTemplateNamePrefix plus a
 // migrations fingerprint (see postgres.MigrationsFingerprint, and its own
 // TestFingerprintFSChangesWithContent for the fingerprint half of this

@@ -172,8 +172,8 @@ func TestGenerationAnchorRefusesNarrowScopeOnOtherBuilding(t *testing.T) {
 	require.ErrorIs(t, err, store.ErrNotFound)
 }
 
-// TestGenerationAnchorGetExcludesSoftDeletedAnalyzer is fix-round-1 finding
-// M1's refusal test for the read path: GenerationAnchorGet's own
+// TestGenerationAnchorGetExcludesSoftDeletedAnalyzer is the refusal test for
+// the read path: GenerationAnchorGet's own
 // "a.deleted_at is null" predicate must exclude a soft-deleted analyzer's
 // anchor even under AdminScope, the widest legitimate grant. A positive
 // control proves the same anchor was readable before the soft-delete.
@@ -202,8 +202,8 @@ func TestGenerationAnchorGetExcludesSoftDeletedAnalyzer(t *testing.T) {
 	require.ErrorIs(t, err, store.ErrNotFound, "a soft-deleted analyzer's anchor must not be readable")
 }
 
-// TestGenerationAnchorUpsertRefusesSoftDeletedAnalyzer is fix-round-1 finding
-// M1's refusal test for the write path: GenerationAnchorUpsert's
+// TestGenerationAnchorUpsertRefusesSoftDeletedAnalyzer is the refusal test
+// for the write path: GenerationAnchorUpsert's
 // select-from-analyzers source requires a.deleted_at is null, so a
 // soft-deleted analyzer's row is refused (RowsAffected == 0 → ErrNotFound)
 // even under AdminScope. Proves nothing was written by restoring the

@@ -10,10 +10,9 @@
 // internal/service/doc.go). Every method that touches tenant data takes ctx
 // first and store.Scope second, validated before any I/O.
 //
-// The following rulings from
-// docs/superpowers/plans/2026-09-16-f3-consumption-engine.md ("Spec gaps and
-// rulings") govern this package and are recorded here so an implementer
-// reading only the code can see why it looks the way it does:
+// The following rulings (docs/decisions.md, F3) govern this package and are
+// recorded here so a developer reading only the code can see why it looks
+// the way it does:
 //
 //   - R68: the load profile is fed active-import consumption only. This
 //     package never reads any other register; internal/domain/loadprofile

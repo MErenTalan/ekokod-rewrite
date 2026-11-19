@@ -1,12 +1,10 @@
 package consumption_test
 
-// This file is the package's ONE shared-test-helper file: Tasks 8, 9
-// and 11a reuse what is here and never redefine a helper with the same
-// name, matching internal/domain/energy's and internal/service/loadprofile's
+// This file is the package's ONE shared-test-helper file: other test files
+// reuse what is here and never redefine a helper with the same name, matching internal/domain/energy's and internal/service/loadprofile's
 // own helpers_test.go convention.
 //
-// Names that could plausibly collide with a helper Task 11a's
-// refresh_test.go / refresh_integration_test.go independently needs
+// Names that could plausibly collide with a helper refresh_test.go / refresh_integration_test.go independently needs
 // (insertReading, newTenant, ctx, and anything shaped like them) are either
 // avoided entirely (every test below builds its own local ctx rather than
 // sharing a package-level one) or given a "paths"-prefixed, clearly
@@ -78,8 +76,7 @@ type fakeAnalytics struct {
 	calls *[]analyticsCall
 
 	// t and wantScope, when both set, fail the test immediately if
-	// any method is called with a Scope other than wantScope — a mutation
-	// that substitutes a different Scope on one call turns this red.
+	// any method is called with a Scope other than wantScope — a bug that substitutes a different Scope on one call turns this red.
 	t         *testing.T
 	wantScope *store.Scope
 }
@@ -190,8 +187,7 @@ type fakeReadings struct {
 	inserted *[]model.MeterReading
 
 	// t and wantScope, when both set, fail the test immediately if
-	// any method is called with a Scope other than wantScope — a mutation
-	// that substitutes a different (even if still valid) Scope on one
+	// any method is called with a Scope other than wantScope — a bug that substitutes a different (even if still valid) Scope on one
 	// repository call turns this red, rather than relying on an accidental
 	// ErrNotFound from an unrelated sibling call.
 	t         *testing.T
@@ -295,22 +291,20 @@ func (noReadings) Latest(context.Context, store.Scope, uuid.UUID, store.TimeRang
 // --- no-op AnomalyRepository / OpsRepository --------------------------------
 
 // noAnomalies panics on every WRITE method: Billing.Consumption must never
-// create, fetch-by-id or resolve an anomaly (that is Task 8's
-// ConsumptionAndRecord/ResolveAnomaly, on the same type) — a panic surfaces
+// create, fetch-by-id or resolve an anomaly (that is ConsumptionAndRecord/ResolveAnomaly, on the same type) — a panic surfaces
 // that violation immediately rather than letting a nil-ish fake silently
 // return zero values.
 //
-// List is the one exception (Task 8): Consumption itself now reads
+// List is the one exception: Consumption itself now reads
 // resolved manual_override/accepted anomalies to substitute their values
-// (applyResolvedAnomalies, anomalies.go) — a read Task 7 never needed but
-// R61 never forbade (R61 only ever forbids Billing reaching an
+// (applyResolvedAnomalies, anomalies.go) — a read R61 never forbade (R61 only ever forbids Billing reaching an
 // AnalyticsRepository). Returning (nil, nil) here matches "no anomalies
 // exist" exactly like a real repository would for a period with none, so
-// every Task 7 test that never seeds a resolved anomaly is unaffected.
+// every test that never seeds a resolved anomaly is unaffected.
 type noAnomalies struct{}
 
 func (noAnomalies) Get(context.Context, store.Scope, uuid.UUID) (model.ConsumptionAnomaly, error) {
-	panic("consumption: Task 7's Billing.Consumption must never call AnomalyRepository.Get")
+	panic("consumption: Billing.Consumption must never call AnomalyRepository.Get")
 }
 
 func (noAnomalies) List(context.Context, store.Scope, store.AnomalyFilter) ([]model.ConsumptionAnomaly, error) {
@@ -318,22 +312,22 @@ func (noAnomalies) List(context.Context, store.Scope, store.AnomalyFilter) ([]mo
 }
 
 func (noAnomalies) Create(context.Context, store.Scope, model.ConsumptionAnomaly) (model.ConsumptionAnomaly, error) {
-	panic("consumption: Task 7's Billing.Consumption must never call AnomalyRepository.Create")
+	panic("consumption: Billing.Consumption must never call AnomalyRepository.Create")
 }
 
 func (noAnomalies) Resolve(context.Context, store.Scope, uuid.UUID, uuid.UUID, string, []byte, time.Time) (model.ConsumptionAnomaly, error) {
-	panic("consumption: Task 7's Billing.Consumption must never call AnomalyRepository.Resolve")
+	panic("consumption: Billing.Consumption must never call AnomalyRepository.Resolve")
 }
 
 // noOps panics on every method, for the same reason noAnomalies does.
 type noOps struct{}
 
 func (noOps) StartRun(context.Context, store.Scope, model.JobRun) (model.JobRun, error) {
-	panic("consumption: Task 7's Billing.Consumption must never call OpsRepository.StartRun")
+	panic("consumption: Billing.Consumption must never call OpsRepository.StartRun")
 }
 
 func (noOps) FinishRun(context.Context, store.Scope, uuid.UUID, string, int32, int32, int32, *string, []byte, time.Time) (model.JobRun, error) {
-	panic("consumption: Task 7's Billing.Consumption must never call OpsRepository.FinishRun")
+	panic("consumption: Billing.Consumption must never call OpsRepository.FinishRun")
 }
 
 func (noOps) RunByTaskID(context.Context, store.Scope, string) (model.JobRun, error) {
@@ -344,19 +338,19 @@ func (noOps) ChildRunSummary(context.Context, store.Scope, string) ([]model.Chil
 }
 
 func (noOps) GetRun(context.Context, store.Scope, uuid.UUID) (model.JobRun, error) {
-	panic("consumption: Task 7's Billing.Consumption must never call OpsRepository.GetRun")
+	panic("consumption: Billing.Consumption must never call OpsRepository.GetRun")
 }
 
 func (noOps) ListRuns(context.Context, store.Scope, store.JobRunFilter) ([]model.JobRun, error) {
-	panic("consumption: Task 7's Billing.Consumption must never call OpsRepository.ListRuns")
+	panic("consumption: Billing.Consumption must never call OpsRepository.ListRuns")
 }
 
 func (noOps) AppendMessage(context.Context, store.Scope, model.OperationalMessage) (model.OperationalMessage, error) {
-	panic("consumption: Task 7's Billing.Consumption must never call OpsRepository.AppendMessage")
+	panic("consumption: Billing.Consumption must never call OpsRepository.AppendMessage")
 }
 
 func (noOps) ListMessages(context.Context, store.Scope, store.MessageFilter) ([]model.OperationalMessage, error) {
-	panic("consumption: Task 7's Billing.Consumption must never call OpsRepository.ListMessages")
+	panic("consumption: Billing.Consumption must never call OpsRepository.ListMessages")
 }
 
 // --- reading fixture builder -------------------------------------------------
@@ -365,7 +359,7 @@ func (noOps) ListMessages(context.Context, store.Scope, store.MessageFilter) ([]
 // register values (active_import, t1_import, ... — a subset of
 // energy.Register names as strings, for terseness in test tables) and
 // MultiplierApplied fixed at 1. Deliberately NOT named insertReading: no row
-// is written anywhere by this helper, and Task 11a's own integration tests
+// is written anywhere by this helper, and own integration tests
 // may want a same-named "insert" helper of their own without colliding with
 // this one's shape or its name.
 func readingRow(analyzerID uuid.UUID, ts time.Time, kind model.ReadingKind, values map[string]string) model.MeterReading {
@@ -405,7 +399,7 @@ func readingRow(analyzerID uuid.UUID, ts time.Time, kind model.ReadingKind, valu
 
 // pathsSeedReading inserts one meter reading through a real ReadingRepository,
 // for paths_integration_test.go's real-database tests. Named with the
-// "paths" prefix per the task-7 report's collision-avoidance convention.
+// "paths" prefix per the collision-avoidance convention.
 func pathsSeedReading(t *testing.T, ctx context.Context, repo store.ReadingRepository, scope store.Scope, r model.MeterReading) {
 	t.Helper()
 	_, _, err := repo.BulkInsert(ctx, scope, []model.MeterReading{r})
@@ -639,10 +633,10 @@ type fakeOps struct {
 }
 
 func (f *fakeOps) StartRun(context.Context, store.Scope, model.JobRun) (model.JobRun, error) {
-	panic("fakeOps: StartRun unused by this fix round's tests")
+	panic("fakeOps: StartRun unused by these tests")
 }
 func (f *fakeOps) FinishRun(context.Context, store.Scope, uuid.UUID, string, int32, int32, int32, *string, []byte, time.Time) (model.JobRun, error) {
-	panic("fakeOps: FinishRun unused by this fix round's tests")
+	panic("fakeOps: FinishRun unused by these tests")
 }
 func (f *fakeOps) RunByTaskID(context.Context, store.Scope, string) (model.JobRun, error) {
 	return model.JobRun{}, store.ErrNotFound
@@ -652,10 +646,10 @@ func (f *fakeOps) ChildRunSummary(context.Context, store.Scope, string) ([]model
 }
 
 func (f *fakeOps) GetRun(context.Context, store.Scope, uuid.UUID) (model.JobRun, error) {
-	panic("fakeOps: GetRun unused by this fix round's tests")
+	panic("fakeOps: GetRun unused by these tests")
 }
 func (f *fakeOps) ListRuns(context.Context, store.Scope, store.JobRunFilter) ([]model.JobRun, error) {
-	panic("fakeOps: ListRuns unused by this fix round's tests")
+	panic("fakeOps: ListRuns unused by these tests")
 }
 
 func (f *fakeOps) AppendMessage(_ context.Context, _ store.Scope, m model.OperationalMessage) (model.OperationalMessage, error) {
@@ -703,22 +697,22 @@ func (f fakeAnalyzers) Get(_ context.Context, _ store.Scope, id uuid.UUID) (mode
 	return a, nil
 }
 func (f fakeAnalyzers) GetByInstallation(context.Context, store.Scope, model.IntegrationProvider, string, string) (model.Analyzer, error) {
-	panic("fakeAnalyzers: GetByInstallation unused by this fix round's tests")
+	panic("fakeAnalyzers: GetByInstallation unused by these tests")
 }
 func (f fakeAnalyzers) List(context.Context, store.Scope, store.AnalyzerFilter) ([]model.Analyzer, error) {
-	panic("fakeAnalyzers: List unused by this fix round's tests")
+	panic("fakeAnalyzers: List unused by these tests")
 }
 func (f fakeAnalyzers) Create(context.Context, store.Scope, model.Analyzer) (model.Analyzer, error) {
-	panic("fakeAnalyzers: Create unused by this fix round's tests")
+	panic("fakeAnalyzers: Create unused by these tests")
 }
 func (f fakeAnalyzers) Update(context.Context, store.Scope, model.Analyzer) (model.Analyzer, error) {
-	panic("fakeAnalyzers: Update unused by this fix round's tests")
+	panic("fakeAnalyzers: Update unused by these tests")
 }
 func (f fakeAnalyzers) SoftDelete(context.Context, store.Scope, uuid.UUID, time.Time) error {
-	panic("fakeAnalyzers: SoftDelete unused by this fix round's tests")
+	panic("fakeAnalyzers: SoftDelete unused by these tests")
 }
 func (f fakeAnalyzers) TouchLastReading(context.Context, store.Scope, uuid.UUID, time.Time) error {
-	panic("fakeAnalyzers: TouchLastReading unused by this fix round's tests")
+	panic("fakeAnalyzers: TouchLastReading unused by these tests")
 }
 
 // --- fakeUsers: store.UserRepository -----------------------------------------
@@ -744,23 +738,23 @@ func (f fakeUsers) Get(_ context.Context, _ store.Scope, id uuid.UUID) (model.Us
 	return model.User{}, store.ErrNotFound
 }
 func (f fakeUsers) List(context.Context, store.Scope, store.UserFilter) ([]model.User, error) {
-	panic("fakeUsers: List unused by this fix round's tests")
+	panic("fakeUsers: List unused by these tests")
 }
 func (f fakeUsers) Create(context.Context, store.Scope, model.User) (model.User, error) {
-	panic("fakeUsers: Create unused by this fix round's tests")
+	panic("fakeUsers: Create unused by these tests")
 }
 func (f fakeUsers) Update(context.Context, store.Scope, model.User) (model.User, error) {
-	panic("fakeUsers: Update unused by this fix round's tests")
+	panic("fakeUsers: Update unused by these tests")
 }
 func (f fakeUsers) SoftDelete(context.Context, store.Scope, uuid.UUID, time.Time) error {
-	panic("fakeUsers: SoftDelete unused by this fix round's tests")
+	panic("fakeUsers: SoftDelete unused by these tests")
 }
 func (f fakeUsers) SetPassword(context.Context, store.Scope, uuid.UUID, string, time.Time) error {
-	panic("fakeUsers: SetPassword unused by this fix round's tests")
+	panic("fakeUsers: SetPassword unused by these tests")
 }
 func (f fakeUsers) PasswordHistory(context.Context, store.Scope, uuid.UUID, int32) ([]model.PasswordHistoryEntry, error) {
-	panic("fakeUsers: PasswordHistory unused by this fix round's tests")
+	panic("fakeUsers: PasswordHistory unused by these tests")
 }
 func (f fakeUsers) RecordLogin(context.Context, store.Scope, uuid.UUID, time.Time) error {
-	panic("fakeUsers: RecordLogin unused by this fix round's tests")
+	panic("fakeUsers: RecordLogin unused by these tests")
 }

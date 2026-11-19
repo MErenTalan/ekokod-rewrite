@@ -1,5 +1,5 @@
 -- Tenant job-run and operational-message repository queries (migration
--- 00008). Owned by Task 11b.
+-- 00008).
 --
 -- job_runs.company_id and operational_messages.company_id are NULLABLE, for
 -- platform-wide work (AdminJournalRepository writes those). Every query here

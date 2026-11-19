@@ -406,8 +406,8 @@ func TestReadingRangeNeverReturnsForeignDataEvenWhenForeignAnalyzerHasReadings(t
 }
 
 // TestReadingBoundaryReadingsNeverReturnsForeignDataEvenWhenForeignAnalyzerHasReadings
-// is BoundaryReadings' guard-failure-provable isolation test (Important
-// finding 1, task-10 fix round 1): TestReadingBoundaryReadingsAnalyzerNotVisibleReturnsNotFound
+// is BoundaryReadings' guard-failure-provable isolation test:
+// TestReadingBoundaryReadingsAnalyzerNotVisibleReturnsNotFound
 // never seeds real data for the foreign analyzer, so tautologising
 // ReadingBoundaryAtOrBefore's own predicate would STILL return zero rows and
 // that test would still pass. Here tenant B's analyzer actually HAS a
@@ -511,8 +511,7 @@ func TestReadingLatestNeverReturnsForeignDataEvenWhenForeignAnalyzerHasReadings(
 }
 
 // f2genPM5340Row builds one fixture MeterReading carrying
-// IntervalGenerationKwh — PM5340's interval energy (migration 00012, F2
-// Task 5).
+// IntervalGenerationKwh — PM5340's interval energy (migration 00012).
 func f2genPM5340Row(analyzerID uuid.UUID, ts time.Time, activeImport, intervalGeneration string) model.MeterReading {
 	row := readingsRow(analyzerID, ts, model.ReadingKindLoadProfile, activeImport, "1")
 	row.SourceProvider = model.IntegrationProviderPM5340
@@ -520,7 +519,7 @@ func f2genPM5340Row(analyzerID uuid.UUID, ts time.Time, activeImport, intervalGe
 	return row
 }
 
-// TestReadingsCarryIntervalGenerationKwh is the F2 Task 5 acceptance test:
+// TestReadingsCarryIntervalGenerationKwh is the F2 acceptance test:
 // BulkInsert then Range returns the exact decimal; nil stays nil; a
 // re-upsert that changes only active_export keeps interval_generation_kwh
 // (the column is written on EVERY upsert, from `excluded.

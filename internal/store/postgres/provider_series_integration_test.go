@@ -254,8 +254,8 @@ func TestProviderHourlyRefusesNarrowScopeOnOtherBuilding(t *testing.T) {
 	require.Len(t, got, 1, "only the AdminScope seed row may exist — the narrow scope's write must not have landed")
 }
 
-// TestProviderHourlyUpsertRefusesSoftDeletedAnalyzer is fix-round-1 finding
-// M1's refusal test for the write path: ProviderHourlyVisibleAnalyzerIDs
+// TestProviderHourlyUpsertRefusesSoftDeletedAnalyzer is the refusal test for
+// the write path: ProviderHourlyVisibleAnalyzerIDs
 // requires deleted_at is null, so a soft-deleted analyzer's batch is refused
 // even under AdminScope. Proves nothing was written by restoring the
 // analyzer and reading it back via AdminScope.
@@ -295,8 +295,8 @@ func TestProviderHourlyUpsertRefusesSoftDeletedAnalyzer(t *testing.T) {
 	require.Len(t, got, 1, "only the positive control's row may exist")
 }
 
-// TestProviderHourlyRangeExcludesSoftDeletedAnalyzer is fix-round-1 finding
-// M1's refusal test for the read path.
+// TestProviderHourlyRangeExcludesSoftDeletedAnalyzer is the refusal test for
+// the read path.
 func TestProviderHourlyRangeExcludesSoftDeletedAnalyzer(t *testing.T) {
 	ctx := context.Background()
 	pool := testfixtures.NewIsolatedDB(t)

@@ -24,8 +24,7 @@ var billingT0 = time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
 
 // newBilling builds a *consumption.Billing wired to readings, with
 // AnomalyRepository and OpsRepository set to the panicking no-op fakes
-// (Task 7's Consumption must never reach either — that is Task 8's
-// ConsumptionAndRecord, on the same type). The clock is fixed at billingT0.
+// (Consumption must never reach either — that is ConsumptionAndRecord, on the same type). The clock is fixed at billingT0.
 func newBilling(t *testing.T, readings fakeReadings) *consumption.Billing {
 	t.Helper()
 	return newBillingAt(t, readings, billingT0)
@@ -202,7 +201,7 @@ func TestBillingNeverEmitsAnOpenOrFutureBucket(t *testing.T) {
 }
 
 // TestBillingSettleDelayAvoidsBillingAStaleEndBoundaryJustAfterClose is
-// R104(1)'s own acceptance probe (final review X's I-A exact scenario): a
+// R104(1)'s own acceptance probe: a
 // daily-only meter's daily-kind snapshots stamp Jan 1 (1000) and Jan 31
 // (1300) exactly at 00:00; February's own snapshot (1310) exists in the
 // fixture but the request is run BEFORE R104(1)'s settle delay has
@@ -630,7 +629,7 @@ func TestBillingMonthlyResetBeforeLoadProfileLookback(t *testing.T) {
 	require.Equal(t, energy.KindBilling, narrow[0].Source)
 	require.NotNil(t, narrow[0].Values[energy.ActiveImport])
 	require.Equal(t, "5150", narrow[0].Values[energy.ActiveImport].String(),
-		"C1: the reset before load_profile's own look-back must still be found")
+		"the reset before load_profile's own look-back must still be found")
 
 	wide := run(lpWide, dec1, feb1)
 	require.Len(t, wide, 2, "December and January")
@@ -845,7 +844,7 @@ func TestMonthlyBillingCoversWhenTheEndSnapshotIsExactlyAtTolerance(t *testing.T
 //
 // The offsets below are the literal 36h, NOT consumption.LoadProfileBoundaryTolerance
 // itself: using the constant as the offset would make this test
-// self-referential (a mutation to the constant moves the fixture and the
+// self-referential (a change to the constant moves the fixture and the
 // production check together, so nothing could ever fail). The first
 // assertion below separately pins the constant's own value.
 func TestMonthlyLoadProfileCoversExactlyAtToleranceButNotOneMicrosecondOver(t *testing.T) {
@@ -1356,8 +1355,8 @@ func TestDailyMissingSnapshotYieldsNoRowForEitherAdjacentDayNotOneMergedRow(t *t
 	require.Equal(t, "100", rows[0].Values[energy.ActiveImport].String())
 }
 
-// TestBillingDailyBucketToleranceCapsAtTheDSTNarrowedBucketWidth is Minor
-// M-f (re-review round 2): boundaryTolerance's cap (billing.go:355-382)
+// TestBillingDailyBucketToleranceCapsAtTheDSTNarrowedBucketWidth:
+// boundaryTolerance's cap (billing.go:355-382)
 // consults BOTH the bucket ending at bound and the bucket beginning at
 // bound, taking the SMALLER width — but the committed suite only ever
 // exercised normal 24h days, where both neighbours are the same width, so a
@@ -1604,10 +1603,10 @@ func TestMonthlyEndSideDailyStalenessYieldsNoRow(t *testing.T) {
 //
 // The offset here is a
 // LITERAL 36*time.Hour, never `-consumption.DailySnapshotTolerance` — the
-// self-referential shape a mutation to the constant's own value would move
+// self-referential shape a change to the constant's own value would move
 // in lockstep with, so the test could never actually pin what the constant
 // IS, only that the code uses it consistently. TestDailySnapshotTolerance
-// IsThirtySixHours below pins the literal value directly; a mutation to
+// IsThirtySixHours below pins the literal value directly; a change to
 // DailySnapshotTolerance (35h or 24h) makes THIS test's fixed 36h-old
 // reading fall outside the (now narrower) tolerance on both sides, so no
 // row is emitted at all and `require.Len(rows, 1)` below goes red.

@@ -60,7 +60,7 @@ func arilTestPool(t *testing.T, srv *fake.Server) (*httpx.Pool, *recordingSleep)
 }
 
 // fakeLocker is a Locker that records Acquire/Release pairs in order, for
-// TestARILDataCallsSerializePerCompany (I1: fix round 1 finding). Mirrors
+// TestARILDataCallsSerializePerCompany. Mirrors
 // GridBox's own copy (gridbox/source_test.go), itself mirroring
 // httpx/client_test.go's unexported one.
 type fakeLocker struct {
@@ -219,12 +219,12 @@ func sortReadings(rs []model.MeterReading) {
 // TestARILFixtureMatrix is the F2 acceptance criterion "every adapter has
 // recorded fixtures covering success, empty result, partial data,
 // authentication failure, malformed payload, rate limiting, and
-// pagination". The subtest names are exactly fake.RequiredCases; Task 17's
-// guard checks them.
+// pagination". The subtest names are exactly fake.RequiredCases; the
+// fixture-matrix guard checks them.
 //
 // Deviation from the shared template's literal pseudocode: the
 // "pagination" subtest calls DiscoverMeteringPoints, not FetchReadings.
-// task-8-brief.md item 2 names analyzers_list's own PageNumber paging as
+// the ARIL API notes name analyzers_list's own PageNumber paging as
 // "the pagination case" for ARIL, and FetchReadings never internally
 // paginates (source.go's package doc: 06 §4 documents no per-call window
 // limit for ARIL's data endpoints, so one call always fully covers
@@ -318,7 +318,7 @@ func TestARILFixtureMatrix(t *testing.T) {
 			},
 		},
 		{
-			// M3: discovery's own PageNumber paging (analyzers_list) is
+			// Discovery's own PageNumber paging (analyzers_list) is
 			// ARIL's ONLY pagination mechanism -- FetchReadings never
 			// internally paginates (see this test's own doc comment and
 			// source.go's package doc), so this subtest drives
@@ -326,7 +326,7 @@ func TestARILFixtureMatrix(t *testing.T) {
 			name:        "pagination",
 			useDiscover: true,
 			routes: func(t *testing.T) []fake.Route {
-				// I1: this case serves the fixture-matrix's own
+				// This case serves the fixture-matrix's own
 				// aril_pagination.json for page 1 (byte-identical to
 				// aril_subscriptions_page1.json, which the other,
 				// non-matrix pagination tests below keep using directly),
@@ -389,7 +389,7 @@ func TestARILFixtureMatrix(t *testing.T) {
 	}
 }
 
-// TestARILDataCallsSerializePerCompany is fix round 1 finding I1: a
+// TestARILDataCallsSerializePerCompany: a
 // recording Locker must see the per-company data key ("aril:<company>") on
 // EVERY data-endpoint call ARIL makes — analyzers_list, owner_consumptions,
 // current_endexes and end_of_month_endexes — not only on the authentication
@@ -398,8 +398,7 @@ func TestARILFixtureMatrix(t *testing.T) {
 // own, distinct key ("aril:auth:<company>" — authClient's doc in source.go
 // explains why the two are kept separate).
 //
-// Mutation proofs (fix round 1, recorded in task-8-report.md's "Fix round
-// 1" section):
+// What this catches:
 //   - removing dataClientConfig's SerializeKey line (source.go) makes every
 //     "data key" assertion below FAIL with 0 acquires of "aril:<company>".
 //   - dropping the company id from that key (a bare "aril" string) makes
@@ -496,7 +495,7 @@ func TestARILDataCallsSerializePerCompany(t *testing.T) {
 	})
 }
 
-// --- Named acceptance tests (task-8-brief.md) ---------------------------
+// --- Named acceptance tests ---------------------------
 
 func TestARILAcceptsBothTokenShapes(t *testing.T) {
 	t.Run("bare_string", func(t *testing.T) {
@@ -515,7 +514,7 @@ func TestARILAcceptsBothTokenShapes(t *testing.T) {
 }
 
 // TestARILEmptyTokenIsAuthFailure exercises aril_auth_failure.json (a bare
-// empty string): task-8-brief.md item 1, "A 401 or an empty token is
+// empty string): the ARIL API notes, "A 401 or an empty token is
 // ErrAuth" — the empty-token half, distinct from the 401-status half
 // TestARILFixtureMatrix's "auth_failure" case covers.
 func TestARILEmptyTokenIsAuthFailure(t *testing.T) {
@@ -574,9 +573,8 @@ func TestARILMaxDemandIsMonthlyMaximum(t *testing.T) {
 	requireDecimalEqual(t, "75", res.Readings[0].MaxDemandKw) // max(50,75,60) from aril_current_endexes.json
 }
 
-// TestARILBillingResumeWindowKeepsMaxDemand is R49/C1's regression test
-// (final-review-A-report.md's runtime probe
-// TestProbeARILBillingResumeWindowDropsMaxDemand): a cursor-driven resume
+// TestARILBillingResumeWindowKeepsMaxDemand is R49's regression test: a
+// cursor-driven resume
 // fetch starts exactly AT the stored end_of_month_endexes reading's own Ts
 // (inclusive resume, R4) — here Sep 1 12:00 Istanbul, the same fixture
 // reading TestARILMaxDemandIsMonthlyMaximum exercises — so every
@@ -586,8 +584,7 @@ func TestARILMaxDemandIsMonthlyMaximum(t *testing.T) {
 // like the first. The computed max demand then silently becomes <nil>,
 // which the store upserts over a previously-stored 75 (readings.go:131
 // "max_demand_kw = excluded.max_demand_kw"). Before the fix this asserts
-// "75" and FAILS with "" (nil) — see final-fix-X-report.md for the
-// observed RED output.
+// "75" and FAILS with "" (nil).
 func TestARILBillingResumeWindowKeepsMaxDemand(t *testing.T) {
 	monthStart, _ := istanbulDay(2026, 9, 1)
 	resumeFrom := monthStart.Add(12 * time.Hour) // Sep 1 12:00 Istanbul == eom reading's own Ts
@@ -739,7 +736,7 @@ func TestARILErrorsCarryNoCredential(t *testing.T) {
 	require.NotContains(t, fmt.Sprintf("%+v", err), "FIXTURE-pass")
 }
 
-// --- adapter review patterns (Task 6 OSOS opus review, applied here) ----
+// --- adapter patterns (shared with OSOS) ----------------------------------
 
 // TestARILStampsEveryTemplateRequiredField is adapter review pattern 1:
 // every field the template requires an adapter to stamp — Ts, Kind,
@@ -960,7 +957,7 @@ func TestARILAuthenticationNeverRetries(t *testing.T) {
 	require.Equal(t, 1, calls, "R32: a non-idempotent login POST must never be retried in-client")
 }
 
-// --- pagination / page budget (task-8-brief.md item 2, adapter review
+// --- pagination / page budget (the ARIL API notes, adapter review
 // pattern 5/8) -------------------------------------------------------------
 
 // TestARILDiscoverPageBudgetLimitsPages proves Options.PageBudget stops

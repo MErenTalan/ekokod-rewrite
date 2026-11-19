@@ -438,7 +438,7 @@ func oracleCompute(in billing.Input) oracleOut {
 
 func decPtr(v decimal.Decimal) *decimal.Decimal { return &v }
 
-// randomInput draws one scenario across every tariff shape (Task 4 generator).
+// randomInput draws one scenario across every tariff shape.
 func randomInput(r *rand.Rand, loc *time.Location) billing.Input {
 	dec := func(maxUnits int, places int32) decimal.Decimal {
 		return decimal.New(r.Int64N(int64(maxUnits)*pow10(places)+1), -places)

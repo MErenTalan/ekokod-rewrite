@@ -1,7 +1,7 @@
 -- Generated building reports (migration 00010). Query names are prefixed
 -- Report…
 
--- Folded minor (fix round 1): a report of a soft-deleted building must not
+-- A report of a soft-deleted building must not
 -- stay readable through the report's own row.
 -- name: ReportGet :one
 select * from reports
@@ -39,7 +39,7 @@ where reports.company_id = sqlc.arg(company_id)
   and (cardinality(sqlc.arg(statuses)::text[]) = 0 or reports.status::text = any(sqlc.arg(statuses)::text[]))
   and exists (select 1 from buildings b where b.id = reports.building_id and b.deleted_at is null);
 
--- Critical Finding 1 (task-11a fix round 1): building_id is NOT NULL on
+-- Building_id is NOT NULL on
 -- reports, and is a stored foreign key — Scope.AllowsBuilding is an
 -- in-memory grant check that cannot know which company owns a building, so
 -- an AllBuildings Scope's Go-side pre-check alone could store ANOTHER

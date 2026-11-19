@@ -1,12 +1,8 @@
 package httpx_test
 
-// fix1_test.go covers the opus review findings from F2 Task 2 fix round 1
-// (task-2-fix1-findings.md): I1-I5 plus the M6-M14 minors folded into this
-// round. Each test's doc comment names the finding it proves and, where a
-// mutation was used to confirm the test actually discriminates (rather
-// than passing vacuously), says so; the mutation-and-restore cycles
-// themselves are not committed — task-2-report.md records the observed
-// FAIL output for each.
+// hardening_test.go covers the client's hardening cases: connection
+// pinning, proxies, redirects, retries and error redaction. Each test's doc
+// comment names the property it proves.
 
 import (
 	"context"
@@ -29,7 +25,7 @@ import (
 )
 
 // ---------------------------------------------------------------------
-// I1: redirects must never be followed.
+// Redirects must never be followed.
 // ---------------------------------------------------------------------
 
 // TestRedirectsAreNeverFollowedAndLeakNoSecrets is I1's exact scenario: a
@@ -87,7 +83,7 @@ func TestRedirectsAreNeverFollowedAndLeakNoSecrets(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// I2: Expand's path/query escaping split.
+// Expand's path/query escaping split.
 // ---------------------------------------------------------------------
 
 // TestExpandPathEscapesWhenTemplateHasNoQueryString is I2's exact bug: a
@@ -107,7 +103,7 @@ func TestExpandPathEscapesWhenTemplateHasNoQueryString(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// I3: the SerializeKey lease is per-attempt, not per-call.
+// The SerializeKey lease is per-attempt, not per-call.
 // ---------------------------------------------------------------------
 
 // eventLocker is a Locker whose Acquire/Release both append to a single,
@@ -146,7 +142,7 @@ func (l *eventLease) Release(ctx context.Context) error {
 	return nil
 }
 
-// TestSerializeLockIsPerAttemptNotPerCall (I3): with MaxAttempts=2 and a
+// TestSerializeLockIsPerAttemptNotPerCall: with MaxAttempts=2 and a
 // server that fails the first attempt (retryable) and succeeds the
 // second, the lock must be acquired and released ONCE PER ATTEMPT — never
 // held across the backoff sleep between them. The combined event log
@@ -191,7 +187,7 @@ func TestSerializeLockIsPerAttemptNotPerCall(t *testing.T) {
 		"the lease must be released BEFORE the backoff sleep, and re-acquired for the second attempt — never held across the sleep")
 }
 
-// TestSerializeLockReleaseSucceedsAfterCallerContextCancelled (I3): the
+// TestSerializeLockReleaseSucceedsAfterCallerContextCancelled: the
 // caller's ctx is ALREADY cancelled before Do is even called. The single
 // attempt this test allows (MaxAttempts=1) therefore fails immediately
 // (ctx is done before net/http ever dials), but Release must still be
@@ -227,7 +223,7 @@ func TestSerializeLockReleaseSucceedsAfterCallerContextCancelled(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// I4: the rate limiter is consulted before EVERY attempt.
+// The rate limiter is consulted before EVERY attempt.
 // ---------------------------------------------------------------------
 
 // tickingClock is a fake clock whose Sleep ADVANCES its own Now() by the
@@ -257,7 +253,7 @@ func (c *tickingClock) Sleep(ctx context.Context, d time.Duration) error {
 	return ctx.Err()
 }
 
-// TestLimiterAppliesToEveryAttempt (I4): Every=3s, Burst=1, and a server
+// TestLimiterAppliesToEveryAttempt: Every=3s, Burst=1, and a server
 // that fails the first two attempts (retryable) before succeeding on the
 // third. The server records, via the shared tickingClock, the virtual
 // time at which each of the three attempts actually reached it. Before
@@ -364,7 +360,7 @@ func TestNoConnectionLeakAcrossOversizedAndErrorResponses(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// M7: lock-acquire and limiter failures are *integration.Error, no
+// Lock-acquire and limiter failures are *integration.Error, no
 // SerializeKey/UUID/lock-backend text.
 // ---------------------------------------------------------------------
 
@@ -374,7 +370,7 @@ func (failingLocker) Acquire(_ context.Context, key string, _ time.Duration) (lo
 	return nil, fmt.Errorf("redis: dial tcp 10.0.0.7:6379: connection refused (lease key %q, corr-id 8f14e45f-ceea-4f5c-b0f2-1a2b3c4d5e6f)", key)
 }
 
-// TestLockAcquireFailureIsIntegrationErrorWithNoInternalText (M7): a
+// TestLockAcquireFailureIsIntegrationErrorWithNoInternalText: a
 // Locker whose Acquire fails with an error that itself embeds the
 // SerializeKey and a UUID-shaped correlation id (modelling a real
 // Redis-backend error) must never let that text reach Do's returned
@@ -407,7 +403,7 @@ func TestLockAcquireFailureIsIntegrationErrorWithNoInternalText(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// M8: Expand requires an absolute http/https URL with a host.
+// Expand requires an absolute http/https URL with a host.
 // ---------------------------------------------------------------------
 
 func TestExpandRequiresAbsoluteHTTPURLWithHost(t *testing.T) {
@@ -425,10 +421,10 @@ func TestExpandRequiresAbsoluteHTTPURLWithHost(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// M9: Retry-After parsing never overflows or goes negative.
+// Retry-After parsing never overflows or goes negative.
 // ---------------------------------------------------------------------
 
-// TestRetryAfterAbsurdlyLargeValueClampsInsteadOfOverflowing (M9): a
+// TestRetryAfterAbsurdlyLargeValueClampsInsteadOfOverflowing: a
 // Retry-After header naming a seconds count near (or beyond) int64's
 // range must clamp to a bounded duration rather than overflowing the
 // multiplication into an undefined (possibly negative) time.Duration.
@@ -465,10 +461,10 @@ func TestRetryAfterAbsurdlyLargeValueClampsInsteadOfOverflowing(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// M13: pinned-host key normalisation and plain-http refusal.
+// Pinned-host key normalisation and plain-http refusal.
 // ---------------------------------------------------------------------
 
-// TestPinnedHostKeyIsCaseAndTrailingDotNormalised (M13): a PinnedCerts
+// TestPinnedHostKeyIsCaseAndTrailingDotNormalised: a PinnedCerts
 // entry configured as "Host.Example." (mixed case, trailing dot) must
 // still match a request to the lowercase, dot-free form the server
 // actually presents — httptest's own srv.Certificate() is pinned under a
@@ -494,7 +490,7 @@ func TestPinnedHostKeyIsCaseAndTrailingDotNormalised(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.Status)
 }
 
-// TestPlainHTTPToPinnedHostIsRefused (M13): a pinned host's protection
+// TestPlainHTTPToPinnedHostIsRefused: a pinned host's protection
 // lives entirely in its dedicated TLS transport. A request whose template
 // names that same host over plain http:// must never be silently carried
 // in the clear over the pinned transport's non-TLS path (which would
@@ -530,10 +526,10 @@ func TestPlainHTTPToPinnedHostIsRefused(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// M14: Request.NoRetry forces exactly one attempt.
+// Request.NoRetry forces exactly one attempt.
 // ---------------------------------------------------------------------
 
-// TestNoRetryForcesExactlyOneAttempt (R32/M14): even with MaxAttempts=5,
+// TestNoRetryForcesExactlyOneAttempt (R32): even with MaxAttempts=5,
 // a Request with NoRetry=true must be tried exactly once — modelling a
 // non-idempotent auth/token-refresh POST where a second attempt after a
 // transient failure would be actively harmful (invalidating a token the
@@ -555,7 +551,7 @@ func TestNoRetryForcesExactlyOneAttempt(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// M12: pinning survives an HTTP CONNECT proxy (ruling R33) — NOT
+// Pinning survives an HTTP CONNECT proxy (ruling R33) — NOT
 // AUTOMATABLE in this test suite; documented rather than faked.
 // ---------------------------------------------------------------------
 //
@@ -580,9 +576,9 @@ func TestNoRetryForcesExactlyOneAttempt(t *testing.T) {
 // direct, independent of whether Proxy is wired correctly. Reaching a
 // non-loopback listener would require either real DNS/hosts-file control
 // or a non-loopback network interface, neither available in this sandbox
-// and neither appropriate to depend on in a unit test run under `go test
-// ./...`. The fix is verified by source inspection instead (baseTransport
+// and neither appropriate to depend on in a unit test run under `go test.
+// /...`. The fix is verified by source inspection instead (baseTransport
 // in pin.go, and golangci-lint/go vet finding no dead code around it) —
-// a reviewer with a network sandbox that permits a non-loopback listener
+// anyone with a network sandbox that permits a non-loopback listener
 // could reproduce the CONNECT-tunnel test straightforwardly by swapping
 // the origin fixture's bind address.

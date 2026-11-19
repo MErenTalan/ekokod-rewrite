@@ -1,7 +1,6 @@
 //go:build integration
 
-// Task 12b fix round 1 (task-12b-fix1-findings.md, Important 1): the
-// original TestSeedLoadsNationalTariffScheduleFixture (seed_integration_test.go)
+// The original TestSeedLoadsNationalTariffScheduleFixture (seed_integration_test.go)
 // never read testdata/national_tariff_schedule_fixture.json — it hand-wrote
 // one model.NationalTariffScheduleEntry and called
 // admin.NewCatalogueRepository(pool).UpsertNationalTariffSchedule directly,
@@ -37,12 +36,11 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/testfixtures"
 )
 
-// TestLoadNationalTariffScheduleFixtureMapsEveryField is the fix-round-1
-// replacement for the old bypassing test. It proves the loader's mapping is
+// TestLoadNationalTariffScheduleFixtureMapsEveryField replaces the old
+// bypassing test. It proves the loader's mapping is
 // correct by construction, not merely by the admin SQL converging (which
-// Task 11b's own tests already prove independently): swap two mapped fields
-// in toModelNationalTariffSchedule (seed.go) and this test fails — see the
-// fix-round-1 report for the observed failure.
+// the admin repository tests already prove independently): swap two mapped fields
+// in toModelNationalTariffSchedule (seed.go) and this test fails.
 func TestLoadNationalTariffScheduleFixtureMapsEveryField(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

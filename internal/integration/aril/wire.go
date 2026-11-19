@@ -32,7 +32,7 @@ type subscriptionsRequest struct {
 // distinguishable from an explicit, legitimate zero/empty value.
 //
 // 06 §4 does not name analyzers_list's error-signalling field explicitly;
-// this adapter follows task-8-brief.md's own vocabulary ("A response with
+// this adapter follows the ARIL API notes' vocabulary ("A response with
 // ErrorCode != 0 on a data call → ErrUpstreamUnavailable") and applies the
 // same {ErrorCode, <list>} envelope shape uniformly to every ARIL POST
 // endpoint. Flagged as a spec gap in the task report — 06 does not give
@@ -88,7 +88,7 @@ type subscriptionWire struct {
 // end_of_month_endexes rows all report index/interval data with this same
 // field spelling (06 gives the field set once; embedding here rather than
 // duplicating it keeps loadProfileRow and endexRow from drifting apart).
-// Every value is *string, never *json.Number: task-8-brief.md's own
+// Every value is *string, never *json.Number: the ARIL API notes'
 // mutation example shows TSum arriving quoted ("TSum \"12.5\" x 40 ->
 // 500"), and normalize.OptionalNumber (never Multiply-on-zero) is what
 // converts a provider numeric string to *decimal.Decimal while preserving
@@ -102,7 +102,7 @@ type registers struct {
 	ReactiveCapasitiveOut *string `json:"ReactiveCapasitiveOut"` // sic
 }
 
-// consumptionsRequest is owner_consumptions' POST body (task-8-brief.md
+// consumptionsRequest is owner_consumptions' POST body (the ARIL API notes
 // item 3, verbatim field set).
 type consumptionsRequest struct {
 	OwnerSerno          string `json:"OwnerSerno"`
@@ -129,7 +129,7 @@ type loadProfileRow struct {
 	registers
 }
 
-// endexesRequest is current_endexes' POST body (task-8-brief.md item 4,
+// endexesRequest is current_endexes' POST body (the ARIL API notes,
 // verbatim field set). 06 §4 does not separately document
 // end_of_month_endexes' request body ("period-scoped index snapshots" is
 // all it says) — this adapter sends the same shape for both endpoints, the

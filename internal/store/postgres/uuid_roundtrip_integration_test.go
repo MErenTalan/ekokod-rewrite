@@ -26,7 +26,7 @@ import (
 //
 //   - encode: a uuid.UUID passed as a query parameter, and a []uuid.UUID passed
 //     as a `= any($3::uuid[])` array parameter (the store.Scope shape every
-//     scoped list query in Tasks 9-11 copies);
+//     scoped list query copies);
 //   - decode: a NOT NULL uuid primary key into uuid.UUID, and a NULLABLE uuid
 //     foreign key into *uuid.UUID.
 //
@@ -39,7 +39,7 @@ import (
 // buildings is used rather than analyzers because it has exactly the shape that
 // matters -- `id uuid primary key` NOT NULL and `responsible_user_id uuid`
 // NULLABLE -- and, unlike analyzers, is reachable through generated queries, so
-// the test covers the code Tasks 9-11 will actually run. analyzers is covered
+// the test covers the code the repositories actually run. analyzers is covered
 // too, one level down, to show the mapping is not special to one table.
 //
 // The query set is constructed with sqlcgen.New(pool) rather than through
@@ -107,7 +107,7 @@ func TestGeneratedNullableUUIDDecodesAsNilNotUUIDNil(t *testing.T) {
 
 // TestGeneratedUUIDArrayParameterRoundTrips exercises the `= any($3::uuid[])`
 // half of the store.Scope shape: a []uuid.UUID encoded as a uuid[] parameter.
-// This is the pattern every scoped list query in Tasks 9-11 copies, and it is a
+// This is the pattern every scoped list query copies, and it is a
 // separate pgx code path from a scalar uuid parameter.
 func TestGeneratedUUIDArrayParameterRoundTrips(t *testing.T) {
 	t.Parallel()

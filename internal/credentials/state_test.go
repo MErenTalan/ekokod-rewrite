@@ -47,12 +47,12 @@ func TestStateRoundTrip(t *testing.T) {
 	require.Equal(t, claims.Nonce, claims2.Nonce)
 }
 
-// TestStateRejectsTamperExpiryAndWrongKey covers every named mutation
-// pattern for state verification: a tampered payload (including one that
+// TestStateRejectsTamperExpiryAndWrongKey covers every failure pattern for
+// state verification: a tampered payload (including one that
 // swaps in ANOTHER company's id — "wrong-company state accepted"), the
 // wrong signing key, and a correctly-signed-but-now-expired token. Each is
 // asserted independently so that a broken verifyState which checks the
-// HMAC with == and skips the expiry entirely (Step 5(c)'s mutation) is
+// HMAC with == and skips the expiry entirely is
 // caught specifically by the expiry sub-test, not accidentally saved by
 // one of the others.
 func TestStateRejectsTamperExpiryAndWrongKey(t *testing.T) {

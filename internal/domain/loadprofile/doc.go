@@ -7,11 +7,9 @@
 // by internal/service/loadprofile before it calls in here. This package
 // imports nothing from the project, does no I/O, and never calls time.Now().
 //
-// The following rulings from
-// docs/superpowers/plans/2026-09-16-f3-consumption-engine.md ("Spec gaps and
-// rulings") govern this package's shapes and arithmetic and are recorded
-// here because an implementer reading only the code should be able to see
-// why it looks the way it does:
+// The following rulings (docs/decisions.md, F3) govern this package's
+// shapes and arithmetic and are recorded here because a developer reading
+// only the code should be able to see why it looks the way it does:
 //
 //   - R67: Stats computes standard deviation over a profile's 24 hourly
 //     means using the POPULATION divisor n, not the sample divisor n-1. The

@@ -12,8 +12,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/store"
 )
 
-// TestDefaultWeekendDaysCopyIsNotAliased proves the mutation R69's ruling
-// forbids: DefaultWeekendDays must not be mutated by a caller that receives
+// TestDefaultWeekendDaysCopyIsNotAliased proves what R69 forbids: DefaultWeekendDays must not be mutated by a caller that receives
 // a Config built from it. defaultWeekendDaysCopy is the ONLY place a domain
 // Config's WeekendDays map is populated from the default, so pinning IT
 // directly is what actually protects the package variable — mutating the

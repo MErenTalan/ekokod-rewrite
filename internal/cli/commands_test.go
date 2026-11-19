@@ -46,7 +46,7 @@ func TestUnknownSubcommandIsAnError(t *testing.T) {
 // failing in config.FromEnv. Mirrors internal/api/router_test.go's
 // testConfig.
 //
-// It is made hermetic (task 9 review, Minor-6) by clearing every ambient
+// It is made hermetic by clearing every ambient
 // EKOKOD_* variable not explicitly listed below: without that, a
 // developer's own exported EKOKOD_DB_URL/EKOKOD_REDIS_URL (or similar)
 // would silently override the values this helper sets, and the test would
@@ -150,7 +150,7 @@ func TestSeedOnNonProductionRunsWithoutYes(t *testing.T) {
 }
 
 // TestSeedPrintsTargetEnvironmentAndMaskedDatabaseURL pins the switch away
-// from the hand-rolled maskedDBHost (task 9 review, Minor-1/Minor-2) to
+// from the hand-rolled maskedDBHost to
 // reusing config's already-tested redactDSN via cfg.Resolved()'s
 // EKOKOD_DB_URL row. That row masks the password but keeps the host and
 // database name readable. The command still fails overall (the fixture DSN
@@ -175,7 +175,7 @@ func TestSeedPrintsTargetEnvironmentAndMaskedDatabaseURL(t *testing.T) {
 // internal/scheduler/scheduler.go:26-28: it is the caller's responsibility
 // to honour it, and this must not require a database connection to verify.
 //
-// The context carries a 2s timeout (task 9 review, Minor-6), not
+// The context carries a 2s timeout, not
 // context.Background(): today this test is a real guard because the DSN
 // setValidEnv sets points at an unreachable localhost:5432, so a regression
 // that moved NewPool above the Enabled gate would surface as a NewPool

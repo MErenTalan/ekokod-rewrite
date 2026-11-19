@@ -84,16 +84,14 @@ func TestPinnedHostRejectsADifferentCertificate(t *testing.T) {
 }
 
 // TestPinnedTransportsDoNotShareTrustAcrossHosts is a second, stronger
-// proof of the same R4 isolation property Step 5(b) of the task brief
-// targets ("build one shared pool from every pin" instead of one pool per
-// host). TestPinnedHostRejectsADifferentCertificate above has exactly one
+// proof of the same R4 isolation property against the obvious bug ("build
+// one shared pool from every pin" instead of one pool per host). TestPinnedHostRejectsADifferentCertificate above has exactly one
 // PinnedCerts entry, and every fake.NewTLSServer listens on the same
 // "127.0.0.1" host (there is only one loopback host string these fake
 // servers can ever use), so a PinnedCerts map with a single entry cannot
 // distinguish "one pool per host" from "one pool merged from every pin" —
-// both degenerate to the identical singleton pool (verified: the mutation
-// described in Step 5(b), applied for real, left that test passing
-// unchanged). This test adds a SECOND, decoy PinnedCerts entry under an
+// both degenerate to the identical singleton pool (verified: that bug,
+// applied for real, left that test passing unchanged). This test adds a SECOND, decoy PinnedCerts entry under an
 // unrelated host name that legitimately pins srvA's own certificate. A
 // correct (per-host-isolated) implementation never lets that decoy entry
 // influence srvA's own (deliberately wrong) pin. A "merge every pin into

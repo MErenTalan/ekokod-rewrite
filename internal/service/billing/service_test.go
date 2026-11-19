@@ -43,7 +43,7 @@ func TestSoundHoursDropsGapAbsorbingRows(t *testing.T) {
 	}
 	got := soundHours([]consumption.Row{
 		row(h0, h0, false),
-		row(h0.Add(5*time.Hour), h0.Add(time.Hour), false), // absorbed 4 missing hours (I-3)
+		row(h0.Add(5*time.Hour), h0.Add(time.Hour), false), // absorbed 4 missing hours
 		row(h0.Add(6*time.Hour), h0.Add(6*time.Hour), true),
 		{Window: energy.Window{From: h0.Add(7 * time.Hour)}, SpanFrom: h0.Add(7 * time.Hour), SpanTo: h0.Add(8 * time.Hour)}, // nil import
 	})

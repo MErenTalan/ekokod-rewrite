@@ -70,8 +70,7 @@ func newSchedulerCmd() *cobra.Command {
 // scheduler.Scheduler.Run propagates from its underlying elector on a normal
 // stop, as opposed to a genuine startup or operational failure.
 //
-// Deliberately narrow to context.Canceled only (task 9 review,
-// Important-3): a context.DeadlineExceeded clause would also match any
+// Deliberately narrow to context.Canceled only: a context.DeadlineExceeded clause would also match any
 // error chain wrapping an ordinary net dial/i-o timeout, because
 // $GOROOT/src/net/net.go's (*timeoutError).Is compares equal to
 // context.DeadlineExceeded. cmd.Context() here comes from

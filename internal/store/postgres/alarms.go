@@ -144,7 +144,7 @@ func (r *AlarmRepository) Update(ctx context.Context, s store.Scope, a model.Ala
 	if !s.Valid() {
 		return model.Alarm{}, store.ErrInvalidScope
 	}
-	// Important Finding 3: same CompanyID check as Create's.
+	// Same CompanyID check as Create's.
 	if a.CompanyID != uuid.Nil && a.CompanyID != s.CompanyID {
 		return model.Alarm{}, store.ErrNotFound
 	}
@@ -189,7 +189,7 @@ func (r *AlarmRepository) SoftDelete(ctx context.Context, s store.Scope, id uuid
 // Analyzers — Isolation: alarm_analyzers has no company_id — join through
 // alarms.
 //
-// Important Finding 2: alarms itself is company-wide, but a narrow Scope
+// Alarms itself is company-wide, but a narrow Scope
 // must still never see an attachment to an analyzer outside its buildings —
 // AlarmAnalyzerList filters on the analyzer's own visibility, not only the
 // alarm's.
@@ -218,7 +218,7 @@ func (r *AlarmRepository) Analyzers(ctx context.Context, s store.Scope, alarmID 
 // analyzerID must also be visible to the Scope, or the whole call is
 // refused with ErrNotFound.
 //
-// Important Finding 2: this replaces ONLY the attachments visible to the
+// This replaces ONLY the attachments visible to the
 // Scope (AlarmAnalyzerDeleteVisibleForAlarm) and leaves an attachment to an
 // analyzer outside it untouched — a narrow Scope replacing "its" list must
 // not be able to silently detach Buildings[1]'s analyzer.
@@ -354,7 +354,7 @@ func (r *AlarmRepository) CreateEvent(ctx context.Context, s store.Scope, e mode
 // ListEvents — Isolation: join alarm_events through alarms; events of
 // alarms not visible to the Scope are never listed.
 //
-// Important Finding 2: an event's own analyzer must ALSO be visible to the
+// An event's own analyzer must ALSO be visible to the
 // Scope, and an event with no analyzer at all (a company-level condition) is
 // visible only to a Scope with AllBuildings — otherwise a narrow Scope could
 // read another building's analyzer id and the event's message/detail through
@@ -389,7 +389,7 @@ func (r *AlarmRepository) ListEvents(ctx context.Context, s store.Scope, f store
 
 // MarkNotified — Isolation: join alarm_events through alarms by eventID.
 //
-// F1 final review pass A, Important Finding 3 (fix round): this used to
+// This used to
 // check only alarms.company_id, ignoring both the alarm's soft delete and
 // the event's own building/analyzer visibility — a narrow Scope could mark
 // an event it could never list (ListEvents) as notified. AlarmMarkNotified

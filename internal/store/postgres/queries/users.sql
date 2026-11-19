@@ -90,7 +90,7 @@ where id = sqlc.arg(id) and company_id = sqlc.arg(company_id) and deleted_at is 
 -- The User-prefixed parent-visibility lookup UserRepository.PasswordHistory
 -- uses. Session-prefixed SessionUserVisible (queries/sessions.sql) exists
 -- for SessionRepository's own use and is a different query in the same
--- shape — ruling 5 in wave-f-context.md is that a parent-visibility lookup
+-- shape — the rule is that a parent-visibility lookup
 -- lives under its OWN repository's prefix, not borrowed across one.
 select exists(
     select 1 from users

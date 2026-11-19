@@ -52,7 +52,7 @@ func (r *CursorRepository) Get(ctx context.Context, s store.Scope, analyzerID uu
 // List implements store.CursorRepository.List. analyzerIDs is a REQUIRED
 // POSITIONAL parameter: an empty or nil slice means NO ROWS, fail-closed,
 // identical to Scope.BuildingIDs — there is no "every analyzer visible to
-// the Scope" form (controller ruling, task-10 fix round 1). CursorList's own
+// the Scope" form. CursorList's own
 // `= any(...)` gets this for free: a nil slice encodes to NULL::uuid[], and
 // Postgres reads `x = any(NULL)` as NULL, which is false in a WHERE clause.
 func (r *CursorRepository) List(ctx context.Context, s store.Scope, analyzerIDs []uuid.UUID) ([]model.IngestionCursor, error) {

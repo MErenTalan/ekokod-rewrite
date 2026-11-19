@@ -170,12 +170,12 @@ func TestBuildGraphGenerationHookUsesRedisLockAndConfiguredFutureTolerance(t *te
 	hook, ok := hooks[0].(*generation.Accumulator)
 	require.True(t, ok)
 
-	require.NotNil(t, hook.Locker(), "the generation hook must have a Locker, not nil (I3)")
+	require.NotNil(t, hook.Locker(), "the generation hook must have a Locker, not nil")
 	require.Equal(t, g.credentialsDeps.Locker, hook.Locker(),
-		"the generation hook must share the SAME redis lock every other Locker consumer in the graph uses (I3)")
+		"the generation hook must share the SAME redis lock every other Locker consumer in the graph uses")
 
 	require.Equal(t, cfg.Ingest.FutureTolerance, hook.FutureTolerance(),
-		"the generation hook's recompute upper bound must come from cfg.Ingest.FutureTolerance, not its own package default (M12)")
+		"the generation hook's recompute upper bound must come from cfg.Ingest.FutureTolerance, not its own package default")
 }
 
 // TestBuildGraphOpensNamedClosersForRedisAndJobClient proves build()

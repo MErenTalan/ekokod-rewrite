@@ -15,8 +15,8 @@ func TestDifferenceEmitsNothingWhenABoundaryIsMissing(t *testing.T) {
 
 	dEnd := energy.Difference(w, nil, readingAt(t0.Add(time.Hour), "100"))
 	require.False(t, dEnd.Emitted)
-	require.Nil(t, dEnd.Values, "M-1: !Emitted must leave Values nil, never an empty non-nil map")
-	require.Nil(t, dEnd.Suspect, "M-1: !Emitted must leave Suspect nil, never an empty non-nil map")
+	require.Nil(t, dEnd.Values, "!Emitted must leave Values nil, never an empty non-nil map")
+	require.Nil(t, dEnd.Suspect, "!Emitted must leave Suspect nil, never an empty non-nil map")
 
 	dStart := energy.Difference(w, readingAt(t0, "90"), nil)
 	require.False(t, dStart.Emitted)
@@ -72,7 +72,7 @@ func TestDifferenceSubtractsPerRegisterAndKeepsNilNil(t *testing.T) {
 	end := &energy.Reading{TS: t0.Add(time.Hour), Kind: energy.KindBilling, Values: map[energy.Register]*decimal.Decimal{
 		energy.ActiveImport: dec("1012.3759"), // T1Import absent at the end boundary
 		// T2Import is absent at the start boundary but carries a large
-		// value at the end. A mutation that treats a nil start register as
+		// value at the end. A bug that treats a nil start register as
 		// zero would wrongly return the full end register value here
 		// instead of leaving it nil.
 		energy.T2Import: dec("5000.0000"),

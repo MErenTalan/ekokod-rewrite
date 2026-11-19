@@ -12,7 +12,7 @@ import (
 // ErrInvalidParams wraps every ValidateParams failure.
 var ErrInvalidParams = errors.New("billing parameters invalid")
 
-// ValidateParams checks a resolved parameter row (M-6): bands contiguous from
+// ValidateParams checks a resolved parameter row: bands contiguous from
 // the exemption (or 0) upward with an unbounded last band, positive limits,
 // tolerance in [0,1], multiplier ≥ 0, positive tiering thresholds, valid enums.
 func ValidateParams(p model.BillingParameters) error {

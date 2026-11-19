@@ -101,9 +101,8 @@ func TestISolarRefreshRequiresRefreshToken(t *testing.T) {
 // httpx classifies ErrUpstreamUnavailable and would normally retry up to
 // MaxAttempts=3 times) still reaches the server EXACTLY ONCE.
 //
-// MUTATION PROOF (task brief Step 5): removing authCall's noRetry:true
-// (setting it false) makes this test fail with reqCount == 6, not 2 — see
-// the task report for the observed failure output.
+// Regression check: removing authCall's noRetry:true
+// (setting it false) makes this test fail with reqCount == 6, not 2.
 func TestISolarTokenCallsAreNeverRetried(t *testing.T) {
 	srv := fake.NewTLSServer(t,
 		fake.Route{Method: http.MethodPost, Path: "/openapi/apiManage/token", Respond: fake.Raw(http.StatusInternalServerError, "application/json", []byte(`{}`))},
@@ -139,8 +138,8 @@ func TestISolarExchangeCodeRejectsEmptyAccessToken(t *testing.T) {
 
 // TestISolarRefreshExposesZeroRefreshTokenWhenAbsent: I4 — a null (or
 // missing) refresh_token on a successful refresh must not be silently
-// dropped or defaulted; Token.RefreshToken.IsZero() must be true so Task 14
-// knows to KEEP the prior refresh token rather than overwrite it with an
+// dropped or defaulted; Token.RefreshToken.IsZero() must be true so the
+// credential service knows to KEEP the prior refresh token rather than overwrite it with an
 // empty one (see token.go's Token.RefreshToken doc).
 func TestISolarRefreshExposesZeroRefreshTokenWhenAbsent(t *testing.T) {
 	srv := fake.NewTLSServer(t, fake.Route{

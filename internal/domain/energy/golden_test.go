@@ -102,7 +102,7 @@ func (v goldenValues) MarshalJSON() ([]byte, error) {
 }
 
 // goldenWant is the JSON shape of runCase's result: a Derivation reduced to
-// its comparable fields, plus the two ratios and max demand (R80, Task 4).
+// its comparable fields, plus the two ratios and max demand (R80).
 type goldenWant struct {
 	Emitted         bool                                `json:"emitted"`
 	Values          goldenValues                        `json:"values"`

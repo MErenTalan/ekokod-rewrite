@@ -313,7 +313,7 @@ func (r *PlantRepository) MonthlyTargets(ctx context.Context, s store.Scope, pla
 // replaced); PlantMonthlyTargetsDelete and PlantMonthlyTargetInsert are each
 // independently scoped via a join/exists to power_plants in their own
 // statement, so a cross-tenant plantID is refused even without the lock
-// above (see the fix-round-1 mutation proofs in the task report).
+// above.
 func (r *PlantRepository) ReplaceMonthlyTargets(ctx context.Context, s store.Scope, plantID uuid.UUID, targets []model.PlantMonthlyTarget) ([]model.PlantMonthlyTarget, error) {
 	if !s.Valid() {
 		return nil, store.ErrInvalidScope
@@ -449,8 +449,8 @@ func plantDeviceFromRow(row sqlcgen.PowerPlantDevice) (model.PlantDevice, error)
 // This used to be UPDATE-then-INSERT-if-absent, a genuine check-then-act
 // race: two concurrent calls creating the SAME NEW device could both miss
 // the UPDATE and both attempt the INSERT, and the loser got ErrConflict
-// instead of converging (fix-round-1 finding, proven failing against that
-// old shape before this fix — see the task report). The single-statement
+// instead of converging (proven failing against that old shape). The
+// single-statement
 // ON CONFLICT form lets Postgres itself serialise the two around the unique
 // index, so every concurrent upsert of a new (plant_id, device_sn) now
 // converges on exactly one row.
@@ -516,7 +516,7 @@ func (r *PlantRepository) AlarmRecipients(ctx context.Context, s store.Scope, pl
 // replaced); PlantAlarmRecipientsDelete and PlantAlarmRecipientInsert are
 // each independently scoped via a join/exists to power_plants in their own
 // statement, so a cross-tenant plantID is refused even without the lock
-// above (see the fix-round-1 mutation proofs in the task report).
+// above.
 func (r *PlantRepository) ReplaceAlarmRecipients(ctx context.Context, s store.Scope, plantID uuid.UUID, emails []string) ([]model.PlantAlarmRecipient, error) {
 	if !s.Valid() {
 		return nil, store.ErrInvalidScope

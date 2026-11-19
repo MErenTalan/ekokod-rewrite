@@ -437,7 +437,7 @@ func TestGeneratePTFHourlyPersistsHourlyDetail(t *testing.T) {
 	require.Len(t, detail, 744)
 	require.Equal(t, int32(744), *res.Bill.PtfHoursMatched)
 
-	// M-9: a live bill that lost its hourly rows gets them back on a non-force Generate.
+	// A live bill that lost its hourly rows gets them back on a non-force Generate.
 	_, err = h.bills.ReplaceHourlyDetail(h.ctx, h.tenant.Scope, res.Bill.ID, nil)
 	require.NoError(t, err)
 	again, err := h.generate(h.tenant.Scope, model.BillScopeAnalyzer, a)
@@ -580,7 +580,7 @@ func TestGenerateBuildingAppliesTariffOnceToAggregate(t *testing.T) {
 	require.Nil(t, res.Bill.AnalyzerID)
 	msgs, err := h.ops.ListMessages(h.ctx, h.tenant.AdminScope, store.MessageFilter{RelatedID: &res.Bill.ID})
 	require.NoError(t, err)
-	require.Len(t, msgs, 1, "M-12: demand unavailable on a multi-analyzer binomial building")
+	require.Len(t, msgs, 1, "demand unavailable on a multi-analyzer binomial building")
 }
 
 // companyFixture gives building 1 cut-off 1 and a dearer tariff, and seeds every analyzer.
@@ -628,7 +628,7 @@ func TestGenerateCompanyUsesEachBuildingsOwnTariffAndWindow(t *testing.T) {
 	require.NoError(t, err)
 	for _, l := range lines {
 		if l.Code == model.BillLineEnergy {
-			require.Nil(t, l.UnitPrice, "different building prices merge to nil (M-7)")
+			require.Nil(t, l.UnitPrice, "different building prices merge to nil")
 			require.Equal(t, "3760.99", l.Amount.StringFixed(2), "800 × 2.451234 + 600 × 3")
 		}
 	}
@@ -677,7 +677,7 @@ func TestGenerateIsolatesTenants(t *testing.T) {
 	require.ErrorIs(t, err, store.ErrNotFound)
 }
 
-// TestGenerateMatchesDomainComputeOverRandomTariffs is Task 7's end-to-end
+// TestGenerateMatchesDomainComputeOverRandomTariffs is end-to-end
 // brute force: Generate must persist exactly what billing.Compute prices for
 // the same tariff, parameters and consumption.
 func TestGenerateMatchesDomainComputeOverRandomTariffs(t *testing.T) {

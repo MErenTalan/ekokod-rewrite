@@ -94,8 +94,7 @@ func linearSelectBoundary(readings []energy.Reading, bound time.Time) *energy.Re
 // failure is reproducible.
 //
 // Every reading carries the value "1", so a TS-only comparison cannot
-// tell which of several equal-timestamp readings was picked — a mutation
-// that walked back to the FIRST of a run of duplicates instead of the LAST
+// tell which of several equal-timestamp readings was picked — a bug that walked back to the FIRST of a run of duplicates instead of the LAST
 // stayed green under that comparison. require.Same asserts pointer
 // identity into the shared readings slice instead, which does distinguish
 // them.

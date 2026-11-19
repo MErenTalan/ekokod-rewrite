@@ -185,7 +185,7 @@ func (r *CarbonRepository) UpsertFactor(ctx context.Context, s store.Scope, f mo
 
 // --- emission_factor_conversions ---------------------------------------
 
-// Conversions — Isolation (fix round 1, Important 3): ONE parent-driven
+// Conversions — Isolation: ONE parent-driven
 // statement (CarbonListConversions, LEFT JOIN from emission_factors), not a
 // separate Go-level pre-check query followed by a second read: zero rows
 // means the factor itself is not visible (ErrNotFound); one or more rows
@@ -239,7 +239,7 @@ func carbonConversionRecordsJSON(conversions []model.EmissionFactorConversion) (
 	return json.Marshal(records)
 }
 
-// ReplaceConversions — Isolation (fix round 1, Important 2):
+// ReplaceConversions — Isolation:
 // emission_factor_conversions has no company_id, so the parent factor is
 // locked FOR SHARE inside this transaction (CarbonFactorOwnerForShare) —
 // and that lock query itself carries the company_id predicate now, so a

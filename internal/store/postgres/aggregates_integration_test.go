@@ -57,8 +57,7 @@ func TestContinuousAggregatesMatchAHandComputedFixture(t *testing.T) {
 	// 00005): it unions materialised buckets with a live scan above the
 	// refresh watermark, so a bare query against it would return the correct
 	// rows EVEN IF the refresh_continuous_aggregate call below were deleted —
-	// exactly the trap wave-g-task-notes.md records Task 8c's review having
-	// found. Setting materialized_only = true HERE, on this disposable
+	// a trap that has bitten before. Setting materialized_only = true HERE, on this disposable
 	// isolated-test database only, forces every read below through the
 	// materialised data alone, so this test can actually distinguish "the
 	// refresh ran" from "real-time aggregation papered over a missing one".
@@ -78,8 +77,7 @@ func TestContinuousAggregatesMatchAHandComputedFixture(t *testing.T) {
 	// row belongs to the NEXT bucket, because time_bucket produces half-open
 	// buckets. first=100, last=150: active_consumption = 150-100 = 50.
 	//
-	// CONTROLLER RULING (task-13-brief.md's pre-flight note F13, restated in
-	// wave-g-task-notes.md's Task 13 section): the answer is 50, NOT 75.
+	// The answer is 50, NOT 75.
 	// 75 would be 175-100, which reaches past the bucket boundary to use
 	// the 01:00 row — that row is not inside hour 0.
 	var hour0Consumption pgtype.Numeric

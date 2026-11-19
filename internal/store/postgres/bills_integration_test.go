@@ -70,7 +70,7 @@ func TestBillGetAndListRespectNullBuildingIDRuling(t *testing.T) {
 // Deliberate-break proof (reverted): removing the
 // requireAnalyzersVisible call from BillRepository.Create let tenant A's
 // narrow Scope attach tenant A's OWN Buildings[1] analyzer (outside the
-// Scope) as a member without error — see the task report.
+// Scope) as a member without error.
 func TestBillCreateRejectsInvisibleBuildingAnalyzerOrMember(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -217,8 +217,7 @@ func TestBillUpdateStatusCannotSetSuperseded(t *testing.T) {
 	require.Equal(t, model.BillStatusIssued, updated.Status)
 }
 
-// TestBillCreateRejectsCrossTenantBuildingEvenWithAdminScope is Critical
-// Finding 1's probe applied to bills: Scope.AllowsBuilding is an in-memory
+// TestBillCreateRejectsCrossTenantBuildingEvenWithAdminScope is a regression test applied to bills: Scope.AllowsBuilding is an in-memory
 // grant check that returns true for ANY id under AllBuildings — it cannot
 // know which company owns a building — so tenant A's AdminScope must not be
 // able to store tenant B's building id as a bill's building_id.
@@ -242,7 +241,7 @@ func TestBillCreateRejectsCrossTenantBuildingEvenWithAdminScope(t *testing.T) {
 	require.Equal(t, ownBuilding, *created.BuildingID)
 }
 
-// TestBillCreateRejectsCrossTenantTariffID is Important Finding 4's probe:
+// TestBillCreateRejectsCrossTenantTariffID is a regression test:
 // bills.tariff_id is a stored foreign key too and must name a tariff of the
 // same company, never taken as given.
 func TestBillCreateRejectsCrossTenantTariffID(t *testing.T) {
@@ -267,18 +266,15 @@ func TestBillCreateRejectsCrossTenantTariffID(t *testing.T) {
 	require.Equal(t, ownTariff, *created.TariffID)
 }
 
-// TestBillCreateAndMemberInsertRejectCrossTenantAnalyzerID is F1 final
-// review pass A, Important Finding 1's probe: bills.analyzer_id and
+// TestBillCreateAndMemberInsertRejectCrossTenantAnalyzerID is a regression test: bills.analyzer_id and
 // bill_members.analyzer_id are stored foreign keys and must be refused even
-// under the OTHER tenant's AdminScope (binding ruling 4) — never taken as
+// under the OTHER tenant's AdminScope — never taken as
 // given. Both are now validated in SQL, inside BillCreate's and
 // BillMemberInsert's own statements (queries/bills.sql), not only by
 // BillRepository's Go-side requireAnalyzersVisible pre-check, which still
-// runs first as defence in depth. final-fix-A-report.md records the
-// procedural proof that the SQL clauses alone — with requireAnalyzersVisible
-// temporarily disabled — still refuse both cases below, and that
-// tautologising either new clause with the pre-check still disabled lets the
-// corresponding write through.
+// runs first as defence in depth. With requireAnalyzersVisible temporarily
+// disabled the SQL clauses alone still refuse both cases below, and
+// tautologising either clause then lets the corresponding write through.
 func TestBillCreateAndMemberInsertRejectCrossTenantAnalyzerID(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -311,8 +307,8 @@ func TestBillCreateAndMemberInsertRejectCrossTenantAnalyzerID(t *testing.T) {
 	require.Equal(t, foreignAnalyzer, *created.AnalyzerID)
 }
 
-// TestSupersedeRejectsReplacementNamingADifferentScopeSubjectOrPeriod is the
-// folded-minor probe: the replacement must keep the replaced bill's (scope,
+// TestSupersedeRejectsReplacementNamingADifferentScopeSubjectOrPeriod: the
+// replacement must keep the replaced bill's (scope,
 // subject, period) — Supersede is a recomputation of ONE bill's history, not
 // a way to attach an unrelated bill's row where another one used to be.
 func TestSupersedeRejectsReplacementNamingADifferentScopeSubjectOrPeriod(t *testing.T) {
@@ -353,8 +349,7 @@ func TestSupersedeRejectsReplacementNamingADifferentScopeSubjectOrPeriod(t *test
 	require.NotEqual(t, original.ID, replacement.ID)
 }
 
-// TestSupersedeReplacementBuildingAndMembersMustBeVisible is Important
-// Finding 7's missing test: the Supersede child-visibility rule — the
+// TestSupersedeReplacementBuildingAndMembersMustBeVisible is a regression test: the Supersede child-visibility rule — the
 // replacement's building and members follow Create's rule exactly.
 func TestSupersedeReplacementBuildingAndMembersMustBeVisible(t *testing.T) {
 	t.Parallel()
@@ -380,7 +375,7 @@ func TestSupersedeReplacementBuildingAndMembersMustBeVisible(t *testing.T) {
 	require.Equal(t, model.BillStatusDraft, stillLive.Status, "a refused Supersede must not have marked the original superseded")
 }
 
-// TestBillPageLimitsClampNegativeOffset is the folded-minor probe: OFFSET
+// TestBillPageLimitsClampNegativeOffset: OFFSET
 // must not be negative.
 func TestBillPageLimitsClampNegativeOffset(t *testing.T) {
 	t.Parallel()
@@ -393,7 +388,8 @@ func TestBillPageLimitsClampNegativeOffset(t *testing.T) {
 	require.NoError(t, err, "a negative Offset must be clamped to 0")
 }
 
-// TestBillOfSoftDeletedBuildingIsNotReadable is the folded-minor probe.
+// TestBillOfSoftDeletedBuildingIsNotReadable: a bill of a soft-deleted
+// building is not readable.
 func TestBillOfSoftDeletedBuildingIsNotReadable(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -418,14 +414,12 @@ func TestBillOfSoftDeletedBuildingIsNotReadable(t *testing.T) {
 	}
 }
 
-// TestBillCreateRefusesOwnAnalyzerIDOutsideNarrowScope is the parked F1
-// finding (F2 Task 0P2 ADDITIONAL scope): a narrow Scope must not be able to
+// TestBillCreateRefusesOwnAnalyzerIDOutsideNarrowScope: a narrow Scope must not be able to
 // create an analyzer-scope bill naming ITS OWN AnalyzerID when that
 // analyzer, though in the same company, sits in a building outside the
 // Scope's grant.
 //
-// Binding ruling 4 (HANDOFF_NEXT_SESSION.md, "Binding rulings from session
-// 2"): narrow-scope proofs use Scope against a same-company building
+// Narrow-scope proofs use Scope against a same-company building
 // outside the grant, not the other tenant's AdminScope on both sides — with
 // a narrow Scope the building predicate would hide a broken company_id
 // predicate. TestBillCreateAndMemberInsertRejectCrossTenantAnalyzerID above
@@ -434,7 +428,7 @@ func TestBillOfSoftDeletedBuildingIsNotReadable(t *testing.T) {
 // to a member analyzer_id, which TestBillCreateRejectsInvisibleBuildingAnalyzerOrMember
 // already covers).
 //
-// Failing-first evidence (reverted before commit, task-0p2-report.md):
+// Failing-first evidence (reverted before commit):
 // tautologising BillCreate's analyzer exists() building branch in
 // queries/bills.sql (appending "or true" to the
 // all_buildings/building_ids check) AND temporarily short-circuiting

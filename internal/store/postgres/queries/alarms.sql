@@ -7,7 +7,7 @@
 select * from alarms
 where id = sqlc.arg(id) and company_id = sqlc.arg(company_id) and deleted_at is null;
 
--- Important Finding 2 (task-11a fix round 1): the alarm RULE is company-wide
+-- The alarm RULE is company-wide
 -- (accepted), but its building-scoped children are not — the AnalyzerID
 -- filter must only match an alarm through an ATTACHMENT whose analyzer is
 -- itself visible to the Scope, or a narrow Scope could use this filter as an
@@ -88,7 +88,7 @@ returning *;
 update alarms set deleted_at = sqlc.arg(deleted_at)
 where id = sqlc.arg(id) and company_id = sqlc.arg(company_id) and deleted_at is null;
 
--- Important Finding 2: Analyzers only lists ATTACHMENTS whose analyzer is
+-- Analyzers only lists ATTACHMENTS whose analyzer is
 -- itself visible to the Scope — a narrow Scope must never learn (via this
 -- method) that an alarm is watching an analyzer in a building it cannot see.
 -- name: AlarmAnalyzerList :many
@@ -99,7 +99,7 @@ where aa.alarm_id = sqlc.arg(alarm_id)
   and (sqlc.arg(all_buildings)::boolean or an.building_id = any(sqlc.arg(building_ids)::uuid[]))
 order by aa.analyzer_id;
 
--- Important Finding 2: ReplaceAnalyzers must replace ONLY the attachments
+-- ReplaceAnalyzers must replace ONLY the attachments
 -- visible to the Scope and leave attachments to analyzers outside it
 -- untouched — a narrow Scope replacing "its" analyzer list must not be able
 -- to silently detach an analyzer in a building it cannot see.
@@ -110,7 +110,7 @@ where aa.analyzer_id = an.id and aa.alarm_id = sqlc.arg(alarm_id)
   and an.company_id = sqlc.arg(company_id) and an.deleted_at is null
   and (sqlc.arg(all_buildings)::boolean or an.building_id = any(sqlc.arg(building_ids)::uuid[]));
 
--- Important Finding 1: alarm_analyzers has no company_id of its own —
+-- Alarm_analyzers has no company_id of its own —
 -- AlarmAnalyzerInsert re-validates both the alarm and the analyzer against
 -- the Scope itself, so the isolation boundary holds even if the Go-side
 -- requireVisible / AlarmCountVisibleAnalyzers pre-checks were ever skipped.
@@ -138,7 +138,7 @@ where company_id = sqlc.arg(company_id) and deleted_at is null
   and id = any(sqlc.arg(analyzer_ids)::uuid[])
   and (sqlc.arg(all_buildings)::boolean or building_id = any(sqlc.arg(building_ids)::uuid[]));
 
--- Important Finding 1: alarm_channels has no company_id of its own — every
+-- Alarm_channels has no company_id of its own — every
 -- statement below re-validates alarm_id against the Scope itself.
 -- name: AlarmChannelList :many
 select ac.* from alarm_channels ac
@@ -158,7 +158,7 @@ select sqlc.arg(alarm_id), sqlc.arg(channel), sqlc.arg(target)
 where exists (select 1 from alarms a where a.id = sqlc.arg(alarm_id) and a.company_id = sqlc.arg(company_id) and a.deleted_at is null)
 returning true;
 
--- Important Finding 1 and 2: alarm_events has no company_id of its own, and
+-- alarm_events has no company_id of its own, and
 -- e.AnalyzerID (when set) must itself be visible to the Scope — validated
 -- here, in the write, not only by the Go-side pre-checks that run before it.
 -- name: AlarmEventCreate :one
@@ -173,12 +173,12 @@ where exists (select 1 from alarms a where a.id = sqlc.arg(alarm_id) and a.compa
   ))
 returning *;
 
--- Important Finding 2: an event's analyzer must be visible to the Scope, and
+-- An event's analyzer must be visible to the Scope, and
 -- an event with NO analyzer (a company-level condition) is visible only to a
 -- Scope with AllBuildings — otherwise this method would hand a narrow Scope
 -- another building's analyzer id and the event's own message/detail payload.
 --
--- F1 final review pass A, Important Finding 3 (fix round): a.deleted_at is
+-- a.deleted_at is
 -- null was missing — a soft-deleted alarm's events stayed listable, in
 -- violation of ruling 4 (a child of a soft-deleted parent must not be
 -- reachable) and of AlarmVisible's own treatment of a soft-deleted alarm as
@@ -206,7 +206,7 @@ where a.company_id = sqlc.arg(company_id) and a.deleted_at is null
 order by ae.triggered_at desc, ae.id
 limit sqlc.arg(limit_val) offset sqlc.arg(offset_val);
 
--- F1 final review pass A, Important Finding 3 (fix round): MarkNotified
+-- MarkNotified
 -- previously checked only alarms.company_id — no a.deleted_at guard (a
 -- soft-deleted alarm's events stayed writable) and no building/analyzer
 -- visibility disjunction at all (a narrow Scope could mark ANY event in the
@@ -227,7 +227,7 @@ where ae.id = sqlc.arg(id)
         ))
   );
 
--- Important Finding 1: alarm_fired_bills has no company_id of its own and
+-- Alarm_fired_bills has no company_id of its own and
 -- names TWO parents (alarms and bills) — both are re-validated against the
 -- Scope here, not only by the Go-side requireVisible/BillVisible pre-checks.
 -- name: AlarmMarkBillFired :one
@@ -241,7 +241,7 @@ where exists (select 1 from alarms a where a.id = sqlc.arg(alarm_id) and a.compa
 on conflict do nothing
 returning true;
 
--- Important Finding 1: isolar_forwarded_alarms has no company_id of its own
+-- Isolar_forwarded_alarms has no company_id of its own
 -- — re-validated against power_plants here, not only by the Go-side
 -- AlarmPlantVisible pre-check.
 -- name: AlarmMarkIsolarForwarded :one

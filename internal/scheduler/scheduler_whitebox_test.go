@@ -103,7 +103,7 @@ func TestSchedulerEntriesIncludeIngestionAndPrices(t *testing.T) {
 	require.Equal(t, cfg.Schedule.EPIAS, entries[2].Cron)
 	require.Equal(t, job.TypeEPIASSyncPrices, entries[2].Task.Type())
 
-	// TestSchedulerRegistersBillingDispatch (F4 Task 10).
+	// TestSchedulerRegistersBillingDispatch.
 	require.Equal(t, cfg.Schedule.Billing, entries[3].Cron)
 	require.Equal(t, job.TypeBillingDispatch, entries[3].Task.Type())
 

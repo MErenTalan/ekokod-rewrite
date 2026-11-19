@@ -39,9 +39,9 @@ func underPackage(pkgPath, target string) bool {
 // money and uuid identifiers.
 //
 // This was a DENY-list (forbiddenInDomain, 9 stdlib paths matched by exact
-// equality) until F1's final review pass B, I2. A denylist only refuses the
-// imports someone thought to name in advance, and it is provably incomplete:
-// the review's mutation probe added an internal/domain/model import of
+// equality) at first. A denylist only refuses the imports someone thought
+// to name in advance, and it is provably incomplete: a probe added an
+// internal/domain/model import of
 // github.com/jackc/pgx/v5 — a real Postgres driver, the exact shape of I/O
 // this guard exists to keep out — and the denylist let it straight through,
 // because pgx was never on the list and never could be by construction; a
@@ -49,9 +49,8 @@ func underPackage(pkgPath, target string) bool {
 // named ones. An allow-list inverts the default: nothing gets in unless it
 // is named here, so a future github.com/redis/go-redis import in a domain
 // service fails the moment it lands, not the moment someone remembers to
-// deny it.
-//
-// .golangci.yml's `domain-is-pure` depguard rule is switched to
+// deny it..
+// golangci.yml's `domain-is-pure` depguard rule is switched to
 // `list-mode: strict` with a matching `allow:` list at the same time. CHANGE
 // BOTH OR NEITHER — the same rule this file's floatGuardPatterns comment
 // already states for the float guard, extended to this guard because the
@@ -213,10 +212,10 @@ var f2guardAdapterForbidden = []string{
 // must see the FULL transitive import graph, not just each package's direct
 // imports. packages.Load with only NeedImports (loadPackages' mode)
 // populates pkg.Imports with direct dependencies, but those dependency
-// Package objects are themselves left as incomplete stubs — their own
-// .Imports is empty — so a recursive walk over them finds nothing. NeedDeps
+// Package objects are themselves left as incomplete stubs — their own.
+// Imports is empty — so a recursive walk over them finds nothing. NeedDeps
 // tells the loader to fully populate every transitively reached package
-// too, so pkg.Imports[x].Imports is real data all the way down (I4).
+// too, so pkg.Imports[x].Imports is real data all the way down.
 func f2guardLoadPackagesWithDeps(t *testing.T, pattern string) []*packages.Package {
 	t.Helper()
 	cfg := &packages.Config{
@@ -267,7 +266,7 @@ func f2guardTransitiveOffender(pkg *packages.Package, forbidden []string, visite
 // clients; persistence is the ingestion job's responsibility": nothing under
 // internal/integration may import the store layer, the pgx driver, or any
 // of the three packages that themselves depend on internal/integration —
-// TRANSITIVELY, not just directly (I4): internal/integration ->
+// TRANSITIVELY, not just directly: internal/integration ->
 // internal/f2probehelper -> internal/store must be caught exactly like
 // internal/integration -> internal/store, because a helper package one hop
 // away is just as much a route to the database as importing it directly.
@@ -284,10 +283,10 @@ func TestAdaptersDoNotImportTheStore(t *testing.T) {
 
 // TestNoTLSVerificationBypass guards removed-behaviour item 16.
 //
-// Deviation from the brief: the brief's sample walk has no exemption for
+// Deviation from the spec: the sample walk has no exemption for
 // its own source file. Since this test's own code necessarily contains the
 // literal string "InsecureSkipVerify" (the substring it searches for), an
-// unmodified copy of the brief's walk fails against itself the moment it
+// unmodified copy of the walk fails against itself the moment it
 // runs — verified live: it does, with arch_test.go named as the offending
 // file. The requirement ("InsecureSkipVerify does not appear" in real code)
 // wins over the sample's walk, so this file is exempted by its own path,
@@ -347,8 +346,8 @@ var loggerHandlerConstructionAllowlist = map[string]bool{
 	"internal/platform/logging/logging.go": true,
 }
 
-// TestOnlyLoggingPackageConstructsBareSlogHandlers is the carried-forward
-// guard from task 9's review (Minor-4): before newCommandLogger existed,
+// TestOnlyLoggingPackageConstructsBareSlogHandlers: before newCommandLogger
+// existed,
 // reverting a call site's logger construction to a bare
 // slog.NewJSONHandler compiled and passed the entire test suite silently,
 // because internal/cli's unit test for newCommandLogger only pinned the
@@ -491,8 +490,8 @@ func methodSetOf(named *types.Named) *types.MethodSet {
 // it gets a type-resolving guard rather than a textual one.
 //
 // WHAT IS INSPECTED, and why the predicate is shaped this way. Every exported
-// method — declared or promoted — of every named type under
-// ./internal/store/postgres/... that takes a context.Context must also take a
+// method — declared or promoted — of every named type under.
+// /internal/store/postgres/... that takes a context.Context must also take a
 // store.Scope.
 //
 //   - The type may be UNEXPORTED. The first draft of this guard required an
@@ -535,8 +534,7 @@ func methodSetOf(named *types.Named) *types.MethodSet {
 // infrastructure is a code-review-visible one-line addition, which is the
 // point — nothing here can be evaded merely by adding a new function.
 //
-// F1 final review pass B, I1, added this list together with the function/var
-// walk below. Before it, TestEveryStoreMethodIsScoped resolved
+// This list came together with the function/var walk below. Before it, TestEveryStoreMethodIsScoped resolved
 // *types.TypeName entries and their method sets ONLY: it never looked at
 // *types.Func or *types.Var in a package's scope at all, so an exported
 // package-level function or a package-level variable of function type,
@@ -555,7 +553,7 @@ var storeScopeAllowlist = map[string]bool{
 	"Ping":              true, // internal/store/postgres/pool.go
 	"MigrateUp":         true, // internal/store/postgres/migrate.go
 	"MigrateDownAll":    true, // internal/store/postgres/migrate.go
-	"MigrateDownN":      true, // internal/store/postgres/migrate.go (F2 task-5: rolls back the N most recent migrations; migration infrastructure like MigrateUp/MigrateDownAll, not a repository read or write)
+	"MigrateDownN":      true, // internal/store/postgres/migrate.go (F2: rolls back the N most recent migrations; migration infrastructure like MigrateUp/MigrateDownAll, not a repository read or write)
 	"MigrateStatus":     true, // internal/store/postgres/migrate.go
 	"PendingMigrations": true, // internal/store/postgres/migrate.go
 	"MigrationsCheck":   true, // internal/store/postgres/health.go (no ctx param today; listed so an added one stays exempt without a guard edit)
@@ -787,9 +785,8 @@ func TestTheJobPackageDoesNotImportTheStore(t *testing.T) {
 // subpackage — is covered the moment it exists, with no edit here. An earlier
 // version listed ./internal/domain/model/... alone, so a float field in a new
 // internal/domain/billing package passed while .golangci.yml claimed the two
-// halves covered the same trees.
-//
-// .golangci.yml's no-float-money depguard rule lists exactly these seven
+// halves covered the same trees..
+// golangci.yml's no-float-money depguard rule lists exactly these seven
 // trees (**/internal/domain/**, **/internal/store/**,
 // **/internal/integration/**, **/internal/ingest/**,
 // **/internal/marketdata/**, **/internal/credentials/** and
@@ -799,9 +796,8 @@ func TestTheJobPackageDoesNotImportTheStore(t *testing.T) {
 // three placeholder doc.go files existed to give each pattern something
 // non-empty to match — loadTypedPackages requires a non-empty match, so a
 // pattern added before its package exists would fail the guard for the
-// wrong reason (a broken load, not a real violation).
-//
-// ./internal/service/... covers the service layer (R76): it computes and
+// wrong reason (a broken load, not a real violation)..
+// /internal/service/... covers the service layer (R76): it computes and
 // holds the same energy and money values internal/domain does, one layer
 // up, so a float there is exactly as much a wrong invoice as a float in
 // internal/domain/energy itself. internal/service/doc.go exists, ahead of
@@ -841,7 +837,7 @@ var floatCarrierPackages = map[string]bool{
 // floor leaves ~5% headroom so that deleting a genuinely dead struct does not
 // turn the guard red, while a guard that silently stopped loading
 // internal/store (~40% of the count) or internal/domain/model cannot pass.
-// The count only grows as Tasks 9-11 add repositories; raise the floor when
+// The count only grows as repositories are added; raise the floor when
 // it has grown well past this.
 const floatGuardMinFields = 1500
 
@@ -1089,7 +1085,7 @@ func f2guardIsJSONDecoderRecv(fn *types.Func) bool {
 }
 
 // f2guardIsJSONNumberRecv reports whether fn is a method whose receiver is
-// encoding/json.Number — the target of the (M3) json.Number.Float64 case:
+// encoding/json.Number — the target of the json.Number.Float64 case:
 // json.Number exists specifically so a caller can hold a JSON number as a
 // string and defer parsing it (typically into decimal.Decimal), and calling
 // its own Float64() throws that away, parsing straight into the float this
@@ -1157,7 +1153,7 @@ func f2guardJSONTargetHazard(typ types.Type, seen map[string]bool) (string, bool
 		}
 		return f2guardJSONTargetHazard(t.Underlying(), seen)
 	case *types.TypeParam:
-		// I2: a generic decode helper — func decode[T any](b []byte) (T,
+		// A generic decode helper — func decode[T any](b []byte) (T,
 		// error) { var v T; return v, json.Unmarshal(b, &v) } — has a
 		// json.Unmarshal call whose target's STATIC type, inside the
 		// generic function's own body, is *T, a type parameter: the
@@ -1192,7 +1188,7 @@ func f2guardCheckJSONTarget(t *testing.T, pkg *packages.Package, arg ast.Expr) {
 	}
 }
 
-// f2guardCheckFmtScanFloatArgs (M2) flags any fmt.Sscan/Sscanf/Sscanln
+// f2guardCheckFmtScanFloatArgs flags any fmt.Sscan/Sscanf/Sscanln
 // argument whose static type is a pointer to float32/float64 — the same
 // hazard TestNoFloatFieldsInModelOrStore forbids in a struct field, reached
 // here through a scan target instead.
@@ -1299,7 +1295,7 @@ func TestIntegrationTreesDoNotParseFloats(t *testing.T) {
 						case fn.Pkg().Path() == "encoding/json" && fn.Name() == "Token" && f2guardIsJSONDecoderRecv(fn):
 							t.Errorf("%s: calls (*json.Decoder).Token: token-by-token JSON numbers decode as float64 with no static type to catch — parse provider numbers through a typed struct with decimal.Decimal/json.Number fields instead",
 								pkg.Fset.Position(node.Pos()))
-						// M2: fmt.Sscan/Sscanf/Sscanln decode straight into
+						// fmt.Sscan/Sscanf/Sscanln decode straight into
 						// whatever pointer type the caller passes — a
 						// *float32/*float64 argument is exactly as
 						// float-typed as the struct fields
@@ -1338,8 +1334,7 @@ var f2guardTLSDangerousFields = map[string]bool{
 // catches the field reached through an embedded wrapper struct — `type w
 // struct{ tls.Config }; var p w; p.VerifyConnection = f` has Recv() == w
 // (the wrapper), never tls.Config, but Obj() is still the *types.Var for
-// tls.Config's own VerifyConnection field, promoted through the embedding
-// (M1).
+// tls.Config's own VerifyConnection field, promoted through the embedding.
 func f2guardTLSDangerousSelection(selection *types.Selection) bool {
 	if selection.Kind() != types.FieldVal {
 		return false
@@ -1421,7 +1416,7 @@ func TestNoTLSConfigDisablesVerification(t *testing.T) {
 						}
 					}
 				case *ast.AssignStmt:
-					// I3: a composite literal only catches a tls.Config
+					// A composite literal only catches a tls.Config
 					// built and filled in one expression. `cfg :=
 					// &tls.Config{}; cfg.VerifyConnection = f` sets the
 					// same dangerous field through a field assignment
@@ -1450,7 +1445,7 @@ func TestNoTLSConfigDisablesVerification(t *testing.T) {
 							pkg.Fset.Position(node.Pos()), sel.Sel.Name)
 					}
 				case *ast.UnaryExpr:
-					// M1: `fp := &c.VerifyPeerCertificate; *fp = ...` never
+					// `fp := &c.VerifyPeerCertificate; *fp = ...` never
 					// appears as an AssignStmt whose LHS is a
 					// SelectorExpr — the LHS is `*fp`, a dereferenced local
 					// variable with no static link back to tls.Config — so

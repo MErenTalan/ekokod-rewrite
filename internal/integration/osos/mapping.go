@@ -52,8 +52,8 @@ func optionalProviderNumber(raw string) (*decimal.Decimal, error) {
 // DiscoverMeteringPoints has no per-row Warnings channel — unlike
 // FetchReadings, 06's MeterDataSource interface returns discovery as plain
 // ([]MeteringPoint, error), so there is nowhere to attach a per-field
-// warning. Per task-6-fix1-findings.md's folded minor ("discovery ...
-// tolerates a bad optional numeric field as nil"), a single installation's
+// warning. Discovery tolerates a bad optional numeric field as nil: a
+// single installation's
 // unparseable optional number must not fail the entire discovery call for
 // every other installation — nil is the closest available signal ("the
 // provider reported nothing usable"), even though, unlike FetchReadings'
@@ -107,8 +107,8 @@ func mapInstallation(row wireInstallation) integration.MeteringPoint {
 // unmarshalTypeErrorField extracts the offending struct field name from a
 // json.Unmarshal error when it is a *json.UnmarshalTypeError (e.g. a
 // register sent as a JSON number where a string was expected) — the
-// concrete manifestation of task-6-fix1-findings.md I7's "a register sent
-// as a JSON number (or other type mismatch)". Any other decode error (a
+// concrete case of "a register sent as a JSON number (or other type
+// mismatch)". Any other decode error (a
 // row that isn't even a JSON object, for instance) falls back to "row".
 func unmarshalTypeErrorField(err error) string {
 	var te *json.UnmarshalTypeError
@@ -120,7 +120,7 @@ func unmarshalTypeErrorField(err error) string {
 
 // mapEnergyRow decodes and converts one energy_values row into a
 // model.MeterReading. raw is that row's original, unmodified JSON bytes —
-// decoding happens here, one row at a time (task-6-fix1-findings.md I7), so
+// decoding happens here, one row at a time, so
 // a row that doesn't even match wireEnergyRow's shape (a type-mismatched
 // field) fails only this row, not the whole page. ok is false when the row
 // failed to decode or parse (the "field" return names which one, for the

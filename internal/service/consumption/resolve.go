@@ -1,4 +1,4 @@
-// Package consumption — this file is Task 8's operator-resolution path:
+// Package consumption — this file is operator-resolution path:
 // ResolveAnomaly and the three ResolutionMode outcomes 04 §4.4 defines.
 package consumption
 
@@ -435,7 +435,7 @@ func (b *Billing) buildResetReading(ctx context.Context, sc store.Scope, analyze
 
 // setRegisterOnReading is toEnergyReading's inverse for one register
 // (convert.go maps model.MeterReading -> energy.Reading; nothing in that
-// file goes the other way, since Task 7 never needed to).
+// file goes the other way).
 func setRegisterOnReading(r *model.MeterReading, reg energy.Register, v *decimal.Decimal) {
 	switch reg {
 	case energy.ActiveImport:

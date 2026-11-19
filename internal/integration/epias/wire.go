@@ -9,7 +9,7 @@ import "encoding/json"
 // surface.
 //
 // WIRE-SHAPE WARNING: these field names are transcribed from
-// docs/rewrite/06-integrations.md §7 and the task-12 brief, not captured
+// docs/rewrite/06-integrations.md §7 and the EPİAŞ API notes, not captured
 // from a live EPİAŞ response — this codebase never calls the real
 // endpoint. F14 (the isolar/EPİAŞ hardening pass) is the task that
 // verifies them against real transparency-platform responses and is the
@@ -69,7 +69,7 @@ func (e unitCostEnvelope) rows() ([]json.RawMessage, bool) {
 }
 
 // unitCostItem is one row of either YEKDEM response shape. Period and Date
-// are both pointers because only one is expected per row (the brief names
+// are both pointers because only one is expected per row (the EPİAŞ API notes name
 // both: "period|date") — whichever is present resolves the (year, month).
 type unitCostItem struct {
 	Period   *string     `json:"period"`

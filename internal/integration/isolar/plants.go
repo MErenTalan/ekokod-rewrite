@@ -20,7 +20,7 @@ const (
 	opGetDeviceListByPsID   = "get_device_list_by_ps_id"
 )
 
-// plantsPageSize / devicesPageSize are the brief's stated page sizes:
+// plantsPageSize / devicesPageSize are the iSolar API notes stated page sizes:
 // "page/size 50, follows rowCount" for Plants, "page/size 100, pageList"
 // for Devices.
 const (

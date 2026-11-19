@@ -10,7 +10,7 @@
 -- the gap a plain, unlocked pre-check would leave open for a concurrent
 -- reassignment of one of the batch's analyzers.
 --
--- interval_generation_kwh (migration 00012, F2 Task 5) needs no change
+-- interval_generation_kwh (migration 00012) needs no change
 -- below: every query here selects `mr.*`, which already picks up the new
 -- column once sqlc regenerates against the migration. The BulkInsert
 -- staging-and-upsert path that DOES need to carry it explicitly lives in

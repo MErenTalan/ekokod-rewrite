@@ -1,0 +1,54 @@
+# Extended regexes (case-insensitive) that must never appear in the clean repo.
+claude
+anthropic
+co-authored-by
+generated with
+superpowers
+sub-?agents?
+\bopus\b
+sonnet
+\bhaiku\b
+chat-?gpt
+openai
+\bgpt-?[0-9]
+copilot
+\bllms?\b
+\bgemini\b
+\bcursor ?ai\b
+master[ _-]?prompt
+\bprompts?\b
+coding (session|assistant|agent)
+\bai[- ](assisted|generated|session|agent|assistant|tool|written|pair)
+yapay zek[aâ][^"]*(ile yaz|ile geliştir|yardımıyla geliştir|kullanılarak geliştir)
+hand-?off
+\bledger\b
+\bbriefs?\b
+-brief\b
+\bfix[ -]?rounds?\b
+\bfix[0-9]\b
+fix1_test
+\breview (round|finding|fix)
+\b(final|opus|code|spec|quality)[ -]review
+\breviewers?\b
+\btasks? [0-9]+[a-z]?\b
+\btask-[0-9]
+red by mutation
+(by|named|reviewer's|this|the|a|flag-only|narrower) mutation\b|mutation[:)]|mutation (test|proof|check|must|would|that)|\bI-mutation|mutation-(proof|tested)
+\bsdd\b
+\bwave[ -][a-z]\b
+\bdispatch(ed)? (an? )?(agent|implementer)
+\bimplementer\b
+\bcontroller session
+\bthe (plan|spec) says\b
+report\.md
+\bfindings?\.md
+\bfindings? [ICM][0-9]
+\b(Important|Minor|Critical) (finding|[0-9])
+folded[- ]minors?
+\bacceptance run
+needs_context
+done_with_concerns
+worktree
+\bStep [0-9]+\([a-z]\)
+ui-ux-pro-max
+\bskills?\b.*(run|invoke|load)|(run|invoke|load)\w* the skill

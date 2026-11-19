@@ -29,7 +29,7 @@ import (
 // accidentally shares seeded data with the other.
 var anomaliesEpoch = time.Date(2026, 5, 1, 8, 0, 0, 0, time.UTC)
 
-// anomaliesNewBilling builds a *consumption.Billing wired with every Task 8
+// anomaliesNewBilling builds a *consumption.Billing wired with every anomaly
 // dependency (Locker, Analyzers, and — R103 — Users, required for
 // ResolveAnomaly) against real Postgres repositories. lock.NewMemory is used
 // rather than a Redis container: Memory is a real, mutex-backed Locker (not
@@ -51,7 +51,7 @@ func anomaliesNewBilling(t *testing.T, pool *pgxpool.Pool, readingRepo store.Rea
 	return b
 }
 
-// TestASuspectPeriodWritesAnAnomalyAndAnOperatorMessage is Task 8's headline
+// TestASuspectPeriodWritesAnAnomalyAndAnOperatorMessage is headline
 // test: a negative delta with no covering reset writes exactly one
 // consumption_anomalies row and one operator message, R60's shape.
 func TestASuspectPeriodWritesAnAnomalyAndAnOperatorMessage(t *testing.T) {

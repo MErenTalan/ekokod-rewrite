@@ -35,7 +35,7 @@ func TestSummariseLeavesATotalNilWhenNoRowReportedTheRegister(t *testing.T) {
 }
 
 // TestSummariseGivesANilTotalWhenARegisterIsReportedOnlyBySuspectRows is the
-// plan's Step 1 fixture verbatim (Task 9): every row that carries
+// plan's Step 1 fixture verbatim: every row that carries
 // active_import is suspect for it; every other row simply never reports it.
 // The total must be nil, not the sum of the sound registers' worth of zero
 // contribution from the suspect rows.
@@ -84,7 +84,7 @@ func TestSummariseCountsSuspectRowsAndExcludesThemFromTotals(t *testing.T) {
 }
 
 func TestAveragesDividesOnlyByContributingRowsNotAllRows(t *testing.T) {
-	// I-mutation (b): active_import is reported by rows 0 and 1 (values 10
+	// Active_import is reported by rows 0 and 1 (values 10
 	// and 20 -> average 15), but reactive_inductive_import is reported by
 	// row 0 only (value 6 -> average 6, not 6/3 = 2 across all three rows).
 	rows := []consumption.Row{
@@ -164,8 +164,8 @@ func TestPeakAndValleyTieBreaksOnEarliestWindow(t *testing.T) {
 
 // TestPeakAndValleyAreCopiesNotPointersIntoTheSlice proves Summarise's Peak
 // and Valley never alias rows: mutating the map behind *s.Peak must not
-// change rows itself. This is guard (a) from the task brief ("Peak returns a
-// pointer into the input slice" is the mutation this test must catch).
+// change rows itself ("Peak returns a pointer into the input slice" is the
+// bug this test must catch).
 func TestPeakAndValleyAreCopiesNotPointersIntoTheSlice(t *testing.T) {
 	rows := []consumption.Row{
 		{

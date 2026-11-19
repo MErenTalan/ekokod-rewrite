@@ -8,7 +8,7 @@
 // GridBox resolves its OWN meter multiplier live from provider data
 // (last_endex, and — for load_profile fetches — the fetched rows
 // themselves): 06 §3's "Multiplier resolution" is entirely this package's
-// concern. FetchRequest.Multiplier (Task 1's R3 field, "the analyzer's own
+// concern. FetchRequest.Multiplier (the R3 field, "the analyzer's own
 // STORED meter_multiplier, resolved by the pipeline before the call") is
 // therefore never read here — it is the pipeline's cached copy of what a
 // PRIOR call's ResolveMultiplier returned, for callers that have no
@@ -40,7 +40,7 @@ import (
 )
 
 const (
-	// maxWindow is the Task 7 brief's "MaxWindow 30 days": Planner.MaxWindow's
+	// maxWindow is the GridBox API notes' "MaxWindow 30 days": Planner.MaxWindow's
 	// answer for every kind, and the chunk size splitWindow splits an
 	// over-wide fetch window into (R20 — GridBox's pagination unit is a
 	// window chunk, not a provider-side cursor: 06 §3's Endpoints table
@@ -51,13 +51,9 @@ const (
 
 	// requestEvery/requestBurst/requestTimeout configure this adapter's own
 	// httpx.ClientConfig, per provider-defaults.md's `gridbox` row: "Rate /
-	// burst" 2 / 2, 30s request timeout. Fix round 1 (I2): the original
-	// round set requestEvery to a full second — one request per Every, so
-	// that was only 1 req/s, understating the table's 2/2 by half. Every
-	// must be 500ms (one request per 500ms = 2 req/s) to match; Burst was
-	// already correct. See task-7-report.md's "Fix round 1" section for the
-	// mutation proof (revert to time.Second and TestGridBoxDataClientRate
-	// fails).
+	// burst" 2 / 2, 30s request timeout. Every is one request per Every, so
+	// it must be 500ms (2 req/s) to match the table; a full second would
+	// understate it by half (TestGridBoxDataClientRate fails on time.Second).
 	requestEvery   = 500 * time.Millisecond
 	requestBurst   = 2
 	requestTimeout = 30 * time.Second
@@ -115,7 +111,7 @@ func (s *Source) Kinds(creds integration.Credentials) []model.ReadingKind {
 	return kinds
 }
 
-// MaxWindow is 30 days for every kind (Task 7 brief).
+// MaxWindow is 30 days for every kind.
 func (s *Source) MaxWindow(model.ReadingKind) time.Duration { return maxWindow }
 
 // RequiredEndpointKeys are the endpoints every GridBox definition needs;
@@ -173,7 +169,7 @@ func fetchConfigError(creds integration.Credentials, kind model.ReadingKind, wir
 // assert its fields directly, with no Pool/Source needed — see
 // TestGridBoxDataClientRate in source_internal_test.go).
 //
-// Fix round 1 (I1): provider-defaults.md's `gridbox` row marks "Serialise
+// provider-defaults.md's `gridbox` row marks "Serialise
 // per company: yes" for the whole provider, not only the token exchange —
 // the original round gave tokenClient a SerializeKey but left dataClient
 // (every last_success_date/last_endex/load_profiles/endexes/energy_values
@@ -205,17 +201,17 @@ func (s *Source) dataClient(creds integration.Credentials) *httpx.Client {
 // serialised (SerializeKey) per company: the token call is a non-idempotent
 // OAuth2 grant exchange that must never be retried blindly, and two
 // concurrent jobs must never race two token exchanges against the same
-// credential. Controller ruling R32 (Task 2 fix round 1): NoRetry: true is
+// credential. Controller ruling R32: NoRetry: true is
 // set on the request in token() below, the one call site every
 // login/refresh goes through.
 //
 // This key is kept DISTINCT from dataClientConfig's own per-company
-// SerializeKey (fix round 1, I1) rather than merged into one lock: a token
+// SerializeKey rather than merged into one lock: a token
 // exchange and a data call are different operations with different retry
 // rules (token: MaxAttempts forced to 1 via NoRetry; data: the
 // Client's normal jittered retries), and merging their locks would have an
 // in-flight token refresh block every data call for the same company (and
-// vice versa) for no reason the brief asks for — 06 §3 only requires that
+// vice versa) for no reason the GridBox API notes ask for — 06 §3 only requires that
 // GridBox calls of the SAME kind for the SAME company never race each
 // other, not that token and data calls take turns.
 func (s *Source) tokenClient(creds integration.Credentials) *httpx.Client {
@@ -629,7 +625,7 @@ func (s *Source) stamp(reading model.MeterReading, req integration.FetchRequest,
 }
 
 // fallbackWarning is 06 §3 "Multiplier resolution" priority 3/4's required
-// warning, naming the wiring number (Task 7 brief's acceptance test: "res.
+// warning, naming the wiring number (the GridBox acceptance test: "res.
 // Warnings contains exactly one WarnMultiplierFallback naming the wiring
 // number"). mult.Source distinguishes R51's two not-provider-resolved
 // outcomes: reusing the analyzer's own stored multiplier (informational —

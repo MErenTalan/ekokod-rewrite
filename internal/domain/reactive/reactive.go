@@ -35,7 +35,7 @@ type Input struct {
 	ActiveExport          *decimal.Decimal // nil-propagating aggregate (R116)
 	ActiveExportKnownSum  decimal.Decimal  // I-18: sum over members that reported export
 	// ActiveExportPartial: some members reported export and some did not, so the
-	// generation exemption cannot be decided (I-18).
+	// generation exemption cannot be decided.
 	ActiveExportPartial bool
 	InstalledPowerKw    *decimal.Decimal
 	Term                model.TariffTerm

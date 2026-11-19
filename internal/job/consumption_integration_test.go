@@ -133,7 +133,7 @@ func TestNewConsumptionRefreshTaskDelaysProcessingByOneMinute(t *testing.T) {
 // built task: asynq.Task exposes no accessor for its options outside a real
 // broker round trip (see TestConsumptionRefreshTaskIDIgnoresAnalyzerAndCompany
 // above), so this enqueues for real and reads the persisted MaxRetry back
-// via asynq.Inspector. The mutation that
+// via asynq.Inspector. A bug that
 // drops integMaxRetryOptions(o)... from the option slice would silently fall
 // back to asynq's default MaxRetry (25), which this asserts against.
 func TestNewConsumptionRefreshTaskAppliesConfiguredMaxRetry(t *testing.T) {

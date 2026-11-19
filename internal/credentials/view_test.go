@@ -11,16 +11,11 @@ import (
 )
 
 // viewAllowedBoolFields is every bool field View is allowed to declare,
-// named explicitly rather than matched by a pattern (R1). The brief's own
-// pinned test snippet for this check named only "HasSecret", but the
-// brief's own View struct also declares "IsActive" (is_active, an
-// ordinary non-secret flag copied straight from
-// model.IntegrationCredential) — a real inconsistency between the two
-// parts of the same brief section. Both bools are equally "cannot carry
-// secret material" (a bool has exactly two values), so the fix keeps R1's
-// actual intent — enumerate every bool explicitly, never describe them
-// with a regex — while matching the View shape the brief also specifies.
-// Documented as a spec gap in the task report.
+// named explicitly rather than matched by a pattern (R1): "HasSecret" and
+// "IsActive" (is_active, an ordinary non-secret flag copied straight from
+// model.IntegrationCredential). Both bools are equally "cannot carry secret
+// material" (a bool has exactly two values); R1's intent is to enumerate
+// every bool explicitly, never describe them with a regex.
 var viewAllowedBoolFields = map[string]bool{
 	"HasSecret": true,
 	"IsActive":  true,

@@ -15,7 +15,7 @@
 // test — the type definitions themselves are the proof of separation.
 //
 // Suspect-period bookkeeping (writing consumption_anomalies rows and
-// operator messages) is Task 8's ConsumptionAndRecord wrapper, added later
+// operator messages) is ConsumptionAndRecord wrapper, added later
 // on the same *Billing type. This file's Consumption methods never write
 // anything; a suspect or missing period is simply omitted from the result
 // (Analytics) or returned with a nil Values map and a populated Suspect map
@@ -184,14 +184,14 @@ type SeriesRequest struct {
 // entry is unreported or suspect. Source records which reading kind
 // produced the row (R62) — energy.Kind, not a bare string, so an invalid
 // value cannot compile. Indexes carries the register's CLOSING index for
-// the period (05 §5 "every index field", Task 9): Analytics fills it from
+// the period (05 §5 "every index field"): Analytics fills it from
 // the bucket's own closing index (seven registers: the six import ones and
 // active_export), Billing from the end boundary reading.
 // Partial is set by Analytics only, on a month or year that the next
 // period's first reading does not close (R499): the period is still open, or
 // its data stops short of its end. Billing never sets it — R98 drops every
 // bucket that has not closed, so an invoice-grade figure is complete or
-// absent. Resolution is populated by Task 8's override-substitution logic in
+// absent. Resolution is populated by override-substitution logic in
 // billing.go: a register present here was covered by a resolved
 // manual_override anomaly for this window, and its Values entry is the
 // operator-supplied figure, not a derived one.

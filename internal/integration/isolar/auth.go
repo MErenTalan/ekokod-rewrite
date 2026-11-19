@@ -109,7 +109,7 @@ func (c *Client) authCall(ctx context.Context, creds integration.Credentials, op
 }
 
 // Verify proves creds can authenticate and reach the platform: 06 §6
-// documents no dedicated "verify" operation, so — per the task brief —
+// documents no dedicated "verify" operation, so — per the iSolar API notes —
 // Verify calls queryPowerStationList with page 1, size 1 and discards the
 // result, exactly like Plants but bounded to the smallest possible page.
 func (c *Client) Verify(ctx context.Context, creds integration.Credentials) error {

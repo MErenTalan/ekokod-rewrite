@@ -78,8 +78,7 @@ func opsOperationalMessageFromRow(row sqlcgen.OperationalMessage) model.Operatio
 // StartRun inserts a job_runs row in the 'running' state. run.CompanyID must
 // equal s.CompanyID, checked before any database call. A caller-supplied
 // run.Status is IGNORED, not merely defaulted: per the contract, a job run
-// always starts 'running' — only FinishRun may set a terminal status (fix
-// round 1, folded minor).
+// always starts 'running' — only FinishRun may set a terminal status.
 func (r *OpsRepository) StartRun(ctx context.Context, s store.Scope, run model.JobRun) (model.JobRun, error) {
 	if !s.Valid() {
 		return model.JobRun{}, store.ErrInvalidScope

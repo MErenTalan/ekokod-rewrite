@@ -19,7 +19,7 @@ import (
 )
 
 // pinnedClient builds an *http.Client that trusts only the certificates in
-// pins, the same way httpx.Pool (Task 2) is meant to build its transport
+// pins, the same way httpx.Pool is meant to build its transport
 // from httpx.PoolOptions.PinnedCerts.
 func pinnedClient(t *testing.T, pins map[string]string) *http.Client {
 	t.Helper()
@@ -49,7 +49,7 @@ func getCtx(t *testing.T, client *http.Client, url string) (*http.Response, erro
 	return client.Do(req)
 }
 
-// TestFakeServerIsTLSAndRecordsRequests is fix-round-2's M4: beyond just
+// TestFakeServerIsTLSAndRecordsRequests: beyond just
 // counting requests, it asserts each RecordedRequest's Method, Path,
 // RawQuery, a header and the Body it captured, and separately proves that a
 // Route.Match predicate reading the body does not starve the Responder of it
@@ -196,7 +196,7 @@ const unmatchedHelperEnv = "FAKE_UNMATCHED_HELPER"
 // run of the unmatched-route scenario; its exit code and t.Errorf output
 // are ordinary process exit status and stdout, fully isolated from this
 // (parent) test's own pass/fail.
-// unmatchedHelperTimeout bounds the re-exec'd child process (M3): it should
+// unmatchedHelperTimeout bounds the re-exec'd child process: it should
 // finish in well under a second in practice, but a hung child (e.g. a
 // regression that makes the fake server block instead of answering 404)
 // must not hang this test forever.
@@ -226,7 +226,7 @@ func TestUnmatchedRouteFailsTheTest(t *testing.T) {
 	cmd.Env = append(os.Environ(), unmatchedHelperEnv+"=1")
 	out, err := cmd.CombinedOutput()
 
-	// M3: assert the specific failure shape, not merely "some error" — a
+	// Assert the specific failure shape, not merely "some error" — a
 	// child killed by the context deadline, or one that exits non-zero for
 	// an unrelated reason (e.g. a panic before the server even starts),
 	// would satisfy a bare require.Error but would NOT prove "an unmatched

@@ -142,8 +142,7 @@ func TestOpsRepositoryRejectsInvalidScope(t *testing.T) {
 	require.ErrorIs(t, err, store.ErrInvalidScope)
 }
 
-// TestOpsCrossTenantIsolation is the fix round 1, Important 4 test: every
-// prior Ops isolation test exercised only a PLATFORM (company_id NULL) row
+// TestOpsCrossTenantIsolation: the other Ops isolation tests exercise only a PLATFORM (company_id NULL) row
 // leaking into a tenant's surface; none used a SECOND REAL company's rows.
 // This proves GetRun/FinishRun/ListRuns/AppendMessage/ListMessages all
 // refuse tenant A's rows under tenant B's OWN AdminScope — the company_id
@@ -197,8 +196,7 @@ func TestOpsCrossTenantIsolation(t *testing.T) {
 	}
 }
 
-// TestOpsStartRunIgnoresCallerSuppliedStatus is the folded-minor test (fix
-// round 1): a job run is INSERTED in state 'running' per the contract,
+// TestOpsStartRunIgnoresCallerSuppliedStatus: a job run is INSERTED in state 'running' per the contract,
 // regardless of what the caller puts in run.Status.
 func TestOpsStartRunIgnoresCallerSuppliedStatus(t *testing.T) {
 	t.Parallel()

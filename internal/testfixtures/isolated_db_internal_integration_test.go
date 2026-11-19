@@ -95,8 +95,7 @@ func TestCreateDatabaseTemplateFailsWith55006WhileASessionIsConnected(t *testing
 // before any query (including a terminate) could even race it.
 //
 // This test FAILS on the pre-fix code (connecting succeeds) and PASSES once
-// isolatedTemplate protects the template — see the task-0p report for the
-// observed pre-fix failure.
+// isolatedTemplate protects the template.
 func TestIsolatedTemplateRefusesConnectionsAfterSetup(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

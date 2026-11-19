@@ -86,7 +86,7 @@ func TestLeadContextIsCancelledWhenTheProcessStops(t *testing.T) {
 	require.False(t, elector.IsLeader())
 }
 
-// TestLeadContextIsCancelledWhenTheConnectionDies goes beyond the brief's own
+// TestLeadContextIsCancelledWhenTheConnectionDies goes beyond the
 // tests, which only exercise cooperative shutdown (cancelling the outer
 // context, which cancels the lead context by Go context propagation alone —
 // that would pass even if the elector never actually monitored the

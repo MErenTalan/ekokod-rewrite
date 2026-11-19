@@ -176,8 +176,7 @@ func TestIntegrationRecordVerificationAndDeleteAreScoped(t *testing.T) {
 	}, []byte("s"), nil)
 	require.NoError(t, err)
 
-	// Asserted under tenant B's AdminScope specifically (fix round 1,
-	// Important 4/gate requirement): integration_credentials has no
+	// Asserted under tenant B's AdminScope specifically: integration_credentials has no
 	// building_id at all, so company_id is the ONLY predicate that could
 	// exclude the row here.
 	_, err = repo.Credential(ctx, tenantB.AdminScope, definitionID)
@@ -216,8 +215,8 @@ func TestIntegrationUpsertCredentialRefusesANonexistentDefinition(t *testing.T) 
 	require.Empty(t, list, "the refused upsert must not have written anything")
 }
 
-// TestIntegrationUpsertCredentialNilSecretKeepsStoredCiphertext is the
-// folded-minor test (fix round 1): an UpsertCredential call with a nil
+// TestIntegrationUpsertCredentialNilSecretKeepsStoredCiphertext: an
+// UpsertCredential call with a nil
 // secret/extra on an existing row must NOT wipe the previously stored
 // ciphertext — it means "leave it as it was", not "clear it".
 func TestIntegrationUpsertCredentialNilSecretKeepsStoredCiphertext(t *testing.T) {
@@ -254,8 +253,7 @@ func TestIntegrationUpsertCredentialNilSecretKeepsStoredCiphertext(t *testing.T)
 
 func strPtrIntegration(s string) *string { return &s }
 
-// TestNewIntegrationRepositoryPanicsOnNilCipher is the folded-minor test (fix
-// round 1): constructing an IntegrationRepository with a nil cipher panics
+// TestNewIntegrationRepositoryPanicsOnNilCipher: constructing an IntegrationRepository with a nil cipher panics
 // immediately, with a clear message, rather than compiling silently and
 // panicking later at the first Seal/Open call.
 func TestNewIntegrationRepositoryPanicsOnNilCipher(t *testing.T) {

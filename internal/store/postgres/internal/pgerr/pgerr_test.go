@@ -55,9 +55,8 @@ func TestTranslateMapsErrNoRowsToStoreErrNotFound(t *testing.T) {
 		// The credential-bearing wrap is the case that actually matters:
 		// pgx.ErrNoRows itself never carries a password, so a cause that
 		// never contains one at all would make every assertion below pass
-		// whether or not this branch scrubs anything (see Important 1/2 of
-		// the Task 8c fix-round-1 findings — that vacuous gap is exactly
-		// what let a real leak through the first time). This wrap forces
+		// whether or not this branch scrubs anything (that vacuous gap is
+		// exactly what let a real leak through the first time). This wrap forces
 		// the assertions to mean something.
 		"wrapped with a credential-bearing cause": fmt.Errorf(
 			"query via postgres://ekokod:s3cret@203.0.113.1:5432/ekokod: %w", pgx.ErrNoRows),
@@ -110,7 +109,7 @@ func TestTranslateMapsUniqueViolationToStoreErrConflict(t *testing.T) {
 }
 
 // TestTranslateDoesNotMapForeignKeyOrCheckViolationsToConflict pins the
-// scope limit stated in the brief: 23503 and 23514 are caller bugs or scope
+// scope limit: 23503 and 23514 are caller bugs or scope
 // escapes, not a conflict a client can retry past, so they must fall through
 // to the scrubbed default like any other error.
 func TestTranslateDoesNotMapForeignKeyOrCheckViolationsToConflict(t *testing.T) {
@@ -160,7 +159,7 @@ func TestTranslateScrubsEverythingElseUsingThePoolsPassword(t *testing.T) {
 // their own, so a version of this test that used them directly would pass
 // regardless of whether the not-found and conflict branches scrub anything —
 // which is exactly the gap that let a real credential leak through the first
-// version of this file (Task 8c fix round 1, Important 1/2). A cause that
+// version of this file. A cause that
 // cannot possibly leak makes NotContains vacuous; wrapping every cause with
 // the credential is what makes the assertion mean something.
 func TestTranslateNeverLeaksThePasswordInAnyOutcome(t *testing.T) {

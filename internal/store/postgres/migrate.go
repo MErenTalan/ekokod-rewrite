@@ -99,7 +99,7 @@ func MigrateDownAll(ctx context.Context, dsn string, log *slog.Logger) error {
 
 // MigrateDownN rolls back exactly n applied migrations, most recent first —
 // `goose down` run n times, in one call. It exists for
-// TestF2IntervalColumnSurvivesCompressedChunk (task-5-brief.md step 1),
+// TestF2IntervalColumnSurvivesCompressedChunk,
 // which must roll back 00013 then 00012 ONLY, proving the pair's own
 // add-column/drop-column round-trips, without also tearing down every
 // earlier migration's tables the way MigrateDownAll would (which would lose

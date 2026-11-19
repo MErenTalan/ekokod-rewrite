@@ -15,7 +15,7 @@ import (
 )
 
 // InvoiceFixture is a real invoice to reconcile against the engine. Total is
-// vat_base + vat, never the supplier's rounded payable (I-2).
+// vat_base + vat, never the supplier's rounded payable.
 type InvoiceFixture struct {
 	Description string        `json:"description"`
 	Input       billing.Input `json:"input"`
@@ -101,7 +101,7 @@ func CompareInvoice(raw []byte, out io.Writer) error {
 	if err := w.Flush(); err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintln(out, "\nComputed amounts derive from unrounded quantities and prices; re-deriving them from the stored 4/6-decimal columns can differ by a kuruş (M-8).")
+	_, _ = fmt.Fprintln(out, "\nComputed amounts derive from unrounded quantities and prices; re-deriving them from the stored 4/6-decimal columns can differ by a kuruş.")
 	if unexplained > 0 {
 		return fmt.Errorf("%w: %d line(s)", ErrUnexplainedDifference, unexplained)
 	}

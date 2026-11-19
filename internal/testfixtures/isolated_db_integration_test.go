@@ -36,8 +36,7 @@ func TestNewIsolatedDBGivesEachCallItsOwnDatabase(t *testing.T) {
 	require.Equal(t, 1, onFirst, "the row must still be visible through the pool that inserted it")
 }
 
-// TestNewIsolatedDBSupportsTheSameSeedTwice is exactly what item 2 of the
-// Part C brief calls out: NewTenant with a fixed seed collides with itself
+// TestNewIsolatedDBSupportsTheSameSeedTwice: NewTenant with a fixed seed collides with itself
 // on the schema's unique indexes within ONE database, so a design that ever
 // shared a database across calls would make this fail. Calling it against
 // TWO calls' pools, with the SAME seed, must succeed on both — proof that
@@ -63,7 +62,7 @@ func TestNewIsolatedDBSupportsTheSameSeedTwice(t *testing.T) {
 // `CREATE DATABASE` + postgres.MigrateUp per call, and this test is what
 // would tell you to.
 //
-// PROOF 2's DERIVATION (Task 8c fix round 1, Important 3). consumption_hourly
+// PROOF 2's DERIVATION. consumption_hourly
 // is declared `timescaledb.materialized_only = false` (00005:113), so a
 // plain `select … from consumption_hourly` unions in real-time aggregation
 // over the raw hypertable REGARDLESS of whether anything was ever
@@ -151,7 +150,7 @@ func TestIsolatedDBCloneSupportsTimescaleOperations(t *testing.T) {
 }
 
 // TestNewIsolatedDBIsSafeUnderConcurrentCalls exercises the concurrency
-// requirement from the Part C brief directly, rather than trusting it from
+// requirement directly, rather than trusting it from
 // the design alone: several subtests call NewIsolatedDB in parallel, and
 // under -race that catches a shared name or a shared connection actually
 // racing, not merely a design that was SUPPOSED to avoid one.

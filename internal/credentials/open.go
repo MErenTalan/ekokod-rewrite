@@ -71,7 +71,7 @@ func (s *Service) buildCredentials(ctx context.Context, sc store.Scope, cred mod
 		Region:    derefOr(cred.IsolarRegion, ""),
 
 		TokenExpiresAt: cred.TokenExpiresAt,
-		IsActive:       cred.IsActive, // X-M3, final review B
+		IsActive:       cred.IsActive,
 	}, nil
 }
 
@@ -83,7 +83,7 @@ func (s *Service) buildCredentials(ctx context.Context, sc store.Scope, cred mod
 // ISolarAccessToken (refreshing it first if it is expiring within 5 min).
 //
 // Open satisfies ingest.CredentialOpener structurally — *Service is the
-// production implementation Task 10's pipeline calls through.
+// production implementation pipeline calls through.
 func (s *Service) Open(ctx context.Context, sc store.Scope, id uuid.UUID) (integration.Credentials, error) {
 	if !sc.Valid() {
 		return integration.Credentials{}, store.ErrInvalidScope

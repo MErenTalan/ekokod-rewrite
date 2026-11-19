@@ -180,7 +180,7 @@ func newSeedE2ECmd() *cobra.Command {
 //
 // An earlier version of this function (maskedDBHost) hand-parsed cfg.DB.URL
 // with net/url and ran the extracted host through secret.Redact against
-// password fragments. Task 9's review (Minor-1, Minor-2) found that pass
+// password fragments. That pass was
 // both pointless and actively harmful: net/url splits the authority at the
 // LAST unescaped '@', so (*url.URL).Host is disjoint from the userinfo
 // password by construction — the redaction pass never removed real
@@ -189,7 +189,7 @@ func newSeedE2ECmd() *cobra.Command {
 // (e.g. "postgres://u:host@myhost:5432/db" printed "my••••••••:5432"). It
 // also duplicated DSN-scrubbing logic config already solved.
 //
-// CORRECTION (task 9 review round 2, Critical): an earlier version of this
+// CORRECTION: an earlier version of this
 // comment claimed that reusing the Resolved row also "fixes" the
 // "(unknown)" degradation maskedDBHost showed for pgx keyword/value DSNs
 // and unix-socket DSNs. That claim was false, and dangerously so: at the

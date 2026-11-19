@@ -1,6 +1,6 @@
 {
   "name": "identical_values",
-  "doc": "I-3(a): two DIFFERENT readings (distinct ts) whose active_import register happens to carry the same value — a genuine zero-usage period, not the R92(1) zero-width case (identical_boundaries.json). It still emits, with active_import measured as \"0\", never nil: a mutation that treats a zero difference as unreported must fail this case.",
+  "doc": "I-3(a): two DIFFERENT readings (distinct ts) whose active_import register happens to carry the same value — a genuine zero-usage period, not the R92(1) zero-width case (identical_boundaries.json). It still emits, with active_import measured as \"0\", never nil: a bug that treats a zero difference as unreported must fail this case.",
   "input": {
     "window": {
       "from": "2025-06-02T00:00:00+03:00",

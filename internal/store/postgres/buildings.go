@@ -127,7 +127,7 @@ func (r *BuildingRepository) responsibleUserVisible(ctx context.Context, s store
 
 // Create implements store.BuildingRepository.Create.
 //
-// CONTROLLER RULING (fix round 1): creating a building requires an
+// CONTROLLER RULING: creating a building requires an
 // AllBuildings Scope. A narrow Scope names a fixed, pre-granted set of
 // existing buildings (Scope.BuildingIDs) — it has no way to grant itself a
 // NEW building id, so a narrow principal creating one would either name an
@@ -270,8 +270,7 @@ func (r *BuildingRepository) Contacts(ctx context.Context, s store.Scope, buildi
 // transaction (zero rows -> ErrNotFound, nothing replaced);
 // BuildingContactsDelete and BuildingContactInsert are each independently
 // scoped via a join/exists to buildings in their own statement, so a
-// cross-tenant buildingID is refused even without the lock above (see the
-// fix-round-1 mutation proofs in the task report). The contacts' own
+// cross-tenant buildingID is refused even without the lock above. The contacts' own
 // BuildingID fields are ignored in favour of buildingID.
 func (r *BuildingRepository) ReplaceContacts(ctx context.Context, s store.Scope, buildingID uuid.UUID, contacts []model.BuildingContact) ([]model.BuildingContact, error) {
 	if !s.Valid() {

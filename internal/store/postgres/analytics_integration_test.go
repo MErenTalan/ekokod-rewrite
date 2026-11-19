@@ -54,7 +54,7 @@ func TestAnalyticsConsumptionHourlyAndDailyAreRealTime(t *testing.T) {
 	// consumption_hourly and consumption_daily are materialized_only = false:
 	// real-time aggregation must make this readable with no manual refresh.
 	// analyzerIDs is a REQUIRED POSITIONAL parameter (empty/nil means NO
-	// ROWS, fail-closed — Important finding 4), so this analyzer must be
+	// ROWS, fail-closed), so this analyzer must be
 	// named explicitly.
 	hourly, err := analyticsRepo.ConsumptionHourly(ctx, tenant.Scope, []uuid.UUID{analyzerID},
 		store.TimeRange{From: analyticsEpoch, To: analyticsEpoch.Add(time.Hour)})
@@ -135,7 +135,7 @@ func TestAnalyticsProductionDailyIsRealTimeAndMonthlyRequiresRefresh(t *testing.
 
 	// plant_production_daily buckets in Europe/Istanbul too: same widened
 	// window as the consumption side. plantIDs is named explicitly
-	// (empty/nil means NO ROWS, fail-closed — Important finding 4).
+	// (empty/nil means NO ROWS, fail-closed).
 	daily, err := analyticsRepo.ProductionDaily(ctx, tenant.Scope, []uuid.UUID{plantID},
 		store.TimeRange{From: analyticsEpoch.Add(-24 * time.Hour), To: analyticsEpoch.Add(48 * time.Hour)})
 	require.NoError(t, err)
@@ -198,8 +198,7 @@ func TestAnalyticsRepositoryRejectsInvalidRange(t *testing.T) {
 	require.ErrorIs(t, err, store.ErrInvalidRange)
 }
 
-// TestAnalyticsConsumptionViewsIDsOutsideScopeContributeNoRowsAndEmptyIDsReturnNothing
-// is Important finding 3 + 4's table-driven isolation test, covering every
+// TestAnalyticsConsumptionViewsIDsOutsideScopeContributeNoRowsAndEmptyIDsReturnNothing is the table-driven isolation test, covering every
 // consumption view (ConsumptionHourly/Daily/Monthly/Yearly), not just
 // Hourly. Monthly and Yearly need a materialised refresh over a CLOSED
 // period (analyticsEpoch's own year, 2026, is still open relative to this
@@ -210,7 +209,7 @@ func TestAnalyticsRepositoryRejectsInvalidRange(t *testing.T) {
 // appear) and tenant B's foreign analyzer (must never appear), then proves
 // three things in one pass:
 //   - tenant B's row is non-vacuous: it reads back through tenant B's own
-//     Scope (F1 final review pass B, I3 — without this, "the company
+//     Scope (without this, "the company
 //     predicate is shadowed" cross-tenant assertion below would prove
 //     nothing if tenant B's row never existed in the first place);
 //   - the cross-tenant assertion is called with tenant A's ADMINSCOPE, not
@@ -221,7 +220,7 @@ func TestAnalyticsRepositoryRejectsInvalidRange(t *testing.T) {
 //     A's row;
 //   - a nil AND an empty (non-nil) ids list return NOTHING — never "every
 //     analyzer visible to scope" — even though tenant A has a real, visible
-//     row in the window (Important finding 4's fail-closed ruling; this is
+//     row in the window (the fail-closed rule; this is
 //     the case that would have differed under the old widen-on-empty SQL).
 func TestAnalyticsConsumptionViewsIDsOutsideScopeContributeNoRowsAndEmptyIDsReturnNothing(t *testing.T) {
 	t.Parallel()
@@ -356,8 +355,8 @@ func TestAnalyticsProductionViewsIDsOutsideScopeContributeNoRowsAndEmptyIDsRetur
 	}
 }
 
-// TestAnalyticsConsumptionDailyBucketsInIstanbulNotUTC is the folded-minor
-// exact-window test: unlike every other test in this file, which widens its
+// TestAnalyticsConsumptionDailyBucketsInIstanbulNotUTC is the exact-window
+// test: unlike every other test in this file, which widens its
 // window by a day on each side specifically to tolerate either UTC or
 // Istanbul bucket alignment, this window is EXACT — From is precisely
 // 2026-01-01T00:00+03:00 (Istanbul midnight), which is 2025-12-31T21:00:00Z.
@@ -395,8 +394,7 @@ func TestAnalyticsConsumptionDailyBucketsInIstanbulNotUTC(t *testing.T) {
 // --- isolation: the aggregates have no company_id; consumption_* join
 // through analyzers, plant_production_* through power_plants --------------
 
-// TestAnalyticsConsumptionHourlyIDsOutsideScopeContributeNoRows (F1 final
-// review pass B, I3) adds the positive control the review found missing —
+// TestAnalyticsConsumptionHourlyIDsOutsideScopeContributeNoRows adds a positive control —
 // without it, `require.Empty(t, got)` also passes on a window that matches
 // nothing at all — and calls the cross-tenant assertion with tenant A's
 // AdminScope rather than the narrow Scope, for the same shadowing reason as
@@ -439,8 +437,8 @@ func TestAnalyticsConsumptionHourlyIDsOutsideScopeContributeNoRows(t *testing.T)
 	require.Empty(t, all)
 }
 
-// TestAnalyticsProductionDailyIDsOutsideScopeContributeNoRows (I3) adds the
-// positive control the review found missing. It is NOT switched to
+// TestAnalyticsProductionDailyIDsOutsideScopeContributeNoRows adds the
+// positive control. It is NOT switched to
 // AdminScope: plant_production_daily joins power_plants, which has no
 // building_id at all (PlantRepository's doc), so tenant A's narrow Scope
 // already applies no building predicate here to shadow behind — only the

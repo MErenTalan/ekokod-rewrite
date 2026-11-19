@@ -1,10 +1,10 @@
 // Package seed embeds the F1 reference-data seed datasets and decodes them
 // into typed, validated Go values.
 //
-// This is Task 12a: it produces the reviewed data files, the Go types, and
+// It holds the reviewed data files, the Go types, and
 // the parsing/validation that turns embedded JSON into values a loader can
 // insert. It performs NO I/O beyond reading the embedded bytes and touches no
-// database — Task 12b's loader is the thing that takes the values returned
+// database — loader is the thing that takes the values returned
 // here and writes them through internal/store/postgres/admin.
 //
 // Every decimal in the JSON is a STRING, decoded with decimal.NewFromString.
@@ -127,8 +127,8 @@ type EmissionFactor struct {
 	Scope         *model.CarbonScope
 	// IsoCategory is filled from the legacy per-entry `category` field
 	// (EmissionCategory, constants.ts:550-557) on every entry. Provenance
-	// correction (task 12b): an earlier version of this package's
-	// documentation (see the task-12a report) said no legacy structure maps
+	// correction: an earlier version of this package's
+	// documentation said no legacy structure maps
 	// a GHG sub-clause to an ISO 14064 category, based only on reading the
 	// i18n display text in tr.json. That was incomplete — the legacy
 	// codebase DOES carry a structured mapping,

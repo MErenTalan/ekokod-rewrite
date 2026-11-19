@@ -1,5 +1,5 @@
--- AdminJournalRepository queries (store.AdminJournalRepository). Owned by
--- Task 11b, called only from internal/store/postgres/admin/journal.go.
+-- AdminJournalRepository queries (store.AdminJournalRepository), called
+-- only from internal/store/postgres/admin/journal.go.
 --
 -- job_runs.company_id and operational_messages.company_id are nullable
 -- precisely so a platform-wide job — run for no tenant — has somewhere to

@@ -134,8 +134,7 @@ func TestISO50001NotesIsolation(t *testing.T) {
 	require.Equal(t, "Updated note", updated.Body)
 
 	// Tenant B cannot read, create, update or delete tenant A's project's
-	// notes — including under tenant B's OWN AdminScope (fix round 1,
-	// Important 4: AllBuildings bypasses the building-id-list branch
+	// notes — including under tenant B's OWN AdminScope (AllBuildings bypasses the building-id-list branch
 	// entirely, so this is what proves the company_id predicate itself, not
 	// just the building-list check, is load-bearing).
 	_, err = repo.Notes(ctx, tenantB.Scope, project.ID, nil)
@@ -225,8 +224,7 @@ func TestISO50001AdminScopeCannotStoreAnotherTenantsForeignKeys(t *testing.T) {
 
 // TestISO50001ProjectCrossTenantAdminScopeIsolation proves Project() itself
 // (not just EnsureProject/ClauseDates/Notes) is refused for another
-// tenant's building, even under the caller's own AdminScope (fix round 1,
-// Important 4).
+// tenant's building, even under the caller's own AdminScope.
 func TestISO50001ProjectCrossTenantAdminScopeIsolation(t *testing.T) {
 	t.Parallel()
 	pool := testfixtures.NewIsolatedDB(t)

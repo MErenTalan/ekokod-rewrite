@@ -7,8 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestFingerprintFSChangesWithContent is F4 Task 0's requirement 6c
-// (pure-function level): the shared isolated-database template's name
+// TestFingerprintFSChangesWithContent (pure-function level): the shared isolated-database template's name
 // folds in MigrationsFingerprint specifically so that a CHANGED migration
 // set never reuses a stale template — this proves the fingerprint itself
 // actually changes when a migration file's content changes, using an

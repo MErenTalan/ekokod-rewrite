@@ -1,4 +1,4 @@
--- SMTP settings repository queries (migration 00008). Owned by Task 11c.
+-- SMTP settings repository queries (migration 00008).
 --
 -- smtp_settings' primary key IS company_id -- one row per company, no id
 -- column at all, and company_id is NOT NULL (`primary key references

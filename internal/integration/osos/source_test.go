@@ -62,7 +62,7 @@ func ososTestPool(t *testing.T, srv *fake.Server) (*httpx.Pool, *recordingSleep)
 }
 
 // ososTestCreds builds Credentials whose Endpoints point at srv, using the
-// exact placeholder names task-6-brief.md / 06 §2 name for each endpoint.
+// exact placeholder names the OSOS API notes / 06 §2 name for each endpoint.
 func ososTestCreds(srv *fake.Server) integration.Credentials {
 	return integration.Credentials{
 		CredentialID: uuid.New(),
@@ -111,8 +111,8 @@ func hourlyRoute(body []byte) fake.Route {
 // Test<P>FixtureMatrix is the F2 acceptance criterion "every adapter has
 // recorded fixtures covering success, empty result, partial data,
 // authentication failure, malformed payload, rate limiting, and
-// pagination". The subtest names are exactly fake.RequiredCases; Task 17's
-// guard checks them.
+// pagination". The subtest names are exactly fake.RequiredCases; the
+// fixture-matrix guard checks them.
 func TestOSOSFixtureMatrix(t *testing.T) {
 	from := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
 	to := time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC)
@@ -135,7 +135,7 @@ func TestOSOSFixtureMatrix(t *testing.T) {
 				require.Empty(t, res.Warnings)
 				require.Empty(t, res.HourlyValues)
 
-				// I2: assert every template-required field on one reading, not
+				// Assert every template-required field on one reading, not
 				// just how many came back.
 				r := res.Readings[0]
 				require.Equal(t, model.ReadingKindDaily, r.Kind)
@@ -360,7 +360,7 @@ func TestOSOSNeverReturnsReadingsOutsideWindow(t *testing.T) {
 	require.True(t, decimal.RequireFromString("1").Equal(*res.Readings[0].ActiveImport))
 }
 
-// TestOSOSDateIsIstanbulLocal pins the exact task-6-brief.md example:
+// TestOSOSDateIsIstanbulLocal pins the exact the OSOS API notes example:
 // meter_date "01/09/2026 00:15:00" -> 2026-08-31T21:15:00Z.
 func TestOSOSDateIsIstanbulLocal(t *testing.T) {
 	body := []byte(`{"energy":[{"meter_date":"01/09/2026 00:15:00","meter_serial_no":"SN0001","t_top_kWh":"1,000"}]}`)
@@ -378,7 +378,7 @@ func TestOSOSDateIsIstanbulLocal(t *testing.T) {
 	require.Equal(t, time.Date(2026, 8, 31, 21, 15, 0, 0, time.UTC), res.Readings[0].Ts.UTC())
 }
 
-// TestOSOSThousandsSeparatorsParseExactly pins the exact task-6-brief.md
+// TestOSOSThousandsSeparatorsParseExactly pins the exact the OSOS API notes
 // example: "12.345,678" -> 12345.678, x multiplier "40" -> 493827.12.
 func TestOSOSThousandsSeparatorsParseExactly(t *testing.T) {
 	body := []byte(`{"energy":[{"meter_date":"01/08/2026 10:00:00","meter_serial_no":"SN0001","t_top_kWh":"12.345,678"}]}`)
@@ -488,7 +488,7 @@ func TestOSOSErrorsCarryNoCredential(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// Fix round 1 (task-6-fix1-findings.md): I1-I8 and folded minors.
+// Edge cases: decoding, windows, page budget, config errors.
 // ---------------------------------------------------------------------
 
 // TestOSOSPerRowTypeMismatchWarnsWithoutFailingTheWholePage proves I7
@@ -640,9 +640,9 @@ func TestOSOSBoundaryRowsAtFromMinusOneSecondFromAndTo(t *testing.T) {
 }
 
 // TestOSOSFortyFiveDayWindowMakesExactlyTwoRequestsWithExpectedDates proves
-// I5: a 45-day window makes exactly two energy_values requests, with the
-// exact start/end params windowChunks computes (30 + 15 days). Mutation d
-// (task-6-fix1-findings.md): MaxWindow mutated to 15 days would make three
+// A 45-day window makes exactly two energy_values requests, with the
+// exact start/end params windowChunks computes (30 + 15 days). A MaxWindow
+// of 15 days would make three
 // requests, which this test's exact count and per-request date assertions
 // catch — unlike the pre-fix pagination check, which only asserted the
 // merged reading count and NextCursor.
@@ -801,8 +801,8 @@ func TestOSOSIdenticalDuplicateTimestampsDoNotWarn(t *testing.T) {
 	require.Empty(t, res.Warnings)
 }
 
-// TestOSOSMissingEndpointKeyIsErrConfig: task-6-fix1-findings.md folded
-// minor, reclassified by R48/I5 — a missing endpoint template key is
+// TestOSOSMissingEndpointKeyIsErrConfig: reclassified by R48 — a missing
+// endpoint template key is
 // *integration.Error{Kind: ErrConfig} (see missingEndpointErr's doc
 // comment in source.go), never ErrMalformedPayload and never ErrAuth, for
 // every one of OSOS's four endpoints.
@@ -870,8 +870,8 @@ func TestOSOSZeroMultiplierOrEmptyInstallationErrorsBeforeAnyCall(t *testing.T) 
 	}
 }
 
-// TestOSOSDiscoverSkipsRowsWithEmptyInstallationNumber: task-6-fix1-findings.md
-// folded minor — a row with no instalationNumber can never become an
+// TestOSOSDiscoverSkipsRowsWithEmptyInstallationNumber: a row with no
+// instalationNumber can never become an
 // identifiable MeteringPoint and is skipped, not turned into a
 // malformed-payload failure for every other installation in the response.
 func TestOSOSDiscoverSkipsRowsWithEmptyInstallationNumber(t *testing.T) {

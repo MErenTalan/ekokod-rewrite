@@ -1,7 +1,6 @@
 package marketdata_test
 
-// Fix round 1, finding I1 (task-12-fix1-findings.md): a mutation deleting
-// either dedupPrices(prices) or dedupYekdem(yek) from sync.go's call sites
+// Deleting either dedupPrices(prices) or dedupYekdem(yek) from sync.go's call sites
 // passed every existing test — sync_integration_test.go's fixtures never
 // hand back two rows sharing a key, and AdminMarketDataRepository's own
 // real "refuse a duplicate key" rule (store.ErrConflict) would have turned
@@ -132,15 +131,14 @@ func (d *duplicatingSource) YekdemUnitCost(_ context.Context, from, to time.Time
 	return d.yekdem(from, to)
 }
 
-// TestSyncPricesDedupesDuplicateHourBeforeUpsert (I1): when HourlyPTF hands
+// TestSyncPricesDedupesDuplicateHourBeforeUpsert: when HourlyPTF hands
 // back two rows for the same Ts (a provider defect, or two overlapping
 // chunks — see dedupPrices' own doc comment in sync.go), Syncer must send
 // UpsertHourlyPrices exactly one row for that Ts, keeping the FIRST
 // occurrence — dedupPrices' documented rule. Deleting the `prices =
 // dedupPrices(prices)` call in sync.go makes this FAIL: the fake would
 // then receive two rows for the same Ts, so the "exactly one row" count
-// assertion below fails (see task-12-report.md's Fix round 1 section for
-// the recorded failure output).
+// assertion below fails.
 func TestSyncPricesDedupesDuplicateHourBeforeUpsert(t *testing.T) {
 	from := time.Date(2026, 3, 1, 0, 0, 0, 0, normalize.Istanbul).UTC()
 	to := time.Date(2026, 3, 1, 1, 0, 0, 0, normalize.Istanbul).UTC() // one hour window
@@ -169,7 +167,7 @@ func TestSyncPricesDedupesDuplicateHourBeforeUpsert(t *testing.T) {
 	require.True(t, first.Equal(rows[0].PTF), "the FIRST occurrence for a duplicated Ts must win (dedupPrices' documented rule), got %s", rows[0].PTF)
 }
 
-// TestSyncPricesDedupesDuplicateYekdemMonthBeforeUpsert (I1): the same
+// TestSyncPricesDedupesDuplicateYekdemMonthBeforeUpsert: the same
 // proof as above for YEKDEM — dedupYekdem keeps the first (Year, Month)
 // occurrence. Deleting `yek = dedupYekdem(yek)` in sync.go makes this
 // FAIL.

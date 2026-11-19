@@ -55,8 +55,7 @@ type IntegrationDefinition struct {
 //
 // SecretEnc and ExtraEnc are AES-256-GCM CIPHERTEXT and stay ciphertext in
 // this struct. There is deliberately no plaintext field: the ordinary Get must
-// not carry a decrypted secret (Task 11's
-// TestIntegrationCredentialsAreNeverReturnedInPlaintext pins that), and a
+// not carry a decrypted secret (TestIntegrationCredentialsAreNeverReturnedInPlaintext pins that), and a
 // caller that genuinely needs the plaintext asks for it through an explicit
 // method that decrypts on the spot.
 //

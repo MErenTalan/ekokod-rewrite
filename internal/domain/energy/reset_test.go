@@ -149,7 +149,7 @@ func TestDeriveIsSuspectWhenOnlyTheFirstResetHasAPrior(t *testing.T) {
 	reset1 := resetAt(t0.Add(20*time.Minute), "0")
 	reset2 := resetAt(t0.Add(40*time.Minute), "0")
 	end := readingAt(t0.Add(time.Hour), "25")
-	// A prior before start must also be ignored (I-3a) alongside this case.
+	// A prior before start must also be ignored alongside this case.
 	priorBeforeStart := readingAt(t0.Add(-5*time.Minute), "890")
 
 	d := energy.Derive(win(t0, time.Hour), start, end,
@@ -247,7 +247,7 @@ func TestDeriveWithAnUnusableResetRowIsSuspectForThatRegisterOnly(t *testing.T) 
 
 	require.Nil(t, d.Values[energy.T1Import], "never -390 or any other plain difference")
 	require.Equal(t, energy.ReasonMeterReset, d.Suspect[energy.T1Import].Reason, "R93: an unusable reset row is meter_reset, not negative_delta")
-	require.Nil(t, d.Suspect[energy.T1Import].Delta, "meter_reset never carries a Delta (M-2)")
+	require.Nil(t, d.Suspect[energy.T1Import].Delta, "meter_reset never carries a Delta")
 	require.Equal(t, 1, d.Suspect[energy.T1Import].ResetRows, "ResetRows counts in-window resets regardless of whether they applied to this register")
 }
 
@@ -297,7 +297,7 @@ func TestDeriveIsSuspectWhenAStartSideResetRowOmitsARegisterBothBoundariesReport
 
 	require.Nil(t, d.Values[energy.T1Import], "never 4030")
 	require.Equal(t, energy.ReasonMeterReset, d.Suspect[energy.T1Import].Reason, "R93 start side: an unusable reset row is meter_reset")
-	require.Nil(t, d.Suspect[energy.T1Import].Delta, "meter_reset never carries a Delta (M-2)")
+	require.Nil(t, d.Suspect[energy.T1Import].Delta, "meter_reset never carries a Delta")
 	require.Equal(t, 1, d.Suspect[energy.T1Import].ResetRows)
 }
 
@@ -667,7 +667,7 @@ func TestDeriveIgnoresAResetAtStartWhenStartIsThatResetRow(t *testing.T) {
 
 	requireValue(t, d, energy.ActiveImport, "40")
 	require.Empty(t, d.Suspect)
-	require.Equal(t, plain.Values, d.Values, "M-8: identical to the plain difference, no reset formula applied")
+	require.Equal(t, plain.Values, d.Values, "identical to the plain difference, no reset formula applied")
 }
 
 // R92(5): resets must be kind=reset and priors must be kind=load_profile
@@ -698,7 +698,7 @@ func TestDeriveIgnoresElementsOfTheWrongKind(t *testing.T) {
 	// A non-reset reading whose kind priors/resets filtering would otherwise
 	// skip must still be ignored as reset evidence when it sits after the
 	// real reset.
-	notAResetAfter := energy.Reading{ // billing, not reset — placed AFTER the real reset (M-12)
+	notAResetAfter := energy.Reading{ // billing, not reset — placed AFTER the real reset
 		TS: t0.Add(45 * time.Minute), Kind: energy.KindBilling,
 		Values: map[energy.Register]*decimal.Decimal{energy.ActiveImport: dec("12345")},
 	}
@@ -731,10 +731,10 @@ func TestDeriveIgnoresAResetAfterTheEndBoundary(t *testing.T) {
 
 // resetsBefore/priorsBefore are rebuilt from literals rather than
 // copied from resets/priors, so they share no Values map or *decimal.Decimal
-// pointer with the inputs — a mutation that edited a map entry or a decimal
+// pointer with the inputs — a bug that edited a map entry or a decimal
 // in place would otherwise change both sides identically and stay green.
 // The fixture also derives successfully through BOTH resets (positive
-// result, no early return), so a mutation anywhere in the loop gets a
+// result, no early return), so a stray write anywhere in the loop gets a
 // chance to touch the inputs before the function returns.
 func TestDeriveDoesNotMutateInputs(t *testing.T) {
 	resets := []energy.Reading{*resetAt(t0.Add(20*time.Minute), "0"), *resetAt(t0.Add(40*time.Minute), "0")}

@@ -3,9 +3,9 @@ package normalize
 import "time"
 
 // Window is a half-open time range [From, To). It is deliberately a plain
-// struct, not job.Window (Task 1): normalize has no F2-task dependency and
+// struct, not job.Window: normalize has no F2-task dependency and
 // must stay that way regardless of wave order. Callers that need
-// job.Window (backfill, Task 15) convert with one field-for-field copy.
+// job.Window (backfill) convert with one field-for-field copy.
 type Window struct {
 	From, To time.Time
 }

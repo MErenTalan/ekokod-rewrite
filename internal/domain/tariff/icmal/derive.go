@@ -53,7 +53,7 @@ var (
 // Analyse derives coefficients per ETSO code from regular rows only (R130,
 // C-1): not cancelled, positive total kWh, no supplementary (Ek) consumption.
 // base maps "YYYYMM" to (PTF month average + YEKDEM) / 1000; contracted maps an
-// ETSO code to its contracted power (C-2); overrunMultiplier is the dated
+// ETSO code to its contracted power; overrunMultiplier is the dated
 // demand overrun multiplier.
 func Analyse(rows []model.IcmalRow, base map[string]decimal.Decimal, contracted map[string]decimal.Decimal, overrunMultiplier decimal.Decimal) []Analysis {
 	type group struct {
@@ -265,7 +265,7 @@ func reactiveConsensus(rows []model.IcmalRow, warn func(i int, code, text string
 }
 
 // supplementary reports an (Ek) correction row: negative kWh, supplementary
-// consumption, or a subscriber group ending "(Ek)" (C-1).
+// consumption, or a subscriber group ending "(Ek)".
 func supplementary(r model.IcmalRow) bool {
 	if r.TotalKwh != nil && r.TotalKwh.IsNegative() {
 		return true

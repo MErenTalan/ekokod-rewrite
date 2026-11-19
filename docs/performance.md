@@ -61,7 +61,7 @@ time predicate non-sargable made it scan all eleven, so the test guards the prop
   bucket, so it was zero for a meter that reports once an hour, and daily/monthly figures lost one
   interval per bucket. Migration 00021 adds a `first()` per register and `first_ts` to the four
   consumption aggregates. The analytics repository now reads one bucket on each side and computes
-  `boundary(b1) − boundary(b0)` (02 §3.1) (plan `docs/superpowers/plans/2026-09-24-f15q-boundary-differencing.md`,
+  `boundary(b1) − boundary(b0)` (02 §3.1) (`docs/decisions.md`,
   R470–R474). Billing is unchanged.
 
 ## PENDING

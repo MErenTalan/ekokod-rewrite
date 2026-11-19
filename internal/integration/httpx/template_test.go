@@ -8,7 +8,7 @@ import (
 	"github.com/MErenTalan/ekokod-rewrite/internal/integration/httpx"
 )
 
-// TestExpandSubstitutesPathAndQuery is the brief's worked example verbatim:
+// TestExpandSubstitutesPathAndQuery is the worked example verbatim:
 // a path placeholder is url.PathEscape'd, a query placeholder is
 // url.QueryEscape'd — different escaping rules for the same character
 // class ('/' -> %2F either way, but a space is %20 in the path and '+' in

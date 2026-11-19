@@ -94,16 +94,14 @@ func TestISolarDeviceMinuteSeriesRejectsEmptyPSKeys(t *testing.T) {
 	require.Empty(t, srv.Requests(), "an empty ps_key list must never reach the network")
 }
 
-// --- fix round 1: R42 MaxWindow + 3h sub-window splitting (I8) -------------
+// --- R42 MaxWindow + 3h sub-window splitting -------------
 
 // TestISolarDeviceMinuteSeriesRefusesWindowLargerThanMaxWindow: R42 — a
 // [from, to) wider than isolar.MaxWindowMinute (1 day) is refused with a
-// non-retryable error BEFORE any call. MUTATION PROOF (task's fix-round-1
-// requirement): removing series.go's checkMaxWindow call makes this test
+// non-retryable error BEFORE any call. Regression check: removing series.go's checkMaxWindow call makes this test
 // fail (err becomes nil and the request reaches the fake server, which is
 // not configured with any route and would fail the test via
-// "fake: unmatched request") — see task-13-report.md's Fix round 1 section
-// for the observed failure output.
+// "fake: unmatched request").
 func TestISolarDeviceMinuteSeriesRefusesWindowLargerThanMaxWindow(t *testing.T) {
 	srv := fake.NewTLSServer(t)
 	c := isolar.New(isolarTestPool(t, srv), isolar.Options{Clock: clock.NewFake(fixtureFrom)})
@@ -138,11 +136,10 @@ func TestISolarPlantMinuteSeriesRefusesWindowLargerThanMaxWindow(t *testing.T) {
 // per-request cap), issued as one call per sub-window and merged. A 7h
 // window must issue exactly 3 calls: [0,3h), [3h,6h), [6h,7h) — the last
 // one clipped, proving the split is exact even when the window is not a
-// whole multiple of 3h. MUTATION PROOF (task's fix-round-1 requirement):
+// whole multiple of 3h. Regression check:
 // replacing series.go's subWindows(from, to, legacyMaxSubWindow) with a
 // single [from, to) window (round 1's original behaviour) makes this test
-// fail with len(reqs) == 1, not 3 — see task-13-report.md's Fix round 1
-// section for the observed failure output.
+// fail with len(reqs) == 1, not 3.
 func TestISolarDeviceMinuteSeriesSplitsIntoThreeHourSubWindows(t *testing.T) {
 	srv := fake.NewTLSServer(t, deviceMinuteRoute(fake.JSON(http.StatusOK, []byte(`{"result_code":"1","result_msg":"success","result_data":{}}`))))
 	c := isolar.New(isolarTestPool(t, srv), isolar.Options{Clock: clock.NewFake(fixtureFrom)})

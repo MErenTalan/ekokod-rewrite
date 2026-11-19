@@ -63,7 +63,7 @@ func gridboxTestPool(t *testing.T, srv *fake.Server) (*httpx.Pool, *recordingSle
 }
 
 // fakeLocker is a Locker that records Acquire/Release pairs in order, for
-// TestGridBoxDataCallsSerializePerCompany (I1: fix round 1 finding). Mirrors
+// TestGridBoxDataCallsSerializePerCompany. Mirrors
 // httpx/client_test.go's own copy (unexported to that package).
 type fakeLocker struct {
 	mu     sync.Mutex
@@ -219,8 +219,8 @@ func sortReadings(rs []model.MeterReading) {
 // TestGridBoxFixtureMatrix is the F2 acceptance criterion "every adapter
 // has recorded fixtures covering success, empty result, partial data,
 // authentication failure, malformed payload, rate limiting, and
-// pagination". The subtest names are exactly fake.RequiredCases; Task 17's
-// guard checks them.
+// pagination". The subtest names are exactly fake.RequiredCases; the
+// fixture-matrix guard checks them.
 func TestGridBoxFixtureMatrix(t *testing.T) {
 	dayFrom, dayTo := istanbulDay(2026, 9, 1)
 	// pagFrom/pagTo span 45 days (Jan1 - Feb15 Istanbul), which splitWindow
@@ -383,14 +383,14 @@ func TestGridBoxFixtureMatrix(t *testing.T) {
 	}
 }
 
-// --- Named acceptance tests (Task 7 brief) ---------------------------------
+// --- Named acceptance tests ---------------------------------
 
 // TestGridBoxMultiplierResolution is the F2 acceptance criterion "GridBox
 // multiplier resolution is tested for all three paths, including the
 // fallback-to-1 case which must emit a warning". Unlike
 // mapping_test.go's TestGridBoxResolveMultiplierPureCases (ResolveMultiplier
 // called directly), this drives every path through FetchReadings so
-// "readings stamped 80" and "res.Warnings" — both of which the brief
+// "readings stamped 80" and "res.Warnings" — both of which the GridBox API notes
 // mentions explicitly — are proven end to end.
 func TestGridBoxMultiplierResolution(t *testing.T) {
 	t.Run("last_endex", func(t *testing.T) {
@@ -661,7 +661,7 @@ func TestGridBoxVerifyMapsAuthFailure(t *testing.T) {
 	require.ErrorIs(t, err, integration.ErrAuth)
 }
 
-// TestGridBoxDataCallsSerializePerCompany is fix round 1 finding I1: a
+// TestGridBoxDataCallsSerializePerCompany: a
 // recording Locker must see the per-company key on every DATA-endpoint call
 // a real FetchReadings makes (last_success_date, last_endex, load_profiles),
 // not only on the token exchange — provider-defaults.md's `gridbox` row
@@ -669,10 +669,9 @@ func TestGridBoxVerifyMapsAuthFailure(t *testing.T) {
 // exchange acquires its own, distinct key ("gridbox:token:<company>" —
 // tokenClient's doc in source.go explains why the two are kept separate).
 //
-// Mutation proof (fix round 1): removing dataClientConfig's SerializeKey
+// Removing dataClientConfig's SerializeKey
 // (source.go) makes the "data key" assertion below FAIL with 0 acquires of
-// "gridbox:<company>" — recorded in task-7-report.md's "Fix round 1"
-// section.
+// "gridbox:<company>".
 func TestGridBoxDataCallsSerializePerCompany(t *testing.T) {
 	from, to := istanbulDay(2026, 9, 1)
 	srv := fake.NewTLSServer(t, append(gridboxBaseRoutes(t),
@@ -799,7 +798,7 @@ func TestGridBoxErrorsCarryNoCredential(t *testing.T) {
 
 // --- bonus: PageBudget / NextCursor (R4/R20) --------------------------------
 
-// TestGridBoxPageBudgetReturnsNextCursor is not one of the brief's named
+// TestGridBoxPageBudgetReturnsNextCursor is not one of the GridBox API notes named
 // tests, but it is the direct proof of R4/R20/R34 pagination the
 // FixtureMatrix's "pagination" subtest (default PageBudget, both chunks in
 // one call) does not exercise on its own: a PageBudget of 1 against a
@@ -856,7 +855,7 @@ func TestGridBoxPageBudgetReturnsNextCursor(t *testing.T) {
 	require.Contains(t, loadProfileCalls[1].RawQuery, "endDate=2026-02-14")
 }
 
-// --- adapter review patterns (Task 6 OSOS opus review, applied here) ------
+// --- adapter patterns (shared with OSOS) ----------------------------------
 
 // TestGridBoxStampsEveryTemplateRequiredField is adapter review pattern 1:
 // every field the template requires an adapter to stamp — Ts, Kind,
@@ -959,7 +958,7 @@ func TestGridBoxMalformedEnvelopeShapes(t *testing.T) {
 // but a genuine shape mismatch on a *json.Number field) produces a
 // WarnUnparseableRow for that row alone, never an ErrMalformedPayload for
 // the whole page.
-// M4 (fix round 1 finding): every register field decodes into *json.Number
+// Every register field decodes into *json.Number
 // (wire.go), so normalize.OptionalNumber's own "no value" sentinel strings
 // — "" and "-" — are NOT valid JSON for that type (unlike a genuine bare
 // number or null): encoding/json refuses to unmarshal them into a

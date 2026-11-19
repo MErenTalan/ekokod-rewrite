@@ -1,5 +1,5 @@
--- AdminCatalogueRepository queries (store.AdminCatalogueRepository). Owned by
--- Task 11b, called only from internal/store/postgres/admin/catalogue.go.
+-- AdminCatalogueRepository queries (store.AdminCatalogueRepository), called
+-- only from internal/store/postgres/admin/catalogue.go.
 --
 -- Every write here is platform-wide and unscoped by design (see
 -- repository.go's AdminCatalogueRepository doc). national_tariff_schedule and

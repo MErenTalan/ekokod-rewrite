@@ -201,9 +201,9 @@ type BuildingCreateParams struct {
 // coalesce(sqlc.narg(at)::timestamptz, now()): a caller that leaves CreatedAt at its zero
 // value gets the database's own now() rather than writing 0001-01-01.
 //
-// CONTROLLER RULING (fix round 1, second dispatch): every stored foreign key
+// RULE: every stored foreign key
 // must be validated IN SQL, inside the write statement — never by a
-// Go-level check alone (a sibling task's AdminScope write stored another
+// Go-level check alone (an AdminScope write once stored another
 // tenant's building id because its Go-level check used
 // Scope.AllowsBuilding(), which returns true for ANY id under AllBuildings
 // with no company_id check at all). responsible_user_id is embedded here as

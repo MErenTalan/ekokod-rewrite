@@ -123,8 +123,7 @@ func TestAnomalyListRejectsInvalidRange(t *testing.T) {
 // --- isolation: consumption_anomalies has no company_id, joins through
 // analyzers ------------------------------------------------------------------
 
-// TestAnomalyCreateRefusesInvisibleAnalyzer is a write isolation proof
-// (F1 final review pass B, I3). The cross-tenant assertion is called with
+// TestAnomalyCreateRefusesInvisibleAnalyzer is a write isolation proof. The cross-tenant assertion is called with
 // tenant A's AdminScope, not the narrow Scope: under a narrow Scope the
 // building predicate alone already excludes tenant B's analyzer (its
 // building_id is never in A's building_ids), so a tautologised
@@ -164,8 +163,8 @@ func TestAnomalyCreateRefusesInvisibleAnalyzer(t *testing.T) {
 	require.NotEqual(t, uuid.Nil, created.ID)
 }
 
-// TestAnomalyGetIsIsolatedToVisibleAnalyzers is Get's isolation proof
-// (I3): a positive control (tenant B reads its own row through its own
+// TestAnomalyGetIsIsolatedToVisibleAnalyzers is Get's isolation proof:
+// a positive control (tenant B reads its own row through its own
 // Scope) and a cross-tenant assertion under tenant A's AdminScope, for the
 // same reason as TestAnomalyCreateRefusesInvisibleAnalyzer — a narrow Scope
 // would let the building predicate shadow a tautologised company_id check.
@@ -203,8 +202,8 @@ func TestAnomalyGetIsIsolatedToVisibleAnalyzers(t *testing.T) {
 	require.Equal(t, own.ID, wide.ID)
 }
 
-// TestAnomalyListIDsOutsideScopeContributeNoRows is List's isolation proof
-// (I3): a positive control (tenant B lists its own row) and a cross-tenant
+// TestAnomalyListIDsOutsideScopeContributeNoRows is List's isolation proof:
+// a positive control (tenant B lists its own row) and a cross-tenant
 // assertion under tenant A's AdminScope, for the same reason as the two
 // tests above.
 func TestAnomalyListIDsOutsideScopeContributeNoRows(t *testing.T) {

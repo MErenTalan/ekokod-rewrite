@@ -79,8 +79,7 @@ func TestPlantRepositoryCreateGetUpdateSoftDelete(t *testing.T) {
 	}
 }
 
-// TestPlantRepositoryUpdateRefusesAForeignCompany is the fix-round-1 proof
-// for Important 3: Update must refuse a model value whose CompanyID names
+// TestPlantRepositoryUpdateRefusesAForeignCompany: Update must refuse a model value whose CompanyID names
 // another company, exactly like Create does, and write nothing.
 //
 // The row named by p.ID belongs to mine's OWN company throughout —
@@ -110,8 +109,8 @@ func TestPlantRepositoryUpdateRefusesAForeignCompany(t *testing.T) {
 	require.Equal(t, myPlant.Name, still.Name, "nothing may be written by a refused Update")
 }
 
-// TestPlantRepositoryDevicesExcludeASoftDeletedParent pins wave-f-context
-// rule 4 for PlantDevicesList's LEFT JOIN shape: a child of a soft-deleted
+// TestPlantRepositoryDevicesExcludeASoftDeletedParent pins the soft-delete
+// rule for PlantDevicesList's LEFT JOIN shape: a child of a soft-deleted
 // parent must not be readable through the parent-scoped query either.
 func TestPlantRepositoryDevicesExcludeASoftDeletedParent(t *testing.T) {
 	t.Parallel()

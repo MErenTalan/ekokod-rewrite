@@ -1,7 +1,7 @@
 // Package isolar is the iSolarCloud (Sungrow) adapter: plant/device
 // discovery, minute production series and fault alarms (06-integrations.md
-// §6). Unlike the meter adapters (internal/integration/osos, .../gridbox,
-// .../aril, .../pm5340), it does not implement integration.MeterDataSource —
+// §6). Unlike the meter adapters (internal/integration/osos, .../gridbox,.
+// ../aril, .../pm5340), it does not implement integration.MeterDataSource —
 // it feeds plant production, power_plant_devices and plant faults instead
 // of meter_readings, so its Client exposes its own bespoke method set.
 //
@@ -100,9 +100,9 @@ var authFailureMsgPattern = regexp.MustCompile(`(?i)token|auth|appkey|access`)
 
 // classifyResult maps a non-success (envelope.ResultCode != "1") result to
 // an integration.Error Kind. This is the ONE place that mapping lives (per
-// the task brief: "isolate the code→Kind mapping in one place with a
+// the iSolar API notes: "isolate the code→Kind mapping in one place with a
 // comment"). iSolar's actual non-success codes are UNVERIFIED against a
-// real response (R21, open question Q4) — the brief's own worked example
+// real response (R21, open question Q4) — the iSolar API notes' own worked example
 // (result_code "E00003", result_msg "er_token_login_invalid") matches via
 // the "token" word in result_msg, which is the mechanism R21 specifies:
 // "a result_msg matching (?i)token|auth|appkey|access, is ErrAuth; anything

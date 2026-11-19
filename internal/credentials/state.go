@@ -65,9 +65,8 @@ func signState(key []byte, companyID, credentialID uuid.UUID, now time.Time) (st
 
 // verifyState checks the HMAC (via hmac.Equal, never a string/byte-slice
 // == comparison — that would be a timing side channel) and, INDEPENDENTLY,
-// the expiry: a mutation that skips the expiry check must not be masked by
-// the HMAC check alone, which is exactly what Step 5(c)'s mutation proof
-// exercises.
+// the expiry: a bug that skips the expiry check must not be masked by
+// the HMAC check alone (state_test.go exercises exactly that).
 func verifyState(key []byte, token string, now time.Time) (stateClaims, error) {
 	encPayload, encSig, ok := strings.Cut(token, ".")
 	if !ok {

@@ -8,8 +8,8 @@ import (
 )
 
 // The single audited conversion pair between the generated types and the
-// domain model, moved to internal/store/postgres/internal/pgnum at the Wave F
-// integration commit so that package admin — a separate package that cannot
+// domain model lives in internal/store/postgres/internal/pgnum so that
+// package admin — a separate package that cannot
 // reach an unexported function here — can call it directly instead of
 // carrying its own verbatim copy. These four functions are one-line
 // delegating wrappers kept under their original unexported names so that no

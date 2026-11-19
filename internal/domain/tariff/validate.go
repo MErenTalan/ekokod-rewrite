@@ -103,7 +103,7 @@ func Validate(d Draft) (model.Tariff, error) {
 		if t.Currency != model.CurrencyTRY { // R127
 			set("currency", CodeMustBeTRY)
 		}
-		if t.DistributionPriceSource == model.PriceSourceKbk && t.KbkDistributionCostTlPerKwh == nil { // I-11b
+		if t.DistributionPriceSource == model.PriceSourceKbk && t.KbkDistributionCostTlPerKwh == nil {
 			set("kbk_distribution_cost_tl_per_kwh", CodeRequired)
 		}
 		if t.ReactivePriceSource == model.PriceSourceKbk && t.KbkReactivePower == nil {
@@ -120,7 +120,7 @@ func Validate(d Draft) (model.Tariff, error) {
 			set("contracted_power_kw", CodeRequired)
 		}
 		if ptf && t.PowerPriceSource == model.PriceSourceKbk {
-			if t.KbkPowerPrice == nil { // I-11a
+			if t.KbkPowerPrice == nil {
 				set("kbk_power_price", CodeRequired)
 			}
 		} else if t.PowerUnitPrice == nil {
@@ -134,7 +134,7 @@ func Validate(d Draft) (model.Tariff, error) {
 			set("power_unit_price", CodeMustBeEmpty)
 		}
 	}
-	if t.OveruseThresholdKwhPerDay != nil && t.OverusePrice == nil { // C-3
+	if t.OveruseThresholdKwhPerDay != nil && t.OverusePrice == nil {
 		set("overuse_price", CodeRequired)
 	}
 
@@ -153,7 +153,7 @@ func Validate(d Draft) (model.Tariff, error) {
 		if !c.Basis.Valid() {
 			set(fmt.Sprintf("extra_charges[%d].basis", i), CodeInvalid)
 		}
-		if c.Basis == model.ExtraChargeBasisPerContractedKw && t.ContractedPowerKw == nil { // M-5
+		if c.Basis == model.ExtraChargeBasisPerContractedKw && t.ContractedPowerKw == nil {
 			set(fmt.Sprintf("extra_charges[%d].basis", i), CodeRequired)
 		}
 	}

@@ -41,8 +41,7 @@ const (
 )
 
 // redactDSN renders raw for display with any password removed. It must
-// never return raw unredacted on any path (task 9 review round 2,
-// Critical): the two early exits below used to be a bare `return raw`,
+// never return raw unredacted on any path: the two early exits below used to be a bare `return raw`,
 // which — combined with dsnDisplay unconditionally prepending the mask
 // glyph — made an un-redacted DSN look redacted while printing its
 // password in clear. That was reachable for any DSN whose credential does

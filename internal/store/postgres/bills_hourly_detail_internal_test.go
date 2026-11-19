@@ -40,11 +40,9 @@ import (
 // package everything else in this directory uses and shares
 // testfixtures.NewIsolatedDB's one container instead of booting its own.
 //
-// This is the same class of proof fix round 1 used for
-// AlarmAnalyzerInsert/AlarmChannelInsert/BillMemberInsert (see
-// task-11a-report.md, "Important 1") — BillHourlyDetailInsert was the one
-// sibling round 1 left as :exec, which is exactly the defect this round
-// fixes: an insert whose WHERE EXISTS guard matches zero rows still reports
+// This is the same class of proof as for
+// AlarmAnalyzerInsert/AlarmChannelInsert/BillMemberInsert — BillHourlyDetailInsert
+// used to be :exec, which is exactly the defect: an insert whose WHERE EXISTS guard matches zero rows still reports
 // err == nil for :exec, so a caller checking only err reads a
 // silently-guarded no-op as success.
 //

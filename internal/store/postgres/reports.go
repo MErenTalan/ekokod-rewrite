@@ -131,7 +131,7 @@ func (r *ReportRepository) Upsert(ctx context.Context, s store.Scope, rp model.R
 		return model.Report{}, store.ErrNotFound
 	}
 	// Fast pre-check only — see Scope.AllowsBuilding's doc comment and
-	// Critical Finding 1 (task-11a fix round 1): an AllBuildings Scope
+	// An AllBuildings Scope
 	// answers true here for ANY building id, including another tenant's.
 	// ReportUpsert validates the stored building_id itself, in SQL, against
 	// this Scope's company, deleted_at and building branch, so the write is

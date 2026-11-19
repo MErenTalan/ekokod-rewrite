@@ -247,9 +247,9 @@ func TestGridBoxDiscoverMapsEveryField(t *testing.T) {
 
 // TestGridBoxResolveMultiplierPureCases covers ResolveMultiplier directly,
 // independent of any HTTP call, for the two paths whose acceptance-test
-// prose (task-7-brief.md) names no FetchResult ("res") — the HTTP-level
+// prose names no FetchResult ("res") — the HTTP-level
 // TestGridBoxMultiplierResolution in source_test.go covers the "last_endex"
-// and "fallback_to_one_warns" paths, which the brief explicitly ties to a
+// and "fallback_to_one_warns" paths, which the GridBox API notes explicitly ties to a
 // FetchResult ("readings stamped 80", "res.Warnings").
 func TestGridBoxResolveMultiplierPureCases(t *testing.T) {
 	t.Run("derived_from_load_profile", func(t *testing.T) {

@@ -168,8 +168,7 @@ func TestUserRepositoryCreateGetUpdateSoftDelete(t *testing.T) {
 	}
 }
 
-// TestUserRepositoryUpdateRefusesAForeignCompany is the fix-round-1 proof for
-// Important 3: Update must refuse a model value whose CompanyID names
+// TestUserRepositoryUpdateRefusesAForeignCompany: Update must refuse a model value whose CompanyID names
 // another company, exactly like Create does, and write nothing.
 //
 // The row named by u.ID belongs to mine's OWN company throughout — the
@@ -203,7 +202,7 @@ func TestUserRepositoryUpdateRefusesAForeignCompany(t *testing.T) {
 }
 
 // TestUserRepositoryPasswordHistoryExcludesASoftDeletedUsersHistory pins
-// wave-f-context rule 4 (a child of a soft-deleted parent is not readable)
+// the soft-delete rule (a child of a soft-deleted parent is not readable)
 // for the UserVisible-gated PasswordHistory path.
 func TestUserRepositoryPasswordHistoryExcludesASoftDeletedUsersHistory(t *testing.T) {
 	t.Parallel()
@@ -243,8 +242,8 @@ func TestUserRepositoryCreateRefusesAnotherCompany(t *testing.T) {
 }
 
 // TestUserRepositorySetPasswordAndPasswordHistoryIsolateByCompany is the
-// mandatory isolation test for the task-8b dispatch row "UserRepository.
-// SetPassword, PasswordHistory — user_password_history -> users".
+// mandatory isolation test for UserRepository.SetPassword and
+// PasswordHistory (user_password_history -> users).
 func TestUserRepositorySetPasswordAndPasswordHistoryIsolateByCompany(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -376,7 +375,7 @@ func TestSessionRepositoryRevokeIsolatesByCompany(t *testing.T) {
 	require.NotNil(t, got.RevokedAt)
 }
 
-// TestSessionRepositoryRevokeKeepsTheOriginalRevokedAt pins folded minor 3:
+// TestSessionRepositoryRevokeKeepsTheOriginalRevokedAt:
 // re-revoking an already-revoked session must not overwrite revoked_at,
 // because replay detection compares against the ORIGINAL instant.
 func TestSessionRepositoryRevokeKeepsTheOriginalRevokedAt(t *testing.T) {

@@ -33,8 +33,8 @@ func TestRedactDSN(t *testing.T) {
 	require.Equal(t, "redis://redis:6379/0", redactDSN("redis://redis:6379/0"))
 	// "not a url" parses without error (url.Parse is extremely permissive —
 	// it succeeds with an empty Scheme, treating the whole input as a
-	// relative path) but carries no scheme, so it is not URL-shaped. Before
-	// task 9's fix round 2, redactDSN's fallback for this case was a bare
+	// relative path) but carries no scheme, so it is not URL-shaped.
+	// Previously redactDSN's fallback for this case was a bare
 	// `return raw`, which happened to be safe here only because this
 	// particular string contains no credential — see
 	// TestRedactDSNNeverLeaksThePasswordAcrossDSNShapes below for the
@@ -46,8 +46,8 @@ func TestRedactDSN(t *testing.T) {
 	require.Equal(t, "(non-URL DSN — value withheld)", redactDSN("not a url"))
 }
 
-// TestRedactDSNNeverLeaksThePasswordAcrossDSNShapes pins the task 9 review
-// round 2 Critical: config.redactDSN's two `return raw` fallbacks (on a
+// TestRedactDSNNeverLeaksThePasswordAcrossDSNShapes: config.redactDSN's two
+// `return raw` fallbacks (on a
 // parse error, and when url.User is nil) failed OPEN — they printed the
 // input completely unredacted — for any DSN shape whose credential does
 // not live in URL userinfo. dsnDisplay (load.go) unconditionally prepends
@@ -55,8 +55,7 @@ func TestRedactDSN(t *testing.T) {
 // redacted while the very next token was the cleartext password. All four
 // non-userinfo shapes below are accepted by pgxpool.ParseConfig and by
 // config's own requiredDSN (which only requires url.Parse to succeed), so
-// this was reachable today through `ekokod config:check`, and task 9's fix
-// round newly wired the identical exposure into `ekokod seed`.
+// this was reachable through `ekokod config:check` and `ekokod seed`.
 func TestRedactDSNNeverLeaksThePasswordAcrossDSNShapes(t *testing.T) {
 	const password = "s3cr3t"
 	cases := map[string]string{

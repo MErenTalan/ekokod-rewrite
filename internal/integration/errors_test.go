@@ -59,7 +59,7 @@ func TestRetryableClassification(t *testing.T) {
 }
 
 // TestErrorRendersOnlyKnownKindText proves *Error.Error() never echoes an
-// arbitrary Kind error's own text (M1): a Kind built from live request data
+// arbitrary Kind error's own text: a Kind built from live request data
 // — the shape a careless call site could construct — must never leak
 // through the rendered message, and a nil Kind must render "unknown"
 // rather than fmt's "%!s(<nil>)".

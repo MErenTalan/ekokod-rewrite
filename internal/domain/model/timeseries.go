@@ -155,7 +155,7 @@ type ConsumptionAnomaly struct {
 // DeviceID is part of the primary key and therefore never null, even though
 // the column carries a foreign key that would otherwise permit it: a
 // plant-level sample with no device breakdown has no representable form here.
-// That is a known schema constraint, recorded in Task 2's report.
+// That is a known schema constraint, recorded in report.
 type PlantProduction struct {
 	PlantID  uuid.UUID
 	Ts       time.Time

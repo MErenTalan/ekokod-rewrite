@@ -13,7 +13,7 @@ import (
 )
 
 // AggregateQuantities sums members per register (R116): nil in any member is
-// nil. ActiveExportKnownSum sums the members that report export (I-18);
+// nil. ActiveExportKnownSum sums the members that report export;
 // MaxDemandKw is kept only for a single member (R111).
 func AggregateQuantities(members []Quantities) Quantities {
 	var out Quantities
@@ -127,7 +127,7 @@ func AggregateHours(members [][]tariff.HourConsumption) (sum []tariff.HourConsum
 }
 
 // CombineCompany sums building invoices (R115). Lines merge by (Code, RatePct);
-// a merged UnitPrice is nil when the buildings' prices differ (M-7). VAT is the
+// a merged UnitPrice is nil when the buildings' prices differ. VAT is the
 // sum of building VATs and TotalCost the sum of building totals.
 func CombineCompany(periodKey string, buildings []Invoice) (Invoice, error) {
 	if len(buildings) == 0 {

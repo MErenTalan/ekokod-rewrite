@@ -249,7 +249,7 @@ type IcmalRowInsertParams struct {
 	BuildingIds        []uuid.UUID
 }
 
-// Important Finding 1: icmal_rows has no company_id of its own, and the
+// Icmal_rows has no company_id of its own, and the
 // Go-side IcmalImportVisible/IcmalVisibleBuildingCount checks that guard
 // InsertRows run OUTSIDE this statement, before the transaction the loop
 // inserts inside even begins. Re-validating both the parent import AND (when
@@ -456,7 +456,7 @@ type NationalTariffEffectiveParams struct {
 	EffectiveOn  pgtype.Date
 }
 
-// Important Finding 5: same Istanbul day boundary and deterministic tiebreak.
+// Same Istanbul day boundary and deterministic tiebreak.
 func (q *Queries) NationalTariffEffective(ctx context.Context, arg NationalTariffEffectiveParams) (NationalTariffSchedule, error) {
 	row := q.db.QueryRow(ctx, nationalTariffEffective,
 		arg.UserGroup,
@@ -611,7 +611,7 @@ type SolarTariffEffectiveParams struct {
 	EffectiveOn pgtype.Date
 }
 
-// Important Finding 5: same Istanbul day boundary (converted by the Go
+// Same Istanbul day boundary (converted by the Go
 // caller) and deterministic tiebreak as TariffEffectiveForBuilding.
 func (q *Queries) SolarTariffEffective(ctx context.Context, arg SolarTariffEffectiveParams) (SolarTariff, error) {
 	row := q.db.QueryRow(ctx, solarTariffEffective, arg.CompanyID, arg.PlantID, arg.EffectiveOn)
@@ -894,7 +894,7 @@ select
   $39, $40, $41,
   $42
 where
-  -- Critical Finding 1 (task-11a fix round 1): a stored building_id is a
+  -- A stored building_id is a
   -- foreign key and MUST be validated in SQL against the Scope's company,
   -- deleted_at and building branch. Scope.AllowsBuilding is an in-memory
   -- grant check that cannot know which company owns a building id — an
@@ -905,7 +905,7 @@ where
     where b.id = $2 and b.company_id = $1 and b.deleted_at is null
       and ($43::boolean or b.id = any($44::uuid[]))
   ))
-  -- Important Finding 4: created_by is a stored foreign key too, and must
+  -- Created_by is a stored foreign key too, and must
   -- name a user of the same company rather than being stored as given.
   and ($37::uuid is null or exists (
     select 1 from users u where u.id = $37 and u.company_id = $1
@@ -1138,7 +1138,7 @@ type TariffEffectiveForBuildingParams struct {
 	EffectiveOn pgtype.Date
 }
 
-// Important Finding 5: the day boundary is Europe/Istanbul (converted by the
+// The day boundary is Europe/Istanbul (converted by the
 // Go caller — see tariffTimeToDate in pgtime.go — before effective_on ever
 // reaches this query) and ties on effective_from resolve deterministically:
 // the schema has no unique index on (building_id, effective_from), so two
@@ -1327,7 +1327,7 @@ select id, company_id, building_id, name, effective_from, currency, energy_type,
 where tariffs.id = $1 and tariffs.company_id = $2
   and ($3::boolean or tariffs.building_id = any($4::uuid[]))
   and tariffs.deleted_at is null
-  -- Folded minor (fix round 1): a tariff of a soft-deleted building must not
+  -- A tariff of a soft-deleted building must not
   -- stay readable through the tariff's own row.
   and (tariffs.building_id is null or exists (select 1 from buildings b where b.id = tariffs.building_id and b.deleted_at is null))
 `
@@ -1342,7 +1342,7 @@ type TariffGetParams struct {
 // Tariffs, tariff templates, solar tariffs, the national tariff schedule and
 // icmal imports (migration 00006). Query names are prefixed with the
 // aggregate they belong to (Tariff…, TariffTemplate…, SolarTariff…,
-// NationalTariff…, Icmal…) per the wave-f convention.
+// NationalTariff…, Icmal…).
 func (q *Queries) TariffGet(ctx context.Context, arg TariffGetParams) (Tariff, error) {
 	row := q.db.QueryRow(ctx, tariffGet,
 		arg.ID,
@@ -1737,7 +1737,7 @@ type TariffTaxListParams struct {
 	BuildingIds  []uuid.UUID
 }
 
-// Important Finding 1: tariff_taxes has no company_id of its own, and the
+// Tariff_taxes has no company_id of its own, and the
 // Go-side requireVisible check that guards Taxes/ReplaceTaxes runs OUTSIDE
 // the write itself — every statement below re-validates that tariff_id
 // names a tariff visible to the Scope, so the guard survives even if the
@@ -1975,7 +1975,7 @@ update tariffs set
 where tariffs.id = $41 and tariffs.company_id = $42
   and ($43::boolean or tariffs.building_id = any($44::uuid[]))
   and tariffs.deleted_at is null
-  -- Critical Finding 1: the NEW building_id this write stores must be
+  -- The NEW building_id this write stores must be
   -- validated exactly as TariffCreate validates it — moving a tariff to
   -- another tenant's building is the same stored-foreign-key bug as
   -- creating one there.

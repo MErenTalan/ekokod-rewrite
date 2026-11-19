@@ -82,8 +82,7 @@ func TestAdminAppendPlatformMessage(t *testing.T) {
 	require.ErrorIs(t, err, store.ErrNotFound)
 }
 
-// TestAdminStartPlatformRunIgnoresCallerSuppliedStatus is the folded-minor
-// test (fix round 1): a platform job run is INSERTED in state 'running' per
+// TestAdminStartPlatformRunIgnoresCallerSuppliedStatus: a platform job run is INSERTED in state 'running' per
 // the contract, regardless of what the caller puts in run.Status.
 func TestAdminStartPlatformRunIgnoresCallerSuppliedStatus(t *testing.T) {
 	t.Parallel()

@@ -2,18 +2,9 @@ package postgres
 
 // Shared, package-wide conversion helpers.
 //
-// MERGE-HYGIENE NOTE (Task 9 fix round 1). This package is shared with Tasks
-// 10 and 11 at merge time, and every name below is generic enough that an
-// independently-written repository file for readings, tariffs, alarms or
-// bills could plausibly declare an identically-named helper of its own. Per
-// wave-f-context.md's merge-hygiene instruction, Task 9 is moving its
-// non-test package-wide helpers into this one clearly-named file — rather
-// than renaming each with an awkward task-specific prefix — so a merge-time
-// collision with an identically-named helper from Task 10 or 11 is a single,
-// easy-to-find place to resolve (keep one implementation, delete the other;
-// every one of these is a pure, stateless conversion, so the two are
-// expected to be behaviourally interchangeable). See the task report's
-// "package-wide unexported helpers" list for the full inventory.
+// Package-wide conversion helpers live in this one file so a repository
+// file never declares an identically-named helper of its own. Every one of
+// them is a pure, stateless conversion.
 import (
 	"time"
 
